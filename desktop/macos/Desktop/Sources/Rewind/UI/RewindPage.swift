@@ -151,6 +151,16 @@ struct RewindPage: View {
   }
 
   var body: some View {
+    keyboardHandledContent
+  }
+
+  // MARK: - Page modifier groups
+  //
+  // `body` used to be one ~15-modifier chain. Swift 6.2 cannot type-check that expression in
+  // reasonable time (Xcode 26.2). Each helper below is a distinct sub-expression; modifier order
+  // matches the original chain and is semantically significant.
+
+  private var chromeContent: some View {
     pageContent
       .glassContent()
       // The page answers arrow keys wherever the pointer is, so it holds keyboard focus itself. The
@@ -159,6 +169,10 @@ struct RewindPage: View {
       // window with no visible extent is a blue rectangle on the wallpaper. See
       // `shellPageKeyboardTarget`.
       .shellPageKeyboardTarget($isPageFocused)
+  }
+
+  private var lifecycleAttachedContent: some View {
+    chromeContent
       .task {
         await viewModel.loadInitialData()
         await resolveCitationFocusIfNeeded()
@@ -168,6 +182,10 @@ struct RewindPage: View {
         screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
         isPageFocused = true
       }
+  }
+
+  private var monitoringNotificationContent: some View {
+    lifecycleAttachedContent
       .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
         let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
         let state = RewindCaptureState.afterMonitoringChange(
@@ -181,6 +199,10 @@ struct RewindPage: View {
       .onReceive(NotificationCenter.default.publisher(for: .rewindCitationFocusRequested)) { _ in
         Task { await resolveCitationFocusIfNeeded() }
       }
+  }
+
+  private var notificationObservedContent: some View {
+    monitoringNotificationContent
       .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
         // RewindPage itself owns the decoded NSImage and frame-load task. Clearing
         // only the view model would leave the previous owner's last frame visible
@@ -199,6 +221,10 @@ struct RewindPage: View {
           isTranscriptExpanded = true
         }
       }
+  }
+
+  private var focusObservedContent: some View {
+    notificationObservedContent
       .onChange(of: isSearchFocused) { _, focused in
         if !focused {
           isPageFocused = true
@@ -207,6 +233,10 @@ struct RewindPage: View {
       .onChange(of: isTranscriptExpanded) { _, expanded in
         viewModel.isTranscriptExpanded = expanded
       }
+  }
+
+  private var screenshotObservedContent: some View {
+    focusObservedContent
       .onChange(of: viewModel.screenshots) { oldScreenshots, newScreenshots in
         // Try to preserve position on the same screenshot the user was viewing
         if !oldScreenshots.isEmpty,
@@ -230,10 +260,18 @@ struct RewindPage: View {
           scheduleLoadCurrentFrame()
         }
       }
-      .onReceive(
-        trackWindow.$start.combineLatest(trackWindow.$span)
-          .debounce(for: .milliseconds(120), scheduler: DispatchQueue.main)
-      ) { start, span in
+  }
+
+  /// Debounced track-window range, extracted so Combine's `combineLatest`/`debounce` overloads are
+  /// not solved inside the SwiftUI modifier chain.
+  private var trackWindowRangePublisher: some Publisher<(Double, Double), Never> {
+    trackWindow.$start.combineLatest(trackWindow.$span)
+      .debounce(for: .milliseconds(120), scheduler: DispatchQueue.main)
+  }
+
+  private var viewModelObservedContent: some View {
+    screenshotObservedContent
+      .onReceive(trackWindowRangePublisher) { start, span in
         guard span > 0, viewModel.activeSearchQuery == nil else { return }
         Task { await viewModel.loadTimelineWindow(from: start, to: start + span) }
       }
@@ -254,6 +292,10 @@ struct RewindPage: View {
           scheduleLoadCurrentFrame()
         }
       }
+  }
+
+  private var escapeHandledContent: some View {
+    viewModelObservedContent
       // Global keyboard handlers
       .onEscapeKey {
         // Expanded transcript → collapse
@@ -279,6 +321,10 @@ struct RewindPage: View {
         }
         return false
       }
+  }
+
+  private var timelineArrowHandledContent: some View {
+    escapeHandledContent
       .onKeyPress(.leftArrow) {
         // Arrow keys only work in timeline mode
         // Left = older = lower index (ASC order: oldest first)
@@ -296,6 +342,10 @@ struct RewindPage: View {
         }
         return .ignored
       }
+  }
+
+  private var keyboardHandledContent: some View {
+    timelineArrowHandledContent
       .onKeyPress(.upArrow) {
         // Up/down navigate search result groups
         if searchViewMode == .results {

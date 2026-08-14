@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-swiftui-body-typecheck-timeout",
+  "violated_contract": "A SwiftUI View.body that compiles on CI's pinned Xcode must also compile on the current maintainer local toolchain. A single modifier chain the Swift 6.2 type checker cannot solve in reasonable time blocks every local named-bundle QA path while CI stays green.",
+  "canonical_prevention": "Break the failing body into named some View sub-expressions and extract Combine publishers from the SwiftUI modifier chain so each expression type-checks independently, preserving original modifier order.",
+  "evidence_prs": [
+    11536
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/**/*.swift"
+  ],
+  "status": "open"
+}

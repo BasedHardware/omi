@@ -1,0 +1,3 @@
+{
+  "change": "Internal: split the Rewind page view body into smaller sub-expressions so it compiles on newer Swift toolchains; no change to how Rewind looks or behaves"
+}
