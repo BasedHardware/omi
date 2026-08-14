@@ -51,6 +51,15 @@ environment_shared:
         OMI_LLM_GATEWAY_FEATURE_MODE:
           value: gateway
           category: rollout
+        OMI_SECURITY_POSTURE:
+          value: auto
+          category: rollout
+        OMI_SECURITY_SCREEN_TIMEOUT_SECONDS:
+          value: '8'
+          category: rollout
+        OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS:
+          value: '15'
+          category: rollout
         OMI_LLM_CHAT_AGENT_ROUTE:
           value: gateway
           category: rollout
@@ -258,6 +267,15 @@ environment_shared:
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
+            category: rollout
+          OMI_SECURITY_POSTURE:
+            value: auto
+            category: rollout
+          OMI_SECURITY_SCREEN_TIMEOUT_SECONDS:
+            value: '8'
+            category: rollout
+          OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS:
+            value: '15'
             category: rollout
           OMI_LLM_CHAT_AGENT_ROUTE:
             value: gateway
