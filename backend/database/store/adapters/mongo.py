@@ -26,6 +26,7 @@ honor identically.
 
 from __future__ import annotations
 
+import os
 import re
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -260,7 +261,20 @@ class MongoDocumentStore:
         # tz_aware=True so BSON datetimes decode as timezone-aware UTC (PyMongo defaults to naive).
         # Stored timestamps (_now() is aware) then compare cleanly against aware values at the callers
         # (lease/admission/stale checks) instead of raising "can't compare naive and aware" TypeErrors.
-        self._mongo_client = client if client is not None else MongoClient(uri, tz_aware=True)
+        #
+        # Bound server selection and connect so an unreachable/degraded Mongo fails fast (seconds)
+        # instead of hanging a request worker on PyMongo's 30s default server-selection. Per-read
+        # deadlines are the port's get(timeout=) -> maxTimeMS; socketTimeoutMS is deliberately left
+        # UNSET so a legitimately long operation is not killed mid-flight. Tunable via env.
+        if client is not None:
+            self._mongo_client = client
+        else:
+            self._mongo_client = MongoClient(
+                uri,
+                tz_aware=True,
+                serverSelectionTimeoutMS=int(os.getenv("MONGO_SERVER_SELECTION_TIMEOUT_MS", "5000")),
+                connectTimeoutMS=int(os.getenv("MONGO_CONNECT_TIMEOUT_MS", "5000")),
+            )
         self._db = self._mongo_client[db_name]
 
     def close(self) -> None:

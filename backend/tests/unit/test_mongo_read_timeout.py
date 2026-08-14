@@ -52,3 +52,28 @@ def test_get_without_timeout_passes_no_deadline():
     store, coll = _store_with_spy()
     store.get("users/u1")
     assert coll.calls == [{}]
+
+
+def test_mongo_client_bounds_server_selection_and_connect(monkeypatch):
+    # The MongoClient had no timeouts, so an unreachable/degraded server hung request workers on
+    # PyMongo's 30s default server-selection (root cause behind "slow Mongo reads"). Bound server
+    # selection + connect so it fails fast; socketTimeoutMS stays unset (per-read maxTimeMS bounds reads).
+    import database.store.adapters.mongo as mongo_mod
+
+    captured = {}
+
+    class _SpyMongoClient:
+        def __init__(self, uri, **kw):
+            captured["uri"] = uri
+            captured.update(kw)
+
+        def __getitem__(self, _name):
+            return object()
+
+    monkeypatch.setattr(mongo_mod, "MongoClient", _SpyMongoClient)
+    mongo_mod.MongoDocumentStore(uri="mongodb://mongo:27017/?replicaSet=rs0", db_name="t")
+
+    assert captured["tz_aware"] is True
+    assert captured["serverSelectionTimeoutMS"] == 5000
+    assert captured["connectTimeoutMS"] == 5000
+    assert "socketTimeoutMS" not in captured  # long ops must not be killed mid-flight
