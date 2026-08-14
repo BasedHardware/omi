@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const platformRoot = new URL("..", import.meta.url).pathname;
@@ -623,5 +623,59 @@ test("T0 adversarial tripwire catches each prohibited path fragment", () => {
       const result = spawnSync("bun", ["run", "scripts/lint-import-graph.ts"], { cwd: platformRoot, encoding: "utf8" });
       expect(result.status).not.toBe(0);
     } finally { rmSync(fixture, { force: true }); }
+  }
+});
+
+test("colocation fence rejects bun.lock under frontend/", () => {
+  const fixture = join(platformRoot, "frontend", "bun.lock");
+  mkdirSync(join(platformRoot, "frontend"), { recursive: true });
+  try {
+    writeFileSync(fixture, "planted\n");
+    const result = runLint();
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain("bun lockfile is forbidden under frontend/");
+  } finally {
+    rmSync(fixture, { force: true });
+  }
+});
+
+test("colocation fence rejects node_modules/.bun under frontend/", () => {
+  const bunDir = join(platformRoot, "frontend", "node_modules", ".bun");
+  mkdirSync(bunDir, { recursive: true });
+  try {
+    writeFileSync(join(bunDir, "planted"), "planted\n");
+    const result = runLint();
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain("bun toolchain is forbidden under frontend/");
+  } finally {
+    rmSync(join(platformRoot, "frontend", "node_modules"), { recursive: true, force: true });
+  }
+});
+
+test("colocation fence rejects frontend source importing backend core/", () => {
+  const fixture = join(platformRoot, "frontend", "colocation-backend-import-tripwire.ts");
+  mkdirSync(join(platformRoot, "frontend"), { recursive: true });
+  try {
+    writeFileSync(fixture, 'import { order } from "../core/order";\nexport const planted = order;\n');
+    const result = runLint();
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain("frontend source may not import backend core/");
+  } finally {
+    rmSync(fixture, { force: true });
+  }
+});
+
+test("colocation fence rejects backend source importing frontend/", () => {
+  const fixture = join(platformRoot, "apps", "service", "routes", "colocation-frontend-import-tripwire.ts");
+  try {
+    writeFileSync(
+      fixture,
+      'import { ChatProduction } from "../../../frontend/packages/surfaces/src/production/ChatProduction";\nexport const planted = ChatProduction;\n',
+    );
+    const result = runLint();
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain("backend source may not import frontend/");
+  } finally {
+    rmSync(fixture, { force: true });
   }
 });
