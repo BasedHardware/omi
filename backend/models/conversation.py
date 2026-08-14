@@ -167,7 +167,7 @@ class Conversation(BaseModel):
     finished_at: Optional[datetime]
 
     source: Optional[ConversationSource] = ConversationSource.omi
-    language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
+    language: Optional[str] = 'en'  # applies only to Friend
 
     structured: Structured
     transcript_segments: List[TranscriptSegment] = []
@@ -286,7 +286,7 @@ class CreateConversation(BaseModel):
     photos: List[ConversationPhoto] = []
 
     source: ConversationSource = ConversationSource.omi
-    language: Optional[str] = None
+    language: Optional[str] = 'en'
 
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
@@ -320,7 +320,7 @@ class ExternalIntegrationCreateConversation(BaseModel):
     geolocation: Optional[Geolocation] = None
 
     source: ConversationSource = ConversationSource.workflow
-    language: Optional[str] = None
+    language: Optional[str] = 'en'
 
     app_id: Optional[str] = None
 

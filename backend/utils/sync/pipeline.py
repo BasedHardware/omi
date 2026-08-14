@@ -1151,6 +1151,7 @@ def process_segment(
                 finished_at=finished_at,
                 transcript_segments=transcript_segments,
                 source=source,
+                language=language,
                 is_locked=is_locked,
                 private_cloud_sync_enabled=private_cloud_sync_enabled,
                 client_device_id=client_device_id,

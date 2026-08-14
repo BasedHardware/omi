@@ -627,6 +627,7 @@
                 "type": "null"
               }
             ],
+            "default": "en",
             "title": "Language"
           },
           "source": {
