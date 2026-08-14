@@ -31,6 +31,7 @@ covers:
   - desktop/macos/Desktop/Sources/Providers/AgentProviderHealth.swift
   - desktop/macos/Desktop/Sources/Providers/AgentProviderInstaller.swift
   - desktop/macos/Desktop/Sources/Providers/AgentProviderRouter.swift
+  - desktop/macos/Desktop/Sources/Providers/AgentRuntimeRouting.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsGlassKit.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentSettings.swift
 preconditions:
