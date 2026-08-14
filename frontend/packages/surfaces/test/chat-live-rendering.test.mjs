@@ -965,6 +965,8 @@ test("agent activity renders safe capability, context, two tools, approval statu
 });
 
 test("successful gateway turn shows Context preview, a local test gateway, and no raw memory ids", async () => {
+  // red-proof: drop the `omi-llm-gateway` adapter mapping in agentCapabilityLabel;
+  // the chip falls through to "Response source not verified".
   const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
   const now = Date.UTC(2026, 7, 7, 12, 0, 0);
   const store = {
