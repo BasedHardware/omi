@@ -79,7 +79,9 @@ actor ContextVisitCoordinator {
     toApp appName: String,
     windowTitle: String?,
     departingFrame: CapturedFrame?,
-    now: Date = Date()
+    now: Date = Date(),
+    handles: [WorkHistoryHandle] = [],
+    bundleID: String? = nil
   ) async throws -> Transition {
     ensureOwnerChangeObserver()
     await waitForTransitionTurn()
@@ -97,11 +99,15 @@ actor ContextVisitCoordinator {
     // arriving visit so the abandoned row is not left live indefinitely.
     try await ensureReconciled(now: now)
     let nextGeneration = state.generation + 1
+    let arrivingIdentity = Self.resolvedVisitIdentity(
+      appName: appName, windowTitle: windowTitle, handles: handles, bundleID: bundleID)
     let arriving = try await store.startVisit(
       appName: appName,
       windowTitle: windowTitle,
       contextGeneration: nextGeneration,
-      startedAt: now)
+      startedAt: now,
+      handles: arrivingIdentity.handles,
+      bundleID: arrivingIdentity.bundleID)
     state.begin(arriving)
     return Transition(
       departingFence: departure.fence,
@@ -153,7 +159,9 @@ actor ContextVisitCoordinator {
   func rearmAfterSystemResume(
     appName: String,
     windowTitle: String?,
-    now: Date = Date()
+    now: Date = Date(),
+    handles: [WorkHistoryHandle] = [],
+    bundleID: String? = nil
   ) async throws -> ContextVisitFence {
     ensureOwnerChangeObserver()
     await waitForTransitionTurn()
@@ -174,11 +182,15 @@ actor ContextVisitCoordinator {
     }
     try await ensureReconciled(now: now)
     let nextGeneration = state.generation + 1
+    let arrivingIdentity = Self.resolvedVisitIdentity(
+      appName: appName, windowTitle: windowTitle, handles: handles, bundleID: bundleID)
     let arriving = try await store.startVisit(
       appName: appName,
       windowTitle: windowTitle,
       contextGeneration: nextGeneration,
-      startedAt: now)
+      startedAt: now,
+      handles: arrivingIdentity.handles,
+      bundleID: arrivingIdentity.bundleID)
     state.begin(arriving)
     return arriving
   }
@@ -196,6 +208,19 @@ actor ContextVisitCoordinator {
 
   func beginForTesting(_ fence: ContextVisitFence) {
     state.begin(fence)
+  }
+
+  private static func resolvedVisitIdentity(
+    appName: String,
+    windowTitle: String?,
+    handles: [WorkHistoryHandle],
+    bundleID: String?
+  ) -> (handles: [WorkHistoryHandle], bundleID: String?) {
+    if !handles.isEmpty {
+      return (handles, bundleID)
+    }
+    let snapshot = WorkHistoryHandleExtractor.liveSnapshot(appName: appName, windowTitle: windowTitle)
+    return (WorkHistoryHandleExtractor.handles(from: snapshot), snapshot.bundleID)
   }
 
   private func finalizeActive(
