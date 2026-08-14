@@ -34,25 +34,64 @@ public enum ContextPaths {
     ///
     /// The path is `~/Library/Application Support/Omi/users/<userId>/omi.db`. The
     /// user id is not known here, so the directory is scanned for any subdirectory
-    /// containing `omi.db`, preferring a real user over the `anonymous` fallback.
-    /// `Omi Beta` is checked as a secondary root.
+    /// containing `omi.db`. `Omi Beta` is checked as a secondary root, and only when
+    /// `Omi` offered nothing at all — a beta install is a fallback, never a competitor.
+    ///
+    /// **The winner is the largest database, not the first name in the alphabet, and that is a fix
+    /// rather than a preference.** This scan used to sort the directory names and take the first
+    /// candidate that existed, which assumed the users directory holds users. On a real machine it
+    /// does not: the one measured here held **1,554 subdirectories**, all but a handful of them
+    /// scaffolding left behind by the Omi desktop app's own test harness — `cancelled-status-
+    /// reconcile-test-…`, `memories-vm-observer-…`, `transcription-storage-recovery-test-…` — each
+    /// with an empty 4 KB `omi.db` inside it. The alphabetical rule therefore resolved to
+    /// `cancelled-status-reconcile-test-049BFE18…`, a database with no `memories` table at all,
+    /// while the signed-in user's real one sat two hundred entries later holding **6,598 memories in
+    /// 58 MB**. Everything downstream read the empty file and reported, perfectly confidently, that
+    /// the user had no memories — including the MCP `recall` tool, which advertises local memories to
+    /// Claude as always available.
+    ///
+    /// Size is the right discriminator because it is the direct evidence: a database with the user's
+    /// history in it is bigger than one with an empty schema in it, and no assumption about the
+    /// *shape* of a user id has to hold for that to be true. `stat` on every candidate costs
+    /// microseconds and opens nothing; asking each file whether its `memories` table is populated
+    /// would be the more literal question and would mean opening fifteen hundred SQLite databases on
+    /// a path the app waits behind. `anonymous` loses every tie, as it did before: it is the
+    /// signed-out fallback and a signed-in user's database is always the better answer.
     public static var omiDatabaseURL: URL? {
+        omiDatabaseURL(inApplicationSupport: FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask)[0])
+    }
+
+    /// The resolution itself, over a stated Application Support root.
+    ///
+    /// Split out so the rule above can be *proved* against a directory a test builds — the failure it
+    /// exists for is entirely about which of many candidates wins, and that is exactly what cannot be
+    /// asserted while the root is fixed to the real one. Nothing in this package may write to a real
+    /// Omi install to set up a test.
+    static func omiDatabaseURL(inApplicationSupport base: URL) -> URL? {
         let fm = FileManager.default
-        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         for rootName in ["Omi", "Omi Beta"] {
             let usersDir = base.appendingPathComponent(rootName, isDirectory: true)
                 .appendingPathComponent("users", isDirectory: true)
             guard let candidates = try? fm.contentsOfDirectory(atPath: usersDir.path) else { continue }
-            let sorted = candidates.sorted { a, b in
-                if a == "anonymous" { return false }
-                if b == "anonymous" { return true }
-                return a < b
-            }
-            for userId in sorted {
+
+            let databases: [(url: URL, userId: String, bytes: Int64)] = candidates.compactMap { userId in
                 let db = usersDir.appendingPathComponent(userId, isDirectory: true)
                     .appendingPathComponent("omi.db")
-                if fm.fileExists(atPath: db.path) { return db }
+                guard fm.fileExists(atPath: db.path) else { return nil }
+                let bytes = (try? fm.attributesOfItem(atPath: db.path)[.size] as? NSNumber)?.int64Value ?? 0
+                return (db, userId, bytes)
             }
+            guard !databases.isEmpty else { continue }
+
+            let best = databases.max { a, b in
+                if a.bytes != b.bytes { return a.bytes < b.bytes }
+                // Deterministic tie-breaks, so two empty installs never resolve differently between
+                // launches: a named user beats `anonymous`, then the name decides.
+                if (a.userId == "anonymous") != (b.userId == "anonymous") { return a.userId == "anonymous" }
+                return a.userId > b.userId
+            }
+            return best?.url
         }
         return nil
     }
