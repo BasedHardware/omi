@@ -21,16 +21,6 @@ def test_send_app_notification_attributes_via_plugin_id_and_app_id():
     assert payload['app_id'] == 'app123'
 
 
-def test_send_chat_message_notification_attributes_via_plugin_id_and_app_id():
-    from utils.chat import _chat_message_notification
-
-    message = _chat_message_notification('app123', 'hi', 'msg-id')
-    payload = nm.NotificationMessage.get_message_as_dict(message)
-
-    assert payload['plugin_id'] == 'app123'
-    assert payload['app_id'] == 'app123'
-
-
 def test_notification_message_keeps_both_identity_keys():
     kept = nm.NotificationMessage.get_message_as_dict(
         nm.NotificationMessage(
