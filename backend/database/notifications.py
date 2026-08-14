@@ -382,7 +382,9 @@ def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str
     return _get_users_in_timezones(timezones, 'id')
 
 
-def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) -> List[Tuple[str, List[str], Any]]:
+def get_users_for_daily_summary(
+    timezones: list[str], target_local_hour: int, unifiedpush: bool
+) -> List[Tuple[str, List[str], Any]]:
     """
     Get users who should receive daily summary notifications.
 
@@ -394,6 +396,11 @@ def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) ->
     Args:
         timezones: List of IANA timezone names where it's currently target_local_hour
         target_local_hour: The local hour we're sending notifications for (0-23)
+        unifiedpush: Which recipients this deployment delivers to — UnifiedPush endpoints when True,
+            else FCM tokens. Resolved by the caller (utils layer); this DB helper reads recipients but
+            must not own delivery policy (cubic PR 10887 #3). In a UnifiedPush deployment NO user has
+            FCM tokens, so without this the "no recipients -> skip" below would drop EVERY user and send
+            zero daily summaries (cubic PR 10887 B2).
 
     Returns:
         List of (uid, [tokens], time_zone) tuples.
@@ -402,15 +409,6 @@ def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) ->
         return []
 
     users: List[Tuple[str, List[str], Any]] = []
-
-    # Which recipients this deployment delivers to: FCM tokens, or (in a UnifiedPush deployment, where
-    # NO user has FCM tokens) each user's UnifiedPush endpoints. Without this the "no tokens -> skip"
-    # below drops EVERY user and sends zero daily summaries on UnifiedPush (cubic PR 10887 B2). Lazy
-    # import: utils.push imports this module.
-    from utils.push.base import UNIFIEDPUSH
-    from utils.push.selector import resolve_push_backend
-
-    unifiedpush = resolve_push_backend() == UNIFIEDPUSH
 
     # 'Where in' query only supports 30 or fewer items in list so we split in chunks
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]

@@ -195,7 +195,11 @@ def test_daily_summary_includes_unifiedpush_users_without_fcm_tokens(monkeypatch
     )
     store.set('users/u-none', {'time_zone': 'UTC'})  # same tz/hour, but no UnifiedPush endpoint
 
-    users = notification_db.get_users_for_daily_summary(['UTC'], notification_db.DEFAULT_DAILY_SUMMARY_HOUR_LOCAL)
+    # The caller (utils layer) resolves the backend and passes unifiedpush=True; the DB helper no
+    # longer reads PUSH_NOTIFICATION_BACKEND itself (cubic PR 10887 #3).
+    users = notification_db.get_users_for_daily_summary(
+        ['UTC'], notification_db.DEFAULT_DAILY_SUMMARY_HOUR_LOCAL, True
+    )
     uids = {u[0] for u in users}
     assert 'u-has' in uids  # UnifiedPush user is included (was skipped before this fix)
     assert 'u-none' not in uids  # a user with no deliverable recipient is still skipped

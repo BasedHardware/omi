@@ -101,7 +101,7 @@ def test_daily_summary_user_read_runs_off_loop_and_preserves_empty_result() -> N
             loop = asyncio.get_running_loop()
             calls: list[tuple[list[str], int]] = []
 
-            def blocking_read(timezones: list[str], target_hour: int) -> list[Any]:
+            def blocking_read(timezones: list[str], target_hour: int, unifiedpush: bool) -> list[Any]:
                 calls.append((timezones, target_hour))
                 loop.call_soon_threadsafe(entered.set)
                 assert release.wait(timeout=2)
@@ -140,7 +140,7 @@ def test_timezone_token_read_runs_off_loop_and_returns_tokens() -> None:
             notification_db.get_users_token_in_timezones = blocking_read
 
             result = await _assert_loop_responsive_while_worker_waits(
-                notifications._get_users_in_timezone('08:00'),
+                notifications._get_users_in_timezone('08:00', 'fcm'),  # FCM backend -> token fetch path
                 entered,
                 release,
             )
@@ -154,7 +154,7 @@ def test_daily_summary_db_failure_remains_fail_soft() -> None:
     with _loaded_other_notifications() as (notifications, notification_db):
         notifications._get_timezones_grouped_by_hour = lambda: {8: ['UTC']}
 
-        def fail_read(_timezones: list[str], _target_hour: int) -> list[Any]:
+        def fail_read(_timezones: list[str], _target_hour: int, _unifiedpush: bool) -> list[Any]:
             raise RuntimeError('firestore unavailable')
 
         notification_db.get_users_for_daily_summary = fail_read
