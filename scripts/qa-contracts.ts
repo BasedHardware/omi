@@ -330,6 +330,7 @@ async function main(): Promise<void> {
   run("bun", ["test", "contract-tests/ratified-contracts.test.ts", "contract-tests/qa-contracts.test.ts"], root);
   run("bun", ["test"], root);
   run("bun", ["run", "lint:imports"], root);
+  run("bun", ["run", "lint:closure"], root);
 
   console.log(JSON.stringify({
     package: `${lock.package.name}@${lock.package.version}`,

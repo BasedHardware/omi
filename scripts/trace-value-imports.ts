@@ -1,13 +1,12 @@
 /**
  * Print the transitive VALUE-import closure of one or more entrypoints, and
- * optionally flag modules that must not appear in it.
+ * flag modules that must not appear in it.
  *
- * WHY THIS EXISTS, AND WHY IT IS NOT YET A FENCE.
- *
- * `lint-import-graph.ts` enforces two rules: the port registry (16) and the
- * wire-path fence (17). Neither asks the question "what does the production
- * kernel actually link?" Two defects of exactly that shape have now shipped
- * past it:
+ * RULE 18 — the import-closure fence. `lint:closure` invokes this tracer
+ * against the ratified production entrypoints and forbidden substrings.
+ * `lint-import-graph.ts` still enforces the port registry (16) and the
+ * wire-path fence (17). Neither asks "what does the production kernel
+ * actually link?" Two defects of exactly that shape have now shipped past it:
  *
  *   1. `apps/service/composition/memory-read.ts` value-imported `apps/qa/renders`,
  *      pulling `createQaDeterministicSynthesizer` -- a MODEL FAKE -- onto the
@@ -16,12 +15,6 @@
  *   2. `apps/service/workers/predicate-batch-contract.ts` value-imported
  *      `predicateAlignmentPromptCost` from `drivers/model/glm`, linking the GLM
  *      client into every image running predicate-batch consolidation.
- *
- * Both were invisible to lint and both were found by tracing the closure. This
- * script is that trace, made repeatable. Promoting it to a rule-18 fence -- with
- * a ratified list of entrypoints and forbidden targets -- is the obvious next
- * step, but adding a CI gate is a design decision, so this ships as a diagnostic
- * and the fence stays a proposal.
  *
  * TYPE-ONLY IMPORTS ARE EXCLUDED. They erase at runtime and cannot link
  * anything into an image, so counting them would produce false positives that
@@ -32,6 +25,7 @@
  *     [--forbid <substring>] [--list]
  *
  * Exits non-zero if any --forbid substring appears in a closure.
+ * Entrypoint and forbidden-list changes are David-only.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
