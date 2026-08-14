@@ -42,6 +42,10 @@ from ..ports import Filter
 
 # ``array_contains_any`` maps to ``$in``: on an array-valued field Mongo's $in matches when ANY array
 # element is in the given list (mirrors Firestore array_contains_any). ``not-in`` -> ``$nin``.
+# CAVEAT (cubic review 4939247683): the plain ``in`` operator also maps to ``$in``, which matches
+# Firestore ``in`` exactly for SCALAR fields (the only shape Omi uses). On an ARRAY-valued field the
+# semantics diverge — Firestore ``in`` compares the whole field value, Mongo ``$in`` matches individual
+# elements — so ``in`` must not be used against an array field on this port (use array_contains* instead).
 _OP = {
     "<": "$lt", "<=": "$lte", ">": "$gt", ">=": "$gte", "in": "$in", "==": "$eq", "!=": "$ne",
     "not-in": "$nin", "array_contains_any": "$in",

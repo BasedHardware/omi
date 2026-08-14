@@ -290,3 +290,49 @@ def test_docref_get_threads_read_timeout_to_store():
     snap = c.document("users/u1").get(timeout=2)
     assert snap.to_dict() == {"v": 1}
     assert seen["timeout"] == 2
+
+
+def test_get_all_batches_via_get_many_not_per_ref():
+    # cubic review 4939247683: get_all must batch by collection through store.get_many (one $in per
+    # collection on Mongo), not do N point reads. Spy the fake store's get_many vs get.
+    from tests.store_fakes import FakeDocumentStore
+
+    store = FakeDocumentStore()
+    c = NeutralFirestoreClient(store)
+    c.document("users/u1/goals/a").set({"v": 1})
+    c.document("users/u1/goals/b").set({"v": 2})
+
+    calls = {"get_many": 0, "get": 0}
+    real_gm, real_get = store.get_many, store.get
+    store.get_many = lambda collection, ids: (calls.__setitem__("get_many", calls["get_many"] + 1), real_gm(collection, ids))[1]
+    store.get = lambda path, **kw: (calls.__setitem__("get", calls["get"] + 1), real_get(path, **kw))[1]
+
+    refs = [c.document("users/u1/goals/a"), c.document("users/u1/goals/missing"), c.document("users/u1/goals/b")]
+    snaps = list(c.get_all(refs))
+    assert [s.exists for s in snaps] == [True, False, True]  # one snapshot per ref, order + missing kept
+    assert snaps[0].to_dict() == {"v": 1}
+    assert calls["get_many"] == 1  # single batched read for the one collection
+    assert calls["get"] == 0  # NOT N per-ref point reads
+
+
+def test_get_all_in_transaction_reads_through_session():
+    # With a transaction, get_all must read through the transaction (read-your-writes), NOT the
+    # session-unaware get_many. Prove each ref is routed through transaction._read.
+    from tests.store_fakes import FakeDocumentStore
+
+    store = FakeDocumentStore()
+    store.set("users/u1/goals/x", {"v": 9})
+    c = NeutralFirestoreClient(store)
+
+    class _StubTx:
+        def __init__(self):
+            self.reads = []
+
+        def _read(self, path, **_kw):
+            self.reads.append(path)
+            return store.get(path)
+
+    tx = _StubTx()
+    snaps = list(c.get_all([c.document("users/u1/goals/x")], transaction=tx))
+    assert tx.reads == ["users/u1/goals/x"]  # routed through the session, not get_many
+    assert snaps[0].to_dict() == {"v": 9}

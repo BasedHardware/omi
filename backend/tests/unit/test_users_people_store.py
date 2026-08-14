@@ -1,9 +1,10 @@
 """People CRUD in database.users, migrated to the WP2 storage port (ADR-0002).
 
 Hermetic: injects the real Mongo adapter over a mongomock client (no server), so the migrated
-path-based code paths run end to end without stubbing the Firestore SDK. The transactional
-``update_person`` is covered by the live dual-backend contract test (mongomock has no replica-set
-transactions); everything non-transactional is covered here.
+path-based code paths run end to end without stubbing the Firestore SDK. ``update_person`` itself is a
+plain get+update (not transactional); the transactional path is ``add_person_speech_sample`` /
+``_add_sample_transaction``, which the live dual-backend contract test covers (mongomock has no
+replica-set transactions). Everything runnable without a replica set is covered here.
 """
 
 import os

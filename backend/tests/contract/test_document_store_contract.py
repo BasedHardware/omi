@@ -34,13 +34,20 @@ def store(request):
             pytest.skip("FIRESTORE_EMULATOR_HOST not set")
         from database.store.adapters.firestore import FirestoreDocumentStore
 
-        return FirestoreDocumentStore()
+        yield FirestoreDocumentStore()
+        return
     uri = os.environ.get("MONGO_URI")
     if not uri:
         pytest.skip("MONGO_URI not set")
     from database.store.adapters.mongo import MongoDocumentStore
 
-    return MongoDocumentStore(uri=uri, db_name="omi_contract")
+    # yield + close: MongoDocumentStore owns a MongoClient; a plain return left its pooled connections
+    # open for every parametrized test, accumulating across the suite (cubic review 4939247683).
+    mongo_store = MongoDocumentStore(uri=uri, db_name="omi_contract")
+    try:
+        yield mongo_store
+    finally:
+        mongo_store.close()
 
 
 @pytest.fixture

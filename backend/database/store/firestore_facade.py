@@ -561,9 +561,32 @@ class NeutralFirestoreClient:
         # raising AttributeError; the write path maps it to the store port's ``if_updated_at``.
         return _Precondition(last_update_time)
 
-    def get_all(self, references: Iterable[_DocRef], *_: Any, **__: Any) -> Iterable[_Snapshot]:
-        for ref in references:
-            yield ref.get()
+    def get_all(
+        self, references: Iterable[_DocRef], *_: Any, transaction: Optional["_FacadeTransaction"] = None, **__: Any
+    ) -> Iterable[_Snapshot]:
+        refs = list(references)
+        if transaction is not None:
+            # Inside a transaction, get_all must read through the session for read-your-writes; the
+            # neutral get_many is not session-aware, so route each ref through the transaction like the
+            # single-doc reads do (real Firestore get_all also honors the transaction).
+            for ref in refs:
+                yield _Snapshot(ref, transaction._read(ref.path))
+            return
+        # Non-transactional: batch by collection via store.get_many (one $in per collection on Mongo)
+        # instead of N point reads (many hot callers: conversations/chat/memories/review_queue/…), then
+        # yield ONE snapshot per input ref (a missing ref stays exists=False), preserving order
+        # (cubic review PR 10887, review 4939247683).
+        by_collection: Dict[str, list] = {}
+        for ref in refs:
+            collection, _, doc_id = ref.path.rpartition("/")
+            by_collection.setdefault(collection, []).append(doc_id)
+        found: Dict[str, StoredDocument] = {}
+        for collection, ids in by_collection.items():
+            for record in self._store.get_many(collection, ids):
+                found[record.path] = record
+        for ref in refs:
+            record = found.get(ref.path)
+            yield _Snapshot(ref, record if record is not None else StoredDocument.missing(ref.path))
 
     def collection_group(self, group_id: str) -> "_GroupQuery":
         return _GroupQuery(self, group_id)

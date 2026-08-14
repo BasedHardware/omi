@@ -145,8 +145,25 @@ class _RecordingIndex:
                 "id": vector["id"],
                 "values": vector.get("values"),
                 "metadata": dict(vector.get("metadata") or {}),
+                "namespace": namespace,
             }
         return {"upserted_count": len(vectors)}
+
+    def update(self, id, *, set_metadata, namespace):
+        # cubic review 4939247683: the port adapter's update_metadata calls this — the fake must
+        # implement it (record + merge into the stored metadata) so the adapter is faithful, not
+        # AttributeError the moment update_vector_metadata is exercised.
+        self.updates = getattr(self, "updates", [])
+        self.updates.append({"id": id, "set_metadata": set_metadata, "namespace": namespace})
+        stored = self._vectors.get(id)
+        if stored is not None:
+            stored["metadata"].update(set_metadata or {})
+
+    def list(self, *, prefix, namespace):
+        # The adapter's list_ids yields from here; return the matching stored ids (by prefix + namespace).
+        for vector_id, stored in self._vectors.items():
+            if stored.get("namespace") == namespace and vector_id.startswith(prefix):
+                yield vector_id
 
     def query(self, **kwargs):
         self.queries.append(kwargs)
@@ -194,6 +211,12 @@ class _FailingIndex:
 
     def upsert(self, **kwargs):
         raise RuntimeError("pinecone unavailable")
+
+    def update(self, *args, **kwargs):  # a failing store fails writes (mirror upsert) — cubic review 4939247683
+        raise RuntimeError("pinecone unavailable")
+
+    def list(self, **kwargs):  # exists so list_ids does not AttributeError; a failing store lists nothing
+        return iter(())
 
 
 class _PortOverIndex:
