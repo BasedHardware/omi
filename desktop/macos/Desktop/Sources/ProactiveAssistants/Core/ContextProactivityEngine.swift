@@ -175,10 +175,13 @@ actor ContextProactivityEngine {
         from: TasksStore.shared.incompleteTasks,
         now: currentFrame.captureTime)
     }
+    let recentDeliveries = await store.recentDeliveredForBucket(
+      bucketID: snapshot.bucketID, now: currentFrame.captureTime)
     let prompt = ContextProactivityPromptBuilder.directorStablePrompt(snapshot: snapshot)
     let uncachedPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
       tasks: taskContext,
-      frame: currentFrame)
+      frame: currentFrame,
+      recentDeliveries: recentDeliveries)
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.activeFenceIsValid(fence)
