@@ -10,6 +10,7 @@ ConfigDict = dict[str, Any]
 
 RETIRED_CANONICAL_MEMORY_ENV = frozenset(
     {
+        'MEMORY_ENABLED_USERS',
         'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
         'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS',
         'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
@@ -26,7 +27,11 @@ def validate_retired_memory_env(*, scope: str, actual: object) -> list[Validatio
     return [
         ValidationError(
             scope,
-            f'retired canonical memory env {name} is forbidden; use the minimal maintenance contract',
+            (
+                f'retired canonical memory env {name} is forbidden; universal memory has no per-user runtime inventory'
+                if name == 'MEMORY_ENABLED_USERS'
+                else f'retired canonical memory env {name} is forbidden; use the minimal maintenance contract'
+            ),
         )
         for name in sorted(RETIRED_CANONICAL_MEMORY_ENV.intersection(actual_entries))
     ]

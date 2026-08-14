@@ -15,13 +15,16 @@ from utils.llm import clients, gateway_shadow, gateway_serving
 from utils.llm import providers
 from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, GatewayContextChatOpenAI, get_llm_gateway_base_url
 from utils.llm.gateway_client import (
+    LLM_CHAT_AGENT_ROUTE_ENV_VAR,
     LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR,
     LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR,
     LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
     LLM_GATEWAY_URL_ENV_VAR,
     GatewayDirectModelSurfaceBlocked,
     feature_auto_lane_id,
+    get_chat_agent_route,
     raise_if_gateway_feature_mode_blocks_direct_model_surface,
+    should_route_chat_agent_through_gateway,
     should_route_features_through_gateway,
 )
 from utils.llm.clients import get_llm_gateway_chat_structured
@@ -434,6 +437,48 @@ def test_perplexity_gateway_response_preserves_top_level_citations():
     assert 'answer' in formatted
     assert 'Source title' in formatted
     assert 'https://example.com/source' in formatted
+
+
+def test_chat_agent_route_direct_while_feature_mode_gateway(monkeypatch):
+    """Chat can stay direct while other features use the gateway."""
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'direct')
+    monkeypatch.delenv('K_SERVICE', raising=False)
+    monkeypatch.delenv('KUBERNETES_SERVICE_HOST', raising=False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+
+    assert should_route_features_through_gateway() is True
+    assert get_chat_agent_route() == 'direct'
+    assert should_route_chat_agent_through_gateway() is False
+
+
+def test_chat_agent_route_gateway_requires_feature_mode(monkeypatch):
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'gateway')
+    monkeypatch.delenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, raising=False)
+    monkeypatch.delenv('K_SERVICE', raising=False)
+
+    assert get_chat_agent_route() == 'gateway'
+    assert should_route_chat_agent_through_gateway() is False
+
+
+def test_chat_agent_route_gateway_with_feature_mode(monkeypatch):
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'luna')  # alias
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv('K_SERVICE', raising=False)
+
+    assert get_chat_agent_route() == 'gateway'
+    assert should_route_chat_agent_through_gateway() is True
+
+
+def test_chat_agent_route_invalid_raises(monkeypatch):
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'not-a-route')
+    try:
+        get_chat_agent_route()
+    except RuntimeError as exc:
+        assert LLM_CHAT_AGENT_ROUTE_ENV_VAR in str(exc)
+    else:
+        raise AssertionError('expected invalid chat agent route to raise')
 
 
 def _load_perplexity_tools():

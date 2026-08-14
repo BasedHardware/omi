@@ -148,6 +148,16 @@ struct TaskMultiSelectionState: Equatable, Sendable {
     }
   }
 
+  /// Clears the complete selection while keeping explicit multi-select mode
+  /// active. The Tasks toolbar uses this for an honest "Deselect All": hidden
+  /// paginated rows must not remain selected after the count returns to zero.
+  mutating func deselectAll() {
+    guard isActive else { return }
+    selectedIDs.removeAll()
+    selectionOrder.removeAll()
+    anchorID = nil
+  }
+
   /// Removes rows that completed a bulk action or disappeared from the store.
   /// The mode remains active when other rows or failures remain selected.
   mutating func removeSelectedIDs(_ taskIDs: Set<String>) {

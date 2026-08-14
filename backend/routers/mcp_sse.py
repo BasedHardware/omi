@@ -7,7 +7,6 @@ allowing clients to connect without running a local MCP server.
 Implements the MCP 2025-03-26 Streamable HTTP Transport specification.
 """
 
-import asyncio
 import json
 import logging
 import os
@@ -27,7 +26,6 @@ from fastapi.templating import Jinja2Templates
 from utils.other.endpoints import check_rate_limit_inline
 from utils.executors import critical_executor, db_executor, run_blocking
 
-import database.memories as memories_db
 import database.conversations as conversations_db
 import database.mcp_api_key as mcp_api_key_db
 import database.mcp_oauth as mcp_oauth_db
@@ -42,16 +40,14 @@ import database.daily_summaries as daily_summaries_db
 from database._client import db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
+from utils.conversations.mcp_transcript_search import (
+    attach_match_snippets_to_conversations,
+    resolve_mcp_conversation_search_ids,
+)
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
-from utils.memory.default_read_rollout import (
-    MemoryReadDecision,
-    read_default_read_rollout,
-)
 from utils.memory.memory_service import (
     MemoryService,
-    raise_if_legacy_write_blocked,
-    resolve_external_memory_write_context,
 )
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
 from testing.parity_pack_v0.live_capture import capture_memory_write
@@ -61,7 +57,6 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
-from utils.memory.surface_routing import pin_memory_system
 from utils.mcp_data import (
     clean_action_item,
     clean_chat_message,
@@ -70,19 +65,16 @@ from utils.mcp_data import (
     end_of_day_utc,
     parse_date_only_utc,
 )
+from utils.mcp_context import MCP_SERVER_INSTRUCTIONS
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     McpVerifiedAuth,
     build_mcp_default_memory_read_context,
     collect_filtered_memories,
-    list_default_mcp_memories,
-    mcp_denied_read_payload,
-    mcp_legacy_read_authorized,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
-    search_default_mcp_memories_vector,
 )
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 from utils.mcp_analytics import (
@@ -473,7 +465,11 @@ MCP_TOOLS: List[Dict[str, Any]] = [
     },
     {
         "name": "search_conversations",
-        "description": "Semantic search across the user's conversations. Returns conversations ranked by relevance to the query.",
+        "description": (
+            "Search the user's conversations by relevance to the query. Matches both conversation "
+            "summaries and transcript content when available, and returns match_snippets from "
+            "transcript segments (grep-style context) alongside each hit."
+        ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": CONVERSATIONS_READ_SECURITY,
         "inputSchema": {
@@ -839,8 +835,6 @@ def execute_tool(
     auth_context: Optional[ProductAuthorizationContext] = None,
 ) -> Dict[str, Any]:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
-    memory_system = pin_memory_system(user_id, db_client=db)
-
     if tool_name == "get_user_profile":
         profile = users_db.get_ai_user_profile(user_id)
         if not profile or not profile.get("profile_text"):
@@ -885,52 +879,11 @@ def execute_tool(
         if not app_key_grant.allowed:
             raise _authorization_denied_error(str(app_key_grant.observability))
 
-        if memory_system == MemorySystem.CANONICAL:
-            filtered = collect_filtered_memories(
-                lambda batch_offset, batch_limit: [
-                    m.model_dump(mode='json')
-                    for m in MemoryService(db_client=db).read_pinned(user_id, memory_system, batch_limit, batch_offset)
-                ],
-                limit=limit,
-                offset=offset,
-                reviewed=reviewed,
-                manually_added=manually_added,
-                include_activity=include_activity,
-                include_sensitive=include_sensitive,
-                updated_after=updated_after,
-                sort=sort,
-                categories=valid_categories or None,
-            )
-            memories = filtered['memories']
-            for memory in memories:
-                if memory.get('is_locked', False):
-                    content = memory.get('content', '')
-                    memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-            return {"memories": memories}
-
-        memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
-        memory_list_results = list_default_mcp_memories(
-            uid=user_id,
-            limit=limit,
-            offset=offset,
-            db_client=db,
-            rollout_decision=memory_rollout,
-            categories=valid_categories,
-            reviewed=reviewed,
-            manually_added=manually_added,
-        )
-        if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
-            return {"memories": memory_list_results.memories}
-        if not mcp_legacy_read_authorized(memory_list_results):
-            denied = mcp_denied_read_payload(memory_list_results)
-            if denied is not None:
-                raise _authorization_denied_error(str(denied))
-            return {"memories": []}
-
         result = collect_filtered_memories(
-            lambda batch_offset, batch_limit: memories_db.get_memories(
-                user_id, batch_limit, batch_offset, valid_categories, sort=sort
-            ),
+            lambda batch_offset, batch_limit: [
+                memory.model_dump(mode='json')
+                for memory in MemoryService(db_client=db).read(user_id, limit=batch_limit, offset=batch_offset)
+            ],
             limit=limit,
             offset=offset,
             reviewed=reviewed,
@@ -939,6 +892,7 @@ def execute_tool(
             include_sensitive=include_sensitive,
             updated_after=updated_after,
             sort=sort,
+            categories=valid_categories or None,
         )
         # Apply locked content truncation
         for memory in result["memories"]:
@@ -958,18 +912,6 @@ def execute_tool(
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
             raise _authorization_denied_error(str(write_grant.observability))
-        try:
-            write_context = resolve_external_memory_write_context(
-                user_id,
-                db_client=db,
-                memory_system=memory_system,
-                consumer='mcp',
-                operation="mcp_tool_memory_create",
-            )
-            raise_if_legacy_write_blocked(write_context)
-        except HTTPException as exc:
-            _raise_tool_error_from_http(exc)
-
         category = identify_category_for_memory(content)
         memory = Memory(content=content, category=category)
         memory_db = MemoryDB.from_memory(memory, user_id, None, True)
@@ -977,7 +919,7 @@ def execute_tool(
             memory_db = MemoryService(db_client=db).create_external_memory(
                 user_id,
                 memory_db,
-                memory_system=write_context.memory_system,
+                memory_system=MemorySystem.CANONICAL,
                 consumer='mcp',
                 operation="mcp_tool_memory_create",
                 upsert_vector=False,
@@ -993,12 +935,7 @@ def execute_tool(
             memories=[memory_db],
         )
 
-        exposure = (
-            MemoryApiExposure.CANONICAL
-            if write_context.memory_system == MemorySystem.CANONICAL
-            else MemoryApiExposure.LEGACY
-        )
-        return {"success": True, "memory": memory_api_payload(memory_db, exposure)}
+        return {"success": True, "memory": memory_api_payload(memory_db, MemoryApiExposure.CANONICAL)}
 
     elif tool_name == "delete_memory":
         memory_id = arguments.get("memory_id")
@@ -1015,7 +952,7 @@ def execute_tool(
             MemoryService(db_client=db).delete_external_memory(
                 user_id,
                 memory_id,
-                memory_system=memory_system,
+                memory_system=MemorySystem.CANONICAL,
                 consumer='mcp',
                 operation="mcp_tool_memory_delete",
                 delete_vector=False,
@@ -1043,7 +980,7 @@ def execute_tool(
                 user_id,
                 memory_id,
                 content,
-                memory_system=memory_system,
+                memory_system=MemorySystem.CANONICAL,
                 consumer='mcp',
                 operation="mcp_tool_memory_edit",
                 upsert_vector=False,
@@ -1128,7 +1065,6 @@ def execute_tool(
             limit = parse_mcp_int(arguments.get("limit"), "limit", default=10, minimum=1, maximum=20)
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
-        fetch_limit = min(limit * 3, 60)
 
         if auth_context is None:
             raise _authorization_denied_error("Missing MCP API app/key identity for memory read authorization")
@@ -1136,49 +1072,7 @@ def execute_tool(
         if not app_key_grant.allowed:
             raise _authorization_denied_error(str(app_key_grant.observability))
 
-        if memory_system == MemorySystem.CANONICAL:
-            memory_service = MemoryService(db_client=db)
-            return {"memories": memory_service.search_mcp(user_id, query, limit=limit)}
-
-        memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
-        vector_search_results = search_default_mcp_memories_vector(
-            uid=user_id,
-            query=query,
-            limit=limit,
-            db_client=db,
-            rollout_decision=memory_rollout,
-        )
-        if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
-            return {"memories": vector_search_results.memories}
-        if not mcp_legacy_read_authorized(vector_search_results):
-            denied = mcp_denied_read_payload(vector_search_results)
-            if denied is not None:
-                raise _authorization_denied_error(str(denied))
-            return {"memories": []}
-
-        matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
-        if not matches:
-            return {"memories": []}
-
-        memory_ids = cast(List[str], [m.get('memory_id') for m in matches if m.get('memory_id')])
-        if not memory_ids:
-            return {"memories": []}
-        memories = memories_db.get_memories_by_ids(user_id, memory_ids)
-
-        # Mirror the REST MCP path so SSE search never surfaces rejected, locked,
-        # or superseded facts, while fetching extra candidates before filtering.
-        score_map = {m.get('memory_id'): m.get('score', 0) for m in matches if m.get('memory_id')}
-        results: List[Dict[str, Any]] = []
-        for mem in memories:
-            if mem.get('user_review') is False or mem.get('is_locked', False) or mem.get('invalid_at') is not None:
-                continue
-            mem['relevance_score'] = round(score_map.get(mem.get('id'), 0), 4)
-            results.append(mem)
-
-        # Sort by relevance
-        results.sort(key=lambda x: x.get('relevance_score', 0), reverse=True)
-
-        return {"memories": results[:limit]}
+        return {"memories": MemoryService(db_client=db).search_mcp(user_id, query, limit=limit)}
 
     elif tool_name == "search_conversations":
         query = arguments.get("query")
@@ -1201,7 +1095,16 @@ def execute_tool(
             end_dt = end_of_day_utc(end_dt)
         ends_at = int(end_dt.timestamp()) if end_dt is not None else None
 
-        conversation_ids = vector_db.query_vectors(query, user_id, starts_at=starts_at, ends_at=ends_at, k=limit)
+        conversation_ids = resolve_mcp_conversation_search_ids(
+            user_id,
+            query,
+            limit=limit,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            query_vectors=vector_db.query_vectors,
+            search_transcript_chunks=vector_db.search_transcript_chunks,
+            embed_query=vector_db.embeddings.embed_query,
+        )
         if not conversation_ids:
             return {"conversations": []}
 
@@ -1215,6 +1118,9 @@ def execute_tool(
                 structured = dict(structured)
                 structured['action_items'] = []
                 structured['events'] = []
+            snippets: List[Dict[str, Any]] = []
+            if not conv.get("is_locked", False):
+                snippets = attach_match_snippets_to_conversations([conv], query)[0].get("match_snippets") or []
             results.append(
                 {
                     "id": conv.get("id"),
@@ -1222,6 +1128,7 @@ def execute_tool(
                     "finished_at": conv.get("finished_at"),
                     "structured": structured,
                     "language": conv.get("language"),
+                    "match_snippets": snippets,
                 }
             )
 
@@ -1458,12 +1365,7 @@ def handle_mcp_message(
                     "protocolVersion": "2025-03-26",
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "omi-mcp-server", "version": "1.0.0"},
-                    "instructions": (
-                        "This server exposes the user's Omi memory (their personal AI memory bank). "
-                        "`get_user_profile` returns a cached high-level profile when available. Use it as a "
-                        "starting point, then call `search_memories`, `get_memories`, or conversation tools for "
-                        "task-specific evidence."
-                    ),
+                    "instructions": MCP_SERVER_INSTRUCTIONS,
                 },
             ),
             None,
@@ -1900,44 +1802,30 @@ async def mcp_streamable_http(
 
 
 @router.get("/v1/mcp/sse", tags=["mcp"], response_class=Response)
-async def mcp_sse_get(
-    request: Request,
+def mcp_sse_get(
     authorization: Optional[str] = Header(None, alias="Authorization"),
     mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id"),
 ):
     """
-    SSE endpoint for server-initiated messages (optional).
+    GET on the Streamable HTTP endpoint: this server offers no server-initiated stream.
 
-    Clients can GET this endpoint to listen for server-initiated notifications.
-    This is optional per the MCP spec and mainly used for long-polling scenarios.
+    The two header parameters are accepted and ignored: released app-client OpenAPI
+    contracts describe them on this operation, and removing them reads as a breaking
+    request-shape change to the compatibility checker.
+
+    Per the MCP Streamable HTTP transport spec (2025-03-26), a server that does not
+    offer server-initiated messages MUST return 405 Method Not Allowed for GET, and
+    clients MUST NOT treat that as an error.
+
+    This used to return an infinite keepalive-ping SSE stream that carried no protocol
+    data (this transport is stateless; nothing is ever pushed, and the deprecated
+    HTTP+SSE transport's required ``endpoint`` event was never sent). Every connected
+    MCP client parked one such stream for the full Cloud Run request timeout (3600s),
+    which exhausted the service's concurrency slots while CPU sat idle and drove
+    tool-call tail latency to minutes ("no available instance" aborts). Do not
+    reintroduce a long-lived GET stream here without accounting for that capacity.
     """
-    # Authenticate
-    auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)
-    if not auth_context:
-        raise invalid_mcp_auth_exception()
-
-    await run_blocking(critical_executor, check_rate_limit_inline, auth_context.uid, "mcp:sse")
-
-    # For backwards compatibility, also support the old SSE flow
-    # Return an empty SSE stream that just sends keepalives
-    async def event_generator():
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
-                yield f"event: ping\ndata: {{}}\n\n"
-                await asyncio.sleep(30)
-        except asyncio.CancelledError:
-            # Normal cancellation when client disconnects
-            pass
-        except Exception as e:
-            logging.warning(f"MCP SSE event generator error: {e}")
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
-    )
+    return Response(status_code=405, headers={"Allow": "POST, HEAD, DELETE"})
 
 
 @router.head("/v1/mcp/sse", tags=["mcp"], response_class=Response)

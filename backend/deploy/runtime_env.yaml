@@ -35,9 +35,6 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
-          MEMORY_ENABLED_USERS:
-            category: memory_rollout
-            value: ''
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -45,6 +42,9 @@ environments:
             value: primary
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
             value: gateway
             category: rollout
           GOOGLE_CLIENT_ID:
@@ -55,7 +55,7 @@ environments:
             value: dev
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -174,6 +174,25 @@ environments:
       pusher:
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          OMI_LLM_GATEWAY_URL:
+            value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
+            category: service_discovery
+          OMI_ENV_STAGE:
+            value: dev
+            category: runtime_identity
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
+            value: gateway
+            category: rollout
+          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+            value: 'false'
+            category: rollout
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret:
+              name: dev-omi-backend-secrets
+              key: OMI_LLM_GATEWAY_SERVICE_TOKEN
           GITHUB_TOKEN:
             secret:
               name: dev-omi-backend-secrets
@@ -223,7 +242,7 @@ environments:
             value: parakeet,modulate-velma-2
             category: stt_policy
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
             category: stt_policy
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware-dev
@@ -301,7 +320,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -363,9 +382,6 @@ environments:
               env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
               provisional: true
               category: service_auth
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -373,6 +389,9 @@ environments:
               value: primary
               category: rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
               value: gateway
               category: rollout
             GOOGLE_CLIENT_ID:
@@ -492,13 +511,13 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
               value: gateway
               category: rollout
             SYNC_BACKFILL_USER_DAILY_HOURS:
@@ -631,13 +650,13 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
               value: gateway
               category: rollout
             SYNC_BACKFILL_USER_DAILY_HOURS:
@@ -758,9 +777,6 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -772,6 +788,9 @@ environments:
               value: 'false'
               category: memory_rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
               value: gateway
               category: rollout
             GOOGLE_CLIENT_ID:
@@ -898,7 +917,7 @@ environments:
               secret: TYPESENSE_HOST
               version: latest
           flags:
-            --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+            --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
             --task-timeout: 3600s
             --cpu: '2'
             --memory: 2Gi
@@ -910,12 +929,12 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: gateway
+              category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
               value: 'false'
@@ -990,9 +1009,6 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
-          MEMORY_ENABLED_USERS:
-            category: memory_rollout
-            value: ''
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -1000,6 +1016,9 @@ environments:
             value: primary
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_LLM_CHAT_AGENT_ROUTE:
             value: gateway
             category: rollout
           GOOGLE_CLIENT_ID:
@@ -1010,7 +1029,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -1141,6 +1160,10 @@ environments:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          MEMORY_V3_CURSOR_SECRET:
+            secret:
+              name: prod-omi-backend-secrets
+              key: MEMORY_V3_CURSOR_SECRET
           MCP_OAUTH_CLIENTS_JSON:
             secret:
               name: prod-omi-backend-secrets
@@ -1183,7 +1206,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,dg-nova-3,parakeet
+            value: dg-nova-3,modulate-velma-2,parakeet
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -1232,6 +1255,9 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
+            MEMORY_V3_CURSOR_SECRET:
+              secret: MEMORY_V3_CURSOR_SECRET
+              version: latest
             DESKTOP_PREVIEW_PUBLISH_KEY:
               secret: DESKTOP_PREVIEW_PUBLISH_KEY
               version: latest
@@ -1259,9 +1285,6 @@ environments:
               env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
               provisional: true
               category: service_auth
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -1269,6 +1292,9 @@ environments:
               value: primary
               category: rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
               value: gateway
               category: rollout
             GOOGLE_CLIENT_ID:
@@ -1365,6 +1391,9 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
+            MEMORY_V3_CURSOR_SECRET_VERSION:
+              value: prod-v1
+              category: memory_rollout
             MCP_OAUTH_CLAUDE_CLIENT_ID:
               env_var: MCP_OAUTH_CLAUDE_CLIENT_ID
               category: oauth_metadata
@@ -1402,13 +1431,13 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
               value: gateway
               category: rollout
             SYNC_BACKFILL_USER_DAILY_HOURS:
@@ -1542,13 +1571,13 @@ environments:
             STT_PRERECORDED_MODEL:
               value: parakeet,modulate-velma-2
               category: stt_policy
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
               value: gateway
               category: rollout
             SYNC_BACKFILL_USER_DAILY_HOURS:
@@ -1670,9 +1699,6 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -1684,6 +1710,9 @@ environments:
               value: 'false'
               category: memory_rollout
             OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
               value: gateway
               category: rollout
             GOOGLE_CLIENT_ID:
@@ -1795,7 +1824,7 @@ environments:
               secret: TYPESENSE_HOST
               version: latest
           flags:
-            --remove-env-vars: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+            --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           env:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
@@ -1804,12 +1833,12 @@ environments:
             OMI_LLM_GATEWAY_FEATURE_MODE:
               value: gateway
               category: rollout
+            OMI_LLM_CHAT_AGENT_ROUTE:
+              value: gateway
+              category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
-            MEMORY_ENABLED_USERS:
-              category: memory_rollout
-              value: ''
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
               value: 'false'

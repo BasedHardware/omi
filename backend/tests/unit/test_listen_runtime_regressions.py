@@ -10,7 +10,9 @@ import pytest
 from routers.listen.contracts import ListenRequest
 from routers.listen.runtime import ListenSessionRuntime
 from routers.listen.transcripts import TranscriptProcessor
+from utils.async_tasks import WebSocketTaskSupervisor
 from utils.listen_session_bootstrap import ListenConnectBase
+from utils.onboarding import ONBOARDING_QUESTIONS, OnboardingHandler
 from utils.stt.streaming import STTService
 from starlette.websockets import WebSocketState
 
@@ -190,6 +192,7 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     runtime.request = request
     runtime.use_custom_stt = False
     runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None)
+    runtime.task_supervisor = WebSocketTaskSupervisor(uid=request.uid, label='listen')
 
     async def bootstrap_persistence_call(*_args, **_kwargs):
         return False
@@ -219,10 +222,78 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
     monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
     monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
-    monkeypatch.setattr(runtime_module, 'OnboardingHandler', lambda *_args: SimpleNamespace())
+
+    async def _noop_question():
+        return None
+
+    monkeypatch.setattr(
+        runtime_module, 'OnboardingHandler', lambda *_args: SimpleNamespace(send_current_question=_noop_question)
+    )
 
     assert await runtime._bootstrap() is True
+    await runtime.task_supervisor.drain_all(timeout=1.0, cancel=False)
     assert selected_multi_language_options == [('es', False, None)]
+
+
+@pytest.mark.anyio
+async def test_bootstrap_sends_first_onboarding_question_before_any_audio(monkeypatch):
+    """An onboarding session's question flow is server-driven: the first question
+    must reach the client at connect time, before any segments arrive. Dropping
+    this kickoff leaves the speech-profile page frozen at 0% with no question."""
+    import routers.listen.runtime as runtime_module
+
+    sent_events = []
+
+    async def send_json(event):
+        sent_events.append(event)
+
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED, send_json=send_json),
+        uid='onboarding-user',
+        language='en',
+        onboarding_mode=True,
+    )
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.use_custom_stt = False
+    runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None, active=True)
+    runtime.task_supervisor = WebSocketTaskSupervisor(uid=request.uid, label='listen')
+
+    async def bootstrap_persistence_call(*_args, **_kwargs):
+        return False
+
+    runtime.persistence = SimpleNamespace(call=bootstrap_persistence_call)
+    runtime.is_multi_channel = False
+    runtime.has_speech_profile = False
+    enqueued_segments = []
+    runtime.transcripts = SimpleNamespace(enqueue=enqueued_segments.extend)
+    runtime._build_components = lambda: None
+
+    base = ListenConnectBase(
+        user_exists=True,
+        user_has_credits=True,
+        transcription_prefs={'single_language_mode': False, 'uses_custom_stt': False},
+        fair_use_init_stage=None,
+        fair_use_track_dg_usage=False,
+        fair_use_dg_budget_exhausted=False,
+    )
+    monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+    monkeypatch.setattr(
+        runtime_module, 'get_stt_service_for_language', lambda language, **_kwargs: ('test-stt', 'en', 'test-model')
+    )
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
+    monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
+
+    assert await runtime._bootstrap() is True
+    await runtime.task_supervisor.drain_all(timeout=2.0, cancel=False)
+
+    assert [event['type'] for event in sent_events] == ['onboarding_question']
+    first_question = sent_events[0]
+    assert first_question['question'] == ONBOARDING_QUESTIONS[0]['question']
+    assert first_question['question_index'] == 0
+    assert first_question['total_questions'] == len(ONBOARDING_QUESTIONS)
+    assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
 
 
 @pytest.mark.anyio

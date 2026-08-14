@@ -129,6 +129,8 @@ env:
     value: "prod"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
+  - name: OMI_LLM_CHAT_AGENT_ROUTE
+    value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
     value: "off"
   - name: ACCOUNT_CUTOVER_ENFORCEMENT
@@ -144,10 +146,13 @@ env:
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_MODE
     value: "off"
-  - name: MEMORY_ENABLED_USERS
-    value: ""
   - name: MEMORY_V3_GET_ENABLED
     value: "false"
+  - name: MEMORY_V3_CURSOR_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MEMORY_V3_CURSOR_SECRET
   - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
     value: "false"
   - name: FAL_KEY
@@ -300,7 +305,7 @@ env:
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,dg-nova-3,parakeet"
+    value: "dg-nova-3,modulate-velma-2,parakeet"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS

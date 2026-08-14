@@ -10,12 +10,14 @@ covers:
   - desktop/macos/Desktop/Sources/ScreenRecordingPermissionPolicy.swift
   - desktop/macos/Desktop/Sources/Onboarding/PermissionDragGuidance.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PermissionsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/PermissionsPageChrome.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+SystemActions.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Permissions.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+TrialPaywall.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift
   - desktop/macos/Desktop/Sources/MainWindow/RewindOnlyView.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveCaptureSystemProbe.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+SuggestionProbe.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistant.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistantTelemetry.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryExtractionModels.swift
@@ -24,6 +26,10 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveAssistantOrchestrationPolicy.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveExternalCaptureYield.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/MediaPlaybackIdleExemption.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+CaptureStatus.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveCaptureStatusSnapshot.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveCaptureStatusSnapshotRegistration.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+NotificationSettings.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+ScreenCaptureHealth.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/SettingsSyncManager.swift

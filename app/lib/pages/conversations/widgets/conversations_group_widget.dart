@@ -28,30 +28,41 @@ class ConversationsGroupWidget extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    // Merge conversations and recordings into one time-sorted list (newest first),
-    // matching how conversations are ordered within a date.
-    final entries = <({DateTime time, ServerConversation? convo, LocalRecording? rec})>[
-      for (final c in conversations) (time: c.startedAt ?? c.createdAt, convo: c, rec: null),
-      for (final r in recordings) (time: r.startedAt, convo: null, rec: r),
-    ]..sort((a, b) => b.time.compareTo(a.time));
+    final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         DateListItem(date: date, isFirst: isFirst),
         ...entries.map((e) {
-          if (e.convo != null) {
+          if (e.conversation != null) {
             return ConversationListItem(
-              key: ValueKey(e.convo!.id),
-              conversation: e.convo!,
-              conversationIdx: conversations.indexOf(e.convo!),
+              key: ValueKey(e.conversation!.id),
+              conversation: e.conversation!,
+              conversationIdx: conversations.indexOf(e.conversation!),
               date: date,
             );
           }
-          return RecordingListItem(key: ValueKey('rec_${e.rec!.id}'), recording: e.rec!);
+          return RecordingListItem(key: ValueKey('rec_${e.recording!.id}'), recording: e.recording!);
         }),
         const SizedBox(height: 10),
       ],
     );
   }
+}
+
+typedef ConversationGroupEntry = ({DateTime time, ServerConversation? conversation, LocalRecording? recording});
+
+/// Merge conversations and local recordings into the time-sorted order used by
+/// the conversations page. The page consumes these lightweight descriptors in
+/// a sliver builder so only visible rows become widgets.
+List<ConversationGroupEntry> buildConversationGroupEntries({
+  required List<ServerConversation> conversations,
+  required List<LocalRecording> recordings,
+}) {
+  return <ConversationGroupEntry>[
+    for (final conversation in conversations)
+      (time: conversation.startedAt ?? conversation.createdAt, conversation: conversation, recording: null),
+    for (final recording in recordings) (time: recording.startedAt, conversation: null, recording: recording),
+  ]..sort((a, b) => b.time.compareTo(a.time));
 }

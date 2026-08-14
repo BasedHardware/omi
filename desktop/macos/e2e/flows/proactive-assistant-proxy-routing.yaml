@@ -1,10 +1,11 @@
 version: 2
 name: proactive-assistant-proxy-routing
 tier: 1
-description: Gemini and embedding clients resolve through the non-production desktop backend policy.
+description: Proactive model clients resolve through the non-production desktop backend policy.
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiClient.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveLaneClient.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/EmbeddingService.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift
 preconditions:
@@ -18,6 +19,7 @@ steps:
     expect:
       result.detail.gemini_proxy_base_url: https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
       result.detail.embedding_proxy_base_url: https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
+      result.detail.proactivity_base_url: https://desktop-backend-dt5lrfkkoa-uc.a.run.app/
 
   - id: S2
     name: Logs are clean

@@ -10,14 +10,14 @@ struct SidebarView: View {
   @ObservedObject var appState: AppState
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
-  @ObservedObject private var crispManager = CrispManager.shared
 
   // Tier gating (0 = show all, 1-6 = sequential tiers)
   @AppStorage("currentTierLevel") private var currentTierLevel = 0
 
   // Toggle states for quick controls
   @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
-  @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
+  @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) private var audioRecordingModeRaw =
+    AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
   @State private var isMonitoring = false
   @State private var isTogglingMonitoring = false
   @State private var isTogglingTranscription = false
@@ -261,7 +261,6 @@ struct SidebarView: View {
         newTier != 0 && newTier < currentItem.requiredTier,
         selectedIndex != SidebarNavItem.settings.rawValue
           && selectedIndex != SidebarNavItem.permissions.rawValue
-          && selectedIndex != SidebarNavItem.help.rawValue
       {
         selectedIndex = SidebarNavItem.dashboard.rawValue
       }
@@ -630,7 +629,7 @@ struct SidebarView: View {
   private func microphonePermissionRow(isExpanded: Bool) -> some View {
     let isDenied = appState.isMicrophonePermissionDenied()
     let isToggleable = appState.hasMicrophonePermission
-    let isActive = transcriptionEnabled && isToggleable
+    let isActive = audioRecordingModeRaw != AssistantSettings.AudioRecordingMode.off.rawValue && isToggleable
     let color: Color =
       isToggleable
       ? Ink.secondary
@@ -700,7 +699,7 @@ struct SidebarView: View {
 
     if isToggleable {
       Button(action: {
-        toggleTranscription(enabled: !transcriptionEnabled)
+        toggleTranscription(enabled: audioRecordingModeRaw == AssistantSettings.AudioRecordingMode.off.rawValue)
       }) {
         row
       }
@@ -802,14 +801,9 @@ struct SidebarView: View {
     // Track setting change
     AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
 
-    // Persist the setting first for immediate feedback
-    AssistantSettings.shared.transcriptionEnabled = enabled
-
-    if enabled {
-      appState.startTranscription()
-    } else {
-      appState.stopTranscription()
-    }
+    let mode: AssistantSettings.AudioRecordingMode = enabled ? .onlyMeetings : .off
+    audioRecordingModeRaw = mode.rawValue
+    AssistantSettings.shared.audioRecordingMode = mode
 
     // Small delay to show the loading state visually
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {

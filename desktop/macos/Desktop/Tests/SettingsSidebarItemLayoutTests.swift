@@ -74,48 +74,30 @@ final class SettingsSidebarItemLayoutTests: XCTestCase {
     )
   }
 
-  /// `CrispManager` has counted unread founder replies all along and nothing anywhere in the app
-  /// drew the number. The `Help` row is its one reader, so the badge has to actually take room —
-  /// and has to do it without pushing the row onto a second line, which is the failure the
-  /// sidebar's whole derived width exists to prevent.
-  func testTheHelpRowsUnreadCountIsDrawnAndStaysOnOneLine() {
-    let plain = itemSize(section: .help, badgeCount: 0)
-    let badged = itemSize(section: .help, badgeCount: 12)
-
-    XCTAssertGreaterThan(
-      badged.width, plain.width,
-      "an unread count that occupies no width is not being rendered")
+  func testPermissionsRowWithMissingNoticeStaysOnOneLine() {
+    let plain = itemHeight(section: .permissions, isSelected: false, showsMissingPermissionNotice: false)
+    let noticed = itemHeight(section: .permissions, isSelected: true, showsMissingPermissionNotice: true)
     XCTAssertEqual(
-      badged.height, plain.height, accuracy: 0.5,
-      "the badge must sit in the row, not add a line to it")
-    XCTAssertLessThanOrEqual(
-      badged.width, SettingsSidebarMetrics.itemAvailableWidth,
-      "the badged Help row must still fit the sidebar it lives in")
-  }
-
-  private func itemSize(
-    section: SettingsContentView.SettingsSection, badgeCount: Int
-  ) -> CGSize {
-    let host = NSHostingView(
-      rootView: SettingsSidebarItem(
-        section: section,
-        isSelected: false,
-        iconWidth: 20,
-        badgeCount: badgeCount,
-        onTap: {}
-      )
-      .fixedSize()
-    )
-    host.layoutSubtreeIfNeeded()
-    return host.fittingSize
+      noticed, plain, accuracy: 0.5,
+      "the missing-grant mark beside the label must sit in the row, not wrap it")
+    XCTAssertLessThan(noticed, 60)
   }
 
   private func itemHeight(isSelected: Bool) -> CGFloat {
+    itemHeight(section: .notifications, isSelected: isSelected, showsMissingPermissionNotice: false)
+  }
+
+  private func itemHeight(
+    section: SettingsContentView.SettingsSection,
+    isSelected: Bool,
+    showsMissingPermissionNotice: Bool
+  ) -> CGFloat {
     let host = NSHostingView(
       rootView: SettingsSidebarItem(
-        section: .notifications,
+        section: section,
         isSelected: isSelected,
         iconWidth: 20,
+        showsMissingPermissionNotice: showsMissingPermissionNotice,
         onTap: {}
       )
       .frame(width: SettingsSidebarMetrics.itemAvailableWidth)

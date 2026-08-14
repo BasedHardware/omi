@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / ".github" / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT / ".github" / "scripts"))
 from workflow_composite_contract import backend_deploy_contract_text
+
 UPDATES_SOURCE = (ROOT / "backend/routers/updates.py").read_text(encoding="utf-8")
 
 MODULE_PATH = ROOT / ".github/scripts/check-gcp-backend-production-boundary.py"
@@ -57,17 +58,18 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
             self.fail("production reservation smoke must send an exact tag body")
 
         schema = re.search(
-            r'class QualifiedBetaPromotionRequest\(BaseModel\):.*?tag: str = Field\(pattern=r"(?P<pattern>[^"]+)"\)',
+            r'class BetaCandidatePromotionRequest\(BaseModel\):.*?tag: str = Field\(pattern=r"(?P<pattern>[^"]+)"\)',
             UPDATES_SOURCE,
             re.DOTALL,
         )
         if schema is None:
-            self.fail("qualified Beta tag schema must remain statically inspectable")
+            self.fail("Beta candidate tag schema must remain statically inspectable")
         self.assertRegex(match.group("tag"), re.compile(schema.group("pattern")))
 
         reserve = UPDATES_SOURCE[
-            UPDATES_SOURCE.index("async def reserve_beta_candidate_endpoint(") :
-            UPDATES_SOURCE.index('@router.put("/v2/desktop/beta/admission")')
+            UPDATES_SOURCE.index("async def reserve_beta_candidate_endpoint(") : UPDATES_SOURCE.index(
+                '@router.put("/v2/desktop/beta/admission")'
+            )
         ]
         self.assertIn("if not _has_beta_promotion_authorization(authorization):", reserve)
         self.assertIn('raise HTTPException(status_code=401, detail="Unauthorized")', reserve)

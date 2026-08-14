@@ -347,7 +347,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Save Knowledge Graph",
       "Save a knowledge graph of entities and relationships extracted from the user's data.",
       [
-        "Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label}).",
+        "Prefer discovery_text (raw notes/findings). Backend extract via knowledge_graph SSOT builds nodes/edges; nodes/edges remain accepted for compatibility.",
         "node_type must be one of: person, organization, place, thing, concept.",
         "Use when exploring the user's files during onboarding to build their knowledge graph.",
         "Deduplication is handled automatically; provide all entities you find.",
@@ -892,11 +892,14 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     promptSnippet: "save_knowledge_graph - Save entities and relationships to the user's knowledge graph",
     promptGuidelines: [
       "Use when exploring the user's files during onboarding or knowledge-graph building.",
-      "Deduplication is handled automatically; include all meaningful entities and relationships you found.",
     ],
-    latency: "fast local",
+    latency: "fast network",
     inputSchema: schema(
       {
+        discovery_text: {
+          type: "string",
+          description: "Raw discovery notes. Backend knowledge_graph SSOT extracts nodes/edges.",
+        },
         nodes: {
           type: "array",
           items: {
@@ -925,10 +928,12 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
           },
         },
       },
-      ["nodes", "edges"],
+      [],
     ),
     annotations: localWrite,
-    timeoutClass: "normal",
+    // discovery_text makes this a network edge with a 60s backend request; the normal
+    // 30s relay deadline would report failure while that request is still in flight.
+    timeoutClass: "long",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Used by onboarding/knowledge graph flows."],
@@ -1652,7 +1657,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     executor: { kind: "swiftTool" },
     surfaces: ["desktop_chat"],
     capabilityDoc: doc("Create Canonical Goal", "Create a user-confirmed canonical goal in Chat-first.", [
-      "Only available to the server-enabled chat-first main Chat cohort.",
+      "Available when the server-projected Chat-first capability is active.",
     ]),
     intendedForAgents: true,
     runtimePreconditions: ["Requires a server-authoritative chat-first capability on the current main Chat run."],
@@ -1675,7 +1680,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     executor: { kind: "swiftTool" },
     surfaces: ["desktop_chat"],
     capabilityDoc: doc("Get Canonical Goals", "Read canonical goal records for a Chat-first response.", [
-      "Only available to the server-enabled chat-first main Chat cohort.",
+      "Available when the server-projected Chat-first capability is active.",
     ]),
     intendedForAgents: true,
     runtimePreconditions: ["Requires a server-authoritative chat-first capability on the current main Chat run."],
@@ -1713,7 +1718,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     executor: { kind: "swiftTool" },
     surfaces: ["desktop_chat"],
     capabilityDoc: doc("Render Chat Blocks", "Add validated structured cards to the current main Chat response.", [
-      "Only available to the server-enabled chat-first main Chat cohort.",
+      "Available when the server-projected Chat-first capability is active.",
     ]),
     intendedForAgents: true,
     runtimePreconditions: [
@@ -1746,7 +1751,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     capabilityDoc: doc(
       "Show Rewind Evidence",
       "Attach one local historical screenshot as evidence on the current main Chat response.",
-      ["Only available to the server-enabled chat-first main Chat cohort."],
+      ["Available when the server-projected Chat-first capability is active."],
     ),
     intendedForAgents: true,
     runtimePreconditions: [
@@ -1790,7 +1795,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     executor: { kind: "nodeTool" },
     surfaces: ["desktop_chat"],
     capabilityDoc: doc("Search Chat History", "Recover a bounded older decision from the current Chat transcript.", [
-      "Only available to the server-enabled chat-first main Chat cohort.",
+      "Available when the server-projected Chat-first capability is active.",
       "The parent kernel searches only the caller-owned current journal generation.",
     ]),
     intendedForAgents: true,

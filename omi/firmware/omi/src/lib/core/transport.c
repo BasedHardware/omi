@@ -1382,7 +1382,12 @@ int transport_clear_bonds(void)
         }
     }
 
-    transport_reset_after_disconnect();
+    /* Only tear down ourselves when the disconnect callback has not already
+     * done so (it nulls current_connection); otherwise re-running the reset
+     * would double-execute teardown. */
+    if (current_connection != NULL) {
+        transport_reset_after_disconnect();
+    }
 
     err = bt_unpair(BT_ID_DEFAULT, NULL);
     if (err && err != -ENOENT) {

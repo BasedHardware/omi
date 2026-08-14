@@ -75,9 +75,6 @@ PR may promote it to `locked`.
 - `backend/tests/unit/test_memory_outbox_worker.py` — projection delivery
   reloads authoritative state, repairs reclaimed deliveries, retries, and
   acknowledges only successful convergence
-- `backend/tests/unit/test_v3_compatibility_projection_outbox_sync.py` —
-  compatibility rows converge under account-generation fences
-
 ## Path globs
 
 - `docs/epics/memory_normative_architecture.md`

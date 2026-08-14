@@ -5,6 +5,7 @@ import XCTest
 private final class MemoryLifecycleURLStub: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
   private nonisolated(unsafe) static var _headers: [String: String] = [:]
+  private nonisolated(unsafe) static var _lastRequestURL: URL?
 
   static var headers: [String: String] {
     get {
@@ -19,14 +20,29 @@ private final class MemoryLifecycleURLStub: URLProtocol, @unchecked Sendable {
     }
   }
 
+  static var lastRequestURL: URL? {
+    get {
+      lock.lock()
+      defer { lock.unlock() }
+      return _lastRequestURL
+    }
+    set {
+      lock.lock()
+      _lastRequestURL = newValue
+      lock.unlock()
+    }
+  }
+
   static func reset() {
     headers = [:]
+    lastRequestURL = nil
   }
 
   override class func canInit(with request: URLRequest) -> Bool { true }
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
   override func startLoading() {
+    Self.lastRequestURL = request.url
     let response = HTTPURLResponse(
       url: request.url!,
       statusCode: 200,
@@ -104,5 +120,33 @@ final class APIClientMemoryLifecycleHeaderTests: XCTestCase {
     XCTAssertFalse(page.canonicalLifecycleExposed)
     XCTAssertEqual(page.deviceScopeSupported, true)
     XCTAssertFalse(page.defaultMemoryDeleteSupported)
+  }
+
+  func testNextCursorHeaderIsExposedOnMemoryListPage() async throws {
+    MemoryLifecycleURLStub.headers = [
+      "X-Omi-Memory-Canonical-Lifecycle-Exposed": "true",
+      "X-Omi-Memory-Next-Cursor": "uml.test.cursor",
+    ]
+    let client = await makeClient()
+
+    let page = try await client.getMemoriesPage(limit: 100, cursor: nil)
+
+    XCTAssertEqual(page.nextCursor, "uml.test.cursor")
+    XCTAssertTrue(page.canonicalLifecycleExposed)
+  }
+
+  func testCursorQueryReplacesOffsetOnContinuationPages() async throws {
+    MemoryLifecycleURLStub.headers = [
+      "X-Omi-Memory-Next-Cursor": "uml.next"
+    ]
+    let client = await makeClient()
+
+    _ = try await client.getMemoriesPage(limit: 50, cursor: "uml.prev+token")
+
+    let url = try XCTUnwrap(MemoryLifecycleURLStub.lastRequestURL)
+    let raw = url.absoluteString
+    XCTAssertTrue(raw.contains("limit=50"), raw)
+    XCTAssertTrue(raw.contains("cursor=uml.prev%2Btoken"), raw)
+    XCTAssertFalse(raw.contains("offset="), raw)
   }
 }
