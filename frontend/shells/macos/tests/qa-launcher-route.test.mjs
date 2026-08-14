@@ -164,17 +164,25 @@ test("macOS QA launcher freezes origin, URLs, and the seven evidence routes befo
     }
     let actions = run.readActions();
     for (const route of evidenceRoutes) {
-      assert.match(actions, new RegExp(`launch\\|query=route=${route}&platform=desktop`));
+      assert.match(actions, new RegExp(`launch\\|query=route=${route}&platform=desktop&generation=platform\\|`));
     }
     assert.equal(actions.match(/^launch\|/gm)?.length, 7);
-    assert.doesNotMatch(actions, /generation=platform/);
+    assert.equal(actions.match(/generation=platform/g)?.length, 7);
 
     const defaultHome = spawnSync(run.launcher, [], {
       encoding: "utf8", env: run.environment,
     });
     assert.equal(defaultHome.status, 0);
     actions = run.readActions();
-    assert.match(actions, /launch\|query=route=home&platform=desktop.*\|api=http:\/\/127\.0\.0\.1:4851\|/);
+    assert.match(actions, /launch\|query=route=home&platform=desktop&generation=platform\|.*api=http:\/\/127\.0\.0\.1:4851\|/);
+
+    const legacyMemories = spawnSync(run.launcher, ["--api", "http://127.0.0.1:4851", "--route", "memories", "--generation", "legacy"], {
+      encoding: "utf8", env: run.environment,
+    });
+    assert.equal(legacyMemories.status, 0, legacyMemories.stderr);
+    const legacyLaunch = run.readActions().trim().split("\n").filter((line) => line.startsWith("launch|")).at(-1);
+    assert.match(legacyLaunch, /launch\|query=route=memories&platform=desktop&generation=legacy\|/);
+    assert.doesNotMatch(legacyLaunch, /generation=platform/);
 
     for (const [name, value] of [
       ["OMI_SURFACE_URL", "https://stale.example.invalid/"],

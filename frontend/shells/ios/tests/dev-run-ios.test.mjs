@@ -93,8 +93,8 @@ exit 0
       assert.equal(selected.status, 0, selected.stderr || selected.stdout);
       const args = readFileSync(argsFile, "utf8");
       assert.match(args, /--dart-define=SURFACE_MODE=scheme/);
-      assert.match(args, new RegExp(`--dart-define=SURFACE_QUERY=route=${route}&platform=mobile`));
-      assert.doesNotMatch(args, /generation=platform/);
+      assert.match(args, new RegExp(`--dart-define=SURFACE_QUERY=route=${route}&platform=mobile&generation=platform`));
+      assert.equal(args.match(/generation=platform/g)?.length, 1);
       assert.match(args, /--dart-define=OMI_RUN_CLIENT_ID=run-launcher-proof/);
       assert.doesNotMatch(args, /OMI_CONSUMER_EVIDENCE/);
       assert.doesNotMatch(args, /rig=dev|qa=|api\.omi\.me/);
@@ -106,9 +106,17 @@ exit 0
       env,
     });
     assert.equal(defaultHome.status, 0, defaultHome.stderr || defaultHome.stdout);
-    assert.match(readFileSync(argsFile, "utf8"), /SURFACE_QUERY=route=home&platform=mobile/);
+    assert.match(readFileSync(argsFile, "utf8"), /SURFACE_QUERY=route=home&platform=mobile&generation=platform/);
     assert.match(readFileSync(argsFile, "utf8"), /OMI_API_BASE_URL=http:\/\/127\.0\.0\.1:4851/);
-    assert.doesNotMatch(readFileSync(argsFile, "utf8"), /generation=platform/);
+    assert.equal(readFileSync(argsFile, "utf8").match(/generation=platform/g)?.length, 1);
+
+    const legacyMemories = spawnSync("/bin/bash", [
+      launcher, "--route", "memories", "--generation", "legacy", "--device", "simulator-proof",
+    ], { encoding: "utf8", env });
+    assert.equal(legacyMemories.status, 0, legacyMemories.stderr || legacyMemories.stdout);
+    const legacyArgs = readFileSync(argsFile, "utf8");
+    assert.match(legacyArgs, /SURFACE_QUERY=route=memories&platform=mobile&generation=legacy/);
+    assert.doesNotMatch(legacyArgs, /generation=platform/);
 
     const fixtureCapture = path.join(scratch, "ios-fixture.png");
     const captured = spawnSync("/bin/bash", [

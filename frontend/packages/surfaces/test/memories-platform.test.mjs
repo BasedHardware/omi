@@ -173,6 +173,8 @@ test("platform Memories hides healthy projection machinery and raw coordinates u
   });
   try {
     await rendered.act(async () => { for (let index = 0; index < 6; index += 1) await Promise.resolve(); });
+    assert.equal(rendered.container.querySelector("[data-generation]")?.getAttribute("data-generation"), "platform");
+    assert.equal((rendered.container.textContent ?? "").includes(EN_MESSAGES["lifecycle.unavailable"]), false, "served platform rows must not render the legacy unavailable chip");
     assert.equal(rendered.container.querySelector(".completeness-notice"), null, "healthy completeness is inspectable in data, not dashboard chrome");
     assert.doesNotMatch(rendered.container.textContent ?? "", /entity:qa:|qa_memory|observed 2026|projection was searched/i);
     assert.match(rendered.container.textContent ?? "", /Saved memory from/);
@@ -187,6 +189,41 @@ test("platform Memories hides healthy projection machinery and raw coordinates u
     assert.match(machineCard?.textContent ?? "", /2026-08-02T12:00:00\.000Z/);
   } finally {
     await rendered.cleanup();
+  }
+});
+
+test("legacy Memories unavailable is Temporarily unavailable; platform Memories with served rows is not", async () => {
+  // red-proof: keep the live launcher on generation=legacy (or omit it). The
+  // legacy surface is what rendered "Temporarily unavailable" while
+  // the platform memories door returned 200 synthesized rows.
+  const MemoriesProduction = await loadProductionExport("MemoriesProduction.tsx", "MemoriesProduction");
+  const fixtureStore = await loadProductionExport("memory-fixtures.ts", "fixtureStore");
+  const legacy = await renderComponent(MemoriesProduction, {
+    store: fixtureStore("unavailable"),
+    fixture: "unavailable",
+  });
+  try {
+    assert.equal(legacy.container.querySelector("[data-generation]"), null);
+    assert.ok(
+      (legacy.container.textContent ?? "").includes(EN_MESSAGES["lifecycle.unavailable"]),
+      "legacy unavailable must render the glance chip",
+    );
+  } finally {
+    await legacy.cleanup();
+  }
+
+  const Component = await loadProductionExport("MemoriesPlatformProduction.tsx", "MemoriesPlatformProduction");
+  const platform = await renderComponent(Component, {
+    store: fixturePropositionStore("normal"),
+    source: { kind: "live", origin: "bridge" },
+  });
+  try {
+    await platform.act(async () => { for (let index = 0; index < 6; index += 1) await Promise.resolve(); });
+    assert.equal(platform.container.querySelector("[data-generation]")?.getAttribute("data-generation"), "platform");
+    assert.equal((platform.container.textContent ?? "").includes(EN_MESSAGES["lifecycle.unavailable"]), false);
+    assert.match(platform.container.textContent ?? "", /Saved memory from/);
+  } finally {
+    await platform.cleanup();
   }
 });
 
