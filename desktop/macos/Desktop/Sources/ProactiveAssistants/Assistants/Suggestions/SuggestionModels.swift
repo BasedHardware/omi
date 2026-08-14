@@ -133,7 +133,6 @@ enum SuggestionGateDecision: Equatable, Sendable {
   case skippedDisabled
   case skippedExcludedApp
   case skippedCooldown
-  case skippedSnoozed
   /// The user has not settled in this context long enough to be working in it.
   case skippedDwell
   /// Today's evaluation budget is spent.
@@ -155,7 +154,6 @@ enum SuggestionGatePolicy {
   static func decide(
     isEnabled: Bool,
     isAppExcluded: Bool,
-    isSnoozed: Bool,
     now: Date,
     lastEvaluationAt: Date?,
     cooldown: TimeInterval,
@@ -166,7 +164,6 @@ enum SuggestionGatePolicy {
   ) -> SuggestionGateDecision {
     guard isEnabled else { return .skippedDisabled }
     guard !isAppExcluded else { return .skippedExcludedApp }
-    guard !isSnoozed else { return .skippedSnoozed }
     guard dwell >= requiredDwell else { return .skippedDwell }
     if let lastEvaluationAt, now.timeIntervalSince(lastEvaluationAt) < cooldown {
       return .skippedCooldown

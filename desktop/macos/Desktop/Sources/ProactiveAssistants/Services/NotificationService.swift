@@ -401,7 +401,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // NOTE: only READ the "already shown" flag here. The flag is SET at actual
     // delivery time (just before showNotification below), NOT here — setting it
     // before the snooze/enabled/frequency gates meant that if any gate suppressed
-    // this delivery (e.g. the user is snoozed when capture breaks), the flag was
+    // this delivery (e.g. notifications are disabled when capture breaks), the flag was
     // still persisted, and since it is only cleared on capture RECOVERY — which
     // never happens while capture stays broken — every later retry hit this early
     // return and the "screen recording needs reset" notice was never delivered.
@@ -412,13 +412,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return
     }
 
-    // Honor the floating-bar snooze for both the in-bar preview and the native
-    // macOS banner — the user opted into "no notifications for 2h".
-    if FloatingControlBarManager.shared.isSnoozed {
-      log("NotificationService: suppressing notification because floating bar is snoozed")
-      recordInsightDeliveryOutcome(insightDeliveryID, outcome: .suppressed, reason: .snoozed)
-      return
-    }
+    // Hiding the floating bar ("Hide for 2 hours") is a statement about the BAR, not
+    // about notifications: an hour of a movie with the bar hidden must still nudge.
+    // Delivery while hidden goes through the existing temp-show path, which pops the
+    // card and re-hides the bar afterwards. It deliberately does not gate here.
 
     // Proactive notifications honor the master Notifications toggle. When the user
     // turns Notifications off in Settings, suppress the floating-bar popup and the
@@ -510,7 +507,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         // later presentation boundary (or a system-banner fallback) can emit the terminal event.
         floatingBarQueued = true
       case .suppressed:
-        recordInsightDeliveryOutcome(insightDeliveryID, outcome: .suppressed, reason: .snoozed)
+        // Unreachable today (a hidden bar presents via temp-show instead of suppressing),
+        // kept for the shared result type; label with the surface, not a retired reason.
+        recordInsightDeliveryOutcome(insightDeliveryID, outcome: .suppressed, reason: .floatingBarUnavailable)
         return
       case .rejectedOwnerChange:
         recordInsightDeliveryOutcome(
@@ -723,7 +722,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let gate = ContextDeliveryGateInput(
       masterEnabled: Self.areNotificationsEnabled(),
       frequencyLevel: level,
-      snoozed: FloatingControlBarManager.shared.isSnoozed,
       paywalled: AppState.isPaywalledEffective,
       cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: level)
     )
@@ -761,7 +759,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       ),
       taskNotificationsEnabled: TaskAssistantSettings.shared.notificationsEnabled,
       focusSuppressed: ProactiveTaskInterruptionSettings.isFocusSuppressed,
-      snoozed: FloatingControlBarManager.shared.isSnoozed,
       now: now,
       calendar: calendar
     )
@@ -823,7 +820,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         ambientFrequencyEligible: false,
         taskNotificationsEnabled: false,
         focusSuppressed: false,
-        snoozed: false,
         now: now,
         calendar: .current
       ),

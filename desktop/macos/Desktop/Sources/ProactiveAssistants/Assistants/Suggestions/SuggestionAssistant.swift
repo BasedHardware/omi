@@ -132,7 +132,6 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     let enabled = await isEnabled
     let excluded = await MainActor.run { SuggestionAssistantSettings.shared.isAppExcluded(frame.appName) }
-    let snoozed = await MainActor.run { FloatingControlBarManager.shared.isSnoozed }
     let cooldown = await cooldownInterval
 
     let now = Date()
@@ -141,7 +140,6 @@ actor SuggestionAssistant: ProactiveAssistant {
     let decision = SuggestionGatePolicy.decide(
       isEnabled: enabled,
       isAppExcluded: excluded,
-      isSnoozed: snoozed,
       now: now,
       lastEvaluationAt: lastEvaluationAt,
       cooldown: cooldown,
@@ -628,7 +626,6 @@ actor SuggestionAssistant: ProactiveAssistant {
     let gateState = await MainActor.run {
       (
         SuggestionAssistantSettings.shared.isAppExcluded(frame.appName),
-        FloatingControlBarManager.shared.isSnoozed,
         NotificationService.areNotificationsEnabled(),
         NotificationService.currentFrequencyLevel()
       )
@@ -637,7 +634,6 @@ actor SuggestionAssistant: ProactiveAssistant {
     let decision = SuggestionGatePolicy.decide(
       isEnabled: assistantEnabled,
       isAppExcluded: gateState.0,
-      isSnoozed: gateState.1,
       now: now,
       lastEvaluationAt: nil,
       cooldown: 0,
@@ -645,9 +641,9 @@ actor SuggestionAssistant: ProactiveAssistant {
       requiredDwell: Self.requiredDwell,
       evaluationsToday: dailyBudget.countToday(now: now),
       dailyBudget: Self.dailyEvaluationBudget)
-    guard gateState.2, gateState.3 > 0, decision.allowsEvaluation else {
-      if !gateState.2 { return ["outcome": "skipped_notifications_disabled"] }
-      if gateState.3 == 0 { return ["outcome": "skipped_frequency_off"] }
+    guard gateState.1, gateState.2 > 0, decision.allowsEvaluation else {
+      if !gateState.1 { return ["outcome": "skipped_notifications_disabled"] }
+      if gateState.2 == 0 { return ["outcome": "skipped_frequency_off"] }
       return ["outcome": SuggestionAssistantTelemetry.GateOutcome(decision).rawValue]
     }
 

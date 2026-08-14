@@ -457,7 +457,6 @@ actor ContextProactivityEngine {
     return ContextDeliveryGateInput(
       masterEnabled: NotificationService.areNotificationsEnabled(),
       frequencyLevel: frequencyLevel,
-      snoozed: FloatingControlBarManager.shared.isSnoozed,
       paywalled: AppState.isPaywalledEffective,
       cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: frequencyLevel),
       dailyLimit: ContextDeliveryBudget.dailyLimit(

@@ -12,7 +12,6 @@ final class SuggestionGatePolicyTests: XCTestCase {
   private func decide(
     isEnabled: Bool = true,
     isAppExcluded: Bool = false,
-    isSnoozed: Bool = false,
     lastEvaluationAt: Date? = nil,
     cooldown: TimeInterval = 180,
     dwell: TimeInterval = 999,
@@ -23,7 +22,6 @@ final class SuggestionGatePolicyTests: XCTestCase {
     SuggestionGatePolicy.decide(
       isEnabled: isEnabled,
       isAppExcluded: isAppExcluded,
-      isSnoozed: isSnoozed,
       now: now,
       lastEvaluationAt: lastEvaluationAt,
       cooldown: cooldown,
@@ -48,8 +46,11 @@ final class SuggestionGatePolicyTests: XCTestCase {
     XCTAssertEqual(decide(isAppExcluded: true), .skippedExcludedApp)
   }
 
-  func testSnoozedBarDoesNotEvaluate() {
-    XCTAssertEqual(decide(isSnoozed: true), .skippedSnoozed)
+  /// Hiding the floating bar is about the bar, not delivery: the gate no longer has a
+  /// snooze input at all, so a hidden bar cannot silently mute an hour of nudges the way
+  /// "Disable for 2 hours" once did (the compiler now enforces what this test documents).
+  func testHiddenBarStillEvaluates() {
+    XCTAssertEqual(decide(), .evaluate)
   }
 
   func testCooldownBlocksUntilItHasFullyElapsed() {
@@ -69,16 +70,15 @@ final class SuggestionGatePolicyTests: XCTestCase {
     let decision = decide(
       isEnabled: false,
       isAppExcluded: true,
-      isSnoozed: true,
       lastEvaluationAt: now
     )
     XCTAssertEqual(decision, .skippedDisabled)
   }
 
-  /// A privacy exclusion must outrank snooze and cooldown: "do not look at this app" is a
+  /// A privacy exclusion must outrank cooldown: "do not look at this app" is a
   /// stronger statement than "not right now".
-  func testExclusionTakesPrecedenceOverSnoozeAndCooldown() {
-    let decision = decide(isAppExcluded: true, isSnoozed: true, lastEvaluationAt: now)
+  func testExclusionTakesPrecedenceOverCooldown() {
+    let decision = decide(isAppExcluded: true, lastEvaluationAt: now)
     XCTAssertEqual(decision, .skippedExcludedApp)
   }
 

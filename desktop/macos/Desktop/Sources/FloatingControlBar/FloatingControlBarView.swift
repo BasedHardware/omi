@@ -826,7 +826,7 @@ struct FloatingControlBarView: View {
 
   @ViewBuilder
   private var barContextMenu: some View {
-    Button("Disable for 2 hours") {
+    Button("Hide for 2 hours") {
       FloatingControlBarManager.shared.snooze(
         for: FloatingControlBarManager.snoozeTwoHoursDuration
       )
