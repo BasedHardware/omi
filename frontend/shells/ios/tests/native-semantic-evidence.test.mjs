@@ -159,6 +159,8 @@ test("prepared matrix AX replay emits gate-shaped input-set and batch receipt", 
     rmSync(outputPath, { force: true });
     const replay = spawnSync(result.receipt.argv[0], result.receipt.argv.slice(1), { cwd: coreRootForTest, encoding: "utf8" });
     assert.equal(replay.status, 0, replay.stderr);
+    // red-proof: a live OMI_PLATFORM_ROOT used to compare fixture SHA 2222… to
+    // current platform HEAD on replay and fail this assertion (lane L1).
     assert.equal(createHash("sha256").update(replay.stdout).digest("hex"), result.receipt.stdout_sha256);
     const preparationPath = path.join(rootScratch, "native-preparation-receipt.json");
     const preparation = JSON.parse(readFileSync(preparationPath, "utf8"));
@@ -200,6 +202,7 @@ test("native semantic wrapper has explicit credential-free environment and no br
   assert.match(source, /parallel-testing-enabled/);
   assert.match(source, /testIdentifier/);
   assert.match(source, /platform_root|OMI_PLATFORM_ROOT/);
+  assert.match(source, /platformRoot && !args\.replay_input/);
   assert.match(source, /source_root/);
   assert.match(source, /macos-foreground-guard\.mjs/);
   assert.match(source, /foreground_custody/);
