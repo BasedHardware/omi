@@ -11,6 +11,24 @@ import pytest
 
 PAYMENT_SOURCE = Path(__file__).resolve().parents[2] / "routers" / "payment.py"
 STRIPE_UTILS_SOURCE = Path(__file__).resolve().parents[2] / "utils" / "stripe.py"
+_MISSING = object()
+
+
+@pytest.fixture(autouse=True)
+def restore_module_stubs():
+    modules = dict(sys.modules)
+    routers_module = modules.get("routers")
+    router_payment = getattr(routers_module, "payment", _MISSING) if routers_module else _MISSING
+    yield
+    for module_name in tuple(sys.modules):
+        if module_name not in modules:
+            del sys.modules[module_name]
+    sys.modules.update(modules)
+    if routers_module:
+        if router_payment is _MISSING:
+            routers_module.__dict__.pop("payment", None)
+        else:
+            routers_module.payment = router_payment
 
 
 def _read_source(path: Path) -> str:
@@ -100,7 +118,7 @@ def test_upgrade_rejects_subscription_pending_cancellation(payment_router):
         "items": {"data": [{"id": "si_1", "price": {"id": "price_current"}}]},
     }
 
-    with patch.object(router.is_purchasable_price_id, "__call__", return_value=True), patch.object(
+    with patch.object(router, "_validate_price_id"), patch.object(
         router.is_paid_plan, "__call__", return_value=True
     ), patch.object(router.stripe.Subscription, "retrieve", return_value=stripe_subscription):
         with pytest.raises(router.HTTPException) as exc_info:
@@ -286,6 +304,9 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     # Force re-import of payment router
     if "routers.payment" in sys.modules:
         del sys.modules["routers.payment"]
+    routers_module = sys.modules.get("routers")
+    if routers_module:
+        routers_module.__dict__.pop("payment", None)
 
     from routers import payment as payment_router
 
