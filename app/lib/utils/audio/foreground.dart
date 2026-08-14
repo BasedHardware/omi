@@ -158,12 +158,17 @@ class ForegroundUtil {
   /// Release AVAudioSession after BLE/wearable capture stops. Phone-mic and
   /// CallKit paths deactivate themselves; this is the matching teardown for
   /// `configureForBluetooth` / FGS audio. No-op on Android.
-  static Future<void> deactivateBluetoothAudioSession() async {
-    if (!Platform.isIOS) return;
+  ///
+  /// Returns false when native deactivation fails so the caller can retry
+  /// instead of treating cleanup as done.
+  static Future<bool> deactivateBluetoothAudioSession() async {
+    if (!Platform.isIOS) return true;
     try {
       await _audioSessionChannel.invokeMethod('deactivateForBluetooth');
+      return true;
     } catch (e) {
       Logger.debug('deactivateForBluetooth failed: $e');
+      return false;
     }
   }
 

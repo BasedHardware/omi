@@ -90,6 +90,9 @@ final class QuickActionsIconPatcher: NSObject {
   private var phoneMicController: PhoneMicController?
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
+  /// Retained so `calls` is populated; a throwaway `CXCallObserver()` can
+  /// report empty during an active call (see PhoneMicInterruptionMonitor).
+  private let bluetoothAudioCallObserver = CXCallObserver()
 
   var session: WCSession?
     var flutterWatchAPI: WatchRecorderFlutterAPI?
@@ -104,6 +107,7 @@ final class QuickActionsIconPatcher: NSObject {
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
     QuickActionsIconPatcher.shared.startObserving()
+    bluetoothAudioCallObserver.setDelegate(self, queue: nil)
       
       
       if WCSession.isSupported() {
@@ -214,7 +218,7 @@ final class QuickActionsIconPatcher: NSObject {
             // CallKit owns the session during a phone call. Phone-mic and
             // Ray-Ban paths deactivate themselves; this is the matching
             // teardown for BLE/wearable capture keep-alive.
-            if CXCallObserver().calls.contains(where: { !$0.hasEnded }) {
+            if self.bluetoothAudioCallObserver.calls.contains(where: { !$0.hasEnded }) {
                 result(true)
                 return
             }
@@ -459,6 +463,10 @@ final class QuickActionsIconPatcher: NSObject {
 
 func registerPlugins(registry: FlutterPluginRegistry) {
   GeneratedPluginRegistrant.register(with: registry)
+}
+
+extension AppDelegate: CXCallObserverDelegate {
+    func callObserver(_ callObserver: CXCallObserver, callChanged call: CXCall) {}
 }
 
 extension AppDelegate: WCSessionDelegate {
