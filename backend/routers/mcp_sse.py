@@ -27,7 +27,6 @@ from utils.other.endpoints import check_rate_limit_inline
 from utils.executors import critical_executor, db_executor, run_blocking
 
 import database.conversations as conversations_db
-import database.memories as memories_db
 import database.mcp_api_key as mcp_api_key_db
 import database.mcp_oauth as mcp_oauth_db
 import database.vector_db as vector_db
@@ -58,11 +57,6 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
-from utils.memory.default_read_rollout import (
-    MemoryReadDecision,
-    read_default_read_rollout,
-)
-from utils.memory.surface_routing import pin_memory_system
 from utils.mcp_data import (
     clean_action_item,
     clean_chat_message,
@@ -77,14 +71,10 @@ from utils.mcp_memories import (
     McpVerifiedAuth,
     build_mcp_default_memory_read_context,
     collect_filtered_memories,
-    list_default_mcp_memories,
-    mcp_denied_read_payload,
-    mcp_legacy_read_authorized,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
-    search_default_mcp_memories_vector,
 )
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 from utils.mcp_analytics import (
@@ -853,8 +843,6 @@ def execute_tool(
     auth_context: Optional[ProductAuthorizationContext] = None,
 ) -> Dict[str, Any]:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
-    memory_system = pin_memory_system(user_id, db_client=db)
-
     if tool_name == "memory_platform":
         return build_mcp_memory_platform_payload()
 
@@ -902,52 +890,11 @@ def execute_tool(
         if not app_key_grant.allowed:
             raise _authorization_denied_error(str(app_key_grant.observability))
 
-        if memory_system == MemorySystem.CANONICAL:
-            filtered = collect_filtered_memories(
-                lambda batch_offset, batch_limit: [
-                    m.model_dump(mode='json')
-                    for m in MemoryService(db_client=db).read_pinned(user_id, memory_system, batch_limit, batch_offset)
-                ],
-                limit=limit,
-                offset=offset,
-                reviewed=reviewed,
-                manually_added=manually_added,
-                include_activity=include_activity,
-                include_sensitive=include_sensitive,
-                updated_after=updated_after,
-                sort=sort,
-                categories=valid_categories or None,
-            )
-            memories = filtered['memories']
-            for memory in memories:
-                if memory.get('is_locked', False):
-                    content = memory.get('content', '')
-                    memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-            return {"memories": memories}
-
-        memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
-        memory_list_results = list_default_mcp_memories(
-            uid=user_id,
-            limit=limit,
-            offset=offset,
-            db_client=db,
-            rollout_decision=memory_rollout,
-            categories=valid_categories,
-            reviewed=reviewed,
-            manually_added=manually_added,
-        )
-        if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
-            return {"memories": memory_list_results.memories}
-        if not mcp_legacy_read_authorized(memory_list_results):
-            denied = mcp_denied_read_payload(memory_list_results)
-            if denied is not None:
-                raise _authorization_denied_error(str(denied))
-            return {"memories": []}
-
         result = collect_filtered_memories(
-            lambda batch_offset, batch_limit: memories_db.get_memories(
-                user_id, batch_limit, batch_offset, valid_categories, sort=sort
-            ),
+            lambda batch_offset, batch_limit: [
+                memory.model_dump(mode='json')
+                for memory in MemoryService(db_client=db).read(user_id, limit=batch_limit, offset=batch_offset)
+            ],
             limit=limit,
             offset=offset,
             reviewed=reviewed,
