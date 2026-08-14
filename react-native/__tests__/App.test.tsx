@@ -262,7 +262,7 @@ jest.mock('../src/omiNative', () => ({
   },
 }));
 
-import App from '../App';
+import App, {resolveInitialRoute} from '../App';
 
 function chatMessage(
   id: string,
@@ -349,14 +349,32 @@ beforeEach(() => {
   );
 });
 
-async function renderApp() {
+async function renderApp(initialRoute?: string) {
   let renderer: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(async () => {
-    renderer = ReactTestRenderer.create(<App />);
+    renderer = ReactTestRenderer.create(<App initialRoute={initialRoute} />);
     await Promise.resolve();
   });
   return renderer!;
 }
+
+test('uses only allowlisted host-selected initial routes', () => {
+  expect(resolveInitialRoute('Chat')).toBe('Chat');
+  expect(resolveInitialRoute('Goals')).toBe('Home');
+  expect(resolveInitialRoute()).toBe('Home');
+});
+
+test('opens host-selected Chat without changing the default route', async () => {
+  const chatRenderer = await renderApp('Chat');
+  const chatOutput = JSON.stringify(chatRenderer.toJSON());
+  expect(chatOutput).toContain('I’m ready.');
+  expect(chatOutput).toContain('Ask anything...');
+
+  const homeRenderer = await renderApp();
+  const homeOutput = JSON.stringify(homeRenderer.toJSON());
+  expect(homeOutput).toContain('Search what you’ve seen and heard');
+  expect(homeOutput).not.toContain('I’m ready.');
+});
 
 test('renders the collapsed reference rail and search-first desktop Home', async () => {
   const renderer = await renderApp();
