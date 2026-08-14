@@ -2963,7 +2963,12 @@ workflows:
       - name: Resolve Context Swift packages
         script: |
           set -euo pipefail
-          xcrun swift package resolve
+          # --disable-keychain: the Developer ID import above initializes a build keychain, after
+          # which SwiftPM's credential search fails with errSecInteractionNotAllowed (-25308) and
+          # aborts the resolve while fetching Sparkle's binary artifact. That artifact is a public
+          # release asset and none of this package's dependencies are private, so there is no
+          # credential to find.
+          xcrun swift package resolve --disable-keychain
 
       - name: Build, notarize, sign, and publish Context
         script: |

@@ -182,14 +182,21 @@ fi
 # ---------------------------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------------------------
+# Every dependency this package has is a public repository or a public release asset, so SwiftPM has
+# no credential to look up — but it searches the login keychain anyway, and on a CI machine that
+# search fails with errSecInteractionNotAllowed (-25308) and takes the whole resolve down with it.
+# Disabling the search is therefore a statement of fact about this package, not a workaround: there
+# are no private dependencies for a keychain lookup to help with.
+SWIFT_AUTH_FLAGS=(--disable-keychain)
+
 log "building ContextApp (release)"
 # Host architecture (no arm64-only triple): Intel Macs get an x86_64 binary; Silicon gets arm64.
-swift build -c release --package-path "$PKG_DIR" --product ContextApp
+swift build -c release --package-path "$PKG_DIR" "${SWIFT_AUTH_FLAGS[@]}" --product ContextApp
 
 log "building context-for-claude-mcp (release)"
-swift build -c release --package-path "$PKG_DIR" --product context-for-claude-mcp
+swift build -c release --package-path "$PKG_DIR" "${SWIFT_AUTH_FLAGS[@]}" --product context-for-claude-mcp
 
-BIN_DIR="$(swift build -c release --package-path "$PKG_DIR" --show-bin-path)"
+BIN_DIR="$(swift build -c release --package-path "$PKG_DIR" "${SWIFT_AUTH_FLAGS[@]}" --show-bin-path)"
 [[ -n "$BIN_DIR" && -d "$BIN_DIR" ]] || die "could not resolve the SPM bin path"
 [[ -x "$BIN_DIR/ContextApp" ]] || die "ContextApp binary missing at $BIN_DIR/ContextApp"
 [[ -x "$BIN_DIR/context-for-claude-mcp" ]] || die "context-for-claude-mcp binary missing at $BIN_DIR/context-for-claude-mcp"
