@@ -132,7 +132,8 @@ def with_parity_pack_env(payload: str) -> str:
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "MEMORY_V3_CURSOR_SECRET", "valueFrom": {"secretKeyRef": {"name": "MEMORY_V3_CURSOR_SECRET", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
-        {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
+        {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
+        {"name": "GOOGLE_MAPS_API_KEY", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_MAPS_API_KEY", "key": "latest"}}},'''
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
@@ -274,6 +275,25 @@ def test_prod_listen_finalization_contract_requires_the_dedicated_worker_binding
         ) in validator._validate_listen_finalization_dispatch_contract('prod', prod)
     finally:
         backend_env['LISTEN_FINALIZATION_TASKS_HANDLER_URL'] = missing_entry
+
+
+def test_listen_finalization_contract_requires_maps_key_on_backend_sync():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+
+    for env in ('dev', 'prod'):
+        env_config = manifest['environments'][env]
+        secrets = env_config['cloud_run']['services']['backend-sync']['secrets']
+        assert secrets['GOOGLE_MAPS_API_KEY'] == {'secret': 'GOOGLE_MAPS_API_KEY', 'version': 'latest'}
+
+        missing = secrets.pop('GOOGLE_MAPS_API_KEY')
+        try:
+            assert validator.ValidationError(
+                f'{env}/cloud_run/backend-sync',
+                'missing required listen-finalization secret GOOGLE_MAPS_API_KEY',
+            ) in validator._validate_listen_finalization_dispatch_contract(env, env_config)
+        finally:
+            secrets['GOOGLE_MAPS_API_KEY'] = missing
 
 
 def test_gke_config_map_contract_rejects_missing_config_map(tmp_path):
