@@ -374,9 +374,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// scrollbar doesn't clip right-aligned user pills when horizontalContentPadding
   /// is 0; the left edge stays aligned with the ask bar. Default 0.
   var trailingContentPadding: CGFloat = 0
-  /// Where the prompt rail's right edge should land. Home uses zero because its
-  /// ask bar fills the chat column; other surfaces keep the page margin.
-  var timelineTrailingInset: CGFloat = ChatComposerLayout.pageMargin
+  /// Where the prompt rail's right edge should land. Zero keeps it flush with
+  /// Home's ask bar; pass a page margin only when the host's composer is inset.
+  var timelineTrailingInset: CGFloat = 0
   /// Narrow sidebars (task chat) keep the rail off so it cannot sit on the text.
   var enablesPromptTimeline: Bool = true
   @ViewBuilder var welcomeContent: () -> WelcomeContent

@@ -1109,7 +1109,6 @@ struct DashboardPage: View {
         chatFirstRichBlockContext: chatFirstRichBlockContext,
         verticalContentPadding: OmiSpacing.sm,
         trailingContentPadding: OmiSpacing.md,
-        timelineTrailingInset: 0,
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
