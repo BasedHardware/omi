@@ -1,5 +1,28 @@
 import CoreGraphics
 
+/// Scale of the idle island. Retract animates to `retractedProgress`; anything
+/// that cancels that animation without `orderOut` must land back on
+/// `revealedProgress` or the chrome stays scaled into the camera housing.
+enum FloatingBarNotchRevealPolicy {
+  static let retractedProgress: CGFloat = 0.01
+  static let revealedProgress: CGFloat = 1
+
+  /// Hover-frame assertions, Space reconciliation, and display revalidation
+  /// often no-op `resizeToFrame`. Those must not share a cancellation token
+  /// with retract/reveal.
+  static var noOpFrameAssertionInvalidatesRevealToken: Bool { false }
+
+  /// A retract whose `orderOut` never ran left the window on-screen at the
+  /// collapsed scale. Restore full scale only when nothing else is still
+  /// retracting it.
+  static func shouldRestoreProgressAfterCancelledRetract(
+    windowStillVisible: Bool,
+    retractStillInFlight: Bool
+  ) -> Bool {
+    windowStillVisible && !retractStillInFlight
+  }
+}
+
 enum FloatingBarNotchTransition {
   static func revealProgress(_ rawProgress: CGFloat) -> CGFloat {
     let progress = min(max(rawProgress, 0), 1)

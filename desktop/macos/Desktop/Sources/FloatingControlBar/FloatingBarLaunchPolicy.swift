@@ -54,3 +54,69 @@ struct FloatingBarLaunchPolicy {
     }
   }
 }
+
+/// When AppKit or an onboarding demo has ordered the notch out, decide whether
+/// the user's durable bar should come back. Disabled and snoozed bars stay
+/// hidden. A session that has never presented the bar (deferred until first
+/// Push-to-Talk) also stays hidden — Space switches must not promote it.
+enum FloatingBarDurableVisibilityPolicy {
+  static func shouldRestoreWhenAppKitOrderedOut(
+    isEnabled: Bool,
+    isSnoozed: Bool,
+    hasBeenPresentedThisSession: Bool
+  ) -> Bool {
+    isEnabled && !isSnoozed && hasBeenPresentedThisSession
+  }
+
+  /// After a demo retracts with `.preserve`, restore the saved bar without
+  /// writing a hide. Disabled and snoozed preferences stay hidden.
+  static func shouldRestoreAfterOnboardingDemo(
+    isEnabled: Bool,
+    isSnoozed: Bool
+  ) -> Bool {
+    isEnabled && !isSnoozed
+  }
+}
+
+/// Where the notch may land after a Space / display reassignment.
+///
+/// The main Omi shell is often the key window on another display. Using that
+/// screen to recenter or to flip island vs pill parks a notch-sized panel in
+/// the middle of the laptop — or draws pill chrome inside the camera housing.
+enum FloatingBarPlacementScreenPolicy {
+  /// Recentering an already-created bar. Never follow the key window.
+  static func screenForRecentering<Screen>(
+    barScreen: Screen?,
+    cursorScreen: Screen?,
+    mainScreen: Screen?,
+    firstScreen: Screen?
+  ) -> Screen? {
+    barScreen ?? cursorScreen ?? mainScreen ?? firstScreen
+  }
+
+  /// A visible panel with no `NSWindow.screen` yet is mid reassignment.
+  /// Falling back to the key window can flip `usesNotchIsland` off and leave
+  /// pill chrome inside a notch-sized frame under the camera housing.
+  static func shouldHoldIslandModeWhileScreenIsReassigning(
+    isVisible: Bool,
+    barScreenMissing: Bool
+  ) -> Bool {
+    isVisible && barScreenMissing
+  }
+
+  /// Space changes must rebuild the frame when island mode flips, not only
+  /// when the bar is currently in notch mode. An early return after mutating
+  /// the SwiftUI flag is what hid the idle chrome in the camera housing.
+  /// Skip while `NSWindow.screen` is still nil — guessing from the cursor or
+  /// main display is what parked the island on the wrong monitor.
+  static func shouldReconcileFrameAfterSpaceChange(
+    isVisible: Bool,
+    showingAIConversation: Bool,
+    islandModeChanged: Bool,
+    frameChanged: Bool,
+    barScreenMissing: Bool
+  ) -> Bool {
+    guard isVisible, !showingAIConversation, !barScreenMissing else { return false }
+    return islandModeChanged || frameChanged
+  }
+}
