@@ -1,0 +1,71 @@
+desktop/context-for-claude/Tests/ContextCoreTests/RetentionSweepTests.swift
+  s_830a75a8050e25::t_0cc68fb4f8f1e5 1-384
+desktop/context-for-claude/Sources/ContextCore/Paths.swift
+  s_830a75a8050e25::t_a407e052dcde17 200,204-234
+  s_830a75a8050e25::t_9d2497067461bc 235-236
+desktop/context-for-claude/Sources/ContextCore/RewindQueries.swift
+  s_830a75a8050e25::t_f4861be2dd314b 198-209,212-217
+  s_830a75a8050e25::t_8c339bafe0bbc0 220,222-253,256-261
+  s_830a75a8050e25::t_645a90f4af5236 218-219,221
+desktop/context-for-claude/Tests/ContextCoreTests/Fixture.swift
+  s_830a75a8050e25::t_51b34deb1b6cf0 93-94,102-103
+desktop/context-for-claude/Sources/ContextCore/Queries.swift
+  s_830a75a8050e25::t_4d617a5553a5d1 1379-1417,1425-1431,1433-1436,1438-1444,1446-1448,1451,1453-1454
+  s_830a75a8050e25::t_1649ee4ae59dc4 354-364,366-368,377-381
+  s_830a75a8050e25::t_5144eaf21861b1 1418-1422
+  s_830a75a8050e25::t_1fbc1376b0b5c5 1423-1424
+desktop/context-for-claude/Tests/ContextCoreTests/AccessibilityTests.swift
+  s_830a75a8050e25::t_f30e3e248606ed 125-127
+  s_830a75a8050e25::t_0c07923a83a348 79-124,128-129
+desktop/context-for-claude/Sources/ContextCore/Models.swift
+  s_830a75a8050e25::t_7650e81b9c6f10 339-344
+desktop/context-for-claude/Tests/ContextCoreTests/QueriesTests.swift
+  s_830a75a8050e25::t_d32c25dfb00132 474-509
+desktop/context-for-claude/Tests/ContextCoreTests/RewindQueriesTests.swift
+  s_830a75a8050e25::t_b7bd011ca98a89 138-191
+  s_830a75a8050e25::t_fbbcc137becccd 122-125,127
+desktop/context-for-claude/Sources/ContextCore/Store.swift
+  s_830a75a8050e25::t_8c74f731d874d8 241-242,244-248,255-256,258-271
+  s_830a75a8050e25::t_3cfe7bb8abb807 23-33
+  s_830a75a8050e25::t_5f4dabfed086ec 302,365,379-406,411-497,499-510,540,548-570,572-598,601-608,616-617
+  s_830a75a8050e25::t_8844d1b2580b49 407-410
+  s_830a75a8050e25::t_7ee8b0503aa752 936-988
+  s_830a75a8050e25::t_86cca8f3ba830e 57-68,73-80
+  s_830a75a8050e25::t_ccb090c5de5364 626-629
+  s_830a75a8050e25::t_1ad03bb61439af 989-1013,1019,1021
+  s_830a75a8050e25::t_083de3667efbb7 98-99
+  s_830a75a8050e25::t_89405a2ecb9f40 541-547
+  s_830a75a8050e25::t_e19920d4f7688b 511-539
+  s_830a75a8050e25::t_02fb54a66ebd86 571
+  s_830a75a8050e25::t_962287f950a73e 659-715
+  s_830a75a8050e25::t_7bfd77bf76cc7f 498
+  s_830a75a8050e25::t_ec8c995cc2c38d 81
+desktop/context-for-claude/Tests/ContextCoreTests/StoreTests.swift
+  s_830a75a8050e25::t_81d001e6f46aa3 45
+  s_830a75a8050e25::t_d903f780e027ac 60-127
+  s_830a75a8050e25::t_bbaf65a28f101d 652-672,677-709
+  s_830a75a8050e25::t_0ff6b7122bc9a1 673-676
+  s_830a75a8050e25::t_2cb36251f391a4 167-169,181-183,273-275,287-289
+desktop/context-for-claude/CONTRACTS.md
+  s_830a75a8050e25::t_bab9145c3e1ed1 91-96
+  s_830a75a8050e25::t_55462c33585a9d 465-468
+desktop/context-for-claude/Sources/ContextCore/Accessibility.swift
+  s_830a75a8050e25::t_d56b1401a0cf26 262,269,275-309
+  s_830a75a8050e25::t_1450694c116eb4 310-311
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0b0d4298d67ae40e15fb31846cb00310aade32a5",
+  "prompts": {},
+  "sessions": {
+    "s_830a75a8050e25": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c76762c9-b116-4248-8786-3ab36dd6ee16",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
