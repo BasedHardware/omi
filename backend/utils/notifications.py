@@ -280,16 +280,23 @@ async def _send_to_user_async(
 
     try:
         response = await run_blocking(postprocess_executor, _send_messages, messages)
-        success_count, invalid_tokens = _collect_send_results(response, tokens)
-
-        if invalid_tokens:
-            await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
-
-        logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
-        return success_count
     except Exception as e:
         logger.error(f'FCM batch send error: {e}')
         return 0
+
+    success_count, invalid_tokens = _collect_send_results(response, tokens)
+
+    # Mirror the sync path (B5): isolate invalid-token cleanup so a remove_bulk_tokens failure AFTER a
+    # confirmed delivery does not get caught above and zero success_count (which gates BYOK's 24h dedupe
+    # lock) — the async path was still running cleanup inside the shared try (cubic review 4939247683).
+    if invalid_tokens:
+        try:
+            await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
+        except Exception as e:
+            logger.error(f'Invalid-token cleanup failed (delivery unaffected): {e}')
+
+    logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
+    return success_count
 
 
 def send_notification(
@@ -435,9 +442,14 @@ def send_training_data_submitted_notification(user_id: str) -> None:
     logger.info(f"Training data submitted notification sent to user {user_id}")
 
 
-async def send_bulk_notification(user_tokens: List[str], title: str, body: str) -> None:
-    """Send notification to multiple users in batches."""
-    backend = resolve_push_backend()
+async def send_bulk_notification(user_tokens: List[str], title: str, body: str, push_backend: Optional[str] = None) -> None:
+    """Send notification to multiple users in batches.
+
+    ``push_backend`` lets a caller that already resolved the backend (e.g. the daily-summary fan-out,
+    which resolves it to pick the recipient-fetch fn) pass it in, so the config-typo fallback is
+    recorded once per operation instead of twice (cubic review 4939247683).
+    """
+    backend = push_backend or resolve_push_backend()
     if backend == DISABLED:
         return
     if backend == UNIFIEDPUSH:
@@ -452,7 +464,12 @@ async def send_bulk_notification(user_tokens: List[str], title: str, body: str) 
             for recipient in user_tokens
         ]
         tag = _generate_tag(f"bulk:{title}:{to_plain_text(body)}")
-        await _up.send_bulk(endpoints, PushMessage(tag=tag, title=title, body=to_plain_text(body)))
+        # Same error boundary as the FCM path below: a dead-endpoint cleanup failure inside send_bulk
+        # must not abort the whole notification job (cubic review 4939247683).
+        try:
+            await _up.send_bulk(endpoints, PushMessage(tag=tag, title=title, body=to_plain_text(body)))
+        except Exception as e:
+            logger.error(f'UnifiedPush bulk send error: {e}')
         return
     try:
         batch_size = 500

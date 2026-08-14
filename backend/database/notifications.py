@@ -113,8 +113,14 @@ def get_users_endpoints_in_timezones(time_zones: List[str]) -> List[UnifiedPushE
     # (get_users_for_daily_summary) so an hour bucket with >30 timezones still resolves (cubic 10887 B3).
     unique = list(dict.fromkeys(time_zones))
     for i in range(0, len(unique), 30):
-        for user in store.query('users', filters=[('time_zone', 'in', unique[i : i + 30])]):
-            endpoints.extend(get_all_endpoints(user.id))
+        # Per-chunk isolation like the FCM sibling _get_users_in_timezones: one failing timezone chunk
+        # must not abort the whole UnifiedPush morning fan-out — log it and keep delivering the rest
+        # (cubic review 4939247683).
+        try:
+            for user in store.query('users', filters=[('time_zone', 'in', unique[i : i + 30])]):
+                endpoints.extend(get_all_endpoints(user.id))
+        except Exception as e:
+            logger.error(f'UnifiedPush timezone chunk {i // 30} failed (other chunks unaffected): {e}')
     return endpoints
 
 

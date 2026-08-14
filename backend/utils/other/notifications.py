@@ -235,15 +235,18 @@ async def send_daily_notification() -> None:
 
 
 async def _send_notification_for_time(target_time: str, title: str, body: str) -> Any:
-    user_in_time_zone = await _get_users_in_timezone(target_time)
+    # Resolve the push backend ONCE per operation and carry it into both the recipient fetch and the
+    # dispatch, so a PUSH_NOTIFICATION_BACKEND typo records its fallback once, not twice (review 4939247683).
+    backend = resolve_push_backend()
+    user_in_time_zone = await _get_users_in_timezone(target_time, backend)
     if not user_in_time_zone:
         logger.info("No users found in time zone")
         return None
-    await send_bulk_notification(user_in_time_zone, title, body)
+    await send_bulk_notification(user_in_time_zone, title, body, push_backend=backend)
     return user_in_time_zone
 
 
-async def _get_users_in_timezone(target_time: str) -> Any:
+async def _get_users_in_timezone(target_time: str, backend: str) -> Any:
     timezones_in_time = _get_timezones_at_time(target_time)
     timezone_chunks = [timezones_in_time[i : i + 30] for i in range(0, len(timezones_in_time), 30)]
     # send_bulk_notification treats its list as endpoints in UnifiedPush mode, so gather endpoints (not
@@ -251,7 +254,7 @@ async def _get_users_in_timezone(target_time: str) -> Any:
     # notification would otherwise reach nobody (cubic PR 10887 B2).
     fetch = (
         notification_db.get_users_endpoints_in_timezones
-        if resolve_push_backend() == UNIFIEDPUSH
+        if backend == UNIFIEDPUSH
         else notification_db.get_users_token_in_timezones
     )
     chunk_results = await asyncio.gather(
