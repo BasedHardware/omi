@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
@@ -74,5 +75,42 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(states, [DeviceTransportState.disconnected, DeviceTransportState.connected]);
+  });
+
+  test('after reconnect, silent audio CCCD is retried once then left dead', () {
+    fakeAsync((async) {
+      transport.dispose();
+      final hostApi = _FakeBleHostApi();
+      transport = NativeBleTransport(uuid, hostApi: hostApi);
+
+      const audioChar = '19b10001-e8f2-537e-4f6c-d104768a1214';
+      final audioServices = [
+        BleService(uuid: serviceUuid, characteristicUuids: [audioChar]),
+      ];
+
+      BleBridge.instance.onDeviceReady(uuid, audioServices);
+      transport.getCharacteristicStream(serviceUuid, audioChar).listen((_) {});
+      async.flushMicrotasks();
+
+      BleBridge.instance.onPeripheralDisconnected(uuid, null);
+      BleBridge.instance.onDeviceReady(uuid, audioServices);
+      async.flushMicrotasks();
+
+      final subscribesBeforeWatch = hostApi.subscribed.where((s) => s.contains(audioChar)).length;
+      expect(subscribesBeforeWatch, greaterThanOrEqualTo(1));
+
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      final afterFirstSilence = hostApi.subscribed.where((s) => s.contains(audioChar)).length;
+      expect(afterFirstSilence, subscribesBeforeWatch + 1, reason: 'one CCCD resubscribe on silence');
+
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      expect(
+        hostApi.subscribed.where((s) => s.contains(audioChar)).length,
+        afterFirstSilence,
+        reason: 'do not tight-loop resubscribe after the single retry',
+      );
+    });
   });
 }

@@ -30,6 +30,7 @@ import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
+import 'package:omi/services/capture/capture_keepalive_policy.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
@@ -47,6 +48,7 @@ import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/app_globals.dart';
 
 import 'package:omi/backend/schema/message_event.dart'
@@ -81,6 +83,11 @@ class CaptureController extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
+  DateTime? _lastAudioFrameAt;
+  DateTime? _captureRecordingStartedAt;
+  bool _captureForegroundHeld = false;
+  int _fgSyncGen = 0;
+  Timer? _foregroundLivenessTimer;
   Timer? _inProgressConversationRefreshTimer;
   int _inProgressConversationRefreshAttempts = 0;
   bool _isRefreshingInProgressConversation = false;
@@ -216,6 +223,7 @@ class CaptureController extends ChangeNotifier
     _phoneMicWalActive = true;
     await ServiceManager.instance().phoneMic.start(
           onByteReceived: (bytes) {
+            _noteAudioFrame();
             final frames = _activeSource?.processBytes(bytes) ?? [];
             for (final frame in frames) {
               _wal.getSyncs().phone.onFrameCaptured(frame);
@@ -957,6 +965,7 @@ class CaptureController extends ChangeNotifier
 
         // Track bytes received from BLE
         _metrics.addBleBytes(snapshot.length);
+        _noteAudioFrame();
 
         // Command button triggered
         bool voiceCommandSupported = _recordingDevice != null
@@ -1390,6 +1399,7 @@ class CaptureController extends ChangeNotifier
     _bleButtonStream?.cancel();
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
+    _foregroundLivenessTimer?.cancel();
     _inProgressConversationRefreshTimer?.cancel();
     _connectionStateListener?.cancel();
     _metrics.dispose();
@@ -1401,8 +1411,56 @@ class CaptureController extends ChangeNotifier
   }
 
   void updateRecordingState(RecordingState state) {
+    final wasLive = isLiveCaptureRecordingState(recordingState);
     recordingState = state;
+    if (isLiveCaptureRecordingState(state) && !wasLive) {
+      _captureRecordingStartedAt = DateTime.now();
+    } else if (!isLiveCaptureRecordingState(state)) {
+      _captureRecordingStartedAt = null;
+    }
+    unawaited(_syncCaptureForegroundKeepAlive());
     notifyListeners();
+  }
+
+  void _noteAudioFrame() {
+    _lastAudioFrameAt = DateTime.now();
+  }
+
+  Future<void> _syncCaptureForegroundKeepAlive() async {
+    if (!(Platform.isIOS || Platform.isAndroid)) return;
+    final gen = ++_fgSyncGen;
+    final hold = shouldHoldCaptureForegroundTask(
+      recordingState: recordingState,
+      lastAudioFrameAt: _lastAudioFrameAt,
+      recordingStartedAt: _captureRecordingStartedAt,
+      now: DateTime.now(),
+    );
+    _foregroundLivenessTimer?.cancel();
+    if (hold && isLiveCaptureRecordingState(recordingState)) {
+      _foregroundLivenessTimer = Timer(captureForegroundAudioStaleAfter, () {
+        unawaited(_syncCaptureForegroundKeepAlive());
+      });
+    }
+    if (hold == _captureForegroundHeld) {
+      return;
+    }
+    try {
+      if (hold) {
+        await ForegroundUtil.initializeForegroundService();
+        if (gen != _fgSyncGen) return;
+        await ForegroundUtil.ensureForegroundTask();
+        if (gen != _fgSyncGen) return;
+        _captureForegroundHeld = true;
+      } else {
+        await ForegroundUtil.stopForegroundTask();
+        if (gen != _fgSyncGen) return;
+        await ForegroundUtil.deactivateBluetoothAudioSession();
+        if (gen != _fgSyncGen) return;
+        _captureForegroundHeld = false;
+      }
+    } catch (e) {
+      Logger.debug('Capture foreground keep-alive sync failed: $e');
+    }
   }
 
   streamRecording() async {
@@ -1448,6 +1506,7 @@ class CaptureController extends ChangeNotifier
       await ServiceManager.instance().phoneMic.start(
             onByteReceived: (bytes) {
               // Process through AudioSource for frame splitting and sync key generation
+              _noteAudioFrame();
               final frames = _activeSource?.processBytes(bytes) ?? [];
 
               for (final frame in frames) {
@@ -1671,6 +1730,7 @@ class CaptureController extends ChangeNotifier
       }
 
       _keepAliveLastExecutedAt = DateTime.now();
+      unawaited(_syncCaptureForegroundKeepAlive());
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
         t.cancel();
         return;
@@ -1679,6 +1739,21 @@ class CaptureController extends ChangeNotifier
       if (!AuthService.instance.isSignedIn()) {
         Logger.debug("[Provider] keep alive - user not signed in, cancelling reconnect");
         t.cancel();
+        return;
+      }
+
+      final shouldReconnect = shouldReconnectSttKeepAlive(
+        recordingDeviceServiceReady: recordingDeviceServiceReady,
+        socketConnected: _socket?.state == SocketServiceState.connected,
+        signedIn: true,
+        hasRecordingDevice: _recordingDevice != null,
+        isPhoneMicKeepAliveState:
+            recordingState == RecordingState.record || recordingState == RecordingState.interrupted,
+        lastAudioFrameAt: _lastAudioFrameAt,
+        now: DateTime.now(),
+      );
+      if (!shouldReconnect) {
+        Logger.debug("[Provider] keep alive - no recent audio frames, skip websocket reconnect");
         return;
       }
 
