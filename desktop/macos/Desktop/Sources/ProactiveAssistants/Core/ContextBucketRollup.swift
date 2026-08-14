@@ -641,10 +641,14 @@ actor ContextBucketRollupWriter {
         normalizedContextKey: ContextTitleNormalizer.identityKey(
           appName: frame.appName, windowTitle: frame.windowTitle) ?? "")
     } catch {
-      if case .http(let status, _) = error as? ProactiveLaneClientError, status == 429 {
+      switch error as? ProactiveLaneClientError {
+      case .http(let status, _) where status == 429:
         return
+      case .quotaCooldown(_):
+        return
+      default:
+        log("Context bucket extraction failed silently: \(error.localizedDescription)")
       }
-      log("Context bucket extraction failed silently: \(error.localizedDescription)")
     }
   }
 

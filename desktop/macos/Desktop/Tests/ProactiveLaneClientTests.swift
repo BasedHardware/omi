@@ -30,6 +30,9 @@ final class ProactiveLaneClientTests: XCTestCase {
       ProactiveLaneClientError.http(status: 429, retryAfterSeconds: nil).localizedDescription,
       "proactive_http_error status=429")
     XCTAssertEqual(ProactiveLaneClientError.ownerChanged.localizedDescription, "proactive_owner_changed")
+    XCTAssertEqual(
+      ProactiveLaneClientError.quotaCooldown(retryAfterSeconds: 12).localizedDescription,
+      "proactive_quota_cooldown status=429")
   }
 
   func testGarbageEnvelopeThrowsInvalidResponseNotARawSerializationError() {
@@ -66,14 +69,14 @@ final class ProactiveLaneClientTests: XCTestCase {
     ProactiveLaneURLStub.enqueue(
       statusCode: 429,
       body: Data(#"{"detail":"Proactive request limit exceeded"}"#.utf8),
-      headers: ["Retry-After": "30"])
+      headers: ["Retry-After": "120"])
 
     do {
       _ = try await completeExtraction(on: client)
       XCTFail("expected the first extraction attempt to throw 429")
     } catch ProactiveLaneClientError.http(let status, let retryAfter) {
       XCTAssertEqual(status, 429)
-      XCTAssertEqual(retryAfter, 30)
+      XCTAssertEqual(retryAfter, 120)
     }
     XCTAssertEqual(ProactiveLaneURLStub.requestCount, 1)
 
@@ -81,26 +84,17 @@ final class ProactiveLaneClientTests: XCTestCase {
     do {
       _ = try await completeExtraction(on: client)
       XCTFail("expected the in-window extraction attempt to skip the network")
-    } catch ProactiveLaneClientError.http(let status, let retryAfter) {
-      XCTAssertEqual(status, 429)
-      XCTAssertEqual(retryAfter, 20)
+    } catch ProactiveLaneClientError.quotaCooldown(let retryAfter) {
+      XCTAssertEqual(retryAfter, 110)
     }
     XCTAssertEqual(
       ProactiveLaneURLStub.requestCount, 1,
       "an extraction attempt before Retry-After must not hit the network")
 
-    clock.advance(by: 21)
+    clock.advance(by: 111)
     ProactiveLaneURLStub.enqueue(
       statusCode: 200,
-      body: try JSONSerialization.data(withJSONObject: [
-        "operation": ModelQoS.Proactivity.extractionOperation,
-        "lane": "omi:auto:desktop-proactive-extraction",
-        "provider_model": "gpt-5.6-luna",
-        "usage": ["cached_tokens": 0, "cache_write_tokens": 0],
-        "cache_write": false,
-        "fallback_class": "unknown",
-        "response": ["choices": [["message": ["content": "{\"narrative\":\"ok\",\"facts\":[]}"]]]],
-      ]))
+      body: try successEnvelope(operation: ModelQoS.Proactivity.extractionOperation))
 
     let result = try await completeExtraction(on: client)
     XCTAssertEqual(result.operation, ModelQoS.Proactivity.extractionOperation)
@@ -130,17 +124,178 @@ final class ProactiveLaneClientTests: XCTestCase {
     do {
       _ = try await completeExtraction(on: client)
       XCTFail("expected cooldown skip")
-    } catch ProactiveLaneClientError.http(let status, _) {
-      XCTAssertEqual(status, 429)
+    } catch ProactiveLaneClientError.quotaCooldown(_) {
+      // Expected: a missing Retry-After still arms the conservative default.
     }
     XCTAssertEqual(ProactiveLaneURLStub.requestCount, 1)
   }
 
+  func testExtractionQuotaCooldownDoesNotSuppressReasoning() async throws {
+    ProactiveLaneURLStub.reset()
+    let clock = ManualDateClock(Date(timeIntervalSince1970: 1_800_000_000))
+    let client = ProactiveLaneClient(
+      session: makeStubSession(),
+      baseURL: { "https://proactive.test" },
+      authorization: { "Bearer test" },
+      now: { clock.now })
+
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 429,
+      body: Data(#"{"detail":"Proactive request limit exceeded"}"#.utf8),
+      headers: ["Retry-After": "120"])
+    do {
+      _ = try await completeExtraction(on: client)
+      XCTFail("expected extraction 429")
+    } catch ProactiveLaneClientError.http(let status, _) {
+      XCTAssertEqual(status, 429)
+    }
+    XCTAssertEqual(ProactiveLaneURLStub.requestedOperations, [ModelQoS.Proactivity.extractionOperation])
+
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try successEnvelope(operation: ModelQoS.Proactivity.reasoningOperation))
+    let reasoning = try await completeReasoning(on: client)
+    XCTAssertEqual(reasoning.operation, ModelQoS.Proactivity.reasoningOperation)
+    XCTAssertEqual(
+      ProactiveLaneURLStub.requestedOperations,
+      [ModelQoS.Proactivity.extractionOperation, ModelQoS.Proactivity.reasoningOperation],
+      "reasoning must still reach the network after an extraction 429")
+
+    do {
+      _ = try await completeExtraction(on: client)
+      XCTFail("expected extraction to remain in cooldown")
+    } catch ProactiveLaneClientError.quotaCooldown(_) {
+      // Extraction stays suppressed in its own window.
+    }
+    XCTAssertEqual(
+      ProactiveLaneURLStub.requestedOperations,
+      [ModelQoS.Proactivity.extractionOperation, ModelQoS.Proactivity.reasoningOperation],
+      "a later extraction attempt in the same window must not hit the network")
+  }
+
+  func testRetryAfterAboveADayIsClampedToOneHour() async throws {
+    ProactiveLaneURLStub.reset()
+    let clock = ManualDateClock(Date(timeIntervalSince1970: 1_800_000_000))
+    let client = ProactiveLaneClient(
+      session: makeStubSession(),
+      baseURL: { "https://proactive.test" },
+      authorization: { "Bearer test" },
+      now: { clock.now })
+
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 429,
+      body: Data(),
+      headers: ["Retry-After": "86400"])
+    do {
+      _ = try await completeExtraction(on: client)
+      XCTFail("expected 429")
+    } catch ProactiveLaneClientError.http(let status, let retryAfter) {
+      XCTAssertEqual(status, 429)
+      XCTAssertEqual(retryAfter, 86400)
+    }
+    XCTAssertEqual(ProactiveLaneURLStub.requestCount, 1)
+
+    clock.advance(by: TimeInterval(ProactiveLaneClient.maxQuotaCooldownSeconds - 1))
+    do {
+      _ = try await completeExtraction(on: client)
+      XCTFail("expected the clamped hour cooldown to still skip the network")
+    } catch ProactiveLaneClientError.quotaCooldown(_) {
+      // Still inside the 3600s ceiling.
+    }
+    XCTAssertEqual(ProactiveLaneURLStub.requestCount, 1)
+
+    clock.advance(by: 2)
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try successEnvelope(operation: ModelQoS.Proactivity.extractionOperation))
+    let result = try await completeExtraction(on: client)
+    XCTAssertEqual(result.operation, ModelQoS.Proactivity.extractionOperation)
+    XCTAssertEqual(ProactiveLaneURLStub.requestCount, 2)
+  }
+
+  func testTinyOrZeroRetryAfterArmsAtLeastTheFloor() async throws {
+    ProactiveLaneURLStub.reset()
+    let clock = ManualDateClock(Date(timeIntervalSince1970: 1_800_000_000))
+    let client = ProactiveLaneClient(
+      session: makeStubSession(),
+      baseURL: { "https://proactive.test" },
+      authorization: { "Bearer test" },
+      now: { clock.now })
+
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 429,
+      body: Data(),
+      headers: ["Retry-After": "1"])
+    do {
+      _ = try await completeExtraction(on: client)
+      XCTFail("expected 429")
+    } catch ProactiveLaneClientError.http(_, _) {
+      // Server 429 with a sub-floor Retry-After.
+    }
+    XCTAssertEqual(ProactiveLaneURLStub.requestCount, 1)
+
+    clock.advance(by: TimeInterval(ProactiveLaneClient.minQuotaCooldownSeconds - 1))
+    do {
+      _ = try await completeExtraction(on: client)
+      XCTFail("expected the 60s floor to still skip the network")
+    } catch ProactiveLaneClientError.quotaCooldown(_) {
+      // Tiny Retry-After is raised to the 60s floor.
+    }
+    XCTAssertEqual(ProactiveLaneURLStub.requestCount, 1)
+
+    clock.advance(by: 2)
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 200,
+      body: try successEnvelope(operation: ModelQoS.Proactivity.extractionOperation))
+    _ = try await completeExtraction(on: client)
+    XCTAssertEqual(ProactiveLaneURLStub.requestCount, 2)
+
+    ProactiveLaneURLStub.enqueue(statusCode: 429, body: Data(), headers: ["Retry-After": "0"])
+    do {
+      _ = try await completeReasoning(on: client)
+      XCTFail("expected 429")
+    } catch ProactiveLaneClientError.http(_, _) {
+      // Zero Retry-After falls through to the conservative default.
+    }
+    clock.advance(by: TimeInterval(ProactiveLaneClient.minQuotaCooldownSeconds - 1))
+    do {
+      _ = try await completeReasoning(on: client)
+      XCTFail("expected at least the 60s floor")
+    } catch ProactiveLaneClientError.quotaCooldown(_) {
+      // Zero/absent Retry-After must not arm a sub-floor cooldown.
+    }
+    XCTAssertEqual(ProactiveLaneURLStub.requestCount, 3)
+  }
+
   private func completeExtraction(on client: ProactiveLaneClient) async throws -> ProactiveLaneResult {
+    try await complete(operation: ModelQoS.Proactivity.extractionOperation, prompt: "extract", on: client)
+  }
+
+  private func completeReasoning(on client: ProactiveLaneClient) async throws -> ProactiveLaneResult {
+    try await complete(operation: ModelQoS.Proactivity.reasoningOperation, prompt: "reason", on: client)
+  }
+
+  private func complete(
+    operation: String,
+    prompt: String,
+    on client: ProactiveLaneClient
+  ) async throws -> ProactiveLaneResult {
     try await client.complete(
-      operation: ModelQoS.Proactivity.extractionOperation,
-      prompt: "extract",
+      operation: operation,
+      prompt: prompt,
       jsonSchema: ["type": "object"])
+  }
+
+  private func successEnvelope(operation: String) throws -> Data {
+    try JSONSerialization.data(withJSONObject: [
+      "operation": operation,
+      "lane": "omi:auto:desktop-\(operation.replacingOccurrences(of: "_", with: "-"))",
+      "provider_model": "gpt-5.6-luna",
+      "usage": ["cached_tokens": 0, "cache_write_tokens": 0],
+      "cache_write": false,
+      "fallback_class": "unknown",
+      "response": ["choices": [["message": ["content": "{\"narrative\":\"ok\",\"facts\":[]}"]]]],
+    ])
   }
 
   private func makeStubSession() -> URLSession {
@@ -182,6 +337,7 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
   private nonisolated(unsafe) static var responses: [StubResponse] = []
   private nonisolated(unsafe) static var served = 0
+  private nonisolated(unsafe) static var operations: [String] = []
 
   static var requestCount: Int {
     lock.lock()
@@ -189,10 +345,17 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
     return served
   }
 
+  static var requestedOperations: [String] {
+    lock.lock()
+    defer { lock.unlock() }
+    return operations
+  }
+
   static func reset() {
     lock.lock()
     responses = []
     served = 0
+    operations = []
     lock.unlock()
   }
 
@@ -210,7 +373,9 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
       client?.urlProtocol(self, didFailWithError: URLError(.badURL))
       return
     }
+    let operation = Self.operation(from: request)
     Self.lock.lock()
+    Self.operations.append(operation)
     let stub = Self.responses.isEmpty ? nil : Self.responses.removeFirst()
     Self.served += 1
     Self.lock.unlock()
@@ -231,4 +396,28 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
   }
 
   override func stopLoading() {}
+
+  private static func operation(from request: URLRequest) -> String {
+    guard let data = bodyData(from: request),
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let operation = object["operation"] as? String
+    else { return "" }
+    return operation
+  }
+
+  private static func bodyData(from request: URLRequest) -> Data? {
+    if let body = request.httpBody { return body }
+    guard let stream = request.httpBodyStream else { return nil }
+    stream.open()
+    defer { stream.close() }
+    var data = Data()
+    let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 4_096)
+    defer { buffer.deallocate() }
+    while stream.hasBytesAvailable {
+      let count = stream.read(buffer, maxLength: 4_096)
+      guard count > 0 else { break }
+      data.append(buffer, count: count)
+    }
+    return data.isEmpty ? nil : data
+  }
 }
