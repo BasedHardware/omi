@@ -20,6 +20,7 @@ from utils import encryption
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from .firestore_index_registry import STALE_IN_PROGRESS_CONVERSATIONS_QUERY
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
+from database import users as users_db
 from utils.other.storage import list_audio_chunks
 
 logger = logging.getLogger(__name__)
