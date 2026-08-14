@@ -34,6 +34,19 @@ class BrandUiTests(unittest.TestCase):
         self.assertEqual(count_purple("const Color(0xFF1A2B3C)"), 0)
         self.assertEqual(count_purple("const Color(0xFF00FF00)"), 0)
 
+    def test_dart_hex_literal_must_start_a_token(self) -> None:
+        """`0x` has to begin a token, or the ratchet fails files containing no purple.
+
+        Without a leading boundary the pattern matches inside an identifier or a longer
+        literal, so an unrelated constant ending in a purple hue is reported as a purple
+        increase.
+        """
+        self.assertEqual(count_purple("foo0x8B5CF6"), 0)
+        self.assertEqual(count_purple("SOME_CONST0x8B5CF6"), 0)
+        # ...while a real literal in the shapes Flutter writes still counts.
+        self.assertGreaterEqual(count_purple("Color(0xFF8B5CF6)"), 1)
+        self.assertGreaterEqual(count_purple("value = 0x8B5CF6;"), 1)
+
     def test_is_ui_source(self) -> None:
         self.assertTrue(is_ui_source("desktop/macos/Desktop/Sources/Foo.swift"))
         self.assertFalse(is_ui_source("backend/main.py"))
