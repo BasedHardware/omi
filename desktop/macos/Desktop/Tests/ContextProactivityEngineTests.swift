@@ -161,7 +161,7 @@ final class ContextProactivityEngineTests: XCTestCase {
   }
 
   @MainActor
-  func testPresentationFreeGateRebuildSuppressesMasterAndQuietChanges() throws {
+  func testPresentationFreeGateRebuildSuppressesMasterChanges() throws {
     let suiteName = "ContextProactivityEngineTests.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suiteName) else {
       XCTFail("failed to create isolated defaults suite")
@@ -171,80 +171,37 @@ final class ContextProactivityEngineTests: XCTestCase {
 
     defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
     defaults.set(3, forKey: NotificationService.frequencyDefaultsKey)
-    defaults.set(8 * 60, forKey: NotificationService.activePeriodStartDefaultsKey)
-    defaults.set(22 * 60, forKey: NotificationService.activePeriodEndDefaultsKey)
-
-    let noonComponents = DateComponents(calendar: .current, year: 2026, month: 8, day: 12, hour: 12)
-    let noon = noonComponents.date ?? Date()
-    let lateComponents = DateComponents(calendar: .current, year: 2026, month: 8, day: 12, hour: 23)
-    let late = lateComponents.date ?? Date()
 
     // Mirror the production rebuild path: capture gate inputs, then re-evaluate
-    // after master/quiet flips before presentation.
+    // after the master toggle flips before presentation.
     let allowed = ContextDeliveryGateInput(
       masterEnabled: defaults.bool(forKey: NotificationService.masterEnabledDefaultsKey),
       frequencyLevel: defaults.integer(forKey: NotificationService.frequencyDefaultsKey),
-      snoozed: false,
       paywalled: false,
-      minuteOfDay: 12 * 60,
-      activePeriod: NotificationService.currentActivePeriod(defaults: defaults),
       cooldownSeconds: ContextDeliveryBudget.cooldownSeconds(frequencyLevel: 3))
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: allowed), .allowed)
 
     defaults.set(false, forKey: NotificationService.masterEnabledDefaultsKey)
-    let noonMinute =
-      try XCTUnwrap(Calendar.current.dateComponents([.hour, .minute], from: noon).hour) * 60
-      + (try XCTUnwrap(Calendar.current.dateComponents([.hour, .minute], from: noon).minute))
-    let masterOff = ContextDeliveryGateInput(
+    let rebuilt = ContextDeliveryGateInput(
       masterEnabled: defaults.bool(forKey: NotificationService.masterEnabledDefaultsKey),
       frequencyLevel: defaults.integer(forKey: NotificationService.frequencyDefaultsKey),
-      snoozed: false,
       paywalled: false,
-      minuteOfDay: noonMinute,
-      activePeriod: NotificationService.currentActivePeriod(defaults: defaults),
       cooldownSeconds: 0)
-    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: masterOff), .masterDisabled)
-
-    defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
-    let lateMinute =
-      try XCTUnwrap(Calendar.current.dateComponents([.hour, .minute], from: late).hour) * 60
-      + (try XCTUnwrap(Calendar.current.dateComponents([.hour, .minute], from: late).minute))
-    let quiet = ContextDeliveryGateInput(
-      masterEnabled: true,
-      frequencyLevel: 3,
-      snoozed: false,
-      paywalled: false,
-      minuteOfDay: lateMinute,
-      activePeriod: NotificationService.currentActivePeriod(defaults: defaults),
-      cooldownSeconds: 0)
-    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: quiet), .quietHours)
+    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: rebuilt), .masterDisabled)
   }
 
   func testAttemptGateRebuildSuppressesBeforeBudgetReservation() {
     let allowed = ContextDeliveryGateInput(
       masterEnabled: true,
       frequencyLevel: 3,
-      snoozed: false,
       paywalled: false,
-      minuteOfDay: 12 * 60,
       cooldownSeconds: 0)
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: allowed), .allowed)
-
-    let snoozed = ContextDeliveryGateInput(
-      masterEnabled: true,
-      frequencyLevel: 3,
-      snoozed: true,
-      paywalled: false,
-      minuteOfDay: 12 * 60,
-      cooldownSeconds: 0)
-    XCTAssertEqual(ContextDeliveryBudget.freeGate(input: snoozed), .snoozed)
 
     let paywalled = ContextDeliveryGateInput(
       masterEnabled: true,
       frequencyLevel: 3,
-      snoozed: false,
       paywalled: true,
-      minuteOfDay: 12 * 60,
       cooldownSeconds: 0)
     XCTAssertEqual(ContextDeliveryBudget.freeGate(input: paywalled), .paywalled)
   }
@@ -255,6 +212,72 @@ final class ContextProactivityEngineTests: XCTestCase {
     XCTAssertFalse(ContextProactivityEngine.presentationSurfaceAvailable(.windowUnavailable))
     XCTAssertFalse(ContextProactivityEngine.presentationSurfaceAvailable(.rejectedOwnerChange))
     XCTAssertFalse(ContextProactivityEngine.presentationSurfaceAvailable(.presented))
+  }
+
+  func testHttpLaneErrorRecordsStatusInTerminalProvenanceJSON() throws {
+    let classified = ProactiveLaneFailureClassification.classify(
+      ProactiveLaneClientError.http(status: 429, retryAfterSeconds: 12))
+    XCTAssertEqual(classified.failure, "http_error")
+    XCTAssertEqual(classified.status, 429)
+    XCTAssertEqual(classified.logDescription, "http_error status=429")
+    let json = try provenanceObject(classified.provenanceJSON)
+    XCTAssertEqual(json["failure"] as? String, "http_error")
+    XCTAssertEqual((json["status"] as? NSNumber)?.intValue, 429)
+    XCTAssertNil(json["error_type"])
+  }
+
+  func testQuotaCooldownIsADistinctProvenanceClassFromHttp429() throws {
+    let skipped = ProactiveLaneFailureClassification.classify(
+      ProactiveLaneClientError.quotaCooldown(retryAfterSeconds: 12))
+    XCTAssertEqual(skipped.failure, "quota_cooldown")
+    XCTAssertEqual(skipped.status, 429)
+    XCTAssertEqual(skipped.logDescription, "quota_cooldown status=429")
+    let json = try provenanceObject(skipped.provenanceJSON)
+    XCTAssertEqual(json["failure"] as? String, "quota_cooldown")
+    XCTAssertEqual((json["status"] as? NSNumber)?.intValue, 429)
+    XCTAssertNil(json["error_type"])
+
+    let http = ProactiveLaneFailureClassification.classify(
+      ProactiveLaneClientError.http(status: 429, retryAfterSeconds: 12))
+    XCTAssertNotEqual(skipped.failure, http.failure)
+    XCTAssertEqual(try provenanceObject(http.provenanceJSON)["failure"] as? String, "http_error")
+  }
+
+  func testDecisionDecodeFailureRecordsADistinctClassFromHttpFailure() throws {
+    let http = ProactiveLaneFailureClassification.classify(
+      ProactiveLaneClientError.http(status: 429, retryAfterSeconds: nil))
+    let decodeError: Error
+    do {
+      _ = try JSONDecoder().decode(ContextDirectorDecision.self, from: Data(#"{"decision":1}"#.utf8))
+      return XCTFail("expected the production decision decoder to reject a malformed payload")
+    } catch {
+      decodeError = error
+    }
+    XCTAssertTrue(decodeError is DecodingError)
+    let decoded = ProactiveLaneFailureClassification.classify(decodeError)
+    XCTAssertEqual(decoded.failure, "decode")
+    XCTAssertNotEqual(decoded.failure, http.failure)
+    let json = try provenanceObject(decoded.provenanceJSON)
+    XCTAssertEqual(json["failure"] as? String, "decode")
+    XCTAssertNil(json["status"])
+  }
+
+  func testInvalidResponseAndNetworkFailuresUseBoundedClasses() throws {
+    let invalid = ProactiveLaneFailureClassification.classify(ProactiveLaneClientError.invalidResponse)
+    XCTAssertEqual(invalid.failure, "invalid_response")
+    XCTAssertEqual(try provenanceObject(invalid.provenanceJSON)["failure"] as? String, "invalid_response")
+
+    let timedOut = ProactiveLaneFailureClassification.classify(URLError(.timedOut))
+    XCTAssertEqual(timedOut.failure, "network")
+    XCTAssertEqual(timedOut.errorType, "timed_out")
+    let json = try provenanceObject(timedOut.provenanceJSON)
+    XCTAssertEqual(json["failure"] as? String, "network")
+    XCTAssertEqual(json["error_type"] as? String, "timed_out")
+  }
+
+  private func provenanceObject(_ json: String) throws -> [String: Any] {
+    let object = try JSONSerialization.jsonObject(with: Data(json.utf8))
+    return try XCTUnwrap(object as? [String: Any])
   }
 
   private func contextBucketDatabase() throws -> DatabaseQueue {
@@ -354,5 +377,147 @@ final class ContextProactivityEngineTests: XCTestCase {
         arguments: [now.addingTimeInterval(-1)])
     }
     return queue
+  }
+}
+
+final class ContextProactivityDirectorFailureTests: XCTestCase {
+  private var fixture: RewindStorageTestIsolation.Fixture?
+
+  override func setUp() async throws {
+    try await super.setUp()
+    fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "director-lane-failure")
+  }
+
+  override func tearDown() async throws {
+    await RewindStorageTestIsolation.tearDown(userDir: fixture?.userDir)
+    fixture = nil
+    try await super.tearDown()
+  }
+
+  func testEngineRecordsHttp429ProvenanceOnTypedLaneError() async throws {
+    let deliveryID = try await seedAttemptedDelivery()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0)
+
+    await engine.recordDirectorFailure(
+      deliveryID: deliveryID,
+      error: ProactiveLaneClientError.http(status: 429, retryAfterSeconds: 30))
+
+    let row = try await fetchDelivery(id: deliveryID)
+    XCTAssertEqual(row["lifecycleState"] as String?, "failed")
+    XCTAssertEqual(row["decisionType"] as String?, "silence")
+    let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
+    XCTAssertEqual(provenance["failure"] as? String, "http_error")
+    XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 429)
+  }
+
+  func testEngineRecordsQuotaCooldownProvenanceOnSelfSuppressedLaneError() async throws {
+    let deliveryID = try await seedAttemptedDelivery()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0)
+
+    await engine.recordDirectorFailure(
+      deliveryID: deliveryID,
+      error: ProactiveLaneClientError.quotaCooldown(retryAfterSeconds: 30))
+
+    let row = try await fetchDelivery(id: deliveryID)
+    XCTAssertEqual(row["lifecycleState"] as String?, "failed")
+    XCTAssertEqual(row["decisionType"] as String?, "silence")
+    let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
+    XCTAssertEqual(provenance["failure"] as? String, "quota_cooldown")
+    XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 429)
+    XCTAssertNil(provenance["error_type"])
+  }
+
+  func testEngineRecordsDecodeProvenanceDistinctFromHttpError() async throws {
+    let deliveryID = try await seedAttemptedDelivery()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0)
+    let decodeError: Error
+    do {
+      _ = try JSONDecoder().decode(ContextDirectorDecision.self, from: Data(#"{"decision":1}"#.utf8))
+      return XCTFail("expected the production decision decoder to reject a malformed payload")
+    } catch {
+      decodeError = error
+    }
+
+    await engine.recordDirectorFailure(deliveryID: deliveryID, error: decodeError)
+
+    let row = try await fetchDelivery(id: deliveryID)
+    XCTAssertEqual(row["lifecycleState"] as String?, "failed")
+    let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
+    XCTAssertEqual(provenance["failure"] as? String, "decode")
+    XCTAssertNil(provenance["status"])
+  }
+
+  private func seedAttemptedDelivery() async throws -> String {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    let versionID = try await pool.write { db -> Int64 in
+      try db.execute(
+        sql: """
+          INSERT INTO context_buckets (id, subjectKind, subjectID, createdAt, updatedAt)
+          VALUES ('bucket', 'task', 'director-failure', ?, ?)
+          """,
+        arguments: [now, now])
+      try db.execute(
+        sql: """
+          INSERT INTO bucket_versions (bucketID, version, header, frozenRankedSegment, createdAt)
+          VALUES ('bucket', 1, 'header', ?, ?)
+          """,
+        arguments: [Data(), now])
+      try db.execute(
+        sql: """
+          INSERT INTO context_visits
+            (id, contextGeneration, poolEpoch, bucketID, appName, rawContextKey,
+             normalizedContextKey, referenceHash, startedAt, outcome, createdAt, updatedAt)
+          VALUES (1, 1, ?, 'bucket', 'Director Failure', 'raw', 'normalized', 'reference', ?, 'active', ?, ?)
+          """,
+        arguments: [poolEpoch, now, now, now])
+      return try Int64.fetchOne(
+        db,
+        sql: "SELECT id FROM bucket_versions WHERE bucketID = 'bucket' AND version = 1")
+        ?? 0
+    }
+    let attempt = try await ContextBucketStore.shared.beginDeliveryAttempt(
+      fence: ContextVisitFence(
+        visitID: 1, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket", startedAt: now),
+      snapshot: ContextBucketSnapshot(
+        bucketID: "bucket",
+        versionID: versionID,
+        version: 1,
+        header: "header",
+        frozenRankedSegment: Data(),
+        tail: ["entry:one"],
+        validatedFacts: ["fact:one statement"],
+        notifyWorthiness: 1),
+      gate: ContextDeliveryGateInput(
+        masterEnabled: true,
+        frequencyLevel: 5,
+        paywalled: false,
+        cooldownSeconds: 0),
+      now: now)
+    return try XCTUnwrap(attempt.id)
+  }
+
+  private func fetchDelivery(id: String) async throws -> Row {
+    let (database, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    return try await pool.read { db in
+      try XCTUnwrap(
+        Row.fetchOne(db, sql: "SELECT * FROM proactive_deliveries WHERE id = ?", arguments: [id]))
+    }
+  }
+
+  private func provenanceObject(_ json: String) throws -> [String: Any] {
+    let object = try JSONSerialization.jsonObject(with: Data(json.utf8))
+    return try XCTUnwrap(object as? [String: Any])
   }
 }

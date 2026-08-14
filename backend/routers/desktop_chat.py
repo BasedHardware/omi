@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.routing import APIRoute
 
+from database._client import get_customer_firestore_client
 from database import llm_usage as llm_usage_db
 from database import redis_db
 from utils.http_client import get_llm_gateway_semaphore
@@ -39,7 +40,7 @@ from utils.llm.gateway_serving import is_gateway_transport_failure
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
-from utils.subscription import enforce_chat_quota
+from utils.subscription import enforce_desktop_chat_quota
 
 _MAX_BODY_BYTES = 16 * 1024 * 1024
 _RATE_LIMIT_PER_MINUTE = 120
@@ -801,16 +802,39 @@ async def _record_usage(uid: str, usage: object) -> None:
     if get_byok_key('anthropic'):
         return
     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens = _usage_values(usage)
+    total_tokens = input_tokens + output_tokens + cache_read_tokens + cache_write_tokens
+    cost = _web_search_requests(usage) * _WEB_SEARCH_COST_PER_REQUEST
+
+    def _write(
+        record_uid: str,
+        in_tokens: int,
+        out_tokens: int,
+        cache_read: int,
+        cache_write: int,
+        combined_tokens: int,
+        cost_usd: float,
+    ) -> None:
+        llm_usage_db.record_llm_usage_bucket(
+            record_uid,
+            in_tokens,
+            out_tokens,
+            cache_read,
+            cache_write,
+            combined_tokens,
+            cost_usd,
+            firestore_client=get_customer_firestore_client(),
+        )
+
     await run_blocking(
         db_executor,
-        llm_usage_db.record_llm_usage_bucket,
+        _write,
         uid,
         input_tokens,
         output_tokens,
         cache_read_tokens,
         cache_write_tokens,
-        input_tokens + output_tokens + cache_read_tokens + cache_write_tokens,
-        _web_search_requests(usage) * _WEB_SEARCH_COST_PER_REQUEST,
+        total_tokens,
+        cost,
     )
 
 
@@ -1091,14 +1115,16 @@ def _record_gateway_result(
 
 
 async def _record_chat_quota_question(uid: str, request_id: str, platform: str | None) -> None:
-    await run_blocking(
-        db_executor,
-        llm_usage_db.record_chat_quota_question,
-        uid,
-        f'desktop_chat_completions:{request_id}',
-        'desktop_chat_completions',
-        platform=platform,
-    )
+    def _write() -> None:
+        llm_usage_db.record_chat_quota_question(
+            uid,
+            f'desktop_chat_completions:{request_id}',
+            'desktop_chat_completions',
+            platform=platform,
+            firestore_client=get_customer_firestore_client(),
+        )
+
+    await run_blocking(db_executor, _write)
 
 
 async def _stream_gateway(
@@ -1260,7 +1286,7 @@ async def chat_completions(
         else:
             public_model, payload = _request(body)
             gateway_payload = {}
-        enforce_chat_quota(uid, platform=x_app_platform)
+        enforce_desktop_chat_quota(uid, platform=x_app_platform)
         await _meter_server_request(uid)
     except HTTPException:
         raise

@@ -81,6 +81,11 @@ struct ChatFirstShell: View {
     .onChange(of: navigation.route) { _, route in
       syncMemoryDestination(for: route)
     }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopMeetingConversationDidComplete)) { _ in
+      _ = promptMaterializationCoordinator.meetingConversationDidComplete(
+        windowForeground: isMainWindowForeground
+      )
+    }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenMemoryAtlasRequested)) { _ in
       memoryDestinationRawValue = MemoryHubDestination.brainMap.rawValue
       navigation.selectPrimary(.memories)
@@ -103,6 +108,11 @@ struct ChatFirstShell: View {
       }
       return true
     }
+  }
+
+  private var isMainWindowForeground: Bool {
+    guard NSApp.isActive, let window = NSApp.mainWindow else { return false }
+    return window.isKeyWindow && window.isVisible
   }
 
   @ViewBuilder
@@ -325,7 +335,8 @@ struct ChatFirstShell: View {
           highlightedSettingId: $highlightedSettingID,
           onBack: {
             _ = navigation.handleEscapeNavigation()
-          }
+          },
+          appState: appState
         )
         SettingsPage(
           appState: appState,
@@ -492,7 +503,10 @@ private struct ChatFirstConversationsHost: View {
           automationRuntime: automationRuntime
         )
       } else {
-        ConversationsPageHost(appState: appState)
+        ConversationsPageHost(
+          appState: appState,
+          initialConversation: navigation.pendingConversation
+        )
       }
     }
     .onAppear {

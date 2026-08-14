@@ -47,3 +47,31 @@ async def test_receiver_routes_explicit_onboarding_start_to_handler():
     await receiver._handle_text('{"type":"start_onboarding"}')
 
     handler.start.assert_awaited_once_with()
+
+
+@pytest.mark.anyio
+async def test_receiver_records_valid_finalization_reason_for_rotation():
+    receiver = object.__new__(ListenReceiver)
+    receiver.host = SimpleNamespace(
+        onboarding_handler=None,
+        use_custom_stt=False,
+        state=SimpleNamespace(finalization_reason=None),
+    )
+
+    await receiver._handle_text('{"type":"finalization_reason","reason":"max_duration_rotation"}')
+
+    assert receiver.host.state.finalization_reason == 'max_duration_rotation'
+
+
+@pytest.mark.anyio
+async def test_receiver_ignores_unknown_finalization_reason():
+    receiver = object.__new__(ListenReceiver)
+    receiver.host = SimpleNamespace(
+        onboarding_handler=None,
+        use_custom_stt=False,
+        state=SimpleNamespace(finalization_reason=None),
+    )
+
+    await receiver._handle_text('{"type":"finalization_reason","reason":"not-a-reason"}')
+
+    assert receiver.host.state.finalization_reason is None

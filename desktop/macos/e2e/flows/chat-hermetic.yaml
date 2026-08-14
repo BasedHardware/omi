@@ -20,9 +20,11 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AuthorizedToolExecution.swift
   - desktop/macos/Desktop/Sources/Chat/ChatOmiMark.swift
   - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
+  - desktop/macos/Desktop/Sources/Chat/MessageMetadata.swift
   - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubbleSupport.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ToolActivityTimelineLayout.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
@@ -30,15 +32,19 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalEventHub.swift
   - desktop/macos/Desktop/Sources/Chat/KernelTurnJournal.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatMessageRatingPersistence.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+MessageRating.swift
   - desktop/macos/Desktop/Sources/Chat/WritingToolsFix.swift
   - desktop/macos/Desktop/Sources/BrowserExtensionSetup.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdownChatTypography.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+MemoryCreation.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+OrphanRepair.swift
   - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeCredentialPolicy.swift
   - desktop/macos/Desktop/Sources/Chat/ChatComposerDraft.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatDraftScope.swift
   # The marker query enters AgentClient.Session through the serialized context
