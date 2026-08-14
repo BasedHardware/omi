@@ -461,7 +461,7 @@ enum LocalAgentProviderRouting {
     let orderedProviders = preferredProviders(for: taskKind)
     let availableProviders = orderedProviders.filter {
       AgentProviderHealth.isReady(
-        $0,
+        for: $0,
         environment: environment,
         fileManager: fileManager,
         homeDirectory: homeDirectory
@@ -476,7 +476,7 @@ enum LocalAgentProviderRouting {
     // installed fallback, speak the fallback note so the user knows.
     if taskKind != .general, let requestedProvider,
       !AgentProviderHealth.isReady(
-        requestedProvider,
+        for: requestedProvider,
         environment: environment,
         fileManager: fileManager,
         homeDirectory: homeDirectory
@@ -575,7 +575,7 @@ enum LocalAgentProviderRouting {
     let availableHarnesses = preferredProviders(for: taskKind)
       .filter {
         AgentProviderHealth.isReady(
-          $0,
+          for: $0,
           environment: environment,
           fileManager: fileManager,
           homeDirectory: homeDirectory
