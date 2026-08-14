@@ -379,7 +379,7 @@ checks:
     command: ["python3", ".github/scripts/check_firestore_persistence_boundary.py"]
     triggers: ["backend/**/*.py", ".github/scripts/check_firestore_persistence_boundary.py", ".github/scripts/firestore_persistence_boundary_baseline.json", "backend/tests/unit/test_check_firestore_persistence_boundary.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "WP1 seal (ADR-0002/0004): database/ is the only door to Firestore — no database._client/SDK import and no raw .document()/.collection()/.collection_group()/.transaction() op outside database/, so the storage layer stays swappable (Firestore | Mongo | ArcadeDB)"
+    reason: "WP1 seal (ADR-0002/0004/0044): no raw Firestore/Firebase SDK CLIENT construction (Client/AsyncClient/firebase_admin.firestore.client()) and no database._client import outside database/, so the storage layer stays swappable (Firestore | Mongo | ArcadeDB). Ops on the injected neutral db_client facade (.document()/.collection()/.collection_group()/.transaction()) are allowed — that is the ADR-0044 seam. Catches a raw Firestore client reintroduced by an upstream merge (ADR-0029/0030)"
   - id: object-store-boundary
     command: ["python3", ".github/scripts/check_object_store_boundary.py"]
     triggers: ["backend/**/*.py", ".github/scripts/check_object_store_boundary.py", ".github/scripts/object_store_boundary_baseline.json", "backend/tests/unit/test_check_object_store_boundary.py", ".github/checks-manifest.yaml"]

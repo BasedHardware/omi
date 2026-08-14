@@ -1783,15 +1783,18 @@ class TestScoreComputation:
         filtered = MagicMock()
         filtered.where.return_value = filtered
         filtered.stream.side_effect = [[], [self._make_mock_doc({'completed': False})], []]
-        filtered.count.return_value = _agg(1)  # overall completed = 1
+        filtered.count.return_value = _agg(1)  # overall completed = 1 (a doc completed outside the weekly window)
         mock_col.where.return_value = filtered
-        mock_col.count.return_value = _agg(1)  # overall total = 1  -> overall 1/1 = 100%
+        # overall total = 2: the weekly-incomplete doc + one completed doc outside the weekly window, so
+        # the counts reconcile with the modeled doc (cubic 10887 D7) instead of claiming 1/1=100% while
+        # the only doc is incomplete.
+        mock_col.count.return_value = _agg(2)
 
         with patch.object(action_items_db, 'db') as patched_db:
             patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
             result = action_items_db.get_scores('test-uid', date='2025-01-15')
 
-        # daily 0/0, weekly 0/1 (0%), overall 1/1 (100%) -> highest is overall
+        # daily 0/0, weekly 0/1 (0%), overall 1/2 (50%) -> highest is overall
         assert result['default_tab'] == 'overall'
 
 

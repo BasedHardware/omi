@@ -2868,39 +2868,6 @@ class FakeSnapshot:
         return {}
 
 
-class FakeRef:
-    def __init__(self) -> None:
-        self.data: dict[str, Any] = {}
-
-    def get(self) -> FakeSnapshot:
-        snapshot = FakeSnapshot()
-        snapshot.exists = bool(self.data)
-        snapshot.to_dict = lambda: dict(self.data)  # type: ignore[method-assign]
-        return snapshot
-
-    def set(self, fields: dict[str, Any], merge: bool = False) -> None:
-        if merge:
-            self.data.update(fields)
-        else:
-            self.data = dict(fields)
-
-
-class FakeCollection:
-    def __init__(self) -> None:
-        self.ref = FakeRef()
-
-    def document(self, _name: str) -> FakeRef:
-        return self.ref
-
-
-class FakeClient:
-    def __init__(self) -> None:
-        self.collections: dict[str, FakeCollection] = {}
-
-    def collection(self, name: str) -> FakeCollection:
-        return self.collections.setdefault(name, FakeCollection())
-
-
 def test_empty_rollout_cohort_cannot_advance_without_observed_success(monkeypatch):
     store = _FakeStore()
     store.set("agent_vm_rollouts/development", {"releaseId": RELEASE.release_id, "phase": "sentinel", "successfulRuns": 2})
@@ -3473,8 +3440,8 @@ class OwnerSnapshot:
 class _FakeStore:
     """Neutral store-port fake for reconciler tests. ``_owners`` drives it via query() (records the
     filters/limit, and can raise on the targeted query to exercise the bounded-scan fallback); the
-    rollout state functions drive it via get()/set() on a path. Replaces the old Firestore-Client-
-    shaped OwnerClient/FakeClient now that jobs.agent_vm_reconciler reads through _store()."""
+    rollout state functions drive it via get()/set() on a path. Replaced the old Firestore-Client-
+    shaped fakes now that jobs.agent_vm_reconciler reads through _store()."""
 
     def __init__(self, snapshots: Sequence[OwnerSnapshot] = (), *, filtered_query_raises: bool = False) -> None:
         self._snapshots = list(snapshots)

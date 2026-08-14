@@ -80,6 +80,7 @@ def test_update_status_on_missing_doc_returns_false(store):
 
 def test_update_progress_merges_and_bumps_updated_at(store):
     wrapped_module.create_wrapped('uid-1', 2025)
+    created_at = store.get('users/uid-1/wrapped/2025').to_dict()['updated_at']
 
     ok = wrapped_module.update_wrapped_progress('uid-1', 2025, {'step': 'stats', 'pct': 0.5})
     assert ok is True
@@ -88,6 +89,9 @@ def test_update_progress_merges_and_bumps_updated_at(store):
     assert stored['progress'] == {'step': 'stats', 'pct': 0.5}
     # Original fields survive the partial update.
     assert stored['status'] == WrappedStatus.PROCESSING
+    # The heartbeat the test is named for must actually advance — is_wrapped_stuck keys off updated_at,
+    # so a regression that stopped bumping it would slip past without this assertion (cubic 10887 D6).
+    assert stored['updated_at'] > created_at
 
 
 def test_update_progress_on_missing_doc_returns_false(store):
