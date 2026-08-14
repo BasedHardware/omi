@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 import pytest
 
 import utils.webhooks as webhooks_module
+from models.users import WebhookType
 from utils.webhooks import realtime_transcript_webhook, send_audio_bytes_developer_webhook, day_summary_webhook
 
 
@@ -413,3 +414,24 @@ class TestCircuitBreakerIntegration:
         ):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * 100))
             mock_client.post.assert_not_called()
+
+
+class TestWebhookFirstTimeSetup:
+    """#11365: a stored setting with no endpoint must not toggle the webhook on."""
+
+    def test_audio_bytes_delay_only_setting_stays_disabled(self):
+        """'<url>,<seconds>' with the URL cleared has nowhere to deliver to."""
+        with patch.object(webhooks_module, "get_user_webhook_db", return_value=",5"):
+            assert webhooks_module.webhook_first_time_setup("uid-1", WebhookType.audio_bytes) is False
+            webhooks_module.disable_user_webhook_db.assert_called_once_with("uid-1", WebhookType.audio_bytes)
+            webhooks_module.enable_user_webhook_db.assert_not_called()
+
+    def test_configured_audio_bytes_setting_enables(self):
+        with patch.object(webhooks_module, "get_user_webhook_db", return_value="https://example.com/audio,5"):
+            assert webhooks_module.webhook_first_time_setup("uid-1", WebhookType.audio_bytes) is True
+            webhooks_module.enable_user_webhook_db.assert_called_once_with("uid-1", WebhookType.audio_bytes)
+
+    def test_blank_url_stays_disabled(self):
+        with patch.object(webhooks_module, "get_user_webhook_db", return_value="   "):
+            assert webhooks_module.webhook_first_time_setup("uid-1", WebhookType.memory_created) is False
+            webhooks_module.disable_user_webhook_db.assert_called_once_with("uid-1", WebhookType.memory_created)

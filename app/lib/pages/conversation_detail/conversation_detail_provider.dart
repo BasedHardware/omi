@@ -84,15 +84,15 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     result ??= _cachedConversation;
     if (result != null && id != null && result.id != id) return null;
     if (result != null) {
-      // Validate against the same effective date used to group conversations
-      // (startedAt ?? createdAt). Using createdAt alone breaks for
-      // conversations whose startedAt lands on a different calendar day, which
-      // would otherwise make this getter return null for a conversation that is
-      // actually present in the selected day-group.
+      // Validate with the *same* key function the list groups by
+      // (`conversationLocalDayKey` over startedAt ?? createdAt). Comparing the
+      // raw UTC year/month/day instead made this getter reject a conversation
+      // that is actually present in the selected day-group whenever the
+      // viewer's local day differs from the UTC day — an evening conversation
+      // for any UTC+ viewer, a post-UTC-midnight one for any UTC- viewer —
+      // blanking the detail page it was opened from (#10976).
       final effectiveDate = result.startedAt ?? result.createdAt;
-      if (effectiveDate.year == selectedDate.year &&
-          effectiveDate.month == selectedDate.month &&
-          effectiveDate.day == selectedDate.day) {
+      if (conversationLocalDayKey(effectiveDate) == conversationLocalDayKey(selectedDate)) {
         return _cachedConversation = result;
       }
     }

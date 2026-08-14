@@ -100,6 +100,9 @@ actor APIClient {
       authPolicy: authPolicy)
   }
 
+  /// - Parameter requestTimeout: overrides the shared 30s transport timeout. Managed LLM
+  ///   endpoints need a longer budget than a normal API call; without it a slow synthesis
+  ///   is cancelled client-side while the backend is still producing the answer.
   func post<T: Decodable, B: Encodable>(
     _ endpoint: String,
     body: B,
@@ -107,11 +110,14 @@ actor APIClient {
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
     expectedOwnerId: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    allowsAuthRetry: Bool = true,
+    requestTimeout: TimeInterval? = nil
   ) async throws -> T {
-    let authPolicy = try resolvedRequestAuthPolicy(
+    var authPolicy = try resolvedRequestAuthPolicy(
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot)
+    authPolicy.allowsAuthRetry = allowsAuthRetry
     let authOwnerId = authPolicy.expectedAuthOwnerId
     try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
@@ -121,6 +127,9 @@ actor APIClient {
     log("APIClient: POST \(url.absoluteString)")
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
+    if let requestTimeout {
+      request.timeoutInterval = requestTimeout
+    }
     request.allHTTPHeaderFields = try await buildHeaders(
       requireAuth: requireAuth,
       includeBYOK: includeBYOK,
@@ -442,6 +451,9 @@ actor APIClient {
     }
 
     if httpResponse.statusCode == 401 {
+      guard authPolicy.allowsAuthRetry else {
+        throw APIError.unauthorized
+      }
       if retriedAuth, authPolicy.returnsPersistent401Response {
         return (data, httpResponse)
       }
@@ -591,6 +603,7 @@ extension APIClient {
 
   static func conversationFilterQueryItems(
     statuses: [ConversationStatus] = [],
+    sources: [ConversationSource] = [],
     includeDiscarded: Bool = false,
     startDate: Date? = nil,
     endDate: Date? = nil,
@@ -604,6 +617,11 @@ extension APIClient {
     if !statuses.isEmpty {
       let statusStrings = statuses.map { $0.rawValue }.joined(separator: ",")
       queryItems.append("statuses=\(statusStrings)")
+    }
+
+    if !sources.isEmpty {
+      let sourceStrings = sources.map { $0.rawValue }.joined(separator: ",")
+      queryItems.append("sources=\(sourceStrings)")
     }
 
     if let startDate = startDate {
@@ -632,6 +650,7 @@ extension APIClient {
     limit: Int = 50,
     offset: Int = 0,
     statuses: [ConversationStatus] = [],
+    sources: [ConversationSource] = [],
     includeDiscarded: Bool = false,
     startDate: Date? = nil,
     endDate: Date? = nil,
@@ -645,6 +664,7 @@ extension APIClient {
     ]
     queryItems += Self.conversationFilterQueryItems(
       statuses: statuses,
+      sources: sources,
       includeDiscarded: includeDiscarded,
       startDate: startDate,
       endDate: endDate,
@@ -659,6 +679,13 @@ extension APIClient {
   /// Fetches a single conversation by ID
   func getConversation(id: String) async throws -> ServerConversation {
     return try await get("v1/conversations/\(id)")
+  }
+
+  /// Reads a capture detail through the archive's strict Omi-device provenance
+  /// contract. This is intentionally separate from the legacy mixed-source
+  /// conversation detail API.
+  func getOmiCapture(id: String) async throws -> ServerConversation {
+    try await get("v1/conversations/\(id)?source=omi&include_discarded=false")
   }
 
   /// Deletes a conversation by ID
@@ -701,7 +728,7 @@ extension APIClient {
     // Set visibility to shared
     try await setConversationVisibility(id: id, visibility: "shared")
     // Return the web URL for the shared conversation
-    return "https://h.omi.me/conversations/\(id)"
+    return DesktopBackendEnvironment.conversationShareURL(id: id)
   }
 
   /// Updates the title of a conversation
@@ -750,6 +777,7 @@ extension APIClient {
   static func conversationsCountEndpoint(
     includeDiscarded: Bool = false,
     statuses: [ConversationStatus] = [.completed, .processing],
+    sources: [ConversationSource] = [],
     startDate: Date? = nil,
     endDate: Date? = nil,
     folderId: String? = nil,
@@ -757,6 +785,7 @@ extension APIClient {
   ) -> String {
     let queryItems = Self.conversationFilterQueryItems(
       statuses: statuses,
+      sources: sources,
       includeDiscarded: includeDiscarded,
       startDate: startDate,
       endDate: endDate,
@@ -775,6 +804,7 @@ extension APIClient {
   func getConversationsCount(
     includeDiscarded: Bool = false,
     statuses: [ConversationStatus] = [.completed, .processing],
+    sources: [ConversationSource] = [],
     startDate: Date? = nil,
     endDate: Date? = nil,
     folderId: String? = nil,
@@ -783,6 +813,7 @@ extension APIClient {
     let endpoint = Self.conversationsCountEndpoint(
       includeDiscarded: includeDiscarded,
       statuses: statuses,
+      sources: sources,
       startDate: startDate,
       endDate: endDate,
       folderId: folderId,

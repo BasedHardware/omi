@@ -8,15 +8,25 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 import routers.goals as goals_router
 import routers.task_recommendations as task_recommendations_router
 import routers.workstreams as workstreams_router
 from models.goal import GoalCreate, GoalFocusRequest, GoalUpdate
+from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
 from models.task_recommendation import NormalizedContextSnapshot, OpenLoopSnapshot, SnapshotReceipt
 from models.workstream import TaskOriginWorkIntent, WorkIntentReceipt, WorkstreamUpdate
 from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID
+
+
+def _canonical_task_router_client() -> TestClient:
+    app = FastAPI()
+    app.include_router(goals_router.router)
+    app.include_router(workstreams_router.router)
+    app.dependency_overrides[goals_router.auth.get_current_user_uid] = lambda: 'not-enrolled'
+    return TestClient(app)
 
 
 def test_openapi_exposes_intent_and_thread_resources_without_manual_workstream_create():
@@ -242,12 +252,51 @@ def test_what_matters_now_initializes_the_dev_smoke_fixture_before_rollout(monke
     ]
 
 
+def _stub_smoke_fixture_control(monkeypatch, projection):
+    """Wire the deploy-smoke seams and leave the real entitlement resolver in place."""
+
+    monkeypatch.setattr(
+        task_recommendations_router,
+        'task_control_db',
+        SimpleNamespace(
+            ensure_development_smoke_fixture=lambda _uid: True,
+            get_task_workflow_control=lambda _uid: TaskWorkflowControl(
+                workflow_mode=TaskWorkflowMode.read, account_generation=0
+            ),
+        ),
+    )
+    monkeypatch.setattr(task_recommendations_router, '_bound_device_id', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(task_recommendations_router.recommendations, 'evaluate', lambda *_args, **_kwargs: projection)
+
+
+def test_dev_deploy_smoke_reaches_what_matters_now_through_the_real_entitlement_gate(monkeypatch):
+    sentinel_projection = object()
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    _stub_smoke_fixture_control(monkeypatch, sentinel_projection)
+
+    result = task_recommendations_router.get_what_matters_now(
+        request_context=object(), device_id=None, uid=WHAT_MATTERS_NOW_SMOKE_UID
+    )
+
+    assert result is sentinel_projection
+
+
+def test_what_matters_now_is_available_for_a_uid_outside_the_former_cohort(monkeypatch):
+    _stub_smoke_fixture_control(monkeypatch, object())
+
+    result = task_recommendations_router.get_what_matters_now(
+        request_context=object(), device_id=None, uid='not-enrolled'
+    )
+    assert result is not None
+
+
 def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaults(monkeypatch):
     captured = {}
+    wake_calls = []
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
     def create(uid, payload):
         captured.update(payload)
-        now = datetime.now(timezone.utc)
         return {
             **payload,
             'goal_id': payload['id'],
@@ -260,6 +309,15 @@ def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaul
         }
 
     monkeypatch.setattr(goals_router.goals_db, 'create_goal', create)
+    # This contract covers the goal payload/response shape. Keep the proactive
+    # wake as an asserted seam instead of starting its Firestore-backed engine;
+    # that integration is covered by the proactive-engine tests and makes this
+    # otherwise pure unit sensitive to retry timing.
+    monkeypatch.setattr(
+        goals_router,
+        '_wake_goal_change',
+        lambda uid, goal_id, mutation_key: wake_calls.append((uid, goal_id, mutation_key)),
+    )
     result = goals_router.create_goal(
         GoalCreate(
             title='Launch desktop',
@@ -274,6 +332,7 @@ def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaul
     assert 'metric' not in captured
     assert result['metric'] is None
     assert result['target_value'] == 0
+    assert wake_calls == [('u1', captured['id'], now)]
 
 
 def test_all_goals_preserves_active_default_and_can_include_unbounded_history(monkeypatch):
@@ -291,6 +350,33 @@ def test_all_goals_preserves_active_default_and_can_include_unbounded_history(mo
     assert captured == {'uid': 'u1', 'include_inactive': False}
     assert goals_router.get_all_goals(include_ended=True, uid='u1') == expected
     assert captured == {'uid': 'u1', 'include_inactive': True}
+
+
+def test_universal_goal_list_keeps_legacy_and_task_routes_on_one_store(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        goals_router.goals_db,
+        'get_all_goals',
+        lambda uid, include_inactive=False: calls.append((uid, include_inactive)) or [],
+    )
+    client = _canonical_task_router_client()
+
+    legacy = client.get('/v1/goals/all')
+    strict = client.get('/v1/goals/canonical/list')
+
+    assert legacy.status_code == 200
+    assert legacy.json() == []
+    assert strict.status_code == 200
+    assert strict.json() == []
+    assert calls == [('not-enrolled', False), ('not-enrolled', False)]
+
+
+def test_canonical_goal_list_projects_enrolled_users(monkeypatch):
+    expected = [{'goal_id': 'goal_1'}]
+    monkeypatch.setattr(goals_router.goals_db, 'get_all_goals', lambda uid, include_inactive=False: expected)
+    monkeypatch.setattr(goals_router, 'normalize_goal_response', lambda goal: goal)
+
+    assert goals_router.get_canonical_goals(include_ended=True, uid='enrolled') == expected
 
 
 def test_goal_update_rejects_null_required_fields():
@@ -367,3 +453,13 @@ def test_work_intent_route_forwards_idempotency_and_generation(monkeypatch):
     assert captured['idempotency_key'] == 'click-1'
     assert captured['account_generation'] == 7
     assert refreshed == [('u1', 'w1')]
+
+
+def test_formerly_noncanonical_task_dependency_requires_authentication():
+    app = FastAPI()
+    app.include_router(workstreams_router.router)
+
+    response = TestClient(app).get('/v1/workstreams/workstream-1')
+
+    assert response.status_code == 401
+    assert response.json()['detail'] == 'Authorization header not found'

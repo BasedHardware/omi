@@ -22,22 +22,22 @@ struct OnboardingNotificationStepView: View {
       HStack {
         Text("Notifications")
           .font(.system(size: 18, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
+        // The escape hatch stays, and stays legible: this step cannot grant the permission
+        // itself, so "Skip" is the only way past a machine that refuses the prompt.
         Button(action: onSkip) {
           Text("Skip")
-            .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
         }
         .buttonStyle(.plain)
       }
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.vertical, OmiSpacing.lg)
 
-      Divider()
-        .background(OmiColors.backgroundTertiary)
+      GlassSeparator()
 
       Spacer()
 
@@ -45,18 +45,22 @@ struct OnboardingNotificationStepView: View {
       VStack(spacing: OmiSpacing.section) {
         // Icon with glow
         ZStack {
+          // A halo, not a glow: on the light panel the old `Color.white` bloom is the panel, so
+          // the breathing circle darkens instead of lightens.
           Circle()
-            .fill(Color.white.opacity(0.15))
+            .fill(Ink.primary.opacity(0.15))
             .frame(width: 100, height: 100)
             .blur(radius: 20)
             .scaleEffect(pulseAnimation ? 1.2 : 1.0)
-            .omiAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: pulseAnimation)
+            .animation(
+              InkReduceMotion.animation(.easeInOut(duration: 2).repeatForever(autoreverses: true)),
+              value: pulseAnimation)
 
           Image(systemName: "bell.badge.fill")
             .font(.system(size: 44))
             .foregroundStyle(
               LinearGradient(
-                colors: [Color.white, Color.gray],
+                colors: [Ink.primary, Ink.secondary],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
               )
@@ -66,16 +70,16 @@ struct OnboardingNotificationStepView: View {
 
         VStack(spacing: OmiSpacing.sm) {
           Text("Proactive Intelligence")
-            .font(.system(size: 24, weight: .bold))
-            .foregroundColor(OmiColors.textPrimary)
+            .inkStyle(InkType.stepHeadline, color: Ink.primary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
 
           Text(
             "omi watches your screen and catches things you'd miss —\nwrong recipients, stale data, hidden shortcuts."
           )
-          .font(.system(size: 14))
-          .foregroundColor(OmiColors.textSecondary)
+          .inkStyle(InkType.prose, color: Ink.secondary)
           .multilineTextAlignment(.center)
-          .lineSpacing(4)
+          .fixedSize(horizontal: false, vertical: true)
         }
 
         // Static notification preview
@@ -97,23 +101,19 @@ struct OnboardingNotificationStepView: View {
         VStack(spacing: OmiSpacing.md) {
           HStack(spacing: OmiSpacing.xs) {
             Image(systemName: "bell.badge.fill")
-              .foregroundColor(Color.white)
+              .foregroundColor(Ink.primary)
               .font(.system(size: 12))
             Text("Notification shown below Ask omi")
-              .font(.system(size: 12))
-              .foregroundColor(OmiColors.textTertiary)
+              .inkStyle(InkType.statusLabel, color: Ink.secondary)
           }
 
+          // A stadium capsule from the one button style — the hand-rolled white rounded rectangle
+          // was the panel's own colour, so the CTA drew nothing at all on light glass.
           Button(action: onContinue) {
             Text("Continue")
-              .font(.system(size: 15, weight: .semibold))
-              .foregroundColor(.black)
               .frame(maxWidth: 280)
-              .padding(.vertical, OmiSpacing.md)
-              .background(Color.white)
-              .cornerRadius(OmiChrome.smallControlRadius)
           }
-          .buttonStyle(.plain)
+          .buttonStyle(InkButtonStyle(kind: .primary))
           .keyboardShortcut(.defaultAction)
         }
         .padding(.bottom, OmiSpacing.section)
@@ -121,7 +121,10 @@ struct OnboardingNotificationStepView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(OmiColors.backgroundPrimary)
+    // No ground: this step is hosted on the shell's one piece of glass, and a step that fills
+    // itself is an opaque slab pasted over the panel. `glassContent()` pins the panel's light
+    // appearance, because a first-run step is reached before any navigation stack has pinned it.
+    .glassContent()
     .onAppear {
       let ownerID = RuntimeOwnerIdentity.currentOwnerId()
       FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
@@ -129,7 +132,7 @@ struct OnboardingNotificationStepView: View {
 
       // Show the notification preview after a brief delay
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-        OmiMotion.withGated(.spring(response: 0.5, dampingFraction: 0.8)) {
+        InkReduceMotion.perform(.spring(response: InkMotion.settle, dampingFraction: 0.8)) {
           showNotification = true
         }
 
@@ -146,7 +149,7 @@ struct OnboardingNotificationStepView: View {
 
         // Show "notification sent" + continue after a beat
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-          OmiMotion.withGated(.easeInOut(duration: 0.3)) {
+          InkReduceMotion.perform(.easeInOut(duration: InkMotion.settle)) {
             notificationSent = true
           }
         }
@@ -156,6 +159,13 @@ struct OnboardingNotificationStepView: View {
 
   // MARK: - macOS Notification Preview
 
+  /// A picture of a macOS notification banner, and the one place in this file that keeps its own
+  /// opaque surface.
+  ///
+  /// The same exemption `glassMediaMat` documents: this is a *depiction*, not a surface of ours. A
+  /// Light Mode banner really is a white card with black type and two shadows, so redrawing it as a
+  /// wash on the panel would make the preview stop looking like the thing it is previewing. Every
+  /// colour below is therefore read against this card's own white, not against the glass.
   private var notificationPreview: some View {
     HStack(spacing: OmiSpacing.md) {
       // App icon

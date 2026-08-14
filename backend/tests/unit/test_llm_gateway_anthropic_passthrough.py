@@ -8,8 +8,11 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from llm_gateway.gateway.config_loader import GatewayConfig, load_gateway_config
+from llm_gateway.gateway.schemas import ProviderRef, Surface
 from llm_gateway.main import app
 from llm_gateway.routers import anthropic_messages
+from llm_gateway.routers.dependencies import get_gateway_config
 from utils.llm.gateway_client import feature_auto_lane_id
 
 CHAT_AGENT_LANE = feature_auto_lane_id('chat_agent')
@@ -103,6 +106,23 @@ def _agentic_request(**overrides: Any) -> dict[str, Any]:
     return body
 
 
+def _anthropic_test_config() -> GatewayConfig:
+    config = load_gateway_config(prod_mode=True)
+    lane = config.lanes[CHAT_AGENT_LANE]
+    route = config.route_artifacts[lane.active_route].model_copy(
+        update={
+            'primary': ProviderRef(provider='anthropic', model='claude-test'),
+            'provider_options': {},
+            'surface': Surface.ANTHROPIC_MESSAGES,
+        }
+    )
+    lanes = dict(config.lanes)
+    lanes[CHAT_AGENT_LANE] = lane.model_copy(update={'surface': Surface.ANTHROPIC_MESSAGES})
+    route_artifacts = dict(config.route_artifacts)
+    route_artifacts[route.route_artifact_id] = route
+    return GatewayConfig(lanes=lanes, route_artifacts=route_artifacts, feature_bundles=config.feature_bundles)
+
+
 @pytest.fixture(autouse=True)
 def _reset_anthropic_client(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
@@ -110,7 +130,9 @@ def _reset_anthropic_client(monkeypatch):
     anthropic_messages._anthropic_http_client = None
     fake = _FakeAsyncClient()
     monkeypatch.setattr(anthropic_messages, '_get_anthropic_http_client', lambda: fake)
+    app.dependency_overrides[get_gateway_config] = _anthropic_test_config
     yield fake
+    app.dependency_overrides.pop(get_gateway_config, None)
     anthropic_messages._anthropic_http_client = None
 
 
@@ -151,11 +173,20 @@ def test_anthropic_messages_rejects_openai_compatible_lane():
     assert 'not an anthropic messages lane' in response.json()['detail']
 
 
+def test_anthropic_messages_rejects_chat_agent_lane_after_luna_migration():
+    app.dependency_overrides.pop(get_gateway_config, None)
+
+    response = TestClient(app).post('/v1/messages', json=_agentic_request(), headers=_auth_headers())
+
+    assert response.status_code == 400
+    assert 'not an anthropic messages lane' in response.json()['detail']
+
+
 def test_anthropic_messages_passthrough_preserves_cache_control(_reset_anthropic_client):
     fake: _FakeAsyncClient = _reset_anthropic_client
     fake._post_response = httpx.Response(
         200,
-        json={'id': 'msg_1', 'type': 'message', 'role': 'assistant', 'content': [], 'model': 'claude-sonnet-5'},
+        json={'id': 'msg_1', 'type': 'message', 'role': 'assistant', 'content': [], 'model': 'claude-test'},
     )
 
     response = TestClient(app).post('/v1/messages', json=_agentic_request(), headers=_auth_headers())
@@ -163,7 +194,7 @@ def test_anthropic_messages_passthrough_preserves_cache_control(_reset_anthropic
     assert response.status_code == 200
     assert len(fake.post_calls) == 1
     forwarded = fake.post_calls[0]['json']
-    assert forwarded['model'] == 'claude-sonnet-5'
+    assert forwarded['model'] == 'claude-test'
     assert 'effort' not in forwarded
     assert forwarded['system'][0]['cache_control'] == {'type': 'ephemeral', 'ttl': '1h'}
     assert forwarded['cache_control'] == {'type': 'ephemeral', 'ttl': '1h'}
@@ -186,7 +217,7 @@ def test_anthropic_messages_records_cache_read_and_write_usage(_reset_anthropic_
             'type': 'message',
             'role': 'assistant',
             'content': [],
-            'model': 'claude-sonnet-5',
+            'model': 'claude-test',
             'usage': {
                 'input_tokens': 100,
                 'cache_read_input_tokens': 900,
@@ -349,7 +380,7 @@ async def test_anthropic_stream_open_cancellation_records_cancelled(monkeypatch,
         lane_id=CHAT_AGENT_LANE,
         route_artifact_id='route.chat_agent.model_config.001',
         provider='anthropic',
-        model='claude-sonnet-5',
+        model='claude-test',
         credential_source='omi_managed',
         request_id='9dc9d507-51a9-45b4-9f36-689521da3669',
     )
@@ -483,7 +514,7 @@ async def test_anthropic_stream_cleanup_failure_still_observes_one_terminal(monk
         lane_id=CHAT_AGENT_LANE,
         route_artifact_id='route.chat_agent.model_config.001',
         provider='anthropic',
-        model='claude-sonnet-5',
+        model='claude-test',
         credential_source='omi_managed',
         request_id='ef7217b8-9c75-4467-bdf5-bf3c818a37ac',
     )

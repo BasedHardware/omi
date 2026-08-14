@@ -299,7 +299,8 @@ extension KernelJournalTurn {
         ChatResource.decodeResourcesFromPersistence(resourcesJSON)
       ),
       turnOwner: owner,
-      journalStatus: status
+      journalStatus: status,
+      hidesEmptyStreamingPlaceholder: metadata["hiddenUntilOutput"] as? Bool ?? false
     )
   }
 

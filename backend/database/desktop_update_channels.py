@@ -224,14 +224,23 @@ def register_release_manifest(data: dict[str, Any], *, firestore_client: Any = N
 #: Pointer transitions differ only in which preconditions they enforce, so the
 #: policy is data and :func:`_build_pointer` is the single mutation authority.
 #: ``direction`` is the permitted build-number movement; every transition
-#: requires the manifest's passed T2 qualification evidence.
+#: accepts normal Codemagic signed-smoke evidence (or retained T2 evidence)
+#: while keeping emergency manifests out of the Stable path.
 TRANSITIONS: dict[str, dict[str, Any]] = {
-    "promote": {"direction": "forward", "require_qualified": True, "require_current_release_id": False},
-    "repoint": {"direction": "either", "require_qualified": True, "require_current_release_id": True},
+    "promote": {
+        "direction": "forward",
+        "accepted_evidence": {("T2", True), ("signed-smoke", False)},
+        "require_current_release_id": False,
+    },
+    "repoint": {
+        "direction": "either",
+        "accepted_evidence": {("T2", True), ("signed-smoke", False)},
+        "require_current_release_id": True,
+    },
     # Private to desktop_beta_breakglass.  The public generic promotion API
     # rejects it, so an emergency manifest can never become Stable or bypass
     # the dedicated audit/admission-pause transaction.
-    "breakglass": {"direction": "either", "require_qualified": False, "require_current_release_id": True},
+    "breakglass": {"direction": "either", "accepted_evidence": None, "require_current_release_id": True},
 }
 
 
@@ -256,9 +265,10 @@ def _build_pointer(
 
     if manifest["platform"] != platform:
         raise ValueError("release manifest platform does not match pointer platform")
-    if policy["require_qualified"]:
-        if manifest["qualification_passed"] is not True or manifest["qualification_tier"] != "T2":
-            raise ValueError("release manifest is missing passed T2 qualification evidence")
+    accepted_evidence = policy["accepted_evidence"]
+    evidence = (manifest["qualification_tier"], manifest["qualification_passed"])
+    if accepted_evidence is not None and evidence not in accepted_evidence:
+        raise ValueError("release manifest qualification is missing accepted normal-path evidence")
 
     current_release_id = current.get("release_id")
     # An acknowledged pointer target is a safe exact retry. It still had to

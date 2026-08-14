@@ -1,7 +1,7 @@
 version: 2
 name: claude-guidance-overlay
 tier: 2
-description: Cursor-free dogfood flow for Claude spatial guidance overlays.
+description: Cursor-free dogfood flow for Claude and Screen Recording spatial guidance overlays.
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/CloudConnectorGuidanceOverlay.swift
@@ -127,6 +127,42 @@ steps:
       result.detail.visible: "false"
 
   - id: S14
+    name: Present Screen Recording Drag Fixture
+    bridge.action:
+      name: spatial_overlay_present_fixture
+      params:
+        fixture: screen-recording-drag
+        settleMs: "150"
+    expect:
+      result.detail.visible: "true"
+      result.detail.kind: dragToGrant
+      result.detail.dropTargetPane: content
+      result.detail.dropTargetVertical: upper
+      result.detail.dragDirection: right
+
+  - id: S15
+    name: Capture Screen Recording Drag Overlay
+    visual.export:
+      name: screen-recording-drag-overlay
+      target: overlay
+
+  - id: S16
+    name: Read Screen Recording Drag State
+    bridge.action:
+      name: spatial_overlay_state
+    expect:
+      result.detail.visible: "true"
+      result.detail.dropTargetPane: content
+      result.detail.dropTargetVertical: upper
+
+  - id: S17
+    name: Dismiss Screen Recording Drag Fixture
+    bridge.action:
+      name: spatial_overlay_dismiss
+    expect:
+      result.detail.visible: "false"
+
+  - id: S18
     name: Logs Clean
     log.expect:
       absent:

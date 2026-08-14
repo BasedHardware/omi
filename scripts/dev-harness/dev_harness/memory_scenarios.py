@@ -32,6 +32,8 @@ WATERMARK = "NOT_ACTIVATION_EVIDENCE"
 DEFAULT_LOCAL_USER_ID = "local_default_user"
 ALICE_USER_ID = "alice"
 BOB_USER_ID = "bob"
+CHAT_FIRST_E2E_ENABLED_USER_ID = "omi-local-emulator-chat-first-enabled-v1"
+CHAT_FIRST_E2E_DISABLED_CONTROL_USER_ID = "omi-local-emulator-chat-first-disabled-v1"
 # Short-term seeds must stay visible across long local-dev sessions.
 SHORT_TERM_EXPIRES_AT = "2027-12-31T23:59:59Z"
 SYNTHETIC_SOURCE_VERSION = "memory-local-synthetic-source-1"
@@ -39,7 +41,6 @@ AUTH_UID_MANIFEST = "canonical-auth-uids.json"
 LOCAL_DEV_PROJECT_ID = safety.DEFAULT_LOCAL_FIREBASE_PROJECT_ID
 LOCAL_DEV_DATABASE_ID = safety.DEFAULT_FIRESTORE_DATABASE_ID
 GLOBAL_READ_GATE_PATH = "memory_control/global_read_gate"
-WRITE_CONVERGENCE_GATE_PATH = "memory_control/write_convergence_gate"
 
 RouteDecision = Literal["disabled", "legacy_primary", "memory_read", "fail_closed"]
 
@@ -177,7 +178,13 @@ def _user(uid: str, name: str) -> ScenarioUser:
     )
 
 
-USERS = (_user(DEFAULT_LOCAL_USER_ID, "Default"), _user(ALICE_USER_ID, "Alice"), _user(BOB_USER_ID, "Bob"))
+USERS = (
+    _user(DEFAULT_LOCAL_USER_ID, "Default"),
+    _user(ALICE_USER_ID, "Alice"),
+    _user(BOB_USER_ID, "Bob"),
+    _user(CHAT_FIRST_E2E_ENABLED_USER_ID, "Chat-first E2E Enabled"),
+    _user(CHAT_FIRST_E2E_DISABLED_CONTROL_USER_ID, "Chat-first E2E Disabled Control"),
+)
 
 
 def _auth_seed(users: Sequence[ScenarioUser]) -> tuple[Mapping[str, object], ...]:
@@ -283,24 +290,7 @@ def _global_gate(*, enabled: bool, kill: bool = False) -> FirestoreSeed:
     )
 
 
-def _write_convergence() -> FirestoreSeed:
-    return FirestoreSeed(
-        path=WRITE_CONVERGENCE_GATE_PATH,
-        protected=True,
-        data={
-            "route_scope": "get_v3_memories",
-            "purpose": "memory_v3_write_convergence_gate",
-            "owner": "memory_platform_local_harness",
-            "config_schema_version": 1,
-            "durable_outbox_enabled": True,
-            "dual_write_projection_ready": True,
-            "delete_convergence_ready": True,
-            "idempotency_contract_ready": True,
-        },
-    )
-
-
-def _control(uid: str, *, read: bool = True, default_grant: bool = True, archive: bool = False) -> FirestoreSeed:
+def _control(uid: str, *, default_grant: bool = True, archive: bool = False) -> FirestoreSeed:
     return FirestoreSeed(
         path=f"users/{uid}/memory_control/state",
         protected=True,
@@ -311,31 +301,7 @@ def _control(uid: str, *, read: bool = True, default_grant: bool = True, archive
             "account_generation": 7,
             "source_generation": 1,
             "commit_sequence": 1,
-            "mode": "read" if read else "off",
-            "mode_epoch": 1,
-            "cutover_epoch": 1 if read else 0,
-            "fallback_projection_ready": read,
-            "persistent_memory_writes_started": False,
-            "decommission_reconciled": False,
-            "writes_blocked": False,
-            "stage_gates": {"shadow": "passed", "write": "passed", "read": "passed" if read else "blocked"},
             "grants": {"omi_chat": {"default_memory": default_grant, "archive": archive}},
-        },
-    )
-
-
-def _projection_state(uid: str, ctx: DeterministicContext) -> FirestoreSeed:
-    return FirestoreSeed(
-        path=f"users/{uid}/v3_compatibility_projection/state",
-        protected=True,
-        data={
-            "uid": uid,
-            "account_generation": 7,
-            "projection_generation": 3,
-            "projection_commit_id": ctx.ids["projection_commit"],
-            "source_commit_id": ctx.ids["source_commit"],
-            "source_version": "memory-local-synthetic-source-1",
-            "updated_at": ctx.now,
         },
     )
 
@@ -437,37 +403,6 @@ def _memory_doc(
     if expires is not None:
         data["expires_at"] = expires
     return FirestoreSeed(path=f"users/{uid}/memory_items/{memory_id}", protected=True, data=data)
-
-
-def _projection_item(
-    uid: str,
-    memory_id: str,
-    content: str,
-    created: str,
-    *,
-    archive: bool = False,
-    category: str = "memory-local-synthetic",
-) -> FirestoreSeed:
-    return FirestoreSeed(
-        path=f"users/{uid}/v3_compatibility_projection_items/{memory_id}",
-        protected=True,
-        data={
-            "id": memory_id,
-            "uid": uid,
-            "content": content,
-            "category": category,
-            "visibility": "private",
-            "created_at": created,
-            "updated_at": created,
-            "account_generation": 7,
-            "projection_generation": 3,
-            "projection_commit_id": "projection_commit_local_030",
-            "source_commit_id": "source_commit_local_030",
-            "source_version": "memory-local-synthetic-source-1",
-            "tier": "archive" if archive else "default",
-            "synthetic": True,
-        },
-    )
 
 
 def _kg_node(uid: str, node_id: str, label: str, node_type: str, *, memory_ids: Sequence[str] = ()) -> FirestoreSeed:
@@ -741,11 +676,8 @@ def _base_firestore(
     )
     seeds: list[FirestoreSeed] = [
         _global_gate(enabled=global_enabled, kill=kill),
-        _write_convergence(),
-        _control(ALICE_USER_ID, read=True, default_grant=True, archive=True),
-        _control(BOB_USER_ID, read=True, default_grant=True, archive=False),
-        _projection_state(ALICE_USER_ID, ctx),
-        _projection_state(BOB_USER_ID, ctx),
+        _control(ALICE_USER_ID, default_grant=True, archive=True),
+        _control(BOB_USER_ID, default_grant=True, archive=False),
         _memory_doc(
             ALICE_USER_ID,
             ctx.ids["alice_short_stale"],
@@ -758,30 +690,18 @@ def _base_firestore(
         _memory_evidence_doc(ALICE_USER_ID, "alice_short_stale", alice_stale),
         _memory_doc(ALICE_USER_ID, ctx.ids["alice_archive"], "archive", alice_archive, "2025-12-01T08:00:00Z"),
         _memory_doc(BOB_USER_ID, ctx.ids["bob_long"], "long_term", bob_long, "2026-01-11T09:00:00Z"),
-        _projection_item(
-            ALICE_USER_ID,
-            ctx.ids["alice_archive"],
-            alice_archive,
-            "2025-12-01T08:00:00Z",
-            archive=True,
-            category="archive",
-        ),
-        _projection_item(BOB_USER_ID, ctx.ids["bob_long"], bob_long, "2026-01-11T09:00:00Z", category="work"),
     ]
     for key, content, captured in short_memories:
         if any(key == promoted[0] for promoted in promoted_short_to_long):
             continue
         memory_id = ctx.ids[key]
         _append_sourced_memory(seeds, uid, key, memory_id, "short_term", content, captured, SHORT_TERM_EXPIRES_AT)
-        seeds.append(_projection_item(uid, memory_id, content, captured, category="commitments"))
     for key, content, captured, category in promoted_short_to_long:
         memory_id = ctx.ids[key]
         _append_sourced_memory(seeds, uid, key, memory_id, "long_term", content, captured)
-        seeds.append(_projection_item(uid, memory_id, content, captured, category=category))
     for key, content, captured, category in long_memories:
         memory_id = ctx.ids[key]
         _append_sourced_memory(seeds, uid, key, memory_id, "long_term", content, captured)
-        seeds.append(_projection_item(uid, memory_id, content, captured, category=category))
     seeds.extend(_alice_knowledge_graph_seeds(uid, ctx))
     return seeds
 
@@ -790,7 +710,6 @@ def _local_flags(ctx: DeterministicContext, *, enabled: bool = True) -> Mapping[
     return {
         "MEMORY_V3_GET_ENABLED": "true" if enabled else "false",
         "MEMORY_MODE": "read" if enabled else "off",
-        "MEMORY_ENABLED_USERS": f"{ALICE_USER_ID},{BOB_USER_ID}",
         "MEMORY_ARCHIVE_OPT_IN_ENABLED": "true",
         "MEMORY_V3_CURSOR_SECRET": ctx.cursor_secret,
         "MEMORY_V3_CURSOR_POLICY_VERSION": ctx.cursor_policy_version,
@@ -806,7 +725,6 @@ def _expected_protected() -> tuple[ExpectedProtectedCollectionChange, ...]:
         ExpectedProtectedCollectionChange("memory_control", ()),
         ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/memory_items", ()),
         ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/memory_evidence", ()),
-        ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/v3_compatibility_projection_items", ()),
         ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/knowledge_nodes", ()),
         ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/knowledge_edges", ()),
         ExpectedProtectedCollectionChange(f"users/{BOB_USER_ID}/memory_items", ()),
@@ -854,8 +772,6 @@ def _build_scenarios() -> dict[str, MemoryScenario]:
     base_reads = (
         GLOBAL_READ_GATE_PATH,
         f"users/{ALICE_USER_ID}/memory_control/state",
-        f"users/{ALICE_USER_ID}/v3_compatibility_projection/state",
-        f"users/{ALICE_USER_ID}/v3_compatibility_projection_items",
     )
     happy = _scenario(
         "happy_path",
@@ -1024,7 +940,13 @@ def validate_scenario(scenario: MemoryScenario) -> None:
     if scenario.scenario_id not in SCENARIOS:
         raise ValueError("Scenario ID must be registered")
     user_ids = {user.uid for user in scenario.users}
-    required = {DEFAULT_LOCAL_USER_ID, ALICE_USER_ID, BOB_USER_ID}
+    required = {
+        DEFAULT_LOCAL_USER_ID,
+        ALICE_USER_ID,
+        BOB_USER_ID,
+        CHAT_FIRST_E2E_ENABLED_USER_ID,
+        CHAT_FIRST_E2E_DISABLED_CONTROL_USER_ID,
+    }
     if not required.issubset(user_ids):
         raise ValueError(f"Scenario users must include {sorted(required)}")
     if scenario.selected_user not in user_ids:
@@ -1298,6 +1220,62 @@ def _apply_firestore_admin_sdk(cfg: config.HarnessConfig, op: SeedOperation) -> 
             os.environ["FIRESTORE_EMULATOR_HOST"] = old_host
 
 
+_AUTH_EMULATOR_APP_NAME = 'omi-local-dev-harness-auth-emulator'
+
+
+def _apply_auth_admin_sdk(cfg: config.HarnessConfig, op: SeedOperation) -> bool:
+    """Seed fixed Auth-emulator UIDs through the Firebase Admin API.
+
+    The client sign-up endpoint chooses a random ``localId``.  The Admin API
+    accepts the operation target as ``uid``, which gives every fixture a stable
+    authenticated identity while product capability comes from server control.
+    """
+
+    try:
+        import firebase_admin
+        from firebase_admin import auth as firebase_auth
+    except ImportError:
+        return False
+
+    old_host = os.environ.get('FIREBASE_AUTH_EMULATOR_HOST')
+    os.environ['FIREBASE_AUTH_EMULATOR_HOST'] = cfg.auth_host
+    try:
+        try:
+            app = firebase_admin.get_app(_AUTH_EMULATOR_APP_NAME)
+        except ValueError:
+            app = firebase_admin.initialize_app(
+                options={'projectId': cfg.project_id},
+                name=_AUTH_EMULATOR_APP_NAME,
+            )
+        if op.action == 'upsert':
+            payload = dict(op.payload if isinstance(op.payload, Mapping) else {})
+            try:
+                firebase_auth.get_user(op.target, app=app)
+            except firebase_auth.UserNotFoundError:
+                firebase_auth.create_user(
+                    uid=op.target,
+                    email=str(payload['email']),
+                    password=str(payload['password']),
+                    display_name=str(payload.get('displayName', '')),
+                    email_verified=bool(payload.get('emailVerified', False)),
+                    disabled=bool(payload.get('disabled', False)),
+                    app=app,
+                )
+        elif op.action == 'delete':
+            try:
+                firebase_auth.delete_user(op.target, app=app)
+            except firebase_auth.UserNotFoundError:
+                pass
+        else:
+            raise RuntimeError(f'Unsupported Auth scenario action: {op.action}')
+        return True
+    finally:
+        if old_host is None:
+            os.environ.pop('FIREBASE_AUTH_EMULATOR_HOST', None)
+        else:
+            os.environ['FIREBASE_AUTH_EMULATOR_HOST'] = old_host
+
+
 def _apply_operation(cfg: config.HarnessConfig, op: SeedOperation) -> None:
     if op.kind == "file":
         target = cfg.layout.state_root / "files" / op.target
@@ -1334,6 +1312,10 @@ def _apply_operation(cfg: config.HarnessConfig, op: SeedOperation) -> None:
                 raise RuntimeError(f"Firestore emulator delete failed for {op.target}: HTTP {status} {body[:200]}")
         return
     if op.kind == "auth":
+        if _apply_auth_admin_sdk(cfg, op):
+            return
+        if op.target in {CHAT_FIRST_E2E_ENABLED_USER_ID, CHAT_FIRST_E2E_DISABLED_CONTROL_USER_ID}:
+            raise RuntimeError('Chat-first E2E fixtures require Firebase Admin Auth to preserve their fixed UIDs')
         # Firebase Auth emulator supports account creation via identitytoolkit and
         # deletion via emulator admin endpoints. If an existing user causes a 400
         # on upsert, the seed remains idempotent for local QA purposes.

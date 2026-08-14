@@ -22,6 +22,7 @@ from utils.subscription import has_transcription_credits, is_paid_plan
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.fair_use_classifier import classify_user_purpose
 from utils.notifications import send_notification
+from utils.observability.fallback import record_fallback
 
 # Patchable lazy-held callables keep tests at a production seam without using
 # in-function imports. Both imported modules are import-pure and construct their
@@ -568,10 +569,29 @@ def _as_utc(dt: datetime) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
+def _coerce_restrict_until(value: Any) -> Optional[datetime]:
+    """Coerce a stored restrict_until into an aware UTC datetime.
+
+    Firestore returns timestamp fields as datetime, but a string (older write,
+    admin console, import) must not silently disable expiry: an unparseable or
+    absent value is treated as unknown so callers fail safe (never assume a
+    restriction is still active on malformed data).
+    """
+    if isinstance(value, datetime):
+        return _as_utc(value)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+        return _as_utc(parsed)
+    return None
+
+
 def _retry_after_seconds_from_restrict_until(restrict_until: Any) -> int | None:
-    if not isinstance(restrict_until, datetime):
+    restrict_until = _coerce_restrict_until(restrict_until)
+    if restrict_until is None:
         return None
-    restrict_until = _as_utc(restrict_until)
     seconds = int((restrict_until - datetime.now(timezone.utc)).total_seconds())
     return max(seconds, 1) if seconds > 0 else None
 
@@ -584,14 +604,25 @@ def normalize_expired_restriction_state(
     if normalized_state.get('stage', 'none') != 'restrict':
         return normalized_state
 
-    restrict_until_raw = normalized_state.get('restrict_until')
-    if not isinstance(restrict_until_raw, datetime):
-        return normalized_state
-
-    restrict_until = _as_utc(restrict_until_raw)
+    restrict_until = _coerce_restrict_until(normalized_state.get('restrict_until'))
     effective_now = _as_utc(now) if now is not None else datetime.now(timezone.utc)
-    if effective_now <= restrict_until:
+    # An unparseable restrict_until (e.g. a string timestamp from an older write
+    # or admin import) must not strand the user in a permanent restriction. Fail
+    # safe toward expiry: clear the restriction instead of keeping it forever.
+    if restrict_until is not None and effective_now <= restrict_until:
         return normalized_state
+    if restrict_until is None:
+        # Malformed stored timestamp: the restriction is being cleared even though
+        # we cannot prove it expired. Surface the silent healing so recurrence of
+        # corrupted fair-use state is observable in ops telemetry (#10948).
+        record_fallback(
+            component='other',
+            from_mode='restrict',
+            to_mode='throttle',
+            reason='malformed_doc',
+            outcome='recovered',
+            log=logger,
+        )
 
     fair_use_db.update_fair_use_state(uid, {'stage': 'throttle', 'restrict_until': None})
     invalidate_enforcement_cache(uid)

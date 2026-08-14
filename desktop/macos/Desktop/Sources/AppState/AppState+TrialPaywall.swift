@@ -8,6 +8,9 @@ extension AppState {
   func triggerUsageLimitPopup(reason: String) {
     // Debug escape hatch for self-test runs that don't want the overage modal in the way.
     if ProcessInfo.processInfo.environment["OMI_SKIP_USAGE_POPUP"] == "1" { return }
+    // A modal the user did not ask for, arriving over what they were doing: the same "something
+    // just opened" cue the what's-new card gets.
+    OmiUISound.play(.reveal)
     usageLimitReason = reason
     showUsageLimitPopup = true
   }
@@ -200,7 +203,7 @@ extension AppState {
     // grant). Counting .unknown as missing would permanently suppress the
     // "All permissions granted" banner for default users, so only a proven
     // denial counts.
-    if isSystemAudioSupported, effectiveSystemAudioMode != .never,
+    if isSystemAudioSupported, audioRecordingMode != .off, shouldCaptureSystemAudio,
       systemAudioPermissionStatus == .denied
     {
       missing.append("System Audio")
@@ -227,6 +230,7 @@ extension AppState {
     if let url = URL(
       string: "x-apple.systempreferences:com.apple.preference.notifications?id=\(bundleId)")
     {
+      log("Opening notification settings for bundle \(bundleId)")
       NSWorkspace.shared.open(url)
     }
   }

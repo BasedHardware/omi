@@ -181,22 +181,15 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
     auth_context = SimpleNamespace(uid="auth-user")
     authorization = SimpleNamespace(allowed=True)
     memory_service = MagicMock()
-    memory_service.read_pinned.return_value = []
+    memory_service.read.return_value = []
     with (
         patch.object(rest, "authorize_memory_external_default_memory_read", return_value=authorization) as authorize,
-        patch.object(rest, "pin_memory_system", return_value=rest.MemorySystem.CANONICAL) as pin,
         patch.object(rest, "MemoryService", return_value=memory_service),
     ):
         assert rest.get_memories(auth_context=auth_context) == []
 
-    pin.assert_called_once_with("auth-user", db_client=rest.db)
     authorize.assert_called_once_with(auth_context, db_client=rest.db)
-    memory_service.read_pinned.assert_called_once_with(
-        "auth-user",
-        rest.MemorySystem.CANONICAL,
-        100,
-        0,
-    )
+    memory_service.read.assert_called_once_with("auth-user", limit=100, offset=0)
 
 
 async def _run_blocking_inline(_executor, func, *args, **kwargs):
@@ -258,6 +251,27 @@ def test_sse_tools_list_filters_by_oauth_scopes():
     assert 'get_conversations' not in names
 
 
+def test_sse_initialize_teaches_every_agent_to_retrieve_full_omi_context_safely():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    response, session_id = sse.handle_mcp_message(auth_context, {'id': 1, 'method': 'initialize'})
+    instructions = response['result']['instructions']
+
+    assert session_id is None
+    assert response['result']['serverInfo']['name'] == 'omi-mcp-server'
+    for tool in (
+        'get_user_profile',
+        'search_memories',
+        'search_conversations',
+        'get_people',
+        'get_action_items',
+        'get_screen_activity',
+    ):
+        assert f'`{tool}`' in instructions
+    assert 'Use only tools exposed by `tools/list`' in instructions
+    assert 'confirm important claims' in instructions
+    assert 'user clearly asked' in instructions
+
+
 @pytest.mark.asyncio
 async def test_sse_post_tools_list_accepts_missing_session_id():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
@@ -297,20 +311,14 @@ async def test_sse_post_tools_list_ignores_stale_session_id():
     assert 'get_memories' in names
 
 
-@pytest.mark.asyncio
-async def test_sse_get_keepalive_uses_transport_rate_limit():
-    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
-    request = _JsonRequest({})
+def test_sse_get_returns_405_without_holding_a_stream():
+    # GET no longer serves a keepalive SSE stream (it exhausted Cloud Run
+    # concurrency slots; see tests/unit/test_mcp_sse_get_no_stream.py). The
+    # spec-mandated 405 must be immediate: no auth or rate-limit work either.
+    response = sse.mcp_sse_get()
 
-    with (
-        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
-        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
-        patch.object(sse, 'check_rate_limit_inline') as check_rate_limit,
-    ):
-        response = await sse.mcp_sse_get(request, authorization='Bearer token')
-
-    assert response.status_code == 200
-    check_rate_limit.assert_called_once_with(UID, 'mcp:sse')
+    assert response.status_code == 405
+    assert response.headers.get('allow') == 'POST, HEAD, DELETE'
 
 
 def test_sse_tool_security_schemes_match_runtime_scope_map():
@@ -380,7 +388,12 @@ def test_authorize_request_rejects_legacy_omi_client_id():
 
 
 def test_legacy_api_key_helper_rejects_oauth_tokens():
-    with patch('routers.mcp_sse.mcp_oauth_db.validate_access_token') as validate_access_token:
+    # Keep this auth-shape test independent from the account-deletion Firestore
+    # fence; the OAuth token must be rejected before any account state matters.
+    with (
+        patch('routers.mcp_sse.mcp_oauth_db.validate_access_token') as validate_access_token,
+        patch.object(sse, 'enforce_account_deletion_http_access'),
+    ):
         validate_access_token.return_value = {
             'uid': UID,
             'scopes': ['memories.read'],
@@ -618,9 +631,8 @@ class TestToolRegistry:
 # The issue named two sites (mcp_sse get_memories / search_memories). There are four: the
 # REST surface in routers/mcp.py has the identical shape.
 #
-# SHADOW_ONLY deliberately keeps returning empty. It is not an authorization denial - in
-# shadow mode legacy is authoritative - so reporting it as an auth error would be wrong in
-# the other direction. That state is tracked separately.
+# An explicit denial returns the shared authorization error payload. An allowed
+# empty account returns success through the same universal repository.
 
 _DENY_REASONS_REPORTED = [
     'malformed_rollout_state',
@@ -634,46 +646,53 @@ _DENY_REASONS_REPORTED = [
 
 
 def _denied_result(reason, read_decision=None):
+    del read_decision
     return SimpleNamespace(
-        read_decision=read_decision or rest.MemoryReadDecision.DENY_MEMORY,
-        memories=[],
-        fallback_reason=reason,
+        allowed=False,
+        status_code=403,
+        observability={
+            'reason': reason,
+            'enabled': False,
+            'consumer': 'mcp',
+        },
     )
 
 
-def _shadow_result():
-    return SimpleNamespace(
-        read_decision=rest.MemoryReadDecision.SHADOW_ONLY, memories=[], fallback_reason='shadow_only'
-    )
+def _allowed_empty_result():
+    return SimpleNamespace(allowed=True, status_code=200, observability={'enabled': True})
 
 
-def _rest_legacy_patches(adapter_attr, result):
+def _rest_universal_patches(result):
+    service = MagicMock()
+    service.read.return_value = []
+    service.search_mcp.return_value = []
     return (
-        patch.object(rest, 'authorize_memory_external_default_memory_read', return_value=SimpleNamespace(allowed=True)),
-        patch.object(rest, 'pin_memory_system', return_value=rest.MemorySystem.LEGACY),
-        patch.object(rest, 'read_default_read_rollout', return_value=SimpleNamespace()),
-        patch.object(rest, adapter_attr, return_value=result),
+        patch.object(rest, 'authorize_memory_external_default_memory_read', return_value=result),
+        patch.object(rest, 'MemoryService', return_value=service),
+        patch.object(rest, 'logger'),
     )
 
 
-def _sse_legacy_patches(adapter_attr, result):
+def _sse_universal_patches(result):
+    service = MagicMock()
+    service.read.return_value = []
+    service.search_mcp.return_value = []
     return (
-        patch.object(sse, 'authorize_memory_external_default_memory_read', return_value=SimpleNamespace(allowed=True)),
-        patch.object(sse, 'pin_memory_system', return_value=sse.MemorySystem.LEGACY),
-        patch.object(sse, 'read_default_read_rollout', return_value=SimpleNamespace()),
-        patch.object(sse, adapter_attr, return_value=result),
+        patch.object(sse, 'authorize_memory_external_default_memory_read', return_value=result),
+        patch.object(sse, 'MemoryService', return_value=service),
+        patch.object(sse, 'logger'),
     )
 
 
 def _run_rest_list(result):
-    a, b, c, d = _rest_legacy_patches('list_default_mcp_memories', result)
-    with a, b, c, d:
+    a, b, c = _rest_universal_patches(result)
+    with a, b, c:
         return rest.get_memories(auth_context=SimpleNamespace(uid=UID))
 
 
 def _run_rest_search(result):
-    a, b, c, d = _rest_legacy_patches('search_default_mcp_memories_vector', result)
-    with a, b, c, d:
+    a, b, c = _rest_universal_patches(result)
+    with a, b, c:
         return rest.search_memories(query='espresso', auth_context=SimpleNamespace(uid=UID))
 
 
@@ -682,14 +701,14 @@ def _sse_auth_context():
 
 
 def _run_sse_list(result):
-    a, b, c, d = _sse_legacy_patches('list_default_mcp_memories', result)
-    with a, b, c, d:
+    a, b, c = _sse_universal_patches(result)
+    with a, b, c:
         return sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
 
 
 def _run_sse_search(result):
-    a, b, c, d = _sse_legacy_patches('search_default_mcp_memories_vector', result)
-    with a, b, c, d:
+    a, b, c = _sse_universal_patches(result)
+    with a, b, c:
         return sse.execute_tool(UID, 'search_memories', {'query': 'espresso'}, auth_context=_sse_auth_context())
 
 
@@ -720,10 +739,10 @@ def test_sse_denied_memory_read_raises_with_reason_instead_of_empty_success(run_
 
 
 @pytest.mark.parametrize('run_surface', _REST_SURFACES)
-def test_rest_shadow_only_still_returns_empty_without_error(run_surface):
-    assert run_surface(_shadow_result()) == []
+def test_rest_allowed_empty_account_returns_empty_without_error(run_surface):
+    assert run_surface(_allowed_empty_result()) == []
 
 
 @pytest.mark.parametrize('run_surface', _SSE_SURFACES)
-def test_sse_shadow_only_still_returns_empty_without_error(run_surface):
-    assert run_surface(_shadow_result()) == {"memories": []}
+def test_sse_allowed_empty_account_returns_empty_without_error(run_surface):
+    assert run_surface(_allowed_empty_result())["memories"] == []

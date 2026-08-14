@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "Твој план се обнавља {date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "Бесплатан план",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10567,6 +10557,7 @@
     "syncStatusWaiting": "Чека синхронизацију",
     "syncStatusRetrying": "Обрада није успела — нови покушај",
     "syncStatusFailed": "Неуспело — додирните Покушај поново",
+    "syncStatusTooOld": "Превише стара за синхронизацију — Omi не може да је прихвати",
     "syncStatusFileUnavailable": "Датотека није доступна",
     "syncStatusUploaded": "Отпремљено · обрада на Omi",
     "noRecordingsYet": "Још нема снимака",
@@ -10766,5 +10757,28 @@
     "whisperModelSizeLarge": "Велики",
     "whisperModelSizeMedium": "Средњи",
     "whisperModelSizeSmall": "Мали",
-    "whisperModelSizeTiny": "Најмањи"
+    "whisperModelSizeTiny": "Најмањи",
+    "planSheetChooseYourPlan": "Изаберите свој план да откључате неограничени Omi.",
+    "availableOnMacMobileWeb": "Доступно на Mac-у, мобилном и вебу",
+    "popularBadge": "ПОПУЛАРНО",
+    "worksOnDesktop": "Ради на рачунару",
+    "noDesktopAccess": "Не ради на рачунару",
+    "annualBillingSummary": "{months} месеци / {price}",
+    "monthsFreeBadge": "{count, plural, one{{count} месец бесплатно} few{{count} месеца бесплатно} other{{count} месеци бесплатно}}",
+    "freemiumLimitsIntro": "Omi је бесплатан, али бесплатна верзија има ограничења која утичу на ваше искуство:",
+    "downgradeLimitDelayNotRealTime": "Кашњење од 5-7 секунди (није у реалном времену)",
+    "downgradeToFreemiumAction": "Пређите на бесплатну верзију",
+    "getFreeUnlimitedAccess": "Остварите бесплатан неограничен приступ",
+    "shareDataForTraining": "Делите податке за обуку",
+    "yourRequestUnderReview": "Ваш захтев је на прегледу",
+    "pinAsBaseline": "Закачи као основу",
+    "unpinAsBaseline": "Откачи са основе",
+    "baselineMemory": "Основна меморија",
+    "alwaysInContext": "Увек у контексту",
+    "accountCutoverUpdateRequiredTitle": "Je vyžadována aktualizace",
+    "accountCutoverUpdateRequiredMessage": "Nainstalujte nejnovější aplikaci Omi, abyste mohli pokračovat po migraci účtu.",
+    "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
+    "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
+    "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
+    "accountCutoverOpenStore": "Otevřít obchod"
 }

@@ -69,6 +69,7 @@ const desktopCoordinatorBundleSchema = z.enum([
   "desktop.context.screen_summary",
   "desktop.context.screenshot_image",
   "desktop.tasks.readwrite",
+  "desktop.memories.write",
   "desktop.artifacts.manage",
   "desktop.automation.read",
   "desktop.automation.act_dev_only",

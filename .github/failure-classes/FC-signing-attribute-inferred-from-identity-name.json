@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-signing-attribute-inferred-from-identity-name",
+  "violated_contract": "A signing decision must be keyed on an attribute read back from a real signature, never inferred from the spelling of the identity string. Local dev signing classified every identity that was not the literal \"-\" as a real identity and stripped its library-validation exception, but the documented self-signed \"Omi Local Dev Signing\" identity carries no Team ID (codesign reports TeamIdentifier=not set), so hardened-runtime library validation rejected the bundled Sparkle/Sentry/onnxruntime frameworks and the app could not launch. The failure is silent: `codesign --verify` passes and `open -a` exits 0.",
+  "canonical_prevention": "Resolve the identity's Team ID from an actual signature, classify the signing mode from that resolved value in exactly one place, and let the same classification drive both the launch-safety gate and the generated entitlements, so a configuration that validates is exactly the configuration that gets signed. Identities that do carry a Team ID stay team-scoped and keep full library validation.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/tests/test-prepare-local-dev-entitlements.sh"
+  ],
+  "evidence_prs": [
+    11117
+  ],
+  "scope_hints": [
+    "desktop/macos/run.sh",
+    "desktop/macos/scripts/prepare-local-dev-entitlements.sh"
+  ],
+  "status": "open"
+}

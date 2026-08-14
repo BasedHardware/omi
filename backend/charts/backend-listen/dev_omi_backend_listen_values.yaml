@@ -14,6 +14,11 @@ image:
   # Build-specific; CI/manual deploy must pass --set-string image.tag=<short-sha>.
   tag: ""
 
+# GKE host / image project. Chart defaults keep GOOGLE_CLOUD_PROJECT aligned with
+# composed runtime_env gke.backend-listen (compute). Customer Firestore must not
+# rely on this env: database/_client.py pins SERVICE_ACCOUNT_JSON + its
+# project_id (based-hardware). Deploy may still --set runtimeGcpProjectId from
+# vars.RUNTIME_GCP_PROJECT_ID (manifest runtime_gcp_project = based-hardware).
 gcpProjectId: based-hardware-dev
 runtimeGcpProjectId: based-hardware-dev
 
@@ -30,8 +35,9 @@ serviceAccount:
   # Automatically mount a ServiceAccount's API credentials?
   automount: true
   # Annotations to add to the service account.
-  # Development-only parity-pack exporter GSA (WI). Runtime JSON SA remains
-  # nik-164 via SERVICE_ACCOUNT_JSON; both have objectAdmin on the pack bucket.
+  # Development-only parity-pack exporter GSA (WI). Customer-data Firestore and
+  # Firebase Admin must use nik-164 via SERVICE_ACCOUNT_JSON — never this pack
+  # WI identity. Both have objectAdmin on the pack bucket for cassette export.
   annotations:
     iam.gke.io/gcp-service-account: dev-omi-listen-parity-pack@based-hardware-dev.iam.gserviceaccount.com
   # The name of the service account to use.
@@ -52,8 +58,12 @@ podLabels:
   # Keep those scrape targets in the same development-only evidence plane as
   # the Pusher targets.
 
-podSecurityContext: {}
-  # fsGroup: 2000
+podSecurityContext:
+  # The image runs as omi:omi (10001:10001). Kubernetes mounts emptyDir as
+  # root-owned, so the parity-pack cassette root needs this supplemental group
+  # before the non-root listener can create its cassettes/ directory.
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
 
 securityContext: {}
   # capabilities:
@@ -127,9 +137,9 @@ env:
   # Development-only dogfood capture. The capture runtime compares this exact
   # Firebase UID; do not replace it with an email or a broad user allowlist.
   - name: OMI_PARITY_PACK_CAPTURE
-    value: "1"
+    value: "0"
   - name: OMI_PARITY_PACK_ALLOWED_PRINCIPALS
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    value: ""
   - name: OMI_PARITY_PACK_ROOT
     value: "/var/omi-parity-pack"
   # Durable export target (private dev bucket). Export is fail-open.
@@ -145,7 +155,11 @@ env:
     value: "8"
   - name: OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS
     value: "15"
+  - name: OMI_LLM_CHAT_AGENT_ROUTE
+    value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
+    value: "off"
+  - name: ACCOUNT_CUTOVER_ENFORCEMENT
     value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
     value: "false"
@@ -167,12 +181,9 @@ env:
         name: dev-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_MODE
-    value: "read"
-  - name: MEMORY_ENABLED_USERS
-    # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+    value: "off"
   - name: MEMORY_V3_GET_ENABLED
-    value: "true"
+    value: "false"
   - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
     value: "false"
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
@@ -229,8 +240,15 @@ env:
     value: "http://parakeet.omiapi.com"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
+  - name: DEEPGRAM_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: DEEPGRAM_API_KEY
+  - name: DEEPGRAM_SELF_HOSTED_ENABLED
+    value: "false"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,parakeet"
+    value: "dg-nova-3,modulate-velma-2,parakeet"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL
@@ -331,6 +349,7 @@ env:
         name: dev-omi-backend-secrets
         key: SERVICE_ACCOUNT_JSON
   - name: GOOGLE_CLOUD_PROJECT
+    # Template substitutes runtimeGcpProjectId (chart default = compute project).
     value: "based-hardware-dev"
   - name: GCP_LOCATION
     value: "us-central1"

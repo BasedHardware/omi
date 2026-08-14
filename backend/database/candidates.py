@@ -9,19 +9,22 @@ from uuid import uuid4
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+
 import database.action_items as action_items_db
 from database._client import db
+from database.firestore_index_registry import CANDIDATES_COMPATIBILITY_QUERY
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
-from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskStatus
+from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskPriority, TaskStatus
 from models.candidate import (
     CandidateAction,
+    CandidateCompatibilityMetadata,
     CandidateCreate,
     CandidateRecord,
     CandidateResolutionReceipt,
     CandidateStatus,
     CandidateSubjectKind,
 )
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from models.task_intelligence import TaskWorkflowControl
 
 CANDIDATES_COLLECTION = 'candidates'
 ACTION_ITEMS_COLLECTION = 'action_items'
@@ -35,6 +38,23 @@ PENDING_CANDIDATE_SEMANTIC_VERSION = 'task-create.v1'
 WORKSTREAM_CANDIDATE_SEMANTIC_VERSION = 'workstream-create.v1'
 MAX_CANDIDATE_EVIDENCE_REFS = 20
 PENDING_CANDIDATE_REUSE_WINDOW = timedelta(days=14)
+TASK_PRIORITY_RANK = {
+    TaskPriority.low: 0,
+    TaskPriority.medium: 1,
+    TaskPriority.high: 2,
+}
+
+
+def _max_optional_confidence(*values: Optional[float]) -> Optional[float]:
+    return max((value for value in values if value is not None), default=None)
+
+
+def _strongest_task_priority(*values: Optional[TaskPriority]) -> Optional[TaskPriority]:
+    return max(
+        (value for value in values if value is not None),
+        key=TASK_PRIORITY_RANK.__getitem__,
+        default=None,
+    )
 
 
 class CandidateStoreError(RuntimeError):
@@ -133,14 +153,12 @@ def _task_control_ref(uid: str):
     )
 
 
-def _validate_write_control(snapshot: Any, *, account_generation: int) -> None:
+def _validate_write_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise CandidateGenerationMismatchError('account generation mismatch')
-    if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-        raise CandidateConflictError('Candidate writes are not enabled')
 
 
 def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
@@ -284,12 +302,35 @@ def _merge_candidate_annotations(existing: CandidateRecord, proposal: CandidateC
         evidence.append(evidence_ref)
         if len(evidence) == MAX_CANDIDATE_EVIDENCE_REFS:
             break
+    compatibility = existing.compatibility
+    if proposal.compatibility is not None:
+        current = compatibility or CandidateCompatibilityMetadata()
+        compatibility = current.model_copy(
+            update={
+                field: value
+                for field in ('metadata', 'category', 'relevance_score')
+                if (value := getattr(proposal.compatibility, field)) is not None
+            }
+        )
+    task_change = existing.task_change
+    proposal_task_change = proposal.task_change
+    if isinstance(task_change, TaskCreatePayload) and isinstance(proposal_task_change, TaskCreatePayload):
+        task_change = task_change.model_copy(
+            update={
+                'due_confidence': _max_optional_confidence(
+                    task_change.due_confidence, proposal_task_change.due_confidence
+                ),
+                'priority': _strongest_task_priority(task_change.priority, proposal_task_change.priority),
+            }
+        )
     payload = existing.model_dump(mode='python')
     payload.update(
         {
             'capture_confidence': max(existing.capture_confidence, proposal.capture_confidence),
             'ownership_confidence': max(existing.ownership_confidence, proposal.ownership_confidence),
             'evidence_refs': evidence,
+            'compatibility': compatibility,
+            'task_change': task_change,
         }
     )
     return CandidateRecord.model_validate(payload)
@@ -299,12 +340,14 @@ def _merge_task_provenance(current_task: dict[str, Any], evidence_refs: list[Evi
     provenance: list[dict[str, Any]] = []
     seen: set[str] = set()
     for raw_ref in list(current_task.get('provenance') or []) + [
-        ref.model_dump(mode='json', exclude_none=True) for ref in evidence_refs
+        ref.model_dump(mode='json', exclude_none=True, exclude_defaults=True) for ref in evidence_refs
     ]:
         if not isinstance(raw_ref, dict):
             continue
         try:
-            normalized_ref = EvidenceRef.model_validate(raw_ref).model_dump(mode='json', exclude_none=True)
+            normalized_ref = EvidenceRef.model_validate(raw_ref).model_dump(
+                mode='json', exclude_none=True, exclude_defaults=True
+            )
         except ValueError:
             normalized_ref = raw_ref
         identity = json.dumps(normalized_ref, sort_keys=True, default=str)
@@ -364,6 +407,19 @@ def _stored_confidence(value: Any) -> float:
     return 0.0
 
 
+def _stored_optional_confidence(value: Any) -> Optional[float]:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def _stored_task_priority(value: Any) -> Optional[TaskPriority]:
+    try:
+        return TaskPriority(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def create_candidate(
     uid: str,
     proposal: CandidateCreate,
@@ -398,7 +454,7 @@ def create_candidate(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
 
         alias_snapshot = alias_ref.get(transaction=write_transaction)
         if alias_snapshot.exists:
@@ -494,9 +550,32 @@ def create_candidate(
                         evidence_ref.model_dump(mode='python', exclude_none=True)
                         for evidence_ref in merged.evidence_refs
                     ],
+                    'compatibility': (
+                        merged.compatibility.model_dump(mode='python', exclude_none=True)
+                        if merged.compatibility is not None
+                        else None
+                    ),
+                    'task_change': (
+                        merged.task_change.model_dump(mode='python', exclude_none=True)
+                        if merged.task_change is not None
+                        else None
+                    ),
                 },
             )
             if reusable_active_accept and claimed_task_ref is not None and claimed_task is not None:
+                task_annotation_patch: dict[str, Any] = {}
+                if isinstance(merged.task_change, TaskCreatePayload):
+                    due_confidence = _max_optional_confidence(
+                        _stored_optional_confidence(claimed_task.get('due_confidence')),
+                        merged.task_change.due_confidence,
+                    )
+                    if due_confidence is not None:
+                        task_annotation_patch['due_confidence'] = due_confidence
+                    priority = _strongest_task_priority(
+                        _stored_task_priority(claimed_task.get('priority')), merged.task_change.priority
+                    )
+                    if priority is not None:
+                        task_annotation_patch['priority'] = priority.value
                 write_transaction.update(
                     claimed_task_ref,
                     {
@@ -508,6 +587,7 @@ def create_candidate(
                         ),
                         'provenance': _merge_task_provenance(claimed_task, merged.evidence_refs),
                         'updated_at': now_value,
+                        **task_annotation_patch,
                     },
                 )
             write_transaction.set(alias_ref, alias_payload)
@@ -546,6 +626,50 @@ def get_candidate(uid: str, candidate_id: str) -> Optional[CandidateRecord]:
     return parse_snapshot_or_none(CandidateRecord, snapshot)
 
 
+def update_candidate_compatibility_score(
+    uid: str,
+    candidate_id: str,
+    *,
+    relevance_score: int,
+    account_generation: int,
+) -> CandidateRecord:
+    """Update the released staged-task score on the canonical Candidate envelope."""
+    if not 0 <= relevance_score <= 1000:
+        raise ValueError('relevance_score must be between 0 and 1000')
+    candidate_ref = _candidate_ref(uid, candidate_id)
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction):
+        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
+        snapshot = candidate_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            raise CandidateNotFoundError(candidate_id)
+        candidate = parse_snapshot_strict(CandidateRecord, snapshot)
+        if candidate.account_generation != account_generation:
+            raise CandidateGenerationMismatchError(candidate_id)
+        is_staged_compatibility_candidate = (
+            candidate.subject_kind == CandidateSubjectKind.task
+            and candidate.proposed_action == CandidateAction.create
+            and (
+                candidate.source_surface == 'legacy_staged'
+                or any(
+                    evidence.kind.value == 'external' and evidence.id.startswith('legacy-staged-')
+                    for evidence in candidate.evidence_refs
+                )
+            )
+        )
+        if candidate.status != CandidateStatus.pending or not is_staged_compatibility_candidate:
+            raise CandidateConflictError('Candidate is not an active staged-task compatibility proposal')
+        existing = candidate.compatibility or CandidateCompatibilityMetadata()
+        compatibility = existing.model_copy(update={'relevance_score': relevance_score})
+        write_transaction.update(candidate_ref, {'compatibility': compatibility.model_dump(mode='python')})
+        return candidate.model_copy(update={'compatibility': compatibility})
+
+    return apply(transaction)
+
+
 def list_candidates(
     uid: str,
     *,
@@ -564,6 +688,39 @@ def list_candidates(
         query = query.offset(offset)
     query = query.limit(limit)
     return parse_snapshots(CandidateRecord, query.stream())
+
+
+def list_candidates_compatibility_page(
+    uid: str,
+    *,
+    account_generation: int,
+    limit: int = 500,
+    cursor: Any | None = None,
+) -> tuple[list[CandidateRecord], int, Any | None]:
+    """Return valid records, raw page size, and a snapshot cursor.
+
+    ``parse_snapshots`` deliberately skips malformed rows. Compatibility
+    callers need the unparsed count as their pagination authority so one bad
+    document cannot make a non-final page look exhausted and hide later data.
+    The cursor is the last raw snapshot for the same reason. Using it with
+    ``start_after`` keeps exhaustive compatibility scans linear in billed
+    document reads; Firestore offsets re-read every skipped prefix.
+    """
+
+    collection = db.collection('users').document(uid).collection(CANDIDATES_COLLECTION)
+    query = CANDIDATES_COMPATIBILITY_QUERY.build(
+        collection,
+        {'account_generation': account_generation},
+        field_filter_factory=FieldFilter,
+    ).order_by(
+        'created_at',
+        direction=firestore.Query.DESCENDING,
+    )
+    if cursor is not None:
+        query = query.start_after(cursor)
+    snapshots = list(query.limit(limit).stream())
+    next_cursor = snapshots[-1] if snapshots else None
+    return parse_snapshots(CandidateRecord, snapshots), len(snapshots), next_cursor
 
 
 def _task_create_storage(candidate: CandidateRecord, *, task_id: str, now: datetime) -> dict[str, Any]:
@@ -635,7 +792,7 @@ def resolve_task_candidate(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = candidate_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -782,16 +939,6 @@ def claim_candidate_integration_dispatch(
                 },
             )
             return None
-        if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-            write_transaction.update(
-                outbox_ref,
-                {
-                    'status': 'suppressed',
-                    'resolution_reason': 'candidate_writes_disabled',
-                    'updated_at': claim_time,
-                },
-            )
-            return None
         if payload.get('status') in {'completed', 'suppressed'}:
             return None
         if payload.get('status') == 'processing':
@@ -847,16 +994,6 @@ def complete_candidate_integration_dispatch(
                 },
             )
             return False
-        if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-            write_transaction.update(
-                outbox_ref,
-                {
-                    'status': 'suppressed',
-                    'resolution_reason': 'candidate_writes_disabled',
-                    'updated_at': completion_time,
-                },
-            )
-            return False
         if payload.get('status') != 'processing' or payload.get('lease_token') != lease_token:
             return False
         write_transaction.update(
@@ -908,7 +1045,7 @@ def resolve_candidate_without_mutation(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = candidate_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -967,7 +1104,7 @@ def reconcile_migrated_candidate(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = candidate_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -1035,7 +1172,7 @@ def claim_candidate_for_legacy_promotion(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         candidate_snapshot = candidate_ref.get(transaction=write_transaction)
         if not candidate_snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -1109,7 +1246,7 @@ def begin_candidate_legacy_promotion(
     @firestore.transactional
     def apply(write_transaction):
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
-        _validate_write_control(control_snapshot, account_generation=account_generation)
+        _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         candidate_snapshot = candidate_ref.get(transaction=write_transaction)
         if not candidate_snapshot.exists:
             raise CandidateNotFoundError(candidate_id)
@@ -1183,6 +1320,7 @@ __all__ = [
     'complete_candidate_integration_dispatch',
     'create_candidate',
     'get_candidate',
+    'update_candidate_compatibility_score',
     'list_candidate_integration_dispatches',
     'list_candidates',
     'pending_candidate_semantic_identity',

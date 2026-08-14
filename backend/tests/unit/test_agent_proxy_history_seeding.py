@@ -8,6 +8,7 @@ turns the live session already had (duplicate context, wasted tokens). The seedi
 decision now keys off the VM's reported session state.
 """
 
+from datetime import datetime, timezone
 import importlib.util
 from pathlib import Path
 from types import ModuleType
@@ -38,6 +39,26 @@ HISTORY = [
     {"sender": "human", "text": "what did I do yesterday"},
     {"sender": "ai", "text": "You had 3 meetings."},
 ]
+
+
+def test_current_time_prompt_uses_server_clock_and_mobile_timezone(agent_proxy):
+    result = agent_proxy.current_time_prompt(
+        "What year is it?",
+        "America/New_York",
+        now=datetime(2026, 7, 31, 2, 30, 45, tzinfo=timezone.utc),
+    )
+
+    assert result == "# Current Time\n2026-07-30T22:30:45-04:00 (America/New_York)\n\nWhat year is it?"
+
+
+def test_current_time_prompt_falls_back_to_utc_for_invalid_mobile_timezone(agent_proxy):
+    result = agent_proxy.current_time_prompt(
+        "What year is it?",
+        "Not/AZone",
+        now=datetime(2026, 7, 31, 2, 30, 45, tzinfo=timezone.utc),
+    )
+
+    assert result == "# Current Time\n2026-07-31T02:30:45+00:00 (UTC)\n\nWhat year is it?"
 
 
 def _patch_history(agent_proxy, monkeypatch) -> MagicMock:
@@ -72,3 +93,15 @@ async def test_fresh_vm_session_seeds_history(agent_proxy, monkeypatch):
     assert "<conversation_history>" in result
     assert "what did I do yesterday" in result
     assert result.endswith("hello")  # the current prompt rides after the seeded history
+
+
+@pytest.mark.asyncio
+async def test_history_failure_falls_back_to_raw_prompt_before_time_prefix(agent_proxy, monkeypatch):
+    async def fail_history(*_args, **_kwargs):
+        raise RuntimeError("Firestore unavailable")
+
+    monkeypatch.setattr(agent_proxy, "_prepare_first_query_prompt", fail_history)
+
+    result = await agent_proxy._prepare_first_query_prompt_with_fallback("uid1", "sess1", "hello", False)
+
+    assert result == "hello"

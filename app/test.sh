@@ -23,18 +23,18 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
   echo "Running setup prerequisites..."
 
   mkdir -p android/app/src/dev/ ios/Config/Dev/ ios/Runner/ macos/ macos/Config/Dev
-  cp setup/prebuilt/firebase_options.dart lib/firebase_options_dev.dart
-  cp setup/prebuilt/google-services.json android/app/src/dev/
-  cp setup/prebuilt/GoogleService-Info.plist ios/Config/Dev/
-  cp setup/prebuilt/GoogleService-Info.plist ios/Runner/
-  cp setup/prebuilt/GoogleService-Info.plist macos/
-  cp setup/prebuilt/GoogleService-Info.plist macos/Config/Dev/
+  cp lib/firebase_options_local.dart lib/firebase_options_dev.dart
+  cp setup/prebuilt/google-services-local.json android/app/src/dev/google-services.json
+  cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Dev/GoogleService-Info.plist
+  cp setup/prebuilt/GoogleService-Info-Local.plist ios/Runner/GoogleService-Info.plist
+  cp setup/prebuilt/GoogleService-Info-Local.plist macos/GoogleService-Info.plist
+  cp setup/prebuilt/GoogleService-Info-Local.plist macos/Config/Dev/GoogleService-Info.plist
 
   mkdir -p android/app/src/prod/ ios/Config/Prod/ macos/Config/Prod
-  cp setup/prebuilt/firebase_options.dart lib/firebase_options_prod.dart
-  cp setup/prebuilt/google-services.json android/app/src/prod/
-  cp setup/prebuilt/GoogleService-Info.plist ios/Config/Prod/
-  cp setup/prebuilt/GoogleService-Info.plist macos/Config/Prod/
+  cp lib/firebase_options_local.dart lib/firebase_options_prod.dart
+  cp setup/prebuilt/google-services-local.json android/app/src/prod/google-services.json
+  cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Prod/GoogleService-Info.plist
+  cp setup/prebuilt/GoogleService-Info-Local.plist macos/Config/Prod/GoogleService-Info.plist
 
   if [[ -n "${OMI_APP_TEST_API_BASE_URL:-}" ]]; then
     echo "API_BASE_URL=${OMI_APP_TEST_API_BASE_URL}" > .dev.env

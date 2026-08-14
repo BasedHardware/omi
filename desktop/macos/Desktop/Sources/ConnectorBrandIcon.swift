@@ -139,7 +139,7 @@ enum ConnectorBrandImageLoader {
     let candidates = Bundle.allBundles + Bundle.allFrameworks + [Bundle.main]
 
     for bundle in candidates {
-      if bundle.url(forResource: "gmail_logo", withExtension: "png") != nil {
+      if resourceURL(forResource: "gmail_logo", withExtension: "png", in: bundle) != nil {
         return bundle
       }
     }
@@ -162,7 +162,7 @@ enum ConnectorBrandImageLoader {
         else { continue }
         for url in bundleURLs where url.pathExtension == "bundle" {
           if let bundle = Bundle(url: url),
-            bundle.url(forResource: "gmail_logo", withExtension: "png") != nil
+            resourceURL(forResource: "gmail_logo", withExtension: "png", in: bundle) != nil
           {
             return bundle
           }
@@ -177,7 +177,22 @@ enum ConnectorBrandImageLoader {
     guard let resourceName = brand.bundledResourceName, let bundle = resourceBundle else {
       return nil
     }
-    return bundle.url(forResource: resourceName, withExtension: "png")
+    return resourceURL(forResource: resourceName, withExtension: "png", in: bundle)
+  }
+
+  private static func resourceURL(
+    forResource resourceName: String,
+    withExtension fileExtension: String,
+    in bundle: Bundle
+  ) -> URL? {
+    let fileName = "\(resourceName).\(fileExtension)"
+    let candidates = [
+      bundle.url(forResource: resourceName, withExtension: fileExtension),
+      bundle.resourceURL?.appendingPathComponent(fileName),
+      bundle.bundleURL.appendingPathComponent(fileName),
+    ].compactMap { $0 }
+
+    return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
   }
 
   static func image(for brand: ConnectorBrand) -> NSImage? {
@@ -232,10 +247,10 @@ struct ConnectorBrandIcon: View {
   var body: some View {
     ZStack {
       RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
+        .fill(Ink.wash)
         .overlay(
           RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .stroke(Color.white.opacity(0.06), lineWidth: 1)
+            .stroke(Ink.separator, lineWidth: 1)
         )
 
       if brand == .agents {
@@ -245,7 +260,7 @@ struct ConnectorBrandIcon: View {
         // X's wordmark glyph — no SF Symbol or app icon exists for it.
         Text("𝕏")
           .font(.system(size: size * 0.5, weight: .bold))
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
       } else if let image = ConnectorBrandImageLoader.image(for: brand) {
         Image(nsImage: image)
           .resizable()
@@ -255,7 +270,7 @@ struct ConnectorBrandIcon: View {
       } else {
         Image(systemName: brand.fallbackSymbol)
           .font(.system(size: size * 0.38, weight: .semibold))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
     }
     .frame(width: size, height: size)

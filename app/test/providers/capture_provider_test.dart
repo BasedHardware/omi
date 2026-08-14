@@ -17,9 +17,11 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/app_globals.dart';
+import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/enums.dart';
 
 /// Fake external actions that tracks people-refresh calls.
@@ -82,11 +84,41 @@ TranscriptSegment _segment(String id, String text) {
 BtDevice _device({required String id, required DeviceType type, String name = 'TestDevice'}) =>
     BtDevice(id: id, name: name, type: type, rssi: -50);
 
+/// CaptureProvider whose socket opening is held on a per-call gate, so a
+/// connection attempt can be kept in flight while another caller tries to
+/// start one, and each attempt can be released independently.
+class _GatedSocketCaptureProvider extends CaptureProvider {
+  final List<Completer<void>> gates = [];
+
+  int get openCalls => gates.length;
+
+  @override
+  Future<TranscriptSegmentSocketService?> openConversationSocket({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    required bool force,
+    String? source,
+    CustomSttConfig? customSttConfig,
+  }) async {
+    final gate = Completer<void>();
+    gates.add(gate);
+    await gate.future;
+    return null;
+  }
+
+  void release(int attempt) => gates[attempt].complete();
+
+  void releaseAll() {
+    for (final gate in gates) {
+      if (!gate.isCompleted) gate.complete();
+    }
+  }
+}
+
 /// Minimal EnvFields stub so Env-backed code paths (e.g. native BLE stream
 /// config reading Env.apiBaseUrl) don't hit a LateInitializationError.
 class _TestEnvFields implements EnvFields {
-  @override
-  String? get openAIAPIKey => null;
   @override
   String? get posthogApiKey => null;
   @override
@@ -160,6 +192,19 @@ void main() {
     expect(provider.suggestionsBySegmentId.containsKey('a'), false);
     expect(provider.taggingSegmentIds.contains('a'), false);
     expect(provider.hasTranscripts, true);
+  });
+
+  test('active capture identity survives deletion of the first segment', () {
+    final provider = CaptureProvider();
+    provider.testSessionStartSeconds = 12345;
+    provider.segments = [_segment('first', 'one'), _segment('second', 'two')];
+
+    final captureIdentity = provider.activeCaptureSessionId;
+    provider.onMessageEventReceived(SegmentsDeletedEvent(segmentIds: ['first']));
+
+    expect(captureIdentity, 'live-12345');
+    expect(provider.activeCaptureSessionId, captureIdentity);
+    expect(provider.segments.single.id, 'second');
   });
 
   group('metricsNotifyEnabled', () {
@@ -1118,6 +1163,160 @@ void main() {
 
       expect(provider.isPaused, isTrue);
       expect(SharedPreferencesUtil().deviceMuted, isTrue);
+      provider.dispose();
+    });
+  });
+
+  // Regression coverage for issue #6311: before this change
+  // `transcriptServiceReady` was `_transcriptServiceReady && _isConnected`, so a
+  // transient ConnectivityService flicker (WiFi↔cellular handoff, brief DNS
+  // hiccup) flipped the header to "Recording, reconnecting" even while the
+  // transcript WebSocket was alive and segments were flowing. The socket
+  // lifecycle is the authoritative signal; a connectivity change must never
+  // change transcript-service readiness.
+  group('transcriptServiceReady is socket-driven, not connectivity-driven (#6311)', () {
+    test('connectivity flicker does not toggle readiness of a ready socket', () {
+      final provider = CaptureProvider();
+
+      // Drive the provider into the socket-subscribed state (the scenario the
+      // old getter got wrong): onConnected mirrors the transcript WebSocket
+      // subscribing, which sets _transcriptServiceReady = true.
+      provider.onConnected();
+      expect(provider.transcriptServiceReady, isTrue);
+
+      // A connectivity flicker must not toggle readiness off. Before the fix
+      // this ANDed _isConnected=false into the getter and manufactured a false
+      // "Recording, reconnecting" over a healthy socket.
+      provider.onConnectionStateChanged(false);
+      expect(provider.transcriptServiceReady, isTrue, reason: 'ready socket must survive a connectivity flicker');
+
+      // And it must not depend on connectivity coming back either.
+      provider.onConnectionStateChanged(true);
+      expect(provider.transcriptServiceReady, isTrue);
+
+      // A socket close is the only thing that should end readiness.
+      provider.onClosed();
+      expect(provider.transcriptServiceReady, isFalse, reason: 'socket close must end transcript readiness');
+      provider.dispose();
+    });
+  });
+
+  // Regression coverage for issue #11305: the keep-alive reconnect callback is
+  // async, so a tick could call _initiateWebsocket() again while the previous
+  // attempt was still connecting. The capture log showed reconnect attempts 24
+  // and 25 overlapping (12s apart, both reaching service-ready), which opens
+  // duplicate /v4/listen sessions and races the controller state.
+  group('no duplicate transcription connection attempt (#11305)', () {
+    Future<void> settle() async {
+      for (var i = 0; i < 50; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    setUp(() {
+      // Batch mode short-circuits the socket entirely; an earlier test leaves
+      // the shared preference on.
+      SharedPreferencesUtil().batchModeEnabled = false;
+    });
+
+    Future<void> startAttempt(
+      _GatedSocketCaptureProvider provider, {
+      BleAudioCodec codec = BleAudioCodec.pcm16,
+      int sampleRate = 16000,
+    }) =>
+        provider.changeAudioRecordProfile(
+          audioCodec: codec,
+          sampleRate: sampleRate,
+          source: ConversationSource.phone.name,
+        );
+
+    test('drops a reconnect attempt while one is still in flight', () async {
+      final provider = _GatedSocketCaptureProvider();
+
+      final first = startAttempt(provider);
+      await settle();
+      expect(provider.openCalls, 1, reason: 'the first attempt must reach the socket service');
+
+      // Second attempt arrives before the first completes: previously it opened
+      // a second socket, now it is dropped.
+      await startAttempt(provider);
+      expect(provider.openCalls, 1, reason: 'an overlapping attempt must not open a second socket');
+
+      provider.release(0);
+      await first;
+
+      // The guard clears once the attempt finishes, so reconnects still work.
+      final next = startAttempt(provider);
+      await settle();
+      expect(provider.openCalls, 2, reason: 'a later attempt must connect again');
+
+      provider.releaseAll();
+      await next;
+      provider.dispose();
+    });
+
+    test('does not drop a forced attempt', () async {
+      final provider = _GatedSocketCaptureProvider();
+
+      final first = startAttempt(provider);
+      await settle();
+      expect(provider.openCalls, 1);
+
+      // Settings/profile changes stop the current socket and must replace it
+      // even while an attempt is in flight.
+      provider.updateRecordingState(RecordingState.record);
+      final forced = provider.onTranscriptionSettingsChanged();
+      await settle();
+      expect(provider.openCalls, 2, reason: 'a forced reconnect must not be gated');
+
+      provider.releaseAll();
+      await first;
+      await forced;
+      provider.dispose();
+    });
+
+    test('stays gated while a forced attempt with the same parameters runs', () async {
+      final provider = _GatedSocketCaptureProvider();
+
+      final first = startAttempt(provider);
+      await settle();
+      expect(provider.openCalls, 1);
+
+      // Same parameters as the attempt in flight, so both share a guard key.
+      provider.updateRecordingState(RecordingState.record);
+      final forced = provider.onTranscriptionSettingsChanged();
+      await settle();
+      expect(provider.openCalls, 2);
+
+      // The first attempt finishing must not ungate the forced one still
+      // connecting, or the next keep-alive tick opens a third socket.
+      provider.release(0);
+      await first;
+
+      await startAttempt(provider);
+      expect(provider.openCalls, 2, reason: 'a repeat must stay gated while the forced attempt is in flight');
+
+      provider.releaseAll();
+      await forced;
+      provider.dispose();
+    });
+
+    test('does not drop an attempt with different parameters', () async {
+      final provider = _GatedSocketCaptureProvider();
+
+      final first = startAttempt(provider);
+      await settle();
+      expect(provider.openCalls, 1);
+
+      // A different codec is a new intent (e.g. the user starts phone mic while
+      // a device reconnect is in flight), not the same attempt repeated.
+      final other = startAttempt(provider, codec: BleAudioCodec.opus, sampleRate: 16000);
+      await settle();
+      expect(provider.openCalls, 2, reason: 'a differently configured attempt must not be gated');
+
+      provider.releaseAll();
+      await first;
+      await other;
       provider.dispose();
     });
   });

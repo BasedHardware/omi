@@ -52,6 +52,7 @@ INTEGRATION_PUBLIC_PATHS = (
     '/v2/integrations/{app_id}/tasks',
 )
 APP_CLIENT_PREFIXES = (
+    '/v1/account/cutover',
     '/v1/action-items',
     '/v1/agent',
     '/v1/announcements',
@@ -61,6 +62,8 @@ APP_CLIENT_PREFIXES = (
     '/v1/apps',
     '/v1/calendar',
     '/v1/candidates',
+    '/v1/chat',
+    '/v1/connectors',
     '/v1/conversations',
     '/v1/dev',
     '/v1/fair-use',
@@ -87,6 +90,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/workstreams',
     '/v1/what-matters-now',
     '/v2/apps',
+    '/v2/chat/materialize-prompts',
     '/v2/files',
     '/v2/firmware',
     '/v2/initial-message',
@@ -122,6 +126,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'GET',
         '/v1/conversations/count',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'POST',
+        '/v1/conversations/topic',
+    ): 'Firebase-authenticated first-party desktop route for provisional titling; not part of the Developer API key contract.',
     (
         'GET',
         '/v1/conversations/{conversation_id}',

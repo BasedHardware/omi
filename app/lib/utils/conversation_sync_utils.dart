@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/providers/conversation_provider.dart';
 
 class ConversationSyncUtils {
   static const Duration _fetchTimeout = Duration(seconds: 30);
@@ -41,11 +44,19 @@ class ConversationSyncUtils {
     final validConversations = conversations.where((conversation) => conversation != null).toList();
     final completedConversations =
         validConversations.where((conversation) => conversation!.status == ConversationStatus.completed).toList();
-    return completedConversations.map((conversation) => _createPointer(conversation!, type)).toList();
+    return completedConversations.map((conversation) => createPointer(conversation!, type)).toList();
   }
 
-  static SyncedConversationPointer _createPointer(ServerConversation conversation, SyncedConversationType type) {
-    final date = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
+  /// The pointer's `key` is handed straight to `ConversationDetailProvider` when
+  /// a synced row is tapped, so it must be the key the list groups by:
+  /// [conversationLocalDayKey] over `startedAt ?? createdAt`. Reading
+  /// `createdAt`'s raw year/month/day instead read *UTC* fields — server
+  /// timestamps parse as UTC — so for any viewer off UTC near local midnight the
+  /// key matched no group, the tap-time selection silently no-opped and the
+  /// detail page opened on whatever conversation was still cached (#10980).
+  @visibleForTesting
+  static SyncedConversationPointer createPointer(ServerConversation conversation, SyncedConversationType type) {
+    final date = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
 
     return SyncedConversationPointer(type: type, index: 0, key: date, conversation: conversation);
   }

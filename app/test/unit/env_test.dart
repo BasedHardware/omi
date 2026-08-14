@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/environment_profile.dart';
 import 'package:omi/flavors.dart';
 import 'package:omi/startup_routing.dart';
 import 'dart:io';
@@ -9,11 +10,9 @@ import 'dart:io';
 /// we test with a single init and exercise the override/flag mechanisms.
 class _TestEnvFields implements EnvFields {
   @override
-  String? get openAIAPIKey => null;
-  @override
   String? get posthogApiKey => null;
   @override
-  String? get apiBaseUrl => 'https://api.omi.me/';
+  String? get apiBaseUrl => null;
   @override
   String? get googleMapsApiKey => null;
   @override
@@ -52,7 +51,65 @@ void main() {
     });
   });
 
+  group('mobile environment profiles', () {
+    test('local development is emulator-first and does not allow production data', () {
+      expect(AppEnvironmentProfile.localDev.defaultApiBaseUrl, 'http://127.0.0.1:8000/');
+      expect(AppEnvironmentProfile.localDev.firebaseProjectId, 'demo-omi-local');
+      expect(AppEnvironmentProfile.localDev.usesFirebaseAuthEmulator, isTrue);
+      expect(AppEnvironmentProfile.localDev.allowsProductionData, isFalse);
+    });
+
+    test('mobile beta explicitly pairs production Firebase with the dev serving plane', () {
+      expect(AppEnvironmentProfile.mobileBeta.defaultApiBaseUrl, 'https://api.omiapi.com/');
+      expect(AppEnvironmentProfile.mobileBeta.firebaseProjectId, 'based-hardware');
+      expect(AppEnvironmentProfile.mobileBeta.usesFirebaseAuthEmulator, isFalse);
+      expect(AppEnvironmentProfile.mobileBeta.allowsProductionData, isTrue);
+      expect(AppEnvironmentProfile.mobileBeta.authCallbackScheme, 'omi-beta');
+    });
+
+    test('mobile beta keeps OAuth on the production identity plane', () {
+      expect(
+        Env.authApiBaseUrlForProfile(AppEnvironmentProfile.mobileBeta, servingApiBaseUrl: 'https://api.omiapi.com/'),
+        Env.productionApiBaseUrl,
+      );
+    });
+
+    test('local prod pairs production Firebase with a developer-chosen backend', () {
+      expect(AppEnvironmentProfile.localProd.firebaseProjectId, 'based-hardware');
+      expect(AppEnvironmentProfile.localProd.usesFirebaseAuthEmulator, isFalse);
+      expect(AppEnvironmentProfile.localProd.allowsProductionData, isTrue);
+      expect(AppEnvironmentProfile.localProd.authCallbackScheme, 'omi');
+    });
+
+    test('local profile rejects a production Firebase project', () {
+      expect(
+        () =>
+            Env.validateFirebaseProject(projectId: 'based-hardware', configuredProfile: AppEnvironmentProfile.localDev),
+        throwsStateError,
+      );
+    });
+
+    test('flavor defaults map to production and local profiles', () {
+      expect(AppEnvironmentProfile.forFlavor(productionFlavor: true), AppEnvironmentProfile.production);
+      expect(AppEnvironmentProfile.forFlavor(productionFlavor: false), AppEnvironmentProfile.localDev);
+    });
+
+    test('production iOS config keeps the production Google redirect client id', () {
+      final prodConfig = File('ios/Flutter/prodRelease.xcconfig').readAsStringSync();
+
+      expect(
+        prodConfig,
+        contains('GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.208440318997-ukinsq3sijhcetkhr26ssqp1terbq7as'),
+      );
+      expect(prodConfig, isNot(contains('GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.1031333818730-')));
+    });
+  });
+
   group('Env.apiBaseUrl', () {
+    test('uses the local emulator API when development env has no URL', () {
+      expect(Env.apiBaseUrl, 'http://127.0.0.1:8000/');
+    });
+
     test('returns override when set', () {
       Env.overrideApiBaseUrl('https://override.example.com/');
       expect(Env.apiBaseUrl, 'https://override.example.com/');
@@ -67,6 +124,14 @@ void main() {
     test('Android production startup accepts the production API and WebSocket', () {
       validateApplicationStartupRouting(environment: Environment.prod, configuredApiBaseUrl: 'https://api.omi.me/');
       expect(Env.productionAgentProxyWsUrl, 'wss://agent.omi.me/v1/agent/ws');
+    });
+
+    test('mobile beta accepts the dev serving plane with production identity', () {
+      Env.validateStartupRouting(
+        productionFamily: true,
+        configuredProfile: AppEnvironmentProfile.mobileBeta,
+        configuredApiBaseUrl: 'https://api.omiapi.com/',
+      );
     });
 
     test('production startup rejects legacy Beta, dev, staging, and arbitrary endpoints', () {
@@ -84,13 +149,62 @@ void main() {
       }
     });
 
-    test('development startup remains configurable', () {
+    test('local prod accepts loopback, private-network, and tunnel endpoints in debug builds', () {
+      for (final endpoint in [
+        'http://127.0.0.1:8000/',
+        'http://192.168.1.20:8000/',
+        'https://example.ngrok-free.app/',
+      ]) {
+        Env.validateStartupRouting(
+          productionFamily: true,
+          configuredProfile: AppEnvironmentProfile.localProd,
+          configuredApiBaseUrl: endpoint,
+          releaseBuild: false,
+        );
+      }
+    });
+
+    test('local prod is rejected in release builds', () {
+      expect(
+        () => Env.validateStartupRouting(
+          productionFamily: true,
+          configuredProfile: AppEnvironmentProfile.localProd,
+          configuredApiBaseUrl: 'http://127.0.0.1:8000/',
+          releaseBuild: true,
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('local prod rejects a malformed endpoint', () {
+      expect(
+        () => Env.validateStartupRouting(
+          productionFamily: true,
+          configuredProfile: AppEnvironmentProfile.localProd,
+          configuredApiBaseUrl: 'not a url',
+          releaseBuild: false,
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('local development startup accepts the emulator API', () {
       expect(
         () => validateApplicationStartupRouting(
           environment: Environment.dev,
-          configuredApiBaseUrl: 'https://api.omi.dev/',
+          configuredApiBaseUrl: 'http://127.0.0.1:8000/',
         ),
         returnsNormally,
+      );
+    });
+
+    test('local development rejects the remote dev serving plane', () {
+      expect(
+        () => validateApplicationStartupRouting(
+          environment: Environment.dev,
+          configuredApiBaseUrl: 'https://api.omiapi.com/',
+        ),
+        throwsStateError,
       );
     });
   });
@@ -103,5 +217,6 @@ void main() {
       mainSource.indexOf('validateApplicationStartupRouting();'),
       lessThan(mainSource.indexOf('ServiceManager.init()')),
     );
+    expect(mainSource, contains('Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);'));
   });
 }

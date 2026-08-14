@@ -100,6 +100,7 @@ strip_main_executable() {
   local before_arches
   local after_arches
   local saved_bytes
+  local backup_path
 
   executable_name="$(main_executable_name || true)"
   if [[ -z "$executable_name" ]]; then
@@ -119,19 +120,37 @@ strip_main_executable() {
 
   before_bytes="$(file_size_bytes "$executable_path")"
   before_arches="$(macho_arches "$executable_path")"
+  backup_path="$MACOS_DIR/.${executable_name}.unstripped.$$"
+  cp -p "$executable_path" "$backup_path"
   chmod u+w "$executable_path" 2>/dev/null || true
-  strip -x "$executable_path"
+  if ! strip -x "$executable_path"; then
+    cp -p "$backup_path" "$executable_path"
+    rm -f "$backup_path"
+    echo "ERROR: strip failed for main app executable" >&2
+    exit 1
+  fi
   after_bytes="$(file_size_bytes "$executable_path")"
   after_arches="$(macho_arches "$executable_path")"
 
   if [[ "$before_arches" != "$after_arches" ]]; then
+    cp -p "$backup_path" "$executable_path"
+    rm -f "$backup_path"
     echo "ERROR: strip changed main executable architectures: before='$before_arches' after='$after_arches'" >&2
     exit 1
   fi
   if [[ "$after_bytes" -gt "$before_bytes" ]]; then
+    cp -p "$backup_path" "$executable_path"
+    rm -f "$backup_path"
     echo "ERROR: strip increased main executable size: $(human_bytes "$before_bytes") -> $(human_bytes "$after_bytes")" >&2
     exit 1
   fi
+  if command -v dyld_info >/dev/null 2>&1 && ! dyld_info -dependents "$executable_path" >/dev/null 2>&1; then
+    cp -p "$backup_path" "$executable_path"
+    rm -f "$backup_path"
+    echo "WARNING: strip produced malformed Mach-O load commands; restored main app executable" >&2
+    return 0
+  fi
+  rm -f "$backup_path"
 
   saved_bytes=$((before_bytes - after_bytes))
   echo "Stripped main app executable: $(human_bytes "$before_bytes") -> $(human_bytes "$after_bytes") (saved $(human_bytes "$saved_bytes"))"
