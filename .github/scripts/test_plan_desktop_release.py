@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
@@ -505,13 +506,14 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
-        self.assertEqual(planner.SOURCE_CHECK_WAIT_SECONDS, 60 * 60)
-        self.assertGreaterEqual(planner.SOURCE_CHECK_WAIT_SECONDS, 45 * 60)
-        self.assertEqual(workflow.count('--source-check-wait-seconds "${CI_GATE_TIMEOUT_SECONDS}"'), 3)
+        self.assertEqual(planner.SOURCE_CHECK_WAIT_SECONDS, 90 * 60)
+        self.assertEqual(workflow.count('--source-check-wait-seconds "${CI_GATE_TIMEOUT_SECONDS}"'), 2)
+        self.assertEqual(workflow.count('--source-check-wait-seconds "${requested_timeout}"'), 1)
         self.assertEqual(workflow.count("--source-check-poll-seconds 30"), 3)
         self.assertIn("CI_GATE_TIMEOUT_SECONDS:", workflow)
-        self.assertIn("vars.DESKTOP_CI_GATE_TIMEOUT_SECONDS || '3600'", workflow)
-        self.assertIn("timeout-minutes: 75", workflow)
+        self.assertIn("vars.DESKTOP_CI_GATE_TIMEOUT_SECONDS || '5400'", workflow)
+        self.assertIn("timeout-minutes: 105", workflow)
+        self.assertIn("if (( requested_timeout > 5400 )); then", workflow)
         self.assertIn("Surface planner non-release decision", workflow)
         self.assertIn("::error::Desktop release planner blocked:", workflow)
         self.assertIn("::warning::Desktop release planner skipped tagging:", workflow)
@@ -569,12 +571,12 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
             workflow,
         )
 
-    def test_hourly_train_defers_while_the_latest_tag_is_young(self) -> None:
+    def test_hourly_train_defers_while_the_latest_candidate_is_young(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "github-output"
             with (
                 patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
-                patch.object(planner, "tag_age_seconds", return_value=120),
+                patch.object(planner, "candidate_publication_age_seconds", return_value=120),
                 patch.object(planner, "releasable_desktop_changes_since") as changes,
                 patch.object(
                     sys,
@@ -586,17 +588,74 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
                 self.assertEqual(planner.main(), 0)
             outputs = output_path.read_text(encoding="utf-8")
 
+        changes.assert_not_called()
         self.assertIn("should_release=false", outputs)
         self.assertIn("Hourly release train", outputs)
 
-    def test_manual_dispatch_ignores_the_train_interval(self) -> None:
-        # --min-tag-interval-seconds defaults to 0: a fresh tag never defers a
-        # deliberate dispatch.
+    def test_train_throttle_reads_release_publication_time_not_commit_time(self) -> None:
+        # Candidate tags are lightweight: a tag pushed minutes ago onto an old
+        # commit has an old `git log --format=%ct` answer, which would defeat
+        # the throttle. The clock is the release's createdAt, and the commit
+        # time must never be consulted.
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            release_json = json.dumps(
+                {
+                    "tagName": LATEST_TAG,
+                    "createdAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                }
+            )
+            completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=release_json, stderr="")
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner.subprocess, "run", return_value=completed),
+                patch.object(planner, "tag_age_seconds") as commit_age,
+                patch.object(planner, "releasable_desktop_changes_since") as changes,
+                patch.object(
+                    sys,
+                    "argv",
+                    [str(SCRIPT), "--repository", REPOSITORY, "--min-tag-interval-seconds", "3300"],
+                ),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        commit_age.assert_not_called()
+        changes.assert_not_called()
+        self.assertIn("should_release=false", outputs)
+        self.assertIn("Hourly release train", outputs)
+
+    def test_train_throttle_stands_aside_when_the_candidate_has_no_release(self) -> None:
+        # No release for the latest tag = build in flight (the one-active-release
+        # fence owns it) or a failed build the train should replace.
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "github-output"
             with (
                 patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
-                patch.object(planner, "tag_age_seconds", return_value=1) as age,
+                patch.object(planner, "candidate_publication_age_seconds", return_value=None),
+                patch.object(planner, "releasable_desktop_changes_since", return_value=[]),
+                patch.object(
+                    sys,
+                    "argv",
+                    [str(SCRIPT), "--repository", REPOSITORY, "--min-tag-interval-seconds", "3300"],
+                ),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        self.assertNotIn("Hourly release train", outputs)
+        self.assertIn("No releasable desktop app changes", outputs)
+
+    def test_manual_dispatch_ignores_the_train_interval(self) -> None:
+        # --min-tag-interval-seconds defaults to 0: a fresh candidate never
+        # defers a deliberate dispatch.
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner, "candidate_publication_age_seconds", return_value=1) as age,
                 patch.object(planner, "releasable_desktop_changes_since", return_value=[]),
                 patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
                 patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),

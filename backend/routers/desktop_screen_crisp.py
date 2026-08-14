@@ -13,7 +13,7 @@ from database.screen_activity import upsert_screen_activity
 from database.vector_db import upsert_screen_activity_vectors
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid, get_user
-from utils.subscription import is_trial_paywalled
+from utils.subscription import is_desktop_trial_paywalled
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ class ScreenActivitySyncRequest(BaseModel):
 
 
 async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
+    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop"):
         raise HTTPException(status_code=402, detail="trial_expired")
     return uid
 

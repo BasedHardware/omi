@@ -56,39 +56,38 @@ Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.
 
 ## Release Pipeline
 
-Beta candidates are cut **on every macOS-affecting merge to `main`** (`push` trigger on the releasable desktop paths, plus a 15-min `schedule` backstop). Each run tags the newest releasable `desktop/macos/**`/`codemagic.yaml` change since the last tag, binding the immutable tag to the Codemagic config that builds it. A candidate reaches beta only after qualification passes:
+Beta candidates ship on the **hourly release train**: `desktop_auto_release.yml` runs on an hourly `schedule` (plus immediate manual `workflow_dispatch` for deliberate/emergency cuts — there is no `push` trigger). Each run tags the newest releasable `desktop/macos/**`/`codemagic.yaml` change since the last tag, coalescing every merge in the window and binding the immutable tag to the Codemagic config that builds it. A candidate reaches Beta automatically after Codemagic finishes the signed release build:
 
-1. **GitHub Actions** (`desktop_auto_release.yml`) — on that `push` (plus the 15-min `schedule` backstop and manual `workflow_dispatch`) it auto-increments the version and pushes a `v*-macos` tag. A ~60s quiet window (`AUTO_RELEASE_QUIET_SECONDS`) coalesces near-simultaneous merges; the one-active-release fence (Codemagic build status on the latest tag) admits one candidate at a time. Fails closed unless `Release Eligibility`, `Desktop Swift Build & Tests`, and `Desktop Swift Release Compile` all succeeded for the exact newest releasable SHA — so a candidate cuts once that SHA's CI is green (the push fires too early; the backstop catches it after CI settles). After publication, a read-only 10-minute assertion uses the GitHub `CODEMAGIC_API_TOKEN` secret to require exactly one same-tag `omi-desktop-swift-release` build and retains JSON intake evidence; absence, duplicate intake, wrong workflow/source, and provider API visibility failures are distinct failures and never dispatch a fallback build.
+1. **GitHub Actions** (`desktop_auto_release.yml`) — the planner auto-increments the version and pushes a `v*-macos` tag. Schedule runs pass `--min-tag-interval-seconds 3300`, throttling the train to at most one candidate per hour, measured from the previous candidate's GitHub-release `createdAt` (not the tagged commit's time — candidate tags are lightweight); manual dispatch skips the throttle. A ~60s quiet window (`AUTO_RELEASE_QUIET_SECONDS`) coalesces near-simultaneous merges; the one-active-release fence (Codemagic build status on the latest tag) admits one candidate at a time. Fails closed unless `Release Eligibility`, `Desktop Swift Build & Tests`, and `Desktop Swift Release Compile` all succeeded for the exact newest releasable SHA, waiting up to an hour for in-flight checks; when the newest SHA carries a completed *failure*, the planner falls back to the newest **green** releasable SHA behind it (bounded scan) so a red tip degrades the candidate's freshness instead of stalling the train. After publication, a read-only 10-minute assertion uses the GitHub `CODEMAGIC_API_TOKEN` secret to require exactly one same-tag `omi-desktop-swift-release` build and retains JSON intake evidence; absence, duplicate intake, wrong workflow/source, and provider API visibility failures are distinct failures and never dispatch a fallback build.
 2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M4:
    - Builds the universal app and dSYM, UUID-checks and uploads symbols to Sentry, and publishes both
    - Signs with Developer ID, notarizes with Apple
    - Creates DMG + Sparkle ZIP
    - Runs `scripts/smoke-signed-desktop-artifact.sh` (signed app, Sparkle ZIP, DMG) before publishing, with a mandatory in-app Keychain write/read/delete canary
-   - Publishes an immutable non-live GitHub candidate with smoke evidence
-3. **Qualification** (`desktop_qualify_beta.yml`) — dispatched by Codemagic after candidate publication, but executed only by `qualify-m1-studio` (label `omi-qual-m1-studio`). The global non-cancelling `desktop-beta-qualification-m1` lock queues all candidates and never cancels local cleanup. It rebuilds the exact tag, runs hermetic T2 and fault injection, and writes evidence. No Codemagic or M4 path can qualify. See `desktop/macos/docs/qualification-environment.md` for lease, port, retention, and cleanup controls; its local stack reaps only matching lease-token/process-group/port provenance and leaves foreign listeners alone.
-4. **Automatic beta promotion** (`desktop_promote_beta.yml`) — a separate `workflow_run` starts only after successful qualification, derives and validates the immutable `v*-macos` tag against the qualification SHA, then invokes the same internal-only backend admission authority. The backend captures the server-owned Beta admission generation before validating digest-matched evidence, then atomically verifies that the reservation and pause state are unchanged while registering the immutable manifest and advancing the explicit beta pointer. If that handoff fails after qualification, use only `desktop_recover_beta.yml` with the exact tag, `confirm=recover-beta`, and a reason.
+   - Publishes an immutable GitHub candidate with stable and Beta signed-smoke evidence
+   - Calls the internal-only Beta admission endpoint with the exact tag; the backend independently verifies the merged tag, GitHub asset digests, and Beta signed-smoke evidence, then atomically registers the immutable manifest and advances the explicit Beta pointer
+
+The former self-hosted T2 qualification and post-qualification promotion workflows are not part of the release path. Local T2 and fault suites remain available as engineering QA tools, but they do not gate Beta visibility. If Codemagic exhausts its bounded promotion retries, the candidate remains non-live; recover with `desktop_recover_beta.yml` using the exact tag, `confirm=recover-beta`, and a reason.
 
 The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; `desktop_backend_auto_dev.yml` owns development Python desktop-backend delivery, while `desktop_backend_prod.yml` and `desktop_backend_recover_prod.yml` own protected production delivery and retained-revision recovery. Merging desktop code does not deploy either production backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
 
 Signed artifact smoke scope:
 - Always-on release audit covers bundle identity, version/tag alignment, signing/Keychain entitlements, Sparkle metadata, backend URL leakage, helper/runtime packaging, artifact readability, and local storage package surface.
-- Stable artifacts are fixed to production Python/Rust services. The separately-installable Beta artifact is fixed to development Python/Rust services, while desktop-login OAuth plus Firebase Auth/Firestore remain production; signed smoke proves the artifact routing. Qualification automatically runs and attaches a live service-account UID-continuity probe; exercise a real human OAuth sign-in separately before broad rollout.
-- Codemagic uploads `build/desktop-smoke-result.json` with artifact digests and completed checks; promotion tooling should compare this result to the exact release asset before changing channels.
+- Stable artifacts are fixed to production Python/Rust services. The separately-installable Beta artifact is fixed to development Python/Rust services, while desktop-login OAuth plus Firebase Auth/Firestore remain production; signed smoke proves the artifact routing. Exercise a real human OAuth sign-in separately before broad rollout.
+- Codemagic uploads stable and Beta smoke results with artifact digests and completed checks; the backend fetches both results concurrently and compares them to the exact immutable release assets before changing channels.
 - The synthetic `--auth-storage-canary` is mandatory before beta publication and runs inside the exact signed app without real credentials. Optional broader live probes (`--launch --network --auth --chat --permissions --storage`) require an isolated release runner and explicit canary env vars; production-bundle launch is fail-closed unless `OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1`, and `--auth` requires `OMI_SIGNED_ARTIFACT_SMOKE_AUTH_PROOF_COMMAND` to prove app-level persistence rather than a raw bearer-token curl.
-- Artifact creation and user visibility are split: create/upload the immutable candidate first, then advance beta/stable visibility only after digest-matched qualification passes.
-- Automatic beta is fail-closed: any signed-smoke, reservation, digest, static, T2, fault-suite, manifest, admission-generation, or pointer failure leaves the candidate non-live. Operators pause/resume only through the ADMIN_KEY-protected backend admission control; workflow variables are not pause authority. When a served Beta is concretely broken, `desktop_rollback_beta.yml` can repoint only macOS Beta to a retained T2-qualified manifest, and `desktop_breakglass_rollout_beta.yml` can advance only to a higher evidence-bound emergency candidate. Both reuse the existing protected `prod` environment and Google identity, atomically audit + pause admission, and cannot reach Stable. Rollback does not downgrade already-updated clients; follow it with a higher-build repair.
+- Artifact creation and user visibility are split: create/upload the immutable candidate first, then advance Beta visibility only after its digest-matched signed smoke passes.
+- Automatic Beta is fail-closed: any signed-smoke, reservation, digest, manifest, admission-generation, or pointer failure leaves the candidate non-live. Operators pause/resume only through the ADMIN_KEY-protected backend admission control; workflow variables are not pause authority. When a served Beta is concretely broken, `desktop_rollback_beta.yml` and `desktop_breakglass_rollout_beta.yml` retain their audited incident-only behavior. Rollback does not downgrade already-updated clients; follow it with a higher-build repair.
 
 Stable is manual:
-- Automatic qualification never promotes Stable. `desktop_promote_prod.yml` remains `workflow_dispatch` only and protected by the `prod` environment.
-- Run it with the current qualified Beta `release_tag` and `confirm=promote-stable`. It reads and compare-and-swaps the current Stable pointer itself, advances only that pointer, updates the existing legacy/static bridges, and verifies hashes and feed output.
+- Codemagic never promotes Stable. `desktop_promote_prod.yml` remains `workflow_dispatch` only and protected by the `prod` environment.
+- Run it with the current Beta `release_tag` and `confirm=promote-stable`. It reads and compare-and-swaps the current Stable pointer itself, advances only that pointer, updates the existing legacy/static bridges, and verifies hashes and feed output.
 - The Python desktop-backend deployment workflows remain independent from desktop release promotion. Stable promotion checks live desktop chat-contract compatibility but does not deploy the backend. Do not manually edit release visibility or pointers outside the promotion workflow.
 
 **Codemagic CLI & API:**
 - Token: `$CODEMAGIC_API_TOKEN` (set in `~/.zshrc`)
 - App ID: `66c95e6ec76853c447b8bcbb`
 - List builds: `curl -s -H "x-auth-token: $CODEMAGIC_API_TOKEN" "https://api.codemagic.io/builds?appId=66c95e6ec76853c447b8bcbb" | python3 -c "import json,sys; [print(f\"{b.get('status','?'):12} tag={b.get('tag','-'):30} start={(b.get('startedAt') or '-')[:19]}\") for b in json.load(sys.stdin).get('builds',[])[:5]]"`
-
-Promotion from beta to stable is handled by `desktop_promote_prod.yml`, not Codemagic.
 
 ## Firebase Connection
 Use the `/firebase` command if your agent provides it.
@@ -255,7 +254,7 @@ checked in. Ask the user for anything you are missing rather than guessing an en
 - `run.sh` prepends the native Homebrew prefix (`/opt/homebrew/bin` on Apple Silicon or `/usr/local/bin` on Intel), followed by the other prefix when present, because agent and launchd shells may not inherit Homebrew's PATH. This keeps `pkg-config` and other build tools discoverable without requiring a machine-wide shell profile change.
 - **Full dev run**: `./run.sh` — builds Swift app, starts Python backend, starts Cloudflare tunnel, launches app
 - **Fast default dev run**: after one successful full named-bundle launch, ordinary Swift-only `./run.sh` calls reuse the installed bundle. The fast lane runs incremental SwiftPM, atomically replaces the executable and current desktop API URL, re-signs the app, and relaunches without copying/re-signing static agent/framework assets or resetting LaunchServices/auth. Named local profiles are eligible: their current disposable `.env` is refreshed on each patch and is never cached in the bundle fingerprint. Package metadata, resources, agent/runtime inputs, entitlements, persistent launch configuration, and an installed bundle whose agent runtime payload is incomplete (`incomplete_runtime_payload`; `scripts/agent-runtime-payload.sh`) automatically take the full path. Force that path with `./run.sh --full` or `OMI_FORCE_FULL_BUNDLE=1`. `OMI_SCAN_STALE_BUNDLES=1` is an explicit stale-LaunchServices recovery scan; do not enable it in the normal loop.
-- **Focused feedback loop**: `./scripts/dev-feedback.py --once|--watch swift '<XCTest filter>'` or `... python '<pytest path>'` runs exactly the regression you selected and reports each iteration time. It watches only the matching component inputs, keeps watching after a failure, and never replaces the full component suite. Pre-push deliberately adds only `xcrun swift build -c debug`; never promote it to the full pinned-Xcode suite or release compile, because that push-time budget belongs to CI.
+- **Focused feedback loop**: `./scripts/dev-feedback.py --once|--watch swift '<XCTest filter>'` or `... python '<pytest path>'` runs exactly the regression you selected and reports each iteration time. It watches only the matching component inputs, keeps watching after a failure, and never replaces the full component suite. A filter that matches no tests fails the iteration (`swift test --filter` exits 0 on zero matches), so a renamed or mistyped filter can never read as PASS. Pre-push deliberately adds only `xcrun swift build -c debug`; never promote it to the full pinned-Xcode suite or release compile, because that push-time budget belongs to CI.
 - **Swift suite throughput**: Local suites default to four workers. CI uses two workers only because each gets a copy-on-write SwiftPM scratch directory and an isolated Foundation runtime home (preferences, Application Support, caches, and temporary files). Do not raise it without evidence that both build and runtime state remain isolated. Set `OMI_SWIFT_TEST_SUITE_WORKERS=1` to diagnose concurrency failures.
 - **Local Python backend**: direct `./run.sh` development reuses a healthy backend that this worktree owns when Python source/config have not changed. Sync dependencies with `cd ../../backend && ./scripts/sync-python-deps.sh` before the first local launch.
 - **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact. The checksum-verified universal Node archives are separately shared at `~/Library/Caches/OmiDesktop/node-archives` (override with `OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR`), so fresh linked worktrees reuse the download but still validate it before staging.
@@ -495,32 +494,7 @@ harness filter classes drift away.
 
 ### Verifying UI Changes (agent-swift)
 
-After editing Swift UI code, verify the change programmatically using [agent-swift](https://github.com/beastoin/agent-swift) — a CLI that controls any macOS app via the Accessibility API.
-
-**One-time setup:** `brew install beastoin/tap/agent-swift` + grant Accessibility permission to Terminal.app.
-
-```bash
-# After ./run.sh launches the app:
-agent-swift doctor                                   # verify Accessibility permission
-agent-swift connect --bundle-id com.omi.desktop-dev  # connect to running app
-agent-swift snapshot -i                              # see interactive elements
-agent-swift click @e3                                # CGEvent click (SwiftUI)
-agent-swift press @e3                                # AXPress (AppKit buttons)
-agent-swift fill @e5 "search text"                   # type into a text field
-agent-swift find role button click                   # find + chained action
-agent-swift is exists @e3                            # assert element exists (exit 0/1)
-agent-swift wait text "Settings"                     # wait for text to appear
-agent-swift screenshot /tmp/evidence.png             # capture app window
-```
-
-**Key rules:**
-- Always use `snapshot -i` (interactive only) — full snapshot of a complex SwiftUI app is extremely verbose.
-- Prefer `click` over `press` for SwiftUI — `click` sends CGEvent clicks (triggers NavigationLink), `press` sends AXPress (AppKit only).
-- Refs go stale after `click`/`press`/`fill`/`scroll` — re-snapshot before the next interaction.
-- Argument order: `get <property> <ref>`, `is <condition> <ref>`, `wait <condition> [<target>]`, `find <locator> <value>`.
-- 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
-- No app-side instrumentation needed — works via macOS Accessibility API on any Cocoa/SwiftUI app.
-- Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos` (stable) and `com.omi.computer-macos.beta` (Omi Beta) — never automate prod.
+Verify Swift UI changes programmatically with [agent-swift](https://github.com/beastoin/agent-swift) (Accessibility-API CLI): setup, command reference, and key rules in [`docs/agent-swift-ui-verification.md`](docs/agent-swift-ui-verification.md). Never automate prod bundles.
 
 ### Changelog Entries
 

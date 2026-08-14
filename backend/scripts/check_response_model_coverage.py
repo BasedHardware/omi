@@ -31,7 +31,7 @@ LEGIT_NON_JSON: dict[tuple[str, str], str] = {
     ("chat.py", "create_voice_message_stream"): "StreamingResponse audio",
     ("chat.py", "transcribe_voice_message_stream"): "StreamingResponse audio",
     ("mcp_sse.py", "mcp_streamable_http"): "SSE stream",
-    ("mcp_sse.py", "mcp_sse_get"): "SSE stream",
+    ("mcp_sse.py", "mcp_sse_get"): "405 Method Not Allowed sentinel (no SSE stream offered)",
     ("mcp_sse.py", "mcp_sse_head"): "SSE stream",
     # --- OAuth / redirect callbacks (return RedirectResponse or HTML) ---
     ("auth.py", "auth_authorize"): "OAuth authorize redirect",
@@ -61,10 +61,10 @@ LEGIT_NON_JSON: dict[tuple[str, str], str] = {
     ("sync.py", "download_audio_file_endpoint"): "binary audio file download (StreamingResponse)",
     ("users.py", "export_all_user_data"): "StreamingResponse data-export download",
     # --- 204 No Content (genuine empty-body deletes; FastAPI rejects response_model+204) ---
-    ("developer.py", "delete_key"): "204 No Content",
+    ("api_key_management.py", "delete_mcp_key"): "204 No Content",
+    ("api_key_management.py", "delete_developer_key"): "204 No Content",
     ("folders.py", "delete_folder"): "204 No Content",
     ("integrations.py", "delete_integration"): "204 No Content",
-    ("mcp.py", "delete_key"): "204 No Content",
     ("mcp.py", "revoke_oauth_grant"): "204 No Content",
     ("action_items.py", "delete_action_item"): "204 No Content",
     ("task_integrations.py", "delete_task_integration"): "204 No Content",

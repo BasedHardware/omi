@@ -194,6 +194,24 @@ enum FloatingControlBarGeometry {
     return showingAIConversation && showingAIResponse
   }
 
+  /// Hit region for surface-filling content states (expanded response panel,
+  /// notification card). The window frame still carries transparent glow
+  /// outsets beside and below the visible surface; content owns exactly the
+  /// surface, so the glow ring keeps passing clicks through to other apps.
+  static func notchSurfaceContentContainsLocal(
+    localPoint: NSPoint,
+    windowSize: NSSize,
+    bottomOutset: CGFloat,
+    horizontalOutset: CGFloat
+  ) -> Bool {
+    notchChromeActivationContainsLocal(
+      localPoint: localPoint,
+      windowSize: windowSize,
+      chromeHeight: max(0, windowSize.height - bottomOutset),
+      horizontalOutset: horizontalOutset
+    )
+  }
+
   static func notchChromeActivationContainsLocal(
     localPoint: NSPoint,
     windowSize: NSSize,

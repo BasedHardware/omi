@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Response Context to show observed tools, screenshot, and admitted kernel sources instead of guessed model or usage numbers"
+}

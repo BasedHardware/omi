@@ -490,10 +490,21 @@ import XCTest
       ))
     XCTAssertTrue(source.contains("private func openMainChatFromIdleNotch()"))
     XCTAssertTrue(source.contains("NotchIdleTapRoute.perform("))
-    XCTAssertTrue(source.contains("(NSApp.delegate as? AppDelegate)?.openMainAppChat()"))
+    XCTAssertTrue(source.contains("AppDelegate.summonWindowTarget()?.openMainAppChat()"))
+    XCTAssertFalse(source.contains("(NSApp.delegate as? AppDelegate)?.openMainAppChat()"))
     XCTAssertFalse(source.contains("gearshape.fill"))
     XCTAssertFalse(source.contains("openFloatingBarSettings()"))
     XCTAssertTrue(source.contains("openAgentChatsFromNotchLogo()"))
+  }
+
+  func testChatFirstCanRoutePrimaryFloatingTextEntryToTheMainApp() {
+    FloatingPrimaryTextInputRouting.configure(routesToMainApp: false)
+    defer { FloatingPrimaryTextInputRouting.configure(routesToMainApp: false) }
+
+    XCTAssertFalse(FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(hasMainConversation: false))
+    FloatingPrimaryTextInputRouting.configure(routesToMainApp: true)
+    XCTAssertTrue(FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(hasMainConversation: false))
+    XCTAssertFalse(FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(hasMainConversation: true))
   }
 
   func testNotchChatSizingPreservesSurfaceWidthAndGlowList() throws {
@@ -749,14 +760,169 @@ import XCTest
     XCTAssertEqual(window.frame, expectedFrame)
   }
 
+  func testIdleNotchWindowDoesNotCoverTheInvisibleHoverMenuExtent() {
+    let previousForceNoNotch = getenv("OMI_FORCE_NO_NOTCH").map { String(cString: $0) }
+    let previousForceNotch = getenv("OMI_FORCE_NOTCH").map { String(cString: $0) }
+    unsetenv("OMI_FORCE_NO_NOTCH")
+    setenv("OMI_FORCE_NOTCH", "1", 1)
+    defer {
+      if let previousForceNoNotch {
+        setenv("OMI_FORCE_NO_NOTCH", previousForceNoNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NO_NOTCH")
+      }
+      if let previousForceNotch {
+        setenv("OMI_FORCE_NOTCH", previousForceNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NOTCH")
+      }
+    }
+
+    let window = FloatingControlBarWindow(
+      contentRect: .zero,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+
+    window.makeKeyAndOrderFront(nil)
+    window.state.setNotchHoverMenuOpen(false)
+    window.normalizeForTemporaryShow()
+
+    let chromeHeight = FloatingControlBarWindow.notchChromeHeight(for: window.screen)
+    let idleFrameHeight = chromeHeight + FloatingControlBarWindow.notchGlowOutsetBottom
+    let formerMaximumHeight =
+      chromeHeight
+      + FloatingControlBarWindow.notchHoverMenuHeight(
+        agentCount: FloatingControlBarWindow.notchAgentListMaxVisibleAgents)
+      + FloatingControlBarWindow.notchGlowOutsetBottom
+    XCTAssertEqual(window.frame.height, idleFrameHeight, accuracy: 0.5)
+    XCTAssertLessThan(window.frame.height, formerMaximumHeight)
+
+    let pointInsideFormerDeadZone = NSPoint(
+      x: window.frame.midX,
+      y: window.frame.maxY - idleFrameHeight - 20
+    )
+    XCTAssertFalse(window.frame.contains(pointInsideFormerDeadZone))
+  }
+
+  func testPresentingDuringNotchRetractionKeepsThePanelVisibleAndRestoresItsContent() {
+    let previousForceNoNotch = getenv("OMI_FORCE_NO_NOTCH").map { String(cString: $0) }
+    let previousForceNotch = getenv("OMI_FORCE_NOTCH").map { String(cString: $0) }
+    let previousDraggableBarEnabled = ShortcutSettings.shared.draggableBarEnabled
+    ShortcutSettings.shared.draggableBarEnabled = false
+    unsetenv("OMI_FORCE_NO_NOTCH")
+    setenv("OMI_FORCE_NOTCH", "1", 1)
+    defer {
+      ShortcutSettings.shared.draggableBarEnabled = previousDraggableBarEnabled
+      if let previousForceNoNotch {
+        setenv("OMI_FORCE_NO_NOTCH", previousForceNoNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NO_NOTCH")
+      }
+      if let previousForceNotch {
+        setenv("OMI_FORCE_NOTCH", previousForceNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NOTCH")
+      }
+    }
+
+    let window = FloatingControlBarWindow(
+      contentRect: .zero,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+    let scheduler = UncancellableRetractionScheduler()
+    window.notchRetractionScheduler = scheduler
+    var staleRetractionCompletionCount = 0
+
+    window.beginNotchRetraction { staleRetractionCompletionCount += 1 }
+    window.showNotification(
+      FloatingBarNotification(
+        ownerID: "owner",
+        title: "Replacement notification",
+        message: "Must remain visible",
+        assistantId: "test"),
+      animated: false)
+    scheduler.fire()
+
+    XCTAssertEqual(
+      staleRetractionCompletionCount, 0,
+      "replacement content must invalidate the stale retraction completion")
+    XCTAssertEqual(window.state.currentNotification?.title, "Replacement notification")
+    XCTAssertEqual(window.state.notchRevealProgress, 1, accuracy: 0.001)
+  }
+
+  func testStartingPushToTalkDuringNotchRetractionKeepsThePanelVisible() {
+    let previousForceNoNotch = getenv("OMI_FORCE_NO_NOTCH").map { String(cString: $0) }
+    let previousForceNotch = getenv("OMI_FORCE_NOTCH").map { String(cString: $0) }
+    let previousDraggableBarEnabled = ShortcutSettings.shared.draggableBarEnabled
+    ShortcutSettings.shared.draggableBarEnabled = false
+    unsetenv("OMI_FORCE_NO_NOTCH")
+    setenv("OMI_FORCE_NOTCH", "1", 1)
+    defer {
+      ShortcutSettings.shared.draggableBarEnabled = previousDraggableBarEnabled
+      if let previousForceNoNotch {
+        setenv("OMI_FORCE_NO_NOTCH", previousForceNoNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NO_NOTCH")
+      }
+      if let previousForceNotch {
+        setenv("OMI_FORCE_NOTCH", previousForceNotch, 1)
+      } else {
+        unsetenv("OMI_FORCE_NOTCH")
+      }
+    }
+
+    let window = FloatingControlBarWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 360, height: 58),
+      styleMask: [.borderless, .nonactivatingPanel],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+    let scheduler = UncancellableRetractionScheduler()
+    window.notchRetractionScheduler = scheduler
+    var staleRetractionCompletionCount = 0
+
+    window.beginNotchRetraction { staleRetractionCompletionCount += 1 }
+    window.resizeForPTTState(expanded: true)
+    scheduler.fire()
+
+    XCTAssertEqual(
+      staleRetractionCompletionCount, 0,
+      "active push-to-talk must invalidate the stale retraction completion")
+    XCTAssertEqual(window.state.notchRevealProgress, 1, accuracy: 0.001)
+  }
+
+  func testDisabledBarDoesNotOrderOutAReplacementConversationAfterCloseSettles() {
+    let manager = FloatingControlBarManager.shared
+    let previousEnabled = manager.isEnabled
+    manager.isEnabled = false
+    defer { manager.isEnabled = previousEnabled }
+    let window = FloatingControlBarWindow(
+      contentRect: .zero,
+      styleMask: [.borderless],
+      backing: .buffered,
+      defer: false
+    )
+    defer { window.close() }
+
+    window.state.showingAIConversation = true
+    XCTAssertFalse(window.shouldOrderOutAfterConversationClose)
+    window.state.showingAIConversation = false
+    XCTAssertTrue(window.shouldOrderOutAfterConversationClose)
+  }
+
   func testAgentSwitcherResizeMatchesContentMorphDurations() throws {
     let windowSource = try floatingControlBarWindowSource()
+    let viewSource = try floatingControlBarViewSource()
 
-    // Pill mode still resizes its panel, and that resize must animate with the
-    // same durations as its content, or the panel keeps sliding after the rows
-    // settle. Notch mode is fixed-window: the switcher open/close must never
-    // animate the NSPanel frame — it only re-asserts the constant idle/hover
-    // surface frame and lets the SwiftUI content morph carry the transition.
+    // SwiftUI owns the content morph. The notch panel snaps once instead of
+    // animating its frame per tick or reserving the maximum hover extent.
     XCTAssertTrue(windowSource.contains("static let notchHoverMenuExpandDuration: TimeInterval = 0.16"))
     XCTAssertTrue(windowSource.contains("static let notchHoverMenuCollapseDuration: TimeInterval = 0.10"))
     XCTAssertTrue(
@@ -773,14 +939,20 @@ import XCTest
     }
     let body = String(windowSource[start.lowerBound..<end.lowerBound])
 
-    // Notch: fixed frame only, before any pill-mode resize.
+    // Notch: one non-animated boundary resize; pill mode keeps its existing
+    // semantic animated transition.
     XCTAssertTrue(body.contains("if notchModeEnabled {"))
-    XCTAssertTrue(body.contains("assertNotchFixedHoverSurfaceFrame()"))
+    XCTAssertTrue(body.contains("notchHoverMenuSurfaceSize(agentCount:"))
+    XCTAssertTrue(body.contains(": notchCollapsedSize"))
+    XCTAssertTrue(body.contains("animated: false"))
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuExpandDuration"))
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuCollapseDuration"))
     XCTAssertTrue(body.contains("resizeSurfaceTransition("))
     XCTAssertTrue(body.contains(".agentSwitcher(visible: true)"))
     XCTAssertTrue(body.contains(".agentSwitcher(visible: false)"))
+    XCTAssertTrue(viewSource.contains("completionCriteria: .logicallyComplete"))
+    XCTAssertTrue(viewSource.contains("settleNotchAgentSwitcherCollapse()"))
+    XCTAssertTrue(viewSource.contains("resizeForHover(expanded: false)"))
     XCTAssertFalse(body.contains("resizeAnchored("))
     // No bare animated resize (which defaults to the slow 0.3s) may remain in
     // the hover-menu expand/collapse path.
@@ -1381,7 +1553,8 @@ import XCTest
 
     // Both the Omi Chat header and subagent header should enter one shared
     // window transition. Back from a subagent goes to the row list on every
-    // display mode when pills exist; otherwise main-input/main-response.
+    // display mode when pills exist. Without a remaining row, chat-first hands typed entry to the
+    // main app while legacy can still restore its main-input/main-response surface.
     XCTAssertTrue(viewSource.contains("          onBackToAgentRows: {\n            showAgentListFromConversation()"))
     XCTAssertTrue(
       viewSource.contains(
@@ -1393,6 +1566,7 @@ import XCTest
     )
     XCTAssertTrue(windowSource.contains("private func showAgentRowsFromConversation()"))
     XCTAssertTrue(windowSource.contains("private func showMainConversationFromAgent()"))
+    XCTAssertTrue(windowSource.contains("routePrimaryTextInputToMainAppAfterAgentExit()"))
     XCTAssertTrue(windowSource.contains("state.hideConversationSurface()"))
     XCTAssertTrue(windowSource.contains("openNotchHoverMenuUntilExit()"))
     XCTAssertTrue(windowSource.contains("resizeForMainInputAfterAgentExit()"))
@@ -1605,7 +1779,7 @@ import XCTest
     XCTAssertTrue(chatBubbleSource.contains("connectsToNext: position < toolCalls.count - 1"))
     XCTAssertTrue(chatBubbleSource.contains(".spring(response: 0.36, dampingFraction: 0.86)"))
     XCTAssertTrue(chatBubbleSource.contains(".move(edge: .top).combined(with: .opacity)"))
-    XCTAssertTrue(chatBubbleSource.contains("toolActivityIcon(name: name, status: displayStatus, size: 15)"))
+    XCTAssertTrue(chatBubbleSource.contains("ToolCallActivityHeadline(name: name, status: displayStatus)"))
     XCTAssertTrue(chatBubbleSource.contains("ToolCallCard(\n              name: name"))
     XCTAssertTrue(chatBubbleSource.contains("agentOpenRef: item.block.agentOpenRef"))
     XCTAssertTrue(chatBubbleSource.contains("onOpenAgent: onOpenAgent"))
@@ -2128,6 +2302,25 @@ import XCTest
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Logger.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+}
+
+@MainActor
+private final class UncancellableRetractionScheduler: DelayedActionScheduling {
+  private var action: (@MainActor () -> Void)?
+
+  func schedule(
+    after interval: TimeInterval,
+    action: @escaping @MainActor () -> Void
+  ) -> DelayedActionCancellation {
+    _ = interval
+    self.action = action
+    return ManualDelayedActionCancellation()
+  }
+
+  func fire() {
+    action?()
+    action = nil
   }
 }
 

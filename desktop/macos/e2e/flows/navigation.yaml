@@ -4,6 +4,7 @@ tier: manual
 description: Top navigation bar smoke — the flat destination row (Home, Library, Tasks, Rewind, Apps), the Memory hub's own three-way switcher, the Settings gear and Rewind all reach their real pages with no menu and nothing opening on hover
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/ShellClickThrough.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/Sound/OmiUISound.swift
   - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
@@ -21,8 +22,6 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/OmiQueryDotMark.swift
   - desktop/macos/Desktop/Sources/MainWindow/EscapeKeyHandler.swift
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
-  - desktop/macos/Desktop/Sources/MainWindow/HelpPage.swift
-  - desktop/macos/Desktop/Sources/MainWindow/CrispManager.swift
 preconditions:
   - auth_ready
 

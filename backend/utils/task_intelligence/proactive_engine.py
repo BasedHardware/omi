@@ -8,6 +8,7 @@ from typing import Callable, Literal, Protocol
 import database.chat_first_intents as intent_db
 from models.chat_first import (
     CaptureLinkSpec,
+    ConversationLinkSpec,
     ChatFirstBlockSpec,
     ChatFirstSubject,
     ColdStartSequence,
@@ -195,6 +196,10 @@ def wake_after_commit(
             selection is None
             or not selection.blocks
             or not any(block.type == 'questionCard' for block in selection.blocks)
+            # Meeting receipts are server-finalized capture facts. Agent/tool
+            # output must not be able to mint a conversationLink for an
+            # ambient or otherwise unrelated conversation.
+            or any(block.type == 'conversationLink' for block in selection.blocks)
         ):
             _meter('judgment_declined', 'agent_judgment')
             return ProactiveWakeResult(outcome='declined')
@@ -280,6 +285,7 @@ def persist_capture_arrival_intent(
     expected_generation: int | None = None,
     now: datetime | None = None,
     eligibility_resolver: Callable[[str], ChatFirstEligibility] = resolve_chat_first_eligibility,
+    is_desktop_meeting: bool = False,
 ) -> ProactiveIntent | None:
     """Persist the deterministic capture receipt without calling an LLM.
 
@@ -298,13 +304,22 @@ def persist_capture_arrival_intent(
         assert eligibility.account_generation is not None
         bounded_summary = summary.strip()[:200]
         if not bounded_summary:
-            return None
+            if not is_desktop_meeting:
+                return None
+            bounded_summary = 'Your meeting notes are ready.'
+        block: ChatFirstBlockSpec
+        if is_desktop_meeting:
+            block = ConversationLinkSpec(
+                type='conversationLink', conversation_id=conversation_id, summary=bounded_summary
+            )
+        else:
+            block = CaptureLinkSpec(type='captureLink', conversation_id=conversation_id, summary=bounded_summary)
         intent, created = intent_db.create_intent(
             uid,
             source='capture_arrival',
             continuity_key=f'capture:{conversation_id}',
             subject=ChatFirstSubject(kind='capture', id=conversation_id),
-            blocks=[CaptureLinkSpec(type='captureLink', conversation_id=conversation_id, summary=bounded_summary)],
+            blocks=[block],
             account_generation=eligibility.account_generation,
             now=resolved_now,
         )
@@ -318,6 +333,45 @@ def persist_capture_arrival_intent(
             type(exc).__name__,
         )
         return None
+
+
+def persist_desktop_meeting_arrival(uid: str, conversation) -> None:
+    """Repair-safe adapter from a completed desktop conversation to its exact Chat receipt."""
+
+    source = conversation.get('source') if isinstance(conversation, dict) else conversation.source
+    status = conversation.get('status') if isinstance(conversation, dict) else conversation.status
+    discarded = conversation.get('discarded', False) if isinstance(conversation, dict) else conversation.discarded
+    external_data = conversation.get('external_data') if isinstance(conversation, dict) else conversation.external_data
+    source = getattr(source, 'value', source)
+    status = getattr(status, 'value', status)
+    if (external_data or {}).get('conversation_role') != 'meeting':
+        return
+    if (external_data or {}).get('conversation_finalization_reason') == 'max_duration_rotation':
+        return
+    if source != 'desktop' or discarded or status != 'completed':
+        return
+    conversation_id = conversation['id'] if isinstance(conversation, dict) else conversation.id
+    structured = (conversation.get('structured') if isinstance(conversation, dict) else conversation.structured) or {}
+    title = structured.get('title') if isinstance(structured, dict) else structured.title
+    overview = structured.get('overview') if isinstance(structured, dict) else structured.overview
+    persist_capture_arrival_intent(
+        uid,
+        conversation_id=conversation_id,
+        summary=title or overview or '',
+        is_desktop_meeting=True,
+    )
+
+
+def persist_desktop_meeting_arrival_best_effort(uid: str, conversation) -> None:
+    """Failure-isolate the repair adapter from conversation creation/retry."""
+    try:
+        persist_desktop_meeting_arrival(uid, conversation)
+    except Exception as exc:
+        logger.warning(
+            'desktop_meeting_arrival_adapter_failed uid=%s error=%s',
+            sanitize_pii(uid),
+            type(exc).__name__,
+        )
 
 
 def persist_daily_opener_intent(

@@ -8,7 +8,7 @@ on:
       expected_generation: {description: 'Exact current macos-beta pointer generation', required: true, type: string}
       incident_url: {description: 'Omi GitHub issue or discussion documenting the incident', required: true, type: string}
       reason: {description: 'Observed failure and emergency rollout reason', required: true, type: string}
-      normal_path_unavailable: {description: 'Why normal qualification cannot recover in time', required: true, type: string}
+      normal_path_unavailable: {description: 'Why normal Beta promotion cannot recover in time', required: true, type: string}
 
 permissions: {}
 concurrency:

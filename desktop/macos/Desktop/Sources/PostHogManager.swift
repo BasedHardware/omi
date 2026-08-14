@@ -501,10 +501,9 @@ extension PostHogManager {
   // but it actually tracks when a conversation/recording is created, not a "memory".
   // This matches Flutter's naming for analytics consistency.
 
-  func conversationCreated(conversationId: String, source: String, durationSeconds: Int? = nil) {
+  func conversationCreated(conversationId _: String, source: String, durationSeconds: Int? = nil) {
     var properties: [String: Any] = [
-      "conversation_id": conversationId,
-      "source": source,
+      "source": source
     ]
     if let duration = durationSeconds {
       properties["duration_seconds"] = duration
@@ -862,10 +861,29 @@ extension PostHogManager {
     )
   }
 
-  func insightGenerated(category: String?) {
+  func insightGenerated(category: String?, deliveryID: UUID? = nil) {
     var properties: [String: Any] = [:]
-    if let cat = category { properties["category"] = cat }
+    if let cat = InsightAssistantTelemetry.boundedCategory(category) { properties["category"] = cat }
+    if let deliveryID { properties["delivery_id"] = deliveryID.uuidString }
     track("Advice Generated", properties: properties.isEmpty ? nil : properties)
+  }
+
+  func insightAssistantDeliveryOutcome(
+    _ outcome: InsightAssistantTelemetry.Outcome,
+    reason: InsightAssistantTelemetry.Reason,
+    deliveryID: UUID,
+    surface: InsightAssistantTelemetry.Surface? = nil
+  ) {
+    let identity = InsightAssistantTelemetry.DeliveryIdentity(deliveryID: deliveryID)
+    track(
+      InsightAssistantTelemetry.deliveryOutcomeEventName,
+      properties: InsightAssistantTelemetry.deliveryOutcomePayload(
+        outcome,
+        reason: reason,
+        identity: identity,
+        surface: surface
+      )
+    )
   }
 
   // MARK: - Apps Events
