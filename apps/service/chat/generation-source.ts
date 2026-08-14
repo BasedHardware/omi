@@ -309,6 +309,8 @@ export const createGatewayChatGenerationSource = (
         input.onComplete();
       };
       if (input.attachments.length > 0) {
+        // Bind/admission already fail-closed unless scanState is clean; the gateway
+        // attachment slice still rejects all attachments until a later product pass.
         queueMicrotask(() => fail(gatewayFailure("generation_provider_failed")));
         return Object.freeze({ cancel(): void { cancelled = true; } });
       }

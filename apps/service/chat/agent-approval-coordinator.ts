@@ -47,6 +47,13 @@ export interface AgentApprovalCoordinatorSnapshot {
 export interface AgentApprovalCoordinator {
   request(input: AgentApprovalCoordinatorRequest): Promise<AgentToolOutcome>;
   resolve(input: AgentApprovalCoordinatorResolve): Promise<AgentToolOutcome>;
+  waitForResolution(input: {
+    readonly runId: string;
+    readonly approvalId: string;
+    readonly callId: string;
+    readonly isCancelled: () => boolean;
+  }): Promise<AgentToolOutcome>;
+  cancelPending(runId: string): Promise<void>;
   snapshot(): AgentApprovalCoordinatorSnapshot;
   restore(snapshot: unknown): void;
 }
@@ -96,7 +103,21 @@ export const createAgentApprovalCoordinator = (
 ): AgentApprovalCoordinator => {
   const scheduler = options.scheduler ?? realtimeAgentToolScheduler;
   const pendingByRun = new Map<string, PendingApproval>();
+  const resolutionWaiters = new Map<string, (outcome: AgentToolOutcome) => void>();
+  const resolvedOutcomes = new Map<string, AgentToolOutcome>();
   let runner: AgentToolRunner = createRunner();
+
+  const waiterKey = (runId: string, approvalId: string): string => `${runId}:${approvalId}`;
+
+  const deliverResolution = (runId: string, approvalId: string, outcome: AgentToolOutcome): void => {
+    const key = waiterKey(runId, approvalId);
+    resolvedOutcomes.set(key, outcome);
+    const notify = resolutionWaiters.get(key);
+    if (notify !== undefined) {
+      resolutionWaiters.delete(key);
+      notify(outcome);
+    }
+  };
 
   function createRunner(): AgentToolRunner {
     return createAgentToolRunner({
@@ -208,7 +229,42 @@ export const createAgentApprovalCoordinator = (
       call: pending.call,
     });
     if (outcome.kind !== "pending_approval") pendingByRun.delete(input.runId);
+    deliverResolution(input.runId, input.approvalId, outcome);
     return outcome;
+  };
+
+  const waitForResolution = async (input: {
+    readonly runId: string;
+    readonly approvalId: string;
+    readonly callId: string;
+    readonly isCancelled: () => boolean;
+  }): Promise<AgentToolOutcome> => {
+    const key = waiterKey(input.runId, input.approvalId);
+    const cached = resolvedOutcomes.get(key);
+    if (cached !== undefined) {
+      resolvedOutcomes.delete(key);
+      return cached;
+    }
+    if (input.isCancelled()) {
+      return Object.freeze({
+        kind: "cancelled",
+        callId: input.callId,
+        summary: "The tool call was cancelled.",
+      });
+    }
+    return await new Promise((resolve) => {
+      resolutionWaiters.set(key, resolve);
+    });
+  };
+
+  const cancelPending = async (runId: string): Promise<void> => {
+    const pending = pendingByRun.get(runId);
+    if (pending === undefined) return;
+    await resolve({
+      runId,
+      approvalId: pending.approvalId,
+      resolution: "cancelled",
+    });
   };
 
   const snapshot = (): AgentApprovalCoordinatorSnapshot => Object.freeze({
@@ -260,5 +316,5 @@ export const createAgentApprovalCoordinator = (
     }
   };
 
-  return Object.freeze({ request, resolve, snapshot, restore });
+  return Object.freeze({ request, resolve, waitForResolution, cancelPending, snapshot, restore });
 };

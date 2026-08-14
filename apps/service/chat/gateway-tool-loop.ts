@@ -14,6 +14,7 @@ import {
   type AgentToolScheduler,
   type AgentToolTraceEvent,
 } from "./agent-tools";
+import type { AgentApprovalCoordinator } from "./agent-approval-coordinator";
 import type { ChatGenerationSourceInput } from "./generation-source";
 
 const SAFE_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u;
@@ -37,11 +38,16 @@ export interface GatewayReadOnlyToolSchema {
 }
 
 export interface GatewayReadOnlyToolLoopOptions {
-  /** A closed registry. The single advertised definition must be risk=safe. */
+  /** A closed registry whose names must match the advertised tool schemas. */
   readonly registry: AgentToolRegistry;
-  readonly tool: GatewayReadOnlyToolSchema;
+  /** Single-tool shorthand; use `tools` when advertising more than one. */
+  readonly tool?: GatewayReadOnlyToolSchema;
+  /** Multi-tool advertisement for the gateway lane. */
+  readonly tools?: readonly GatewayReadOnlyToolSchema[];
   /** The same append-only ledger used by the generation supervisor. */
   readonly agentRunEvents: AgentRunEventStore;
+  /** Required when any advertised tool is approval-required. */
+  readonly approvalCoordinator?: AgentApprovalCoordinator;
   readonly nowEpochMilliseconds: () => number;
   readonly scheduler?: AgentToolScheduler;
 }
@@ -83,29 +89,42 @@ const exactKeys = (value: Record<string, unknown>, expected: readonly string[]):
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
 };
 
-const validateToolSchema = (
+const normalizeAdvertisedTools = (
   loop: GatewayReadOnlyToolLoopOptions,
+): readonly GatewayReadOnlyToolSchema[] => {
+  if (loop.tools !== undefined) {
+    if (loop.tool !== undefined) throw new TypeError("configure one gateway tool advertisement");
+    if (loop.tools.length === 0) throw new TypeError("invalid gateway tool configuration");
+    return loop.tools;
+  }
+  if (loop.tool !== undefined) return Object.freeze([loop.tool]);
+  throw new TypeError("invalid gateway tool configuration");
+};
+
+const validateAdvertisedToolSchema = (
+  schema: GatewayReadOnlyToolSchema,
+  registry: AgentToolRegistry,
 ): Readonly<{ type: "function"; function: GatewayReadOnlyToolSchema }> => {
-  const tool = ownPlainObject(loop.tool);
-  const parameters = ownPlainObject(loop.tool.parameters);
-  const properties = ownPlainObject(loop.tool.parameters.properties);
+  const tool = ownPlainObject(schema);
+  const parameters = ownPlainObject(schema.parameters);
+  const properties = ownPlainObject(schema.parameters.properties);
   if (tool === null || parameters === null || properties === null
     || !exactKeys(tool, ["description", "name", "parameters"])
     || !exactKeys(parameters, ["additionalProperties", "properties", "required", "type"])
-    || !SAFE_TOKEN.test(loop.tool.name) || !SAFE_TEXT.test(loop.tool.description)
-    || loop.tool.parameters.type !== "object" || loop.tool.parameters.additionalProperties !== false
-    || !Array.isArray(loop.tool.parameters.required)
-    || loop.registry.names().length !== 1 || loop.registry.names()[0] !== loop.tool.name) {
-    throw new TypeError("invalid gateway read-only tool configuration");
+    || !SAFE_TOKEN.test(schema.name) || !SAFE_TEXT.test(schema.description)
+    || schema.parameters.type !== "object" || schema.parameters.additionalProperties !== false
+    || !Array.isArray(schema.parameters.required)) {
+    throw new TypeError("invalid gateway tool configuration");
   }
-  const definition = loop.registry.resolve(loop.tool.name);
-  if (definition === null || definition.risk !== "safe") {
-    throw new TypeError("invalid gateway read-only tool configuration");
+  const definition = registry.resolve(schema.name);
+  if (definition === null
+    || (definition.risk !== "safe" && definition.risk !== "approval-required")) {
+    throw new TypeError("invalid gateway tool configuration");
   }
-  const required = new Set(loop.tool.parameters.required);
-  if (required.size !== loop.tool.parameters.required.length
+  const required = new Set(schema.parameters.required);
+  if (required.size !== schema.parameters.required.length
     || [...required].some((name) => !SAFE_TOKEN.test(name) || !(name in properties))) {
-    throw new TypeError("invalid gateway read-only tool configuration");
+    throw new TypeError("invalid gateway tool configuration");
   }
   for (const [name, rawProperty] of Object.entries(properties)) {
     const property = ownPlainObject(rawProperty);
@@ -118,10 +137,29 @@ const validateToolSchema = (
         && (typeof property.description !== "string" || !SAFE_TEXT.test(property.description)))
       || (property.enum !== undefined && (!Array.isArray(property.enum) || property.enum.length === 0
         || property.enum.some((entry) => typeof entry !== "string" || !SAFE_TOKEN.test(entry))))) {
-      throw new TypeError("invalid gateway read-only tool configuration");
+      throw new TypeError("invalid gateway tool configuration");
     }
   }
-  return Object.freeze({ type: "function", function: loop.tool });
+  return Object.freeze({ type: "function", function: schema });
+};
+
+const validateToolLoop = (
+  loop: GatewayReadOnlyToolLoopOptions,
+): readonly Readonly<{ type: "function"; function: GatewayReadOnlyToolSchema }>[] => {
+  const schemas = normalizeAdvertisedTools(loop);
+  const registryNames = [...loop.registry.names()].sort();
+  const schemaNames = schemas.map((schema) => schema.name).sort();
+  if (registryNames.length !== schemaNames.length
+    || registryNames.some((name, index) => name !== schemaNames[index])) {
+    throw new TypeError("invalid gateway tool configuration");
+  }
+  const providerTools = schemas.map((schema) => validateAdvertisedToolSchema(schema, loop.registry));
+  const needsCoordinator = schemas.some((schema) =>
+    loop.registry.resolve(schema.name)?.risk === "approval-required");
+  if (needsCoordinator && loop.approvalCoordinator === undefined) {
+    throw new TypeError("approval-required gateway tools require a coordinator");
+  }
+  return Object.freeze(providerTools);
 };
 
 const validatesAgainstToolSchema = (
@@ -142,7 +180,8 @@ const validatesAgainstToolSchema = (
 
 export const validateGatewayReadOnlyToolLoop = (
   loop: GatewayReadOnlyToolLoopOptions,
-): Readonly<{ type: "function"; function: GatewayReadOnlyToolSchema }> => validateToolSchema(loop);
+): readonly Readonly<{ type: "function"; function: GatewayReadOnlyToolSchema }>[] =>
+  validateToolLoop(loop);
 
 const canonicalJson = (value: unknown): string => {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
@@ -243,10 +282,12 @@ const toolHistory = (
 export const startGatewayReadOnlyToolLoop = (
   options: GatewayToolLoopStartOptions,
 ): GatewayToolLoopRun => {
-  const providerTool = validateToolSchema(options.loop);
+  const providerTools = validateToolLoop(options.loop);
+  const advertisedSchemas = new Map(providerTools.map((tool) => [tool.function.name, tool.function]));
   const controller = new AbortController();
   let activeRunner: ReturnType<typeof createAgentToolRunner> | null = null;
   let activeCallId: string | null = null;
+  let activeApprovalRunId: string | null = null;
 
   void (async (): Promise<void> => {
     const input = options.input;
@@ -272,7 +313,7 @@ export const startGatewayReadOnlyToolLoop = (
           body: JSON.stringify({
             model: options.laneId,
             messages,
-            tools: [providerTool],
+            tools: providerTools,
             tool_choice: round === 0 ? "auto" : "none",
             stream: true,
             stream_options: { include_usage: true },
@@ -409,74 +450,117 @@ export const startGatewayReadOnlyToolLoop = (
           options.fail(gatewayFailure("generation_provider_failed"));
           return;
         }
-      } else if (!validatesAgainstToolSchema(options.loop.tool, parsedInput)) {
-        try {
-          outcome = appendSyntheticFailure(ledger, input, canonicalCallId, toolName, idem,
-            "tool_invalid_input", "The tool request is invalid.");
-        } catch {
-          options.fail(gatewayFailure("generation_provider_failed"));
-          return;
-        }
       } else {
         const definition = options.loop.registry.resolve(toolName)!;
-        try {
-          ledger.toolRequest({
-            runId: input.generationId, attemptId, callId: canonicalCallId,
-            toolName, timeoutMs: definition.timeoutMs, idempotencyKey: idem,
-          });
-        } catch {
-          options.fail(gatewayFailure("generation_provider_failed"));
-          return;
-        }
-        let ledgerError = false;
-        let terminalRecorded = false;
-        const runner = createAgentToolRunner({
-          registry: options.loop.registry,
-          nowEpochMilliseconds: options.loop.nowEpochMilliseconds,
-          scheduler: options.loop.scheduler,
-          onEvent: (event: AgentToolTraceEvent): void => {
-            try {
-              if (event.kind === "tool_result") {
-                ledger.toolResult({
-                runId: input.generationId, attemptId, callId: event.callId,
-                toolName: event.toolName, resultSummary: event.summary,
-                durationMs: event.durationMs, retryable: event.retryable,
-                });
-                terminalRecorded = true;
-              }
-              if (event.kind === "tool_error") {
-                ledger.toolError({
-                runId: input.generationId, attemptId, callId: event.callId,
-                toolName: event.toolName, errorCode: event.code,
-                errorSummary: event.summary, retryable: event.retryable,
-                });
-                terminalRecorded = true;
-              }
-            } catch { ledgerError = true; }
-          },
-        });
-        activeRunner = runner;
-        outcome = await runner.request({
-          callId: canonicalCallId,
-          toolName,
-          idempotencyKey: idem,
-          input: parsedInput,
-        });
-        activeRunner = null;
-        if (options.isCancelled()) return;
-        if (!ledgerError && !terminalRecorded && outcome.kind === "failed") {
+        const advertised = advertisedSchemas.get(toolName);
+        if (advertised === undefined) {
           try {
-            ledger.toolError({
-              runId: input.generationId, attemptId, callId: outcome.callId,
-              toolName, errorCode: outcome.code, errorSummary: outcome.summary,
-              retryable: outcome.retryable,
+            outcome = appendSyntheticFailure(ledger, input, canonicalCallId, toolName, idem,
+              "tool_unknown", "The requested tool is unavailable.");
+          } catch {
+            options.fail(gatewayFailure("generation_provider_failed"));
+            return;
+          }
+        } else if (!validatesAgainstToolSchema(advertised, parsedInput)) {
+          try {
+            outcome = appendSyntheticFailure(ledger, input, canonicalCallId, toolName, idem,
+              "tool_invalid_input", "The tool request is invalid.");
+          } catch {
+            options.fail(gatewayFailure("generation_provider_failed"));
+            return;
+          }
+        } else if (definition.risk === "approval-required") {
+          const coordinator = options.loop.approvalCoordinator;
+          if (coordinator === undefined) {
+            options.fail(gatewayFailure("generation_provider_failed"));
+            return;
+          }
+          activeApprovalRunId = input.generationId;
+          outcome = await coordinator.request({
+            runId: input.generationId,
+            attemptId,
+            call: {
+              callId: canonicalCallId,
+              toolName,
+              idempotencyKey: idem,
+              input: parsedInput,
+            },
+          });
+          if (options.isCancelled()) return;
+          if (outcome.kind === "pending_approval") {
+            outcome = await coordinator.waitForResolution({
+              runId: input.generationId,
+              approvalId: outcome.approvalId,
+              callId: canonicalCallId,
+              isCancelled: options.isCancelled,
             });
-            terminalRecorded = true;
-          } catch { ledgerError = true; }
-        }
-        if (ledgerError || outcome.kind === "pending_approval" || outcome.kind === "cancelled") {
-          options.fail(gatewayFailure("generation_provider_failed"));
-          return;
+          }
+          activeApprovalRunId = null;
+          if (options.isCancelled()) return;
+          if (outcome.kind === "cancelled") {
+            options.fail(gatewayFailure("generation_provider_failed"));
+            return;
+          }
+        } else {
+          try {
+            ledger.toolRequest({
+              runId: input.generationId, attemptId, callId: canonicalCallId,
+              toolName, timeoutMs: definition.timeoutMs, idempotencyKey: idem,
+            });
+          } catch {
+            options.fail(gatewayFailure("generation_provider_failed"));
+            return;
+          }
+          let ledgerError = false;
+          let terminalRecorded = false;
+          const runner = createAgentToolRunner({
+            registry: options.loop.registry,
+            nowEpochMilliseconds: options.loop.nowEpochMilliseconds,
+            scheduler: options.loop.scheduler,
+            onEvent: (event: AgentToolTraceEvent): void => {
+              try {
+                if (event.kind === "tool_result") {
+                  ledger.toolResult({
+                    runId: input.generationId, attemptId, callId: event.callId,
+                    toolName: event.toolName, resultSummary: event.summary,
+                    durationMs: event.durationMs, retryable: event.retryable,
+                  });
+                  terminalRecorded = true;
+                }
+                if (event.kind === "tool_error") {
+                  ledger.toolError({
+                    runId: input.generationId, attemptId, callId: event.callId,
+                    toolName: event.toolName, errorCode: event.code,
+                    errorSummary: event.summary, retryable: event.retryable,
+                  });
+                  terminalRecorded = true;
+                }
+              } catch { ledgerError = true; }
+            },
+          });
+          activeRunner = runner;
+          outcome = await runner.request({
+            callId: canonicalCallId,
+            toolName,
+            idempotencyKey: idem,
+            input: parsedInput,
+          });
+          activeRunner = null;
+          if (options.isCancelled()) return;
+          if (!ledgerError && !terminalRecorded && outcome.kind === "failed") {
+            try {
+              ledger.toolError({
+                runId: input.generationId, attemptId, callId: outcome.callId,
+                toolName, errorCode: outcome.code, errorSummary: outcome.summary,
+                retryable: outcome.retryable,
+              });
+              terminalRecorded = true;
+            } catch { ledgerError = true; }
+          }
+          if (ledgerError || outcome.kind === "pending_approval" || outcome.kind === "cancelled") {
+            options.fail(gatewayFailure("generation_provider_failed"));
+            return;
+          }
         }
       }
       messages = Object.freeze([...messages, ...toolHistory({ id: callId, name: toolName, argumentsJson }, outcome)]);
@@ -487,6 +571,10 @@ export const startGatewayReadOnlyToolLoop = (
   return Object.freeze({
     cancel(): void {
       controller.abort();
+      if (activeApprovalRunId !== null && options.loop.approvalCoordinator !== undefined) {
+        void options.loop.approvalCoordinator.cancelPending(activeApprovalRunId);
+        activeApprovalRunId = null;
+      }
       if (activeRunner !== null && activeCallId !== null) activeRunner.cancel(activeCallId);
     },
   });

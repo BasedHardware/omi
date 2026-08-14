@@ -8,6 +8,7 @@ import {
   createGatewayRequiredChatGenerationSource,
 } from "../chat/generation-source";
 import { createGetActionItemsToolLoop } from "../chat/action-items-tool";
+import { createProductionGatewayToolLoop } from "../chat/gateway-tool-composition";
 import { LOOPBACK_HOST, assertPortInRange } from "../net/loopback";
 import { isQaEvidenceRunId } from "../observability/producer-evidence";
 import { QA_FIXTURE_TIME_ANCHOR_UTC } from "../qa/seed";
@@ -180,11 +181,12 @@ const main = (): void => {
         if (typeof ownerAccountId !== "string" || ownerAccountId !== input.context.ownerAccountId) {
           throw new Error("gateway tool owner mismatch");
         }
-        return createGetActionItemsToolLoop({
+        return createProductionGatewayToolLoop({
           fetch: (request) => service.app.fetch(request),
           bearerToken: service.devToken,
           nowEpochMilliseconds: () => Date.parse(QA_FIXTURE_TIME_ANCHOR_UTC),
           agentRunEvents: service.writePath.agentRunEvents,
+          approvalCoordinator: service.writePath.agentApprovalCoordinator,
         });
       },
     });
