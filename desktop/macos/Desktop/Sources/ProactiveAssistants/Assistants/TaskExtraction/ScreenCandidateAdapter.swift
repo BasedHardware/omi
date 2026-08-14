@@ -1,5 +1,182 @@
 import Foundation
 
+enum ScreenCandidateReconciliation {
+  /// Repeated screen observations arrive in short bursts while the user moves
+  /// between apps. Keep this intentionally narrow so a genuinely repeated task
+  /// later in the day can become a new Candidate.
+  static let reuseWindow: TimeInterval = 30 * 60
+
+  static func isEquivalent(_ lhs: StagedTaskRecord, _ rhs: StagedTaskRecord) -> Bool {
+    guard normalized(lhs.sourceApp) == normalized(rhs.sourceApp) else { return false }
+    guard compatibleDueDates(lhs.dueAt, rhs.dueAt) else { return false }
+
+    let lhsMetadata = lhs.metadata ?? [:]
+    let rhsMetadata = rhs.metadata ?? [:]
+    // Distinct action intents must stay separate (Approve ≠ Review/Close) even
+    // when entity tokens overlap. Channel phrasing that encodes the same intent
+    // ("Reply … to approve opening" vs "Approve … to open") shares a signature.
+    // Generic/object-only phrasing without a distinguishing verb does not match
+    // a strong intent — that keeps Review/Close from collapsing into a vague
+    // "reply about opening" observation via Jaccard alone.
+    guard
+      actionSignature(for: lhs.description, metadata: lhsMetadata)
+        == actionSignature(for: rhs.description, metadata: rhsMetadata)
+    else { return false }
+
+    let lhsTarget = canonicalTarget(in: lhsMetadata)
+    let rhsTarget = canonicalTarget(in: rhsMetadata)
+    if lhsTarget != rhsTarget { return false }
+
+    let lhsTokens = semanticTokens(lhs.description)
+    let rhsTokens = semanticTokens(rhs.description)
+    guard !lhsTokens.isEmpty, !rhsTokens.isEmpty else { return false }
+
+    // Identifiers are high-signal task identity. In particular, PR #123 and
+    // PR #124 must not collapse merely because the surrounding prose matches.
+    let lhsIdentifiers = Set(lhsTokens.filter(containsDigit))
+    let rhsIdentifiers = Set(rhsTokens.filter(containsDigit))
+    guard lhsIdentifiers == rhsIdentifiers else { return false }
+
+    if lhsTokens == rhsTokens { return true }
+    let intersection = lhsTokens.intersection(rhsTokens).count
+    let union = lhsTokens.union(rhsTokens).count
+    return union > 0 && Double(intersection) / Double(union) >= 0.72
+  }
+
+  private static func normalized(_ value: String?) -> String {
+    value?
+      .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased() ?? ""
+  }
+
+  /// Burst-dedupe due policy:
+  /// - both nil → compatible
+  /// - both present → compatible only when within 60s (same inferred instant)
+  /// - exactly one nil → compatible, so flaky deadline inference on the same
+  ///   screen does not mint a second Candidate inside the reuse window
+  /// Distinct non-nil dues remain separate via the both-present branch.
+  private static func compatibleDueDates(_ lhs: Date?, _ rhs: Date?) -> Bool {
+    switch (lhs, rhs) {
+    case (nil, nil): true
+    case (.some(let lhs), .some(let rhs)): abs(lhs.timeIntervalSince(rhs)) < 60
+    case (nil, .some), (.some, nil): true
+    }
+  }
+
+  private static let channelActionStems: Set<String> = [
+    "reply", "respond", "message", "tell", "ask", "ping", "dm", "text",
+  ]
+
+  private static let negationStems: Set<String> = [
+    "not", "never", "no", "dont", "don't", "don",
+    // Apostrophe forms tokenize to the prefix stem (`won't` → `won`); keep both.
+    "cannot", "cant", "wont", "won't", "won", "shouldnt", "shouldn't", "shouldn",
+  ]
+
+  /// Ordered strongest-first. First matching purpose class wins unless a
+  /// channel verb is leading and a later purpose verb is present.
+  /// `open` is intentionally omitted: it is usually the object of another
+  /// intent ("approve … to open") rather than a distinguishing action.
+  private static let purposeActionClasses: [(canonical: String, stems: Set<String>)] = [
+    ("approve", ["approve", "authoriz", "greenlight"]),
+    ("review", ["review", "inspect", "audit"]),
+    ("close", ["close", "shut", "archive", "dismiss"]),
+    ("delete", ["delete", "remov"]),
+    ("merge", ["merge"]),
+    ("deploy", ["deploy", "releas"]),
+    ("fix", ["fix", "repair", "patch"]),
+    ("test", ["test"]),
+    ("update", ["update", "updat", "edit", "chang"]),
+    ("send", ["send", "share", "forward", "ship"]),
+    ("complete", ["complete", "finish"]),
+  ]
+
+  static func actionSignature(for description: String, metadata: [String: Any]) -> String {
+    if (metadata["already_done"] as? Bool) == true { return "complete" }
+
+    let stems = orderedStems(description)
+    guard !stems.isEmpty else { return "capture" }
+
+    let purposeHits: [(index: Int, canonical: String)] = stems.enumerated().compactMap {
+      index, stem in
+      guard let canonical = purposeClass(for: stem) else { return nil }
+      return (index, canonical)
+    }
+    guard !purposeHits.isEmpty else { return "capture" }
+
+    let leadingIsChannel = stems.prefix(3).contains(where: { channelActionStems.contains($0) })
+    let selected: (index: Int, canonical: String)
+    if leadingIsChannel, let purpose = purposeHits.first(where: { $0.index > 0 }) {
+      selected = purpose
+    } else {
+      selected = purposeHits[0]
+    }
+
+    // Polarity: "do not approve" / "never approve" must not collapse into approve.
+    // Channel phrasing ("reply … to approve") keeps the positive purpose class.
+    if hasNegation(before: selected.index, in: stems) {
+      return "not_\(selected.canonical)"
+    }
+    return selected.canonical
+  }
+
+  private static func hasNegation(before purposeIndex: Int, in stems: [String]) -> Bool {
+    guard purposeIndex > 0 else { return false }
+    let windowStart = max(0, purposeIndex - 3)
+    return stems[windowStart..<purposeIndex].contains(where: { negationStems.contains($0) })
+  }
+
+  private static func purposeClass(for stem: String) -> String? {
+    for entry in purposeActionClasses {
+      if entry.stems.contains(where: { stem == $0 || stem.hasPrefix($0) }) {
+        return entry.canonical
+      }
+    }
+    return nil
+  }
+
+  private static func canonicalTarget(in metadata: [String: Any]) -> String? {
+    (metadata["duplicate_of"] as? String) ?? (metadata["refines_task"] as? String)
+  }
+
+  private static func containsDigit(_ token: String) -> Bool {
+    token.unicodeScalars.contains { CharacterSet.decimalDigits.contains($0) }
+  }
+
+  private static func orderedStems(_ value: String) -> [String] {
+    let folded = value.folding(
+      options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+    let words = folded.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted)
+    return words.compactMap { word in
+      guard word.count > 1 else { return nil }
+      return stem(word)
+    }
+  }
+
+  private static func semanticTokens(_ value: String) -> Set<String> {
+    let ignored: Set<String> = [
+      "a", "about", "an", "and", "for", "in", "of", "on", "the", "to", "with",
+    ]
+    return Set(
+      orderedStems(value).compactMap { word in
+        guard !ignored.contains(word) else { return nil }
+        return word
+      })
+  }
+
+  private static func stem(_ word: String) -> String {
+    if word == "opening" || word == "opened" || word == "opens" { return "open" }
+    if word == "approving" || word == "approved" || word == "approves" { return "approve" }
+    if word == "replying" || word == "replied" || word == "replies" { return "reply" }
+    if word == "reviewing" || word == "reviewed" || word == "reviews" { return "review" }
+    if word == "closing" || word == "closed" || word == "closes" { return "close" }
+    if word == "sending" || word == "sent" || word == "sends" { return "send" }
+    if word == "responding" || word == "responded" || word == "responds" { return "respond" }
+    return word
+  }
+}
+
 enum ScreenCaptureOutcome: String, Codable {
   case ignore
   case createDirect = "create_direct"

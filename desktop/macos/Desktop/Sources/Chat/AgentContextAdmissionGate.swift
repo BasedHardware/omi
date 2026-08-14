@@ -17,8 +17,40 @@ import Foundation
 ///   serialized; the query stream itself runs outside the gate.
 actor AgentContextAdmissionGate {
   private final class WaiterHandle: @unchecked Sendable {
-    var cancelled = false
-    var continuation: CheckedContinuation<WakeReason, Never>?
+    private let lock = NSLock()
+    private var cancelled = false
+    private var continuation: CheckedContinuation<WakeReason, Never>?
+
+    func cancel() -> CheckedContinuation<WakeReason, Never>? {
+      lock.lock()
+      defer { lock.unlock() }
+      cancelled = true
+      let continuation = continuation
+      self.continuation = nil
+      return continuation
+    }
+
+    func register(_ continuation: CheckedContinuation<WakeReason, Never>) -> Bool {
+      lock.lock()
+      defer { lock.unlock() }
+      guard !cancelled else { return false }
+      self.continuation = continuation
+      return true
+    }
+
+    func isCancelled() -> Bool {
+      lock.lock()
+      defer { lock.unlock() }
+      return cancelled
+    }
+
+    func takeContinuation() -> CheckedContinuation<WakeReason, Never>? {
+      lock.lock()
+      defer { lock.unlock() }
+      let continuation = continuation
+      self.continuation = nil
+      return continuation
+    }
   }
 
   private enum WakeReason {
@@ -28,13 +60,22 @@ actor AgentContextAdmissionGate {
 
   private struct WaiterSlot {
     let handle: WaiterHandle
-    var continuation: CheckedContinuation<WakeReason, Never>?
   }
 
   private var held = false
   private var releasePending = false
   private var waiters: [WaiterSlot] = []
   private var waiterHead = 0
+  private let onWaiterRegistered: (@Sendable () -> Void)?
+  private let beforeResumingGrantedWaiter: (@Sendable () -> Void)?
+
+  init(
+    onWaiterRegistered: (@Sendable () -> Void)? = nil,
+    beforeResumingGrantedWaiter: (@Sendable () -> Void)? = nil
+  ) {
+    self.onWaiterRegistered = onWaiterRegistered
+    self.beforeResumingGrantedWaiter = beforeResumingGrantedWaiter
+  }
 
   func withExclusiveAccess<Result: Sendable>(
     _ operation: @escaping @Sendable () async throws -> Result
@@ -59,19 +100,17 @@ actor AgentContextAdmissionGate {
         registerWaiter(slotIndex: slotIndex, handle: handle, continuation: continuation)
       }
     } onCancel: {
-      handle.cancelled = true
-      if let continuation = handle.continuation {
-        handle.continuation = nil
+      if let continuation = handle.cancel() {
         continuation.resume(returning: .cancelled)
       }
-      Task { await self.finalizeCancelledWaiter(at: slotIndex) }
+      Task { await self.finalizeCancelledWaiter(handle: handle) }
     }
 
     switch wakeReason {
     case .granted:
       return true
     case .cancelled:
-      finalizeCancelledWaiter(at: slotIndex)
+      finalizeCancelledWaiter(handle: handle)
       return false
     }
   }
@@ -91,26 +130,28 @@ actor AgentContextAdmissionGate {
       continuation.resume(returning: .cancelled)
       return
     }
-    if handle.cancelled {
+    guard handle.register(continuation) else {
       continuation.resume(returning: .cancelled)
       return
     }
-    handle.continuation = continuation
-    waiters[slotIndex].continuation = continuation
+    onWaiterRegistered?()
     if releasePending {
       releasePending = false
       release()
     }
   }
 
-  private func finalizeCancelledWaiter(at index: Int) {
-    guard waiters.indices.contains(index) else { return }
-    waiters[index].continuation = nil
-    waiters[index].handle.cancelled = true
+  private func finalizeCancelledWaiter(handle: WaiterHandle) {
+    guard let index = waiters.firstIndex(where: { $0.handle === handle }) else { return }
     if index == waiterHead {
       advanceWaiterHeadPastCancelled()
     }
     compactWaitersIfNeeded()
+    if releasePending {
+      releasePending = false
+      release()
+      return
+    }
     if waiterHead >= waiters.count, !held {
       waiters.removeAll(keepingCapacity: true)
       waiterHead = 0
@@ -120,16 +161,21 @@ actor AgentContextAdmissionGate {
   private func release() {
     advanceWaiterHeadPastCancelled()
     while waiterHead < waiters.count {
-      if waiters[waiterHead].handle.cancelled {
+      let handle = waiters[waiterHead].handle
+      if handle.isCancelled() {
         waiterHead += 1
         continue
       }
-      if let continuation = waiters[waiterHead].continuation {
-        waiters[waiterHead].continuation = nil
+      if let continuation = handle.takeContinuation() {
         waiterHead += 1
         compactWaitersIfNeeded()
+        beforeResumingGrantedWaiter?()
         continuation.resume(returning: .granted)
         return
+      }
+      if handle.isCancelled() {
+        waiterHead += 1
+        continue
       }
       releasePending = true
       return
@@ -141,7 +187,7 @@ actor AgentContextAdmissionGate {
   }
 
   private func advanceWaiterHeadPastCancelled() {
-    while waiterHead < waiters.count, waiters[waiterHead].handle.cancelled {
+    while waiterHead < waiters.count, waiters[waiterHead].handle.isCancelled() {
       waiterHead += 1
     }
     compactWaitersIfNeeded()

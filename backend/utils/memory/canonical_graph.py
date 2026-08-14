@@ -235,6 +235,7 @@ def _canonical_graph_query_item_is_eligible(
         and _enum_value(item.get('processing_state')) == 'processed'
         and _enum_value(item.get('source_state')) == 'active'
         and not set(sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
+        and promotion.get('is_locked') is not True
         and promotion.get('user_review') is not False
     )
 

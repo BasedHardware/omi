@@ -1,9 +1,0 @@
-{
-  "files": {
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 3688
-  },
-  "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "Suggestion triage: AI captures excluded from dashboard lanes, acceptSuggestedTask"
-  },
-  "threshold": 1500
-}

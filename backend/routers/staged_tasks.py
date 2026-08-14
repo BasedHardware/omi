@@ -1,50 +1,53 @@
-"""Staged tasks — AI-generated tasks awaiting user promotion to action items."""
+"""Released staged-task compatibility routes over universal Candidates.
+
+``users/{uid}/staged_tasks`` is historical storage. Reads project its active
+rows beside pending Candidates without mutating either store. New creates and
+all task decisions use Candidate authority; an explicit mutation of a
+historical row materializes only that row and retires it after the canonical
+decision succeeds.
+"""
 
 import hashlib
-import logging
-from fastapi import APIRouter, Depends, HTTPException, Query
+import json
+from datetime import datetime, timezone
 from typing import List
-from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-import database.staged_tasks as staged_tasks_db
 import database.action_items as action_items_db
 import database.candidates as candidates_db
+import database.staged_tasks as staged_tasks_db
 import database.task_intelligence_control as task_control_db
 from models.candidate import CandidateRecord, CandidateStatus
-from models.task_intelligence import TaskWorkflowMode
+from models.shared import StatusResponse
 from models.staged_task import (
+    MigrateConversationItemsResponse,
+    PromoteStagedTaskResponse,
+    RestoreLegacyConversationItemsResponse,
     StagedTask,
     StagedTaskListResponse,
-    PromoteStagedTaskResponse,
-    MigrateConversationItemsResponse,
-    RestoreLegacyConversationItemsResponse,
 )
-from models.shared import StatusResponse
 from utils.other import endpoints as auth
-from utils.observability.fallback import record_fallback
 from utils.task_intelligence import candidate_service
-from utils.task_intelligence.rollout import effective_task_workflow_control, resolve_task_intelligence_for_user
-from utils.task_intelligence.staged_migration import migrate_staged_tasks, proposal_from_legacy_staged
+from utils.task_intelligence.staged_migration import proposal_from_legacy_staged
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
+
+_LEGACY_EVIDENCE_PREFIX = 'legacy-staged-'
+_MISSING_TIMESTAMP = datetime(1970, 1, 1, tzinfo=timezone.utc)
+_CANDIDATE_PAGE_SIZE = 500
 
 
-def _effective_control(uid: str):
-    """Project raw workflow metadata through the sole canonical entitlement."""
+def _control(uid: str):
+    """Read the account-generation fence; workflow mode is no longer entitlement."""
 
-    control = task_control_db.get_task_workflow_control(uid)
-    rollout = resolve_task_intelligence_for_user(
-        uid=uid,
-        workflow_mode=control.workflow_mode,
-        account_generation=control.account_generation,
-    )
-    return effective_task_workflow_control(control, rollout)
+    return task_control_db.get_task_workflow_control(uid)
 
 
 def _candidate_as_staged(candidate: CandidateRecord) -> dict:
     task_change = candidate.task_change
+    compatibility = candidate.compatibility
     return {
         'id': candidate.candidate_id,
         'description': getattr(task_change, 'description', None) or 'Suggested task',
@@ -54,7 +57,115 @@ def _candidate_as_staged(candidate: CandidateRecord) -> dict:
         'due_at': getattr(task_change, 'due_at', None),
         'source': candidate.source_surface,
         'priority': getattr(task_change, 'priority', None),
+        'metadata': compatibility.metadata if compatibility is not None else None,
+        'category': compatibility.category if compatibility is not None else None,
+        'relevance_score': compatibility.relevance_score if compatibility is not None else None,
     }
+
+
+def _legacy_as_staged(row: dict) -> dict:
+    created_at = row.get('created_at') or row.get('updated_at') or _MISSING_TIMESTAMP
+    updated_at = row.get('updated_at') or created_at
+    return {
+        'id': str(row['id']),
+        'description': row.get('description') or 'Suggested task',
+        'completed': False,
+        'created_at': created_at,
+        'updated_at': updated_at,
+        'due_at': row.get('due_at'),
+        'source': row.get('source'),
+        'priority': row.get('priority'),
+        'metadata': row.get('metadata'),
+        'category': row.get('category'),
+        'relevance_score': row.get('relevance_score'),
+    }
+
+
+def _candidate_legacy_row_ids(candidate: CandidateRecord) -> set[str]:
+    row_ids: set[str] = set()
+    for evidence in candidate.evidence_refs:
+        evidence_id = getattr(evidence, 'id', None)
+        kind = getattr(getattr(evidence, 'kind', None), 'value', getattr(evidence, 'kind', None))
+        if kind == 'external' and isinstance(evidence_id, str) and evidence_id.startswith(_LEGACY_EVIDENCE_PREFIX):
+            row_ids.add(evidence_id[len(_LEGACY_EVIDENCE_PREFIX) :])
+    return row_ids
+
+
+def _is_staged_compatibility_candidate(candidate: CandidateRecord) -> bool:
+    return (
+        candidate.subject_kind.value == 'task'
+        and candidate.proposed_action.value == 'create'
+        and (candidate.source_surface == 'legacy_staged' or bool(_candidate_legacy_row_ids(candidate)))
+    )
+
+
+def _all_staged_compatibility_candidates(uid: str, *, account_generation: int) -> list[CandidateRecord]:
+    records: list[CandidateRecord] = []
+    cursor = None
+    while True:
+        page, raw_page_size, cursor = candidates_db.list_candidates_compatibility_page(
+            uid,
+            account_generation=account_generation,
+            limit=_CANDIDATE_PAGE_SIZE,
+            cursor=cursor,
+        )
+        records.extend(candidate for candidate in page if _is_staged_compatibility_candidate(candidate))
+        if raw_page_size < _CANDIDATE_PAGE_SIZE:
+            return records
+
+
+def _active_historical_rows(uid: str) -> list[dict]:
+    return [
+        row
+        for row in staged_tasks_db.get_active_staged_tasks_for_compatibility(uid)
+        if row.get('id') and not row.get('completed')
+    ]
+
+
+def _staged_row(uid: str, staged_id: str) -> dict | None:
+    return staged_tasks_db.get_staged_task_for_compatibility(uid, staged_id)
+
+
+def _projected_timestamp(item: dict) -> float:
+    value = item.get('created_at') or item.get('updated_at')
+    if not isinstance(value, datetime):
+        return _MISSING_TIMESTAMP.timestamp()
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.timestamp()
+
+
+def _staged_sort_key(item: dict) -> tuple:
+    score = item.get('relevance_score')
+    has_score = isinstance(score, int) and not isinstance(score, bool)
+    return (
+        0 if has_score else 1,
+        score if has_score else 0,
+        -_projected_timestamp(item),
+        str(item.get('id', '')),
+    )
+
+
+def _merged_staged_projection(uid: str, *, account_generation: int) -> list[dict]:
+    """Pure read projection with canonical precedence and deterministic order."""
+
+    candidates = _all_staged_compatibility_candidates(uid, account_generation=account_generation)
+    represented_legacy_ids: set[str] = set()
+    candidate_items: list[dict] = []
+    for candidate in candidates:
+        represented_legacy_ids.update(_candidate_legacy_row_ids(candidate))
+        if candidate.status == CandidateStatus.pending:
+            candidate_items.append(_candidate_as_staged(candidate))
+
+    legacy_items = [
+        _legacy_as_staged(row) for row in _active_historical_rows(uid) if str(row['id']) not in represented_legacy_ids
+    ]
+    by_id: dict[str, dict] = {}
+    for item in [*legacy_items, *candidate_items]:
+        # Candidate items are appended last and are authoritative on the
+        # vanishingly unlikely public-ID collision.
+        by_id[str(item['id'])] = item
+    return sorted(by_id.values(), key=_staged_sort_key)
 
 
 def _create_candidate_from_staged_row(uid: str, row: dict, *, account_generation: int) -> CandidateRecord:
@@ -66,273 +177,83 @@ def _create_candidate_from_staged_row(uid: str, row: dict, *, account_generation
     )
 
 
-def _is_staged_compatibility_candidate(candidate: CandidateRecord) -> bool:
-    return (
-        candidate.subject_kind.value == 'task'
-        and candidate.proposed_action.value == 'create'
-        and candidate.source_surface == 'legacy_staged'
-    )
-
-
-def _pending_staged_candidates(uid: str, *, account_generation: int) -> list[CandidateRecord]:
-    records: list[CandidateRecord] = []
-    offset = 0
-    while True:
-        page = candidates_db.list_candidates(
-            uid,
-            status=CandidateStatus.pending,
-            account_generation=account_generation,
-            limit=500,
-            offset=offset,
-        )
-        records.extend(candidate for candidate in page if _is_staged_compatibility_candidate(candidate))
-        if len(page) < 500:
-            break
-        offset += len(page)
-    return records
-
-
-def _staged_row(uid: str, staged_id: str) -> dict | None:
-    return next(
-        (row for row in staged_tasks_db.get_all_staged_tasks_for_migration(uid) if row.get('id') == staged_id),
-        None,
-    )
-
-
-def _restore_all_legacy_conversation_items(uid: str) -> dict:
-    """Complete the released single-call recovery contract around page storage primitives."""
-
-    cursor = None
-    seen_cursors: set[str] = set()
-    restored = 0
-    skipped_existing = 0
-
-    while True:
-        page = staged_tasks_db.restore_legacy_conversation_items(
-            uid,
-            limit=staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_PAGE_SIZE,
-            cursor=cursor,
-        )
-        restored += page['restored']
-        skipped_existing += page['skipped_existing']
-
-        if not page['has_more']:
-            if page['next_cursor'] is not None:
-                raise ValueError('complete legacy recovery returned a continuation cursor')
-            return {
-                'restored': restored,
-                'skipped_existing': skipped_existing,
-                'has_more': False,
-                'next_cursor': None,
-            }
-
-        next_cursor = page['next_cursor']
-        if not next_cursor or next_cursor == cursor or next_cursor in seen_cursors:
-            raise ValueError('legacy recovery returned an invalid continuation cursor')
-        seen_cursors.add(next_cursor)
-        cursor = next_cursor
-
-
-def _legacy_rows_missing_canonical_representation(uid: str, *, account_generation: int) -> list[dict]:
-    """Find active retired rows without their deterministic canonical representation."""
-
-    missing: list[dict] = []
-    for row in staged_tasks_db.get_all_staged_tasks_for_migration(uid):
-        if row.get('source') != 'conversation_migration' or row.get('completed'):
-            continue
-        candidate_id = candidates_db.candidate_id_for_idempotency(
-            uid,
-            account_generation,
-            f"legacy-staged:{row.get('id', '')}",
-        )
-        candidate = candidates_db.get_candidate(uid, candidate_id)
-        if candidate is None:
-            missing.append(row)
-            continue
-        if candidate.status == CandidateStatus.accepted and (
-            not candidate.result_task_id or action_items_db.get_action_item(uid, candidate.result_task_id) is None
-        ):
-            missing.append(row)
-    return missing
-
-
-def _ensure_canonical_legacy_recovery(uid: str, control) -> None:
-    """Repair missing legacy Candidates before acknowledging compatibility recovery."""
-
-    if not _legacy_rows_missing_canonical_representation(uid, account_generation=control.account_generation):
-        return
-
-    # Candidate migration is idempotent and bounded to 500-row pages. Walk the
-    # complete staged-task set: a missing legacy row may sort after unrelated
-    # rows, so a single page could acknowledge neither the repair nor progress.
-    after_id = None
-    seen_checkpoints: set[str] = set()
-    while True:
-        report = migrate_staged_tasks(uid, control, after_id=after_id, limit=500)
-        if report.failed:
-            raise HTTPException(status_code=503, detail='Legacy task recovery is not canonically reconciled')
-        checkpoint = report.checkpoint
-        if report.scanned < 500:
-            break
-        if not checkpoint or checkpoint == after_id or checkpoint in seen_checkpoints:
-            raise HTTPException(status_code=503, detail='Legacy task recovery made no pagination progress')
-        seen_checkpoints.add(checkpoint)
-        after_id = checkpoint
-
-    if _legacy_rows_missing_canonical_representation(uid, account_generation=control.account_generation):
-        raise HTTPException(status_code=503, detail='Legacy task recovery is not canonically reconciled')
-
-
-def _reconcile_write_sidecar(
-    uid: str,
-    row: dict,
-    *,
-    account_generation: int,
-    status: CandidateStatus,
-    result_task_id: str | None = None,
-    reason: str,
-    claim_token: str | None = None,
-) -> bool:
+def _materialize_historical_candidate(uid: str, row: dict, *, account_generation: int) -> CandidateRecord:
     try:
-        candidate = _create_candidate_from_staged_row(uid, row, account_generation=account_generation)
-        if candidate.status == CandidateStatus.pending:
-            candidate = candidates_db.reconcile_migrated_candidate(
+        return _create_candidate_from_staged_row(uid, row, account_generation=account_generation)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail='Staged task cannot be represented canonically') from exc
+    except candidates_db.CandidateGenerationMismatchError as exc:
+        raise HTTPException(status_code=409, detail='Task account generation changed') from exc
+    except candidates_db.CandidateStoreError as exc:
+        raise HTTPException(status_code=409, detail='Staged task Candidate cannot be materialized') from exc
+
+
+def _candidate_for_public_id(uid: str, task_id: str, *, account_generation: int) -> CandidateRecord | None:
+    candidate = candidates_db.get_candidate(uid, task_id)
+    if (
+        candidate is None
+        or candidate.account_generation != account_generation
+        or not _is_staged_compatibility_candidate(candidate)
+    ):
+        return None
+    return candidate
+
+
+def _reject_pending_candidate(uid: str, candidate: CandidateRecord, *, account_generation: int, reason: str) -> None:
+    if candidate.status != CandidateStatus.pending:
+        return
+    try:
+        candidate_service.reject_candidate(
+            uid,
+            candidate.candidate_id,
+            reason=reason,
+            account_generation=account_generation,
+        )
+    except candidates_db.CandidateNotFoundError:
+        return
+    except candidates_db.CandidateGenerationMismatchError as exc:
+        raise HTTPException(status_code=409, detail='Task account generation changed') from exc
+    except candidates_db.CandidateStoreError as exc:
+        raise HTTPException(status_code=409, detail='Staged task Candidate cannot be rejected') from exc
+
+
+def _retire_historical_row(uid: str, row_id: str) -> None:
+    # Cleanup is deliberately after the canonical terminal decision. If this
+    # delete fails, the Candidate evidence suppresses the row on reads and a
+    # retry can finish cleanup without recreating or re-resolving the task.
+    staged_tasks_db.delete_staged_task(uid, row_id)
+
+
+def _retire_candidate_historical_rows(uid: str, candidate: CandidateRecord) -> None:
+    for row_id in sorted(_candidate_legacy_row_ids(candidate)):
+        _retire_historical_row(uid, row_id)
+
+
+def _accept_candidate(uid: str, candidate: CandidateRecord, *, account_generation: int) -> dict:
+    if candidate.status in {CandidateStatus.rejected, CandidateStatus.expired}:
+        raise HTTPException(status_code=404, detail='Staged task not found or already closed')
+    if candidate.status == CandidateStatus.accepted:
+        task_id = candidate.result_task_id
+    else:
+        try:
+            receipt = candidate_service.accept_candidate(
                 uid,
                 candidate.candidate_id,
-                status=status,
                 account_generation=account_generation,
-                result_task_id=result_task_id,
-                reason=reason,
-                claim_token=claim_token,
             )
-        if candidate.status != status:
-            return False
-        if status == CandidateStatus.accepted and candidate.result_task_id != result_task_id:
-            return False
-        return True
-    except (ValueError, candidates_db.CandidateStoreError):
-        record_fallback(
-            component='other',
-            from_mode='staged_write',
-            to_mode='legacy_only',
-            reason='other',
-            outcome='degraded',
-            log=logger,
-        )
-        return False
-
-
-def _require_write_promotion_reconciled(
-    uid: str,
-    row: dict,
-    *,
-    account_generation: int,
-) -> dict:
-    promoted_to = row.get('promoted_to')
-    if not isinstance(promoted_to, str) or not promoted_to:
-        raise HTTPException(status_code=404, detail='Staged task not found or already promoted')
-    candidate, claim_token = _claim_write_promotion(
-        uid,
-        row,
-        account_generation=account_generation,
-        resume_active_claim=True,
-    )
-    if candidate.status == CandidateStatus.accepted:
-        if candidate.result_task_id != promoted_to:
-            raise HTTPException(status_code=409, detail='Staged task Candidate resolved to another task')
-        return action_items_db.get_action_item(uid, promoted_to) or {'id': promoted_to}
-    if not claim_token:
-        raise HTTPException(status_code=503, detail='Could not recover staged task promotion claim')
-    try:
-        reserved_task_id = candidates_db.begin_candidate_legacy_promotion(
-            uid,
-            candidate.candidate_id,
-            account_generation=account_generation,
-            claim_token=claim_token,
-            result_task_id=promoted_to,
-            legacy_mutation_already_committed=True,
-        )
-    except (ValueError, candidates_db.CandidateStoreError) as exc:
-        raise HTTPException(status_code=503, detail='Could not recover staged task promotion claim') from exc
-    if reserved_task_id.task_id != promoted_to:
-        raise HTTPException(status_code=409, detail='Staged task promotion does not match its Candidate claim')
-    if not _reconcile_write_sidecar(
-        uid,
-        row,
-        account_generation=account_generation,
-        status=CandidateStatus.accepted,
-        result_task_id=promoted_to,
-        reason=row.get('promotion_skipped') or 'legacy_promoted',
-        claim_token=claim_token,
-    ):
-        raise HTTPException(status_code=503, detail='Could not reconcile staged task promotion')
-    return action_items_db.get_action_item(uid, promoted_to) or {'id': promoted_to}
-
-
-def _claim_write_promotion(
-    uid: str,
-    row: dict,
-    *,
-    account_generation: int,
-    resume_active_claim: bool = False,
-) -> tuple[CandidateRecord, str | None]:
-    try:
-        candidate = _create_candidate_from_staged_row(uid, row, account_generation=account_generation)
-        if candidate.status == CandidateStatus.accepted:
-            return candidate, None
-        if candidate.status in {CandidateStatus.rejected, CandidateStatus.expired}:
-            staged_tasks_db.suppress_staged_task_for_terminal_candidate(
-                uid,
-                row['id'],
-                reason=candidate.status.value,
-            )
-            return candidate, None
-        if candidate.status != CandidateStatus.pending:
-            raise HTTPException(status_code=409, detail=f'Staged task Candidate is {candidate.status.value}')
-        claim_token = candidates_db.claim_candidate_for_legacy_promotion(
-            uid,
-            candidate.candidate_id,
-            account_generation=account_generation,
-            resume_active_claim=resume_active_claim,
-        )
-        return candidate, claim_token
-    except HTTPException:
-        raise
-    except (ValueError, candidates_db.CandidateStoreError) as exc:
-        raise HTTPException(status_code=409, detail='Staged task Candidate cannot be promoted') from exc
-
-
-def _begin_write_promotion(
-    uid: str,
-    row: dict,
-    candidate: CandidateRecord,
-    claim_token: str | None,
-    *,
-    account_generation: int,
-) -> candidates_db.LegacyPromotionReservation:
-    if not claim_token:
-        raise HTTPException(status_code=409, detail='Staged task Candidate has no promotion claim')
-    existing = action_items_db.get_active_action_item_by_description(uid, row['description'])
-    preferred_existing_task_id = (
-        existing['id'] if existing is not None and isinstance(existing.get('id'), str) and existing['id'] else None
-    )
-    result_task_id = candidates_db.task_id_for_candidate(uid, account_generation, candidate.candidate_id)
-    try:
-        return candidates_db.begin_candidate_legacy_promotion(
-            uid,
-            candidate.candidate_id,
-            account_generation=account_generation,
-            claim_token=claim_token,
-            result_task_id=result_task_id,
-            preferred_existing_task_id=preferred_existing_task_id,
-        )
-    except (ValueError, candidates_db.CandidateStoreError) as exc:
-        raise HTTPException(status_code=409, detail='Staged task Candidate promotion could not begin') from exc
-
-
-# ============================================================================
-# MODELS
-# ============================================================================
+        except candidates_db.CandidateNotFoundError as exc:
+            raise HTTPException(status_code=404, detail='Staged task not found or already promoted') from exc
+        except candidates_db.CandidateGenerationMismatchError as exc:
+            raise HTTPException(status_code=409, detail='Task account generation changed') from exc
+        except candidates_db.CandidateStoreError as exc:
+            raise HTTPException(status_code=409, detail='Staged task Candidate cannot be promoted') from exc
+        task_id = receipt.task_id
+    if not task_id:
+        raise HTTPException(status_code=409, detail='Accepted staged Candidate has no task')
+    return action_items_db.get_action_item(uid, task_id) or {
+        'id': task_id,
+        'candidate_id': candidate.candidate_id,
+    }
 
 
 class CreateStagedTaskRequest(BaseModel):
@@ -354,57 +275,37 @@ class BatchUpdateScoresRequest(BaseModel):
     scores: List[BatchScoreEntry] = Field(..., max_length=500)
 
 
-# ============================================================================
-# ENDPOINTS
-# ============================================================================
-
-
 @router.post('/v1/staged-tasks', tags=['staged-tasks'], response_model=StagedTask)
-def create_staged_task(
-    request: CreateStagedTaskRequest,
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    control = _effective_control(uid)
-    if control.workflow_mode == TaskWorkflowMode.read:
-        digest = hashlib.sha256(request.description.strip().lower().encode('utf-8')).hexdigest()[:24]
-        synthetic_row = {
-            'id': f'read-{digest}',
-            'description': request.description,
-            'due_at': request.due_at,
-            'source': request.source,
-            'priority': request.priority,
-        }
-        try:
-            candidate = _create_candidate_from_staged_row(
-                uid, synthetic_row, account_generation=control.account_generation
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail='Staged task cannot be represented canonically') from exc
-        return _candidate_as_staged(candidate)
-
-    row = staged_tasks_db.create_staged_task(
+def create_staged_task(request: CreateStagedTaskRequest, uid: str = Depends(auth.get_current_user_uid)):
+    control = _control(uid)
+    identity_payload = {
+        'description': request.description.strip(),
+        'due_at': request.due_at.isoformat() if request.due_at else None,
+        'priority': request.priority,
+        'source': request.source,
+        'metadata': request.metadata,
+        'category': request.category,
+        'relevance_score': request.relevance_score,
+    }
+    digest = hashlib.sha256(
+        json.dumps(identity_payload, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    ).hexdigest()[:24]
+    synthetic_row = {
+        'id': f'compat-{digest}',
+        'description': request.description,
+        'due_at': request.due_at,
+        'source': request.source,
+        'priority': request.priority,
+        'metadata': request.metadata,
+        'category': request.category,
+        'relevance_score': request.relevance_score,
+    }
+    candidate = _materialize_historical_candidate(
         uid,
-        description=request.description,
-        due_at=request.due_at,
-        source=request.source,
-        priority=request.priority,
-        metadata=request.metadata,
-        category=request.category,
-        relevance_score=request.relevance_score,
+        synthetic_row,
+        account_generation=control.account_generation,
     )
-    if control.workflow_mode == TaskWorkflowMode.write:
-        try:
-            _create_candidate_from_staged_row(uid, row, account_generation=control.account_generation)
-        except (ValueError, candidates_db.CandidateStoreError):
-            record_fallback(
-                component='other',
-                from_mode='staged_write',
-                to_mode='legacy_only',
-                reason='other',
-                outcome='degraded',
-                log=logger,
-            )
-    return row
+    return _candidate_as_staged(candidate)
 
 
 @router.get('/v1/staged-tasks', tags=['staged-tasks'], response_model=StagedTaskListResponse)
@@ -413,91 +314,81 @@ def get_staged_tasks(
     offset: int = Query(0, ge=0),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    control = _effective_control(uid)
-    if control.workflow_mode == TaskWorkflowMode.read:
-        candidates = _pending_staged_candidates(uid, account_generation=control.account_generation)
-        return {
-            'items': [_candidate_as_staged(candidate) for candidate in candidates[offset : offset + limit]],
-            'has_more': len(candidates) > offset + limit,
-        }
-    fetch_limit = limit + 1
-    items = staged_tasks_db.get_staged_tasks(uid, limit=fetch_limit, offset=offset)
-    has_more = len(items) > limit
-    if has_more:
-        items = items[:limit]
-    return {'items': items, 'has_more': has_more}
+    control = _control(uid)
+    items = _merged_staged_projection(uid, account_generation=control.account_generation)
+    return {'items': items[offset : offset + limit], 'has_more': len(items) > offset + limit}
 
 
 @router.delete('/v1/staged-tasks', tags=['staged-tasks'])
 def clear_staged_tasks(uid: str = Depends(auth.get_current_user_uid)):
-    control = _effective_control(uid)
-    if control.workflow_mode == TaskWorkflowMode.read:
-        candidates = _pending_staged_candidates(uid, account_generation=control.account_generation)
-        for candidate in candidates:
-            candidate_service.reject_candidate(
-                uid,
-                candidate.candidate_id,
-                reason='legacy_clear',
-                account_generation=control.account_generation,
-            )
-        return {'status': 'ok', 'deleted_count': len(candidates)}
-    rows = (
-        [row for row in staged_tasks_db.get_all_staged_tasks_for_migration(uid) if not row.get('completed')]
-        if control.workflow_mode == TaskWorkflowMode.write
-        else []
-    )
-    for row in rows:
-        reconciled = _reconcile_write_sidecar(
+    control = _control(uid)
+    candidates = _all_staged_compatibility_candidates(uid, account_generation=control.account_generation)
+    candidate_by_legacy_id: dict[str, CandidateRecord] = {}
+    for candidate in candidates:
+        for row_id in _candidate_legacy_row_ids(candidate):
+            candidate_by_legacy_id[row_id] = candidate
+
+    deleted_count = 0
+    counted_candidate_ids: set[str] = set()
+    for candidate in candidates:
+        if candidate.status != CandidateStatus.pending:
+            continue
+        _reject_pending_candidate(
             uid,
-            row,
+            candidate,
             account_generation=control.account_generation,
-            status=CandidateStatus.rejected,
             reason='legacy_clear',
         )
-        if not reconciled:
-            raise HTTPException(status_code=503, detail='Could not reconcile staged task deletion')
-    count = staged_tasks_db.clear_staged_tasks(uid)
-    return {'status': 'ok', 'deleted_count': count}
+        counted_candidate_ids.add(candidate.candidate_id)
+        deleted_count += 1
+
+    for row in _active_historical_rows(uid):
+        row_id = str(row['id'])
+        candidate = candidate_by_legacy_id.get(row_id)
+        if candidate is None:
+            candidate = _materialize_historical_candidate(
+                uid,
+                row,
+                account_generation=control.account_generation,
+            )
+            _reject_pending_candidate(
+                uid,
+                candidate,
+                account_generation=control.account_generation,
+                reason='legacy_clear',
+            )
+        _retire_historical_row(uid, row_id)
+        if candidate.candidate_id not in counted_candidate_ids:
+            counted_candidate_ids.add(candidate.candidate_id)
+            deleted_count += 1
+    return {'status': 'ok', 'deleted_count': deleted_count}
 
 
 @router.delete('/v1/staged-tasks/{task_id}', tags=['staged-tasks'], response_model=StatusResponse)
-def delete_staged_task(
-    task_id: str,
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    control = _effective_control(uid)
-    if control.workflow_mode == TaskWorkflowMode.read:
-        candidate = candidates_db.get_candidate(uid, task_id)
-        if (
-            candidate is None
-            or candidate.account_generation != control.account_generation
-            or not _is_staged_compatibility_candidate(candidate)
-        ):
-            return {'status': 'ok'}
-        if candidate.status != CandidateStatus.pending:
-            return {'status': 'ok'}
-        try:
-            candidate_service.reject_candidate(
-                uid,
-                task_id,
-                reason='legacy_delete',
-                account_generation=control.account_generation,
-            )
-        except candidates_db.CandidateNotFoundError:
-            pass
-        return {'status': 'ok'}
-    row = _staged_row(uid, task_id) if control.workflow_mode == TaskWorkflowMode.write else None
-    if row is not None and not row.get('completed'):
-        reconciled = _reconcile_write_sidecar(
+def delete_staged_task(task_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    control = _control(uid)
+    candidate = _candidate_for_public_id(uid, task_id, account_generation=control.account_generation)
+    if candidate is not None:
+        _reject_pending_candidate(
             uid,
-            row,
+            candidate,
             account_generation=control.account_generation,
-            status=CandidateStatus.rejected,
             reason='legacy_delete',
         )
-        if not reconciled:
-            raise HTTPException(status_code=503, detail='Could not reconcile staged task deletion')
-    staged_tasks_db.delete_staged_task(uid, task_id)
+        _retire_candidate_historical_rows(uid, candidate)
+        return {'status': 'ok'}
+
+    row = _staged_row(uid, task_id)
+    if row is None:
+        return {'status': 'ok'}
+    candidate = _materialize_historical_candidate(uid, row, account_generation=control.account_generation)
+    _reject_pending_candidate(
+        uid,
+        candidate,
+        account_generation=control.account_generation,
+        reason='legacy_delete',
+    )
+    _retire_historical_row(uid, task_id)
     return {'status': 'ok'}
 
 
@@ -506,166 +397,69 @@ def batch_update_staged_scores(
     request: BatchUpdateScoresRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    if _effective_control(uid).workflow_mode == TaskWorkflowMode.read:
-        return {'status': 'ok'}
-    staged_tasks_db.batch_update_staged_scores(uid, [s.model_dump() for s in request.scores])
+    control = _control(uid)
+    for score in request.scores:
+        candidate = _candidate_for_public_id(uid, score.id, account_generation=control.account_generation)
+        if candidate is None:
+            row = _staged_row(uid, score.id)
+            if row is None:
+                continue
+            candidate = _materialize_historical_candidate(uid, row, account_generation=control.account_generation)
+        try:
+            candidates_db.update_candidate_compatibility_score(
+                uid,
+                candidate.candidate_id,
+                relevance_score=score.relevance_score,
+                account_generation=control.account_generation,
+            )
+        except candidates_db.CandidateNotFoundError:
+            # A concurrent resolution may close and clean up the Candidate;
+            # the endpoint remains idempotent for the released client.
+            continue
+        except candidates_db.CandidateConflictError:
+            # Accepted, rejected, expired, or non-staged Candidates are
+            # immutable through the released staged-score compatibility API.
+            continue
+        except candidates_db.CandidateGenerationMismatchError as exc:
+            raise HTTPException(status_code=409, detail='Task account generation changed') from exc
     return {'status': 'ok'}
 
 
 @router.post('/v1/staged-tasks/promote', tags=['staged-tasks'], response_model=PromoteStagedTaskResponse)
 def promote_staged_task(uid: str = Depends(auth.get_current_user_uid)):
-    control = _effective_control(uid)
-    if control.workflow_mode == TaskWorkflowMode.read:
-        return {'promoted': False, 'reason': 'Score-based promotion is disabled', 'promoted_task': None}
-    claim_token: str | None = None
-    reservation: candidates_db.LegacyPromotionReservation | None = None
-    if control.workflow_mode == TaskWorkflowMode.write:
-        for row in staged_tasks_db.get_all_staged_tasks_for_migration(uid):
-            if row.get('completed') and row.get('promoted_to'):
-                _require_write_promotion_reconciled(
-                    uid,
-                    row,
-                    account_generation=control.account_generation,
-                )
-        while True:
-            selected_row = staged_tasks_db.get_top_staged_task_for_promotion(uid)
-            if selected_row is None:
-                return {'promoted': False, 'reason': 'No staged tasks available', 'promoted_task': None}
-            candidate, claim_token = _claim_write_promotion(
-                uid,
-                selected_row,
-                account_generation=control.account_generation,
-            )
-            if candidate.status not in {CandidateStatus.rejected, CandidateStatus.expired}:
-                break
-        if candidate.status == CandidateStatus.accepted:
-            task_id = candidate.result_task_id
-            if task_id is None:
-                raise HTTPException(status_code=409, detail='Accepted staged Candidate has no task')
-            staged_tasks_db.complete_staged_task_promotion(uid, selected_row['id'], task_id)
-            action_item = action_items_db.get_action_item(uid, task_id) or {'id': task_id}
-            return {'promoted': True, 'reason': None, 'promoted_task': action_item}
-        reservation = _begin_write_promotion(
-            uid,
-            selected_row,
-            candidate,
-            claim_token,
-            account_generation=control.account_generation,
-        )
-        action_item = staged_tasks_db.promote_staged_task(
-            uid,
-            task_id=selected_row['id'],
-            include_staged_id=True,
-            action_item_id=reservation.task_id,
-            reservation_kind=reservation.kind,
-        )
-    else:
-        action_item = staged_tasks_db.promote_staged_task(uid, include_staged_id=True)
-    if action_item is None:
+    control = _control(uid)
+    items = _merged_staged_projection(uid, account_generation=control.account_generation)
+    if not items:
         return {'promoted': False, 'reason': 'No staged tasks available', 'promoted_task': None}
-    staged_id = action_item.pop('_staged_task_id', None)
-    if control.workflow_mode == TaskWorkflowMode.write and staged_id:
-        row = _staged_row(uid, staged_id)
-        if row is not None:
-            if not _reconcile_write_sidecar(
-                uid,
-                row,
-                account_generation=control.account_generation,
-                status=CandidateStatus.accepted,
-                result_task_id=action_item.get('id'),
-                reason=row.get('promotion_skipped') or 'legacy_promoted',
-                claim_token=claim_token,
-            ):
-                raise HTTPException(status_code=503, detail='Could not reconcile staged task promotion')
-    return {'promoted': True, 'reason': None, 'promoted_task': action_item}
+    return promote_staged_task_by_id(items[0]['id'], uid=uid)
 
 
 @router.post('/v1/staged-tasks/{task_id}/promote', tags=['staged-tasks'])
 def promote_staged_task_by_id(task_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    control = _effective_control(uid)
-    if control.workflow_mode == TaskWorkflowMode.read:
-        candidate = candidates_db.get_candidate(uid, task_id)
-        if (
-            candidate is None
-            or candidate.account_generation != control.account_generation
-            or not _is_staged_compatibility_candidate(candidate)
-        ):
+    control = _control(uid)
+    candidate = _candidate_for_public_id(uid, task_id, account_generation=control.account_generation)
+    historical_row: dict | None = None
+    if candidate is None:
+        historical_row = _staged_row(uid, task_id)
+        if historical_row is None:
             raise HTTPException(status_code=404, detail='Staged task not found or already promoted')
-        if candidate.status in {CandidateStatus.rejected, CandidateStatus.expired}:
-            raise HTTPException(status_code=404, detail='Staged task not found or already promoted')
-        receipt = candidate_service.accept_candidate(uid, task_id, account_generation=control.account_generation)
-        return {
-            'promoted': True,
-            'reason': None,
-            'promoted_task': {
-                'id': receipt.task_id,
-                'candidate_id': candidate.candidate_id,
-            },
-        }
-    existing_row = _staged_row(uid, task_id) if control.workflow_mode == TaskWorkflowMode.write else None
-    if existing_row is not None and existing_row.get('completed'):
-        action_item = _require_write_promotion_reconciled(
+        candidate = _materialize_historical_candidate(
             uid,
-            existing_row,
+            historical_row,
             account_generation=control.account_generation,
         )
-        return {'promoted': True, 'reason': None, 'promoted_task': action_item}
-    claim_token: str | None = None
-    reservation: candidates_db.LegacyPromotionReservation | None = None
-    if control.workflow_mode == TaskWorkflowMode.write:
-        if existing_row is None:
-            raise HTTPException(status_code=404, detail='Staged task not found or already promoted')
-        candidate, claim_token = _claim_write_promotion(
-            uid,
-            existing_row,
-            account_generation=control.account_generation,
-        )
-        if candidate.status in {CandidateStatus.rejected, CandidateStatus.expired}:
-            raise HTTPException(status_code=404, detail='Staged task not found or already closed')
-        if candidate.status == CandidateStatus.accepted:
-            accepted_task_id = candidate.result_task_id
-            if accepted_task_id is None:
-                raise HTTPException(status_code=409, detail='Accepted staged Candidate has no task')
-            staged_tasks_db.complete_staged_task_promotion(uid, task_id, accepted_task_id)
-            action_item = action_items_db.get_action_item(uid, accepted_task_id) or {'id': accepted_task_id}
-            return {'promoted': True, 'reason': None, 'promoted_task': action_item}
-        reservation = _begin_write_promotion(
-            uid,
-            existing_row,
-            candidate,
-            claim_token,
-            account_generation=control.account_generation,
-        )
-    action_item = staged_tasks_db.promote_staged_task(
-        uid,
-        task_id=task_id,
-        include_staged_id=True,
-        action_item_id=reservation.task_id if reservation is not None else None,
-        reservation_kind=reservation.kind if reservation is not None else None,
-    )
-    if action_item is None:
-        raise HTTPException(status_code=404, detail='Staged task not found or already promoted')
-    action_item.pop('_staged_task_id', None)
-    if control.workflow_mode == TaskWorkflowMode.write:
-        row = _staged_row(uid, task_id)
-        if row is not None:
-            if not _reconcile_write_sidecar(
-                uid,
-                row,
-                account_generation=control.account_generation,
-                status=CandidateStatus.accepted,
-                result_task_id=action_item.get('id'),
-                reason=row.get('promotion_skipped') or 'legacy_promoted',
-                claim_token=claim_token,
-            ):
-                raise HTTPException(status_code=503, detail='Could not reconcile staged task promotion')
+
+    action_item = _accept_candidate(uid, candidate, account_generation=control.account_generation)
+    if historical_row is not None:
+        _retire_historical_row(uid, str(historical_row['id']))
+    else:
+        _retire_candidate_historical_rows(uid, candidate)
     return {'promoted': True, 'reason': None, 'promoted_task': action_item}
 
 
 @router.post('/v1/staged-tasks/migrate', tags=['staged-tasks'], response_model=StatusResponse)
 def migrate_ai_tasks(uid: str = Depends(auth.get_current_user_uid)):
-    # Retain the released endpoint for older desktop clients, but never move
-    # live action items off the collection rendered by the legacy Tasks UI.
+    del uid
     return {'status': 'legacy task migration retired; no action taken'}
 
 
@@ -675,36 +469,22 @@ def migrate_ai_tasks(uid: str = Depends(auth.get_current_user_uid)):
     response_model=MigrateConversationItemsResponse,
 )
 def migrate_conversation_items(
-    # Kept accepted for released callers that included the old page controls.
-    # The compatibility route ignores them and is now always all-or-complete.
     limit: int = Query(default=50, ge=1, le=100, deprecated=True),
     cursor: str | None = Query(default=None, min_length=1, max_length=256, deprecated=True),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    del limit, cursor
-    control = task_control_db.get_task_workflow_control(uid)
-    # In canonical modes, a marked row may already have a matching
-    # legacy_staged Candidate. Restoring it as an action item while that
-    # Candidate is pending or accepted would create a duplicate. That mode
-    # retains the Candidate as the canonical representation instead.
-    if control.workflow_mode in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-        _ensure_canonical_legacy_recovery(uid, control)
-        return {
-            'status': 'ok',
-            'migrated': 0,
-            'deleted': 0,
-            'restored': 0,
-            'skipped_existing': 0,
-            'has_more': False,
-            'next_cursor': None,
-        }
-
-    # This released endpoint is single-call only: old desktop clients mark
-    # migration complete after one successful response and never consume a
-    # cursor. Keep it all-or-complete; the dedicated action-items endpoint is
-    # the bounded, cursor-paginated API used by current clients.
-    result = _restore_all_legacy_conversation_items(uid)
-    return {'status': 'ok', 'migrated': 0, 'deleted': 0, **result}
+    # Released callers retain an acknowledged wire shape, but convergence never
+    # turns this endpoint into an implicit account-wide migration.
+    del limit, cursor, uid
+    return {
+        'status': 'ok',
+        'migrated': 0,
+        'deleted': 0,
+        'restored': 0,
+        'skipped_existing': 0,
+        'has_more': False,
+        'next_cursor': None,
+    }
 
 
 @router.post(
@@ -717,10 +497,7 @@ def restore_legacy_conversation_items(
     cursor: str | None = Query(default=None, min_length=1, max_length=256),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    """Safely restore rows moved by the now-retired desktop migration."""
-
-    control = task_control_db.get_task_workflow_control(uid)
-    if control.workflow_mode in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-        return {'status': 'ok', 'restored': 0, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None}
-    result = staged_tasks_db.restore_legacy_conversation_items(uid, limit=limit, cursor=cursor)
-    return {'status': 'ok', **result}
+    # The old recovery moved rows directly into action_items and bypassed
+    # Candidate authority. Keep the endpoint decodable, permanently inert.
+    del limit, cursor, uid
+    return {'status': 'ok', 'restored': 0, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None}

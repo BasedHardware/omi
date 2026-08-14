@@ -23,6 +23,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_FILE_SEARCH_ASSISTANT_MODEL = "gpt-4.1"
+
 
 def _safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
     """Build FileChat objects from raw file docs, skipping (not raising on) a malformed one.
@@ -257,7 +259,9 @@ class FileChatTool:
                 model="gpt-5.6-luna",
                 messages=messages,
                 stream=True,
-                max_tokens=2048,
+                # Luna uses the current Chat Completions output-budget field.
+                # `max_tokens` is rejected by the provider with HTTP 400.
+                max_completion_tokens=2048,
             )
             async for chunk in stream:
                 delta = chunk.choices[0].delta if chunk.choices else None
@@ -307,7 +311,9 @@ class FileChatTool:
                 assistant = openai.beta.assistants.create(  # type: ignore[reportDeprecated]  # Assistants API still in use
                     name="File Reader",
                     instructions="You are a helpful assistant that answers questions about the provided file. Use the file_search tool to search the file contents when needed.",
-                    model="gpt-5.6-luna",
+                    # Luna supports vision Chat Completions but not the
+                    # Assistants API. Keep file search on an Assistants model.
+                    model=_FILE_SEARCH_ASSISTANT_MODEL,
                     tools=[{"type": "file_search"}],
                     timeout=timeout,
                 )

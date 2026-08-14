@@ -32,7 +32,7 @@ class DeveloperMemorySearchResult:
 
     @property
     def should_use_legacy_fallback(self) -> bool:
-        return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
+        return False
 
 
 def _developer_result(result: DefaultReadSearchResult) -> DeveloperMemorySearchResult:
@@ -115,11 +115,8 @@ def search_memory_default_developer_memories(
 ) -> DeveloperMemorySearchResult:
     """Return explicit read-decision semantics for the developer list caller.
 
-    Missing/malformed/no-grant/disabled rollout states are DENY_MEMORY or
-    SHADOW_ONLY, not an implicit `None` downgrade to the legacy
-    `users/{uid}/memories` path. Legacy fallback is only valid when callers pass
-    an explicit USE_LEGACY_SAFE decision. Firestore `memory_items` are touched
-    only after USE_MEMORY.
+    Missing, malformed, or explicitly denied consumer grants fail closed.
+    Firestore `memory_items` are touched only after USE_MEMORY.
     """
 
     decision = rollout_decision_from_legacy_args(
@@ -167,11 +164,9 @@ def search_memory_default_developer_memories_vector(
 ) -> DeveloperMemorySearchResult:
     """Return explicit read-decision semantics for the developer vector caller.
 
-    Missing/malformed/no-grant/disabled rollout states are DENY_MEMORY or
-    SHADOW_ONLY before vector lookup or `users/{uid}/memory_items` reads. Legacy
-    fallback is only valid when callers pass an explicit USE_LEGACY_SAFE decision.
-    Archive is deliberately default-disabled here; explicit Archive routes remain
-    separate and capability-gated.
+    Missing, malformed, or explicitly denied consumer grants fail closed before
+    vector lookup or `users/{uid}/memory_items` reads. Archive is deliberately
+    default-disabled here; explicit Archive routes remain separately gated.
     """
 
     decision = rollout_decision_from_legacy_args(

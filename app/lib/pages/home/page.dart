@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -384,11 +383,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
-        await ForegroundUtil.initializeForegroundService();
-        await ForegroundUtil.startForegroundTask();
-      }
+      // Do not start flutter_foreground_task from location permission. On iOS
+      // that holds AVAudioSession (green mic) all day even when locationEnabled
+      // is false and nothing is capturing. CaptureController starts/stops the
+      // keep-alive only while a live capture session has audio.
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
@@ -782,10 +780,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         // Show slim green call bar on non-home/conversations tabs when a call is active
                         if (selectedIndex > 1) const ActiveCallTopBar(),
                         Expanded(
-                          child: IndexedStack(
-                            index: selectedIndex,
-                            children: _buildPages(selectedIndex),
-                          ),
+                          child: IndexedStack(index: selectedIndex, children: _buildPages(selectedIndex)),
                         ),
                       ],
                     ),
