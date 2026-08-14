@@ -56,6 +56,9 @@ final class ConversationUploader: ObservableObject {
     /// Said once per airgapped stretch. The ticker drains every `tickInterval`, and a line per tick
     /// would turn a deliberate setting into a log flood.
     private var didLogAirgap = false
+    /// Said once per launch, for the same reason: a queue this Mac cannot safely attribute is a
+    /// standing condition, not an event.
+    private var didLogForeignOwner = false
     private var wake: Task<Void, Never>?
     private var ticker: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
@@ -115,6 +118,10 @@ final class ConversationUploader: ObservableObject {
 
         await restoreStateOnce()
         await reconcile()
+        // Before the airgap and sign-in guards on purpose. Claiming is a local write about who the
+        // queue's work belongs to; it needs an account, not a network, and a user in Airgap Mode
+        // still deserves a `pendingCount` that means what it says.
+        await claimQueuedBeforeSignIn()
         await refreshPendingCount()
 
         // Airgap Mode: the queue is durable across launches, so the honest answer is to leave every
@@ -375,7 +382,16 @@ final class ConversationUploader: ObservableObject {
     }
 
     private func nextDue(excluding blocked: Set<Int64>) async -> UploadQueue.Entry? {
-        let ownerId = OmiAuth.shared.userId
+        // Signed in without a user id is not "signed in enough to upload": the queue records which
+        // account each session is owed to, and a request sent now would put this Mac's capture in an
+        // account we cannot name. Holding is the only safe answer, and saying so is what keeps it
+        // from being another silent stall.
+        guard let ownerId = OmiAuth.shared.userId else {
+            ContextLog.error(
+                "Signed in but the account has no user id; the queue stays put rather than uploading"
+                    + " to an account this Mac cannot name", Self.category)
+            return nil
+        }
         do {
             let due = try await database.perform {
                 try UploadQueue.pending($0, ownerId: ownerId, dueAt: ContextTime.now, limit: 20)
@@ -391,8 +407,9 @@ final class ConversationUploader: ObservableObject {
     /// the engine never made the call. Bounded by a watermark set on first run, so installing this
     /// never decides to upload a month of history on its own.
     private func reconcile() async {
+        let ownerId = OmiAuth.shared.userId
         do {
-            let added = try await database.perform { try UploadQueue.reconcile($0) }
+            let added = try await database.perform { try UploadQueue.reconcile($0, ownerId: ownerId) }
             if added > 0 {
                 ContextLog.info("Queued \(added) closed session(s) found on disk", Self.category)
             }
@@ -401,8 +418,39 @@ final class ConversationUploader: ObservableObject {
         }
     }
 
+    /// Hands the queue's unattributed rows to the signed-in account, when the database can show
+    /// nobody else has ever had capture on this Mac. See `UploadQueue.claimOrphans` for why that is
+    /// the strongest evidence available and why a refusal is the right answer without it.
+    private func claimQueuedBeforeSignIn() async {
+        guard let ownerId = OmiAuth.shared.userId else { return }
+        do {
+            switch try await database.perform({ try UploadQueue.claimOrphans($0, ownerId: ownerId) }) {
+            case .claimed(let count) where count > 0:
+                ContextLog.info(
+                    "Adopted \(count) session(s) that were queued before sign-in", Self.category)
+            case .claimed:
+                break
+            case .refusedForeignOwner:
+                // Once per launch: the drain runs every `tickInterval`, and this state does not
+                // change on its own, so a line per pass would bury the log in a standing condition.
+                guard !didLogForeignOwner else { break }
+                didLogForeignOwner = true
+                ContextLog.error(
+                    "Sessions are queued with no account, and this Mac has already uploaded for a"
+                        + " different one; they stay local rather than going to the wrong account",
+                    Self.category)
+            }
+        } catch {
+            ContextLog.error(
+                "Could not adopt the sessions queued before sign-in: \(error.localizedDescription)",
+                Self.category)
+        }
+    }
+
     private func refreshPendingCount() async {
-        guard let count = try? await database.perform({ try UploadQueue.pendingCount($0) }) else { return }
+        let ownerId = OmiAuth.shared.userId
+        guard let count = try? await database.perform({ try UploadQueue.pendingCount($0, ownerId: ownerId) })
+        else { return }
         if pendingCount != count { pendingCount = count }
     }
 
@@ -435,7 +483,9 @@ final class ConversationUploader: ObservableObject {
     private func scheduleNextWake() async {
         // `try?` on a throwing call returning `Double?` flattens to a single optional, so one
         // unwrap is both necessary and sufficient here.
-        guard let dueAt = try? await database.perform({ try UploadQueue.nextDueAt($0) }) else {
+        let ownerId = OmiAuth.shared.userId
+        guard let dueAt = try? await database.perform({ try UploadQueue.nextDueAt($0, ownerId: ownerId) })
+        else {
             return
         }
         let delay = dueAt - ContextTime.now
@@ -537,8 +587,11 @@ private enum UploadPayload {
                 startedAt: UploadPayload.iso(startedAt),
                 finishedAt: UploadPayload.iso(finishedAt),
                 language: language,
-                clientDeviceId: "macos_\(OmiAPI.deviceIdHash)",
-                clientPlatform: "macos")
+                // The one id, not a second spelling of it assembled here. `build_client_device_id`
+                // has to produce the same string from the headers that this body carries, or the
+                // conversation is stored under a device that nothing else on the account is.
+                clientDeviceId: ClientDevice.clientDeviceId,
+                clientPlatform: ClientDevice.platform)
         }
     }
 

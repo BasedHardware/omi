@@ -180,7 +180,14 @@ public enum UploadQueue {
     ///
     /// Deliberately does nothing to a session that is already `uploaded` or `skipped`: the engine
     /// re-enqueueing a session it closed twice must never turn a finished upload back into work.
-    public static func markPending(_ store: ContextStore, sessionId: Int64, ownerId: String? = nil) throws {
+    ///
+    /// `ownerId` is required rather than defaulted: every row the drain can act on has to name the
+    /// account it is owed to, and a parameter that quietly defaults to "nobody" is how rows end up
+    /// stranded — `pending` filters on the owner, so an unowned row is invisible to it forever. A
+    /// nil here is still allowed, because capture genuinely happens while signed out, but it has to
+    /// be a decision the caller made rather than one it forgot to make. `claimOrphans` is what turns
+    /// those rows back into work once there is an account to attribute them to.
+    public static func markPending(_ store: ContextStore, sessionId: Int64, ownerId: String?) throws {
         let now = ContextTime.now
         try store.write { db in
             try db.execute(
@@ -286,43 +293,78 @@ public enum UploadQueue {
 
     // MARK: - Reading
 
-    /// Everything still owed to the account and due by `dueAt`, oldest first.
+    /// Which queued rows are `ownerId`'s, as one SQL fragment that every reader shares.
+    ///
+    /// Sharing it is the point. `pendingCount` used to count every queued row while `pending` read
+    /// only the signed-in account's, so rows no drain could ever pick up were still reported to the
+    /// user as "waiting to upload" — a queue that looked busy and was completely inert, with nothing
+    /// failing to say otherwise. Any future divergence of that shape has to be written here, in one
+    /// place, rather than emerging from two queries that quietly drifted apart.
+    ///
+    /// A nil owner is "nobody is signed in", not a wildcard for a signed-in account. It matches
+    /// everything still queued, because with no account in the app every row is equally waiting for
+    /// the sign-in that will move it — the signed-out user's backlog is exactly what the menu bar
+    /// should still be telling them about. Only `pendingCount` and `nextDueAt` can be asked this
+    /// way; `pending` demands a real owner, so the drain can never reach the unfiltered set.
+    private static func ownerClause(_ ownerId: String?) -> String {
+        ownerId == nil ? "" : " AND ownerId = ?"
+    }
+
+    private static func ownerArguments(_ ownerId: String?) -> [any DatabaseValueConvertible] {
+        ownerId.map { [$0] } ?? []
+    }
+
+    /// Everything still owed to `ownerId` and due by `dueAt`, oldest first.
+    ///
+    /// The owner is not optional: asking for work is asking for one account's work, and there is no
+    /// answer to "what should I upload for nobody". A signed-in session with no user id has to stop
+    /// at the caller rather than fall through to a query that would hand unattributed capture to an
+    /// account it cannot name.
     public static func pending(
-        _ store: ContextStore, ownerId: String?, dueAt: Double = ContextTime.now, limit: Int = 50
+        _ store: ContextStore, ownerId: String, dueAt: Double = ContextTime.now, limit: Int = 50
     ) throws -> [Entry] {
         try store.read { db in
             guard try db.tableExists("uploads") else { return [] }
-            guard let ownerId = ownerId else { return [] }
             let rows = try Row.fetchAll(
                 db,
                 sql: """
                     SELECT * FROM uploads
-                    WHERE state IN ('pending', 'failed') AND nextAttemptAt <= ? AND ownerId = ?
+                    WHERE state IN ('pending', 'failed') AND nextAttemptAt <= ?\(ownerClause(ownerId))
                     ORDER BY queuedAt ASC, sessionId ASC
                     LIMIT ?
                     """,
-                arguments: [dueAt, ownerId, limit])
+                arguments: StatementArguments([dueAt] + ownerArguments(ownerId) + [limit]))
             return rows.map(entry(from:))
         }
     }
 
-    /// How much is still owed, due or not. This is the number the UI shows.
-    public static func pendingCount(_ store: ContextStore) throws -> Int {
+    /// How much is still owed to `ownerId`, due or not. This is the number the UI shows, and it is
+    /// deliberately the same set `pending` drains — only without the due-time and limit bounds.
+    public static func pendingCount(_ store: ContextStore, ownerId: String?) throws -> Int {
         try store.read { db in
             guard try db.tableExists("uploads") else { return 0 }
             return try Int.fetchOne(
-                db, sql: "SELECT COUNT(*) FROM uploads WHERE state IN ('pending', 'failed')") ?? 0
+                db,
+                sql: """
+                    SELECT COUNT(*) FROM uploads
+                    WHERE state IN ('pending', 'failed')\(ownerClause(ownerId))
+                    """,
+                arguments: StatementArguments(ownerArguments(ownerId))) ?? 0
         }
     }
 
-    /// When the earliest still-waiting entry becomes due, or nil when nothing is queued. Lets the
-    /// uploader sleep exactly as long as it must instead of polling.
-    public static func nextDueAt(_ store: ContextStore) throws -> Double? {
+    /// When `ownerId`'s earliest still-waiting entry becomes due, or nil when nothing is queued for
+    /// them. Lets the uploader sleep exactly as long as it must instead of polling.
+    public static func nextDueAt(_ store: ContextStore, ownerId: String?) throws -> Double? {
         try store.read { db in
             guard try db.tableExists("uploads") else { return nil }
             return try Double.fetchOne(
                 db,
-                sql: "SELECT MIN(nextAttemptAt) FROM uploads WHERE state IN ('pending', 'failed')")
+                sql: """
+                    SELECT MIN(nextAttemptAt) FROM uploads
+                    WHERE state IN ('pending', 'failed')\(ownerClause(ownerId))
+                    """,
+                arguments: StatementArguments(ownerArguments(ownerId)))
         }
     }
 
@@ -385,8 +427,13 @@ public enum UploadQueue {
     /// Bounded by a watermark that starts at "now" the first time this runs, so installing this
     /// build does not decide to upload a month of history the user never asked to sync. Returns how
     /// many sessions it added.
+    ///
+    /// `ownerId` is the account the rows are owed to, exactly as in `markPending`. Omitting it here
+    /// is what stranded them: this insert named no owner, `pending` filters on one, and no other
+    /// statement in the tree ever writes the column — so every session reconciliation rescued was
+    /// rescued into a row the drain could not see, and stayed `pending` with zero attempts forever.
     @discardableResult
-    public static func reconcile(_ store: ContextStore, limit: Int = 100) throws -> Int {
+    public static func reconcile(_ store: ContextStore, ownerId: String?, limit: Int = 100) throws -> Int {
         let now = ContextTime.now
         guard let watermark = try timestamp(store, .reconcileWatermark) else {
             try setTimestamp(store, .reconcileWatermark, now)
@@ -412,10 +459,10 @@ public enum UploadQueue {
                 try db.execute(
                     sql: """
                         INSERT OR IGNORE INTO uploads
-                          (sessionId, state, attempts, partsDone, queuedAt, updatedAt, nextAttemptAt)
-                        VALUES (?, 'pending', 0, 0, ?, ?, 0)
+                          (sessionId, state, attempts, partsDone, queuedAt, updatedAt, nextAttemptAt, ownerId)
+                        VALUES (?, 'pending', 0, 0, ?, ?, 0, ?)
                         """,
-                    arguments: [id, now, now])
+                    arguments: [id, now, now, ownerId])
                 highest = max(highest, endedAt)
             }
             // Only advance past what was actually examined: a full batch means there is more behind
@@ -426,6 +473,57 @@ public enum UploadQueue {
                     arguments: [MetaKey.reconcileWatermark.rawValue, String(highest)])
             }
             return rows.count
+        }
+    }
+
+    // MARK: - Ownership
+
+    /// What `claimOrphans` decided, so the caller can say it out loud. A refusal is a real outcome
+    /// and must never look like "there was nothing to do".
+    public enum OrphanClaim: Sendable, Equatable {
+        /// How many unattributed rows now belong to the signed-in account. Zero is normal.
+        case claimed(Int)
+        /// This database has already uploaded for a different account, so an unattributed row could
+        /// have been captured by either of them and nothing on disk can tell us which.
+        case refusedForeignOwner
+    }
+
+    /// Attributes rows that were queued before there was an account to attribute them to.
+    ///
+    /// Capture that happens while signed out is queued with no owner — that is deliberate, and the
+    /// promise the uploader makes is that it is parked rather than dropped. Unparking it is this
+    /// function, and it is the only thing standing between a row with no owner and the drain, so it
+    /// is where the account-isolation question actually gets answered.
+    ///
+    /// **Nothing records who captured a session.** `sessions` holds a start, an end and an app hint;
+    /// the queue's `ownerId` is the only attribution anywhere in the schema, and for these rows it is
+    /// exactly what is missing. So the honest evidence available is one question: *has this database
+    /// ever worked for anybody else?* If every attributed row names the account asking, then no other
+    /// account has ever had capture on this Mac to lose, and claiming is provably safe. If any row
+    /// names a different account, the Mac has served two people, an unattributed row could belong to
+    /// either, and we refuse — the rows stay local, which costs an upload, where guessing wrong would
+    /// put one person's conversations in another person's account.
+    ///
+    /// Terminal rows are left alone: `uploaded` and `skipped` are nobody's work any more, and
+    /// rewriting them would only churn `updatedAt` on settled history.
+    @discardableResult
+    public static func claimOrphans(_ store: ContextStore, ownerId: String) throws -> OrphanClaim {
+        let now = ContextTime.now
+        return try store.write { db in
+            guard try db.tableExists("uploads") else { return .claimed(0) }
+            let foreign = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM uploads WHERE ownerId IS NOT NULL AND ownerId <> ?",
+                arguments: [ownerId]) ?? 0
+            guard foreign == 0 else { return .refusedForeignOwner }
+
+            try db.execute(
+                sql: """
+                    UPDATE uploads SET ownerId = ?, updatedAt = ?
+                    WHERE ownerId IS NULL AND state IN ('pending', 'failed')
+                    """,
+                arguments: [ownerId, now])
+            return .claimed(db.changesCount)
         }
     }
 
