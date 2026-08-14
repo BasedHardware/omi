@@ -8,22 +8,42 @@ self-host deployment (later WPs add services to the same compose).
 > (outside the `src/omi` source tree). This file instead lives in the source because it is the
 > operational runbook for the compose stack.
 
-## Environments (compose + env per-environment — ADR-0043)
+## Environments — the authoritative map (ADR-0043)
 
-The stack is split per environment on a common base — **no `docker-compose.yml`, no override** (studio
-`compose-environments-onprem`):
+**Four environments** — `prod`, `dev`, `test-unit`, `test-e2e`. This section is the single source of
+truth for how they differ (network, inference reach, auth, store, seed, exposure); everything else
+(env `.example` files, `run-*.sh`, the ADRs) defers here. The compose stack is split per environment
+on a common base — **no `docker-compose.yml`, no override** (ADR-0043; studio `compose-environments-onprem`).
 
-| Entrypoint | Posture | When | Env file (layered) |
-|---|---|---|---|
-| `compose.prod.yaml` | **hermetic** (`omi internal:true`, no egress = ADR-0001 proof); inference is an operator service on the `omi` net; API behind the TLS proxies | production; the offline/hermetic verification below | `backend.env.base` + `backend.env.prod` |
-| `compose.dev.yaml`  | **non-hermetic dev** (`omi` non-internal; backend maps `host.docker.internal` to reach host inference for RAG; API published on :8000) | local dev, chat/RAG, seeding, E2E | `backend.env.base` + `backend.env.dev` |
+| Dimension | **prod** | **dev** | **test-unit** | **test-e2e** |
+|---|---|---|---|---|
+| Entrypoint | `compose.prod.yaml` | `compose.dev.yaml` | **no compose** — file-isolated pytest (ADR-0026) | `compose.dev.yaml` + `testing/e2e/` |
+| `omi` network | `internal: true` — **no egress** (the ADR-0001 proof) | `internal: false` — egress, so the backend can reach **host** inference | n/a (built image + mounted repo) | as dev |
+| Inference (LLM/embeddings/STT) | operator endpoint **on the `omi` net** (`--profile inference`, or an external URL the operator wires) | **host** via `host.docker.internal` (e.g. host Ollama `/v1`) | n/a — fakes/mocks, no network | host (as dev) |
+| Auth | **OIDC/Keycloak real**, `LOCAL_DEVELOPMENT=false` | `LOCAL_DEVELOPMENT=true` → `Bearer dev-token` = **uid 123**, or `ADMIN_KEY`, or real OIDC | uid 123 / `FakeAuthProvider` (no live IdP) | real OIDC (the E2E path) or uid 123 |
+| Store | Mongo (`--profile mongo`) or the Firestore emulator | as prod | `FakeDocumentStore` / `mongomock` (no live DB) | Mongo / emulator, live |
+| Object / vector / push | S3-compat (`objstore`) / Qdrant (`chat`) / ntfy (`push`) — operator services | as prod (host-reachable) | fakes (`FakeObjectStore`/`FakeVectorStore`, in-memory) | live services via profiles |
+| Data seed | operator-provided | **`compose.seed.yaml`** overlay: 5-user MELD/Friends seed via the backend REST API (D35) | n/a | via the API, like seed |
+| API exposure | **none raw** — behind the TLS proxies (`api-proxy`/`kc-proxy`) | published on `:8000` for host `curl` convenience | n/a | via `api-proxy` TLS (device trusts the self-signed CA) |
+| Env file (layered) | `backend.env.base` + `backend.env.prod` | `backend.env.base` + `backend.env.dev` | env set inline by each test | `backend.env.base` + `backend.env.dev` (+ `.seed` for seeding) |
 
-Always pass `-f compose.<env>.yaml` (there is no implicit default). Profiles
-(`mongo/objstore/push/chat/inference/auth`) are feature toggles, added per-run in any env. Unit tests
-do **not** use compose (file-isolated, ADR-0026). Copy the env templates once:
+**Rules that fall out of the matrix:**
+- Always pass `-f compose.<env>.yaml` — there is **no implicit default**. Profiles
+  (`mongo/objstore/push/chat/inference/auth`) are orthogonal feature toggles, added per-run in any env.
+- **`prod` is the hermetic proof** (`omi internal:true`, no egress = ADR-0001); **`dev` is deliberately
+  non-hermetic** (egress on, so RAG can reach host inference). Same code, different posture — the
+  difference is the network + how inference is addressed, nothing in the app.
+- **`test-unit` never uses compose** — file-isolated pytest against the built image with the repo
+  mounted (ADR-0026), driving the neutral seams with in-memory fakes (`FakeDocumentStore`,
+  `FakeObjectStore`, `FakeVectorStore`, `FakeAuthProvider`) or `mongomock`. No live services, no network.
+- **`test-e2e` is `dev` with live services** — the compose dev stack (real Mongo/Keycloak/Qdrant/ntfy),
+  driven end-to-end (OIDC login, seed, chat, push). `run-*.sh` scripts (`run-chat-e2e.sh`,
+  `run-inference-live-tests.sh`) bring up the profile(s) and exercise the real path (rule 12).
+
+Copy the env templates once:
 ```bash
 cd deploy/onprem
-for e in base dev prod; do cp backend.env.$e.example backend.env.$e; done
+for e in base dev prod; do cp backend.env.$e.example backend.env.$e; done   # + seed when seeding (D35)
 sed -i "s/^ENCRYPTION_SECRET=.*/ENCRYPTION_SECRET=$(openssl rand -hex 32)/" backend.env.base
 ```
 
