@@ -160,3 +160,52 @@ def test_group_query_supports_order_by_and_start_after():
     ids = {s.id for s in q.stream()}
     assert ids == {"e1", "e2"}  # cross-parent sweep with order_by + start_after wired (no crash)
     assert list(q.start_after("users/u1/events/e1").stream())  # start_after accepted
+
+
+def test_write_option_precondition_enforced_on_batch_delete():
+    # Regression: NeutralFirestoreClient.write_option was missing, so staged-task recovery and chat
+    # clear (which build a precondition via write_option and pass it to batch.delete) raised
+    # AttributeError on the Mongo-backed facade. It must exist AND enforce the precondition, surfacing
+    # a stale revision as google FailedPrecondition (what those callers catch to re-read and retry).
+    import pytest
+    from google.api_core.exceptions import FailedPrecondition
+
+    c = _client()
+    ref = c.document("users/u1/staged/s1")
+    ref.set({"n": 1})
+    stale = ref.get().update_time
+    ref.update({"n": 2})  # moves the revision past ``stale``
+
+    batch = c.batch()
+    batch.delete(ref, option=c.write_option(last_update_time=stale))
+    with pytest.raises(FailedPrecondition):
+        batch.commit()
+    assert ref.get().exists is True  # the refused batch left the row in place
+
+    current = ref.get().update_time
+    batch = c.batch()
+    batch.delete(ref, option=c.write_option(last_update_time=current))
+    batch.commit()
+    assert ref.get().exists is False  # a matching precondition lets the delete through
+
+
+def test_last_update_option_precondition_enforced_on_reference_update():
+    # review-queue self-heal passes a native LastUpdateOption to reference.update; the facade must map
+    # it to the store precondition, not silently ignore it, and raise on a stale revision.
+    import pytest
+    from google.api_core.exceptions import FailedPrecondition
+    from google.cloud.firestore_v1 import LastUpdateOption
+
+    c = _client()
+    ref = c.document("users/u1/review/r1")
+    ref.set({"status": "pending"})
+    stale = ref.get().update_time
+    ref.update({"status": "touched"})  # moves the revision
+
+    with pytest.raises(FailedPrecondition):
+        ref.update({"status": "healed"}, option=LastUpdateOption(stale))
+    assert ref.get().to_dict()["status"] == "touched"
+
+    current = ref.get().update_time
+    ref.update({"status": "healed"}, option=LastUpdateOption(current))
+    assert ref.get().to_dict()["status"] == "healed"

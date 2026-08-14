@@ -74,12 +74,12 @@ def test_concurrent_delete_is_normalized_to_missing_ids(monkeypatch):
             self._racing_id = racing_id
             self._deleted = False
 
-        def update(self, path, data):
+        def update(self, path, data, *, if_updated_at=None):
             if path.endswith(f'/{self._racing_id}') and not self._deleted:
                 # The concurrent delete lands the instant before our write.
                 self._deleted = True
                 self._docs.pop(path, None)
-            return super().update(path, data)
+            return super().update(path, data, if_updated_at=if_updated_at)
 
     store = _ConcurrentDeleteStore('racing')
     _seed(store, 'racing')

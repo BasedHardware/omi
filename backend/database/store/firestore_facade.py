@@ -26,6 +26,7 @@ from google.api_core import exceptions as _gexc
 from database.store import sentinels as _neutral
 from database.store.errors import AlreadyExists as _StoreAlreadyExists
 from database.store.errors import NotFound as _StoreNotFound
+from database.store.errors import PreconditionFailed as _StorePreconditionFailed
 from database.store.records import StoredDocument
 
 # Google sentinels/types are only needed to RECOGNISE values upstream passes in; importing them here
@@ -135,6 +136,30 @@ def _firestore_errors():
         raise _gexc.NotFound(str(exc)) from exc
     except _StoreAlreadyExists as exc:
         raise _gexc.AlreadyExists(str(exc)) from exc
+    except _StorePreconditionFailed as exc:
+        raise _gexc.FailedPrecondition(str(exc)) from exc
+
+
+class _Precondition:
+    """Neutral write precondition returned by ``NeutralFirestoreClient.write_option`` — the facade's
+    stand-in for a Firestore ``LastUpdateOption`` ("apply this write only if the doc's revision is
+    unchanged since ``updated_at``"). The store port enforces it via ``if_updated_at``."""
+
+    __slots__ = ("updated_at",)
+
+    def __init__(self, updated_at: Any) -> None:
+        self.updated_at = updated_at
+
+
+def _precondition_time(option: Any) -> Any:
+    """Extract the revision timestamp from a write ``option``, accepting either the facade's own
+    ``_Precondition`` (from ``write_option``) or a native Firestore ``LastUpdateOption`` (which
+    upstream constructs directly, e.g. review-queue self-heal). ``None`` -> no precondition."""
+    if option is None:
+        return None
+    if isinstance(option, _Precondition):
+        return option.updated_at
+    return getattr(option, "_last_update_time", None)
 
 
 class _AggregationResult:
@@ -225,14 +250,12 @@ class _DocRef:
         self._client._store.set(self.path, _neutral_data(data), merge=merge)
 
     def update(self, data: Dict[str, Any], option: Any = None) -> None:
-        # ``option`` (Firestore LastUpdateOption) is an optimistic-concurrency precondition ("only
-        # write if the doc's revision is unchanged"). The neutral store port has no revision-
-        # precondition primitive yet, so it is accepted but not enforced on Mongo (D37 debt). Callers
-        # that pass it (review_queue self-heal) already gate the write on a status check, so a rare
-        # lost-update is bounded, not silent corruption.
-        del option
+        # ``option`` (Firestore LastUpdateOption, or the facade's own write_option token) is an
+        # optimistic-concurrency precondition ("only write if the doc's revision is unchanged"). It maps
+        # to the store port's ``if_updated_at``; the Mongo adapter enforces it against the stored
+        # ``_updated_at`` and raises FailedPrecondition (via _firestore_errors) on a stale revision.
         with _firestore_errors():
-            self._client._store.update(self.path, _neutral_data(data))
+            self._client._store.update(self.path, _neutral_data(data), if_updated_at=_precondition_time(option))
 
     def create(self, data: Dict[str, Any]) -> None:
         with _firestore_errors():
@@ -452,17 +475,21 @@ class _FacadeTransaction:
     def set(self, ref: _DocRef, data: Dict[str, Any], merge: bool = False) -> None:
         self._client._store._set(ref.path, _neutral_data(data), merge=merge, session=self._session)
 
-    def update(self, ref: _DocRef, data: Dict[str, Any]) -> None:
+    def update(self, ref: _DocRef, data: Dict[str, Any], option: Any = None) -> None:
         with _firestore_errors():
-            self._client._store._update(ref.path, _neutral_data(data), session=self._session)
+            self._client._store._update(
+                ref.path, _neutral_data(data), if_updated_at=_precondition_time(option), session=self._session
+            )
 
     def create(self, ref: _DocRef, data: Dict[str, Any]) -> None:
         with _firestore_errors():
             self._client._store._create(ref.path, _neutral_data(data), session=self._session)
 
-    def delete(self, ref: _DocRef) -> None:
+    def delete(self, ref: _DocRef, option: Any = None) -> None:
         with _firestore_errors():
-            self._client._store._delete(ref.path, session=self._session)
+            self._client._store._delete(
+                ref.path, if_updated_at=_precondition_time(option), session=self._session
+            )
 
 
 class _FacadeBatch:
@@ -472,19 +499,20 @@ class _FacadeBatch:
         self._batch = client._store.batch()
 
     def set(self, ref: _DocRef, data: Dict[str, Any], merge: bool = False, option: Any = None) -> None:
-        del option  # LastUpdateOption precondition: accepted, not enforced on Mongo (D37 debt)
+        # No caller passes a precondition to batch.set; Firestore's set carries none either. Accept and
+        # ignore ``option`` for signature parity.
+        del option
         self._batch.set(ref.path, _neutral_data(data), merge=merge)
 
     def update(self, ref: _DocRef, data: Dict[str, Any], option: Any = None) -> None:
-        del option
-        self._batch.update(ref.path, _neutral_data(data))
+        self._batch.update(ref.path, _neutral_data(data), if_updated_at=_precondition_time(option))
 
     def delete(self, ref: _DocRef, option: Any = None) -> None:
-        del option
-        self._batch.delete(ref.path)
+        self._batch.delete(ref.path, if_updated_at=_precondition_time(option))
 
     def commit(self) -> None:
-        self._batch.commit()
+        with _firestore_errors():
+            self._batch.commit()
 
 
 class NeutralFirestoreClient:
@@ -509,6 +537,13 @@ class NeutralFirestoreClient:
 
     def batch(self) -> _FacadeBatch:
         return _FacadeBatch(self)
+
+    def write_option(self, *, last_update_time: Any) -> _Precondition:
+        # Firestore ``Client.write_option(last_update_time=...)`` builds a LastUpdateOption an upstream
+        # write then carries (batch.delete/update precondition — staged-task recovery, chat clear).
+        # Return the neutral equivalent so those paths work on the Mongo-backed facade instead of
+        # raising AttributeError; the write path maps it to the store port's ``if_updated_at``.
+        return _Precondition(last_update_time)
 
     def get_all(self, references: Iterable[_DocRef], *_: Any, **__: Any) -> Iterable[_Snapshot]:
         for ref in references:
