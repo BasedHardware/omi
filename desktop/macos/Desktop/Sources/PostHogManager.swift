@@ -484,6 +484,15 @@ extension PostHogManager {
       ])
   }
 
+  func appSessionStarted(_ session: AppSessionStart) {
+    track(
+      "App Session Started",
+      properties: [
+        "app_session_id": session.id,
+        "session_start_kind": session.kind.rawValue,
+      ])
+  }
+
   /// Track first launch with comprehensive system diagnostics
   func firstLaunch(diagnostics: [String: Any]) {
     track("First Launch", properties: diagnostics)
