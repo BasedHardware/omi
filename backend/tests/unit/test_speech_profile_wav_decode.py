@@ -152,13 +152,26 @@ class TestUploadProfileWavDecodeGuard:
         mock_upload.assert_not_called()
 
     def test_batch_skips_empty_vad_without_uploading(self):
+        class ImmediateThread:
+            def __init__(self, target, args):
+                self.target = target
+                self.args = args
+
+            def start(self):
+                self.target(*self.args)
+
+            def join(self):
+                pass
+
         with patch.object(batch_mod.os, "makedirs"), patch.object(
             batch_mod, "get_users_uid", return_value=["test-uid"]
         ), patch.object(batch_mod, "get_profile_audio_if_exists", return_value="/tmp/profile.wav"), patch.object(
             batch_mod, "upload_profile_audio"
         ) as mock_upload, patch.object(
             vad_mod, "vad_is_empty", return_value=[]
-        ) as mock_vad:
+        ) as mock_vad, patch.object(
+            batch_mod.threading, "Thread", ImmediateThread
+        ):
             batch_mod.execute()
 
         mock_vad.assert_called_once_with("/tmp/profile.wav", return_segments=True)
