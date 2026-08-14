@@ -26,6 +26,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveAssistantOrchestrationPolicy.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveExternalCaptureYield.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/MediaPlaybackIdleExemption.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+CaptureStatus.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveCaptureStatusSnapshot.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveCaptureStatusSnapshotRegistration.swift
