@@ -17,7 +17,7 @@ const {
   fetchPlatformSettings,
   PLATFORM_CURRENT_SESSION_PATH,
   PLATFORM_SETTINGS_PATH,
-} = await import(new URL("../../core/packages/adapters-platform/dist/index.js", import.meta.url).href);
+} = await import(new URL("../../frontend/packages/adapters-platform/dist/index.js", import.meta.url).href);
 const { REPO_PATHS } = await import(new URL("../lib/provenance.mjs", import.meta.url).href);
 
 const PLATFORM_REPO = REPO_PATHS.platform;

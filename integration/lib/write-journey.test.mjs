@@ -39,7 +39,7 @@ import { createReadableTaskBag } from "./write-journey-task.mjs";
 
 const corpus = readVendoredWriteOutcomes();
 const { classifyWriteOpsResponse: classify } = await import(
-  new URL("../../core/packages/adapters-platform/dist/index.js", import.meta.url).href
+  new URL("../../frontend/packages/adapters-platform/dist/index.js", import.meta.url).href
 );
 const judge = (journey) => judgeJourney(journey, { corpus, classify });
 const outcome = (journey, name) => judge(journey).assertions.find((a) => a.name === name);

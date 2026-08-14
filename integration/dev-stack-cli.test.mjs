@@ -201,11 +201,11 @@ test("RED-PROOF --stop refuses a gateway it did not start", async () => {
 test("RED-PROOF a failed assert leaves the sanitized run log readable", () => {
   const rootPair = roots();
   writeService(rootPair, "process.env.OMI_RUN_ID");
-  mkdirSync(join(rootPair.core, "core/packages/surfaces"), { recursive: true });
-  mkdirSync(join(rootPair.core, "core/shells/macos/scripts"), { recursive: true });
-  mkdirSync(join(rootPair.core, "core/shells/ios/scripts"), { recursive: true });
-  const macos = join(rootPair.core, "core/shells/macos/scripts/dev-run-macos.sh");
-  const ios = join(rootPair.core, "core/shells/ios/scripts/dev-run-ios.sh");
+  mkdirSync(join(rootPair.core, "frontend/packages/surfaces"), { recursive: true });
+  mkdirSync(join(rootPair.core, "frontend/shells/macos/scripts"), { recursive: true });
+  mkdirSync(join(rootPair.core, "frontend/shells/ios/scripts"), { recursive: true });
+  const macos = join(rootPair.core, "frontend/shells/macos/scripts/dev-run-macos.sh");
+  const ios = join(rootPair.core, "frontend/shells/ios/scripts/dev-run-ios.sh");
   writeFileSync(macos, "#!/bin/bash\nexit 1\n");
   writeFileSync(ios, "#!/bin/bash\nexit 1\n");
   chmodSync(macos, 0o755);

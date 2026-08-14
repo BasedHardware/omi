@@ -15,7 +15,7 @@
  *     an in-process suite cannot do, because the subject is the response bytes.
  *
  * The corpora are read from node_modules — deliberately. That is the copy the
- * backend is pinned to, so drift between it and core/contracts/ratified/ shows
+ * backend is pinned to, so drift between it and frontend/contracts/ratified/ shows
  * up here rather than in production.
  */
 

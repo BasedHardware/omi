@@ -8,10 +8,10 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { listSurfaceDependencyRows } from "../core/packages/surfaces/test/dependency-dist-state.mjs";
+import { listSurfaceDependencyRows } from "../frontend/packages/surfaces/test/dependency-dist-state.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const coreRoot = resolve(here, "..", "core");
+const coreRoot = resolve(here, "..", "frontend");
 const surfacesName = "@omi-core/surfaces";
 
 function readJson(path) {

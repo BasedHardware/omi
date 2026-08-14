@@ -17,7 +17,7 @@ const IOS_OUT = {
   envVar: "OMI_IOS_SHELL_DIR",
   path: "app/test/bridge_http_conformance_generated_test.dart",
 };
-// The shells are in-repo since PR-6 promotion (core/shells/). Resolving them
+// The shells are in-repo since PR-6 promotion (frontend/shells/). Resolving them
 // here rather than in a sibling tracker checkout is what makes these gates
 // actually RUN: before promotion both hosts resolved to a path that does not
 // exist inside a worktree, so `emit()` took its SKIP branch and the drift and

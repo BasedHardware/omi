@@ -11,11 +11,11 @@
  *
  *   - `PlatformTaskItem` and `Task` are FIELD-COMPLETE with each other — all
  *     thirteen fields, same names, same types, checked by reading both
- *     interfaces directly (`core/contracts/src/domain/{tasks,platform-tasks}.ts`).
+ *     interfaces directly (`frontend/contracts/src/domain/{tasks,platform-tasks}.ts`).
  *     The one difference is `id`'s nominal TS type (`RecordId`, a branded
  *     string, vs a plain `string`) — erased at runtime, so mapping one to the
  *     other invents nothing and decides nothing.
- *   - `TasksProduction.tsx` (`core/packages/surfaces/src/production/`) has NO
+ *   - `TasksProduction.tsx` (`frontend/packages/surfaces/src/production/`) has NO
  *     unit-test seam — it is a Vite/React bundle, no jsdom or
  *     `@testing-library` anywhere in this workspace. Its actual field usage
  *     was read directly rather than assumed: `id`, `description`, `dueAt`,
@@ -64,10 +64,10 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 
 const { fetchTasks } = await import(
-  new URL("../../core/packages/adapters-legacy/dist/index.js", import.meta.url).href
+  new URL("../../frontend/packages/adapters-legacy/dist/index.js", import.meta.url).href
 );
 const { fetchPlatformTaskPage } = await import(
-  new URL("../../core/packages/adapters-platform/dist/index.js", import.meta.url).href
+  new URL("../../frontend/packages/adapters-platform/dist/index.js", import.meta.url).href
 );
 const { REPO_PATHS } = await import(new URL("../lib/provenance.mjs", import.meta.url).href);
 const PLATFORM_REPO = REPO_PATHS.platform;
@@ -75,7 +75,7 @@ const BOOT_TIMEOUT_MS = 20_000;
 const ACTIVE_EPOCH = 7;
 
 const PRODUCTION_SOURCE_PATH = new URL(
-  "../../core/packages/surfaces/src/production/TasksProduction.tsx",
+  "../../frontend/packages/surfaces/src/production/TasksProduction.tsx",
   import.meta.url,
 );
 

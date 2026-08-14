@@ -59,7 +59,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 
 const { fetchPlatformTaskPage, walkPlatformTaskPages, PLATFORM_TASKS_READ_PATH } = await import(
-  new URL("../../core/packages/adapters-platform/dist/index.js", import.meta.url).href
+  new URL("../../frontend/packages/adapters-platform/dist/index.js", import.meta.url).href
 );
 const { REPO_PATHS } = await import(new URL("../lib/provenance.mjs", import.meta.url).href);
 const PLATFORM_REPO = REPO_PATHS.platform;

@@ -24,8 +24,8 @@ app="$out/${app_name}.app"
 # candidates; no machine-specific absolute fallback is permitted.
 default_dist=""
 for candidate in \
-  "$here/../../../core-foundation/core/packages/surfaces/dist" \
-  "$here/../../../../core-foundation/core/packages/surfaces/dist"; do
+  "$here/../../packages/surfaces/dist" \
+  "$here/../../../frontend/packages/surfaces/dist"; do
   if [[ -f "$candidate/index.html" ]]; then
     default_dist="$(cd "$candidate" && pwd)"
     break
@@ -40,7 +40,7 @@ if [[ -z "${OMI_SURFACES_DIST:-}" ]]; then
 fi
 if [[ -z "$OMI_SURFACES_DIST" || ! -f "$OMI_SURFACES_DIST/index.html" ]]; then
   echo "ERROR: surfaces dist missing; set OMI_SURFACES_DIST to a dist directory" >&2
-  echo "  Run: cd core && pnpm install && pnpm --filter @omi-core/surfaces build" >&2
+  echo "  Run: cd frontend && pnpm install && pnpm --filter @omi-core/surfaces build" >&2
   exit 1
 fi
 

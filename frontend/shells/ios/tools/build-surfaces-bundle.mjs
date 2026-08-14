@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Copies the real @omi-core/surfaces ship build into app/assets/surfaces/
 // so the iOS scheme handler can serve it at omi-ui://local/ (wave-2).
-// Expects core/packages/surfaces/dist to already be built.
+// Expects frontend/packages/surfaces/dist to already be built.
 //   node tools/build-surfaces-bundle.mjs
 // Optional: SURFACES_DIST=/abs/path/to/dist
 
@@ -20,8 +20,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const contract = JSON.parse(readFileSync(join(root, 'contract/bridge.contract.json'), 'utf8'));
-// The shell is in-repo at core/shells/ios since the PR-6 promotion, so the
-// surfaces build is a sibling package: core/shells/ios -> core/packages/...
+// The shell is in-repo at frontend/shells/ios since the PR-6 promotion, so the
+// surfaces build is a sibling package: frontend/shells/ios -> frontend/packages/...
 // The previous value pointed at a sibling `core-foundation` checkout, a layout
 // that does not exist inside a worktree — the same stale-path class of bug that
 // left the bridge drift gates silently SKIPping before promotion.
@@ -31,7 +31,7 @@ const out = join(root, 'app/assets/surfaces');
 
 if (!existsSync(join(dist, 'index.html'))) {
   console.error(
-    `surfaces dist missing at ${dist} — run: cd core && pnpm --filter @omi-core/surfaces build`,
+    `surfaces dist missing at ${dist} — run: cd frontend && pnpm --filter @omi-core/surfaces build`,
   );
   process.exit(1);
 }

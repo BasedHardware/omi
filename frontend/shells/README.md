@@ -1,4 +1,4 @@
-# `core/shells/` — native hosting code
+# `frontend/shells/` — native hosting code
 
 Per-platform hosting for the shared TypeScript surfaces: a loopback/scheme origin,
 webview mounting, and the bridge bindings. Promoted here from the frontend tracker's
@@ -16,10 +16,10 @@ launcher should call these and nothing deeper; the internals below them are free
 
 ```bash
 # macOS — LIVE against the registered local-production service
-core/shells/macos/scripts/dev-run-macos.sh --api http://127.0.0.1:4851
+frontend/shells/macos/scripts/dev-run-macos.sh --api http://127.0.0.1:4851
 
 # iOS Simulator — LIVE against the registered local-production service
-core/shells/ios/scripts/dev-run-ios.sh --api http://127.0.0.1:4851
+frontend/shells/ios/scripts/dev-run-ios.sh --api http://127.0.0.1:4851
 ```
 
 Their shared LIVE controls honor the same API environment; platform-specific controls are
@@ -79,7 +79,7 @@ override the port; the iOS origin is not configurable at all.
 published the app bundle to the LAN while every `127.0.0.1` check still passed.
 
 ```bash
-core/shells/macos/scripts/verify-loopback.sh 4841
+frontend/shells/macos/scripts/verify-loopback.sh 4841
 # VERDICT: loopback-bind PASS
 ```
 
@@ -119,5 +119,5 @@ window composited; `simctl` proves both. A byte-identical "success" pair is a fa
 
   ```bash
   FLUTTER_BIN=/Users/dazheng/.local/share/mise/installs/flutter/3.44.5/bin/flutter \
-    core/shells/ios/scripts/dev-run-ios.sh --api http://127.0.0.1:4851
+    frontend/shells/ios/scripts/dev-run-ios.sh --api http://127.0.0.1:4851
   ```

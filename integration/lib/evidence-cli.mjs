@@ -23,7 +23,7 @@ const flag = (name) => {
 };
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 const writeJson = (path, value) => writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
-const validator = resolve(dirname(fileURLToPath(import.meta.url)), "../../core/shells/tools/validate-consumer-evidence.mjs");
+const validator = resolve(dirname(fileURLToPath(import.meta.url)), "../../frontend/shells/tools/validate-consumer-evidence.mjs");
 
 function requireRawRunId(runId) {
   const failure = rawRunIdFailure(runId);

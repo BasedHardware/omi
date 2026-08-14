@@ -27,7 +27,7 @@ const OUT_REL = {
   envVar: "OMI_IOS_SHELL_DIR",
 };
 
-// In-repo at core/shells/ios since the PR-6 promotion; see gen-bridge-swift.mjs.
+// In-repo at frontend/shells/ios since the PR-6 promotion; see gen-bridge-swift.mjs.
 const SHELL_DIR = process.env[OUT_REL.envVar] ?? path.join(ROOT, "shells/ios");
 
 const check = process.argv.includes("--check");
