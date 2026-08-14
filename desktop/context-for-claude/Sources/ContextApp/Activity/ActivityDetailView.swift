@@ -65,14 +65,21 @@ enum ActivityDetailMetrics {
     static let backChipGap: CGFloat = 5
     static let backChipGlyphSize: CGFloat = 10
 
-    /// The conversation's emoji disc, a step up from the row's 40 pt so the header outranks the row
-    /// it was opened from.
-    static let tileSize: CGFloat = 46
-    static let emojiSize: CGFloat = 22
-    static let glyphSize: CGFloat = 17
+    /// The conversation's emoji, set bare beside the headline exactly as the reference sets it — no
+    /// disc, no ring. It used to sit in a 46 pt circle carried over from the spine's rows, which put
+    /// a drawn fixture between the back control and the title and made the emoji read as an avatar
+    /// rather than as the conversation's own mark. 30 pt is the reference's `title` step, scaled to
+    /// this app's ladder: a shade under the 27 pt headline's cap height plus its ascender, so the
+    /// two sit on the same optical line.
+    static let headerEmojiSize: CGFloat = 30
 
-    /// The overline — "Conversation", "Memory", "Task" — in the day header's own idiom: uppercase
-    /// and tracked out, which is what makes a word read as chrome rather than as content.
+    /// A circular icon control in the header — the reference's toolbar shape, at the same diameter
+    /// as the pills beside it so the two read as one row of controls.
+    static let iconButtonSize: CGFloat = SearchLayout.chipHeight
+    static let iconButtonGlyphSize: CGFloat = 12
+
+    /// The overline — "Memory", "Task" — in the day header's own idiom: uppercase and tracked out,
+    /// which is what makes a word read as chrome rather than as content.
     static let overlineSize: CGFloat = 11
     static let overlineTracking: CGFloat = 1.0
 
@@ -82,7 +89,11 @@ enum ActivityDetailMetrics {
     static let sectionLabelGap: CGFloat = 8
     /// Between the glyph and the word in a section label.
     static let sectionGlyphGap: CGFloat = 6
-    static let sectionGlyphSize: CGFloat = 11
+    /// Beside a section's name, which is set at the semibold label role.
+    static let sectionGlyphSize: CGFloat = 12
+    /// …and beside the card's own bar, which is set at the small label role and takes the smaller
+    /// glyph with it.
+    static let barGlyphSize: CGFloat = 11
     static let bodyTopPadding: CGFloat = 18
     static let bodyBottomPadding: CGFloat = 28
 
@@ -129,10 +140,41 @@ enum ActivityDetailMetrics {
     static let cardLineGap: CGFloat = 3
     static let checkGlyphSize: CGFloat = 14
 
+    /// The sheet the whole summary sits on, under its own `Conversation Details` bar. A step
+    /// rounder than the cards inside it: a container that shares its children's radius reads as a
+    /// fourth sibling rather than as the thing holding them.
+    static let pageCardRadius: CGFloat = 18
+    static let pageCardBarPaddingHorizontal: CGFloat = 16
+    static let pageCardBarPaddingVertical: CGFloat = 9
+    static let pageCardInset: CGFloat = 16
+
     /// How much of an app's reading is shown before it is folded away, and the control that unfolds
-    /// it. The reference's own threshold — a paragraph under it is not worth a disclosure.
-    static let appResultCollapsedLength = 200
+    /// it.
+    ///
+    /// The reference folds at 200 characters. That number is a *measure* decision wearing a length,
+    /// and this screen's measure is not the reference's: at `proseMaxWidth` and the reading role
+    /// 200 characters is barely three lines, so the reference's threshold ported literally folded
+    /// away almost every reading an app has ever produced and left a card that was mostly its own
+    /// disclosure control. 600 is the same intent at this width — around nine lines, which is where
+    /// a reading stops being a paragraph and starts being a page.
+    static let appResultCollapsedLength = 600
     static let disclosureGlyphSize: CGFloat = 10
+    /// The tile that stands in for an app's icon, at the reference's own size.
+    static let appIconSize: CGFloat = 32
+    static let appIconRadius: CGFloat = 8
+    static let appIconGlyphSize: CGFloat = 15
+    /// Between the app's identity row and the prose under it.
+    static let appHeaderGap: CGFloat = 9
+
+    /// Prose that arrived as markdown: between two blocks of it, and the gutter a bullet's dot
+    /// sits in. The dot is set at the reading role, so the gutter is a little wider than the glyph
+    /// to keep the wrapped second line of a bullet clear of it.
+    static let proseBlockGap: CGFloat = 7
+    static let bulletGutterWidth: CGFloat = 14
+    /// The extra air a sub-heading takes above itself, so that a run of `**Heading**` / bullets /
+    /// `**Heading**` / bullets reads as two groups rather than as one evenly-spaced list. Never on
+    /// the first block, which already has the section's own gap over it.
+    static let proseHeadingLeadGap: CGFloat = 6
 
     /// The empty and failed bodies: a glyph over two lines of type, centred in what is left of the
     /// panel.
@@ -216,7 +258,7 @@ struct ActivityDetailView: View {
             case .summary:
                 header(showsTranscriptControl: true)
                 rule
-                page { summarySections(conversation) }
+                page { detailsCard { summarySections(conversation) } }
             case .transcript where isLocal:
                 // No pane to go back to, so the ordinary header stays: this *is* the local
                 // conversation's only screen, and the way out of it is Activity.
@@ -257,26 +299,80 @@ struct ActivityDetailView: View {
         }
     }
 
+    /// The sheet the whole summary is read off, under a bar naming it — the reference's own card
+    /// (`.glassCard` under a `Conversation Details` header strip), which is the single largest
+    /// structural difference between a page of loose sections and the screen the shipping app draws.
+    ///
+    /// **Drawn in every state, not only when there is something under it.** The reference draws it
+    /// unconditionally and overlays its processing notice on top; keeping that means a conversation
+    /// that arrives slowly does not reflow its own page as the read lands, and a failure sentence is
+    /// framed as this conversation's details being unavailable rather than as a bare apology
+    /// floating on glass.
+    ///
+    /// The fill is a rung *under* the cards it contains, so nesting reads as depth rather than as
+    /// two boxes of the same grey: an action item at `Ink.rowFill` composites over this to land
+    /// around `rowFillHover`, which is the separation the spine's own hover state uses.
+    private func detailsCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        let shape = RoundedRectangle(
+            cornerRadius: ActivityDetailMetrics.pageCardRadius, style: .continuous)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: ActivityDetailMetrics.sectionGlyphGap) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: ActivityDetailMetrics.barGlyphSize, weight: .semibold))
+                    .foregroundStyle(Ink.secondary)
+                Text(ActivityDetailCopy.conversationDetailsHeading)
+                    .inkStyle(.statusLabel, color: Ink.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, ActivityDetailMetrics.pageCardBarPaddingHorizontal)
+            .padding(.vertical, ActivityDetailMetrics.pageCardBarPaddingVertical)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Ink.rowFill)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Ink.separator).frame(height: 1)
+            }
+
+            VStack(alignment: .leading, spacing: ActivityDetailMetrics.sectionGap) {
+                content()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(ActivityDetailMetrics.pageCardInset)
+        }
+        .background(shape.fill(Ink.wash))
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(Ink.separator, lineWidth: 1))
+        .accessibilityIdentifier("activity-detail-card")
+    }
+
     // MARK: Header
 
+    /// The reference's header row, in the reference's order: the back pill, the conversation's own
+    /// emoji, the title with the clock under it, and the controls trailing.
+    ///
+    /// **A conversation carries no overline.** The reference has none, and it is right: the emoji
+    /// and a title in the largest type on the screen already say what kind of thing this is, and a
+    /// tracked-out `CONVERSATION` above them is a second answer to a question nobody asked. A memory
+    /// and a task keep theirs — they have no emoji and their headline is their whole content, so the
+    /// overline is the only thing naming the kind.
     private func header(showsTranscriptControl: Bool) -> some View {
         HStack(alignment: .top, spacing: ActivityDetailMetrics.headerGap) {
             ActivityDetailBackChip(
                 glyph: "chevron.left", label: "Activity", help: "Back to Activity (Escape)",
                 identifier: "activity-detail-back", action: onBack)
             if case .conversation(let conversation) = request.subject {
-                ActivityConversationTile(
-                    emoji: conversation.emoji, size: ActivityDetailMetrics.tileSize,
-                    emojiSize: ActivityDetailMetrics.emojiSize,
-                    glyphSize: ActivityDetailMetrics.glyphSize)
+                Text(conversation.emoji)
+                    .font(.system(size: ActivityDetailMetrics.headerEmojiSize))
+                    .accessibilityHidden(true)
             }
             VStack(alignment: .leading, spacing: ActivityDetailMetrics.titleGap) {
-                Text(request.subject.overline.uppercased())
-                    .font(
-                        .system(size: ActivityDetailMetrics.overlineSize, weight: .semibold)
-                    )
-                    .tracking(ActivityDetailMetrics.overlineTracking)
-                    .foregroundStyle(Ink.secondary)
+                if let overline {
+                    Text(overline.uppercased())
+                        .font(
+                            .system(size: ActivityDetailMetrics.overlineSize, weight: .semibold)
+                        )
+                        .tracking(ActivityDetailMetrics.overlineTracking)
+                        .foregroundStyle(Ink.secondary)
+                }
                 headline
                 metaLine
             }
@@ -288,8 +384,14 @@ struct ActivityDetailView: View {
         .padding(.bottom, ActivityDetailMetrics.headerBottomPadding)
     }
 
-    /// The reference's trailing header: the status badge when there is one, then the control that
-    /// reaches the other pane. Its editing toolbar is not ported — nothing on this surface writes.
+    /// The reference's trailing header: the status badge when there is one, the control that reaches
+    /// the other pane, and the one round button from its toolbar this app can honour.
+    ///
+    /// **The rest of that toolbar is deliberately absent, not merely unimplemented.** The reference
+    /// puts a rename pencil beside the title and a link, folder and trash beside the transcript
+    /// button; every one of those writes to a record this surface only reads, and a control that
+    /// cannot do the thing it draws is worse than no control. Copy is the exception — it is a read,
+    /// and this app already performs it — so it keeps the reference's shape.
     @ViewBuilder
     private func headerControls(showsTranscriptControl: Bool) -> some View {
         HStack(spacing: ActivityDetailMetrics.chipGap) {
@@ -305,7 +407,19 @@ struct ActivityDetailView: View {
                     help: "Show the transcript", identifier: "activity-detail-view-transcript",
                     action: { openTranscript(focusing: []) })
             }
+            if let lines = loadedBody?.lines, !lines.isEmpty {
+                ActivityDetailIconButton(
+                    glyph: "doc.on.doc", help: "Copy the transcript",
+                    identifier: "activity-detail-copy-transcript-header",
+                    action: { copyTranscript(lines) })
+            }
         }
+    }
+
+    /// The word over the headline, or nil for the one subject that does not need one — see `header`.
+    private var overline: String? {
+        guard case .conversation = request.subject else { return request.subject.overline }
+        return nil
     }
 
     /// The one line that names the thing.
@@ -319,10 +433,14 @@ struct ActivityDetailView: View {
     private var headline: some View {
         switch request.subject {
         case .conversation(let conversation):
+            // One line, truncated with an ellipsis — the reference's `.lineLimit(1)`. A title that
+            // wraps to two pushes the clock under it down past the header's rule and takes the row
+            // of controls beside it with it, which is a header whose height depends on how long the
+            // account's headline happened to be.
             Text(conversation.title)
                 .inkStyle(.stepHeadline, color: Ink.primary)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+                .truncationMode(.tail)
         case .memory(let memory):
             Text(memory.text)
                 .inkStyle(.prose, color: Ink.primary)
@@ -354,8 +472,8 @@ struct ActivityDetailView: View {
 
     /// The header's clock sentence.
     ///
-    /// A conversation states the day and the window it ran over — the reference's
-    /// `MMM d, yyyy from h:mm a to h:mm a`, in this app's own day vocabulary so that "Today" and
+    /// A conversation states the day and the window it ran over, in the reference's own grammar —
+    /// `<day> from h:mm a to h:mm a` — and in this app's day vocabulary, so that "Today" and
     /// "Yesterday" read the way they do everywhere else on the spine. **How long it took is not
     /// here**: the reference makes that a metadata chip in the body and so does this screen, and a
     /// duration stated in both places is the same fact competing with itself.
@@ -366,7 +484,7 @@ struct ActivityDetailView: View {
     private var timing: String {
         switch request.subject {
         case .conversation(let conversation):
-            return ActivityFormat.day(conversation.startedAt) + " · "
+            return ActivityFormat.day(conversation.startedAt) + " "
                 + ActivityFormat.window(from: conversation.startedAt, duration: conversation.duration)
         case .memory(let memory):
             return "Kept \(ActivityFormat.stamp(memory.timestamp))"
@@ -398,12 +516,14 @@ struct ActivityDetailView: View {
             // Ahead of everything, because it is the reason the rest of the page is thin.
             if let status = body.status { processingNotice(status) }
             if let overview = body.overview {
-                section(glyph: "text.alignleft", title: ActivityDetailCopy.summaryHeading) {
-                    Text(overview)
-                        .inkStyle(.prose, color: Ink.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: ActivityDetailMetrics.proseMaxWidth, alignment: .leading)
-                        .textSelection(.enabled)
+                // The reference's starred `Summary`, glyph for glyph. Its star is `PageGlass.starred`
+                // — orange — and this one is not: that hue is a thirteenth colour role introduced for
+                // one decorative glyph on a surface whose whole palette is system semantics and
+                // neutrals, and this package ranks by weight rather than by hue (INV-UI-1). The shape
+                // is what carries the reference's meaning here; the colour was carrying none, since
+                // nothing on this screen is starred.
+                section(glyph: "star.fill", title: ActivityDetailCopy.summaryHeading) {
+                    ActivityDetailProse(text: overview)
                 }
             }
             metadataRow(body, conversation: conversation)
@@ -716,8 +836,12 @@ private struct ActivityDetailSectionLabel: View {
             Image(systemName: glyph)
                 .font(.system(size: ActivityDetailMetrics.sectionGlyphSize, weight: .semibold))
                 .foregroundStyle(Ink.secondary)
+            // `buttonLabel` — 15 / semibold — and not the 12 pt label role this used to be. The
+            // reference sets every section heading a full weight above the prose under it, and at
+            // 12 pt regular over 17 pt prose the heading was the *quietest* thing in its own
+            // section. It is the only semibold rung in the ladder short of display type.
             Text(title)
-                .inkStyle(.statusLabel, color: Ink.primary)
+                .inkStyle(.buttonLabel, color: Ink.primary)
             if let count, count > 0 {
                 Text(ActivityFormat.number(count))
                     .inkStyle(.statusLabel, color: Ink.secondary)
@@ -749,8 +873,44 @@ private struct ActivityDetailChip: View {
         }
         .padding(.horizontal, ActivityDetailMetrics.chipPaddingHorizontal)
         .padding(.vertical, ActivityDetailMetrics.chipPaddingVertical)
-        .background(Capsule(style: .continuous).fill(Ink.rowFill))
+        // The panel's own chip: a wash *and* a hairline, which is what makes these read as outlined
+        // pills rather than as three grey smudges. A bare fill at `rowFill` is 4.5% of the label
+        // colour — on glass, over a light desktop, that is very nearly nothing, and the row lost its
+        // shape entirely against a pale ground.
+        .activityChip(isSelected: false, isHovering: false)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A round control in the header: one glyph, no word. The reference's toolbar shape.
+private struct ActivityDetailIconButton: View {
+    let glyph: String
+    let help: String
+    let identifier: String
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: glyph)
+                .font(.system(size: ActivityDetailMetrics.iconButtonGlyphSize, weight: .medium))
+                .foregroundStyle(Ink.primary)
+                .frame(
+                    width: ActivityDetailMetrics.iconButtonSize,
+                    height: ActivityDetailMetrics.iconButtonSize)
+                .background(
+                    Circle()
+                        .fill(isHovering ? SearchInk.chipFillHover : SearchInk.chipFill)
+                        .overlay(Circle().strokeBorder(SearchInk.chipStroke, lineWidth: 1))
+                )
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help(help)
+        .accessibilityLabel(Text(help))
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -853,13 +1013,19 @@ private struct ActivityActionItemRow: View {
     }
 }
 
-/// What one app made of the conversation, folded when it runs long.
+/// What one app made of the conversation: an identity row, then the reading, folded when it runs
+/// long.
 ///
-/// The reference's card carries the app's icon, name and author above the prose and a "Generated by"
-/// footer under it; all of that comes from a catalog this app has no way to load, and its own
-/// catalog-less branch degrades to the literal word "App". So the card is the prose, and the
-/// section label above it says whose kind of thing it is.
-private struct ActivityAppResultCard: View {
+/// **The identity row is the reference's own catalog-less branch, ported literally.** The reference
+/// resolves each result against the app catalog it keeps loaded and draws the app's icon, name and
+/// author; when the catalog has not answered — which is what the shipping app shows in practice —
+/// it falls back to a rounded square with `app.fill` in it and the plain word "App". This app has no
+/// catalog and no way to get one, so that fallback is not a degraded state here, it is the state:
+/// the row is honest about who wrote the prose (an app did) without inventing which one.
+///
+/// The "Generated by <app>" footer under the reference's prose is *not* ported, because unlike the
+/// header it cannot degrade — it names the app or it says nothing at all.
+struct ActivityAppResultCard: View {
     let result: ActivityAppResult
 
     @State private var isExpanded = false
@@ -870,41 +1036,171 @@ private struct ActivityAppResultCard: View {
 
     private var shown: String {
         guard isFoldable, !isExpanded else { return result.content }
-        return String(result.content.prefix(ActivityDetailMetrics.appResultCollapsedLength)) + "…"
+        return Self.folded(result.content, at: ActivityDetailMetrics.appResultCollapsedLength)
+    }
+
+    /// The first `limit` characters, snapped back to the last line break inside them.
+    ///
+    /// A blind `prefix` cuts mid-word, and once the prose is rendered rather than printed it also
+    /// cuts mid-*block* — half a bullet, or a heading with nothing under it. Snapping to a line
+    /// boundary means the fold always lands between two things the reader can see the shape of. A
+    /// payload whose first line is already past the limit has no boundary to snap to and keeps the
+    /// blunt cut, which is the honest answer for a wall of text with no structure in it.
+    static func folded(_ content: String, at limit: Int) -> String {
+        let head = content.prefix(limit)
+        guard let lastBreak = head.lastIndex(where: \.isNewline) else { return String(head) + "…" }
+        return head[head.startIndex..<lastBreak].trimmingCharacters(in: .whitespacesAndNewlines)
+            + "\n…"
     }
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: ActivityDetailMetrics.cardCornerRadius, style: .continuous)
     }
 
+    private var iconShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: ActivityDetailMetrics.appIconRadius, style: .continuous)
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: ActivityDetailMetrics.cardGlyphGap) {
-            Text(shown)
-                .inkStyle(.prose, color: Ink.primary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: ActivityDetailMetrics.proseMaxWidth, alignment: .leading)
-                .textSelection(.enabled)
-            Spacer(minLength: 0)
-            if isFoldable {
-                Button(action: { isExpanded.toggle() }) {
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(
-                            .system(
-                                size: ActivityDetailMetrics.disclosureGlyphSize, weight: .semibold)
-                        )
-                        .foregroundStyle(Ink.secondary)
-                        .contentShape(Rectangle())
+        VStack(alignment: .leading, spacing: ActivityDetailMetrics.appHeaderGap) {
+            HStack(spacing: ActivityDetailMetrics.cardGlyphGap) {
+                Image(systemName: "app.dashed")
+                    .font(.system(size: ActivityDetailMetrics.appIconGlyphSize, weight: .regular))
+                    .foregroundStyle(Ink.secondary)
+                    .frame(
+                        width: ActivityDetailMetrics.appIconSize,
+                        height: ActivityDetailMetrics.appIconSize)
+                    .background(iconShape.fill(Ink.rowFillHover))
+                    .overlay(iconShape.strokeBorder(Ink.separator, lineWidth: 1))
+                Text(ActivityDetailCopy.appResultTitle)
+                    .inkStyle(.rowCopy, color: Ink.primary)
+                Spacer(minLength: 0)
+                // Only when there is something folded behind it. The reference draws the chevron
+                // unconditionally, which on a short reading is a control that toggles nothing.
+                if isFoldable {
+                    Button(action: { isExpanded.toggle() }) {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(
+                                .system(
+                                    size: ActivityDetailMetrics.disclosureGlyphSize,
+                                    weight: .semibold)
+                            )
+                            .foregroundStyle(Ink.secondary)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(isExpanded ? "Show less" : "Show all of it")
+                    .accessibilityIdentifier("activity-detail-app-result-disclosure")
                 }
-                .buttonStyle(.plain)
-                .help(isExpanded ? "Show less" : "Show all of it")
-                .accessibilityIdentifier("activity-detail-app-result-disclosure")
             }
+            ActivityDetailProse(text: shown)
         }
         .padding(.horizontal, ActivityDetailMetrics.cardPaddingHorizontal)
         .padding(.vertical, ActivityDetailMetrics.cardPaddingVertical)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(shape.fill(Ink.rowFill))
         .overlay(shape.strokeBorder(Ink.separator, lineWidth: 1))
+    }
+}
+
+// MARK: - Prose that arrived as markdown
+
+/// The account's prose, rendered rather than printed.
+///
+/// **Everything on this screen that an LLM wrote arrives as markdown**, and until now it was set as
+/// one flat `Text`: an app's reading of a conversation came out as literal `**Sleep Times**` with
+/// `- ` hanging off the front of every bullet, which is the single loudest tell that a pane is
+/// showing a raw payload. The reference renders both the overview and each app result through
+/// `OmiMarkdown`; this is the same job at the width of what the account actually sends.
+///
+/// **Deliberately three block kinds and no more.** A heading, a bullet, a paragraph — which is the
+/// whole of what these payloads contain. Tables, ordered lists, block quotes, fenced code and images
+/// are not implemented and are not stubbed: they arrive as ordinary paragraphs with their syntax
+/// intact, which is exactly what happens today and is a great deal better than a half-drawn table.
+/// Inline emphasis, code spans and links come free from `AttributedString`'s own parser.
+///
+/// Parsed through `AttributedString(markdown:)` rather than `LocalizedStringKey`, which is the only
+/// safe way to hand it a string from the network: a `LocalizedStringKey` built from arbitrary text
+/// treats `%` as a format specifier and the payload is somebody's conversation.
+struct ActivityDetailProse: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ActivityDetailMetrics.proseBlockGap) {
+            ForEach(Array(Self.blocks(of: text).enumerated()), id: \.offset) { index, block in
+                switch block {
+                case .heading(let run):
+                    Text(run)
+                        .inkStyle(.buttonLabel, color: Ink.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, index == 0 ? 0 : ActivityDetailMetrics.proseHeadingLeadGap)
+                case .bullet(let run):
+                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                        Text("•")
+                            .inkStyle(.prose, color: Ink.secondary)
+                            .frame(
+                                width: ActivityDetailMetrics.bulletGutterWidth, alignment: .leading)
+                        Text(run)
+                            .inkStyle(.prose, color: Ink.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                case .paragraph(let run):
+                    Text(run)
+                        .inkStyle(.prose, color: Ink.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .frame(maxWidth: ActivityDetailMetrics.proseMaxWidth, alignment: .leading)
+        .textSelection(.enabled)
+    }
+
+    /// One block of rendered prose.
+    enum Block: Equatable {
+        case heading(AttributedString)
+        case bullet(AttributedString)
+        case paragraph(AttributedString)
+    }
+
+    /// Splits a payload into blocks, one line at a time.
+    ///
+    /// Line-wise and not a real block parser, because the thing being parsed is a line-wise format
+    /// in practice: these payloads are a heading, some bullets, a heading, some bullets. A blank
+    /// line is a block separator and never a block — `VStack` spacing is what puts air between two
+    /// paragraphs, and an empty `Text` would put a whole line box there instead.
+    static func blocks(of text: String) -> [Block] {
+        text.components(separatedBy: .newlines).compactMap { raw in
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { return nil }
+
+            // `## Sleep Times` and `**Sleep Times**` are the same heading, and the account's apps
+            // send both. The second is only a heading when the emphasis spans the *whole* line: a
+            // sentence that happens to start with a bold clause is a sentence.
+            if line.hasPrefix("#") {
+                let stripped = line.drop { $0 == "#" }.trimmingCharacters(in: .whitespaces)
+                return stripped.isEmpty ? nil : .heading(inline(stripped))
+            }
+            if line.count > 4, line.hasPrefix("**"), line.hasSuffix("**"),
+                !line.dropFirst(2).dropLast(2).contains("**")
+            {
+                return .heading(inline(String(line.dropFirst(2).dropLast(2))))
+            }
+            for marker in ["- ", "* ", "• "] where line.hasPrefix(marker) {
+                let item = String(line.dropFirst(marker.count))
+                return item.isEmpty ? nil : .bullet(inline(item))
+            }
+            return .paragraph(inline(line))
+        }
+    }
+
+    /// Inline markdown, or the line verbatim when it will not parse. **Never a throw and never a
+    /// dropped line**: a payload this parser cannot read is still the reader's own conversation.
+    static func inline(_ line: String) -> AttributedString {
+        (try? AttributedString(
+            markdown: line,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+            ?? AttributedString(line)
     }
 }
 

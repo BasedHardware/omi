@@ -526,10 +526,71 @@ final class ActivityDetailTests: XCTestCase {
         XCTAssertEqual(ActivityFormat.offset(-5), "0:00")
     }
 
-    func testAConversationWithNoWidthStatesOneTimeRatherThanARange() {
+    /// The reference's grammar, which is words and not an en dash: `<day> from h:mm a to h:mm a`,
+    /// and `<day> at h:mm a` for a conversation with no width. The clause carries its own
+    /// preposition so the header only ever joins it to the day.
+    func testAConversationStatesItsWindowInTheReferencesGrammar() {
         XCTAssertEqual(
-            ActivityFormat.window(from: at(hour: 9), duration: 0), ActivityFormat.time(at(hour: 9)))
-        XCTAssertTrue(ActivityFormat.window(from: at(hour: 9), duration: 1_800).contains("–"))
+            ActivityFormat.window(from: at(hour: 9), duration: 0),
+            "at \(ActivityFormat.time(at(hour: 9)))")
+        XCTAssertEqual(
+            ActivityFormat.window(from: at(hour: 9), duration: 1_800),
+            "from \(ActivityFormat.time(at(hour: 9))) to \(ActivityFormat.time(at(hour: 9, minute: 30)))")
+    }
+
+    // MARK: - Prose that arrived as markdown
+
+    /// **The regression the app-insights card was rebuilt for.** An app's reading arrives as
+    /// markdown and used to be printed verbatim — literal `**Sleep Times**` with `- ` hanging off
+    /// every bullet, which is a pane showing its own payload.
+    func testAnAppsReadingIsSplitIntoHeadingsBulletsAndParagraphs() {
+        let blocks = ActivityDetailProse.blocks(
+            of: """
+                **Decisions**
+                - The tier is held.
+                * The plan goes out Thursday.
+
+                ## Still open
+                Nobody owns the rename.
+                """)
+
+        XCTAssertEqual(
+            blocks,
+            [
+                .heading(ActivityDetailProse.inline("Decisions")),
+                .bullet(ActivityDetailProse.inline("The tier is held.")),
+                .bullet(ActivityDetailProse.inline("The plan goes out Thursday.")),
+                .heading(ActivityDetailProse.inline("Still open")),
+                .paragraph(ActivityDetailProse.inline("Nobody owns the rename.")),
+            ])
+        // The syntax is consumed, not printed: the rendered run carries neither the asterisks nor
+        // the dash.
+        guard case .heading(let first) = blocks[0] else { return XCTFail("expected a heading") }
+        XCTAssertEqual(String(first.characters), "Decisions")
+        // A blank line separates blocks and is never a block of its own — an empty `Text` would put
+        // a whole line box where the stack's own spacing belongs.
+        XCTAssertEqual(blocks.count, 5)
+    }
+
+    /// A sentence that merely *begins* with a bold clause is a sentence. Promoting it to a heading
+    /// would silently restyle ordinary prose the moment an app emphasised its first two words.
+    func testOnlyAWhollyEmphasisedLineIsAHeading() {
+        guard case .paragraph = ActivityDetailProse.blocks(of: "**Priya** owns the migration.")[0]
+        else { return XCTFail("a bold opening clause is not a heading") }
+        guard case .heading = ActivityDetailProse.blocks(of: "**Priya**")[0] else {
+            return XCTFail("a wholly emphasised line is a heading")
+        }
+    }
+
+    /// The fold lands between blocks rather than mid-word, so a collapsed reading never shows half
+    /// a bullet or a heading with nothing under it.
+    func testAFoldedReadingIsCutAtALineBoundary() {
+        let content = "**Decisions**\n- The tier is held.\n- The plan goes out Thursday."
+        XCTAssertEqual(
+            ActivityAppResultCard.folded(content, at: 40), "**Decisions**\n- The tier is held.\n…")
+        // A first line already past the limit has no boundary to snap back to, and keeps the blunt
+        // cut rather than collapsing to nothing.
+        XCTAssertEqual(ActivityAppResultCard.folded("one long unbroken line", at: 8), "one long…")
     }
 
     // MARK: - Helpers

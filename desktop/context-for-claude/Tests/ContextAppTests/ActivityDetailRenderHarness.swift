@@ -329,13 +329,22 @@ extension ActivityRenderHarnessDetail {
                     sourceSegmentIDs: []),
             ],
             appResults: [
+                // **Markdown, because that is what an app really sends.** Every reading on this
+                // screen was written by a language model and arrives with `**bold**` sub-headings
+                // and `- ` bullets in it; a fixture of one flat paragraph is a fixture that cannot
+                // fail when the renderer stops rendering. Under the fold, so the frame shows the
+                // whole shape rather than the disclosure control.
                 ActivityAppResult(
                     id: "r1",
-                    content:
-                        "Two decisions and one open question. The enterprise tier is held until the "
-                        + "beta ships, the migration plan goes out Thursday, and nobody has said who "
-                        + "owns the rename once the release is out — which is the thread most likely "
-                        + "to be dropped between now and then.")
+                    content: """
+                        **Decisions**
+                        - The enterprise tier is held until the beta ships.
+                        - The migration plan goes out Thursday morning.
+
+                        **Still open**
+                        - Nobody has said who owns the rename once the release is out — the thread \
+                        most likely to be dropped between now and then.
+                        """)
             ],
             lines: script.enumerated().map { index, line in
                 ActivityTranscriptLine(

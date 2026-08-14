@@ -90,9 +90,20 @@ struct SearchBarView: View {
         case results
     }
 
+    /// The account half of the activity body.
+    ///
+    /// **A stored seam and not an expression inside `body`**, because the expression was a way for a
+    /// render harness to read the user's real memories. The preview initialiser below can only nil
+    /// out the *search* store; the activity branch built its own live reader every time it drew, so
+    /// an empty-query harness case rendered this person's saved memories into PNGs on disk. Held
+    /// here, the harness passes `ActivityAccountAbsent()` and the promise its header makes — that
+    /// nothing of the user's is ever captured — is one the type system keeps.
+    private let account: ActivityAccountReading
+
     init(
         initialQuery: String = "",
         store: @escaping () -> ContextStore? = { nil },
+        account: ActivityAccountReading = ActivityLocalMemories(OmiActivityFeed()),
         onDismiss: @escaping () -> Void,
         onHeightChange: @escaping (CGFloat) -> Void = { _ in },
         onOpenMoment: @escaping (SearchMoment) -> Void = { _ in },
@@ -108,6 +119,7 @@ struct SearchBarView: View {
         self.onOpenTimeline = onOpenTimeline
         self.onOpenSettings = onOpenSettings
         self.store = store
+        self.account = account
         _query = State(initialValue: initialQuery)
         _results = StateObject(wrappedValue: SearchResultsModel(store: store))
         // A panel handed a question to start from is answering it, not showing the day.
@@ -115,11 +127,13 @@ struct SearchBarView: View {
     }
 
     /// The already-answered form, for previews and the render harness. Nothing it draws can reach
-    /// the user's database.
+    /// the user's database — including the account one, which is why `account` is the absent reader
+    /// rather than the default.
     init(query: String, results: SearchResultsModel, onDismiss: @escaping () -> Void = {}) {
         self.initialQuery = query
         self.onDismiss = onDismiss
         self.store = { nil }
+        self.account = ActivityAccountAbsent()
         _query = State(initialValue: query)
         _results = StateObject(wrappedValue: results)
         _shownBody = State(initialValue: query.isEmpty ? .activity : .results)
@@ -230,9 +244,9 @@ struct SearchBarView: View {
                     // Wrapped so the memory column is read the way the shipping Omi app reads it —
                     // this Mac's own database first, the account second. Without it a `/v3/memories`
                     // outage draws an empty column indistinguishable from an empty account, which is
-                    // the state the backend has actually been in. See `ActivityLocalMemories`; it is
-                    // a decorator precisely so this line is the only place the app decides to use it.
-                    account: ActivityLocalMemories(OmiActivityFeed()),
+                    // the state the backend has actually been in. See `ActivityLocalMemories`; the
+                    // default of `account` above is the only place the app decides to use it.
+                    account: account,
                     query: query,
                     since: bounds.since,
                     until: bounds.until,
@@ -590,6 +604,11 @@ private struct SearchField: NSViewRepresentable {
     /// `SearchResultsModel.move`.
     var onGridStep: (SearchGridStep) -> Bool = { _ in false }
 
+    /// The face the *placeholder* is set in — `SearchMetrics.queryFace`'s size and family at
+    /// reading weight. See where it is applied for why the weight differs from the query's.
+    static let placeholderFace: NSFont =
+        InkFonts.role(size: SearchMetrics.queryFontSize, weight: .regular).metrics
+
     func makeNSView(context: Context) -> FocusingTextField {
         // The same role the chip is measured with, resolved to the AppKit font it is made of. The
         // two must be the same face or the capsule and the text it wraps disagree about how wide the
@@ -608,9 +627,22 @@ private struct SearchField: NSViewRepresentable {
         // rung a placeholder usually gets: this bar is glass, and a placeholder is the *only* thing
         // on an untouched bar — a rung that vanishes over a dark wallpaper leaves an empty capsule
         // with no idea what to type into it. See `Ink.tertiary` for the two-rung rule.
+        //
+        // **The same size and the same family as the query, one weight lighter.** It used to be the
+        // query's own semibold face, which on a bar that has no field well around it made an
+        // untouched surface look like it already held a question — the prompt read as content, at
+        // the loudest weight on the whole surface. The shipping Omi search field draws its
+        // placeholder at reading weight and its query heavier, and that contrast is the whole of
+        // how a field says "nothing typed yet" when the glass gives it no other edge to say it
+        // with. Only the weight moves: the rung is the same, so the contrast this bar needs over a
+        // dark wallpaper is untouched. Measured nowhere — `SearchMetrics.chipWidth` sizes the
+        // *query* capsule, which never contains this string — so the two faces cannot disagree
+        // about anything.
         field.placeholderAttributedString = NSAttributedString(
             string: SearchMetrics.placeholder,
-            attributes: [.font: face, .foregroundColor: NSColor(Ink.secondary)])
+            attributes: [
+                .font: Self.placeholderFace, .foregroundColor: NSColor(Ink.secondary),
+            ])
         // Both Return paths, because AppKit picks between them depending on whether the field editor
         // is active: a live editor reports `insertNewline:` through the delegate, an inactive one fires
         // the cell's target/action instead. Wiring only one leaves Return dead half the time.

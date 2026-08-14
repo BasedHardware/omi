@@ -332,8 +332,14 @@ enum ActivityDetailCopy {
 
     // The summary pane, ported from the reference section by section.
 
+    /// The bar over the card the whole summary is read off.
+    static let conversationDetailsHeading = "Conversation Details"
     static let summaryHeading = "Summary"
     static let transcriptHeading = "Transcript"
+    /// What an app's reading is filed under. The reference resolves the app's real name from a
+    /// catalog and falls back to this when it cannot; this app has no catalog, so the fallback is
+    /// the only honest label — an app wrote this, and which one is not knowable here.
+    static let appResultTitle = "App"
     static let actionItemsHeading = "Action Items"
     /// The reference's own words for the section. "Insights" and not "results": what is under it is
     /// prose an app wrote about the conversation, not a status code.
@@ -894,10 +900,14 @@ extension ActivityFormat {
         return String(format: "%d:%02d", minutes, secs)
     }
 
-    /// "9:12 AM – 9:46 AM", or just the start when the conversation has no width. The dash is an en
-    /// dash: it is a range, not a hyphenation.
+    /// "from 9:12 AM to 9:46 AM", or "at 9:12 AM" when the conversation has no width.
+    ///
+    /// Words rather than an en dash, which is the reference's own phrasing
+    /// (`\(date) from \(start) to \(end)`) and reads as a sentence under a headline instead of as a
+    /// pair of numbers with a rule between them. The clause carries its own preposition so the
+    /// caller only ever joins it to the day.
     static func window(from start: Date, duration: TimeInterval) -> String {
-        guard duration >= 1 else { return time(start) }
-        return "\(time(start)) – \(time(start.addingTimeInterval(duration)))"
+        guard duration >= 1 else { return "at \(time(start))" }
+        return "from \(time(start)) to \(time(start.addingTimeInterval(duration)))"
     }
 }

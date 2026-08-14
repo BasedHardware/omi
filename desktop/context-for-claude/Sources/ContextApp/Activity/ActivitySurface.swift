@@ -216,6 +216,25 @@ enum ActivitySurfaceLayout {
     /// The chevron. A step under the label, because it is punctuation on a control rather than a
     /// second thing to read.
     static let filterChevronSize: CGFloat = 9
+
+    /// **Whether `Filter` wears a pill.**
+    ///
+    /// It used to, always — and a pill was precisely the wrong thing to give it. The five things
+    /// directly underneath are pills, so a sixth one a line above them said `Filter` was another
+    /// kind you could solo rather than the control that reveals them. The shipping Omi Activity page
+    /// draws this row's leading control bare for that reason, and this surface is the same row.
+    ///
+    /// The pill comes back for the only two states where it is doing work: a **soloed kind**, where
+    /// the fill is the one thing on the row saying the list is being narrowed at all, and **hover**,
+    /// which is now the control's only affordance — bare type with no feedback under the pointer is
+    /// a control nobody discovers.
+    ///
+    /// A value rather than a condition inside the `body` for the reason everything else in this
+    /// enum is one: "the resting row has no pill on it" is then a claim a test can hold instead of a
+    /// thing somebody has to re-notice in a screenshot.
+    nonisolated static func filterControlIsFilled(kind: ActivityKind, isHovering: Bool) -> Bool {
+        kind != .all || isHovering
+    }
 }
 
 // MARK: - The header
@@ -260,7 +279,13 @@ struct ActivityPanelHeader: View {
                 .foregroundStyle(Ink.primary)
                 .padding(.horizontal, ActivitySurfaceLayout.chipHorizontalPadding)
                 .frame(height: SearchLayout.chipHeight + ActivitySurfaceLayout.headerControlLift)
-                .activityChip(isSelected: kind != .all, isHovering: isHovering)
+                // Bare at rest — see `ActivitySurfaceLayout.filterControlIsFilled`. The height is
+                // unconditional so the row does not change shape when the pill arrives.
+                .activityChip(
+                    isSelected: kind != .all,
+                    isHovering: isHovering,
+                    isFilled: ActivitySurfaceLayout.filterControlIsFilled(
+                        kind: kind, isHovering: isHovering))
             }
             .buttonStyle(.plain)
             .onHover { isHovering = $0 }
@@ -349,16 +374,24 @@ extension View {
     ///
     /// Reachable from the detail screen for exactly that reason: its way back is a chip, and a
     /// second definition of the pill would be the second opinion this comment exists to prevent.
-    func activityChip(isSelected: Bool, isHovering: Bool) -> some View {
+    /// - Parameter isFilled: whether the pill is drawn at all. Only the header's `Filter` control
+    ///   ever passes `false`: a control that discloses the chips must not look like one of them.
+    ///   The hit shape is the capsule either way, so a bare control is exactly as easy to press as a
+    ///   filled one — the pill is what is missing, never the target.
+    func activityChip(isSelected: Bool, isHovering: Bool, isFilled: Bool = true) -> some View {
         let fill: Color =
             isSelected
             ? SearchInk.chipFillSelected : (isHovering ? SearchInk.chipFillHover : SearchInk.chipFill)
         return
             background(
-                Capsule(style: .continuous).fill(fill)
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .strokeBorder(SearchInk.chipStroke, lineWidth: 1))
+                Group {
+                    if isFilled {
+                        Capsule(style: .continuous).fill(fill)
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(SearchInk.chipStroke, lineWidth: 1))
+                    }
+                }
             )
             .contentShape(Capsule(style: .continuous))
     }
