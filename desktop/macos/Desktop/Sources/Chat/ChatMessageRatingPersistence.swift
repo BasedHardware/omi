@@ -46,18 +46,24 @@ struct ChatMessageRatingQueue: Equatable {
   /// rows are dropped without a persist payload so a 404 cannot revert them.
   /// A queued `nil` is a clear-rating and must persist after sync; do not
   /// collapse it with a missing key.
+  ///
+  /// A queued rating is keyed by the live-tail message id (the in-memory id at
+  /// tap time). Journal projection can later replace that row with a projected
+  /// message whose `id` is the kernel `turnId`, while the original id survives
+  /// only as `clientTurnId`. Match on either so the rating survives the remap,
+  /// and PATCH with the projected (remote) id so the backend row is found.
   mutating func drain(using messages: [ChatMessage]) -> [(messageId: String, rating: Int?)] {
     var persist: [(messageId: String, rating: Int?)] = []
     let snapshot = pending
     for (messageId, rating) in snapshot {
-      guard let message = messages.first(where: { $0.id == messageId }) else {
+      guard let message = messages.first(where: { $0.id == messageId || $0.clientTurnId == messageId }) else {
         pending.removeValue(forKey: messageId)
         continue
       }
       switch ChatMessageRatingPersistence.of(message) {
       case .persistNow:
         pending.removeValue(forKey: messageId)
-        persist.append((messageId, rating))
+        persist.append((message.id, rating))
       case .localOnly:
         pending.removeValue(forKey: messageId)
       case .waitForSync:

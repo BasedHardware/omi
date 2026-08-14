@@ -157,6 +157,98 @@ final class ChatMessageRatingPersistenceTests: XCTestCase {
     XCTAssertFalse(provider.pendingMessageRatings.contains(messageId))
   }
 
+  /// Thread 2 regression: a thumbs tap on the live tail is keyed by the local
+  /// in-memory id, but journal projection replaces that row with the kernel
+  /// turnId. The queued rating must survive the remap and PATCH with the
+  /// projected (remote) id, not the stale local id.
+  func testQueuedRatingSurvivesProjectionIdRemap() async throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    let localId = "live-tail-local"
+    let remoteId = "srv-42"
+    let persisted = expectation(description: "queued rating PATCHes with remote id after id remap")
+    provider.persistMessageRatingHandler = { persistedId, rating in
+      XCTAssertEqual(persistedId, remoteId, "drain must PATCH with the projected remote id")
+      XCTAssertEqual(rating, 1)
+      persisted.fulfill()
+    }
+    provider.messages = [
+      ChatMessage(
+        id: localId,
+        text: "I'll look that up.",
+        sender: .ai,
+        isStreaming: false,
+        isSynced: false,
+        journalStatus: .completed)
+    ]
+
+    XCTAssertEqual(provider.queueMessageRating(localId, rating: 1), .waitForSync)
+
+    // The journal turn has a *different* turnId from the live-tail id, with a
+    // matching clientTurnId so projection remaps the row by continuity.
+    var dictionary: [String: Any] = [
+      "conversationId": "conversation-1",
+      "turnId": remoteId,
+      "turnSeq": 1,
+      "conversationGeneration": 1,
+      "generationBaseTurnSeq": 0,
+      "producerId": "producer:\(remoteId)",
+      "payloadHash": "sha256:\(remoteId)",
+      "role": "assistant",
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
+      "content": "I'll look that up.",
+      "origin": "test",
+      "status": KernelJournalTurnStatus.completed.rawValue,
+      "contentBlocks": [],
+      "resources": [],
+      "metadataJson": "{\"continuityKey\":\"\(localId)\"}",
+      "createdAtMs": 1_700_000_000_000,
+      "updatedAtMs": 1_700_000_000_000,
+    ]
+    dictionary["remoteId"] = remoteId
+    provider.projectJournalTurn(try XCTUnwrap(KernelJournalTurn(dictionary: dictionary)))
+
+    await fulfillment(of: [persisted], timeout: 1.0)
+    XCTAssertEqual(provider.messages.first?.id, remoteId)
+    XCTAssertEqual(provider.messages.first?.rating, 1)
+    XCTAssertFalse(provider.pendingMessageRatings.contains(localId))
+  }
+
+  /// Queue-level regression for the id-remap fix: drain must match by
+  /// clientTurnId when the id has changed.
+  func testQueueDrainsByClientTurnIdAfterIdRemap() {
+    var queue = ChatMessageRatingQueue()
+    let localId = "local-1"
+    let remoteId = "remote-1"
+    queue.enqueue(messageId: localId, rating: 1)
+
+    // The message has been remapped: id=remoteId, clientTurnId=localId
+    let remapped = ChatMessage(
+      id: remoteId, clientTurnId: localId,
+      text: "Done.", sender: .ai, isSynced: true)
+    let ready = queue.drain(using: [remapped])
+    XCTAssertEqual(ready.count, 1)
+    XCTAssertEqual(ready.first?.messageId, remoteId, "drain must PATCH with the projected remote id")
+    XCTAssertEqual(ready.first?.rating, 1)
+    XCTAssertTrue(queue.isEmpty)
+  }
+
+  /// Thread 1 regression: a drained rating PATCH that is in flight when an
+  /// owner transition fires must not write under the new session.
+  func testPersistMessageRatingFencedByOwner() async {
+    let provider = ChatProvider()
+    let persisted = expectation(description: "owner-fenced PATCH is dropped")
+    persisted.isInverted = true
+    provider.persistMessageRatingHandler = { _, _ in
+      persisted.fulfill()
+    }
+    // Simulate a PATCH whose captured owner no longer matches the current owner.
+    await provider.persistMessageRating("m1", rating: 1, expectedOwner: "stale-owner")
+    await fulfillment(of: [persisted], timeout: 0.2)
+  }
+
   private func makeTurn(
     surface: AgentSurfaceReference,
     turnId: String,

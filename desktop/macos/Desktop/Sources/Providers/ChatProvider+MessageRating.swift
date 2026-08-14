@@ -33,12 +33,25 @@ extension ChatProvider {
 
   func flushPendingMessageRatings() {
     let ready = pendingMessageRatings.drain(using: messages)
+    guard !ready.isEmpty else { return }
+    // Fence against an account/owner transition: if the owner changes while a
+    // drained PATCH is in flight, `resetSessionStateForAuthChange` clears the
+    // queue and messages, so the stale owner captured here no longer matches
+    // and the PATCH is dropped instead of mutating the new owner's session.
+    let ownerAtFlush = runtimeOwnerId
     for item in ready {
-      Task { await persistMessageRating(item.messageId, rating: item.rating) }
+      Task { [weak self] in
+        await self?.persistMessageRating(
+          item.messageId, rating: item.rating, expectedOwner: ownerAtFlush)
+      }
     }
   }
 
-  func persistMessageRating(_ messageId: String, rating: Int?) async {
+  func persistMessageRating(_ messageId: String, rating: Int?, expectedOwner: String? = nil) async {
+    // Owner fence: if an auth change happened between the flush drain and this
+    // call, the rating belongs to the previous account and must not be written
+    // under the new session.
+    if let expectedOwner, runtimeOwnerId != expectedOwner { return }
     do {
       if let persistMessageRatingHandler {
         try await persistMessageRatingHandler(messageId, rating)
