@@ -660,6 +660,75 @@ class TestBYOKSubscriptionEntitlements:
         assert response.transcription_seconds_limit == 37
         byok_key.assert_called_once_with('deepgram')
 
+    def test_oauth_provider_gets_unlimited_byok_plan(self, monkeypatch):
+        """OAuth-only accounts (ChatGPT/Grok) get the unlimited BYOK plan even
+        though they never send a Deepgram key — the selection header plus the
+        stored server-side credential is the entitlement signal."""
+        from models.users import PlanType
+
+        from routers import users
+
+        def fake_credential(_uid, provider):
+            return (
+                {'provider': provider, 'access_token': 'tok', 'refresh_token': 'ref'}
+                if provider in {'chatgpt', 'grok'}
+                else None
+            )
+
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
+        monkeypatch.setattr(users, 'get_byok_llm_provider', lambda: 'grok')
+        monkeypatch.setattr(users.llm_oauth_db, 'get_credential', fake_credential)
+
+        response = users.get_user_subscription_endpoint(uid='oauth-byok-user')
+
+        assert response.subscription.plan == PlanType.unlimited
+        assert 'byok' in (response.subscription.features or [])
+        assert response.show_subscription_ui is False
+
+    def test_oauth_provider_without_stored_credential_keeps_plan(self, monkeypatch):
+        """A stale X-BYOK-LLM-Provider header with no stored credential must not
+        synthesize an unlimited plan."""
+        from models.users import PlanLimits, PlanType, Subscription
+
+        from routers import users
+
+        subscription = Subscription(plan=PlanType.basic)
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
+        monkeypatch.setattr(users, 'get_byok_llm_provider', lambda: 'grok')
+        monkeypatch.setattr(users.llm_oauth_db, 'get_credential', lambda _uid, _provider: None)
+        monkeypatch.setattr(users, 'get_byok_key', lambda _provider: None)
+        monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
+        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
+        monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
+        monkeypatch.setattr(
+            users,
+            'get_plan_limits',
+            lambda _plan: PlanLimits(transcription_seconds=37, words_transcribed=50, insights_gained=3),
+        )
+        monkeypatch.setattr(users, 'get_plan_features', lambda _plan, simplified: [])
+        monkeypatch.setattr(users, 'should_show_new_plans', lambda _platform, _version: True)
+        monkeypatch.setattr(users, 'get_monthly_usage_for_subscription', lambda _uid: {})
+        monkeypatch.setattr(users, 'get_paid_plan_definitions', lambda: [])
+        monkeypatch.setattr(users, 'has_ever_purchased', lambda _uid, _subscription: False)
+        monkeypatch.setattr(users, 'filter_plans_for_user', lambda _definitions, _plan, **_kwargs: [])
+        monkeypatch.setattr(users, 'should_hide_subscription_ui', lambda _uid, _platform, _version: False)
+        monkeypatch.setattr(
+            users,
+            'get_phone_call_quota_snapshot',
+            lambda _uid: MagicMock(to_client_dict=lambda: {'has_access': False, 'is_paid': False}),
+        )
+        monkeypatch.setattr(
+            users,
+            'get_chat_quota_snapshot',
+            lambda _uid, platform: {'used': 0, 'unit': 'questions', 'limit': 30, 'allowed': True, 'reset_at': None},
+        )
+        monkeypatch.setattr(users, 'neo_grandfather_until', lambda _subscription: None)
+        monkeypatch.setattr(users, 'wire_plan_for_client', lambda plan, _platform, _version: plan)
+
+        response = users.get_user_subscription_endpoint(uid='oauth-byok-user')
+
+        assert response.subscription.plan == PlanType.basic
+
 
 # ---------------------------------------------------------------------------
 # 11. Cache routing: raw keys never in cache keys
@@ -1000,6 +1069,64 @@ class TestBYOKFingerprintValidation:
         finally:
             _byok_ctx.reset(token)
 
+    def test_oauth_selection_stores_a_fresh_credential_for_the_request(self):
+        from utils.byok import (
+            _byok_ctx,
+            _byok_llm_provider_ctx,
+            _byok_oauth_credential_ctx,
+            get_byok_oauth_credential,
+            validate_byok_request,
+        )
+
+        credential = {'provider': 'chatgpt', 'access_token': 'access-2', 'refresh_token': 'refresh-2'}
+        key_token = _byok_ctx.set({})
+        provider_token = _byok_llm_provider_ctx.set('chatgpt')
+        credential_token = _byok_oauth_credential_ctx.set(None)
+        try:
+            with patch('utils.llm.oauth.get_credential', return_value=credential) as get_credential:
+                validate_byok_request('oauth-uid')
+            get_credential.assert_called_once_with('oauth-uid', 'chatgpt')
+            assert get_byok_oauth_credential() == credential
+        finally:
+            _byok_ctx.reset(key_token)
+            _byok_llm_provider_ctx.reset(provider_token)
+            _byok_oauth_credential_ctx.reset(credential_token)
+
+    def test_get_llm_lazy_oauth_fetch_writes_credential_back_to_context(self, monkeypatch):
+        """A credential fetched lazily by get_llm must be installed in the request
+        context so mid-call failures classify as BYOK (get_llm_error_source) and
+        later get_llm() calls in the same request reuse it."""
+        from utils.byok import (
+            _byok_ctx,
+            _byok_llm_provider_ctx,
+            _byok_oauth_credential_ctx,
+            get_byok_oauth_credential,
+        )
+        from utils.llm import clients
+
+        credential = {'provider': 'grok', 'access_token': 'access-9', 'refresh_token': 'refresh-9'}
+        oauth_client = MagicMock()
+
+        monkeypatch.setattr(clients, 'get_byok_key', lambda provider: None)
+        monkeypatch.setattr(clients, 'get_byok_uid', lambda: 'oauth-uid')
+        monkeypatch.setattr(clients, 'get_byok_llm_provider', lambda: 'grok')
+        monkeypatch.setattr(clients, 'get_byok_oauth_credential', lambda: None)
+        monkeypatch.setattr(clients, 'get_llm_oauth_credential', lambda _uid, _provider: credential)
+        monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
+        monkeypatch.setattr(clients, '_create_llm_oauth_client', lambda _cred, _stream, _feature: oauth_client)
+        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
+
+        key_token = _byok_ctx.set({})
+        provider_token = _byok_llm_provider_ctx.set('grok')
+        credential_token = _byok_oauth_credential_ctx.set(None)
+        try:
+            assert clients.get_llm('memories') is oauth_client
+            assert get_byok_oauth_credential() == credential
+        finally:
+            _byok_ctx.reset(key_token)
+            _byok_llm_provider_ctx.reset(provider_token)
+            _byok_oauth_credential_ctx.reset(credential_token)
+
     @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
     @patch('database.users.get_byok_state')
     def test_header_for_unenrolled_provider_is_not_used(self, mock_get_state):
@@ -1296,6 +1423,31 @@ class TestWSAuthDependencyBYOK:
             await get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok')
             assert get_byok_keys() == {'openai': 'sk-good'}
             assert has_validated_byok_keys()
+
+        asyncio.run(authenticate_and_assert_context())
+
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
+    @patch('utils.other.endpoints.validate_byok_websocket_keys', return_value=({}, None))
+    @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
+    def test_ws_listen_propagates_oauth_provider_so_credential_resolves(
+        self, _mock_auth, _mock_validate, _mock_deletion
+    ):
+        """WebSocket listen carries X-BYOK-LLM-Provider for OAuth-backed BYOK.
+
+        The listen WS path never sees x-byok-* key headers for ChatGPT/Grok; the
+        selected provider header must be propagated to the request context so
+        downstream get_llm() can resolve the stored OAuth credential by uid.
+        """
+        import asyncio
+        from utils.byok import get_byok_llm_provider, get_byok_uid
+        from utils.other.endpoints import get_current_user_uid_ws_listen
+
+        ws = self._make_ws({'x-byok-llm-provider': 'chatgpt'})
+
+        async def authenticate_and_assert_context():
+            await get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok')
+            assert get_byok_llm_provider() == 'chatgpt'
+            assert get_byok_uid() == 'ws-uid'
 
         asyncio.run(authenticate_and_assert_context())
 

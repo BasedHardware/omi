@@ -168,6 +168,11 @@ class ListenPusherSession:
                 "language": self.config.language,
                 "byok_keys": self.deps.get_byok_keys(),
             }
+            from utils.byok import get_byok_llm_provider
+
+            byok_llm_provider = get_byok_llm_provider()
+            if byok_llm_provider in {'chatgpt', 'grok'}:
+                payload['byok_llm_provider'] = byok_llm_provider
             if pending.get('finalization_job_id'):
                 payload['finalization_job_id'] = pending['finalization_job_id']
                 payload['dispatch_generation'] = pending.get('dispatch_generation') or 1

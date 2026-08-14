@@ -829,6 +829,10 @@ export default function omiProvider(pi: ExtensionAPI): void {
     const value = process.env[envName];
     if (value && value.length > 0) byokHeaders[headerName] = value;
   }
+  const selectedBYOKProvider = process.env.OMI_BYOK_LLM_PROVIDER;
+  if (selectedBYOKProvider === "chatgpt" || selectedBYOKProvider === "grok" || selectedBYOKProvider === "openrouter" || selectedBYOKProvider === "openai" || selectedBYOKProvider === "anthropic" || selectedBYOKProvider === "gemini") {
+    byokHeaders["X-BYOK-LLM-Provider"] = selectedBYOKProvider;
+  }
   const byokActive = Object.keys(byokHeaders).length > 0;
   if (byokActive) {
     process.stderr.write(`[omi-provider] BYOK active — attaching ${Object.keys(byokHeaders).length} X-BYOK headers\n`);

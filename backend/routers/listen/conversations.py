@@ -11,7 +11,7 @@ from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.message_event import ConversationEvent, ConversationSessionEvent, LastConversationEvent
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
-from utils.byok import get_byok_keys
+from utils.byok import get_byok_keys, get_byok_llm_provider
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
@@ -124,7 +124,7 @@ class LiveConversationController:
             lifecycle_service.request_finalization,
             self.host.request.uid,
             conversation_id,
-            has_byok_keys=bool(get_byok_keys()),
+            has_byok_keys=bool(get_byok_keys()) or get_byok_llm_provider() in {'chatgpt', 'grok'},
         )
         route = finalization['route']
         if route == 'pusher':

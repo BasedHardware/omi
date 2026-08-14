@@ -30,8 +30,6 @@ import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
-import 'package:omi/services/capture/capture_foreground_keepalive_sync.dart';
-import 'package:omi/services/capture/capture_keepalive_policy.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
@@ -49,7 +47,6 @@ import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/app_globals.dart';
 
 import 'package:omi/backend/schema/message_event.dart'
@@ -84,10 +81,6 @@ class CaptureController extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
-  DateTime? _lastAudioFrameAt;
-  DateTime? _captureRecordingStartedAt;
-  final CaptureForegroundKeepAliveSync _captureForegroundKeepAlive = CaptureForegroundKeepAliveSync();
-  Timer? _foregroundLivenessTimer;
   Timer? _inProgressConversationRefreshTimer;
   int _inProgressConversationRefreshAttempts = 0;
   bool _isRefreshingInProgressConversation = false;
@@ -161,7 +154,7 @@ class CaptureController extends ChangeNotifier
   }
 
   CaptureController({CaptureExternalActions? externalActions})
-      : externalActions = externalActions ?? const NoopCaptureExternalActions() {
+    : externalActions = externalActions ?? const NoopCaptureExternalActions() {
     // Restore a persisted device mute so it survives an app kill/restart. When
     // the device reconnects, streamDeviceRecording() reads _isPaused as
     // `wasPaused` and re-applies the mute instead of silently resuming.
@@ -222,31 +215,30 @@ class CaptureController extends ChangeNotifier
     _activeSource = PhoneMicSource();
     _phoneMicWalActive = true;
     await ServiceManager.instance().phoneMic.start(
-          onByteReceived: (bytes) {
-            _noteAudioFrame();
-            final frames = _activeSource?.processBytes(bytes) ?? [];
-            for (final frame in frames) {
-              _wal.getSyncs().phone.onFrameCaptured(frame);
-              if (_socket?.state == SocketServiceState.connected) {
-                _socket?.send(frame.payload);
-                _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
-              }
-            }
-          },
-          onRecording: () {
-            updateRecordingState(RecordingState.record);
-          },
-          onStop: () {
-            if (!_micInterrupted) {
-              updateRecordingState(RecordingState.stop);
-            }
-          },
-          onInitializing: () {
-            updateRecordingState(RecordingState.initialising);
-          },
-          onStalled: _onMicStalled,
-          onInterruption: _onMicInterruption,
-        );
+      onByteReceived: (bytes) {
+        final frames = _activeSource?.processBytes(bytes) ?? [];
+        for (final frame in frames) {
+          _wal.getSyncs().phone.onFrameCaptured(frame);
+          if (_socket?.state == SocketServiceState.connected) {
+            _socket?.send(frame.payload);
+            _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+          }
+        }
+      },
+      onRecording: () {
+        updateRecordingState(RecordingState.record);
+      },
+      onStop: () {
+        if (!_micInterrupted) {
+          updateRecordingState(RecordingState.stop);
+        }
+      },
+      onInitializing: () {
+        updateRecordingState(RecordingState.initialising);
+      },
+      onStalled: _onMicStalled,
+      onInterruption: _onMicInterruption,
+    );
   }
 
   void _onMicStalled() {
@@ -699,13 +691,13 @@ class CaptureController extends ChangeNotifier
     CustomSttConfig? customSttConfig,
   }) {
     return ServiceManager.instance().socket.conversation(
-          codec: codec,
-          sampleRate: sampleRate,
-          language: language,
-          force: force,
-          source: source,
-          customSttConfig: customSttConfig,
-        );
+      codec: codec,
+      sampleRate: sampleRate,
+      language: language,
+      force: force,
+      source: source,
+      customSttConfig: customSttConfig,
+    );
   }
 
   Future<void> _connectTranscriptionSocket({
@@ -732,8 +724,9 @@ class CaptureController extends ChangeNotifier
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Get language and custom STT config
-    String language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
+        ? SharedPreferencesUtil().userPrimaryLanguage
+        : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
 
     Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
@@ -870,20 +863,24 @@ class CaptureController extends ChangeNotifier
             _isProcessingButtonEvent = true;
             if (_isPaused) {
               PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error resuming device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
+              resumeDeviceRecording()
+                  .then((_) {
+                    _isProcessingButtonEvent = false;
+                  })
+                  .catchError((e) {
+                    Logger.debug("Error resuming device recording: $e");
+                    _isProcessingButtonEvent = false;
+                  });
             } else {
               PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording().then((_) {
-                _isProcessingButtonEvent = false;
-              }).catchError((e) {
-                Logger.debug("Error pausing device recording: $e");
-                _isProcessingButtonEvent = false;
-              });
+              pauseDeviceRecording()
+                  .then((_) {
+                    _isProcessingButtonEvent = false;
+                  })
+                  .catchError((e) {
+                    Logger.debug("Error pausing device recording: $e");
+                    _isProcessingButtonEvent = false;
+                  });
             }
           } else if (doubleTapAction == 2) {
             // Star ongoing conversation (doesn't end it)
@@ -965,7 +962,6 @@ class CaptureController extends ChangeNotifier
 
         // Track bytes received from BLE
         _metrics.addBleBytes(snapshot.length);
-        _noteAudioFrame();
 
         // Command button triggered
         bool voiceCommandSupported = _recordingDevice != null
@@ -978,7 +974,8 @@ class CaptureController extends ChangeNotifier
 
         // Local storage syncs. In batch mode the native layer owns writing the
         // .bin files, so the Dart WAL writer must stay off to avoid double-writes.
-        var checkWalSupported = !SharedPreferencesUtil().batchModeEnabled &&
+        var checkWalSupported =
+            !SharedPreferencesUtil().batchModeEnabled &&
             (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
             codec.isOpusSupported() &&
             (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
@@ -1086,8 +1083,9 @@ class CaptureController extends ChangeNotifier
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    var language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
+        ? SharedPreferencesUtil().userPrimaryLanguage
+        : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
     final sttConfigId = customSttConfig.sttConfigId;
 
@@ -1399,7 +1397,6 @@ class CaptureController extends ChangeNotifier
     _bleButtonStream?.cancel();
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
-    _foregroundLivenessTimer?.cancel();
     _inProgressConversationRefreshTimer?.cancel();
     _connectionStateListener?.cancel();
     _metrics.dispose();
@@ -1411,63 +1408,8 @@ class CaptureController extends ChangeNotifier
   }
 
   void updateRecordingState(RecordingState state) {
-    final wasLive = isLiveCaptureRecordingState(recordingState);
-    final isLive = isLiveCaptureRecordingState(state);
     recordingState = state;
-    if (shouldClearCaptureAudioTimestamp(wasLive: wasLive, isLive: isLive)) {
-      _lastAudioFrameAt = null;
-    }
-    if (isLive && !wasLive) {
-      _captureRecordingStartedAt = DateTime.now();
-    } else if (!isLive) {
-      _captureRecordingStartedAt = null;
-    }
-    unawaited(_syncCaptureForegroundKeepAlive());
     notifyListeners();
-  }
-
-  void _noteAudioFrame() {
-    _lastAudioFrameAt = DateTime.now();
-    if (shouldResyncCaptureForegroundOnAudioFrame(
-      currentlyHeld: _captureForegroundKeepAlive.held,
-      recordingState: recordingState,
-    )) {
-      unawaited(_syncCaptureForegroundKeepAlive());
-    }
-  }
-
-  Future<void> _syncCaptureForegroundKeepAlive() async {
-    if (!(Platform.isIOS || Platform.isAndroid)) return;
-    try {
-      await _captureForegroundKeepAlive.apply(
-        desiredHold: () {
-          final hold = shouldHoldCaptureForegroundTask(
-            recordingState: recordingState,
-            lastAudioFrameAt: _lastAudioFrameAt,
-            recordingStartedAt: _captureRecordingStartedAt,
-            now: DateTime.now(),
-          );
-          _foregroundLivenessTimer?.cancel();
-          // Wearable FGS is frame-driven; re-check after the stale window.
-          // Phone-mic / system-audio hold for the whole session.
-          if (hold && isBluetoothCaptureForegroundOwner(recordingState)) {
-            _foregroundLivenessTimer = Timer(captureForegroundAudioStaleAfter, () {
-              unawaited(_syncCaptureForegroundKeepAlive());
-            });
-          }
-          return hold;
-        },
-        bluetoothSessionOwner: () => isBluetoothCaptureForegroundOwner(recordingState),
-        start: () async {
-          await ForegroundUtil.initializeForegroundService();
-          await ForegroundUtil.ensureForegroundTask();
-        },
-        stop: ForegroundUtil.stopForegroundTask,
-        deactivateBluetoothAudioSession: ForegroundUtil.deactivateBluetoothAudioSession,
-      );
-    } catch (e) {
-      Logger.debug('Capture foreground keep-alive sync failed: $e');
-    }
   }
 
   streamRecording() async {
@@ -1511,34 +1453,33 @@ class CaptureController extends ChangeNotifier
     // record
     try {
       await ServiceManager.instance().phoneMic.start(
-            onByteReceived: (bytes) {
-              // Process through AudioSource for frame splitting and sync key generation
-              _noteAudioFrame();
-              final frames = _activeSource?.processBytes(bytes) ?? [];
+        onByteReceived: (bytes) {
+          // Process through AudioSource for frame splitting and sync key generation
+          final frames = _activeSource?.processBytes(bytes) ?? [];
 
-              for (final frame in frames) {
-                _wal.getSyncs().phone.onFrameCaptured(frame);
+          for (final frame in frames) {
+            _wal.getSyncs().phone.onFrameCaptured(frame);
 
-                if (_socket?.state == SocketServiceState.connected) {
-                  _socket?.send(frame.payload);
-                  _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
-                }
-              }
-            },
-            onRecording: () {
-              updateRecordingState(RecordingState.record);
-            },
-            onStop: () {
-              if (!_micInterrupted) {
-                updateRecordingState(RecordingState.stop);
-              }
-            },
-            onInitializing: () {
-              updateRecordingState(RecordingState.initialising);
-            },
-            onStalled: _onMicStalled,
-            onInterruption: _onMicInterruption,
-          );
+            if (_socket?.state == SocketServiceState.connected) {
+              _socket?.send(frame.payload);
+              _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+            }
+          }
+        },
+        onRecording: () {
+          updateRecordingState(RecordingState.record);
+        },
+        onStop: () {
+          if (!_micInterrupted) {
+            updateRecordingState(RecordingState.stop);
+          }
+        },
+        onInitializing: () {
+          updateRecordingState(RecordingState.initialising);
+        },
+        onStalled: _onMicStalled,
+        onInterruption: _onMicInterruption,
+      );
     } catch (e, st) {
       // Typed native failures (permission_denied, engine_start_failed, ...) or
       // mic contention — fail visibly instead of recording silence.
@@ -1616,15 +1557,15 @@ class CaptureController extends ChangeNotifier
     updateRecordingState(RecordingState.record);
     try {
       await ServiceManager.instance().phoneMic.startBatch(
-            onStop: () {
-              if (!_micInterrupted && !_phoneMicBatchRestartInFlight) {
-                updateRecordingState(RecordingState.stop);
-              }
-            },
-            onInterruption: _onMicInterruption,
-            onBatchStalled: _onBatchStalled,
-            onError: _onBatchCaptureError,
-          );
+        onStop: () {
+          if (!_micInterrupted && !_phoneMicBatchRestartInFlight) {
+            updateRecordingState(RecordingState.stop);
+          }
+        },
+        onInterruption: _onMicInterruption,
+        onBatchStalled: _onBatchStalled,
+        onError: _onBatchCaptureError,
+      );
     } catch (e, st) {
       // No socket to clean in batch — fail visibly instead of recording nothing.
       Logger.error('[CaptureProvider] phone mic batch start failed: $e\n$st');
@@ -1737,7 +1678,6 @@ class CaptureController extends ChangeNotifier
       }
 
       _keepAliveLastExecutedAt = DateTime.now();
-      unawaited(_syncCaptureForegroundKeepAlive());
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
         t.cancel();
         return;
@@ -1746,21 +1686,6 @@ class CaptureController extends ChangeNotifier
       if (!AuthService.instance.isSignedIn()) {
         Logger.debug("[Provider] keep alive - user not signed in, cancelling reconnect");
         t.cancel();
-        return;
-      }
-
-      final shouldReconnect = shouldReconnectSttKeepAlive(
-        recordingDeviceServiceReady: recordingDeviceServiceReady,
-        socketConnected: _socket?.state == SocketServiceState.connected,
-        signedIn: true,
-        hasRecordingDevice: _recordingDevice != null,
-        isPhoneMicKeepAliveState:
-            recordingState == RecordingState.record || recordingState == RecordingState.interrupted,
-        lastAudioFrameAt: _lastAudioFrameAt,
-        now: DateTime.now(),
-      );
-      if (!shouldReconnect) {
-        Logger.debug("[Provider] keep alive - no recent audio frames, skip websocket reconnect");
         return;
       }
 

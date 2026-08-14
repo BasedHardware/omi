@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -70,7 +69,6 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
 class ForegroundUtil {
   static bool _isInitialized = false;
   static bool _isStarting = false;
-  static const _audioSessionChannel = MethodChannel('com.omi.ios/audioSession');
 
   static Future<void> requestPermissions() async {
     // Android 13+, you need to allow notification permission to display foreground service notification.
@@ -137,38 +135,6 @@ class ForegroundUtil {
     } catch (e) {
       Logger.debug('ForegroundService initialization failed: $e');
       _isInitialized = false;
-    }
-  }
-
-  /// Start the keep-alive only if it is not already running. Unlike
-  /// [startForegroundTask], this does not restart a live service (restart
-  /// would bounce the iOS audio session).
-  static Future<ServiceRequestResult> ensureForegroundTask() async {
-    try {
-      if (await FlutterForegroundTask.isRunningService) {
-        Logger.debug('ForegroundTask already running, not restarting');
-        return const ServiceRequestSuccess();
-      }
-    } catch (e) {
-      Logger.debug('ForegroundTask running-state check failed: $e');
-    }
-    return startForegroundTask();
-  }
-
-  /// Release AVAudioSession after BLE/wearable capture stops. Phone-mic and
-  /// CallKit paths deactivate themselves; this is the matching teardown for
-  /// `configureForBluetooth` / FGS audio. No-op on Android.
-  ///
-  /// Returns false when native deactivation fails so the caller can retry
-  /// instead of treating cleanup as done.
-  static Future<bool> deactivateBluetoothAudioSession() async {
-    if (!Platform.isIOS) return true;
-    try {
-      await _audioSessionChannel.invokeMethod('deactivateForBluetooth');
-      return true;
-    } catch (e) {
-      Logger.debug('deactivateForBluetooth failed: $e');
-      return false;
     }
   }
 

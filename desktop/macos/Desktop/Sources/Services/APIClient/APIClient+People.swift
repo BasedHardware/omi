@@ -130,6 +130,95 @@ extension APIClient {
     try await delete("v1/users/me/byok-active", includeBYOK: false)
   }
 
+  func completeLLMOAuth(
+    provider: LLMOAuthProvider,
+    code: String,
+    codeVerifier: String,
+    redirectURI: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws {
+    struct Request: Encodable {
+      let code: String
+      let codeVerifier: String
+      let redirectURI: String
+
+      enum CodingKeys: String, CodingKey {
+        case code
+        case codeVerifier = "code_verifier"
+        case redirectURI = "redirect_uri"
+      }
+    }
+    struct Response: Decodable {
+      let connected: [String]
+      let selectedProvider: String?
+
+      enum CodingKeys: String, CodingKey {
+        case connected
+        case selectedProvider = "selected_provider"
+      }
+    }
+    let _: Response = try await post(
+      "v1/users/me/llm-oauth/\(provider.rawValue)",
+      body: Request(code: code, codeVerifier: codeVerifier, redirectURI: redirectURI),
+      includeBYOK: false,
+      authorizationSnapshot: authorizationSnapshot,
+      allowsAuthRetry: false
+    )
+  }
+
+  func llmOAuthStatus() async throws -> (connected: Set<LLMOAuthProvider>, selected: LLMOAuthProvider?) {
+    struct Response: Decodable {
+      let connected: [String]
+      let selectedProvider: String?
+
+      enum CodingKeys: String, CodingKey {
+        case connected
+        case selectedProvider = "selected_provider"
+      }
+    }
+    let response: Response = try await get("v1/users/me/llm-oauth", includeBYOK: false)
+    return (
+      Set(response.connected.compactMap(LLMOAuthProvider.init(rawValue:))),
+      response.selectedProvider.flatMap(LLMOAuthProvider.init(rawValue:))
+    )
+  }
+
+  func llmOAuthConfiguration(_ provider: LLMOAuthProvider) async throws -> LLMOAuthConfiguration {
+    struct Configuration: Decodable {
+      let authorizationURL: String
+      let clientID: String
+      let redirectURI: String
+      let scope: String
+      let authorizationParameters: [String: String]
+
+      enum CodingKeys: String, CodingKey {
+        case authorizationURL = "authorization_url"
+        case clientID = "client_id"
+        case redirectURI = "redirect_uri"
+        case scope
+        case authorizationParameters = "authorization_parameters"
+      }
+    }
+    struct Response: Decodable {
+      let configurations: [String: Configuration]
+    }
+    let response: Response = try await get("v1/users/me/llm-oauth", includeBYOK: false)
+    guard let configuration = response.configurations[provider.rawValue] else {
+      throw APIError.invalidResponse
+    }
+    return LLMOAuthConfiguration(
+      authorizationURL: configuration.authorizationURL,
+      clientID: configuration.clientID,
+      redirectURI: configuration.redirectURI,
+      scope: configuration.scope,
+      authorizationParameters: configuration.authorizationParameters
+    )
+  }
+
+  func disconnectLLMOAuth(_ provider: LLMOAuthProvider) async throws {
+    try await delete("v1/users/me/llm-oauth/\(provider.rawValue)", includeBYOK: false)
+  }
+
   /// Fetches all people for the current user
   func getPeople() async throws -> [Person] {
     return try await get("v1/users/people")

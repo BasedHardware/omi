@@ -1,6 +1,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import httpx
 import pytest
@@ -1571,6 +1572,146 @@ async def test_chat_completions_gateway_config_error_is_http_503(monkeypatch):
             x_omi_request_id=None,
         )
     assert error.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_routes_oauth_provider_without_managed_gateway(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'get_byok_llm_provider', lambda: 'chatgpt')
+    monkeypatch.setattr(desktop_chat, 'get_byok_oauth_credential', lambda: {'provider': 'chatgpt'})
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
+
+    class OAuthClient:
+        async def ainvoke(self, messages, **kwargs):
+            assert isinstance(messages[0], desktop_chat.HumanMessage)
+            assert kwargs == {'max_tokens': 16}
+            return SimpleNamespace(
+                id='oauth-msg',
+                content='from OAuth',
+                tool_calls=[{'id': 'call_1', 'name': 'weather', 'args': {'city': 'Kuala Lumpur'}}],
+                usage_metadata={'input_tokens': 2, 'output_tokens': 3},
+            )
+
+    monkeypatch.setattr(desktop_chat, 'get_llm', lambda *_args, **_kwargs: OAuthClient())
+
+    response = await desktop_chat.chat_completions(
+        {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'hello'}], 'max_tokens': 16},
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id='oauth-request',
+    )
+
+    assert response.status_code == 200
+    payload = json.loads(response.body)
+    assert payload['choices'][0]['message']['content'] == 'from OAuth'
+    assert payload['choices'][0]['finish_reason'] == 'tool_calls'
+    assert payload['choices'][0]['message']['tool_calls'][0]['function']['arguments'] == '{"city":"Kuala Lumpur"}'
+    assert payload['usage'] == {'prompt_tokens': 2, 'completion_tokens': 3, 'total_tokens': 5}
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_rejects_oauth_web_search_without_claiming_recovery(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'get_byok_llm_provider', lambda: 'chatgpt')
+    monkeypatch.setattr(desktop_chat, 'get_byok_oauth_credential', lambda: {'provider': 'chatgpt'})
+    fallback = Mock()
+    monkeypatch.setattr(desktop_chat, 'record_fallback', fallback)
+    monkeypatch.setattr(desktop_chat, 'get_llm', Mock())
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat.chat_completions(
+            {
+                'model': 'omi-sonnet',
+                'messages': [{'role': 'user', 'content': 'find current news'}],
+                'omi_web_search': True,
+            },
+            uid='user-1',
+            x_app_platform=None,
+            x_omi_chat_contract_version=None,
+            x_omi_request_id=None,
+        )
+
+    assert error.value.status_code == 400
+    fallback.assert_called_once_with(
+        component='desktop_chat',
+        from_mode='chatgpt_oauth',
+        to_mode='unsupported_web_search',
+        reason='capability_mismatch',
+        outcome='degraded',
+    )
+    desktop_chat.get_llm.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_streams_oauth_provider_without_managed_gateway(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'get_byok_llm_provider', lambda: 'grok')
+    monkeypatch.setattr(desktop_chat, 'get_byok_oauth_credential', lambda: {'provider': 'grok'})
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
+
+    class OAuthClient:
+        async def astream(self, messages, **kwargs):
+            assert isinstance(messages[0], desktop_chat.HumanMessage)
+            assert kwargs == {'max_tokens': 16}
+            yield SimpleNamespace(content='from', tool_call_chunks=[], usage_metadata=None)
+            yield SimpleNamespace(
+                content=' OAuth', tool_call_chunks=[], usage_metadata={'input_tokens': 2, 'output_tokens': 3}
+            )
+
+    monkeypatch.setattr(desktop_chat, 'get_llm', lambda *_args, **_kwargs: OAuthClient())
+
+    response = await desktop_chat.chat_completions(
+        {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'hello'}], 'stream': True, 'max_tokens': 16},
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id='oauth-stream-request',
+    )
+
+    body = ''.join([chunk async for chunk in response.body_iterator]).encode()
+    assert b'"content":"from"' in body
+    assert b'"content":" OAuth"' in body
+    assert b'"prompt_tokens":2' in body
+    assert body.endswith(b'data: [DONE]\n\n')
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_streams_argument_only_oauth_tool_chunks(monkeypatch):
+    class OAuthClient:
+        async def astream(self, _messages, **_kwargs):
+            yield SimpleNamespace(
+                content='',
+                tool_call_chunks=[{'id': 'call_1', 'name': 'weather', 'args': '{"city":'}],
+                usage_metadata=None,
+            )
+            yield SimpleNamespace(
+                content='', tool_call_chunks=[{'id': 'call_1', 'args': '"Kuala Lumpur"}'}], usage_metadata=None
+            )
+
+    monkeypatch.setattr(desktop_chat, 'get_llm', lambda *_args, **_kwargs: OAuthClient())
+    events = [
+        event
+        async for event in desktop_chat._stream_oauth(
+            {'messages': [{'role': 'user', 'content': 'hello'}], 'max_tokens': 16},
+            'omi-sonnet',
+            'user-1',
+            on_upstream_accepted=desktop_chat._no_op_async,
+        )
+    ]
+    payloads = [json.loads(event[6:]) for event in events if event.startswith('data: {')]
+    tool_deltas = [
+        call
+        for payload in payloads
+        if payload.get('choices')
+        for call in payload['choices'][0].get('delta', {}).get('tool_calls', [])
+    ]
+    assert [call['function']['arguments'] for call in tool_deltas] == ['{"city":', '"Kuala Lumpur"}']
+    assert payloads[-1]['choices'][0]['finish_reason'] == 'tool_calls'
 
 
 async def _done():

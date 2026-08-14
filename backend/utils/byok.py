@@ -101,12 +101,16 @@ BYOK_HEADERS = {
     'openrouter': 'x-byok-openrouter',
     'deepgram': 'x-byok-deepgram',
 }
+BYOK_LLM_PROVIDER_HEADER = 'x-byok-llm-provider'
+BYOK_LLM_PROVIDERS = frozenset({'openrouter', 'openai', 'anthropic', 'gemini', 'chatgpt', 'grok'})
 
 # Keys for the current request, if the client supplied them.
 # Default is None (not {}) to avoid sharing a mutable object across contexts.
 _byok_ctx: ContextVar[Optional[Dict[str, str]]] = ContextVar('byok_keys', default=None)
 _byok_uid_ctx: ContextVar[Optional[str]] = ContextVar('byok_uid', default=None)
 _byok_validated_ctx: ContextVar[bool] = ContextVar('byok_validated', default=False)
+_byok_llm_provider_ctx: ContextVar[Optional[str]] = ContextVar('byok_llm_provider', default=None)
+_byok_oauth_credential_ctx: ContextVar[Optional[Dict[str, Any]]] = ContextVar('byok_oauth_credential', default=None)
 
 
 def get_byok_keys() -> Dict[str, str]:
@@ -126,15 +130,33 @@ def get_byok_uid() -> Optional[str]:
     return _byok_uid_ctx.get()
 
 
+def get_byok_llm_provider() -> Optional[str]:
+    return _byok_llm_provider_ctx.get()
+
+
+def get_byok_oauth_credential() -> Optional[Dict[str, Any]]:
+    return _byok_oauth_credential_ctx.get()
+
+
 def set_byok_uid(uid: Optional[str]) -> None:
     """Attach the authenticated uid to the current request context."""
     _byok_uid_ctx.set(uid)
 
 
+def set_byok_llm_provider(provider: Optional[str]) -> None:
+    _byok_llm_provider_ctx.set(provider if provider in BYOK_LLM_PROVIDERS else None)
+
+
+def set_byok_oauth_credential(credential: Optional[Dict[str, Any]]) -> None:
+    _byok_oauth_credential_ctx.set(credential)
+
+
 def has_byok_keys() -> bool:
     """True if the current request carries at least one BYOK header."""
     keys = _byok_ctx.get()
-    return bool(keys)
+    if keys:
+        return True
+    return get_byok_oauth_credential() is not None
 
 
 def has_validated_byok_keys() -> bool:
@@ -169,6 +191,11 @@ def extract_byok_from_websocket(websocket: WebSocket) -> Dict[str, str]:
     return keys
 
 
+def extract_byok_llm_provider_from_websocket(websocket: WebSocket) -> Optional[str]:
+    provider = websocket.headers.get(BYOK_LLM_PROVIDER_HEADER)
+    return provider if provider in BYOK_LLM_PROVIDERS else None
+
+
 class BYOKMiddleware(BaseHTTPMiddleware):
     """Extract BYOK headers from each HTTP request into the contextvar.
 
@@ -186,12 +213,16 @@ class BYOKMiddleware(BaseHTTPMiddleware):
         token = _byok_ctx.set(keys)
         uid_token = _byok_uid_ctx.set(None)
         validated_token = _byok_validated_ctx.set(False)
+        provider_token = _byok_llm_provider_ctx.set(request.headers.get(BYOK_LLM_PROVIDER_HEADER))
+        credential_token = _byok_oauth_credential_ctx.set(None)
         try:
             return await call_next(request)
         finally:
             _byok_ctx.reset(token)
             _byok_uid_ctx.reset(uid_token)
             _byok_validated_ctx.reset(validated_token)
+            _byok_llm_provider_ctx.reset(provider_token)
+            _byok_oauth_credential_ctx.reset(credential_token)
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +311,19 @@ def validate_byok_request(uid: str) -> None:
     if error:
         logger.warning('BYOK validation failed uid=%s: %s', uid, error)
         raise HTTPException(status_code=403, detail=error)
+    provider = get_byok_llm_provider()
+    if provider in {'chatgpt', 'grok'}:
+        try:
+            from utils.llm.oauth import get_credential as get_llm_oauth_credential
+
+            credential = get_llm_oauth_credential(uid, provider)
+        except Exception as error:
+            raise HTTPException(status_code=503, detail='LLM OAuth credential is temporarily unavailable') from error
+        if credential is None:
+            raise HTTPException(
+                status_code=403, detail='LLM OAuth credential is unavailable; reconnect the provider in Settings'
+            )
+        set_byok_oauth_credential(credential)
     _byok_validated_ctx.set(True)
     set_byok_uid(uid)
 

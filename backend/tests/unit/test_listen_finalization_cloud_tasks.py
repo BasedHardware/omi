@@ -799,6 +799,43 @@ async def test_pusher_claims_the_durable_job_before_finalizing(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_pusher_claims_oauth_backed_job_with_byok_authority(monkeypatch):
+    websocket = _PusherWebSocket()
+    claim = MagicMock(return_value={'status': 'claimed', 'lease_epoch': 7, 'attempt_count': 1})
+    completed = MagicMock(return_value=True)
+    finalizer = AsyncMock()
+    set_provider = MagicMock()
+    set_uid = MagicMock()
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(jobs_db, 'claim_finalization_job', claim)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_completed', completed)
+    monkeypatch.setattr(pusher_finalization, 'finalize_persisted_conversation', finalizer)
+    monkeypatch.setattr(pusher_finalization, 'set_byok_llm_provider', set_provider)
+    monkeypatch.setattr(pusher_finalization, 'set_byok_uid', set_uid)
+
+    await pusher_finalization.process_conversation_task(
+        'uid-1',
+        'conversation-1',
+        'en',
+        websocket,
+        byok_llm_provider='grok',
+        finalization_job_id='job-1',
+        dispatch_generation=3,
+    )
+
+    set_provider.assert_called_once_with('grok')
+    set_uid.assert_called_once_with('uid-1')
+    claim.assert_called_once_with(
+        'job-1',
+        3,
+        allow_byok=True,
+        expected_uid='uid-1',
+        expected_conversation_id='conversation-1',
+    )
+    finalizer.assert_awaited_once()
+
+
+@pytest.mark.anyio
 async def test_pusher_keeps_a_completed_job_terminal_when_source_result_delivery_fails(monkeypatch):
     """#9995: source disconnect after 104 cannot reclassify durable success."""
     websocket = _PusherWebSocket()

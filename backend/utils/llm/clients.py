@@ -24,9 +24,16 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
 
 from models.structured_extraction import StructuredExtraction
-from utils.byok import get_byok_key
+from utils.byok import (
+    get_byok_key,
+    get_byok_llm_provider,
+    get_byok_oauth_credential,
+    get_byok_uid,
+    set_byok_oauth_credential,
+)
 from utils.llm.byok_errors import handle_llm_error
 from utils.observability.fallback import record_fallback
+from utils.llm.oauth import LLMOAuthError, get_credential as get_llm_oauth_credential
 from utils.llm.model_config import (
     MODEL_QOS_PROFILES,
     _ANTHROPIC_ONLY_FEATURES,
@@ -431,6 +438,42 @@ def _create_byok_client(
     return None
 
 
+def _create_llm_oauth_client(credential: Dict[str, Any], streaming: bool = False, feature: str = '') -> ChatOpenAI:
+    provider = credential['provider']
+    default_model = 'gpt-5.4-mini' if provider == 'chatgpt' else 'grok-4.3'
+    model = credential.get('model') if isinstance(credential.get('model'), str) else default_model
+    kwargs: Dict[str, Any] = _with_llm_callbacks(
+        {'request_timeout': 120, 'max_retries': 1}, provider, model=model, feature=feature
+    )
+    if streaming:
+        kwargs['streaming'] = True
+        kwargs['stream_options'] = {'include_usage': True}
+    if provider == 'chatgpt':
+        headers = {
+            'originator': 'codex_cli_rs',
+            'openai-beta': 'responses=experimental',
+            'user-agent': 'omi-codex',
+        }
+        account_id = credential.get('account_id')
+        if isinstance(account_id, str):
+            headers['chatgpt-account-id'] = account_id
+        return _cached_openai_chat(
+            model,
+            credential['access_token'],
+            {
+                **kwargs,
+                'base_url': 'https://chatgpt.com/backend-api/codex',
+                'default_headers': headers,
+                'use_responses_api': True,
+            },
+        )
+    return _cached_openai_chat(
+        model,
+        credential['access_token'],
+        {**kwargs, 'base_url': 'https://api.x.ai/v1'},
+    )
+
+
 # Anthropic client for chat agent (module-level, BYOK-aware).
 # The proxy constructs the provider client at its first use so importing a
 # deployable entrypoint never needs provider credentials.
@@ -498,12 +541,13 @@ def get_llm(
     get_model(feature) to get the model string and the provider-specific client.
     """
     gateway_feature_mode = should_route_features_through_gateway()
+    oauth_credential = get_byok_oauth_credential()
 
-    if is_anthropic_only_feature(feature) and not gateway_feature_mode:
+    if is_anthropic_only_feature(feature) and not gateway_feature_mode and oauth_credential is None:
         raise ValueError(
             f"Feature '{feature}' is Anthropic — use get_model('{feature}') with anthropic_client instead of get_llm()"
         )
-    if is_perplexity_only_feature(feature) and not gateway_feature_mode:
+    if is_perplexity_only_feature(feature) and not gateway_feature_mode and oauth_credential is None:
         raise ValueError(
             f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
         )
@@ -517,11 +561,11 @@ def get_llm(
     # with missing_byok_key. Keep the pre-selection provider to detect the switch.
     lane_provider = _effective_byok_provider(model, provider)
 
-    if provider == 'anthropic' and not gateway_feature_mode:
+    if provider == 'anthropic' and not gateway_feature_mode and oauth_credential is None:
         raise ValueError(
             f"Feature '{feature}' resolved to Anthropic model '{model}' — use get_model() with anthropic_client"
         )
-    if provider == 'perplexity' and not gateway_feature_mode:
+    if provider == 'perplexity' and not gateway_feature_mode and oauth_credential is None:
         raise ValueError(
             f"Feature '{feature}' resolved to Perplexity model '{model}' — use get_model() with Perplexity HTTP client"
         )
@@ -535,18 +579,14 @@ def get_llm(
         )
 
     byok_profile = get_byok_profile()
+    byok_provider = _effective_byok_provider(model, provider)
+    byok_key = get_byok_key(byok_provider)
     if byok_profile:
         profile_model, profile_provider = byok_profile.get(feature, (model, provider))
         profile_key = get_byok_key(_effective_byok_provider(profile_model, profile_provider))
         if profile_key:
             model, provider, byok_key = profile_model, profile_provider, profile_key
             byok_provider = _effective_byok_provider(model, provider)
-        else:
-            byok_provider = _effective_byok_provider(model, provider)
-            byok_key = get_byok_key(byok_provider)
-    else:
-        byok_provider = _effective_byok_provider(model, provider)
-        byok_key = get_byok_key(byok_provider)
     if not byok_key:
         configured_provider = provider
         for candidate in ('openrouter', 'openai', 'gemini', 'anthropic'):
@@ -565,6 +605,25 @@ def get_llm(
                     log=logger,
                 )
                 break
+    if not byok_key:
+        uid = get_byok_uid()
+        oauth_provider = get_byok_llm_provider()
+        if oauth_credential is None and uid and oauth_provider in {'chatgpt', 'grok'}:
+            try:
+                oauth_credential = get_llm_oauth_credential(uid, oauth_provider)
+            except LLMOAuthError as error:
+                logger.warning('LLM OAuth credential refresh failed uid=%s', uid)
+                raise RuntimeError('LLM OAuth credential refresh failed; reconnect the provider in Settings') from error
+            if oauth_credential is None:
+                raise RuntimeError('LLM OAuth credential is unavailable; reconnect the provider in Settings')
+            # Publish the fetched credential back to the request context so
+            # error classification (get_llm_error_source) recognizes a mid-call
+            # 401/403 as a BYOK failure and fires the reconnection nudge, and so
+            # later get_llm() calls in the same request reuse it.
+            set_byok_oauth_credential(oauth_credential)
+    if oauth_credential:
+        provider = oauth_credential['provider']
+        model = 'gpt-5.4-mini' if provider == 'chatgpt' else 'grok-4.3'
 
     if byok_key and byok_profile:
         byok_model, byok_prov = byok_profile.get(feature, (model, provider))
@@ -576,7 +635,9 @@ def get_llm(
             byok_key = byok_key_for_profile
 
     effective_provider = _effective_byok_provider(model, provider)
-    if byok_key and gateway_feature_mode and effective_provider == lane_provider:
+    if oauth_credential:
+        result = _create_llm_oauth_client(oauth_credential, streaming, feature)
+    elif byok_key and gateway_feature_mode and effective_provider == lane_provider:
         result = get_or_create_omi_gateway_llm_for_byok(
             feature_auto_lane_id(feature),
             provider=effective_provider,

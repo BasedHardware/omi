@@ -196,6 +196,25 @@ async def test_finalization_job_identity_survives_pusher_reconnect():
 
 
 @pytest.mark.anyio
+async def test_conversation_processing_frame_carries_selected_oauth_provider(monkeypatch):
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, deps_overrides={'get_byok_keys': lambda: {}})
+    monkeypatch.setattr('utils.byok.get_byok_llm_provider', lambda: 'chatgpt')
+    await session.connect()
+
+    await session.request_conversation_processing('conv-1', 'job-1', 3)
+
+    assert frame_json(ws.sent[-1]) == {
+        'conversation_id': 'conv-1',
+        'language': 'en',
+        'byok_keys': {},
+        'byok_llm_provider': 'chatgpt',
+        'finalization_job_id': 'job-1',
+        'dispatch_generation': 3,
+    }
+
+
+@pytest.mark.anyio
 async def test_pending_conversation_and_speaker_sample_replay_uses_target_rate_for_multi_channel():
     ws = FakePusherWebSocket()
     connect_calls = []

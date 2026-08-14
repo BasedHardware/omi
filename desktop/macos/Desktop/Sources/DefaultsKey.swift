@@ -70,6 +70,8 @@ enum DefaultsKey: String {
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case byokLLMProvider = "dev_byok_llm_provider"
+  case chatGPTLLMOAuthConnected = "dev_chatgpt_llm_oauth_connected"
+  case grokLLMOAuthConnected = "dev_grok_llm_oauth_connected"
   case rewindDisableContentCache = "rewindDisableContentCache"
   // Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.
