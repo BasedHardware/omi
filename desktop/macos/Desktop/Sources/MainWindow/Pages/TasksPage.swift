@@ -3291,24 +3291,45 @@ class TasksViewModel: ObservableObject {
     let cal = Calendar.current
     let startOfToday = cal.startOfDay(for: Date())
     switch category {
-    case .today: return cal.date(bySettingHour: 23, minute: 59, second: 0, of: Date())
+    case .today: return Self.todayDueAt()
     case .tomorrow: return cal.date(byAdding: .day, value: 1, to: startOfToday)
     case .later: return cal.date(byAdding: .day, value: 7, to: startOfToday)
     case .noDeadline: return nil
     }
   }
 
+  /// Due date assigned by the composer's "Today" button: end of the current day.
+  static func todayDueAt(now: Date = Date(), calendar: Calendar = .current) -> Date? {
+    calendar.date(bySettingHour: 23, minute: 59, second: 0, of: now)
+  }
+
   /// Create an inline task below the specified task
-  func createInlineTask(description: String, afterTaskId: String?) async {
+  func createInlineTask(description: String, afterTaskId: String?, forceToday: Bool = false) async {
     let context = contextForInlineCreate()
     let created = await store.createTask(
       description: description,
-      dueAt: context.dueAt,
+      dueAt: forceToday ? Self.todayDueAt() : context.dueAt,
       priority: nil,
       tags: context.tags.isEmpty ? nil : context.tags
     )
 
     if let created = created {
+      if forceToday {
+        // "Today" button: the task belongs to the Today section regardless of
+        // where the composer was opened. Position after the anchor task when it
+        // is already in Today, otherwise surface at the top of Today.
+        if let afterId = afterTaskId,
+          let afterIndex = getOrderedTasks(for: .today).firstIndex(where: { $0.id == afterId })
+        {
+          moveTask(created, toIndex: afterIndex + 1, inCategory: .today)
+        } else {
+          moveTask(created, toIndex: 0, inCategory: .today)
+        }
+        keyboardSelectedTaskId = created.id
+        isInlineCreating = false
+        inlineCreateAfterTaskId = nil
+        return
+      }
       if let afterId = afterTaskId {
         // Position the new task after afterTaskId in category order
         for category in TaskCategory.allCases {
@@ -3473,7 +3494,12 @@ struct TasksPage: View {
           onDelete: {
             closeTaskDetailPanel()
             Task { await viewModel.deleteTaskWithUndo(taskDetailTask) }
-          }
+          },
+          onPriorityChange: taskDetailTask.completed
+            ? nil
+            : { newPriority in
+              Task { await viewModel.updateTaskDetails(taskDetailTask, priority: newPriority) }
+            }
         )
         .frame(width: 360)
         .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -3799,7 +3825,7 @@ struct TasksPage: View {
     inlineCreateFocused = false
   }
 
-  private func commitInlineCreate() {
+  private func commitInlineCreate(forToday: Bool = false) {
     let text = inlineCreateText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else {
       cancelInlineCreate()
@@ -3809,7 +3835,7 @@ struct TasksPage: View {
     inlineCreateText = ""
     inlineCreateFocused = false
     Task {
-      await viewModel.createInlineTask(description: text, afterTaskId: afterId)
+      await viewModel.createInlineTask(description: text, afterTaskId: afterId, forceToday: forToday)
     }
   }
 
@@ -4286,7 +4312,8 @@ struct TasksPage: View {
                 text: $inlineCreateText,
                 isFocused: $inlineCreateFocused,
                 onCommit: { _ in commitInlineCreate() },
-                onCancel: { cancelInlineCreate() }
+                onCancel: { cancelInlineCreate() },
+                onCommitToday: { _ in commitInlineCreate(forToday: true) }
               )
               .id("inline-create-top")
             }
@@ -4370,7 +4397,8 @@ struct TasksPage: View {
                   inlineCreateText: $inlineCreateText,
                   inlineCreateFocused: $inlineCreateFocused,
                   onInlineCommit: { commitInlineCreate() },
-                  onInlineCancel: { cancelInlineCreate() }
+                  onInlineCancel: { cancelInlineCreate() },
+                  onInlineCommitToday: { commitInlineCreate(forToday: true) }
                 )
               }
             }
@@ -4381,7 +4409,8 @@ struct TasksPage: View {
                 text: $inlineCreateText,
                 isFocused: $inlineCreateFocused,
                 onCommit: { _ in commitInlineCreate() },
-                onCancel: { cancelInlineCreate() }
+                onCancel: { cancelInlineCreate() },
+                onCommitToday: { _ in commitInlineCreate(forToday: true) }
               )
               .id("inline-create-top-flat")
             }
@@ -4641,6 +4670,7 @@ struct TaskCategorySection: View {
   @FocusState.Binding var inlineCreateFocused: Bool
   var onInlineCommit: (() -> Void)?
   var onInlineCancel: (() -> Void)?
+  var onInlineCommitToday: (() -> Void)?
 
   @State private var isTopDropTargeted = false
 
@@ -4805,7 +4835,8 @@ struct TaskCategorySection: View {
                   text: $inlineCreateText,
                   isFocused: $inlineCreateFocused,
                   onCommit: { _ in onInlineCommit?() },
-                  onCancel: { onInlineCancel?() }
+                  onCancel: { onInlineCancel?() },
+                  onCommitToday: { _ in onInlineCommitToday?() }
                 )
                 .padding(.top, OmiSpacing.xxs)
               }
@@ -5209,7 +5240,6 @@ struct TaskRow: View {
   @State private var showRepeatPicker = false
   @State private var editRecurrenceRule: String = ""
   @State private var showTagPicker = false
-  @State private var showPriorityPicker = false
 
   // Swipe gesture state
   @State private var swipeOffset: CGFloat = 0
@@ -5704,7 +5734,6 @@ struct TaskRow: View {
       // Hover actions overlaid on trailing edge (no layout shift)
       if TaskDetailPanelPresentationPolicy.showsHoverActions(
         isRowHovering: isHovering,
-        isPriorityPickerPresented: showPriorityPicker,
         isMultiSelectMode: isMultiSelectMode,
         isDeletedTask: isDeletedTask,
         isTextFieldFocused: isTextFieldFocused,
@@ -5746,19 +5775,6 @@ struct TaskRow: View {
             }
             .buttonStyle(.plain)
             .help("Add due date")
-          }
-
-          // Priority button
-          if !task.completed {
-            PriorityBadgeInteractive(
-              priority: task.priority,
-              isCompleted: task.completed,
-              isHovering: isHovering,
-              showPriorityPicker: $showPriorityPicker,
-              onPriorityChange: { newPriority in
-                Task { await onUpdateDetails?(task, nil, nil, newPriority, nil) }
-              }
-            )
           }
 
           // Outdent button (decrease indent)
@@ -6124,99 +6140,6 @@ struct DueDateBadgeInteractive: View {
     .buttonStyle(.plain)
     .onHover { hovering in
       isHovering = hovering
-    }
-  }
-}
-
-struct PriorityBadgeInteractive: View {
-  let priority: String?
-  let isCompleted: Bool
-  let isHovering: Bool  // Row hover state
-  @Binding var showPriorityPicker: Bool
-  let onPriorityChange: (String) -> Void
-
-  @State private var badgeHovering = false
-
-  private var badgeColor: Color {
-    switch priority {
-    case "high": return Ink.primary
-    case "medium": return Ink.secondary
-    case "low": return Ink.secondary
-    default: return Ink.secondary
-    }
-  }
-
-  private var label: String {
-    priority?.capitalized ?? "Priority"
-  }
-
-  var body: some View {
-    // Show if task has a priority, or show "add priority" on hover/popover
-    if priority != nil || ((isHovering || showPriorityPicker) && !isCompleted) {
-      Button {
-        showPriorityPicker = true
-      } label: {
-        HStack(spacing: OmiSpacing.hairline) {
-          if priority != nil {
-            Image(systemName: priority == "high" ? "flag.fill" : "flag")
-              .scaledFont(size: 8)
-          } else {
-            Image(systemName: "plus")
-              .scaledFont(size: 8)
-          }
-          Text(label)
-            .scaledFont(size: OmiType.micro, weight: .medium)
-          if badgeHovering && priority != nil {
-            Image(systemName: "pencil")
-              .scaledFont(size: 7)
-          }
-        }
-        .foregroundColor(
-          badgeHovering ? badgeColor : (priority != nil ? Ink.primary : Ink.secondary))
-      }
-      .buttonStyle(.plain)
-      .onHover { hovering in
-        badgeHovering = hovering
-      }
-      .popover(isPresented: $showPriorityPicker) {
-        VStack(spacing: OmiSpacing.xxs) {
-          ForEach(["high", "medium", "low"], id: \.self) { value in
-            let color: Color =
-              value == "high"
-              ? Ink.errorRed : value == "medium" ? PageGlass.warning : Ink.secondary
-            let isSelected = priority == value
-
-            Button {
-              showPriorityPicker = false
-              onPriorityChange(value)
-            } label: {
-              HStack {
-                Image(systemName: value == "high" ? "flag.fill" : "flag")
-                  .scaledFont(size: OmiType.caption)
-                  .foregroundColor(color)
-                  .frame(width: 20)
-                Text(value.capitalized)
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(Ink.primary)
-                Spacer()
-                if isSelected {
-                  Image(systemName: "checkmark")
-                    .scaledFont(size: OmiType.caption, weight: .medium)
-                    .foregroundColor(color)
-                }
-              }
-              .padding(.horizontal, OmiSpacing.md)
-              .padding(.vertical, OmiSpacing.sm)
-              .background(isSelected ? color.opacity(0.1) : Color.clear)
-              .cornerRadius(OmiChrome.badgeRadius)
-              .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-          }
-        }
-        .padding(OmiSpacing.sm)
-        .frame(width: 180)
-      }
     }
   }
 }
@@ -6633,6 +6556,11 @@ struct InlineTaskCreationRow: View {
   @FocusState.Binding var isFocused: Bool
   let onCommit: (String) -> Void
   let onCancel: () -> Void
+  var onCommitToday: ((String) -> Void)? = nil
+
+  private var isTextEmpty: Bool {
+    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
 
   var body: some View {
     HStack(alignment: .center, spacing: OmiSpacing.md) {
@@ -6656,6 +6584,27 @@ struct InlineTaskCreationRow: View {
         }
 
       Spacer()
+
+      if let onCommitToday {
+        Button {
+          onCommitToday(text)
+        } label: {
+          HStack(spacing: OmiSpacing.xs) {
+            Image(systemName: "sun.max")
+              .scaledFont(size: OmiType.caption)
+            Text("Today")
+              .scaledFont(size: OmiType.caption, weight: .medium)
+          }
+          .foregroundColor(Ink.primary)
+          .padding(.horizontal, OmiSpacing.sm)
+          .padding(.vertical, OmiSpacing.xxs)
+          .background(Capsule().fill(Ink.rowFillHover))
+        }
+        .buttonStyle(.plain)
+        .disabled(isTextEmpty)
+        .opacity(isTextEmpty ? 0.4 : 1)
+        .help("Create task due today")
+      }
     }
     .padding(.trailing, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.xs)
