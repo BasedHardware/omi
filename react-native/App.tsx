@@ -53,12 +53,15 @@ import {omiBackend} from './src/omiNative';
 import {
   loadDesktopReads,
   loadMemories,
+  taskGroup,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
   type ConversationProjection,
   type DomainReadOutcome,
   type MemoryProjection,
   type ReadPageState,
+  type TaskGroup,
+  type TaskProjection,
 } from './src/desktopReadClient';
 import {subscribeDesktopSearchCommand} from './src/desktopCommands';
 
@@ -82,7 +85,6 @@ const quickPrompts = [
   'Summarize my recent conversations',
 ];
 type Route = 'Home' | 'Chat' | 'Conversations' | 'Memories' | 'Tasks';
-type ReadRoute = Exclude<Route, 'Home' | 'Chat'>;
 type ProjectionFilter = 'all' | DesktopReadProjection['kind'];
 type ReadsPhase =
   | 'initial-loading'
@@ -174,14 +176,6 @@ const filterLabels: Array<{label: string; value: ProjectionFilter}> = [
   {label: 'Conversations', value: 'conversation'},
   {label: 'Memories', value: 'memory'},
 ];
-
-function projectionKind(route: ReadRoute): DesktopReadProjection['kind'] {
-  return {
-    Conversations: 'conversation',
-    Memories: 'memory',
-    Tasks: 'task',
-  }[route] as DesktopReadProjection['kind'];
-}
 
 function displayTitle(item: DesktopReadProjection): string {
   return item.kind === 'memory'
@@ -657,6 +651,168 @@ function MemoriesPage({
   );
 }
 
+const taskGroups: TaskGroup[] = ['Today', 'Tomorrow', 'Later'];
+
+function formatTaskDue(dueAt: number | null): string {
+  if (dueAt === null) {
+    return 'No due date';
+  }
+  return new Date(dueAt * 1000).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+}
+
+function TasksPage({
+  outcome,
+  loading,
+}: {
+  outcome: DomainReadOutcome<DesktopReadProjection> | null;
+  loading: boolean;
+}) {
+  const [query, setQuery] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const nowEpochSeconds = useRef(Math.floor(Date.now() / 1000)).current;
+  const tasks = useMemo(
+    () =>
+      outcome?.status === 'success'
+        ? outcome.value.items.filter(
+            (item): item is TaskProjection => item.kind === 'task',
+          )
+        : [],
+    [outcome],
+  );
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    return normalized === ''
+      ? tasks
+      : tasks.filter(task =>
+          task.title.toLocaleLowerCase().includes(normalized),
+        );
+  }, [query, tasks]);
+  const grouped = useMemo(
+    () =>
+      taskGroups.map(label => ({
+        label,
+        tasks: filtered.filter(
+          task => taskGroup(task.dueAt, nowEpochSeconds) === label,
+        ),
+      })),
+    [filtered, nowEpochSeconds],
+  );
+  const error = outcome?.status === 'error' ? outcome.error : null;
+  const filtering = query.trim() !== '';
+  return (
+    <View style={styles.tasksPage}>
+      <Text style={styles.projectionTitle}>Tasks</Text>
+      <View style={styles.taskSearchBox}>
+        <Search accessible={false} color="#777777" size={17} />
+        <TextInput
+          accessibilityLabel="Search loaded tasks"
+          onChangeText={setQuery}
+          placeholder="Search loaded tasks"
+          placeholderTextColor="#666666"
+          style={styles.memorySearchInput}
+          value={query}
+        />
+      </View>
+      {loading && outcome === null ? (
+        <View style={styles.projectionEmpty}>
+          <ActivityIndicator color="#888888" />
+          <Text style={styles.projectionEmptyCopy}>Loading tasks…</Text>
+        </View>
+      ) : error !== null ? (
+        <View style={styles.projectionEmpty}>
+          <Text style={styles.projectionEmptyTitle}>Tasks unavailable</Text>
+          <Text style={styles.projectionEmptyCopy}>
+            Saved tasks could not be loaded.
+          </Text>
+        </View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.projectionEmpty}>
+          <Text style={styles.projectionEmptyTitle}>
+            {filtering ? 'No loaded tasks match.' : 'No tasks yet.'}
+          </Text>
+          {filtering && (
+            <Text style={styles.projectionEmptyCopy}>
+              Search covers task descriptions already loaded on this device.
+            </Text>
+          )}
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.taskList}>
+          {grouped.map(group =>
+            group.tasks.length === 0 ? null : (
+              <View key={group.label} style={styles.taskGroup}>
+                <View style={styles.taskGroupHeader}>
+                  <Text style={styles.taskGroupTitle}>{group.label}</Text>
+                  <Text style={styles.taskGroupCount}>
+                    {group.tasks.length}
+                  </Text>
+                </View>
+                {group.tasks.map(task => {
+                  const selected = task.id === selectedId;
+                  return (
+                    <FocusPressable
+                      accessibilityLabel={`${
+                        task.completed ? 'Completed' : 'Open'
+                      } task: ${task.title}`}
+                      accessibilityRole="button"
+                      accessibilityState={{selected}}
+                      key={task.id}
+                      onPress={() => setSelectedId(task.id)}
+                      style={({pressed}) => [
+                        styles.taskCard,
+                        selected && styles.taskCardSelected,
+                        pressed && styles.pressed,
+                      ]}>
+                      <View
+                        accessibilityElementsHidden
+                        importantForAccessibility="no-hide-descendants"
+                        style={[
+                          styles.taskCompletion,
+                          task.completed && styles.taskCompletionDone,
+                        ]}>
+                        {task.completed && (
+                          <Text style={styles.taskCheck}>✓</Text>
+                        )}
+                      </View>
+                      <View style={styles.taskCardText}>
+                        <Text
+                          style={[
+                            styles.taskDescription,
+                            task.completed && styles.taskDescriptionDone,
+                          ]}>
+                          {task.title}
+                        </Text>
+                        <Text style={styles.taskDue}>
+                          {task.completed
+                            ? `Completed · ${formatTaskDue(task.dueAt)}`
+                            : formatTaskDue(task.dueAt)}
+                        </Text>
+                      </View>
+                    </FocusPressable>
+                  );
+                })}
+              </View>
+            ),
+          )}
+          {outcome?.status === 'success' && (
+            <ReadStatus label="Tasks" page={outcome.value.page} />
+          )}
+        </ScrollView>
+      )}
+      <View
+        accessibilityLabel="Task keyboard shortcuts"
+        style={styles.taskShortcuts}>
+        <Text style={styles.taskShortcut}>Tab · Focus</Text>
+        <Text style={styles.taskShortcut}>Enter · Select</Text>
+      </View>
+    </View>
+  );
+}
+
 function ReadStatus({label, page}: {label: string; page: ReadPageState}) {
   if (page.complete && page.completenessStatus === 'complete') {
     return null;
@@ -671,9 +827,6 @@ function ReadStatus({label, page}: {label: string; page: ReadPageState}) {
   return (
     <View style={styles.readStatus}>
       <Text style={styles.readStatusText}>{detail}</Text>
-      {page.reasons.length > 0 && (
-        <Text style={styles.readStatusReason}>{page.reasons.join(', ')}</Text>
-      )}
     </View>
   );
 }
@@ -688,39 +841,9 @@ function OutcomeStatus({
   return outcome.status === 'error' ? (
     <View style={styles.readStatus}>
       <Text style={styles.readStatusText}>{label} are unavailable.</Text>
-      <Text style={styles.readStatusReason}>{outcome.error}</Text>
     </View>
   ) : (
     <ReadStatus label={label} page={outcome.value.page} />
-  );
-}
-
-function ProjectionPage({
-  route,
-  outcome,
-  loading,
-}: {
-  route: ReadRoute;
-  outcome: DomainReadOutcome<DesktopReadProjection> | null;
-  loading: boolean;
-}) {
-  const items = outcome?.status === 'success' ? outcome.value.items : [];
-  const error = outcome?.status === 'error' ? outcome.error : null;
-  return (
-    <View style={styles.projection}>
-      <Text style={styles.projectionTitle}>{route}</Text>
-      <ProjectionList
-        emptyCopy={`No ${route.toLowerCase()} yet.`}
-        error={error}
-        footer={
-          outcome?.status === 'success' ? (
-            <ReadStatus label={route} page={outcome.value.page} />
-          ) : undefined
-        }
-        items={items.filter(item => item.kind === projectionKind(route))}
-        loading={loading}
-      />
-    </View>
   );
 }
 
@@ -1562,10 +1685,9 @@ function App(): React.JSX.Element {
                       outcome={routeOutcome}
                     />
                   ) : (
-                    <ProjectionPage
+                    <TasksPage
                       loading={readsPhase === 'initial-loading'}
                       outcome={routeOutcome}
-                      route={route}
                     />
                   )}
                 </View>
@@ -1880,6 +2002,78 @@ const styles = StyleSheet.create({
   memoryProvenance: {color: '#888888', fontSize: 11, marginTop: 9},
   memoryCitation: {color: '#707070', fontSize: 11, marginTop: 3},
   memoryFooter: {gap: 10, paddingVertical: 8},
+  tasksPage: {flex: 1, paddingHorizontal: 28, paddingTop: 24},
+  taskSearchBox: {
+    alignItems: 'center',
+    backgroundColor: '#202020',
+    borderColor: '#343434',
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 9,
+    marginTop: 16,
+    paddingHorizontal: 14,
+  },
+  taskList: {gap: 20, paddingBottom: 78, paddingTop: 18},
+  taskGroup: {gap: 7},
+  taskGroupHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 3,
+  },
+  taskGroupTitle: {
+    color: '#d8d8d8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  taskGroupCount: {color: '#737373', fontSize: 11},
+  taskCard: {
+    alignItems: 'center',
+    backgroundColor: '#202020',
+    borderColor: '#303030',
+    borderRadius: 13,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 54,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  taskCardSelected: {backgroundColor: '#292929', borderColor: '#686868'},
+  taskCompletion: {
+    alignItems: 'center',
+    borderColor: '#777777',
+    borderRadius: 9,
+    borderWidth: 1,
+    height: 18,
+    justifyContent: 'center',
+    width: 18,
+  },
+  taskCompletionDone: {backgroundColor: '#d8d8d8', borderColor: '#d8d8d8'},
+  taskCheck: {color: '#1a1a1a', fontSize: 12, fontWeight: '800'},
+  taskCardText: {flex: 1},
+  taskDescription: {color: '#eeeeee', fontSize: 14, lineHeight: 19},
+  taskDescriptionDone: {
+    color: '#858585',
+    textDecorationLine: 'line-through',
+  },
+  taskDue: {color: '#707070', fontSize: 11, marginTop: 3},
+  taskShortcuts: {
+    alignItems: 'center',
+    backgroundColor: '#1d1d1d',
+    borderColor: '#303030',
+    borderRadius: 13,
+    borderWidth: 1,
+    bottom: 14,
+    flexDirection: 'row',
+    gap: 18,
+    left: 28,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    position: 'absolute',
+  },
+  taskShortcut: {color: '#858585', fontSize: 11, fontWeight: '600'},
   projection: {flex: 1, paddingHorizontal: 28, paddingVertical: 24},
   projectionTitle: {color: '#ffffff', fontSize: 22, fontWeight: '600'},
   projectionEmpty: {
@@ -1907,7 +2101,6 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   readStatusText: {color: '#b0b0b0', fontSize: 13, fontWeight: '600'},
-  readStatusReason: {color: '#777777', fontSize: 12},
   retryButton: {
     alignItems: 'center',
     alignSelf: 'flex-start',

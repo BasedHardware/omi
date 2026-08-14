@@ -4,11 +4,13 @@ import {
   loadMemories,
   loadTasks,
   parseMemoryText,
+  taskGroup,
 } from '../src/desktopReadClient';
 import type {NativeHttpRequest, OmiBackend} from '../src/omiNative';
 
 const page = (items: unknown[], completenessVersion: string) => ({
   contractVersion: '1.0.0',
+  accountEpoch: 7,
   items,
   window: {
     status: 'complete',
@@ -149,6 +151,7 @@ test('loads and normalizes all three exact desktop read routes', async () => {
         }),
       ],
       page: expect.objectContaining({completenessStatus: 'complete'}),
+      accountEpoch: 7,
     },
   });
   expect(paths.sort()).toEqual(
@@ -312,7 +315,35 @@ test('preserves an incomplete task projection and its reasons', async () => {
       completenessStatus: 'incomplete',
       reasons: ['pending_writes'],
     },
+    accountEpoch: 7,
   });
+});
+
+test('groups task epochs by deterministic UTC day boundaries', () => {
+  const now = Date.UTC(2026, 7, 14, 23, 30) / 1000;
+  expect(taskGroup(Date.UTC(2026, 7, 14, 0, 0) / 1000, now)).toBe('Today');
+  expect(taskGroup(Date.UTC(2026, 7, 13, 0, 0) / 1000, now)).toBe('Today');
+  expect(taskGroup(Date.UTC(2026, 7, 15, 0, 0) / 1000, now)).toBe('Tomorrow');
+  expect(taskGroup(Date.UTC(2026, 7, 16, 0, 0) / 1000, now)).toBe('Later');
+  expect(taskGroup(null, now)).toBe('Later');
+});
+
+test('accepts an omitted account epoch and retains a null task revision', async () => {
+  const response = page([{...task, revision: null}], 'tasks-completeness-v1');
+  delete (response as {accountEpoch?: number}).accountEpoch;
+  const result = await loadTasks(
+    backendFor(() => ({status: 200, body: JSON.stringify(response)})),
+  );
+  expect(result.accountEpoch).toBeNull();
+  expect(result.items[0]).toEqual(
+    expect.objectContaining({
+      owner: null,
+      source: 'assistant',
+      provenance: ['assistant:summarizer-v3'],
+      indentLevel: 0,
+      revision: null,
+    }),
+  );
 });
 
 test('marks a full conversation window as potentially incomplete', async () => {

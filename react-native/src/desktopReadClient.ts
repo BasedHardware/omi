@@ -41,10 +41,32 @@ export type TaskProjection = {
   completed: boolean;
   completedAt: number | null;
   dueAt: number | null;
+  owner: string | null;
+  source: string;
+  provenance: string[];
   sortOrder: number;
+  indentLevel: number;
   createdAt: number;
   updatedAt: number;
+  revision: string | null;
 };
+
+export type TaskGroup = 'Today' | 'Tomorrow' | 'Later';
+
+export function taskGroup(
+  dueAt: number | null,
+  nowEpochSeconds: number,
+): TaskGroup {
+  if (dueAt === null) {
+    return 'Later';
+  }
+  const today = Math.floor(nowEpochSeconds / 86400);
+  const dueDay = Math.floor(dueAt / 86400);
+  if (dueDay <= today) {
+    return 'Today';
+  }
+  return dueDay === today + 1 ? 'Tomorrow' : 'Later';
+}
 
 export type DesktopReadProjection =
   | ConversationProjection
@@ -63,6 +85,10 @@ export type ReadPageState = {
 export type DomainRead<T extends DesktopReadProjection> = {
   items: T[];
   page: ReadPageState;
+};
+
+export type TaskRead = DomainRead<TaskProjection> & {
+  accountEpoch: number | null;
 };
 
 export type DomainReadOutcome<T extends DesktopReadProjection> =
@@ -382,11 +408,15 @@ export async function loadMemories(
   return {items, page: validated.page};
 }
 
-export async function loadTasks(
-  backend: OmiBackend,
-): Promise<DomainRead<TaskProjection>> {
+export async function loadTasks(backend: OmiBackend): Promise<TaskRead> {
+  const value = await read(backend, 'desktop-tasks-read', '/v1/tasks');
+  const accountEpochValue = object(value, 'Tasks response').accountEpoch;
+  const accountEpoch =
+    accountEpochValue === undefined
+      ? null
+      : integer(accountEpochValue, 'Tasks response accountEpoch');
   const validated = validatePage(
-    await read(backend, 'desktop-tasks-read', '/v1/tasks'),
+    value,
     'Tasks response',
     'tasks-completeness-v1',
   );
@@ -402,8 +432,9 @@ export async function loadTasks(
     if (item.owner !== null && typeof item.owner !== 'string') {
       throw new Error(`Task ${index} owner is malformed`);
     }
-    string(item.source, `Task ${index} source`);
-    stringArray(item.provenance, `Task ${index} provenance`);
+    const owner = item.owner as string | null;
+    const source = string(item.source, `Task ${index} source`);
+    const provenance = stringArray(item.provenance, `Task ${index} provenance`);
     const sortOrder = finite(item.sortOrder, `Task ${index} sortOrder`);
     const indentLevel = integer(item.indentLevel, `Task ${index} indentLevel`);
     if (indentLevel < 0) {
@@ -411,7 +442,10 @@ export async function loadTasks(
     }
     const createdAt = integer(item.createdAt, `Task ${index} createdAt`);
     const updatedAt = integer(item.updatedAt, `Task ${index} updatedAt`);
-    string(item.revision, `Task ${index} revision`);
+    const revision =
+      item.revision === null
+        ? null
+        : string(item.revision, `Task ${index} revision`);
     return {
       kind: 'task' as const,
       id,
@@ -425,12 +459,17 @@ export async function loadTasks(
       completed,
       completedAt,
       dueAt,
+      owner,
+      source,
+      provenance,
       sortOrder,
+      indentLevel,
       createdAt,
       updatedAt,
+      revision,
     };
   });
-  return {items, page: validated.page};
+  return {items, page: validated.page, accountEpoch};
 }
 
 export async function loadDesktopReads(

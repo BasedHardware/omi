@@ -747,6 +747,131 @@ test('loads the next memory page with the encoded exact cursor', async () => {
   ).toHaveLength(0);
 });
 
+test('groups and filters loaded tasks with completed and selectable presentation', async () => {
+  const now = Date.UTC(2026, 7, 14, 12, 0) / 1000;
+  const dateNow = jest.spyOn(Date, 'now').mockReturnValue(now * 1000);
+  const requests: string[] = [];
+  const task = (
+    id: string,
+    description: string,
+    dueAt: number | null,
+    completed = false,
+  ) => ({
+    id,
+    description,
+    completed,
+    completedAt: completed ? now : null,
+    dueAt,
+    owner: null,
+    source: 'assistant',
+    provenance: ['assistant:test'],
+    sortOrder: 1,
+    indentLevel: 0,
+    createdAt: now,
+    updatedAt: now,
+    revision: null,
+  });
+  mockBackend.request.mockImplementation(async request => {
+    requests.push(request.path);
+    if (request.path === '/v1/tasks') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          contractVersion: '1.0.0',
+          accountEpoch: 4,
+          items: [
+            task('today', 'Ship desktop', now - 86400),
+            task('tomorrow', 'Review notes', now + 86400),
+            task('later', 'Archive paperwork', null, true),
+          ],
+          window: {
+            status: 'incomplete',
+            complete: false,
+            hasMore: false,
+            nextCursor: null,
+          },
+          completeness: {
+            version: 'tasks-completeness-v1',
+            status: 'degraded',
+            reasons: ['source_delayed'],
+          },
+          absence: null,
+        }),
+      };
+    }
+    return mockBackendResponse(request);
+  });
+  const renderer = await renderApp();
+  const tasks = renderer.root
+    .findAll(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityRole === 'tab',
+    )
+    .find(node => node.props.children[1].props.children === 'Tasks')!;
+  await ReactTestRenderer.act(async () => tasks.props.onPress());
+  const rendered = JSON.stringify(renderer.toJSON());
+  expect(rendered).toContain('Today');
+  expect(rendered).toContain('Tomorrow');
+  expect(rendered).toContain('Later');
+  expect(rendered).toContain('Completed · No due date');
+  expect(rendered).toContain('Tasks may be temporarily incomplete.');
+  expect(rendered).not.toContain('source_delayed');
+  expect(rendered).toContain('Tab · Focus');
+  expect(rendered).toContain('Enter · Select');
+  expect(rendered).not.toContain('New');
+  expect(rendered).not.toContain('Delete');
+  const completed = renderer.root.find(
+    node =>
+      String(node.type) === 'Pressable' &&
+      node.props.accessibilityLabel === 'Completed task: Archive paperwork',
+  );
+  expect(completed.props.accessibilityState.selected).toBe(false);
+  await ReactTestRenderer.act(async () => completed.props.onPress());
+  expect(
+    renderer.root.find(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityLabel === 'Completed task: Archive paperwork',
+    ).props.accessibilityState.selected,
+  ).toBe(true);
+  const beforeSearch = requests.length;
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search loaded tasks')
+      .props.onChangeText('review');
+  });
+  const filtered = JSON.stringify(renderer.toJSON());
+  expect(filtered).toContain('Review notes');
+  expect(filtered).not.toContain('Ship desktop');
+  expect(filtered).not.toContain('Archive paperwork');
+  expect(requests).toHaveLength(beforeSearch);
+  dateNow.mockRestore();
+});
+
+test('renders the dedicated Tasks unavailable state without mutation controls', async () => {
+  mockBackend.request.mockImplementation(async request =>
+    request.path === '/v1/tasks'
+      ? {id: request.id, status: 503, body: null}
+      : mockBackendResponse(request),
+  );
+  const renderer = await renderApp();
+  const tasks = renderer.root
+    .findAll(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityRole === 'tab',
+    )
+    .find(node => node.props.children[1].props.children === 'Tasks')!;
+  await ReactTestRenderer.act(async () => tasks.props.onPress());
+  const rendered = JSON.stringify(renderer.toJSON());
+  expect(rendered).toContain('Tasks unavailable');
+  expect(rendered).not.toContain('desktop-tasks-read failed (503)');
+  expect(rendered).not.toContain('Create task');
+  expect(rendered).not.toContain('Delete task');
+});
+
 test('opens a read-only selected-record pane from a loaded conversation row', async () => {
   const renderer = await renderApp();
   const conversations = renderer.root
@@ -844,7 +969,9 @@ test('keeps successful reads visible and reports each unavailable domain', async
   const renderer = await renderApp();
   const home = JSON.stringify(renderer.toJSON());
   expect(home).not.toContain('Keep the successful task');
-  expect(home).toContain('desktop-conversations-read failed (503)');
+  expect(home).toContain('Conversations');
+  expect(home).toContain('are unavailable.');
+  expect(home).not.toContain('desktop-conversations-read failed (503)');
   expect(home).not.toContain('Tasks are incomplete.');
   expect(home).not.toContain('pending_writes');
 
