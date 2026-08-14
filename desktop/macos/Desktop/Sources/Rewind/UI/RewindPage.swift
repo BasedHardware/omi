@@ -151,6 +151,12 @@ struct RewindPage: View {
   }
 
   var body: some View {
+    // Split so the release compiler can type-check. One 160-line modifier
+    // chain here fails `swift build -c release` (Codemagic 170 / #11519).
+    rewindPageKeyHandlers(rewindPageLifecycle(pageChrome))
+  }
+
+  private var pageChrome: some View {
     pageContent
       .glassContent()
       // The page answers arrow keys wherever the pointer is, so it holds keyboard focus itself. The
@@ -159,6 +165,10 @@ struct RewindPage: View {
       // window with no visible extent is a blue rectangle on the wallpaper. See
       // `shellPageKeyboardTarget`.
       .shellPageKeyboardTarget($isPageFocused)
+  }
+
+  private func rewindPageLifecycle<Content: View>(_ content: Content) -> some View {
+    content
       .task {
         await viewModel.loadInitialData()
         await resolveCitationFocusIfNeeded()
@@ -254,6 +264,10 @@ struct RewindPage: View {
           scheduleLoadCurrentFrame()
         }
       }
+  }
+
+  private func rewindPageKeyHandlers<Content: View>(_ content: Content) -> some View {
+    content
       // Global keyboard handlers
       .onEscapeKey {
         // Expanded transcript → collapse
