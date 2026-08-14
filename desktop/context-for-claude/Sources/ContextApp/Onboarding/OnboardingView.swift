@@ -79,6 +79,85 @@ enum OnboardingStep: Int, CaseIterable, Sendable {
     static func progressIndex(of step: OnboardingStep, signedIn: Bool) -> Int? {
         progressSteps(signedIn: signedIn).firstIndex(of: step)
     }
+
+    /// **A recorded card, corrected to the itinerary the run actually has.**
+    ///
+    /// `OnboardingResume` records a card, and the itinerary is recomputed on every launch from a fact
+    /// the record knows nothing about: whether a session was restored. So the two can disagree, and
+    /// the disagreement has exactly one shape — a run that recorded `.signIn` and came back to a
+    /// process that had already restored an account. Opening on that card asks somebody who is signed
+    /// in to sign in again, under a progress band with no lit dot (`.signIn` is not on the itinerary
+    /// to be indexed in) and a back arrow that is refused. Nothing is broken; the card is simply not
+    /// one this run has.
+    ///
+    /// The correction is the same rule `next(after:)` already applies to a step that dropped out
+    /// mid-run: hand back the first card that still comes after it. `.done` is the floor, because a
+    /// resume point past every remaining card is a run that finished.
+    static func resumed(_ step: OnboardingStep, signedIn: Bool) -> OnboardingStep {
+        let itinerary = itinerary(signedIn: signedIn)
+        guard !itinerary.contains(step) else { return step }
+        return itinerary.first { $0.rawValue > step.rawValue } ?? .done
+    }
+}
+
+// MARK: - The last card, as a value
+
+/// **What the closing card does on arrival and offers to be pressed**, given the state the run
+/// finished in.
+///
+/// A value rather than three `if`s inside a `View`, because this is where the flow's one hard
+/// stranding lived and a `private var` on a `View` is not something a test can hold — the same
+/// argument `OnboardingStep` and `homeLine(chord:)` are hoisted on.
+///
+/// The stranding: the ungranted card offered "Open Screen Recording" and nothing else, on every
+/// ungranted run. That is the right control for somebody who has not answered the screen row yet and
+/// a trap for somebody who answered "I'll do this later" — `finish()` deliberately does not reopen
+/// the pane over a deliberate deferral, so the watch that notices a grant was never armed either, so
+/// nothing on the card could change its own state. No grant, no "Done", and a borderless window with
+/// no Dock icon behind it: the flow was over and its last screen could not be closed.
+///
+/// Two separate facts came out of that, and they are separate fields here for the same reason:
+/// *whether to watch* is about the card being able to stop being wrong, and *whether to open the
+/// pane* is about not taking back an answer the user gave.
+struct OnboardingFinale: Equatable {
+    /// The one control on the card. There is always exactly one, because a final screen with no
+    /// control is a screen that has to close on a timer.
+    enum Action: Equatable {
+        /// The grant is missing and undecided: the route to the pane.
+        case openScreenRecording
+        /// Granted, but this process was not holding it when it connected to the window server.
+        case restart
+        /// Nothing left to do here.
+        case close
+    }
+
+    var action: Action
+    /// Whether to poll TCC for the grant. **Whenever it is missing**, however it came to be missing:
+    /// a card that cannot notice a grant is a card that cannot stop being wrong.
+    var watchesForTheGrant: Bool
+    /// Whether to open the pane and point at the row. Never over somebody who said later.
+    var opensThePane: Bool
+    /// Whether the closing beat — the ring on the real status item, under the line naming it —
+    /// belongs on this arrival. It does whenever the run is genuinely over, which a deliberate
+    /// deferral is and a run still waiting on a switch is not.
+    var ringsTheMenuBar: Bool
+
+    static func of(
+        screenGranted: Bool, needsRelaunch: Bool, screenWasPostponed: Bool
+    ) -> OnboardingFinale {
+        guard screenGranted else {
+            return OnboardingFinale(
+                action: screenWasPostponed ? .close : .openScreenRecording,
+                watchesForTheGrant: true,
+                opensThePane: !screenWasPostponed,
+                ringsTheMenuBar: screenWasPostponed)
+        }
+        return OnboardingFinale(
+            action: needsRelaunch ? .restart : .close,
+            watchesForTheGrant: false,
+            opensThePane: false,
+            ringsTheMenuBar: true)
+    }
 }
 
 // MARK: - The view
@@ -99,13 +178,14 @@ struct OnboardingView: View {
         self.onTutorial = onTutorial
     }
 
-    /// Fixed order. Microphone first because it is the one people expect; the system tap second
-    /// because it only makes sense once the mic has been explained; screen, and then the window text
-    /// that sharpens it, because the second is worth nothing without the first.
+    /// The rows, in the order the card lists them: screen, Accessibility, microphone, system audio.
     ///
-    /// The order and the required subset both live on `PermissionInvitations`, because that is what
-    /// they are *for*: the set `canLeaveStep` quantifies over. Two copies would be two answers to
-    /// "may this card be left".
+    /// **The order and the reason for it are `PermissionInvitations.listed`'s**, and this deliberately
+    /// does not restate either. It used to — "microphone first because it is the one people expect" —
+    /// and that sentence outlived the ordering it described by a whole rewrite: the screen went first
+    /// so that granting it makes every later pane's row findable, which is an argument about two
+    /// locators needing each other's grant and cannot be summarised here without going stale again.
+    /// One owner for the order, one owner for the required subset `canLeaveStep` quantifies over.
     private var capabilities: [Capability] { invitations.listed }
 
     /// Owned by the auth layer, observed here. Everything Context for Claude records lands in this
@@ -121,10 +201,26 @@ struct OnboardingView: View {
     /// `.welcome`. See `OnboardingResume` for why that record has to exist at all — granting Screen
     /// Recording ends this process *by design*, so "the app restarted" is an ordinary event in the
     /// middle of onboarding rather than a crash to recover from.
-    @State private var step: OnboardingStep =
-        PermissionChoreography.probedCapability == nil
-        ? (OnboardingResume().step ?? .welcome)
-        : .permissions
+    ///
+    /// A resumed card is put through `OnboardingStep.resumed` rather than opened as recorded: the
+    /// itinerary is recomputed from this launch's account state, and a card that has dropped off it
+    /// is not one this run can stand on.
+    @State private var step: OnboardingStep = openingStep(
+        probe: PermissionChoreography.probedCapability,
+        resume: OnboardingResume().step,
+        signedIn: OmiAuth.shared.isSignedIn)
+
+    /// The card this run opens on. Hoisted out of the `@State` default for the same reason
+    /// `OnboardingStep` is hoisted out of the view: it has a wrong answer available in three
+    /// directions — the probe, a fresh install, and a resume point the itinerary no longer holds —
+    /// and none of them can be asserted from inside a `View`.
+    nonisolated static func openingStep(
+        probe: Capability?, resume: OnboardingStep?, signedIn: Bool
+    ) -> OnboardingStep {
+        guard probe == nil else { return .permissions }
+        guard let resume else { return .welcome }
+        return OnboardingStep.resumed(resume, signedIn: signedIn)
+    }
 
     /// Who asks, when the user says to, and who decides whether this card may be left. Not the view,
     /// and not a clock: an answer is terminal only when the user authored it — a grant, or an
@@ -146,6 +242,9 @@ struct OnboardingView: View {
     @State private var warmingModels = false
 
     @State private var openedScreenSettings = false
+    /// The finale's grant watch. Held so it can be ended: it is an unbounded poll and the card
+    /// closing is what owns its end.
+    @State private var screenWatch: Task<Void, Never>?
     @State private var cueDrift = false
     @State private var finale = false
 
@@ -345,10 +444,16 @@ struct OnboardingView: View {
     /// to be asked to allow, and the ask is only meaningful if it was described first. The destination
     /// line is the one that has to be here and not later: the next card asks for an account, and a
     /// user who has not been told what leaves the machine cannot meaningfully agree to it.
+    ///
+    /// **The destination line names both readers**, and it did not always. It said "and Claude reads it
+    /// from there", which was the whole truth back when every retrieval surface in the product was
+    /// Claude over MCP. It is not now: the account is also where the app's own Activity panel reads
+    /// conversations, memories and tasks back from, so a user consenting on the strength of that line
+    /// was being told about one of the two things their account is for.
     private static let valueClaims: [(glyph: String, copy: String)] = [
         ("rectangle.on.rectangle", "I watch your screen — the frames, and the text in your windows."),
         ("waveform", "I listen — your microphone, and the audio of your calls."),
-        ("lock", "It lands in your Omi account, and Claude reads it from there."),
+        ("lock", "It lands in your Omi account, and you and Claude both read it back from there."),
     ]
 
     // MARK: - 3. Sign in — before anything is recorded, not after
@@ -661,12 +766,19 @@ struct OnboardingView: View {
     /// The handoff card. It offers the tutorial and nothing else, because the tutorial itself is a
     /// separate surface — and until that surface exists both buttons finish the flow, so a missing
     /// piece of the product cannot strand anyone on a card with no way out.
+    ///
+    /// **The aside describes the walkthrough that exists.** It promised "a minute, and it ends with
+    /// Claude answering a question about your own screen" — written when the tutorial was a short
+    /// hop from a captured page straight into Claude. `TutorialStep.flow` is eleven beats now, and the
+    /// middle of it is this app's own surfaces: the chord, the timeline, the search panel. A card that
+    /// under-describes what it is about to start is a card people press "Not now" on.
     private var tutorial: some View {
         VStack(alignment: .leading, spacing: 18) {
             says(
                 [("Want to see it work?", .plain)],
                 style: .firstTitle,
-                aside: "A minute, and it ends with Claude answering a question about your own screen.")
+                aside: "A few minutes. You’ll open my window, travel back through your own screen, "
+                    + "and finish with Claude answering a question about it.")
 
             HStack(spacing: 12) {
                 InkButton("Show me") { startTutorial() }
@@ -676,12 +788,31 @@ struct OnboardingView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// **"Show me" is an exit from the flow, so it has to close the flow's books.**
+    ///
+    /// It did not, and the two buttons on this card disagreed about whether onboarding had happened.
+    /// "Not now" advances to `.done`, whose `finish()` writes `context.onboarded`, clears the resume
+    /// point and registers the login item. "Show me" hands over to a surface that never comes back
+    /// here — `OnboardingWindow.startTutorial` dismisses this card and `Tutorial` keeps no record of
+    /// its own — so `finish()` was simply never reached. The user who took the walkthrough got no
+    /// login item, and the next launch read `context.onboarded` false with a resume point still
+    /// pointing at `.tutorial` and put this card back up, offering the tutorial they had just done.
+    ///
+    /// Sealing here rather than making the tutorial call back is what keeps one owner for the flag:
+    /// both exits from the last card of onboarding go through `sealTheRun()`, and the tutorial stays a
+    /// surface onboarding hands off to rather than a step that has to report in.
+    ///
+    /// Only the bookkeeping runs. `.done`'s other work — reopening the Screen Recording pane, ringing
+    /// the menu bar — is deliberately left behind, because the tutorial owns both of those beats
+    /// itself (`TutorialStep.screenAccess`, `.menuBar`) and doing them here would put a System
+    /// Settings pane over the walkthrough as it starts.
     private func startTutorial() {
         Sound.effect(.click)
         guard let onTutorial else {
             advance()
             return
         }
+        sealTheRun()
         onTutorial()
     }
 
@@ -699,14 +830,15 @@ struct OnboardingView: View {
                 aside: doneAside)
 
             Group {
-                if !isGranted(.screen) {
+                switch lastCard.action {
+                case .restart:
+                    InkButton("Restart to finish") { restartForScreenGrant() }
+                case .close:
+                    InkButton("Done") { closeOnboarding() }
+                case .openScreenRecording:
                     InkButton("Open Screen Recording", kind: .secondary) {
                         Permissions.openSettings(for: .screen)
                     }
-                } else if needsRelaunch {
-                    InkButton("Restart to finish") { restartForScreenGrant() }
-                } else {
-                    InkButton("Done") { closeOnboarding() }
                 }
             }
             .padding(.top, 4)
@@ -715,13 +847,35 @@ struct OnboardingView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// Whether the user said "later" to the screen row on purpose, rather than simply not having
+    /// answered yet. The two states look identical from `isGranted(.screen)` and the last card owes
+    /// them different things: a route to the pane, or the door.
+    private var screenWasPostponed: Bool { invitations.answers[.screen] == .deferred }
+
+    /// What this card does and offers, given the state the run finished in.
+    private var lastCard: OnboardingFinale {
+        OnboardingFinale.of(
+            screenGranted: isGranted(.screen),
+            needsRelaunch: needsRelaunch,
+            screenWasPostponed: screenWasPostponed)
+    }
+
     private var doneHeadline: String {
-        if !isGranted(.screen) { return "One more thing." }
+        guard isGranted(.screen) else {
+            return screenWasPostponed ? "Whenever you’re ready." : "One more thing."
+        }
         return needsRelaunch ? "Almost." : "I’m listening."
     }
 
     private var doneAside: String {
-        if !isGranted(.screen) { return "Switch me on in Settings. I’ll do the rest." }
+        if !isGranted(.screen) {
+            // A card that closes is a card that has to say where the app went, the same as the
+            // granted one — and it must not ask again for something already answered.
+            guard !screenWasPostponed else {
+                return "Switch Screen Recording on whenever you like. \(homeLine)"
+            }
+            return "Switch me on in Settings. I’ll do the rest."
+        }
         // Naming the reason matters: "restart" with no cause reads as something having gone wrong.
         // macOS decides what a process may capture when it starts, so this one has to start again.
         return needsRelaunch
@@ -729,15 +883,41 @@ struct OnboardingView: View {
             : homeLine
     }
 
-    /// Where I live. Said once, here, because it is the last thing on screen and the only place it is
+    /// **Where I live, and how to summon me.** The last thing on screen, and the only place either is
     /// still news.
+    ///
+    /// It was "I live up here." and nothing else, from when the menu bar was the only way in and the
+    /// timeline was the only window. The app's advertised way in is the chord now — it opens the
+    /// Activity panel, and `StatusView` prints the same chord beside the same row — so a final card
+    /// that taught only the menu bar was teaching the slower of two routes and omitting the one the
+    /// product is arranged around. The menu bar stays: it is what the ring is pointing at while this
+    /// is read, and it is the route that works when the chord cannot.
     ///
     /// Not conditional on the account. It used to be written as a ternary whose two branches were the
     /// same string, under a comment promising a signed-in variant about where the recordings go —
     /// which is to say the app paid to observe sign-in state and rendered the same words either way.
     /// Where the recordings go is already said on the value card, before consent is taken, which is
     /// the only place saying it changes anything.
-    private let homeLine = "I live up here."
+    ///
+    /// It **is** conditional on the chord being armed, and that is not the same kind of condition. A
+    /// gesture binding needs Accessibility to fire at all, Accessibility is the one permission this
+    /// flow lists and never requires, and a closing sentence promising a keystroke that does nothing
+    /// is worse than one that says less. `GlobalShortcuts` is asked rather than assumed, so a rebound
+    /// chord prints as whatever the user bound.
+    private var homeLine: String {
+        let shortcuts = GlobalShortcuts.shared
+        let armed = shortcuts.readiness(for: .openActivity) == .armed
+        return Self.homeLine(chord: armed ? shortcuts.display(for: .openActivity) : nil)
+    }
+
+    /// The sentence itself, as a function of the one fact it turns on — `nil` for "there is no chord
+    /// to promise". Hoisted out of the view for the same reason `OnboardingStep` is: whether the last
+    /// card of the flow advertises a keystroke has a wrong answer available in both directions, and a
+    /// `View` is not a place that can be asserted.
+    static func homeLine(chord: String?) -> String {
+        guard let chord else { return "I live up here." }
+        return "I live up here. Press \(chord) to see what I’ve caught."
+    }
 
     /// The window sits inside `visibleFrame`, so its top-trailing corner is directly beneath the
     /// menu bar item. A drifting chevron points at it; a drawn menu bar would be a lie.
@@ -914,12 +1094,45 @@ struct OnboardingView: View {
     /// nobody clicks. "Allow" is macOS's own word for the button on the dialog it raises, and
     /// "Open Settings" is the truth about a second click: TCC spends each prompt exactly once.
     private func status(for capability: Capability) -> String {
-        if capability == .screen, needsRelaunch { return "Action required" }
-        if isGranted(capability) { return "Granted" }
-        if invitations.subject == capability { return "Asking…" }
+        Self.statusWord(
+            for: capability,
+            granted: isGranted(capability),
+            screenNeedsRelaunch: needsRelaunch,
+            reported: reported,
+            asking: invitations.subject == capability,
+            answer: invitations.answers[capability],
+            offered: invitations.offered.contains(capability))
+    }
+
+    /// The word itself, as a function of the seven facts that decide it.
+    ///
+    /// Hoisted out of the view for the same reason `homeLine(chord:)` is: this is the only affordance
+    /// on the card, every one of these words is a promise about what the next click does, and a
+    /// `private var` on a `View` is not something a test can hold.
+    ///
+    /// **Accessibility never says "Allow", and never says "Asking…".** macOS has no dialog for it at
+    /// any point in its life — `Permissions.request(.accessibility)` opens the pane, because
+    /// `AXIsProcessTrustedWithOptions` only nags with a dialog that leads there — so a row promising
+    /// a prompt is promising something that cannot arrive, and a row claiming macOS is asking is
+    /// claiming something nothing is doing. This was already the documented intent of the preamble
+    /// ("its own row says Open Settings"); the row said "Allow" until it had been clicked once, which
+    /// is exactly the one click the sentence was written to save.
+    nonisolated static func statusWord(
+        for capability: Capability,
+        granted: Bool,
+        screenNeedsRelaunch: Bool,
+        reported: Bool,
+        asking: Bool,
+        answer: PermissionGate.Answer?,
+        offered: Bool
+    ) -> String {
+        if capability == .screen, screenNeedsRelaunch { return "Action required" }
+        if granted { return "Granted" }
+        if capability == .accessibility, reported, answer != .deferred { return "Open Settings" }
+        if asking { return "Asking…" }
         if !reported { return "Checking" }
-        if invitations.answers[capability] == .deferred { return "Later" }
-        return invitations.offered.contains(capability) ? "Open Settings" : "Allow"
+        if answer == .deferred { return "Later" }
+        return offered ? "Open Settings" : "Allow"
     }
 
     private func refreshPermissions() {
@@ -998,7 +1211,14 @@ struct OnboardingView: View {
 
     // MARK: - Finale
 
-    private func finish() {
+    /// **Everything that makes this install a set-up one**, and nothing that draws.
+    ///
+    /// Split out of `finish()` because `.done` stopped being the only way out of the flow: the
+    /// tutorial hand-off leaves from `.tutorial` and never returns, so both exits call this and
+    /// exactly one of them goes on to do the finale. Idempotent — every line is a set, a clear, or a
+    /// stop with a no-op case — which is what lets the two paths share it without either having to
+    /// know whether the other ran.
+    private func sealTheRun() {
         if !LoginItem.enable() {
             ContextLog.error("could not register as a login item", "onboarding")
         }
@@ -1010,23 +1230,24 @@ struct OnboardingView: View {
         // The bed is the cinematic's, and the cinematic is over. Fades rather than cuts; a stop with
         // no music playing is a no-op, so this is safe however the run got here.
         Sound.music.stop()
+    }
+
+    private func finish() {
+        sealTheRun()
 
         // Screen Recording is the one grant macOS will not take from a dialog — it has to be
         // switched on in System Settings, and it only takes effect in a new process. Dismissing
         // here would leave the user believing setup finished with a third of it dead, so the card
         // stays, opens the right pane itself, and waits.
-        guard isGranted(.screen) else {
-            // "I'll do this later" was a real answer, given deliberately on the permissions card.
-            // Opening the pane over them again here would take it back. The button on this card is
-            // still the route forward whenever they want it.
-            if invitations.answers[.screen] != .deferred { openScreenSettingsOnce() }
-            return
-        }
-
+        //
+        // **The watch and the pane are separate decisions**, and conflating them is what stranded a
+        // postponed run — see `OnboardingFinale`.
+        let lastCard = self.lastCard
+        if lastCard.watchesForTheGrant { watchForScreenGrant(openingPane: lastCard.opensThePane) }
         // "I live up here" is only useful if the user can find "here". Ring the real status item
         // and walk the pointer to it while the line is still on screen. The ring comes down when the
         // user closes the card, not on a timer of its own.
-        MenuBarSpotlight.show()
+        if lastCard.ringsTheMenuBar { MenuBarSpotlight.show() }
     }
 
     /// **The last click of the flow.** The card used to close itself 1.6 s after arriving here, and
@@ -1039,6 +1260,10 @@ struct OnboardingView: View {
     private func closeOnboarding() {
         Sound.effect(.click)
         withAnimation(.easeOut(duration: InkReduceMotion.duration(InkMotion.finaleGlow))) { finale = true }
+        // Everything this card put on top of other applications, taken back off. The watch is a poll
+        // with no deadline — the card being closed is what ends it — and the overlay is a window over
+        // System Settings that would otherwise outlive the flow that raised it.
+        endScreenWatch()
         MenuBarSpotlight.hide()
         OnboardingWindow.dismiss()
     }
@@ -1052,35 +1277,51 @@ struct OnboardingView: View {
     /// is not.
     private func restartForScreenGrant() {
         Sound.effect(.click)
-        PermissionOverlay.hide()
+        endScreenWatch()
         MenuBarSpotlight.hide()
         Permissions.relaunchApp()
     }
 
-    /// Opens the Screen Recording pane once, points at the real row, and watches for the switch.
+    /// **Watches for the Screen Recording switch, and — unless the user already said later — opens
+    /// the pane and points at the row.**
     ///
     /// The watch is a poll because macOS posts no notification for a TCC grant — it is how this app
     /// *detects the user's action*, which is the one thing a clock here is allowed to do. It starts
     /// nothing on its own: when the grant lands the card offers a button and stops.
-    private func openScreenSettingsOnce() {
+    ///
+    /// Two things it no longer gets wrong, both of them the same mistake — treating "we opened the
+    /// pane" as the thing being waited on rather than a courtesy on the way:
+    ///
+    /// - **A grant that landed before System Settings came forward used to be dropped.** The guard
+    ///   after the wait returned on `Permissions.check(.screen)` being *true*, which is the good case;
+    ///   the card then sat on "One more thing" over a permission the user had just given. The wait now
+    ///   only decides whether there is anything to point at, and the loop below is what answers.
+    /// - **A postponed run had no watch at all**, so nothing on the last card could ever change its
+    ///   own state. See `finish()`.
+    private func watchForScreenGrant(openingPane: Bool) {
         guard !openedScreenSettings else { return }
         openedScreenSettings = true
-        Permissions.openSettings(for: .screen)
+        if openingPane { Permissions.openSettings(for: .screen) }
 
-        Task { @MainActor in
-            // Nothing to point at until the pane is up. Waiting for System Settings to actually come
-            // forward, rather than assuming it takes 1200 ms, means the overlay lands on the pane
-            // that is really there — on a slow launch the fixed sleep rang the previous pane's rows.
-            await Permissions.waitForSettingsFrontmost()
-            guard step == .done, !Permissions.check(.screen) else { return }
-            PermissionOverlay.show(
-                for: .screen,
-                caption: "Switch on \(PermissionChoreography.appDisplayName).")
+        screenWatch = Task { @MainActor in
+            if openingPane {
+                // Nothing to point at until the pane is up. Waiting for System Settings to actually
+                // come forward, rather than assuming it takes 1200 ms, means the overlay lands on the
+                // pane that is really there — on a slow launch the fixed sleep rang the previous
+                // pane's rows.
+                await Permissions.waitForSettingsFrontmost()
+                guard !Task.isCancelled, step == .done else { return }
+                if !Permissions.check(.screen) {
+                    PermissionOverlay.show(
+                        for: .screen,
+                        caption: "Switch on \(PermissionChoreography.appDisplayName).")
+                }
+            }
 
-            while step == .done, !Permissions.check(.screen) {
+            while !Task.isCancelled, step == .done, !Permissions.check(.screen) {
                 try? await Task.sleep(for: Permissions.grantWatchPoll)
             }
-            guard step == .done, Permissions.check(.screen) else {
+            guard !Task.isCancelled, step == .done, Permissions.check(.screen) else {
                 PermissionOverlay.hide()
                 return
             }
@@ -1088,7 +1329,19 @@ struct OnboardingView: View {
             needsRelaunch = Permissions.screenNeedsRelaunch
             Sound.effect(.chime)
             // Witness the grant on the overlay, then stop. The restart is the user's to press.
-            PermissionOverlay.confirmGranted()
+            if openingPane {
+                PermissionOverlay.confirmGranted()
+            } else {
+                PermissionOverlay.hide()
+            }
         }
+    }
+
+    /// Ends the watch and takes down anything it raised. The poll is unbounded by design, so leaving
+    /// this card is the only thing that can stop it.
+    private func endScreenWatch() {
+        screenWatch?.cancel()
+        screenWatch = nil
+        PermissionOverlay.hide()
     }
 }

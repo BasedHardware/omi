@@ -106,6 +106,22 @@ struct TutorialEnvironment {
     // MARK: Permissions
 
     var screenIsGranted: () -> Bool = { false }
+
+    /// **Whether the screen grant this app is holding belongs to the next process rather than this
+    /// one.**
+    ///
+    /// A separate question from `screenIsGranted`, because the answers genuinely differ and the
+    /// tutorial has beats that depend on the difference. The window server fixes what a process may
+    /// capture when that process *connects*, so a grant made while this app is running reads back
+    /// true from `CGPreflightScreenCaptureAccess` and captures nothing at all until the app starts
+    /// again. That is not an edge: it is the ordinary first run, because onboarding's permissions card
+    /// takes the grant and its tutorial hand-off leaves before the card that offers the relaunch.
+    ///
+    /// Without this the capture beat is a gate that cannot be satisfied by anything the user does —
+    /// the one shape this whole flow is arranged to make impossible — sitting under a card asking
+    /// them to keep scrolling.
+    var screenNeedsRelaunch: () -> Bool = { false }
+
     var requestScreenAccess: () async -> Bool = { false }
     var openScreenSettings: () -> Void = {}
 
@@ -163,24 +179,24 @@ struct TutorialEnvironment {
     /// than a fallback for one.
     ///
     /// It was the fallback, for a machine whose chord could not fire, back when ⌘ + ⌘ opened the
-    /// timeline and the ordinary route was the user's own keypress. The chord opens Activity now, so
-    /// nothing in the flow puts a timeline on screen and this is the only thing that does. The
-    /// tutorial owning the window is what obliges it to say so on the card and to hand it back at
-    /// teardown — see `TutorialModel.enter(.timeline)`.
+    /// timeline and the ordinary route was the user's own keypress. The chord opens the Activity
+    /// search panel now, so nothing in the flow puts a timeline on screen and this is the only thing
+    /// that does. The tutorial owning the window is what obliges it to say so on the card and to hand
+    /// it back at teardown — see `TutorialModel.enter(.timeline)`.
     var presentTimeline: () -> Void = {}
     var dismissTimeline: () -> Void = {}
     var timelineIsVisible: () -> Bool = { false }
 
-    /// The chord the Activity window really opens on, and whether this machine is genuinely listening
-    /// for it. Both read from the shortcut layer that registers it: a tutorial that taught a chord the
-    /// app does not listen for would be teaching a surface that is not there, and the user can
-    /// rebind it, after which a literal string would be wrong for them specifically.
+    /// The chord the Activity surface really opens on, and whether this machine is genuinely
+    /// listening for it. Both read from the shortcut layer that registers it: a tutorial that taught a
+    /// chord the app does not listen for would be teaching a surface that is not there, and the user
+    /// can rebind it, after which a literal string would be wrong for them specifically.
     var activityChord: () -> String = { "" }
     var activityChordIsArmed: () -> Bool = { false }
 
-    /// Watches for the real `openActivity` shortcut firing, calling back when it does. The window it
-    /// brings forward is brought forward by the app's own handler; this only ever *observes*, which is
-    /// what keeps the beat's gate a fact about the user rather than about the tutorial.
+    /// Watches for the real `openActivity` shortcut firing, calling back when it does. The panel it
+    /// opens is opened by the app's own handler; this only ever *observes*, which is what keeps the
+    /// beat's gate a fact about the user rather than about the tutorial.
     var watchForActivityHotkey: (@escaping () -> Void) -> Void = { _ in }
     var stopWatchingActivityHotkey: () -> Void = {}
 
@@ -189,31 +205,35 @@ struct TutorialEnvironment {
     var watchForDrag: (@escaping () -> Void) -> Void = { _ in }
     var stopWatchingDrag: () -> Void = {}
 
-    /// Watches the **real search window**, calling back with everything it does: being asked for,
-    /// going away, answering a question, having one of its results pressed.
+    /// Watches the **real search panel**, calling back with everything it does: coming up, going
+    /// away, answering a question, having one of its results pressed.
     ///
     /// The search beats' whole connection to the surface they coach, and it only ever *observes* —
-    /// exactly like `watchForActivityHotkey`, and for the same reason. The window comes forward
-    /// because the user pressed the real pill; this is how the tutorial finds out it worked, rather
-    /// than by taking the press and drawing something of its own.
+    /// exactly like `watchForActivityHotkey`, and for the same reason. The panel is opened by the
+    /// user pressing the real pill, or by the real chord; this is how the tutorial finds out it
+    /// worked, rather than by taking the press and drawing something of its own.
+    ///
+    /// **Armed from the chord beat onwards**, and not only for the two beats that coach the panel.
+    /// ⌘ + ⌘ opens this surface, so the chord beat is the first thing in the flow that can put one on
+    /// screen — and a run that did not see it come up would not know it was there to take away again
+    /// before the drag beat (`TutorialStep.usesSearchPanel`).
     var watchSearchPanel: (@escaping (SearchPanelEvent) -> Void) -> Void = { _ in }
     var stopWatchingSearchPanel: () -> Void = {}
 
-    /// Whether the real search window is on screen right now. Read on entry to a beat that assumes
-    /// it, so a card cannot describe a field that is not there. **Not a gate** — see
-    /// `TutorialModel.searchPanelIsOpen`, which is nearly always true now that this is the app's main
-    /// window.
+    /// Whether the real search panel is on screen right now. Read on entry to a beat that assumes it,
+    /// so a card cannot describe a panel that is not there.
     var searchPanelIsVisible: () -> Bool = { false }
 
-    /// Brings the search window forward **on the tutorial's behalf** — the honest fallback for a
-    /// machine where the pill could not be pressed, and the one thing the waiver on that beat has to
-    /// do, because the beat after it has nothing to ask without a field to ask it in. Also what the
-    /// "Open search" button on the query card presses, for a user who closed the window mid-beat.
-    ///
-    /// There is deliberately no `dismissSearchPanel` beside it. The tutorial used to close the panel
-    /// on the way into any beat that did not use it; the search surface is the app's main window now,
-    /// and a walkthrough does not get to close the user's window on its way past.
+    /// Opens the search panel **on the tutorial's behalf** — the honest fallback for a machine where
+    /// the pill could not be pressed, and the one thing the waiver on that beat has to do, because
+    /// the beat after it has nothing to ask without a panel to ask it in. Also what the "Open search"
+    /// button on the query card presses, for a user who dismissed the panel mid-beat.
     var presentSearchPanel: () -> Void = {}
+    /// Closes it again, on the way into any beat that does not use it and on teardown. A floating
+    /// slab left over the drag beat or the Claude beats is the tutorial leaving its own furniture
+    /// behind. Only ever called for a panel this run watched come up — see
+    /// `TutorialModel.searchPanelIsOurs`.
+    var dismissSearchPanel: () -> Void = {}
 
     /// Where a real piece of UI actually is, in AppKit screen coordinates. `nil` degrades the coach
     /// mark to a card.
@@ -226,6 +246,22 @@ struct TutorialEnvironment {
 
     var showMenuBarSpotlight: () -> Void = {}
     var hideMenuBarSpotlight: () -> Void = {}
+
+    // MARK: Where the run got to
+
+    /// Records the beat the run is on, so a process that goes away underneath it can be picked up
+    /// where it left off. Called from `TutorialModel.enter`, on the transition rather than on
+    /// arrival — see `TutorialResume`.
+    ///
+    /// Behind the environment like everything else the model touches, and for the harder of the two
+    /// usual reasons: the machine running the tests is the machine the app runs on, so a model that
+    /// wrote to `UserDefaults.standard` directly would rewrite the developer's own walkthrough state
+    /// every time the suite ran.
+    var recordResumePoint: (TutorialStep) -> Void = { _ in }
+
+    /// Spends the record, when the run is genuinely over. Not called for a teardown that a
+    /// terminating process asked for — `TutorialModel.tearDown` explains which is which.
+    var clearResumePoint: () -> Void = {}
 
     // MARK: Proof
 
@@ -253,6 +289,7 @@ struct TutorialEnvironment {
         }
 
         environment.screenIsGranted = { Permissions.check(.screen) }
+        environment.screenNeedsRelaunch = { Permissions.screenNeedsRelaunch }
         environment.requestScreenAccess = { await Permissions.request(.screen) }
         environment.openScreenSettings = { Permissions.openSettings(for: .screen) }
 
@@ -285,6 +322,10 @@ struct TutorialEnvironment {
         environment.stopWatchingSearchPanel = { TutorialSearchPanelWatch.stop() }
         environment.searchPanelIsVisible = { SearchBarWindow.isVisible }
         environment.presentSearchPanel = { SearchBarWindow.present() }
+        // The panel's own dismissal and not `orderOut`, because that is what announces `.closed` —
+        // so a panel the tutorial takes away and one the user pressed Escape on leave every observer
+        // in the same state.
+        environment.dismissSearchPanel = { SearchBarWindow.dismiss() }
         environment.activityChord = { GlobalShortcuts.shared.display(for: .openActivity) }
         environment.activityChordIsArmed = {
             GlobalShortcuts.shared.readiness(for: .openActivity) == .armed
@@ -297,6 +338,9 @@ struct TutorialEnvironment {
 
         environment.showMenuBarSpotlight = { MenuBarSpotlight.show() }
         environment.hideMenuBarSpotlight = { MenuBarSpotlight.hide() }
+
+        environment.recordResumePoint = { TutorialResume().record($0) }
+        environment.clearResumePoint = { TutorialResume().clear() }
 
         environment.newToolCall = { QueryStamp.newCall(since: $0) }
 
@@ -315,8 +359,8 @@ struct TutorialEnvironment {
 /// Observes the real `openActivity` shortcut for the length of one step.
 ///
 /// A thin wrapper over `GlobalShortcuts.addObserver` so the token has somewhere to live and a second
-/// `start` cannot leak the first. It deliberately owns no window: the chord's own handler brings the
-/// Activity window forward, and this only reports that it fired.
+/// `start` cannot leak the first. It deliberately owns no window: the chord's own handler opens the
+/// Activity search panel, and this only reports that it fired.
 @MainActor
 enum TutorialHotkeyWatch {
     private static var token: UUID?

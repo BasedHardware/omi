@@ -123,6 +123,169 @@ final class OnboardingStepMachineTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - Resuming onto a card this run still has
+
+    /// **A resume point is a record, and the itinerary is recomputed.** The two can disagree.
+    ///
+    /// `OnboardingResume` records the card and deliberately nothing else, and the itinerary is
+    /// rebuilt on every launch from a fact the record knows nothing about: whether a session was
+    /// restored. So a process that comes back with an account already restored can find `.signIn`
+    /// waiting for it — the one card that run does not have. Opening it asks somebody who is signed
+    /// in to sign in again, under a progress band with no dot to light and a back arrow that is
+    /// refused.
+    func testAResumePointIsCorrectedToTheItineraryTheRunActuallyHas() {
+        XCTAssertEqual(
+            OnboardingStep.resumed(.signIn, signedIn: true), .permissions,
+            "a restored session has no sign-in card, so resuming onto it strands the user on a "
+                + "screen this run does not have")
+        XCTAssertEqual(
+            OnboardingStep.resumed(.signIn, signedIn: false), .signIn,
+            "a run that really is signed out resumes exactly where it was")
+    }
+
+    /// Every other card survives the correction untouched, whichever way the account went. A
+    /// correction that moved a card the itinerary still holds would be worse than the bug.
+    func testEveryCardOnTheItineraryResumesWhereItWasRecorded() {
+        for step in OnboardingStep.allCases {
+            for signedIn in [true, false] where OnboardingStep.itinerary(signedIn: signedIn).contains(step) {
+                XCTAssertEqual(
+                    OnboardingStep.resumed(step, signedIn: signedIn), step,
+                    "\(step) is on the itinerary for signedIn: \(signedIn) and must not be moved")
+            }
+        }
+    }
+
+    /// The three inputs to "which card does this run open on", in the order they outrank each other.
+    func testTheOpeningCardIsTheProbeThenTheResumePointThenTheWelcome() {
+        XCTAssertEqual(
+            OnboardingView.openingStep(probe: .screen, resume: .connector, signedIn: true),
+            .permissions,
+            "the choreography probe opens on the permissions card whatever else is recorded")
+        XCTAssertEqual(
+            OnboardingView.openingStep(probe: nil, resume: nil, signedIn: false), .welcome,
+            "a genuine first run starts at the top")
+        XCTAssertEqual(
+            OnboardingView.openingStep(probe: nil, resume: .connector, signedIn: true), .connector,
+            "a run in progress comes back to the card it left")
+        XCTAssertEqual(
+            OnboardingView.openingStep(probe: nil, resume: .signIn, signedIn: true), .permissions,
+            "and never onto a card this run's itinerary dropped")
+    }
+}
+
+// MARK: - The last card
+
+/// **The closing card, and the one state in which it could not be closed.**
+///
+/// `OnboardingFinale` exists because this is where the flow's one hard stranding lived: the
+/// ungranted card offered "Open Screen Recording" and nothing else, and `finish()` armed the grant
+/// watch only for a run that had *not* postponed the screen row — so a user who pressed "I'll do
+/// these later" reached a final card that could not notice a grant and had no button that could
+/// close it, in a borderless window with no Dock icon behind it.
+final class OnboardingFinaleTests: XCTestCase {
+
+    /// The trap itself.
+    func testADeliberateLaterCanCloseTheLastCard() {
+        let finale = OnboardingFinale.of(
+            screenGranted: false, needsRelaunch: false, screenWasPostponed: true)
+
+        XCTAssertEqual(
+            finale.action, .close,
+            "a user who answered “later” has finished the flow and must be able to leave it")
+        XCTAssertFalse(
+            finale.opensThePane,
+            "reopening the pane over a deliberate deferral takes the answer back")
+        XCTAssertTrue(
+            finale.ringsTheMenuBar,
+            "the run is over, so it gets the closing beat that names where the app lives")
+    }
+
+    /// The other half, and the reason the watch is a separate field from the pane: a card that
+    /// cannot notice a grant is a card that cannot stop being wrong. Whatever the user answered, a
+    /// switch flipped by hand has to reach this card.
+    func testTheGrantIsWatchedForWheneverItIsMissing() {
+        for postponed in [true, false] {
+            XCTAssertTrue(
+                OnboardingFinale.of(
+                    screenGranted: false, needsRelaunch: false, screenWasPostponed: postponed
+                ).watchesForTheGrant,
+                "postponed: \(postponed) — nothing on this card can change its own state without it")
+        }
+        XCTAssertFalse(
+            OnboardingFinale.of(screenGranted: true, needsRelaunch: true, screenWasPostponed: false)
+                .watchesForTheGrant,
+            "there is nothing left to watch for once the grant is in")
+    }
+
+    /// An undecided run keeps the behaviour it had: the pane, pointed at, and no closing beat until
+    /// the grant lands.
+    func testAnUndecidedRunIsStillSentToThePane() {
+        let finale = OnboardingFinale.of(
+            screenGranted: false, needsRelaunch: false, screenWasPostponed: false)
+
+        XCTAssertEqual(finale.action, .openScreenRecording)
+        XCTAssertTrue(finale.opensThePane)
+        XCTAssertFalse(
+            finale.ringsTheMenuBar,
+            "the run is not over — ringing the menu bar here would be the card saying it is")
+    }
+
+    /// And the two granted states, unchanged.
+    func testAGrantedRunOffersTheRestartAndThenTheDoor() {
+        XCTAssertEqual(
+            OnboardingFinale.of(screenGranted: true, needsRelaunch: true, screenWasPostponed: false)
+                .action, .restart)
+        XCTAssertEqual(
+            OnboardingFinale.of(screenGranted: true, needsRelaunch: false, screenWasPostponed: false)
+                .action, .close)
+    }
+
+    /// **Accessibility never says "Allow", and never says "Asking…".**
+    ///
+    /// macOS has no dialog for it at any point: `Permissions.request(.accessibility)` opens the pane,
+    /// because `AXIsProcessTrustedWithOptions` only nags with a dialog that leads there. The row said
+    /// "Allow" until it had been clicked once — promising a prompt that cannot arrive, and costing
+    /// the user the one click the card's own preamble was rewritten to save.
+    func testTheAccessibilityRowNeverPromisesADialog() {
+        let beforeAnyClick = OnboardingView.statusWord(
+            for: .accessibility, granted: false, screenNeedsRelaunch: false, reported: true,
+            asking: false, answer: nil, offered: false)
+        XCTAssertEqual(beforeAnyClick, "Open Settings")
+
+        let midEpisode = OnboardingView.statusWord(
+            for: .accessibility, granted: false, screenNeedsRelaunch: false, reported: true,
+            asking: true, answer: nil, offered: true)
+        XCTAssertEqual(
+            midEpisode, "Open Settings",
+            "nothing is asking, so the row may not say something is")
+    }
+
+    /// The words the rest of the rows still use, so the branch above cannot have been bought by
+    /// flattening everything else.
+    func testTheOtherRowsKeepTheirWords() {
+        func word(
+            _ capability: Capability, granted: Bool = false, needsRelaunch: Bool = false,
+            reported: Bool = true, asking: Bool = false, answer: PermissionGate.Answer? = nil,
+            offered: Bool = false
+        ) -> String {
+            OnboardingView.statusWord(
+                for: capability, granted: granted, screenNeedsRelaunch: needsRelaunch,
+                reported: reported, asking: asking, answer: answer, offered: offered)
+        }
+
+        XCTAssertEqual(word(.microphone), "Allow")
+        XCTAssertEqual(word(.microphone, offered: true), "Open Settings")
+        XCTAssertEqual(word(.microphone, asking: true), "Asking…")
+        XCTAssertEqual(word(.microphone, reported: false), "Checking")
+        XCTAssertEqual(word(.microphone, answer: .deferred), "Later")
+        XCTAssertEqual(word(.microphone, granted: true), "Granted")
+        XCTAssertEqual(word(.screen, granted: true, needsRelaunch: true), "Action required")
+        XCTAssertEqual(
+            word(.accessibility, answer: .deferred), "Later",
+            "a postponed row says so, Accessibility included")
+        XCTAssertEqual(word(.accessibility, granted: true), "Granted")
+    }
 }
 
 // MARK: - Asking one at a time
@@ -1256,7 +1419,7 @@ final class OnboardingHasNoTimedTriggersTests: XCTestCase {
     ]
 
     func testNothingInTheOnboardingCardIsScheduledOnAClock() throws {
-        let source = try onboardingSource()
+        let source = try onboardingViewSource()
 
         var offenders: [(line: Int, text: String)] = []
         for (index, raw) in source.components(separatedBy: "\n").enumerated() {
@@ -1282,13 +1445,13 @@ final class OnboardingHasNoTimedTriggersTests: XCTestCase {
     /// The two specific things that used to happen without the user, named so a regression reads as
     /// the bug rather than as an anonymous style violation.
     func testTheCardNeitherClosesNorRestartsItself() throws {
-        let source = try onboardingSource()
+        let source = try onboardingViewSource()
 
         for (action, needle) in [
             ("close the window", "OnboardingWindow.dismiss()"),
             ("restart the app", "Permissions.relaunchApp()"),
         ] {
-            let callers = functionsCalling(needle, in: source)
+            let callers = onboardingFunctionsCalling(needle, in: source)
             XCTAssertFalse(callers.isEmpty, "expected \(needle) to still be called somewhere")
             for caller in callers {
                 XCTAssertTrue(
@@ -1302,35 +1465,121 @@ final class OnboardingHasNoTimedTriggersTests: XCTestCase {
         }
     }
 
-    // MARK: Helpers
+}
 
-    private func onboardingSource() throws -> String {
-        let url = InkSourceSweep.uiSourceRoot.appendingPathComponent("Onboarding/OnboardingView.swift")
-        return InkSourceSweep.strippingComments(from: try String(contentsOf: url, encoding: .utf8))
+// MARK: - The last card names the way in
+
+/// **What the closing line is allowed to promise.**
+///
+/// It was "I live up here." and nothing more, from when the menu bar was the only way into the app
+/// and the timeline was the only window it had. Neither is true: `⌘ + ⌘` opens the Activity panel and
+/// is the gesture the product advertises — the menu bar prints the same chord beside the same row —
+/// so a final card teaching only the menu bar taught the slower of the two routes.
+///
+/// The condition is the honest half. A gesture binding needs Accessibility to fire at all, and
+/// Accessibility is the one permission this flow lists and never requires, so the run that reaches
+/// this card with it ungranted must not be told to press anything.
+///
+/// `@MainActor` because the copy lives on `OnboardingView`, which is, and hoisting the sentence out
+/// of the view was about making it *assertable* rather than about taking it off the main actor.
+@MainActor
+final class OnboardingHomeLineTests: XCTestCase {
+
+    func testTheClosingLineNamesTheChordWhenThereIsOneToName() {
+        let line = OnboardingView.homeLine(chord: ShortcutChord.bothCommandKeysDisplay)
+        XCTAssertTrue(line.contains("I live up here"), "the menu bar is still what the ring points at")
+        XCTAssertTrue(
+            line.contains(ShortcutChord.bothCommandKeysDisplay),
+            "the app's advertised way in has to appear on the card that says where the app is")
     }
 
-    /// The `private func` / `private var` each occurrence of `needle` sits inside.
-    ///
-    /// Brace-free and deliberately crude: it walks declarations in order and attributes a hit to the
-    /// most recent one. That is sound here because `OnboardingView` declares its members flat.
-    private func functionsCalling(_ needle: String, in source: String) -> [String] {
-        var current = "<file scope>"
-        var found: [String] = []
-        for raw in source.components(separatedBy: "\n") {
-            let line = raw.trimmingCharacters(in: .whitespaces)
-            if let name = declarationName(of: line) { current = name }
-            if line.contains(needle) { found.append(current) }
+    /// A rebound chord prints as whatever the user bound it to, because the caller asks
+    /// `GlobalShortcuts` rather than spelling the default in the copy.
+    func testTheChordIsPrintedRatherThanSpelled() {
+        XCTAssertTrue(OnboardingView.homeLine(chord: "⌥⇧A").contains("⌥⇧A"))
+    }
+
+    func testNoChordIsPromisedWhenTheShortcutCannotFire() {
+        let line = OnboardingView.homeLine(chord: nil)
+        XCTAssertEqual(
+            line, "I live up here.",
+            "a chord that needs an ungranted Accessibility must not be advertised as a keystroke")
+        XCTAssertFalse(line.contains("Press"))
+    }
+}
+
+// MARK: - Both exits from the flow close its books
+
+/// **The last card is not the only way out of onboarding, and both ways have to seal the run.**
+///
+/// `.done`'s `finish()` writes `context.onboarded`, clears `OnboardingResume` and registers the login
+/// item. The tutorial hand-off leaves from `.tutorial` and never comes back — `OnboardingWindow`
+/// dismisses the card and `Tutorial` keeps no record of its own — so for a release "Show me" reached
+/// none of that. Taking the walkthrough left the install un-onboarded: no login item, and the next
+/// launch read the flag false with a resume point still pointing at `.tutorial` and put the card back
+/// up offering the tutorial the user had just finished. "Not now" was the only button that finished
+/// onboarding.
+///
+/// **A static checker, not behavioural coverage**, and labelled as one for the same reason the timed
+/// trigger sweep above is: both writers are private members of a SwiftUI `View`, and the facts they
+/// write are read by `ContextApp` at launch and by `CinematicGate` — neither reachable from a test
+/// without a seam that would mean the view under test is not the view that ships. What it can prove
+/// is that there is exactly one writer and that both exits go through it.
+final class OnboardingSealsTheRunOnEveryExitTests: XCTestCase {
+
+    func testBothExitsFromTheFlowSealTheRun() throws {
+        let source = try onboardingViewSource()
+
+        for exit in ["startTutorial", "finish"] {
+            XCTAssertTrue(
+                onboardingFunctionsCalling("sealTheRun()", in: source).contains(exit),
+                """
+                \(exit)() does not seal the run. Both ways off the last card of onboarding — \
+                "Show me" into the tutorial and "Not now" into .done — have to register the login \
+                item, set context.onboarded and clear the resume point, or the exit that skips it \
+                leaves the install looking un-onboarded on the next launch.
+                """)
         }
-        return found
     }
 
-    private func declarationName(of line: String) -> String? {
-        for keyword in ["private func ", "func ", "private var ", "var "] {
-            guard line.hasPrefix(keyword) else { continue }
-            let rest = line.dropFirst(keyword.count)
-            let name = rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" }
-            return name.isEmpty ? nil : String(name)
-        }
-        return nil
+    /// One writer for the terminal flag, which is what the rest of the product is documented against:
+    /// `CinematicGate` calls itself read-only "so there is exactly one writer in the product".
+    func testOnlySealTheRunWritesTheOnboardedFlag() throws {
+        let source = try onboardingViewSource()
+        XCTAssertEqual(
+            onboardingFunctionsCalling("\"context.onboarded\"", in: source), ["sealTheRun"],
+            "context.onboarded must have exactly one writer, and it is sealTheRun()")
     }
+}
+
+// MARK: - Reading OnboardingView as text
+
+private func onboardingViewSource() throws -> String {
+    let url = InkSourceSweep.uiSourceRoot.appendingPathComponent("Onboarding/OnboardingView.swift")
+    return InkSourceSweep.strippingComments(from: try String(contentsOf: url, encoding: .utf8))
+}
+
+/// The `private func` / `private var` each occurrence of `needle` sits inside.
+///
+/// Brace-free and deliberately crude: it walks declarations in order and attributes a hit to the
+/// most recent one. That is sound here because `OnboardingView` declares its members flat.
+private func onboardingFunctionsCalling(_ needle: String, in source: String) -> [String] {
+    var current = "<file scope>"
+    var found: [String] = []
+    for raw in source.components(separatedBy: "\n") {
+        let line = raw.trimmingCharacters(in: .whitespaces)
+        if let name = onboardingDeclarationName(of: line) { current = name }
+        if line.contains(needle) { found.append(current) }
+    }
+    return found
+}
+
+private func onboardingDeclarationName(of line: String) -> String? {
+    for keyword in ["private func ", "func ", "private var ", "var "] {
+        guard line.hasPrefix(keyword) else { continue }
+        let rest = line.dropFirst(keyword.count)
+        let name = rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" }
+        return name.isEmpty ? nil : String(name)
+    }
+    return nil
 }

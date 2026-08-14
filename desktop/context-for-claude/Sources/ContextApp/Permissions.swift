@@ -118,7 +118,9 @@ enum Permissions {
             // to be taken before the user can possibly grant anything, and the first capability poll
             // happens at launch.
             _ = screenGrantedAtLaunch
-            return CGPreflightScreenCaptureAccess()
+            return screenIsGranted(
+                preflight: CGPreflightScreenCaptureAccess(),
+                capturedRecently: capturedRecently(.screen))
         case .accessibility:
             return AXElement.isTrusted
         }
@@ -177,7 +179,25 @@ enum Permissions {
 
     /// Whether the system prompt for this capability has already been spent. macOS shows each one
     /// exactly once, so a caller that sees `true` must open the pane rather than ask again.
-    static func promptIsSpent(_ c: Capability) -> Bool { hasPrompted(c) }
+    ///
+    /// **Accessibility is always spent, because it never had a prompt to spend.** macOS shows no
+    /// dialog for it at any point — `request(.accessibility)` opens the pane and nothing else, and
+    /// `markPrompted` is consequently only ever called for the three that do prompt. Answering
+    /// `false` here meant every caller took the will-prompt branch: the card hid itself and captioned
+    /// "macOS is asking. I'll wait." for a dialog that cannot arrive, and then the pane was opened a
+    /// second time about two seconds later by the wait that follows. One press, two panes, under a
+    /// sentence describing something that never happened — the same defect the screen beat already
+    /// documents having fixed on its own path.
+    static func promptIsSpent(_ c: Capability) -> Bool {
+        promptIsSpent(c, hasPrompted: hasPrompted(c))
+    }
+
+    /// The rule itself, split from the machine it reads. `hasPrompted` is a fact about *this* Mac, so
+    /// a test written against the live call passes for the wrong reason on a Mac that has already
+    /// spent all three prompts — and would go on passing if the rule were replaced by `true`.
+    nonisolated static func promptIsSpent(_ c: Capability, hasPrompted: Bool) -> Bool {
+        c == .accessibility || hasPrompted
+    }
 
     /// The ask itself, with no exclusion of its own. Only `PermissionBroker` may call it — the door
     /// is the single owner, and a second entrance would restore exactly the defect it exists for.
@@ -280,12 +300,59 @@ enum Permissions {
         defaults.bool(forKey: Key.everCaptured(c))
     }
 
-    /// Records that `c` has produced real output at least once. Idempotent and cheap enough to call
-    /// from a capture path: the guard makes the steady state a single dictionary read.
+    /// Records that `c` has produced real output — just now, and at least once ever. Cheap enough to
+    /// call from a capture path: the stamp is one locked dictionary write, and the `UserDefaults`
+    /// write behind the guard happens once in the life of the install.
     static func noteCaptureSucceeded(_ c: Capability) {
+        captureClock.stamp(c)
         guard !hasEverCaptured(c) else { return }
         defaults.set(true, forKey: Key.everCaptured(c))
         ContextLog.milestone("\(c.rawValue) capture confirmed working on this install", "permissions")
+    }
+
+    /// **How recently output has to have landed for it to still be proof.**
+    ///
+    /// Bounded from below by the capture path's own quietest cadence: `ScreenPipeline`'s force
+    /// interval is 60 s, so a window nobody is touching still produces a capture every minute, and
+    /// anything shorter than that would call a perfectly healthy screen unproven. Bounded from
+    /// above by the other direction — a grant that genuinely dies has to stop being vouched for
+    /// while the user is still looking at the menu bar, not minutes later.
+    static let captureEvidenceSeconds: Double = 150
+
+    /// Whether `c` has produced something recently enough for that to still describe *now*.
+    ///
+    /// A clock that has moved backwards (NTP, a wake from sleep) reads as no evidence rather than
+    /// as fresh evidence: with nothing observed the preflight is the answer again, which is where
+    /// this started and is never worse than it.
+    static func capturedRecently(
+        _ c: Capability,
+        within seconds: Double = captureEvidenceSeconds,
+        now: Double = ContextTime.now
+    ) -> Bool {
+        guard let at = captureClock.lastOutput(c) else { return false }
+        let elapsed = now - at
+        return elapsed >= 0 && elapsed <= seconds
+    }
+
+    /// **Observed capture outranks the preflight, and nothing outranks observed capture.**
+    ///
+    /// `CGPreflightScreenCaptureAccess` answers a question about TCC's records; the thing anyone
+    /// actually wants to know is whether *this* process can capture, and those are different
+    /// questions by construction. The window server fixes a process's capture rights when it
+    /// connects, so the preflight describes the next launch as often as this one — and it reads
+    /// false for a bundle whose signature has just changed, which on a machine that rebuilds the
+    /// app all day is most of the time.
+    ///
+    /// A stream that produced pixels a moment ago has already answered. There is no arrangement of
+    /// TCC records that makes a frame on disk not have happened, so evidence is an *or*: it adds an
+    /// answer where the preflight had a wrong one, and the preflight keeps its place as the answer
+    /// for the case with no evidence at all.
+    ///
+    /// The inverse is what `captureEvidenceSeconds` bounds. An install that has never captured has
+    /// nothing to offer here, and a grant that dies stops producing inside the window. Neither can
+    /// be talked into reading "granted".
+    static func screenIsGranted(preflight: Bool, capturedRecently: Bool) -> Bool {
+        preflight || capturedRecently
     }
 
     /// True when a capability this install has demonstrably used is no longer granted.
@@ -673,7 +740,10 @@ enum Permissions {
 
     /// The four words the permission row can show, per `docs/design-system.md`.
     private enum Word {
-        static let granted = "Granted"
+        /// Shared with `ContextCore` rather than spelled twice: `CaptureState` writes this same word
+        /// when it reconciles a report against a live stream, and two spellings of one status are
+        /// two claims a reader has to work out are the same claim.
+        static let granted = CapabilityReport.grantedDetail
         static let open = "Open"
         static let checking = "Checking"
         static let actionRequired = "Action required"
@@ -751,6 +821,12 @@ enum Permissions {
     // MARK: - Plumbing
 
     private static let state = RequestState()
+
+    /// In memory on purpose, and never persisted. What it holds is proof about *this* process —
+    /// window-server capture rights are fixed when a process connects — so a stamp carried across a
+    /// relaunch would be vouching for a process that no longer exists. `hasEverCaptured` is the
+    /// durable half, and it answers a different question.
+    private static let captureClock = CaptureClock()
 
     private static func offMain<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
         await withCheckedContinuation { continuation in
@@ -1256,6 +1332,29 @@ private final class RequestState: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return pending.contains(c)
+    }
+}
+
+/// When each capability last produced something, in this process.
+///
+/// Stamped from capture paths on whatever thread they happen to be on — a screen tick on the main
+/// actor, an audio pump off it — and read by the capability poll, so it takes the lock for the same
+/// reason `RequestState` does.
+private final class CaptureClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stamps: [Capability: Double] = [:]
+
+    func stamp(_ c: Capability) {
+        let now = ContextTime.now
+        lock.lock()
+        stamps[c] = now
+        lock.unlock()
+    }
+
+    func lastOutput(_ c: Capability) -> Double? {
+        lock.lock()
+        defer { lock.unlock() }
+        return stamps[c]
     }
 }
 

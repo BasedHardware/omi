@@ -317,10 +317,10 @@ struct TutorialCardView: View {
         case .realFrames: return "Nothing is arriving — carry on anyway"
         case .screenRecordingGrant: return "Carry on without it"
         // "Carry on anyway" and no longer "open it for me". The waiver used to promise a window,
-        // because the chord opened the timeline and the beat after it needed one; the chord brings
-        // the app's main window forward now — already on screen for almost everybody — and the beat
-        // after opens its own timeline whatever happened here. There is nothing left to offer but
-        // the way past, and a label that offered more would be describing an action nothing takes.
+        // because the chord opened the timeline and the beat after it needed one; the chord opens the
+        // Activity search panel now, which is not what the beat after wants, and that beat opens its
+        // own timeline whatever happened here. There is nothing left to offer but the way past, and a
+        // label that offered more would be describing an action nothing takes.
         case .realHotkey: return "That shortcut isn't working — carry on anyway"
         case .realGesture: return "I can't drag it — carry on anyway"
         case .realSearchPanel: return "I can't find that button — open search for me"

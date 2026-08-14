@@ -220,7 +220,16 @@ final class TutorialRenderHarness: XCTestCase {
             contentRect: backdropFrame, styleMask: [.borderless], backing: .buffered, defer: false)
         backdrop.isOpaque = true
         backdrop.hasShadow = false
-        backdrop.level = .floating
+        // **`.screenSaver`, not `.floating`.** The backdrop is the entire privacy guarantee, and the
+        // frame it guards is written to a file on disk. At `.floating` it only clears *this*
+        // process's windows: another application's panel, notification or overlay sits at the same
+        // level or above it, lands inside the captured rectangle, and is then somebody's real screen
+        // in a PNG. Measured rather than assumed — two frames of an earlier run of these render
+        // harnesses came back with a browser's window furniture and its coloured reflections along
+        // the edge. Anything left
+        // floating above this window ends up in the capture, so it goes above the levels an ordinary
+        // application window can reach.
+        backdrop.level = .screenSaver
         backdrop.contentView = {
             let view = NSImageView(frame: NSRect(origin: .zero, size: backdropFrame.size))
             view.image = desktop
@@ -242,7 +251,9 @@ final class TutorialRenderHarness: XCTestCase {
         // The shipped configuration: the card draws its own shadow in SwiftUI, so a window shadow
         // would trace the transparent rectangle around it.
         window.hasShadow = false
-        window.level = .popUpMenu
+        // One rung above the backdrop, so the card is the thing the capture is of rather than the
+        // synthetic desktop alone.
+        window.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
         InkGlass.pin(window)
 
         let container = NSView(frame: NSRect(origin: .zero, size: cardFrame.size))
@@ -357,12 +368,15 @@ final class TutorialWorld {
     ///
     /// The window is no longer marked visible before the keypress. It used to be, because the chord
     /// itself opened the timeline and the model read whether it was on screen as it entered the step;
-    /// the chord opens Activity now, and the beat being entered is what puts a timeline up
-    /// (`environment.presentTimeline`). Nothing here pokes the model — the keypress goes through the
-    /// observer the model armed, exactly as the shortcut layer delivers it.
+    /// the chord opens the Activity search panel now, and the beat being entered is what puts a
+    /// timeline up (`environment.presentTimeline`). Nothing here pokes the model — the keypress goes
+    /// through the observer the model armed, exactly as the shortcut layer delivers it.
+    ///
+    /// The panel the chord opened is closed again on the way into this beat, which is what leaves the
+    /// drag demonstration drawn over a timeline rather than under a floating slab.
     func modelAtTheTimelineBeat() -> TutorialModel {
         let model = modelAtTheChordBeat()
-        report(.opened)  // the chord brings the main window forward
+        report(.opened)  // the chord opens the search panel
         hotkeyFired?()  // openActivity → timeline
         precondition(model.step == .timeline, "the harness did not reach the drag beat")
         precondition(timelineIsVisible, "the drag beat has to have opened a timeline to drag")
@@ -404,6 +418,7 @@ final class TutorialWorld {
         environment.stopWatchingSearchPanel = { self.searchPanelHappened = nil }
         environment.searchPanelIsVisible = { self.searchPanelIsVisible }
         environment.presentSearchPanel = { self.report(.opened) }
+        environment.dismissSearchPanel = { self.report(.closed) }
         environment.locateTarget = { _ in nil }
         return environment
     }

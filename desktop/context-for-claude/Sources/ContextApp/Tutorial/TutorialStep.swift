@@ -13,12 +13,13 @@ import Foundation
 /// chord and waits, and the window that appears is opened by the keypress. What is left is one idea
 /// per card, and every card that asks for something waits for it.
 ///
-/// ## Which window the chord beat teaches, and why the timeline beat stopped riding it
+/// ## Which surface the chord beat teaches, and why the timeline beat stopped riding it
 ///
 /// `openActivity` was `openTimeline`, and the beat taught ⌘ + ⌘ as the way to the timeline — which
 /// it was, for as long as the timeline was this app's one real window. It is not: the chord opens
-/// Activity, the main window. The beat follows the chord, because the one thing a tutorial may never
-/// do is teach a gesture the app no longer has.
+/// the Activity surface, which is the same dismissible search panel `.openSearch` toggles. The beat
+/// follows the chord, because the one thing a tutorial may never do is teach a gesture the app no
+/// longer has.
 ///
 /// That left `timeline` with nothing to open it, and the honest repair is not to drop the beat: the
 /// drag through a captured day is the moment the product becomes obvious, and the timeline is still
@@ -26,6 +27,9 @@ import Foundation
 /// (`TutorialModel.enter(.timeline)`), the way it already opens a page for the capture beat. The
 /// coach-mark rule that governs everything else here is untouched — the beat still cannot be left
 /// until the user really drags — and nothing here claims a keypress nobody made.
+///
+/// The chord putting the *search panel* on screen is also why the drag beat takes it back off again:
+/// see `usesSearchPanel`, and `TutorialModel.enter`.
 ///
 /// The page came back too, and the word that was doing the work in that objection was *stranger's*.
 /// `collectFrames` opens `anthropic.com` — Claude's own home, and the one page this app can put on
@@ -39,8 +43,9 @@ enum TutorialStep: String, CaseIterable, Sendable {
     case screenAccess
     /// "Scroll for a bit" — on the page this beat opens for them, gated on real frames.
     case collectFrames
-    /// The chord, taught the only way a chord can be taught: the user presses it and the real window
-    /// opens because they did. That window is Activity. Gated on the real shortcut really firing.
+    /// The chord, taught the only way a chord can be taught: the user presses it and the real
+    /// surface opens because they did. That surface is the Activity search panel. Gated on the real
+    /// shortcut really firing.
     case openActivity
     /// The timeline, opened by the tutorial, and the drag that travels through it. Gated on a real
     /// gesture — the opening is the tutorial's, the travelling has to be the user's.
@@ -48,8 +53,10 @@ enum TutorialStep: String, CaseIterable, Sendable {
     /// "Find one moment" — the real Search All pill, which opens the real search panel. Gated on
     /// that panel really being on screen.
     case findMoments
-    /// Type a query into **the real search bar**, press Return, and tap the real hit that comes back
-    /// to travel to it. Gated on a real answer to a real question.
+    /// Type a query into **the real search bar** and click the real hit that comes back, to travel
+    /// to it. Gated on a real answer to a real question — which the typing itself produces, since
+    /// the results narrow live. Deliberately not Return: that key hands the question to Claude and
+    /// closes this panel.
     case query
     /// The handoff the first-run plan ends on: Claude reads its MCP config at startup, so it has to
     /// be restarted before it can answer from this store.
@@ -84,6 +91,28 @@ enum TutorialStep: String, CaseIterable, Sendable {
         return following < Self.flow.count ? Self.flow[following] : .finished
     }
 
+    /// **The beat a *new process* may honestly pick this run up on.**
+    ///
+    /// Itself, for all but one of them — every beat re-reads the world on the way in, so a resumed
+    /// `screenAccess` asks TCC again, a resumed `timeline` opens its own window again, and a resumed
+    /// `findMoments` asks whether a panel is on screen right now.
+    ///
+    /// `claudeProof` is the exception, and it is a correctness one rather than a nicety. Its gate is
+    /// a `QueryStamp` written **strictly after** an instant, and that instant is snapshotted by the
+    /// beat before it (`TutorialModel.enter(.claudeHandoff)` sets `proofSince`). A process that woke
+    /// straight onto the proof would be watching from instant zero, so a stamp Claude wrote at any
+    /// point in the past — including during the run that just ended — would satisfy the one gate in
+    /// this flow that this app cannot produce. The payoff would be a claim about something that did
+    /// not happen, which is the failure the whole file is arranged around. Landing on the handoff
+    /// starts the watch, and costs the user one card they have already seen.
+    ///
+    /// A property rather than an `if` at the resume site, for the same reason `placement` and
+    /// `usesSearchPanel` are: a beat added later has to answer the question, and a test can read the
+    /// answer.
+    var resumeLanding: TutorialStep {
+        self == .claudeProof ? .claudeHandoff : self
+    }
+
     /// What has to be true before this step may be left behind.
     ///
     /// This is the honesty contract, written where the machine can be tested against it rather than
@@ -115,9 +144,9 @@ enum TutorialStep: String, CaseIterable, Sendable {
         switch self {
         case .timeline: return .timelineTrack
         case .findMoments: return .searchAllButton
-        // The real search window, not the timeline the pill was pressed in: this beat is asking for
-        // a question to be typed, and the field to type it into is in that window. The card stands
-        // under it rather than over it — see `TutorialOverlay.under`.
+        // The real search panel, not the timeline the pill was pressed in: this beat is asking for a
+        // question to be typed, and the field to type it into is in the panel floating above. The
+        // card stands under it rather than over it — see `TutorialOverlay.under`.
         case .query: return .searchPanel
         default: return nil
         }
@@ -163,6 +192,26 @@ enum TutorialStep: String, CaseIterable, Sendable {
     /// placement question anyway.
     var handsOverToAnotherApp: Bool { placement != .centred }
 
+    /// Whether this beat is conducted **in the real search panel**.
+    ///
+    /// Two beats are: pressing the pill that opens it, and asking it a question. Everything else in
+    /// the flow happens somewhere the panel would only be in the way — which is what this decides.
+    /// `TutorialModel.enter` closes the panel on the way into any step that answers false, so a
+    /// floating slab is never carried into a beat that is about something underneath it.
+    ///
+    /// **The beat this now matters most for is `timeline`, and it did not used to.** ⌘ + ⌘ opened a
+    /// timeline once; it opens this panel. So the ordinary run reaches the drag beat with the panel
+    /// the user just summoned sitting over the very window they are about to be asked to drag — and
+    /// reaches the pill beat with the surface that beat teaches already on screen. One rule fixes
+    /// both: the panel goes back where it came from on the way into any beat that does not use it.
+    ///
+    /// It only ever closes a panel this run watched come up (`TutorialModel.searchPanelIsOurs`); a
+    /// panel the user already dismissed is not dismissed a second time.
+    ///
+    /// A property on the step rather than an `if` in the transition, for the same reason `placement`
+    /// is one: a beat added later has to answer the question, and a test can read the answer.
+    var usesSearchPanel: Bool { self == .findMoments || self == .query }
+
     /// Whether the card takes the keyboard when it appears.
     ///
     /// A card is a thing to press, so most of them do: this app is an accessory and is almost never
@@ -178,9 +227,10 @@ enum TutorialStep: String, CaseIterable, Sendable {
     /// activate first, which is the trade every coach-mark step in the flow already makes.
     ///
     /// **`query` used to be the exception and is now the rule.** It carried its own text field, so it
-    /// had to be typable and took focus to be so. The typing happens in the real search bar now, in
-    /// the app's main window — a coach mark that took key status over it would take the field away
-    /// from the user at the exact moment the card is asking them to type into it.
+    /// had to be typable and took focus to be so. The typing happens in the real search bar now, and
+    /// that bar is a non-activating panel whose whole trick is holding the first responder while this
+    /// app is not frontmost — a coach mark that activated over it would take the field away from the
+    /// user at the exact moment the card is asking them to type into it.
     var takesFocusOnEntry: Bool {
         guard self != .claudeProof else { return false }
         return target == nil
@@ -220,21 +270,25 @@ enum TutorialGate: Equatable, Sendable {
     /// A real scroll gesture over one of this app's own windows, measured in points travelled.
     /// Waivable: a timeline that never opened has nothing to drag.
     case realGesture
-    /// The **real search surface was really asked for**, reported by the window itself
-    /// (`SearchPanelEvent.opened`) rather than by the press that asked for it.
+    /// The **real search panel** is really on screen, reported by the panel itself
+    /// (`SearchPanelEvent.opened` / `.closed`) rather than by the press that asked for it.
     ///
     /// Observed and not intercepted, which is the fix this case is named for: the tutorial used to
     /// swallow the "Search All" press and draw its own results on a coach card, so what the user
     /// learned to press opened a surface that only existed during the tutorial. Now the press falls
-    /// through to the shell, the real window comes forward because they pressed it, and this is how
-    /// the beat finds out — the same shape as `realHotkey`, for the same reason.
+    /// through to the shell, the real bar opens because they pressed it, and this is how the beat
+    /// finds out — the same shape as `realHotkey`, for the same reason.
     ///
-    /// **The ask and not the window**, since the search surface became the app's main window and is
-    /// therefore up almost all of the time. A gate on "is it on screen" would be met before the card
-    /// finished drawing; a gate on somebody asking for it is still a fact about the user.
+    /// **A fact about the display, and it is one again.** This was briefly gated on the *ask* rather
+    /// than the panel, because a search surface that had been promoted to a permanent window was up
+    /// before the tutorial started and "is it on screen" said nothing about anybody. A dismissible
+    /// panel is not: it closes on Escape, it closes when a result hands off to the timeline, and the
+    /// tutorial takes it back off screen on the way into every beat that is not about it
+    /// (`TutorialStep.usesSearchPanel`). So by the time this beat begins there is nothing up, and a
+    /// panel appearing is once more the user having done something.
     ///
-    /// Waivable, and the waiver brings the window forward rather than skipping past it: the beat
-    /// after this one has nothing to be asked without it.
+    /// Waivable, and the waiver opens the panel rather than skipping past it: the beat after this one
+    /// has nothing to be asked without it.
     case realSearchPanel
     /// At least one real hit from a real search of the real store, reported by the real panel that
     /// ran it. Not waivable: a "found it" with nothing behind it is the one beat that would make
@@ -265,8 +319,11 @@ enum TutorialTarget: Equatable, Sendable {
     case timelineTrack
     /// The timeline's "Search All" pill, found by walking our own accessibility tree.
     case searchAllButton
-    /// The real search window, from `SearchBarWindow`'s own frame. Nil whenever it is not up — which
-    /// is now the unusual case rather than the common one, since it is the app's main window, but a
-    /// user can still close it. The coach mark degrades to a card, the way every target here can.
+    /// The real search panel, from `SearchBarWindow`'s own frame. Nil whenever it is not up, which is
+    /// most of the time — the coach mark degrades to a card, the way every target here can.
+    ///
+    /// Asked of the window rather than reassembled from `SearchLayout`: the panel sizes itself to its
+    /// own content, so a rectangle built out of layout constants is a guess that is wrong the moment
+    /// a result row lands. Nothing in the tutorial computes this shape.
     case searchPanel
 }

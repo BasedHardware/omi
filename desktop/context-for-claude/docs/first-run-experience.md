@@ -1,12 +1,40 @@
 # First-Run Experience — Plan
 
-**Premise: the search bar is Claude.** This app ships no search panel, no scrubbable timeline, and
-no global hotkey. Every retrieval surface is Claude, reached over MCP. First run therefore has four
-jobs, in order: look unmistakably good, take consent honestly, register with Claude, and then prove
-the whole thing works by getting a real answer out of Claude.
+**Premise: the app has a front door, and Claude reads the same store through it.** First run has
+four jobs, in order: look unmistakably good, take consent honestly, register with Claude, and then
+prove the whole thing works — by walking the user through the app's own surfaces and finishing on a
+real answer out of Claude.
 
-Anything that would fake a retrieval UI inside this app is out of scope by definition — it would be
-teaching a surface that does not exist.
+The rule underneath all of it is unchanged and is the only one that matters: **first run may not
+teach a surface or a gesture the app does not have.** What changed is which surfaces those are, and
+this document had it backwards for a release — see below.
+
+## What the app actually ships now, and what this document used to claim
+
+This plan was written against a product with no retrieval UI of its own. Its original premise —
+*"the search bar is Claude. This app ships no search panel, no scrubbable timeline, and no global
+hotkey"* — is false in all three clauses, and it is recorded here rather than deleted because every
+stale instruction further down descends from it.
+
+- **The Activity spine is the main surface.** A chronological, day-grouped feed of conversations,
+  memories, tasks and screen moments, with a filter chip row (`All · Conversations · Memories ·
+  Tasks · Rewind`) and an hour rail. It answers inside the floating panel *before anything is typed*,
+  so it is what the app opens on (`Activity/ActivitySurface.swift`, `Search/SearchBarView.swift`).
+- **Conversations, memories and tasks come from the user's Omi account**; screen moments are local.
+  An unreachable account is an ordinary state the surface distinguishes from an empty one, so the
+  value card's consent line has to name the account as something the *user* reads back too, not only
+  Claude (`OnboardingView.valueClaims`).
+- **Two global chords, both rebindable.** `⌘ + ⌘` — both physical Command keys together, not a
+  double tap — opens Activity; `⌘⌘⇧` toggles the same surface. The action is `GlobalShortcuts.Action
+  .openActivity`, renamed from `openTimeline` when the window behind it changed, with the *persisted*
+  identifier deliberately left as `openTimeline` so recorded bindings survive (`Action.storageKey`).
+  Neither chord fires without Accessibility, which is the one permission this flow lists and never
+  requires — so any copy naming a chord must ask `GlobalShortcuts.readiness` first.
+- **The timeline is not the landing screen.** It is reached from the `Timeline ⌘T` pill in the
+  panel's header, from the menu bar's "Open Timeline" row, or by activating a moment. Settings is the
+  gear in the same header, and the menu bar.
+- **The panel is a Spotlight panel**: borderless, non-activating, key without pulling the app
+  forward, gone on Escape.
 
 ---
 
@@ -187,10 +215,38 @@ again once `context.onboarded` is set.
 
 ## Phase 4 — Onboarding cards
 
-`welcome → value → sign in to Omi → permissions → connectors → tutorial intro`, with progress dots
-and click sounds. Reuses the existing `Step` machine (`OnboardingView.swift:15-17`, currently
-`intro, value, connector, signIn, setup, done`) — sign-in and connector registration already work and
-are not rebuilt, only restyled onto the Phase 0 palette.
+`welcome → value → sign in to Omi → permissions → connector → tutorial intro → done`, with progress
+dots and click sounds. The machine is `OnboardingStep` (`OnboardingView.swift`), and it is a value
+with pure `itinerary` / `next` / `back` / `progressSteps` functions rather than a private enum inside
+the view, because the ordering is the part with wrong answers available and a `View` cannot be
+asserted against.
+
+- **Sign-in comes before permissions, deliberately.** Everything recorded lands in an Omi account and
+  the permissions are what start the recording, so the account has to be known before macOS is asked
+  for a microphone. A restored session drops `.signIn` and nothing else.
+- **Back is refused from `.permissions` onward.** TCC shows each prompt exactly once and will not
+  un-ask, so a card reached backwards could not do anything.
+- **Both exits from the last card seal the run.** `.done`'s `finish()` and the tutorial hand-off both
+  call `sealTheRun()` — login item, `context.onboarded`, `OnboardingResume().clear()`, music stop.
+  The hand-off used to skip all four, so taking the walkthrough left the install un-onboarded and put
+  the card back up on the next launch.
+- **A resume point is corrected to this run's itinerary** (`OnboardingStep.resumed`). The record holds
+  a card; the itinerary is rebuilt at launch from whether a session was restored, so the two can
+  disagree — a run that recorded `.signIn` and came back with an account already restored would open
+  on the one card that run does not have, asking somebody signed in to sign in again.
+- **The `done` card names both ways in**: the menu bar (rung by `MenuBarSpotlight` while the line is
+  on screen) and the chord, printed from `GlobalShortcuts` and omitted when it is not armed.
+- **The `done` card always watches for the screen grant, and only sometimes opens the pane**
+  (`OnboardingFinale`). Those were one condition and it stranded a run: the ungranted card's only
+  control was "Open Screen Recording", and the watch was armed only for a run that had *not*
+  postponed the screen row — so a user who pressed "I'll do these later" reached a last card that
+  could not notice a grant and had no button that could close it, in a borderless window with no Dock
+  icon behind it. A deliberate "later" now closes the flow; the watch runs whenever the grant is
+  missing, however it came to be missing.
+- **The Accessibility row never says "Allow"** (`OnboardingView.statusWord`). macOS has no dialog for
+  it at any point — `Permissions.request(.accessibility)` opens the pane — so the word is
+  "Open Settings" from the first frame rather than after a click that spends a prompt which does not
+  exist.
 
 ---
 
@@ -211,6 +267,14 @@ highlight the real thing; we never redraw or simulate it as though it were ours.
    with `chime.wav`. Screen Recording additionally needs the existing relaunch nudge, because the
    window server only honours the grant in a new process.
 
+**The rows, in the order the card lists them: screen, Accessibility, microphone, system audio.** The
+required subset is microphone, system audio and screen; Accessibility is listed and never required,
+because macOS has no dialog for it and gating the card on a switch flipped by hand would strand
+anyone unwilling to leave the flow. Screen goes first because the two row locators each need the
+other's grant, and granting the screen is what makes every later pane's row findable — the full
+argument is on `PermissionInvitations.listed`, which is the one owner of both lists. Nothing else may
+restate the order; a copy of it in `OnboardingView` outlived the ordering it described by a rewrite.
+
 Permissions stay one-at-a-time, and the lead-in/after-grant pacing inside an episode survives — that
 pacing was a deliberate earlier fix and is not to be undone. What *is* undone is the **automatic
 sequencing** around it: the card no longer asks for anything on its own. Each capability is a row the
@@ -220,18 +284,50 @@ before the sentence explaining it could be read.
 
 ---
 
-## Phase 6 — The tutorial, which ends inside Claude
+## Phase 6 — The tutorial, which walks the app's own surfaces and ends inside Claude
 
-1. **"Learn how this works"** card — Start / Skip.
-2. **Collect frames.** Open `anthropic.com/research` — Claude's own site, the one this app can put on
+**Eleven beats, and `TutorialStep.flow` is the list.** It was six when this section was written, all
+of them either a card or Claude, because the app had no surfaces of its own to walk. Four of the
+current eleven — `openActivity`, `timeline`, `findMoments`, `query` — are this app's own windows.
+Onboarding's `.tutorial` card is what offers it, and its aside has to describe *this*, not the
+one-minute hop to Claude the flow used to be.
+
+1. **`invitation`** — "Let me show you what I do", Start / Skip.
+2. **`screenAccess`** — Screen Recording, asked for here and only if it is genuinely missing.
+
+   **A grant and a grant *in force* are different facts, and the flow reads both**
+   (`TutorialEnvironment.screenNeedsRelaunch`). macOS decides what a program may capture when that
+   program connects to the window server, so a grant taken while this app is running preflights as
+   granted and captures nothing until the app starts again. That is the ordinary first run rather
+   than an edge: onboarding's permissions card is where the grant is normally taken, and the tutorial
+   hand-off leaves from the card *before* the one that offers the relaunch. Untested, the walkthrough
+   thanked the user for sight it did not have and then sat the capture beat out its full 45 s patience
+   waiting for frames that physically could not arrive, under a card telling them to keep scrolling a
+   page it had opened for them. The beat now says why, opens no page, and offers the way past at once
+   — the same treatment an unarmed chord and an unopened timeline already get — and `TutorialOutcome`
+   carries the reason through to the closing card as `.cannotSeeYet`.
+3. **`collectFrames`.** Open `anthropic.com/research` — Claude's own site, the one this app can put on
    somebody's screen without choosing a third party's content for them, and the page on it there is
    enough of to scroll — and ask them to scroll it. The home page is short and largely static, and
    capture dedupes perceptually, so scrolling it to the end produced very little for the gate.
    The gate **reads our own store** (`TutorialGate.realFrames`): real frames, not a timer pretending.
    The count is not narrated; the card says "Scroll through it for a bit" and then "Got it", and it
    claims the page was opened only when `NSWorkspace` says it really was.
-3. **"Your screen is now searchable."** Only shown once frames actually landed.
-4. **Hand off to Claude — by doing it.** Direct user instruction: "Open claude for me and type the
+4. **`openActivity`** — the chord, taught the only way a chord can be taught: the user presses `⌘ + ⌘`
+   and the real Activity panel opens *because they did*, gated on the real shortcut really firing
+   (`TutorialGate.realHotkey`). This beat was `openTimeline` and taught the chord as the way to the
+   timeline. It is not, and the beat followed the behaviour rather than keeping the old lesson.
+5. **`timeline`** — the drag through a captured day, which is the moment the product becomes obvious.
+   The tutorial **opens that window itself** and says so, because the chord no longer does; the
+   travelling still has to be the user's (`TutorialGate.realGesture`).
+6. **`findMoments`** — the real "Search All" pill, gated on the real search panel being on screen.
+7. **`query`** — type into the real search bar and click the real hit to travel to it. **Deliberately
+   not Return**: in the panel that key hands the question to Claude and closes the surface the beat is
+   being conducted in, so a card coaching it would coach the one keystroke that ends its own lesson.
+   The results narrow as they are typed, so there is nothing to submit; the gate is a real answer to a
+   real question (`TutorialGate.realSearchResult`), which is the one gate in the flow that cannot be
+   waived.
+8. **Hand off to Claude — by doing it.** Direct user instruction: "Open claude for me and type the
    first thing in." The tutorial routes the suggested question through `ClaudeRouter` as
    `claude://claude.ai/new?q=…`, which lands it in the composer of a **normal new chat**. The prompt
    is **pre-filled, not sent** — pressing Return stays the user's. Every branch that could not
@@ -268,21 +364,29 @@ before the sentence explaining it could be read.
    nothing clear — never the bottom, where the composer is). Claude's frame comes from
    `ClaudeWindowProbe`, which reads `CGWindowListCopyWindowInfo` and so needs no grant, and it is
    re-read every tick because Claude opens *after* the card and the user can move it.
-5. **Prove it.** The MCP server writes a last-query timestamp into the data directory; the app watches
-   for it, so "Found it" appears only when Claude has genuinely called one of our tools. This is the
-   payoff beat, and it is earned rather than staged. It is also the one card that **must not take the
-   keyboard** (`TutorialStep.takesFocusOnEntry`): the tool call happens when the user presses Return
-   in Claude's composer, and an accessory app activating over Claude eats exactly that keystroke.
-6. **"You're all set"** → `MenuBarSpotlight.show()` for "one more thing — I live up here."
+9. **Prove it** (`claudeProof`). The MCP server writes a last-query timestamp into the data directory;
+   the app watches for it, so "Found it" appears only when Claude has genuinely called one of our
+   tools. This is the payoff beat, and it is earned rather than staged. It is also the one card that
+   **must not take the keyboard** (`TutorialStep.takesFocusOnEntry`): the tool call happens when the
+   user presses Return in Claude's composer, and an accessory app activating over Claude eats exactly
+   that keystroke.
+10. **`allSet`** — "That's everything", and the one sentence that says what the capture beat really
+    achieved. This absorbed the old standalone "Your screen is now searchable" card.
+11. **`menuBar`** — "one more thing — I live up here", with `MenuBarSpotlight.show()`.
 
-No shortcut-conflict step: we register no hotkey, so there is no conflict to warn about. Adding a fake
-one would be theatre.
+**The shortcut-conflict step is back in scope.** This section used to end "we register no hotkey, so
+there is no conflict to warn about. Adding a fake one would be theatre." Two chords are registered
+now (`⌘ + ⌘` and `⌘⌘⇧`), both rebindable, and `ShortcutConflicts` exists to report a collision with
+another tool's binding. It is surfaced in Settings rather than as a first-run card — a conflict
+notice in front of someone who has not yet used either chord is a warning about nothing — but the
+justification for having no such step is no longer "there is no hotkey".
 
 ---
 
 ## Verification
 
-- `swift test` — 146 tests today; new behaviour adds tests (pid exclusion, sound gating, step machine).
+- `swift test --package-path desktop/context-for-claude` — 1123 tests today (was 146 when this plan
+  was written); new behaviour adds tests (pid exclusion, sound gating, step machine).
 - `scripts/build.sh` then a genuinely cold run: `tccutil reset All com.omi.context-for-claude`,
   `defaults delete com.omi.context-for-claude`, delete the Keychain session, clear both MCP
   registrations. **Reset TCC only while the app is installed** — `tccutil` resolves bundle ids through
@@ -295,4 +399,11 @@ one would be theatre.
 
 ## Explicitly out of scope
 
-A scrubbable rewind timeline, an in-app search panel, and a global hotkey. The search bar is Claude.
+This section used to read: *"A scrubbable rewind timeline, an in-app search panel, and a global
+hotkey. The search bar is Claude."* All three shipped. They are named here only so nobody reads the
+sentence above as still binding.
+
+What remains out of scope is the rule the sentence was an instance of: **first run may not teach a
+surface or a gesture the app does not have, and may not stage a result it did not get.** Every
+tutorial gate is still a real one (`TutorialGate`), the cinematic's windows are still synthetic
+(`CinematicWindowArt`), and no card may claim a chord `GlobalShortcuts.readiness` says is not armed.

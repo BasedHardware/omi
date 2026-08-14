@@ -50,14 +50,41 @@ final class TutorialOverlay {
 
     var isVisible: Bool { window?.isVisible ?? false }
 
+    /// **The machine the card on screen is really driving**, read off the hosting view rather than
+    /// off the reference this type keeps beside it.
+    ///
+    /// The two can disagree, and the whole rebinding rule in `show` is about the one way they can: a
+    /// second run replaces `model` while the card keeps rendering the first. Only a reader that goes
+    /// through the root view can tell, which is why this exists — `TutorialResumeTests` asserts it,
+    /// and there is nothing else in the product a source-level check could look at.
+    var machineOnScreen: TutorialModel? { hosting?.rootView.model }
+
     /// Shows (or re-lays-out) the card for `step`.
     func show(model: TutorialModel, step: TutorialStep) {
         guard !step.isTerminal else { return hide() }
+        // **The window outlives a run; the card's binding must not.** The window and its hosting view
+        // are built once and kept, and the card inside is bound to whichever `TutorialModel` built
+        // it — so a second run would go on rendering, and go on driving, the machine that already
+        // finished: an empty card whose buttons answer nothing. That is no longer hypothetical:
+        // a resumed walkthrough (`TutorialResume`) is a second `TutorialModel` in the same process,
+        // and it is the change that makes this reachable.
+        let isANewMachine = self.model !== model
         self.model = model
         chrome.isCoachMark = step.target != nil
         stepScreen = nil
 
-        let window = self.window ?? makeWindow(for: model)
+        // Rebound only on a window that was already standing. A window built here builds its hosting
+        // view around *this* model, and replacing that root view immediately would cost the first
+        // card of every run a layout pass: `fittingSize` answers zero for one pass after a root view
+        // is replaced (see `fittingHeight`), so the card would be pinned to its 96 pt floor until the
+        // next tick moved it.
+        let window: TutorialOverlayWindow
+        if let standing = self.window {
+            window = standing
+            if isANewMachine { hosting?.rootView = TutorialCardView(model: model, chrome: chrome) }
+        } else {
+            window = makeWindow(for: model)
+        }
         self.window = window
 
         layout(step: step)
@@ -316,21 +343,27 @@ final class TutorialOverlay {
     /// Pure, and separated from `NSScreen`, for the same reason `parked` is — the failure it guards
     /// against is a fact about a display geometry the machine this was written on does not have.
     ///
-    /// The panel is not an occluder to be stood beside; it is 760 pt wide and the side bands on a
-    /// laptop are 315 pt, which is narrower than this card. So there is only one axis to work with,
+    /// The panel is not an occluder to be stood beside; its window is 1112 pt wide and the side bands
+    /// on a laptop are 179 pt, which is far narrower than this card. So there is only one axis to
+    /// work with,
     /// and only one end of it: the panel's **top** edge is the prompt bar — the field the beat is
     /// asking somebody to type into, and the one part of the surface a card may never be laid over.
     /// Its bottom edge is the last row of a grid that scrolls. The card goes under the bottom.
     ///
-    /// **Where it stops being possible, and what happens then.** At the search surface's own ceiling
-    /// (`SearchLayout.defaultResultsBodyHeight`, the height that file says "still fits a 13"
-    /// display") the panel leaves about 140 pt under it on that display, and this card is taller than
-    /// that. There is no placement that both fits and clears — so it takes the bottom of the screen
-    /// and overlaps the panel's foot, which costs the user part of the last visible row of results
-    /// and costs them nothing they are being asked to touch. The one invariant that survives every
+    /// **`panel` is the panel's own frame, never a rectangle assembled here.** The search surface
+    /// sizes itself to its content, so a shape rebuilt out of `SearchLayout` constants is a guess
+    /// that goes wrong the moment a row lands — the production caller reads
+    /// `SearchBarWindow.panelFrame` through `TutorialTargetLocator`, and the test that exercises this
+    /// asks `SearchBarWindow` for its own placement rather than doing the arithmetic itself.
+    ///
+    /// **Where it stops being possible, and what happens then.** At the tallest the panel is allowed
+    /// to be it leaves about 140 pt under it on a 13" display, and this card is taller than that.
+    /// There is no placement that both fits and clears — so it takes the bottom of the screen and
+    /// overlaps the panel's foot, which costs the user part of the last visible row of results and
+    /// costs them nothing they are being asked to touch. The one invariant that survives every
     /// geometry is the one worth stating: **the card's top edge never rises above the panel's
-    /// midpoint**, so the field, the query chip and the `↵ Search` affordance are never underneath
-    /// it.
+    /// midpoint**, so the field, the query chip and the `↵ Ask Claude` affordance are never
+    /// underneath it.
     nonisolated static func under(
         _ size: NSSize, panel: CGRect, in visible: NSRect, margin: CGFloat
     ) -> NSRect {

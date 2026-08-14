@@ -185,6 +185,19 @@ struct RevivalBudget {
     }
 }
 
+/// **The surface a launch, or a Dock click, has to put in front of the user.**
+///
+/// Three cases because there are three flows a user can be in the middle of, and the whole content of
+/// the type is that they are mutually exclusive and ordered — see `ContextAppDelegate.landing`.
+enum LaunchLanding: Equatable {
+    /// Setup was never finished, or a run of it is still open.
+    case onboarding
+    /// A walkthrough was interrupted, at this beat.
+    case tutorial(TutorialStep)
+    /// Nothing is outstanding: the app's own surface.
+    case activity
+}
+
 /// Everything that must happen once per process, in the order the rest of the app assumes:
 /// activation policy before any window can steal focus, fonts before anything draws, capture before
 /// the user can look at its status, onboarding last.
@@ -254,13 +267,12 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             // because nothing about onboarding may depend on audio succeeding.
             Sound.prepare()
 
-            // **Both chords open the main window, and that is the product decision rather than a
+            // **Both chords reach the Activity panel, and that is the product decision rather than a
             // duplicated case.** Both Command keys together is this app's advertised way in, and
-            // what a way in has to land on is the window the app opens on — Activity. It used to
+            // what a way in has to land on is the surface the app opens on — Activity. It used to
             // land on the timeline, from when the timeline *was* the app's one real window; leaving
-            // it there once Activity became the main window would have made the gesture the product
-            // teaches the one gesture that does not take you to the app. Double-tap Command-Shift
-            // brings the same window forward with its search field focused.
+            // it there would have made the gesture the product teaches the one gesture that does not
+            // take you to the app. Double-tap Command-Shift is the same surface as a toggle.
             //
             // Both are rebindable, and both simply do not fire while Accessibility is ungranted — a
             // global monitor cannot see keys without it, and pretending to be armed would be worse.
@@ -268,11 +280,11 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             GlobalShortcuts.shared.start { action in
                 switch action {
                 case .openSearch:
-                    // `present`, never `toggle`. A chord that *closed* the app's main window on its
-                    // second press is the Spotlight bargain applied to the wrong kind of object: the
-                    // user asked to search, and the answer to asking twice is the field focused with
-                    // its text selected, not the window they were reading gone.
-                    Self.openActivities()
+                    // `toggle`, because the surface is a Spotlight panel again: a chord that puts a
+                    // floating overlay on screen is the chord that takes it away, and a second press
+                    // that re-focused a panel already in front of the user would be a keystroke with
+                    // nothing to show for it.
+                    SearchBarWindow.toggle()
                 case .openActivity:
                     // This is also what the tutorial's chord beat rides on: it observes the shortcut
                     // rather than opening anything itself, so the window the user learns to summon is
@@ -289,24 +301,9 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             // writes through, which is what makes a rebind take effect without a relaunch.
             SettingsWindow.shortcutProvider = LiveShortcutBindings()
 
-            // Two reasons to open the card, and the second exists only because onboarding can end
-            // this process on purpose: granting Screen Recording applies to the *next* launch, so
-            // the flow restarts the app mid-run. The replacement has `context.onboarded` unset — the
-            // run never finished — so the flag alone would have reopened it anyway; the resume point
-            // is what stops it reopening at the cinematic, and it is consulted here too so a run in
-            // progress is restored even if the flag had already been set.
-            let onboarded = UserDefaults.standard.bool(forKey: Self.onboardedKey)
-            if !onboarded || OnboardingResume().step != nil {
-                OnboardingWindow.present()
-            } else {
-                // **The app opens on its main window.** It used to open on nothing at all, which was
-                // defensible while every surface was summoned by a chord and is not now that there
-                // is one: an app with a Dock icon that launches to an empty screen has not launched.
-                // Deliberately not gated on the capture database being open — the store opens
-                // lazily, and the surface waits for it rather than the launch waiting for the
-                // surface (see `SearchResultsModel`).
-                Self.openActivities()
-            }
+            // What a launch puts on screen is the same question the Dock icon asks, so it is asked
+            // in the same place — see `surfaceSomethingForTheUser`.
+            Self.surfaceSomethingForTheUser()
         }
     }
 
@@ -330,46 +327,87 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    /// The one place that decides *which* surface a "show me the app" gesture means.
+    /// **What the user is in the middle of**, as a value rather than as a branch.
     ///
-    /// Ordered by what the user is in the middle of, not by what is most impressive:
+    /// Pure, and separated from the three facts it reads, for the same reason
+    /// `shouldReviveAfterTermination` is: the ordering is the whole decision, and an ordering that
+    /// can only be exercised by launching the app is an ordering nobody can assert.
     ///
-    /// - **An unfinished setup outranks everything.** The card is a floating window that steps aside
-    ///   while System Settings is frontmost (`Permissions.systemSettingsIsFrontmost`) and that the
-    ///   flow itself hides between beats, so "there is no card on screen" is a routine state of a run
-    ///   that is very much in progress. Opening another window over it would bury the one thing the
-    ///   user still has to finish; `OnboardingWindow.present()` brings back the run they were in.
-    /// - **Otherwise the main window**, always.
+    /// The order, and why it is this one:
     ///
-    /// **`hasVisibleWindows` used to gate the second clause and no longer does, and that is the fix
+    /// 1. **An unfinished setup outranks everything.** The card is a floating window that steps aside
+    ///    while System Settings is frontmost (`Permissions.systemSettingsIsFrontmost`) and that the
+    ///    flow itself hides between beats, so "there is no card on screen" is a routine state of a run
+    ///    that is very much in progress. It also comes first because the walkthrough is something
+    ///    onboarding *hands off to* — its last card seals the run before starting it — so a machine
+    ///    carrying both records is one where the earlier flow never finished, and finishing it is the
+    ///    only order that ends with both records spent.
+    /// 2. **A walkthrough in progress outranks the Activity panel**, exactly as an unfinished
+    ///    onboarding does, and for a sharper reason than "the card would be buried". The panel *is*
+    ///    the surface two of the tutorial's beats are about: `findMoments` waits for one to appear
+    ///    and advances the moment it does. A launch that opened Activity and then resumed the run
+    ///    would satisfy that beat on the user's behalf — the flow would credit them with a press they
+    ///    never made, which is the one thing `TutorialModel`'s rules exist to prevent. So this is an
+    ///    `else`, not a second thing to do.
+    /// 3. **Otherwise the Activity panel**, always. It used to open on nothing at all, which was
+    ///    defensible while every surface was summoned by a chord and is not now that there is a Dock
+    ///    icon: an app that launches to an empty screen has not launched. Deliberately not gated on
+    ///    the capture database being open — the store opens lazily and the surface waits for it,
+    ///    rather than the launch waiting for the surface (see `SearchResultsModel`).
+    static func landing(
+        onboarded: Bool, onboardingInProgress: Bool, tutorialResume: TutorialStep?
+    ) -> LaunchLanding {
+        if !onboarded || onboardingInProgress { return .onboarding }
+        if let beat = tutorialResume { return .tutorial(beat) }
+        return .activity
+    }
+
+    /// The one place that decides *which* surface a "show me the app" gesture means, and the one
+    /// place that reads the records behind it.
+    ///
+    /// Launch and the Dock icon both arrive here. They used to answer the question separately, with
+    /// launch carrying its own copy of the onboarding clause — one owner is what stops the two
+    /// drifting the moment a third flow (this walkthrough) needs a place in the order.
+    ///
+    /// **`hasVisibleWindows` used to gate the last clause and no longer does, and that is the fix
     /// rather than an oversight.** The reasoning was "AppKit brings the app's windows forward by
     /// itself, so a second window ordered in on top is the Dock icon opening a timeline over the
     /// Settings sheet the user was reading". It stopped being true the moment the target became the
-    /// window this gesture *means*: with any window at all on screen — the timeline, Settings, a
+    /// surface this gesture *means*: with any window at all on screen — the timeline, Settings, a
     /// minimised anything — a Dock click did nothing whatsoever, which is the definition of an app
-    /// that cannot be found. `SearchBarWindow.present()` is idempotent and brings the main window
-    /// forward, so the answer to "show me the app" is the same window every time.
+    /// that cannot be found. `SearchBarWindow.present()` is idempotent and brings the panel forward,
+    /// so the answer to "show me the app" is the same surface every time.
     @MainActor
     private static func surfaceSomethingForTheUser() {
-        let onboarded = UserDefaults.standard.bool(forKey: onboardedKey)
-        if !onboarded || OnboardingResume().step != nil {
+        switch landing(
+            onboarded: UserDefaults.standard.bool(forKey: onboardedKey),
+            onboardingInProgress: OnboardingResume().step != nil,
+            tutorialResume: TutorialResume().step)
+        {
+        case .onboarding:
             OnboardingWindow.present()
-            return
+        case .tutorial(let beat):
+            // Idempotent on a run that is already walking: `TutorialController.start` brings the
+            // current card back rather than starting a second machine, which is what a Dock click
+            // mid-walkthrough should do and is the reason this clause is not gated on the tutorial
+            // being stopped.
+            Tutorial.start(resumingAt: beat)
+        case .activity:
+            openActivities()
         }
-
-        openActivities()
     }
 
-    /// **The main window**, opened the one way it is ever opened.
+    /// **The Activity panel**, opened the one way it is ever opened.
     ///
-    /// What "show me the app" means: launch, the Dock icon, the ⌘⌘⇧ chord and the menu bar's row all
-    /// arrive here. It used to be the timeline — "this app's one real window" — and the timeline is
-    /// the app's *second* window now: the place a moment opens into, not the place the app starts.
+    /// What "show me the app" means: launch, the Dock icon, the ⌘ + ⌘ chord and the menu bar's row all
+    /// arrive here. `present` and never `toggle`, unlike the search chord: none of these four is a
+    /// keystroke a user repeats, and a Dock click that closed the panel would be a gesture that does
+    /// the opposite of what it says.
     ///
     /// No store guard, unlike `openTimeline` below. The surface asks for the capture database on
     /// every read and waits for it to open, so there is nothing to decline over — and a launch that
     /// showed nothing for the second or two before the store opens would be exactly the inert gesture
-    /// this window exists to stop.
+    /// this panel exists to stop.
     @MainActor
     private static func openActivities() {
         SearchBarWindow.present()
@@ -475,6 +513,27 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     ///     worked; this one says so out loud, because an app that respawns forever is worse than an
     ///     app that needs reopening and that has to be guaranteed by the predicate rather than by a
     ///     neighbouring subsystem.
+    /// **Whether there is an unfinished run to come back to** — the second clause of the decision
+    /// below, and no longer a question with one flow in it.
+    ///
+    /// Pure, and separate, because the answer changed while the predicate's parameter name did not.
+    /// `shouldReviveAfterTermination` calls it `onboardingInProgress` from when onboarding was the
+    /// only flow that macOS could end mid-run; what it has always meant is *there is something to
+    /// come back to*. The walkthrough is now the flow that most needs it: `TutorialStep.screenAccess`
+    /// asks for Screen Recording after onboarding's last card has already sealed its own books
+    /// (`OnboardingView.sealTheRun`), so the "Quit & Reopen" this whole mechanism was measured
+    /// against arrives with `OnboardingResume` spent — and the app stayed dead in exactly the shape
+    /// of the original report, one flow later.
+    ///
+    /// Neither record means "the user is looking at a card right now". Both mean the run was never
+    /// concluded, which is the same thing the revival is for: `TutorialModel.abandon` deliberately
+    /// leaves its record behind when the process is torn down under a run that was still going.
+    static func aRunIsWaiting(
+        onboardingResume: OnboardingStep?, tutorialResume: TutorialStep?
+    ) -> Bool {
+        onboardingResume != nil || tutorialResume != nil
+    }
+
     static func shouldReviveAfterTermination(
         requestedLocally: Bool,
         onboardingInProgress: Bool,
@@ -512,7 +571,16 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func reviveIfTheSystemEndedThisRun() {
         let requestedLocally = TerminationOrigin.wasRequestedLocally
-        let onboardingInProgress = OnboardingResume().step != nil
+        // **There are two unfinished runs now, and the second one is the one that asks macOS for
+        // this quit.** The parameter is named for onboarding because onboarding was the only flow
+        // that existed when the predicate was written; what it has always meant is "there is
+        // something to come back to". `TutorialStep.screenAccess` calls
+        // `CGRequestScreenCaptureAccess` after onboarding has sealed its own books, so a walkthrough
+        // hits exactly the alert this whole mechanism was measured against — with `OnboardingResume`
+        // already spent, and therefore, until this line, with the app staying dead.
+        let tutorialBeat = TutorialResume().step
+        let onboardingInProgress = Self.aRunIsWaiting(
+            onboardingResume: OnboardingResume().step, tutorialResume: tutorialBeat)
         let budget = RevivalBudget()
         let spent = budget.recent().count
         let revive = Self.shouldReviveAfterTermination(
@@ -536,6 +604,10 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
         ContextLog.milestone(
             "Termination — requestedLocally=\(requestedLocally) "
                 + "onboardingInProgress=\(onboardingInProgress) "
+                // Which of the two unfinished runs, when it is the walkthrough. Same argument as
+                // every other field on this line: the next report has to be readable in one query,
+                // and "in progress" alone would not say which flow the user lost.
+                + "tutorialBeat=\(tutorialBeat?.rawValue ?? "none") "
                 + "revivalsSpent=\(spent)/\(RevivalBudget.allowance) "
                 + "screenPendingRelaunch=\(Permissions.screenNeedsRelaunch) "
                 + "→ \(revive ? "reopening this bundle" : "staying quit")",

@@ -4,8 +4,9 @@ import ContextCore
 /// The tutorial's public face. This is the whole API the app shell needs:
 ///
 /// ```swift
-/// Tutorial.start()                 // after onboarding's last card
-/// Tutorial.start(store: myStore)   // when the caller already holds the capture database
+/// Tutorial.start()                     // after onboarding's last card
+/// Tutorial.start(store: myStore)       // when the caller already holds the capture database
+/// Tutorial.start(resumingAt: beat)     // a process picking up a run a previous one was in
 /// ```
 ///
 /// `store` is optional because the app's writable store is owned privately by `Engine`, and the
@@ -14,8 +15,12 @@ import ContextCore
 /// the store say so rather than inventing numbers.
 @MainActor
 enum Tutorial {
-    static func start(store: ContextStore? = nil) {
-        TutorialController.shared.start(store: store)
+    /// - Parameter resume: the beat `TutorialResume` recorded, for a launch that found a walkthrough
+    ///   in progress (`ContextAppDelegate.landing`). Nil starts at the top, which is what onboarding's
+    ///   hand-off wants. The record is a *starting point* and never a claim about the world — see
+    ///   `TutorialModel.begin(resumingAt:)` for what a resumed run re-reads rather than trusts.
+    static func start(store: ContextStore? = nil, resumingAt resume: TutorialStep? = nil) {
+        TutorialController.shared.start(store: store, resumingAt: resume)
     }
 
     static var isRunning: Bool { TutorialController.shared.isRunning }
@@ -65,7 +70,7 @@ final class TutorialController {
         return !model.step.isTerminal
     }
 
-    func start(store injected: ContextStore?) {
+    func start(store injected: ContextStore?, resumingAt resume: TutorialStep? = nil) {
         if let model, !model.step.isTerminal {
             // Already walking: bring the current card back rather than starting a second machine.
             TutorialOverlay.shared.show(model: model, step: model.step)
@@ -90,7 +95,7 @@ final class TutorialController {
 
         let model = TutorialModel(environment: environment)
         self.model = model
-        model.begin()
+        model.begin(resumingAt: resume)
         startTicking(every: environment.pollInterval)
     }
 
