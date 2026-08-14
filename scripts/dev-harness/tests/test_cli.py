@@ -65,6 +65,55 @@ def test_real_check_lists_provider_credentials(monkeypatch: pytest.MonkeyPatch, 
     assert any("DEEPGRAM_API_KEY" in item for item in missing)
 
 
+def test_java_stub_that_exits_nonzero_is_not_a_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    """macOS ships /usr/bin/java as a stub that is always on PATH but has no JVM behind it.
+
+    A PATH lookup therefore passes on every Mac, and the missing runtime only surfaces
+    ~135s later as an unexplained firestore/auth health-check timeout.
+    """
+    monkeypatch.setattr(cli, "_which", lambda _name: "/usr/bin/java")
+    monkeypatch.setattr(cli.subprocess, "run", lambda *_args, **_kwargs: subprocess.CompletedProcess([], 1))
+
+    assert cli._java_runtime_present() is False
+
+
+def test_java_present_when_the_binary_reports_a_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "_which", lambda _name: "/usr/bin/java")
+    monkeypatch.setattr(cli.subprocess, "run", lambda *_args, **_kwargs: subprocess.CompletedProcess([], 0))
+
+    assert cli._java_runtime_present() is True
+
+
+def test_missing_java_runtime_is_reported_as_a_prerequisite(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("PROVIDER_MODE", "offline")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "_java_runtime_present", lambda: False)
+    cfg = config.load_config(REPO_ROOT)
+
+    missing, _warnings = cli.prerequisite_report(cfg)
+
+    assert any("java runtime" in item for item in missing)
+
+
+def test_npx_firebase_tools_does_not_wait_on_an_install_prompt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Without --yes, npx asks "Ok to proceed? (y)" on a pipe nothing can answer.
+
+    The emulator runs detached with stdout redirected to a log file, so the prompt
+    blocks forever and the failure presents as a health-check timeout instead.
+    """
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    monkeypatch.setattr(cli, "_which", lambda name: None if name == "firebase" else f"/usr/bin/{name}")
+    cfg = config.load_config(REPO_ROOT, create_layout=True)
+
+    command = cli._firebase_command(cfg)
+
+    assert command[:3] == ["npx", "--yes", "firebase-tools"]
+
+
 def test_firebase_command_writes_the_configured_emulator_ports(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
     monkeypatch.setenv("OMI_HARNESS_PORT_OFFSET", "321")
