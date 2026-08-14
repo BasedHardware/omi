@@ -8,7 +8,7 @@
     "desktop/macos/Desktop/Tests/ContextProactivityEngineTests.swift"
   ],
   "evidence_prs": [
-    11527
+    11538
   ],
   "scope_hints": [
     "desktop/macos/Desktop/Sources/ProactiveAssistants/**"
