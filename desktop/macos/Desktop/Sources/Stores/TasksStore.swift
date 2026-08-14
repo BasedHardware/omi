@@ -2517,9 +2517,8 @@ class TasksStore: ObservableObject {
 
     guard isCurrent(lease) else { return }
     for id in confirmed {
-      try? await ActionItemStorage.shared.deleteActionItemByBackendId(
-        id,
-        deletedBy: "user",
+      try? await ActionItemStorage.shared.markActionItemDeletionAcknowledged(
+        backendId: id,
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
       guard isCurrent(lease) else { return }
@@ -3174,7 +3173,6 @@ class TasksStore: ObservableObject {
         // No backend row exists; a tombstone would wait forever for an ack.
         try await ActionItemStorage.shared.deleteActionItemByBackendId(
           task.id,
-          deletedBy: "user",
           authorization: Self.localMutationAuthorization(
             snapshot: lease.authorizationSnapshot
           )
@@ -3248,9 +3246,8 @@ class TasksStore: ObservableObject {
         authorizationSnapshot: lease.authorizationSnapshot
       )
       guard isCurrent(lease) else { return }
-      try? await ActionItemStorage.shared.deleteActionItemByBackendId(
-        task.id,
-        deletedBy: "user",
+      try? await ActionItemStorage.shared.markActionItemDeletionAcknowledged(
+        backendId: task.id,
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
     } catch {
@@ -3267,11 +3264,10 @@ class TasksStore: ObservableObject {
     expectedOwnerID: String? = nil
   ) async {
     guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
-    // Undo of a tombstoned delete: the row still exists locally (deleted, awaiting the
-    // backend ack). Purge it before the re-insert below or undo would create a duplicate.
+    // Undo of a tombstoned delete: the row still exists locally (deleted, whether or not
+    // the backend acked). Purge it before the re-insert below or undo would duplicate it.
     try? await ActionItemStorage.shared.deleteActionItemByBackendId(
       task.id,
-      deletedBy: "user",
       authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
     )
     guard isCurrent(lease) else { return }

@@ -33,13 +33,17 @@ final class ActionItemDeletionSyncTests: XCTestCase {
     try await super.tearDown()
   }
 
-  private func serverTask(id: String, deleted: Bool? = false) -> TaskActionItem {
+  private func serverTask(
+    id: String,
+    deleted: Bool? = false,
+    updatedAt: Date = Date(timeIntervalSince1970: 1_750_000_000)
+  ) -> TaskActionItem {
     TaskActionItem(
       id: id,
       description: "task \(id)",
       completed: false,
       createdAt: Date(timeIntervalSince1970: 1_750_000_000),
-      updatedAt: Date(timeIntervalSince1970: 1_750_000_000),
+      updatedAt: updatedAt,
       dueAt: nil,
       deleted: deleted,
       taskStatus: nil
@@ -68,9 +72,10 @@ final class ActionItemDeletionSyncTests: XCTestCase {
       "a tombstoned task must stay invisible even after the server re-sends it")
   }
 
-  /// Only the server's acknowledgement removes the row; after that, hydration of a task
-  /// the server no longer has cannot bring it back.
-  func testAcknowledgementPurgesTheTombstone() async throws {
+  /// The acknowledgement clears the pending flag — and nothing else. Purging the row here
+  /// (the old shape) destroyed the only record of *who* retired the task: the backend has no
+  /// `deleted_by` field, so the row the Removed lane re-fetches always reports nil.
+  func testAcknowledgementClearsPendingButKeepsUserProvenance() async throws {
     try await ActionItemStorage.shared.syncTaskActionItems(
       [serverTask(id: "backend-2")], authorization: .unrestricted)
     try await ActionItemStorage.shared.markActionItemDeletedPendingBackendSync(
@@ -80,11 +85,71 @@ final class ActionItemDeletionSyncTests: XCTestCase {
     XCTAssertEqual(beforeAck, ["backend-2"])
 
     // The ack path (deleteTask / flushPendingBackendDeletions after a 2xx).
-    try await ActionItemStorage.shared.deleteActionItemByBackendId(
-      "backend-2", deletedBy: "user", authorization: .unrestricted)
+    try await ActionItemStorage.shared.markActionItemDeletionAcknowledged(
+      backendId: "backend-2", authorization: .unrestricted)
 
     let pending = try await ActionItemStorage.shared.getPendingBackendDeletionIds()
     XCTAssertTrue(pending.isEmpty, "an acknowledged deletion must leave nothing to flush")
+
+    let record = try await ActionItemStorage.shared.getActionItemByBackendId("backend-2")
+    XCTAssertEqual(record?.deleted, true, "the ack confirms the retirement, it does not undo it")
+    XCTAssertEqual(
+      record?.deletedBy, "user",
+      "'Removed by me' and the extraction dedup list both read this column")
+
+    let visible = try await ActionItemStorage.shared.getFilteredActionItems(
+      limit: 50, completedStates: [false])
+    XCTAssertFalse(
+      visible.contains { (item: TaskActionItem) in item.id == "backend-2" },
+      "a confirmed tombstone must stay out of the live lane")
+  }
+
+  /// The Removed lane refetches deleted tasks from the server and syncs them back in. That
+  /// hydration used to take the server's absent `deleted_by` as nil, re-filing every user
+  /// deletion under "Removed by AI" and emptying the extraction dedup list.
+  func testDeletedPageHydrationKeepsUserProvenance() async throws {
+    try await ActionItemStorage.shared.syncTaskActionItems(
+      [serverTask(id: "backend-5")], authorization: .unrestricted)
+    try await ActionItemStorage.shared.markActionItemDeletedPendingBackendSync(
+      backendId: "backend-5", authorization: .unrestricted)
+    try await ActionItemStorage.shared.markActionItemDeletionAcknowledged(
+      backendId: "backend-5", authorization: .unrestricted)
+
+    // What `loadDeletedTasks` syncs back: the server's soft-deleted row, no deleted_by.
+    // Stamped after the local ack so the 60s optimistic-update guard does not skip it.
+    try await ActionItemStorage.shared.syncTaskActionItems(
+      [serverTask(id: "backend-5", deleted: true, updatedAt: Date().addingTimeInterval(300))],
+      authorization: .unrestricted)
+
+    let record = try await ActionItemStorage.shared.getActionItemByBackendId("backend-5")
+    XCTAssertEqual(record?.deleted, true)
+    XCTAssertEqual(
+      record?.deletedBy, "user",
+      "hydration must not re-attribute a user deletion to the AI")
+
+    let userDeleted = try await ActionItemStorage.shared.getRecentDeletedTasks(deletedBy: "user")
+    XCTAssertTrue(
+      userDeleted.contains { $0.description == "task backend-5" },
+      "task extraction reads this list to stop re-suggesting what the user removed")
+  }
+
+  /// The mirror case: a task the server reports as live again has no retirement left to
+  /// attribute, so stale provenance must not survive the un-delete.
+  func testHydrationClearsProvenanceWhenTheServerRevivesTheTask() async throws {
+    try await ActionItemStorage.shared.syncTaskActionItems(
+      [serverTask(id: "backend-6")], authorization: .unrestricted)
+    try await ActionItemStorage.shared.markActionItemDeletedPendingBackendSync(
+      backendId: "backend-6", authorization: .unrestricted)
+    try await ActionItemStorage.shared.markActionItemDeletionAcknowledged(
+      backendId: "backend-6", authorization: .unrestricted)
+
+    try await ActionItemStorage.shared.syncTaskActionItems(
+      [serverTask(id: "backend-6", deleted: false, updatedAt: Date().addingTimeInterval(300))],
+      authorization: .unrestricted)
+
+    let record = try await ActionItemStorage.shared.getActionItemByBackendId("backend-6")
+    XCTAssertEqual(record?.deleted, false)
+    XCTAssertNil(record?.deletedBy, "a live task carries no deletion provenance")
   }
 
   /// The full-sync purge cleans up acknowledged soft-deletes; it must not eat the durable

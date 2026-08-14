@@ -374,7 +374,15 @@ extension ActionItemRecord {
     self.description = item.description
     self.completed = item.completed
     self.deleted = item.isRetired
-    self.deletedBy = item.deletedBy
+    // The backend has no `deleted_by` field, so a server row always reports nil here.
+    // Retirement provenance ("user" / "ai_dedup" / "staged") is local-only state: taking
+    // the server's nil re-attributed every user deletion to the AI on the next hydration.
+    // A task the server reports as live has no retirement left to attribute.
+    if let itemDeletedBy = item.deletedBy {
+      self.deletedBy = itemDeletedBy
+    } else if !self.deleted {
+      self.deletedBy = nil
+    }
     self.source = item.source
     self.conversationId = item.conversationId
     self.priority = item.priority
