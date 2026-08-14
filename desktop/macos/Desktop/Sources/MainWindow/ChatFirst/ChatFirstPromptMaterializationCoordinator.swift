@@ -28,6 +28,8 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
   private var didLoadTranscriptFirstPage = false
   private var lastAttemptAt: Date?
   private var requestTask: Task<Void, Never>?
+  private var pendingCompletionBypass = false
+  private var pendingCompletionWindowForeground = false
   private var requestGeneration = 0
   private let now: () -> Date
 
@@ -61,25 +63,68 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
     requestGeneration &+= 1
     requestTask?.cancel()
     requestTask = nil
+    pendingCompletionBypass = false
+    pendingCompletionWindowForeground = false
   }
 
   /// `ChatFirstShell` alone forwards app foreground events. This is never
   /// registered by the legacy shell, floating/notch UI, or a background task.
   @discardableResult
   func mainWindowDidBecomeForeground() -> Bool {
-    requestMaterialization(windowForeground: true)
+    // A completion observed while the window was backgrounded must not spend
+    // the debounce interval on a request the server is required to reject.
+    // Consume the queued completion only when a real foreground opportunity is
+    // available; if a request is already in flight, leave it queued so the
+    // completion handler below can issue the one bypassing follow-up.
+    if pendingCompletionBypass {
+      pendingCompletionWindowForeground = true
+      guard requestTask == nil else { return true }
+      pendingCompletionBypass = false
+      pendingCompletionWindowForeground = false
+      return requestMaterialization(windowForeground: true, bypassMinimumInterval: true)
+    }
+    return requestMaterialization(windowForeground: true)
+  }
+
+  /// Conversation processing completed while rich Chat is already visible.
+  /// This exact completion signal bypasses only the foreground debounce; all
+  /// route, owner, first-page, and in-flight gates remain authoritative.
+  @discardableResult
+  func meetingConversationDidComplete(windowForeground: Bool) -> Bool {
+    guard didLoadTranscriptFirstPage, driver?.materializationContext() != nil else { return false }
+    if requestTask != nil {
+      pendingCompletionBypass = true
+      pendingCompletionWindowForeground = pendingCompletionWindowForeground || windowForeground
+      return true
+    }
+    guard windowForeground else {
+      // Keep the completion durable in this coordinator until the shell gets a
+      // genuine foreground event. In particular, do not update lastAttemptAt
+      // for the server's intentionally empty background response.
+      pendingCompletionBypass = true
+      pendingCompletionWindowForeground = false
+      return true
+    }
+    return requestMaterialization(windowForeground: windowForeground, bypassMinimumInterval: true)
   }
 
   @discardableResult
-  private func requestMaterialization(windowForeground: Bool) -> Bool {
+  private func requestMaterialization(
+    windowForeground: Bool,
+    bypassMinimumInterval: Bool = false
+  ) -> Bool {
     guard
-      ChatFirstPromptMaterializationPolicy.shouldStart(
-        hasChatFirstMainChatContext: driver?.materializationContext() != nil,
-        transcriptFirstPageLoaded: didLoadTranscriptFirstPage,
-        isRunning: requestTask != nil,
-        lastAttemptAt: lastAttemptAt,
-        now: now()
-      ), let driver
+      let driver,
+      driver.materializationContext() != nil,
+      didLoadTranscriptFirstPage,
+      requestTask == nil,
+      bypassMinimumInterval
+        || ChatFirstPromptMaterializationPolicy.shouldStart(
+          hasChatFirstMainChatContext: true,
+          transcriptFirstPageLoaded: true,
+          isRunning: false,
+          lastAttemptAt: lastAttemptAt,
+          now: now())
     else { return false }
 
     lastAttemptAt = now()
@@ -90,6 +135,17 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
       await self.materialize(using: driver, windowForeground: windowForeground, generation: generation)
       if self.requestGeneration == generation {
         self.requestTask = nil
+        if self.pendingCompletionBypass {
+          let windowForeground = self.pendingCompletionWindowForeground
+          if windowForeground {
+            self.pendingCompletionBypass = false
+            self.pendingCompletionWindowForeground = false
+            _ = self.requestMaterialization(
+              windowForeground: true,
+              bypassMinimumInterval: true
+            )
+          }
+        }
       }
     }
     return true

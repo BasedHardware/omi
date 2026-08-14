@@ -9,7 +9,22 @@ import Foundation
 final class FloatingBarUsageLimiter: ObservableObject {
   static let shared = FloatingBarUsageLimiter()
 
-  private static let cachedPlanKey = "floatingBar_cachedPlan"
+  /// Local mirror for avoiding needless requests after the device budget is
+  /// exhausted. The backend independently resolves the subscription and is the
+  /// spend authority; this cached value can only make the client more permissive.
+  static func proactiveBudgetMultiplier(defaults: UserDefaults = .standard, now: Date = Date()) -> Int {
+    switch defaults.string(forKey: .floatingBarCachedPlan) {
+    case SubscriptionPlanType.architect.rawValue, SubscriptionPlanType.pro.rawValue:
+      return 4
+    case SubscriptionPlanType.operator.rawValue:
+      return 2
+    case SubscriptionPlanType.unlimited.rawValue:
+      let grandfatherUntil = defaults.double(forKey: .floatingBarCachedDesktopGrandfatherUntil)
+      return grandfatherUntil > now.timeIntervalSince1970 ? 2 : 1
+    default:
+      return 1
+    }
+  }
 
   @Published private(set) var hasPaidPlan: Bool = false
 
@@ -20,7 +35,7 @@ final class FloatingBarUsageLimiter: ObservableObject {
 
   init() {
     hasPaidPlan =
-      UserDefaults.standard.string(forKey: Self.cachedPlanKey).map { $0 != "basic" } ?? false
+      UserDefaults.standard.string(forKey: .floatingBarCachedPlan).map { $0 != "basic" } ?? false
   }
 
   /// Fetch the user's subscription plan and usage quota from the backend.
@@ -28,7 +43,10 @@ final class FloatingBarUsageLimiter: ObservableObject {
   func fetchPlan() async {
     do {
       let response = try await APIClient.shared.getUserSubscription()
-      applyPlan(plan: response.subscription.plan, status: response.subscription.status)
+      applyPlan(
+        plan: response.subscription.plan,
+        status: response.subscription.status,
+        desktopGrandfatherUntil: response.desktopGrandfatherUntil)
     } catch {
       log("FloatingBarUsageLimiter: failed to fetch plan: \(error.localizedDescription)")
     }
@@ -49,7 +67,11 @@ final class FloatingBarUsageLimiter: ObservableObject {
   }
 
   /// Update cached plan directly from an already-fetched subscription (no extra API call).
-  func applyPlan(plan: SubscriptionPlanType, status: SubscriptionStatusType) {
+  func applyPlan(
+    plan: SubscriptionPlanType,
+    status: SubscriptionStatusType,
+    desktopGrandfatherUntil: Int? = nil
+  ) {
     hasPaidPlan = plan != .basic && status == .active
     // A verified active subscription is authoritative over a stale
     // trial/usage flag. Neo uses the Free Desktop floor for non-premium
@@ -63,7 +85,19 @@ final class FloatingBarUsageLimiter: ObservableObject {
       serverQuota = nil
       optimisticDelta = 0
     }
-    UserDefaults.standard.set(plan.rawValue, forKey: Self.cachedPlanKey)
+    // Persist only an active entitlement. Caching an inactive paid plan would
+    // incorrectly restore both paid access and the larger proactive budget on
+    // the next launch before the subscription refresh completes.
+    UserDefaults.standard.set(
+      hasPaidPlan ? plan.rawValue : SubscriptionPlanType.basic.rawValue,
+      forKey: .floatingBarCachedPlan)
+    if hasPaidPlan, plan == .unlimited, let desktopGrandfatherUntil {
+      UserDefaults.standard.set(
+        desktopGrandfatherUntil,
+        forKey: .floatingBarCachedDesktopGrandfatherUntil)
+    } else {
+      UserDefaults.standard.removeObject(forKey: .floatingBarCachedDesktopGrandfatherUntil)
+    }
   }
 
   /// Reset all quota state on sign-out so the next user starts clean.
@@ -71,7 +105,8 @@ final class FloatingBarUsageLimiter: ObservableObject {
     serverQuota = nil
     optimisticDelta = 0
     hasPaidPlan = false
-    UserDefaults.standard.removeObject(forKey: Self.cachedPlanKey)
+    UserDefaults.standard.removeObject(forKey: .floatingBarCachedPlan)
+    UserDefaults.standard.removeObject(forKey: .floatingBarCachedDesktopGrandfatherUntil)
   }
 
   var isLimitReached: Bool {

@@ -8,7 +8,7 @@ import type {
 import type { ContextSnapshotProjection, OutboundMessage, OutboundMessageDraft } from "../protocol.js";
 import { AdapterRegistry } from "./adapter-registry.js";
 import { generateAgentId } from "./sqlite-store.js";
-import { AdapterRuntimeError, failureFromError, type RuntimeFailure } from "./failures.js";
+import { AdapterRuntimeError, attachWorkerRecycle, failureFromError, type RuntimeFailure } from "./failures.js";
 import {
   clearOwnerSurfaceState,
   importLegacyMainChatSessions,
@@ -142,6 +142,7 @@ import type {
   AgentRuntimeKernelOptions,
 } from "./kernel-types.js";
 import { ExternalSurfaceAuthorityError, StaleAdapterBindingError } from "./kernel-types.js";
+import { AdapterWorkerRecycledError } from "./worker-pool.js";
 import { providerBoundaryForAdapter, resolveAdapterWithinBoundary } from "./execution-policy.js";
 import type { SurfaceRef } from "./surface-session.js";
 
@@ -973,6 +974,7 @@ export class KernelCore {
       let binding: AdapterBinding;
       let handle: AdapterBindingHandle;
       let bindingResolutionProtectedBindingId: string | null = null;
+      let adapterDispatchStarted = false;
       try {
         assertExecutionAuthority();
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
@@ -1122,6 +1124,7 @@ export class KernelCore {
             { capabilityRef: toolCapability.capabilityRef },
           );
           this.markAttemptRunning(attempt, binding);
+          adapterDispatchStarted = true;
           return worker.adapter.executeAttempt(
             {
               sessionId: accepted.session.sessionId,
@@ -1141,7 +1144,38 @@ export class KernelCore {
             (event) => this.persistAdapterEvent(accepted.session.sessionId, accepted.run.runId, attempt.attemptId, event),
             abortController.signal,
           );
-        });
+        }, adapterId === "pi-mono" ? {
+          recycleWorkerOnError: true,
+          shouldRecycleWorkerOnError: () => (
+            adapterDispatchStarted
+            && !input.authoritySignal?.aborted
+            && !abortController.signal.aborted
+            && this.runStatus(accepted.run.runId) !== "cancelling"
+            && this.readAttempt(attempt.attemptId).status !== "cancelling"
+          ),
+          onWorkerBindingInvalidated: () => {
+            this.markBindingStale(binding, attempt, "pinned_worker_recycled_after_execution_error");
+          },
+          onWorkerRecycled: (_bindingId, outcome) => {
+            this.appendEvent({
+              sessionId: accepted.session.sessionId,
+              runId: accepted.run.runId,
+              attemptId: attempt.attemptId,
+              type: "worker.recycled",
+              payload: {
+                adapterId,
+                recoveryAction: "worker_recycled",
+                recoveryOutcome: !outcome.stopSucceeded
+                  ? "stop_failed"
+                  : outcome.bindingInvalidationSucceeded
+                    ? "recovered"
+                    : "binding_stale_failed",
+                bindingStalePersisted: outcome.bindingInvalidationSucceeded,
+                retryDisposition: "next_send",
+              },
+            });
+          },
+        } : undefined);
         this.activeExecutions.delete(accepted.run.runId);
         assertExecutionAuthority();
         if (handle.bindingId && nextContextDelivery) {
@@ -1185,9 +1219,13 @@ export class KernelCore {
           }
           break;
         }
-        if (isStaleBindingError(error)) {
-          this.markBindingStale(binding, attempt, messageFrom(error));
-          const failure = failureFromError(error, {
+        const workerRecovery = error instanceof AdapterWorkerRecycledError ? error : null;
+        const executionError = workerRecovery?.originalError ?? error;
+        if (isStaleBindingError(executionError)) {
+          if (!workerRecovery?.bindingInvalidationSucceeded) {
+            this.markBindingStale(binding, attempt, messageFrom(executionError));
+          }
+          const failure = failureFromError(executionError, {
             code: "stale_binding",
             source: "adapter_execution",
             adapterId: attempt.adapterId,
@@ -1198,19 +1236,31 @@ export class KernelCore {
           resumeFromAttemptId = attempt.attemptId;
           continue;
         }
-        if (await this.tryRecoverAttempt(input, attempt, error, "adapter_execution_failed", attemptNo < maxAttempts)) {
+        if (
+          !workerRecovery
+          && await this.tryRecoverAttempt(input, attempt, error, "adapter_execution_failed", attemptNo < maxAttempts)
+        ) {
           retryReason = "recoverable_error";
           resumeFromAttemptId = attempt.attemptId;
           continue;
         }
         const wasCancelling = this.runStatus(accepted.run.runId) === "cancelling";
         const status: AttemptStatus = wasCancelling ? "cancelled" : "failed";
-        const failure = wasCancelling ? null : failureFromError(error, {
-          code: "adapter_execution_failed",
-          source: "adapter_execution",
-          adapterId: attempt.adapterId,
-          retryable: false,
-        });
+        const baseFailure = wasCancelling ? null : failureFromError(
+          workerRecovery?.originalError ?? error,
+          {
+            code: "adapter_execution_failed",
+            source: "adapter_execution",
+            adapterId: attempt.adapterId,
+            retryable: Boolean(workerRecovery),
+          },
+        );
+        const failure = baseFailure && workerRecovery
+          ? attachWorkerRecycle(baseFailure, {
+            stopSucceeded: workerRecovery.stopSucceeded,
+            bindingInvalidationSucceeded: workerRecovery.bindingInvalidationSucceeded,
+          })
+          : baseFailure;
         this.finishAttemptAndRun({
           sessionId: accepted.session.sessionId,
           runId: accepted.run.runId,

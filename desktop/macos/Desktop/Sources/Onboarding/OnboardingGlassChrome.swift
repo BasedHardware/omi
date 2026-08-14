@@ -58,6 +58,12 @@ enum OnboardingGlass {
   /// How far a step drifts as it arrives, as a fraction of the card's height.
   static let stepOffsetFraction: CGFloat = 0.015
 
+  /// Extra scroll-content runway below the final row. The progress band is a sibling of the
+  /// scroll view, but a `scrollTo` sentinel at the content edge can still place a tall widget's
+  /// last control flush against that sibling while SwiftUI is settling its layout. Keeping more
+  /// than one band's height here makes the separation structural rather than timing-dependent.
+  static let scrollContentBottomPadding: CGFloat = InkLayout.progressBandHeight + 12
+
   /// The alpha an inactive dot is set at.
   ///
   /// Deliberately an opacity on `Ink.primary` rather than `Ink.secondary`: this is a *fill*, not

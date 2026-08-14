@@ -31,15 +31,19 @@ extension FloatingControlBarManager {
     }
   }
 
+  @discardableResult
   static func appendAdviceNotification(
     _ notification: FloatingBarNotification,
     to queue: inout [FloatingBarNotification]
-  ) {
+  ) -> FloatingBarNotification? {
+    var evicted: FloatingBarNotification?
     if queue.count >= Self.maxPendingAdviceNotifications {
-      let evicted = queue.removeFirst()
-      recordQueuedInsightOutcomes([evicted], reason: .queueOverflow)
+      let removed = queue.removeFirst()
+      evicted = removed
+      recordQueuedInsightOutcomes([removed], reason: .queueOverflow)
     }
     queue.append(notification)
+    return evicted
   }
 
   static func dequeueCurrentOwnerAdviceNotification(

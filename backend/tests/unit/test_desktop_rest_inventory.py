@@ -180,7 +180,6 @@ KNOWN_MISSING_ROUTES: Set[str] = {
     '/v1/personas/generate-prompt',
     '/v3/memories/mark-all-read',
     '/v3/memories/visibility',  # backend has /v3/memories/{memory_id}/visibility
-    '/v3/memories/{param}/read',
     '/v3/memory-imports/batch',  # backend route exists but lacks response_model export
     # These backend routes exist but return unmodeled (loose) responses, so
     # adding them to the app-client surface would regress the strict

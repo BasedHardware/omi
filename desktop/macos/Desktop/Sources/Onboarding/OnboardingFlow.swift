@@ -234,11 +234,13 @@ enum OnboardingFlow {
     "onboardingStep",
     "onboardingFurthestStep",
     "onboardingHowDidYouHearSource",
-    // Second Brain onboarding keys: the resume step (SBOnboardingModel.resumeStepKey)
-    // and the picked role (DefaultsKey.onboardingRole). Both are account-scoped —
-    // without them here a mid-onboarding sign-out leaks the prior user's resume
-    // point + role to the next account on the same Mac.
+    // Second Brain onboarding keys: the resume step (SBOnboardingModel.resumeStepKey),
+    // the shortcut-completion flag (SBOnboardingModel.shortcutsCompletedKey), and the
+    // picked role (DefaultsKey.onboardingRole). All are account-scoped — without them
+    // here a mid-onboarding sign-out leaks the prior user's resume point, shortcut-
+    // completion status, and role to the next account on the same Mac.
     "sbOnboardingResumeStep",
+    "sbOnboardingShortcutsCompleted",
     "onboardingRole",
     "onboardingGoalDraft",
     "onboardingJustCompleted",

@@ -1,7 +1,7 @@
 import Combine
 import Foundation
 
-/// The narrow canonical-goal contract shared by the cohort-only Chat renderers
+/// The narrow canonical-goal contract shared by the universal Chat renderers
 /// and Goals destination. It intentionally has no relationship to the
 /// Dashboard recommendation/outbox state.
 protocol CanonicalGoalsClient: AnyObject, Sendable {
@@ -28,7 +28,7 @@ protocol CanonicalGoalsClient: AnyObject, Sendable {
 
 extension APIClient: CanonicalGoalsClient {}
 
-/// Root-owned canonical projection for the chat-first cohort. The store accepts
+/// Root-owned canonical projection for universal Chat-first. The store accepts
 /// only the immutable capability sampled by the root shell; it never reads a
 /// local rollout preference or re-decides the cohort from cached goal data.
 @MainActor
