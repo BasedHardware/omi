@@ -7,6 +7,7 @@
 #
 #   ./scripts/dev-run-macos.sh --route chat        # LIVE Chat against the local backend
 #   ./scripts/dev-run-macos.sh --api http://127.0.0.1:4851 --route home
+#   ./scripts/dev-run-macos.sh --generation legacy # LIVE against the legacy Memories UI
 #   ./scripts/dev-run-macos.sh --accept            # headless acceptance, exits nonzero on zero traffic
 #
 # Env (all overridable, all with local-sane defaults — nothing is hardcoded at
@@ -30,6 +31,7 @@ core="$(cd "$here/../.." && pwd)"
 api_base="${OMI_API_BASE_URL:-http://127.0.0.1:4851}"
 accept=0
 route="home"
+generation="platform"
 evidence_out=""
 run_id_arg=""
 fixture=""
@@ -44,6 +46,7 @@ while (( $# )); do
   case "$1" in
     --api) api_base="${2:?--api needs a URL}"; shift 2 ;;
     --route) route="${2:?--route needs a name}"; shift 2 ;;
+    --generation) generation="${2:?--generation needs legacy or platform}"; shift 2 ;;
     --accept) accept=1; shift ;;
     --evidence-out) evidence_out="${2:?--evidence-out needs a path}"; shift 2 ;;
     --run-id) run_id_arg="${2:?--run-id needs a raw run id}"; shift 2 ;;
@@ -137,6 +140,13 @@ case "$route" in
     exit 2
     ;;
 esac
+case "$generation" in
+  legacy|platform) ;;
+  *)
+    echo "ERROR: --generation must be legacy or platform" >&2
+    exit 2
+    ;;
+esac
 
 if (( capture_mode )); then
   # Fixture captures are a deliberately separate branch: no API URL policy,
@@ -224,10 +234,9 @@ export OMI_SURFACE_PORT="$port"
 # Inherited overrides would let main.swift bypass the frozen candidate origin
 # or load stale/remote content. The QA launcher owns the surface selection.
 unset OMI_SURFACE_URL OMI_SURFACE_PATH
-surface_query="route=${route}&platform=desktop"
-if [[ -n "$evidence_out" ]]; then
-  surface_query="${surface_query}&generation=platform"
-fi
+# Live local production talks to the platform Memories door. Legacy stays
+# reachable with `--generation legacy` (or `generation=legacy` in a query).
+surface_query="route=${route}&platform=desktop&generation=${generation}"
 export OMI_SURFACE_QUERY="$surface_query"
 export OMI_API_BASE_URL="$api_base"
 

@@ -9,6 +9,7 @@ import {
   resolveProductionRoute,
   resolveSettingsReturnRoute,
 } from "../src/production/production-routing.ts";
+import { parseGenerationSelectionFromEntries } from "@omi-core/domain";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => readFile(resolve(root, relative), "utf8");
@@ -83,6 +84,24 @@ test("an unknown explicit route is unsupported instead of falling through", () =
   assert.equal(route("memroies", null, "platform"), "unsupported");
   // red-proof: return Home or Memories from the unknown-route branch. This
   // reproduces a truthful-looking page for a destination the host never loaded.
+});
+
+test("a live launcher query without generation selects legacy Memories; generation=platform selects the served door", () => {
+  const omitted = parseGenerationSelectionFromEntries(new URLSearchParams("route=memories&platform=desktop").entries());
+  assert.equal(omitted.selection.memories, "legacy");
+  assert.equal(route("memories", null, omitted.selection.memories), "memories");
+  const live = parseGenerationSelectionFromEntries(
+    new URLSearchParams("route=memories&platform=desktop&generation=platform").entries(),
+  );
+  assert.equal(live.selection.memories, "platform");
+  assert.equal(route("memories", null, live.selection.memories), "memories");
+  const reachableLegacy = parseGenerationSelectionFromEntries(
+    new URLSearchParams("route=memories&platform=desktop&generation=legacy").entries(),
+  );
+  assert.equal(reachableLegacy.selection.memories, "legacy");
+  // red-proof: a plain launch that omits `generation=` lands on the legacy
+  // Memories UI while the platform memories door serves synthesized rows — "Temporarily
+  // unavailable" on screen, 200 with synthesized rows on the wire.
 });
 
 test("mobile Settings return routes fail closed to Home", () => {

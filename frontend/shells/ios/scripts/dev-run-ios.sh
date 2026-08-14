@@ -5,6 +5,7 @@
 #   ./scripts/dev-run-ios.sh                      # LIVE against registered local production
 #   ./scripts/dev-run-ios.sh --api http://127.0.0.1:4851
 #   ./scripts/dev-run-ios.sh --route chat
+#   ./scripts/dev-run-ios.sh --generation legacy  # LIVE against the legacy Memories UI
 #   ./scripts/dev-run-ios.sh --fixture conversations   # FIXTURE, bridge bypassed
 #   ./scripts/dev-run-ios.sh --device <udid>
 #
@@ -35,6 +36,7 @@ fixture_accessibility="none"
 device=""
 accept=0
 route="home"
+generation="platform"
 evidence_out=""
 run_id_arg=""
 capture_out=""
@@ -62,6 +64,7 @@ while (( $# )); do
     --accessibility) fixture_accessibility="${2:?--accessibility needs a mode}"; shift 2 ;;
     --device) device="${2:?--device needs a udid}"; shift 2 ;;
     --route) route="${2:?--route needs a production route}"; shift 2 ;;
+    --generation) generation="${2:?--generation needs legacy or platform}"; shift 2 ;;
     --evidence-out) evidence_out="${2:?--evidence-out needs a host path}"; shift 2 ;;
     --run-id) run_id_arg="${2:?--run-id needs a raw run id}"; shift 2 ;;
     --capture-out) capture_out="${2:?--capture-out needs a PNG path}"; shift 2 ;;
@@ -140,6 +143,10 @@ fi
 case "$route" in
   home|memories|conversations|tasks|folders|chat|settings|listen) ;;
   *) echo "ERROR: --route must be one of home|memories|conversations|tasks|folders|chat|settings|listen." >&2; exit 2 ;;
+esac
+case "$generation" in
+  legacy|platform) ;;
+  *) echo "ERROR: --generation must be legacy or platform." >&2; exit 2 ;;
 esac
 api_host="$(/usr/bin/python3 -c 'import sys, urllib.parse
 try:
@@ -237,10 +244,9 @@ else
     exit 1
   fi
   # The simulator shares the host network stack, so 127.0.0.1 reaches the host.
-  surface_query="route=${route}&platform=mobile"
-  if [[ -n "$evidence_out" ]]; then
-    surface_query="${surface_query}&generation=platform"
-  fi
+  # Live local production talks to the platform Memories door. Legacy stays
+  # reachable with `--generation legacy`.
+  surface_query="route=${route}&platform=mobile&generation=${generation}"
   defines+=(
     --dart-define=SURFACE_QUERY="$surface_query"
     --dart-define=OMI_API_BASE_URL="$api_base"
