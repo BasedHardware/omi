@@ -350,20 +350,33 @@ final class OmiBleManager: NSObject {
         }
     }
 
-    // MARK: - RSSI Keep-Alive
+    // MARK: - RSSI diagnostics polling
 
-    private func startRssiKeepAlive(for peripheral: CBPeripheral) {
-        stopRssiKeepAlive()
+    /// Periodic `readRSSI` is only for the diagnostics graph. It is not a
+    /// connection keep-alive — a 3s timer in the background costs radio/CPU
+    /// and does not prevent `connection_timeout`.
+    func setRssiStreamingEnabled(_ enabled: Bool, uuid: String) {
+        isRssiStreamingEnabled = enabled
+        if enabled, let peripheral = peripherals[uuid], peripheral.state == .connected {
+            startRssiPolling(for: peripheral)
+        } else {
+            stopRssiPolling()
+        }
+    }
+
+    private func startRssiPolling(for peripheral: CBPeripheral) {
+        stopRssiPolling()
         rssiTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self, weak peripheral] _ in
             guard let peripheral = peripheral, peripheral.state == .connected else {
-                self?.stopRssiKeepAlive()
+                self?.stopRssiPolling()
                 return
             }
             peripheral.readRSSI()
         }
+        peripheral.readRSSI()
     }
 
-    private func stopRssiKeepAlive() {
+    private func stopRssiPolling() {
         rssiTimer?.invalidate()
         rssiTimer = nil
     }
@@ -425,7 +438,7 @@ final class OmiBleManager: NSObject {
     private static func classifyRssiTrend(samples: [(ts: Int64, rssi: Int64)], nowMs: Int64) -> String {
         let windowStart = nowMs - rssiTrendWindowMs
         let recent = samples.filter { $0.ts >= windowStart }
-        // No recent samples — keep-alive wasn't running, so we can't say.
+        // No recent samples — diagnostics RSSI polling was off, so we can't say.
         if recent.isEmpty { return "gap" }
         if recent.count < 3 { return "unknown" }
         // Compare the average of the oldest third to the newest third. A drop of
@@ -634,7 +647,7 @@ final class OmiBleManager: NSObject {
     // MARK: - Audio Batch Helpers
 
     private func cleanupPeripheral(_ peripheralUuid: String) {
-        stopRssiKeepAlive()
+        stopRssiPolling()
         discoveredServices.removeValue(forKey: peripheralUuid)
 
         // Clean up pending completions
@@ -828,7 +841,12 @@ extension OmiBleManager: CBPeripheralDelegate {
             
             flutterApi?.onDeviceReady(peripheralUuid: uuid, services: bleServices) { _ in }
             LimitlessFlashDrainEngine.shared.onDeviceReady(uuid)
-            startRssiKeepAlive(for: peripheral)
+            // One sample for disconnect annotation. Do not start a 3s timer
+            // here — that was a fake keep-alive and a background battery cost.
+            peripheral.readRSSI()
+            if isRssiStreamingEnabled {
+                startRssiPolling(for: peripheral)
+            }
         }
     }
 
