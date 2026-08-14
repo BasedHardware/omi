@@ -47,11 +47,16 @@ export function PlansSheet({
   const isCanceling_ = subscription?.cancel_at_period_end;
 
   useEffect(() => {
+    let cancelled = false;
+
     if (open) {
       // Use cached plans if available, otherwise fetch
       if (cachedPlans && cachedPlans.length > 0) {
+        if (cancelled) return;
         setPricingOptions(cachedPlans);
-        const activePlan = cachedPlans.find((p) => p.is_active);
+        const activePlan = cachedPlans.find(
+          (p) => p.is_active || p.id === subscription?.current_price_id,
+        );
         if (activePlan) {
           setSelectedPriceId(activePlan.id);
         } else {
@@ -59,20 +64,26 @@ export function PlansSheet({
         }
         setIsLoadingPlans(false);
       } else {
-        loadPlans();
+        loadPlans(cancelled);
       }
     }
-  }, [open, cachedPlans]);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, cachedPlans, subscription?.current_price_id]);
 
-  const loadPlans = async () => {
+  const loadPlans = async (cancelled = false) => {
     setIsLoadingPlans(true);
     setError(null);
     try {
       const response = await getAvailablePlans();
+      if (cancelled) return;
       if (response && response.plans) {
         setPricingOptions(response.plans);
         // Pre-select current active plan or first plan
-        const activePlan = response.plans.find((p) => p.is_active);
+        const activePlan = response.plans.find(
+          (p) => p.is_active || p.id === subscription?.current_price_id,
+        );
         if (activePlan) {
           setSelectedPriceId(activePlan.id);
         } else if (response.plans.length > 0) {
@@ -96,6 +107,11 @@ export function PlansSheet({
       // Find if selected plan is the currently active one
       const selectedOption = pricingOptions.find((p) => p.id === selectedPriceId);
       const isCurrentPlan = selectedOption?.is_active;
+
+      if (isCanceling_ && selectedPriceId !== subscription?.current_price_id) {
+        setError('Plan changes are available after your current subscription ends.');
+        return;
+      }
 
       // If already subscribed and selecting a different plan, use upgrade endpoint
       if (isUnlimited && !isCanceling_ && !isCurrentPlan) {
@@ -268,7 +284,9 @@ export function PlansSheet({
                         <div className="grid grid-cols-2 gap-3">
                           {sortedOptions.map((option) => {
                             const isSelected = selectedPriceId === option.id;
-                            const isCurrent = option.is_active;
+                            const isCurrent =
+                              option.is_active ||
+                              option.id === subscription?.current_price_id;
                             const isAnnual =
                               option.interval === 'year' ||
                               option.title?.toLowerCase().includes('annual');
@@ -277,11 +295,15 @@ export function PlansSheet({
                               <button
                                 key={option.id}
                                 onClick={() => setSelectedPriceId(option.id)}
+                                disabled={isCanceling_ && !isCurrent}
                                 className={cn(
                                   'relative p-4 rounded-xl border-2 text-left transition-all',
                                   isSelected
                                     ? 'border-white/25 bg-white/[0.08]'
                                     : 'border-bg-tertiary hover:border-bg-quaternary bg-bg-tertiary/50',
+                                  isCanceling_ &&
+                                    !isCurrent &&
+                                    'cursor-not-allowed opacity-50',
                                 )}
                               >
                                 {isAnnual && (
@@ -312,6 +334,13 @@ export function PlansSheet({
                             );
                           })}
                         </div>
+
+                        {isCanceling_ && subscription?.current_period_end && (
+                          <p className="text-sm text-text-tertiary">
+                            You can reactivate your current plan now. Plan changes are
+                            available after {formatDate(subscription.current_period_end)}.
+                          </p>
+                        )}
 
                         {/* Features List */}
                         <div className="space-y-2">
@@ -371,6 +400,17 @@ export function PlansSheet({
                           )}
                         </button>
 
+                        {!isUnlimited && subscription?.stripe_subscription_id && (
+                          <button
+                            onClick={handleManagePayment}
+                            disabled={isLoading}
+                            className="w-full flex items-center justify-center gap-2 py-2.5 text-text-secondary hover:text-text-primary transition-colors"
+                          >
+                            <CreditCard className="w-4 h-4" />
+                            <span className="text-sm">Manage Billing &amp; Invoices</span>
+                          </button>
+                        )}
+
                         {/* Secondary Actions */}
                         {isUnlimited && (
                           <div className="pt-4 border-t border-bg-tertiary space-y-3">
@@ -380,7 +420,9 @@ export function PlansSheet({
                               className="w-full flex items-center justify-center gap-2 py-2.5 text-text-secondary hover:text-text-primary transition-colors"
                             >
                               <CreditCard className="w-4 h-4" />
-                              <span className="text-sm">Manage Payment Method</span>
+                              <span className="text-sm">
+                                Manage Billing &amp; Invoices
+                              </span>
                             </button>
 
                             {!isCanceling_ && (

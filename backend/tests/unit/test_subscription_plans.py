@@ -29,9 +29,12 @@ def subscription_module():
     """Load a fresh ``utils.subscription`` against stubbed circular-import deps."""
     announcements_stub = ModuleType("database.announcements")
     announcements_stub.compare_versions = lambda a, b: 0
+    client_stub = ModuleType("database._client")
+    client_stub.get_customer_firestore_client = MagicMock()
 
     fakes = {
         "database.announcements": announcements_stub,
+        "database._client": client_stub,
         "database.users": ModuleType("database.users"),
         "database.user_usage": ModuleType("database.user_usage"),
     }
@@ -113,6 +116,101 @@ def test_architect_is_treated_as_paid_unlimited_plan(subscription_module):
 def test_basic_plan_features_include_unlimited_memories(subscription_module):
     features = subscription_module.get_plan_features(PlanType.basic)
     assert "Unlimited memories" in features
+
+
+def test_cancellation_is_pending_until_period_end(subscription_module):
+    subscription = SimpleNamespace(cancel_at_period_end=True, current_period_end=200)
+
+    assert subscription_module.is_pending_cancellation(subscription, now=199)
+    assert not subscription_module.is_pending_cancellation(subscription, now=200)
+
+
+def test_missing_period_end_is_still_pending_cancellation(subscription_module):
+    subscription = SimpleNamespace(cancel_at_period_end=True, current_period_end=None)
+
+    assert subscription_module.is_pending_cancellation(subscription, now=200)
+
+
+def test_can_pay_basic_stale_defers_plan_change_until_cancellation_ends(monkeypatch, subscription_module):
+    """A cancel-at-period-end Stripe subscription must block a different target
+    price even when the local Firestore record is missing/basic (lag or recovery).
+    Same-price reactivation stays allowed in that branch."""
+    sub = subscription_module
+
+    # Firestore record is basic/stale -> no pending cancellation there.
+    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
+    sub.users_db.get_user_valid_subscription = lambda uid: None
+    sub.users_db.get_stripe_customer_id = lambda uid: "cus_x"
+    # No active (non-canceling) subscription, so the basic branch proceeds.
+    monkeypatch.setattr(sub, "_has_active_stripe_subscription", lambda uid: False)
+
+    pending = SimpleNamespace(
+        plan="paid",
+        status="active",
+        cancel_at_period_end=True,
+        current_period_end=2_000_000_000,
+        current_price_id="price_current",
+    )
+    monkeypatch.setattr(sub, "find_active_paid_subscription_for_user", lambda uid: pending)
+    monkeypatch.setattr(
+        sub,
+        "price_ids_match_plan_and_interval",
+        lambda current_price_id, target_price_id: current_price_id == target_price_id,
+    )
+
+    # Different target price must be deferred even though Firestore is basic.
+    can_pay, reason = sub.can_user_make_payment("u1", target_price_id="price_target")
+    assert can_pay is False
+    assert "after the current subscription ends" in reason
+
+    # Same-price reactivation is allowed.
+    can_pay, reason = sub.can_user_make_payment("u1", target_price_id="price_current")
+    assert can_pay is True
+    assert "reactivate" in reason
+
+
+def test_legacy_price_matches_current_price_with_same_plan_and_interval(monkeypatch, subscription_module):
+    sub = subscription_module
+    legacy_price_id = next(iter(sub.LEGACY_PRICE_MAP))
+    monkeypatch.setenv("STRIPE_UNLIMITED_MONTHLY_PRICE_ID", "price_unlimited_monthly")
+    monkeypatch.setenv("STRIPE_UNLIMITED_ANNUAL_PRICE_ID", "price_unlimited_annual")
+
+    legacy_price = MagicMock()
+    legacy_price.recurring.interval = "month"
+    monkeypatch.setattr(sub.stripe.Price, "retrieve", MagicMock(return_value=legacy_price))
+
+    assert sub.price_ids_match_plan_and_interval(legacy_price_id, "price_unlimited_monthly")
+    assert not sub.price_ids_match_plan_and_interval(legacy_price_id, "price_unlimited_annual")
+
+
+def test_price_interval_lookup_handles_price_without_recurring(monkeypatch, subscription_module):
+    sub = subscription_module
+    legacy_price_id = next(iter(sub.LEGACY_PRICE_MAP))
+    monkeypatch.setenv("STRIPE_UNLIMITED_MONTHLY_PRICE_ID", "price_unlimited_monthly")
+    monkeypatch.setenv("STRIPE_UNLIMITED_ANNUAL_PRICE_ID", "price_unlimited_annual")
+
+    # A legacy price whose Stripe object carries no recurring block (retrieved
+    # only after the known plan definitions fail to match) must not crash the
+    # interval lookup — it simply cannot be matched.
+    price_without_recurring = MagicMock()
+    del price_without_recurring.recurring
+    monkeypatch.setattr(sub.stripe.Price, "retrieve", MagicMock(return_value=price_without_recurring))
+
+    assert not sub.price_ids_match_plan_and_interval(legacy_price_id, "price_unlimited_monthly")
+    assert not sub.price_ids_match_plan_and_interval(legacy_price_id, "price_unlimited_annual")
+
+
+def test_reconcile_basic_subscription_without_stored_stripe_id(monkeypatch, subscription_module):
+    sub = subscription_module
+    stored = SimpleNamespace(plan=PlanType.basic, stripe_subscription_id=None, current_period_end=None)
+    recovered = MagicMock()
+    recovered.model_dump.return_value = {"stripe_subscription_id": "sub_recovered"}
+    users_db = SimpleNamespace(update_user_subscription=MagicMock())
+    monkeypatch.setattr(sub, "users_db", users_db)
+    monkeypatch.setattr(sub, "find_active_paid_subscription_for_user", lambda uid: recovered)
+
+    assert sub.reconcile_basic_plan_with_stripe("u1", stored) is recovered
+    users_db.update_user_subscription.assert_called_once_with("u1", {"stripe_subscription_id": "sub_recovered"})
 
 
 def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subscription_module):

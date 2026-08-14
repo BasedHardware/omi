@@ -901,17 +901,20 @@ function UsageSectionContent({
   const [isCanceling, setIsCanceling] = useState(false);
   const [showUpgradeOptions, setShowUpgradeOptions] = useState(false);
 
-  // Set initial selected price when plans load
+  // Set initial selected price when plans load, and keep it in sync when the
+  // subscription's current price changes (e.g. after a plan change or
+  // cancellation) so a pending-cancellation user isn't left on a stale option.
+  const currentPriceId = subscription?.current_price_id;
   useEffect(() => {
-    if (cachedPlans && cachedPlans.length > 0 && !selectedPriceId) {
-      const activePlan = cachedPlans.find((p) => p.is_active);
+    if (cachedPlans && cachedPlans.length > 0) {
+      const activePlan = cachedPlans.find((p) => p.is_active || p.id === currentPriceId);
       if (activePlan) {
         setSelectedPriceId(activePlan.id);
-      } else {
+      } else if (!selectedPriceId) {
         setSelectedPriceId(cachedPlans[0].id);
       }
     }
-  }, [cachedPlans, selectedPriceId]);
+  }, [cachedPlans, currentPriceId]);
 
   const formatDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -996,7 +999,14 @@ function UsageSectionContent({
     setError(null);
 
     try {
-      const isCurrentPlan = selectedOption?.is_active;
+      const isCurrentPlan =
+        selectedOption?.is_active ||
+        selectedOption?.id === subscription?.current_price_id;
+
+      if (isCancelingSubscription && selectedPriceId !== subscription?.current_price_id) {
+        setError('Plan changes are available after your current subscription ends.');
+        return;
+      }
 
       if (isUnlimited && !isCancelingSubscription && !isCurrentPlan) {
         const result = await upgradeSubscription(selectedPriceId);
@@ -1033,6 +1043,11 @@ function UsageSectionContent({
       const result = await getCustomerPortal();
       if (result?.url) {
         window.open(result.url, '_blank');
+        const handleFocus = () => {
+          onSubscriptionUpdate();
+          window.removeEventListener('focus', handleFocus);
+        };
+        window.addEventListener('focus', handleFocus);
       } else {
         setError('Failed to open payment portal');
       }
@@ -1110,12 +1125,23 @@ function UsageSectionContent({
                       <p className="text-sm text-text-tertiary">Free tier</p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setShowUpgradeOptions(true)}
-                    className="px-5 py-2.5 bg-text-primary hover:bg-text-primary/90 text-bg-primary text-sm font-semibold rounded-xl transition-all shadow-lg shadow-black/40"
-                  >
-                    Upgrade to Unlimited
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowUpgradeOptions(true)}
+                      className="px-5 py-2.5 bg-text-primary hover:bg-text-primary/90 text-bg-primary text-sm font-semibold rounded-xl transition-all shadow-lg shadow-black/40"
+                    >
+                      Upgrade to Unlimited
+                    </button>
+                    {subscription?.stripe_subscription_id && (
+                      <button
+                        onClick={handleManagePayment}
+                        disabled={isLoading}
+                        className="px-4 py-2.5 border border-bg-quaternary text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
+                      >
+                        Billing &amp; Invoices
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Monthly Listening Usage */}
@@ -1200,6 +1226,14 @@ function UsageSectionContent({
                   </div>
                 </div>
               </Card>
+
+              {/* Billing error surfaced in the Basic view (not only the upgrade panel) */}
+              {error && !showUpgradeOptions && (
+                <div className="flex items-center gap-2 p-3 bg-red-500/10 rounded-xl border border-red-500/20">
+                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <p className="text-sm text-red-400">{error}</p>
+                </div>
+              )}
 
               {/* Upgrade Options (shown when clicked) */}
               {showUpgradeOptions && (
@@ -1372,7 +1406,8 @@ function UsageSectionContent({
                 <div className="grid grid-cols-2 gap-3">
                   {sortedOptions.map((option) => {
                     const isSelected = selectedPriceId === option.id;
-                    const isCurrent = option.is_active;
+                    const isCurrent =
+                      option.is_active || option.id === subscription?.current_price_id;
                     const isAnnual =
                       option.interval === 'year' ||
                       option.title?.toLowerCase().includes('annual');
@@ -1381,11 +1416,15 @@ function UsageSectionContent({
                       <button
                         key={option.id}
                         onClick={() => setSelectedPriceId(option.id)}
+                        disabled={isCancelingSubscription && !isCurrent}
                         className={cn(
                           'relative p-4 rounded-xl border-2 text-left transition-all',
                           isSelected
                             ? 'border-white/25 bg-white/[0.08]'
                             : 'border-bg-tertiary hover:border-bg-quaternary bg-bg-tertiary/50',
+                          isCancelingSubscription &&
+                            !isCurrent &&
+                            'cursor-not-allowed opacity-50',
                         )}
                       >
                         {isAnnual && (
@@ -1422,6 +1461,13 @@ function UsageSectionContent({
                 </div>
               )}
 
+              {isCancelingSubscription && subscription?.current_period_end && (
+                <p className="text-sm text-text-tertiary">
+                  You can reactivate your current plan now. Plan changes are available
+                  after {formatDate(subscription.current_period_end)}.
+                </p>
+              )}
+
               {/* Features List */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium text-text-secondary">Features:</h4>
@@ -1449,7 +1495,11 @@ function UsageSectionContent({
                 disabled={
                   isLoading ||
                   !selectedPriceId ||
-                  (!isCancelingSubscription && selectedOption?.is_active)
+                  (!isCancelingSubscription &&
+                    (selectedOption?.is_active ||
+                      selectedOption?.id === subscription?.current_price_id)) ||
+                  (isCancelingSubscription &&
+                    selectedPriceId !== subscription?.current_price_id)
                 }
                 className={cn(
                   'w-full py-3 rounded-xl font-medium transition-colors',
@@ -1465,7 +1515,8 @@ function UsageSectionContent({
                   </span>
                 ) : isCancelingSubscription ? (
                   'Reactivate Subscription'
-                ) : selectedOption?.is_active ? (
+                ) : selectedOption?.is_active ||
+                  selectedOption?.id === subscription?.current_price_id ? (
                   'Current Plan'
                 ) : (
                   'Change Plan'
@@ -1480,7 +1531,7 @@ function UsageSectionContent({
                   className="w-full flex items-center justify-center gap-2 py-2.5 text-text-secondary hover:text-text-primary transition-colors"
                 >
                   <CreditCard className="w-4 h-4" />
-                  <span className="text-sm">Manage Payment Method</span>
+                  <span className="text-sm">Manage Billing &amp; Invoices</span>
                 </button>
 
                 {!isCancelingSubscription && (
