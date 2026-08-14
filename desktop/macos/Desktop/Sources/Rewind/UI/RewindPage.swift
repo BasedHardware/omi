@@ -92,7 +92,8 @@ struct RewindPage: View {
     return names
   }
 
-  var body: some View {
+  @ViewBuilder
+  private var pageContent: some View {
     ZStack {
       // Background
       Color.clear.ignoresSafeArea()
@@ -147,153 +148,212 @@ struct RewindPage: View {
         .padding(.bottom, RewindSurfaceLayout.bottomGap)
       }
     }
-    .glassContent()
-    // The page answers arrow keys wherever the pointer is, so it holds keyboard focus itself. The
-    // timeline track owns scroll gestures directly. This container is not a control, though: the
-    // system focus effect around it was a 1 pt accent rectangle on the window's edges, which on a
-    // window with no visible extent is a blue rectangle on the wallpaper. See
-    // `shellPageKeyboardTarget`.
-    .shellPageKeyboardTarget($isPageFocused)
-    .task {
-      await viewModel.loadInitialData()
-    }
-    .onAppear {
-      isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
-      screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
-      isPageFocused = true
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
-      let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
-      let state = RewindCaptureState.afterMonitoringChange(
-        captureEnabled: screenAnalysisEnabled,
-        monitoring: pluginState
-      )
-      isMonitoring = state.isMonitoring
-      screenAnalysisEnabled = state.captureEnabled
-      screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .expandRewindTranscript)) { _ in
-      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-        isTranscriptExpanded = true
+  }
+
+  var body: some View {
+    // Split so the release compiler can type-check. One 160-line modifier
+    // chain here fails `swift build -c release` (Codemagic 170 / #11519).
+    rewindPageKeyHandlers(rewindPageLifecycle(pageChrome))
+  }
+
+  private var pageChrome: some View {
+    pageContent
+      .glassContent()
+      // The page answers arrow keys wherever the pointer is, so it holds keyboard focus itself. The
+      // timeline track owns scroll gestures directly. This container is not a control, though: the
+      // system focus effect around it was a 1 pt accent rectangle on the window's edges, which on a
+      // window with no visible extent is a blue rectangle on the wallpaper. See
+      // `shellPageKeyboardTarget`.
+      .shellPageKeyboardTarget($isPageFocused)
+  }
+
+  private func rewindPageLifecycle<Content: View>(_ content: Content) -> some View {
+    content
+      .task {
+        await viewModel.loadInitialData()
+        await resolveCitationFocusIfNeeded()
       }
-    }
-    .onChange(of: isSearchFocused) { _, focused in
-      if !focused {
+      .onAppear {
+        isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+        screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
         isPageFocused = true
       }
-    }
-    .onChange(of: isTranscriptExpanded) { _, expanded in
-      viewModel.isTranscriptExpanded = expanded
-    }
-    .onChange(of: viewModel.screenshots) { oldScreenshots, newScreenshots in
-      // Try to preserve position on the same screenshot the user was viewing
-      if !oldScreenshots.isEmpty,
-        currentIndex < oldScreenshots.count,
-        let currentId = oldScreenshots[currentIndex].id,
-        let newIndex = newScreenshots.firstIndex(where: { $0.id == currentId })
-      {
-        // Same screenshot found in new array - adjust index
-        currentIndex = newIndex
-        // No need to reload frame - it's the same screenshot
-      } else if !newScreenshots.isEmpty {
-        // A viewport query may replace every sampled row. Stay near the same visible moment instead
-        // of snapping to the newest capture in all of history.
-        if !oldScreenshots.isEmpty, viewModel.activeSearchQuery == nil, trackWindow.span > 0 {
-          let centre = trackWindow.start + trackWindow.span / 2
-          currentIndex = RewindTimelineNavigation.nearestIndex(to: centre, screenshots: newScreenshots) ?? 0
-        } else {
-          currentIndex = newScreenshots.count - 1
-        }
-        selectedGroupIndex = 0
-        scheduleLoadCurrentFrame()
+      .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
+        let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
+        let state = RewindCaptureState.afterMonitoringChange(
+          captureEnabled: screenAnalysisEnabled,
+          monitoring: pluginState
+        )
+        isMonitoring = state.isMonitoring
+        screenAnalysisEnabled = state.captureEnabled
+        screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
       }
-    }
-    .onReceive(
-      trackWindow.$start.combineLatest(trackWindow.$span)
-        .debounce(for: .milliseconds(120), scheduler: DispatchQueue.main)
-    ) { start, span in
-      guard span > 0, viewModel.activeSearchQuery == nil else { return }
-      Task { await viewModel.loadTimelineWindow(from: start, to: start + span) }
-    }
-    .onChange(of: viewModel.activeSearchQuery) { oldQuery, newQuery in
-      // When search becomes active, default to results view
-      if oldQuery == nil && newQuery != nil {
-        searchViewMode = .results
-        selectedGroupIndex = 0
+      .onReceive(NotificationCenter.default.publisher(for: .rewindCitationFocusRequested)) { _ in
+        Task { await resolveCitationFocusIfNeeded() }
       }
-      // When search is cleared, reset view mode
-      if newQuery == nil {
+      .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+        // RewindPage itself owns the decoded NSImage and frame-load task. Clearing
+        // only the view model would leave the previous owner's last frame visible
+        // while this persistent page reloads for the incoming account.
+        invalidatePendingFrameLoad()
+        currentImage = nil
+        currentIndex = 0
+        selectedGroupIndex = 0
         searchViewMode = nil
-        selectedGroupIndex = 0
-      }
-      invalidatePendingFrameLoad()
-      if searchViewMode != .results && !activeScreenshots.isEmpty {
-        currentIndex = min(currentIndex, activeScreenshots.count - 1)
-        scheduleLoadCurrentFrame()
-      }
-    }
-    // Global keyboard handlers
-    .onEscapeKey {
-      // Expanded transcript → collapse
-      if isTranscriptExpanded {
+        selectedSpeakerSegment = nil
         isTranscriptExpanded = false
         LiveTranscriptMonitor.shared.clearSaved()
-        return true
       }
-      // Timeline mode → go back to results list
-      if searchViewMode == .timeline {
-        searchViewMode = .results
-        return true
-      }
-      // In search mode → clear search
-      if viewModel.activeSearchQuery != nil {
-        viewModel.searchQuery = ""
-        searchViewMode = nil
-        return true
-      }
-      if isSearchFocused {
-        isSearchFocused = false
-        return true
-      }
-      return false
-    }
-    .onKeyPress(.leftArrow) {
-      // Arrow keys only work in timeline mode
-      // Left = older = lower index (ASC order: oldest first)
-      if searchViewMode != .results {
-        previousFrame()
-        return .handled
-      }
-      return .ignored
-    }
-    .onKeyPress(.rightArrow) {
-      // Right = newer = higher index
-      if searchViewMode != .results {
-        nextFrame()
-        return .handled
-      }
-      return .ignored
-    }
-    .onKeyPress(.upArrow) {
-      // Up/down navigate search result groups
-      if searchViewMode == .results {
-        if selectedGroupIndex > 0 {
-          selectedGroupIndex -= 1
-          return .handled
+      .onReceive(NotificationCenter.default.publisher(for: .expandRewindTranscript)) { _ in
+        OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+          isTranscriptExpanded = true
         }
       }
-      return .ignored
-    }
-    .onKeyPress(.downArrow) {
-      if searchViewMode == .results {
-        let groups = viewModel.groupedSearchResults
-        if selectedGroupIndex < groups.count - 1 {
-          selectedGroupIndex += 1
-          return .handled
+      .onChange(of: isSearchFocused) { _, focused in
+        if !focused {
+          isPageFocused = true
         }
       }
-      return .ignored
-    }
+      .onChange(of: isTranscriptExpanded) { _, expanded in
+        viewModel.isTranscriptExpanded = expanded
+      }
+      .onChange(of: viewModel.screenshots) { oldScreenshots, newScreenshots in
+        // Try to preserve position on the same screenshot the user was viewing
+        if !oldScreenshots.isEmpty,
+          currentIndex < oldScreenshots.count,
+          let currentId = oldScreenshots[currentIndex].id,
+          let newIndex = newScreenshots.firstIndex(where: { $0.id == currentId })
+        {
+          // Same screenshot found in new array - adjust index
+          currentIndex = newIndex
+          // No need to reload frame - it's the same screenshot
+        } else if !newScreenshots.isEmpty {
+          // A viewport query may replace every sampled row. Stay near the same visible moment instead
+          // of snapping to the newest capture in all of history.
+          if !oldScreenshots.isEmpty, viewModel.activeSearchQuery == nil, trackWindow.span > 0 {
+            let centre = trackWindow.start + trackWindow.span / 2
+            currentIndex = RewindTimelineNavigation.nearestIndex(to: centre, screenshots: newScreenshots) ?? 0
+          } else {
+            currentIndex = newScreenshots.count - 1
+          }
+          selectedGroupIndex = 0
+          scheduleLoadCurrentFrame()
+        }
+      }
+      .onReceive(
+        trackWindow.$start.combineLatest(trackWindow.$span)
+          .debounce(for: .milliseconds(120), scheduler: DispatchQueue.main)
+      ) { start, span in
+        guard span > 0, viewModel.activeSearchQuery == nil else { return }
+        Task { await viewModel.loadTimelineWindow(from: start, to: start + span) }
+      }
+      .onChange(of: viewModel.activeSearchQuery) { oldQuery, newQuery in
+        // When search becomes active, default to results view
+        if oldQuery == nil && newQuery != nil {
+          searchViewMode = .results
+          selectedGroupIndex = 0
+        }
+        // When search is cleared, reset view mode
+        if newQuery == nil {
+          searchViewMode = nil
+          selectedGroupIndex = 0
+        }
+        invalidatePendingFrameLoad()
+        if searchViewMode != .results && !activeScreenshots.isEmpty {
+          currentIndex = min(currentIndex, activeScreenshots.count - 1)
+          scheduleLoadCurrentFrame()
+        }
+      }
+  }
+
+  private func rewindPageKeyHandlers<Content: View>(_ content: Content) -> some View {
+    content
+      // Global keyboard handlers
+      .onEscapeKey {
+        // Expanded transcript → collapse
+        if isTranscriptExpanded {
+          isTranscriptExpanded = false
+          LiveTranscriptMonitor.shared.clearSaved()
+          return true
+        }
+        // Timeline mode → go back to results list
+        if searchViewMode == .timeline {
+          searchViewMode = .results
+          return true
+        }
+        // In search mode → clear search
+        if viewModel.activeSearchQuery != nil {
+          viewModel.searchQuery = ""
+          searchViewMode = nil
+          return true
+        }
+        if isSearchFocused {
+          isSearchFocused = false
+          return true
+        }
+        return false
+      }
+      .onKeyPress(.leftArrow) {
+        // Arrow keys only work in timeline mode
+        // Left = older = lower index (ASC order: oldest first)
+        if searchViewMode != .results {
+          previousFrame()
+          return .handled
+        }
+        return .ignored
+      }
+      .onKeyPress(.rightArrow) {
+        // Right = newer = higher index
+        if searchViewMode != .results {
+          nextFrame()
+          return .handled
+        }
+        return .ignored
+      }
+      .onKeyPress(.upArrow) {
+        // Up/down navigate search result groups
+        if searchViewMode == .results {
+          if selectedGroupIndex > 0 {
+            selectedGroupIndex -= 1
+            return .handled
+          }
+        }
+        return .ignored
+      }
+      .onKeyPress(.downArrow) {
+        if searchViewMode == .results {
+          let groups = viewModel.groupedSearchResults
+          if selectedGroupIndex < groups.count - 1 {
+            selectedGroupIndex += 1
+            return .handled
+          }
+        }
+        return .ignored
+      }
+  }
+
+  @MainActor
+  private func resolveCitationFocusIfNeeded() async {
+    // Keep the one-shot request queued until the owner's initial database load has completed. A
+    // notification can arrive while the destination is still mounting; consuming then would lose
+    // the citation before Rewind can resolve it.
+    guard viewModel.isReadyForCitationFocus,
+      let id = RewindCitationFocusState.shared.consume(),
+      let screenshot = try? await RewindDatabase.shared.getScreenshot(id: id)
+    else { return }
+
+    // A citation jump owns the frame transition. Cancel the previous decode and clear its image so
+    // an old day's picture cannot remain visible while the exact target day is being sampled.
+    invalidatePendingFrameLoad()
+    currentImage = nil
+    currentIndex = 0
+    guard await viewModel.focusCitationScreenshot(screenshot),
+      let targetIndex = viewModel.screenshots.firstIndex(where: { $0.id == id })
+    else { return }
+
+    currentIndex = targetIndex
+    trackWindow.reveal(screenshot.timestamp.timeIntervalSince1970)
+    scheduleLoadCurrentFrame()
   }
 
   /// The AppKit track owns wheel/swipe input and forwards only gestures that begin on the timeline.
@@ -819,7 +879,7 @@ struct RewindPage: View {
 
   private func loadCurrentFrame(at requestedIndex: Int, requestID: UUID, sourceToken: String) async {
     let screenshots = activeScreenshots
-    guard requestedIndex < screenshots.count else { return }
+    guard requestedIndex >= 0, requestedIndex < screenshots.count else { return }
 
     isLoadingFrame = true
 
@@ -1396,11 +1456,7 @@ struct RewindPage: View {
         .omiAnimation(.easeInOut(duration: 0.15), value: appState.isTranscribing)
     }
     .onTapGesture {
-      if appState.isTranscribing {
-        appState.stopTranscription()
-      } else {
-        appState.startTranscription()
-      }
+      appState.toggleTranscription()
     }
     .help(appState.isTranscribing ? "Audio is on - click to stop" : "Audio is off - click to start")
   }

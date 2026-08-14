@@ -37,14 +37,15 @@ final class MemoryGraphRevisitTests: XCTestCase {
   func testMemoryHubDestinationMenuHasStableRoutes() {
     XCTAssertEqual(
       MemoryHubDestination.allCases,
-      [.memories, .conversations, .brainMap]
+      [.memories, .conversations, .brainMap, .activity]
     )
     // Storage identity and reading order are different lists, and only one of them may be reordered
     // freely: `allCases` is pinned by the persisted raw values above.
     XCTAssertEqual(
       MemoryHubDestination.switcherOrder,
-      [.conversations, .memories, .brainMap]
+      [.activity, .conversations, .memories, .brainMap]
     )
+    XCTAssertEqual(MemoryHubDestination.activity.title, "Activity")
     XCTAssertEqual(MemoryHubDestination.memories.title, "Memories")
     XCTAssertEqual(MemoryHubDestination.conversations.title, "Conversations")
     XCTAssertEqual(MemoryHubDestination.brainMap.title, "Brain Map")

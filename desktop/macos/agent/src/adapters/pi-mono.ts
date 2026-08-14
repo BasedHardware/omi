@@ -34,9 +34,11 @@ import type {
   EventCallback,
   WarmupSessionConfig,
 } from "./interface.js";
+import { StaleAdapterBindingError } from "../runtime/kernel-types.js";
 
 type PiMonoConfig = HarnessConfig & {
   onRestart?: (reason: string) => void;
+  onDisposed?: () => void;
 };
 
 // Pi-mono RPC command/event types
@@ -682,6 +684,14 @@ export class PiMonoAdapter implements HarnessAdapter {
     rmSync(this.contextFilePath, { force: true });
   }
 
+  async dispose(): Promise<void> {
+    try {
+      await this.stop();
+    } finally {
+      this.config.onDisposed?.();
+    }
+  }
+
   async createSession(opts: SessionOpts): Promise<string> {
     const mapped = opts.model ? mapModel(opts.model) : undefined;
     await this.setExecutionRole(opts.executionRole ?? "coordinator");
@@ -766,7 +776,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     relayContext?: PiMonoRelayContext
   ): Promise<PromptResult> {
     if (!this.sessions.has(sessionId)) {
-      throw new Error(`pi-mono session is no longer active: ${sessionId}`);
+      throw new StaleAdapterBindingError(`pi-mono session is no longer active: ${sessionId}`);
     }
     // Serialization invariant: pi-mono RPC only handles one prompt at a time.
     // Do not supersede an in-flight prompt: pi-mono turn_end events do not carry
@@ -1523,7 +1533,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   }
 
   stop(): Promise<void> {
-    return this.harness.stop();
+    return this.harness.dispose();
   }
 
   async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {
@@ -1546,7 +1556,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
     // RuntimeAdapter instance is alive the opaque session id is still usable as
     // process-local state. Startup reconciliation marks these bindings stale.
     if (!this.harness.hasSession(input.adapterNativeSessionId)) {
-      throw new Error(`pi-mono binding is stale: ${input.adapterNativeSessionId}`);
+      throw new StaleAdapterBindingError(`pi-mono binding is stale: ${input.adapterNativeSessionId}`);
     }
     return this.binding(input, input.adapterNativeSessionId);
   }

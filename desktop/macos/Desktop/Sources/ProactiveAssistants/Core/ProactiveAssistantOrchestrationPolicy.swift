@@ -137,6 +137,16 @@ enum ProactiveAssistantOrchestrationPolicy {
     return .capture(nextCounter: 0, didLeaveCall: currentCounter > 0)
   }
 
+  /// How long the same context waits between frame re-flushes to the assistants.
+  ///
+  /// Maximum (level 5) is the "nudge me in seconds" demo mode: a 10 s fallback pairs with
+  /// the 10 s suggestion dwell so the first eligible evaluation lands ~10-13 s after the
+  /// switch. Every other level keeps the 60 s cadence; assistant-side gates still bound
+  /// actual model spend either way.
+  static func distributionFallbackInterval(frequencyLevel: Int) -> TimeInterval {
+    frequencyLevel >= 5 ? 10 : 60
+  }
+
   static func distributionDecision(
     lastDistributedApp: String?,
     lastDistributedWindowTitle: String?,

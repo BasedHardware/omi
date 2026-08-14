@@ -61,6 +61,7 @@ actor RewindIndexer {
   }
 
   func suspendForOwnerTransition() {
+    RewindCaptureOwnerGeneration.beginTransition()
     ownerTransitionSuspended = true
     resetInitializationState()
     log("RewindIndexer: Suspended for effective-owner transition")
@@ -68,6 +69,7 @@ actor RewindIndexer {
 
   func resumeAfterOwnerTransition() {
     ownerTransitionSuspended = false
+    RewindCaptureOwnerGeneration.endTransition()
     log("RewindIndexer: Resumed after effective-owner transition")
   }
 
@@ -104,6 +106,7 @@ actor RewindIndexer {
 
     // Initialize storage
     try await RewindStorage.shared.initialize()
+    await retryPendingExcludedVideoChunkCleanups()
 
     isInitialized = true
     initFailureCount = 0
@@ -232,26 +235,19 @@ actor RewindIndexer {
     return false
   }
 
-  /// The encoder reports an immutable path when it abandons a writer
-  /// generation. Storage owns the DB tombstone and file deletion; keeping that
-  /// mutation out of the encoder avoids a circular actor dependency and lets
-  /// the persistence boundary reject stale post-OCR inserts for the path.
-  @discardableResult
-  private func discardAbandonedVideoChunkIfNeeded(_ error: Error) async -> Bool {
-    do {
-      return try await RewindStorage.shared.recoverAbandonedVideoChunkIfNeeded(error)
-    } catch {
-      logError("RewindIndexer: Failed to discard abandoned video chunk", error: error)
-      return true
-    }
-  }
-
   // MARK: - Frame Processing
 
   /// Process a captured frame from ProactiveAssistantsPlugin
-  func processFrame(_ frame: CapturedFrame) async {
+  func processFrame(
+    _ frame: CapturedFrame,
+    exclusionSnapshot: RewindCaptureExclusionSnapshot? = nil
+  ) async {
     // Ensure initialized with backoff
     guard await ensureInitialized() else { return }
+    guard let snapshot = exclusionSnapshot ?? RewindCaptureExclusionGeneration.snapshot(appName: frame.appName),
+      snapshot.appName == frame.appName,
+      RewindCaptureExclusionGeneration.isCurrent(snapshot)
+    else { return }
     scheduleRetentionCleanupIfDue()
 
     do {
@@ -275,10 +271,8 @@ actor RewindIndexer {
       }
 
       // Add frame to video encoder
-      let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
-        image: cgImage,
-        timestamp: frame.captureTime
-      )
+      let encodedFrame = try await encodeFrameIfCurrent(
+        image: cgImage, timestamp: frame.captureTime, snapshot: snapshot)
 
       // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
       // since there's no video chunk to load later
@@ -330,7 +324,8 @@ actor RewindIndexer {
       )
 
       guard !ownerTransitionSuspended else { return }
-      let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
+      let inserted = try await insertScreenshotIfCurrent(screenshot, snapshot: snapshot)
+      guard RewindCaptureExclusionGeneration.isCurrent(snapshot) else { return }
       markFrameEncodedForDedupe(dedupeSignature, timestamp: frame.captureTime)
 
       // Embed OCR text for semantic search (non-blocking)
@@ -339,7 +334,8 @@ actor RewindIndexer {
       {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
-            id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle)
+            id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle,
+            ownerSnapshot: snapshot.ownerSnapshot)
           await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
             id: id,
             ocrText: ocrText,
@@ -364,8 +360,18 @@ actor RewindIndexer {
   }
 
   /// Process a frame directly from a CGImage (macOS 14+ path, avoids JPEG decode round-trip)
-  func processFrame(cgImage: CGImage, appName: String, windowTitle: String?, captureTime: Date) async {
+  func processFrame(
+    cgImage: CGImage,
+    appName: String,
+    windowTitle: String?,
+    captureTime: Date,
+    exclusionSnapshot: RewindCaptureExclusionSnapshot? = nil
+  ) async {
     guard await ensureInitialized() else { return }
+    guard let snapshot = exclusionSnapshot ?? RewindCaptureExclusionGeneration.snapshot(appName: appName),
+      snapshot.appName == appName,
+      RewindCaptureExclusionGeneration.isCurrent(snapshot)
+    else { return }
     scheduleRetentionCleanupIfDue()
 
     do {
@@ -375,10 +381,8 @@ actor RewindIndexer {
       }
 
       // Add frame to video encoder (CGImage directly, no decode needed)
-      let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
-        image: cgImage,
-        timestamp: captureTime
-      )
+      let encodedFrame = try await encodeFrameIfCurrent(
+        image: cgImage, timestamp: captureTime, snapshot: snapshot)
 
       // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
       guard let encodedFrame = encodedFrame else { return }
@@ -428,7 +432,8 @@ actor RewindIndexer {
       )
 
       guard !ownerTransitionSuspended else { return }
-      let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
+      let inserted = try await insertScreenshotIfCurrent(screenshot, snapshot: snapshot)
+      guard RewindCaptureExclusionGeneration.isCurrent(snapshot) else { return }
       markFrameEncodedForDedupe(dedupeSignature, timestamp: captureTime)
 
       // Embed OCR text for semantic search (non-blocking)
@@ -437,12 +442,13 @@ actor RewindIndexer {
       {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
-            id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle)
+            id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle,
+            ownerSnapshot: snapshot.ownerSnapshot)
           await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
             id: id,
             ocrText: ocrText,
-            appName: appName,
-            windowTitle: windowTitle,
+            appName: frame.appName,
+            windowTitle: frame.windowTitle,
             expectedOwnerID: captureOwnerID)
         }
       }
@@ -469,8 +475,18 @@ actor RewindIndexer {
   }
 
   /// Process a frame with additional metadata (focus status, etc.)
-  func processFrame(_ frame: CapturedFrame, focusStatus: String?, extractedTasks: [String]?, insight: String?) async {
+  func processFrame(
+    _ frame: CapturedFrame,
+    focusStatus: String?,
+    extractedTasks: [String]?,
+    insight: String?,
+    exclusionSnapshot: RewindCaptureExclusionSnapshot? = nil
+  ) async {
     guard await ensureInitialized() else { return }
+    guard let snapshot = exclusionSnapshot ?? RewindCaptureExclusionGeneration.snapshot(appName: frame.appName),
+      snapshot.appName == frame.appName,
+      RewindCaptureExclusionGeneration.isCurrent(snapshot)
+    else { return }
     scheduleRetentionCleanupIfDue()
 
     do {
@@ -495,10 +511,8 @@ actor RewindIndexer {
       }
 
       // Add frame to video encoder
-      let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
-        image: cgImage,
-        timestamp: frame.captureTime
-      )
+      let encodedFrame = try await encodeFrameIfCurrent(
+        image: cgImage, timestamp: frame.captureTime, snapshot: snapshot)
 
       // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
       guard let encodedFrame = encodedFrame else { return }
@@ -560,7 +574,8 @@ actor RewindIndexer {
       )
 
       guard !ownerTransitionSuspended else { return }
-      let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
+      let inserted = try await insertScreenshotIfCurrent(screenshot, snapshot: snapshot)
+      guard RewindCaptureExclusionGeneration.isCurrent(snapshot) else { return }
       if !carriesMetadata {
         markFrameEncodedForDedupe(dedupeSignature, timestamp: frame.captureTime)
       }
@@ -571,7 +586,8 @@ actor RewindIndexer {
       {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
-            id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle)
+            id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle,
+            ownerSnapshot: snapshot.ownerSnapshot)
           await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
             id: id,
             ocrText: ocrText,

@@ -1,3 +1,5 @@
+// dart format width=80
+
 /// GENERATED CODE - DO NOT MODIFY BY HAND
 /// *****************************************************
 ///  FlutterGen
@@ -5,7 +7,7 @@
 
 // coverage:ignore-file
 // ignore_for_file: type=lint
-// ignore_for_file: directives_ordering,unnecessary_import,implicit_dynamic_list_literal,deprecated_member_use
+// ignore_for_file: deprecated_member_use,directives_ordering,implicit_dynamic_list_literal,unnecessary_import
 
 import 'package:flutter/widgets.dart';
 
@@ -54,15 +56,15 @@ class $AssetsFontsGen {
 
   /// List of all assets
   List<String> get values => [
-    sfprodisplayblackitalic,
-    sfprodisplaybold,
-    sfprodisplayheavyitalic,
-    sfprodisplaylightitalic,
-    sfprodisplaymedium,
-    sfprodisplayregular,
-    sfprodisplaysemibolditalic,
-    sfprodisplaythinitalic,
-  ];
+        sfprodisplayblackitalic,
+        sfprodisplaybold,
+        sfprodisplayheavyitalic,
+        sfprodisplaylightitalic,
+        sfprodisplaymedium,
+        sfprodisplayregular,
+        sfprodisplaysemibolditalic,
+        sfprodisplaythinitalic
+      ];
 }
 
 class $AssetsImagesGen {
@@ -336,79 +338,79 @@ class $AssetsImagesGen {
 
   /// List of all assets
   List<dynamic> get values => [
-    a1,
-    a2,
-    a3,
-    a4,
-    a5,
-    logoTextWhite,
-    aiMagic,
-    appLauncherIcon,
-    appleRemindersLogo,
-    appleLogo,
-    appleWatch,
-    background,
-    beeDevice,
-    blob,
-    calendarLogo,
-    checkbox,
-    clone,
-    emailLogo,
-    emotionalFeedback1,
-    facebookLogo,
-    fieldy,
-    friendPendant,
-    googleLogo,
-    gradientCard,
-    herologo,
-    icChart,
-    icCloneChat,
-    icClonePlus,
-    icDollar,
-    imessageLogo,
-    instagramLogo,
-    instruction1,
-    instruction2,
-    instruction3,
-    limitless,
-    linkIcon,
-    linkedinLogo,
-    logoTransparent,
-    logoTransparentV2,
-    neoOne,
-    newBackground,
-    notionLogo,
-    omiDevkitWithoutRope,
-    omiGlass,
-    omiWithRopeNoPadding,
-    omiWithRope,
-    omiWithoutRopeGreenCharging,
-    omiWithoutRopeTurnedOff,
-    omiWithoutRope,
-    onboardingBg1,
-    onboardingBg2,
-    onboardingBg3,
-    onboardingBg4,
-    onboardingBg51,
-    onboardingBg52,
-    onboardingBg6,
-    onboarding,
-    plaudNotePin,
-    raybanMeta,
-    recordingGreenCircleIcon,
-    slackLogo,
-    speaker0Icon,
-    speaker1Icon,
-    splash,
-    splashIcon,
-    stars,
-    stripeLogo,
-    telegramLogo,
-    whatsappLogo,
-    xLogo,
-    xLogoMini,
-    youtubeLogo,
-  ];
+        a1,
+        a2,
+        a3,
+        a4,
+        a5,
+        logoTextWhite,
+        aiMagic,
+        appLauncherIcon,
+        appleRemindersLogo,
+        appleLogo,
+        appleWatch,
+        background,
+        beeDevice,
+        blob,
+        calendarLogo,
+        checkbox,
+        clone,
+        emailLogo,
+        emotionalFeedback1,
+        facebookLogo,
+        fieldy,
+        friendPendant,
+        googleLogo,
+        gradientCard,
+        herologo,
+        icChart,
+        icCloneChat,
+        icClonePlus,
+        icDollar,
+        imessageLogo,
+        instagramLogo,
+        instruction1,
+        instruction2,
+        instruction3,
+        limitless,
+        linkIcon,
+        linkedinLogo,
+        logoTransparent,
+        logoTransparentV2,
+        neoOne,
+        newBackground,
+        notionLogo,
+        omiDevkitWithoutRope,
+        omiGlass,
+        omiWithRopeNoPadding,
+        omiWithRope,
+        omiWithoutRopeGreenCharging,
+        omiWithoutRopeTurnedOff,
+        omiWithoutRope,
+        onboardingBg1,
+        onboardingBg2,
+        onboardingBg3,
+        onboardingBg4,
+        onboardingBg51,
+        onboardingBg52,
+        onboardingBg6,
+        onboarding,
+        plaudNotePin,
+        raybanMeta,
+        recordingGreenCircleIcon,
+        slackLogo,
+        speaker0Icon,
+        speaker1Icon,
+        splash,
+        splashIcon,
+        stars,
+        stripeLogo,
+        telegramLogo,
+        whatsappLogo,
+        xLogo,
+        xLogoMini,
+        youtubeLogo
+      ];
 }
 
 class $AssetsIntegrationAppLogosGen {
@@ -467,25 +469,23 @@ class $AssetsIntegrationAppLogosGen {
 
   /// List of all assets
   List<dynamic> get values => [
-    appleHealthLogo,
-    asanaLogo,
-    clickupLogo,
-    githubLogo,
-    gmailLogo,
-    googleCalendar,
-    googleTasksLogo,
-    mondayLogo,
-    notionLogo,
-    todoistLogo,
-    trelloLogo,
-    whoop,
-    xLogo,
-  ];
+        appleHealthLogo,
+        asanaLogo,
+        clickupLogo,
+        githubLogo,
+        gmailLogo,
+        googleCalendar,
+        googleTasksLogo,
+        mondayLogo,
+        notionLogo,
+        todoistLogo,
+        trelloLogo,
+        whoop,
+        xLogo
+      ];
 }
 
-class Assets {
-  const Assets._();
-
+abstract final class Assets {
   static const $AssetsCompetitorLogosGen competitorLogos =
       $AssetsCompetitorLogosGen();
   static const $AssetsFontsGen fonts = $AssetsFontsGen();
@@ -499,12 +499,18 @@ class Assets {
 }
 
 class AssetGenImage {
-  const AssetGenImage(this._assetName, {this.size, this.flavors = const {}});
+  const AssetGenImage(
+    this._assetName, {
+    this.size,
+    this.flavors = const {},
+    this.animation,
+  });
 
   final String _assetName;
 
   final Size? size;
   final Set<String> flavors;
+  final AssetGenImageAnimation? animation;
 
   Image image({
     Key? key,
@@ -559,11 +565,30 @@ class AssetGenImage {
     );
   }
 
-  ImageProvider provider({AssetBundle? bundle, String? package}) {
-    return AssetImage(_assetName, bundle: bundle, package: package);
+  ImageProvider provider({
+    AssetBundle? bundle,
+    String? package,
+  }) {
+    return AssetImage(
+      _assetName,
+      bundle: bundle,
+      package: package,
+    );
   }
 
   String get path => _assetName;
 
   String get keyName => _assetName;
+}
+
+class AssetGenImageAnimation {
+  const AssetGenImageAnimation({
+    required this.isAnimation,
+    required this.duration,
+    required this.frames,
+  });
+
+  final bool isAnimation;
+  final Duration duration;
+  final int frames;
 }

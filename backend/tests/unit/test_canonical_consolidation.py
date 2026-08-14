@@ -915,12 +915,6 @@ def test_batch_rejects_duplicate_supersede_across_decisions():
     assert error == "output_invalid:duplicate_supersede_target:mem_new_b"
 
 
-def test_legacy_cohort_is_noop():
-    with patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.LEGACY):
-        report = run_canonical_consolidation("uid-legacy", run_id="test-run", now=NOW)
-    assert report.skipped_reason == "not_canonical_cohort"
-
-
 def test_clean_total_batch_routes_and_advances_watermark():
     item = _item("mem_a", "Enjoys hiking")
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)

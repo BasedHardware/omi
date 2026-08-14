@@ -7,12 +7,17 @@ from google.api_core.exceptions import InvalidArgument
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
-from database.google_credentials import prepare_google_credentials
+from database.google_credentials import (
+    customer_data_service_account,
+    customer_entitlement_service_account,
+    prepare_google_credentials,
+)
 
 __all__ = [
     "db",
     "delete_collection_recursive",
     "document_id_from_seed",
+    "get_customer_firestore_client",
     "get_firestore_client",
     "get_users_uid",
     "is_document_size_limit_error",
@@ -79,14 +84,17 @@ _install_query_stream_retry_compat()
 
 _firestore_client = None
 _firestore_client_lock = Lock()
+_customer_firestore_client = None
+_customer_firestore_client_lock = Lock()
 
 
 def _build_firestore_client() -> Any:
-    prepare_google_credentials()
     # Production safety: only override project/database when pointed at a local
     # Firestore emulator. Without FIRESTORE_EMULATOR_HOST set (i.e. real Firestore),
-    # defer entirely to default resolution so env vars cannot repoint prod Firestore.
+    # never let bare GOOGLE_CLOUD_PROJECT (often the GKE compute project) repoint
+    # the customer-data client away from SERVICE_ACCOUNT_JSON's project_id.
     if os.environ.get("FIRESTORE_EMULATOR_HOST"):
+        prepare_google_credentials()
         project = os.environ.get("FIREBASE_PROJECT_ID") or os.environ.get("GOOGLE_CLOUD_PROJECT")
         database = os.environ.get("FIRESTORE_DATABASE_ID")
         kwargs: dict[str, str] = {}
@@ -95,6 +103,13 @@ def _build_firestore_client() -> Any:
         if database:
             kwargs["database"] = database
         return firestore.Client(**kwargs)
+
+    customer_data = customer_data_service_account()
+    if customer_data is not None:
+        credentials, project_id = customer_data
+        return firestore.Client(credentials=credentials, project=project_id)
+
+    prepare_google_credentials()
     return firestore.Client()
 
 
@@ -106,6 +121,33 @@ def get_firestore_client() -> Any:
             if _firestore_client is None:
                 _firestore_client = _build_firestore_client()
     return _firestore_client
+
+
+def _build_customer_firestore_client() -> Any:
+    """Identity, subscription, and usage — production customer project.
+
+    Compute-local state (``agentVm``, GCE) keeps using ``get_firestore_client()``
+    so development Cloud Run ADC can stay on ``based-hardware-dev``.
+    """
+    if os.environ.get("FIRESTORE_EMULATOR_HOST"):
+        return _build_firestore_client()
+
+    entitlements = customer_entitlement_service_account()
+    if entitlements is not None:
+        credentials, project_id = entitlements
+        return firestore.Client(credentials=credentials, project=project_id)
+
+    return get_firestore_client()
+
+
+def get_customer_firestore_client() -> Any:
+    global _customer_firestore_client
+
+    if _customer_firestore_client is None:
+        with _customer_firestore_client_lock:
+            if _customer_firestore_client is None:
+                _customer_firestore_client = _build_customer_firestore_client()
+    return _customer_firestore_client
 
 
 _EXPIRED_TRANSACTION_MARKER = "transaction has expired"

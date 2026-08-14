@@ -40,6 +40,8 @@ enum DefaultsKey: String {
   case chatBridgeMode = "chatBridgeMode"
   case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
   case multiChatEnabled = "multiChatEnabled"
+  /// Opt-in: proactive notifications are also spoken out loud on delivery.
+  case speakNotificationsAloud = "speakNotificationsAloud"
   case aiChatWorkingDirectory = "aiChatWorkingDirectory"
   case hasCompletedOnboarding = "hasCompletedOnboarding"
   case onboardingStep = "onboardingStep"
@@ -60,7 +62,12 @@ enum DefaultsKey: String {
   /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
   case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
+  /// One-shot marker: the PTT-only microphone choice has been folded into the shared
+  /// `preferredMicrophoneDeviceUID`, so it is never carried over twice.
+  case shortcutPTTMicrophoneMergedIntoPreferred = "shortcut_pttMicrophoneMergedIntoPreferred"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
+  case floatingBarCachedPlan = "floatingBar_cachedPlan"
+  case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case rewindDisableContentCache = "rewindDisableContentCache"
   case screenKnowledgeGraphExtractionEnabled = "screenKnowledgeGraphExtractionEnabled"
@@ -74,7 +81,13 @@ enum DefaultsKey: String {
   // migration contract instead of repeating raw UserDefaults literals.
   case tasksCategoryOrder = "TasksCategoryOrder"
   case tasksSortOrderMigrated = "TasksSortOrderMigrated"
+  /// Whether the Suggestions section on the Tasks page is expanded. Shared by the
+  /// view (@AppStorage) and the view model's keyboard-navigation/select-all scope.
+  case tasksSuggestionsSectionExpanded = "tasksSuggestionsSectionExpanded"
   case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
+  case gmailSelectedCookiePath = "gmailSelectedCookiePath"
+  case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
+  case disableSystemAudioCapture = "disableSystemAudioCapture"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
@@ -103,12 +116,30 @@ struct ScopedDefaultsKey {
     Self(rawValue: "TasksSortOrderMigrated.owner.\(ownerID)")
   }
 
+  static func pendingCanonicalReceiptInvalidation(
+    ownerID: String,
+    keyPrefix: String = "suggested.canonicalReceipt.pendingInvalidation."
+  ) -> Self {
+    Self(rawValue: "\(keyPrefix)\(ownerID)")
+  }
+
+  static func pendingCanonicalReceiptInvalidationTimestamps(
+    ownerID: String,
+    keyPrefix: String = "suggested.canonicalReceipt.pendingInvalidation."
+  ) -> Self {
+    Self(rawValue: "\(keyPrefix)\(ownerID).timestamps")
+  }
+
   static func importConnectorAvailabilityText(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
   }
 
   static func importConnectorSourceCount(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
+  }
+
+  static func taskInterruptionLedger(ownerID: String) -> Self {
+    Self(rawValue: "proactiveTaskInterruptionLedger.v1.\(ownerID)")
   }
 }
 
@@ -125,6 +156,10 @@ extension UserDefaults {
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
   func data(forKey key: ScopedDefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: ScopedDefaultsKey) -> Bool { bool(forKey: key.rawValue) }
+  func stringArray(forKey key: ScopedDefaultsKey) -> [String]? { stringArray(forKey: key.rawValue) }
+  func dictionary(forKey key: ScopedDefaultsKey) -> [String: Any]? {
+    dictionary(forKey: key.rawValue)
+  }
   func object(forKey key: ScopedDefaultsKey) -> Any? { object(forKey: key.rawValue) }
   func object(forKey key: DefaultsKey) -> Any? { object(forKey: key.rawValue) }
 

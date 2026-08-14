@@ -8,5 +8,6 @@
   ],
   "evidence_prs": [9952],
   "scope_hints": [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", "backend/scripts/**"],
-  "status": "open"
+  "status": "dormant",
+  "dormant_since": "2026-08-10T09:37:50.107774Z"
 }
