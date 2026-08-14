@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Literal, Optional, cast
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, cast
 
 from database import knowledge_graph as kg_db
 from database import _client
