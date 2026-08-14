@@ -312,9 +312,14 @@ class _StagingOperation {
       return null;
     }
     final attachment = decoded['attachment'];
+    const allowed = {
+      ...ChatAttachmentStagingContract.descriptorFields,
+      'scanState',
+      'scannerId',
+    };
     if (attachment is! Map<String, dynamic> ||
-        attachment.length != ChatAttachmentStagingContract.descriptorFields.length ||
-        !attachment.keys.every(ChatAttachmentStagingContract.descriptorFields.contains)) {
+        !ChatAttachmentStagingContract.descriptorFields.every(attachment.containsKey) ||
+        !attachment.keys.every(allowed.contains)) {
       return null;
     }
     final attachmentId = attachment['id'];
@@ -340,13 +345,37 @@ class _StagingOperation {
     if (parsedExpiry == null || parsedExpiry.toUtc().toIso8601String() != expiresAt) {
       return null;
     }
-    return <String, Object>{
+    const allowedScanStates = {
+      'staged',
+      'scanning',
+      'clean',
+      'rejected',
+      'timed_out',
+      'error',
+      'bound',
+    };
+    final parsed = <String, Object>{
       'id': attachmentId,
       'mimeType': mimeType,
       'sizeBytes': sizeBytes,
       'expiresAt': expiresAt,
       'state': ChatAttachmentStagingContract.stagedState,
     };
+    if (attachment.containsKey('scanState')) {
+      final scanState = attachment['scanState'];
+      if (scanState is! String || !allowedScanStates.contains(scanState)) {
+        return null;
+      }
+      parsed['scanState'] = scanState;
+    }
+    if (attachment.containsKey('scannerId')) {
+      final scannerId = attachment['scannerId'];
+      if (scannerId is! String || !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,64}$').hasMatch(scannerId)) {
+        return null;
+      }
+      parsed['scannerId'] = scannerId;
+    }
+    return parsed;
   }
 
   Future<void> _fail(ChatAttachmentStagingFailureReason reason) async {

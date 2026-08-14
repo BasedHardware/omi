@@ -227,6 +227,13 @@ let exactAttachment: [String: Any] = [
   "expiresAt": "2026-08-10T08:00:00.000Z",
 ]
 check("exact-p7-fixture-parses-without-name", parsed(["attachment": exactAttachment]))
+var platformScan = exactAttachment
+platformScan["scanState"] = "clean"
+platformScan["scannerId"] = "dev-noop-scanner"
+check("platform-scan-metadata-parses", parsed(["attachment": platformScan]))
+var bogusScan = exactAttachment
+bogusScan["scanState"] = "antivirus-clean"
+check("reject-unknown-scan-state", !parsed(["attachment": bogusScan]))
 for (name, mutation) in [
   ("unsafe-id", { var value = exactAttachment; value["id"] = "../secret"; return value }),
   ("extra-display-name", { var value = exactAttachment; value["displayName"] = "secret.pdf"; return value }),

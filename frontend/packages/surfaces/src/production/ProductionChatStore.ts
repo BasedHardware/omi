@@ -39,6 +39,9 @@ export {
   canRetryAttachmentScan,
   createDevNoopAttachmentScanner,
   isAdmissibleForBind,
+  isChatAttachmentScanState,
+  scanMetadataFromWire,
+  scannerIdFromWire,
   toTrayAttachment,
 } from "./chat-attachment-scan.js";
 export type {

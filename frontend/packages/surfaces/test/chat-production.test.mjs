@@ -18,6 +18,7 @@ import {
   canRetryAttachmentScan,
   createDevNoopAttachmentScanner,
   isAdmissibleForBind,
+  scanMetadataFromWire,
   toTrayAttachment,
 } from "../src/production/chat-attachment-scan.ts";
 
@@ -158,7 +159,7 @@ test("ChatProduction avoids numeric attachment literals and fixture imports", as
   assert.match(source, /data-route="chat"/);
   assert.match(source, /surface-notices/);
   assert.match(source, /data-attachment-scan/);
-  assert.match(source, /DEV_NOOP_SCANNER_ID/);
+  assert.match(source, /scanMetadataFromWire/);
   assert.doesNotMatch(source, /antivirus|\bmalware\b|\bvirus\b/i);
   const scanSource = await read("src/production/chat-attachment-scan.ts");
   assert.match(scanSource, /"dev-noop-scanner"/);
@@ -217,4 +218,13 @@ test("dev-noop-scanner is fail-closed and times out on an injected clock", async
   assert.equal(await timed.scan(staged), "clean");
   now = ATTACHMENT_SCAN_TIMEOUT_MS;
   assert.equal(await timed.scan(staged), "timed_out");
+
+  const wire = scanMetadataFromWire({
+    ...staged,
+    scanState: "clean",
+    scannerId: "dev-noop-scanner",
+  });
+  assert.deepEqual(wire, { scanState: "clean", scannerId: "dev-noop-scanner" });
+  assert.equal(scanMetadataFromWire({ ...staged, scanState: "antivirus-clean" }).scanState, null);
+  assert.equal(isAdmissibleForBind(wire.scanState ?? "error"), true);
 });

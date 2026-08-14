@@ -23,8 +23,43 @@ export type ChatAttachmentScanClock = {
 
 export type ChatTrayAttachment = StagedChatAttachment & {
   readonly scanState: ChatAttachmentScanState;
-  readonly scannerId: typeof DEV_NOOP_SCANNER_ID;
+  readonly scannerId: string;
 };
+
+const SCAN_STATES: ReadonlySet<ChatAttachmentScanState> = new Set([
+  "staged",
+  "scanning",
+  "clean",
+  "rejected",
+  "timed_out",
+  "error",
+  "bound",
+]);
+
+const SCANNER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,64}$/u;
+
+export function isChatAttachmentScanState(value: unknown): value is ChatAttachmentScanState {
+  return typeof value === "string" && SCAN_STATES.has(value as ChatAttachmentScanState);
+}
+
+export function scannerIdFromWire(value: unknown): string {
+  return typeof value === "string" && SCANNER_ID_PATTERN.test(value) ? value : DEV_NOOP_SCANNER_ID;
+}
+
+/** Read platform upload/bind scan extras. Unknown states stay null (fail-closed). */
+export function scanMetadataFromWire(value: unknown): {
+  readonly scanState: ChatAttachmentScanState | null;
+  readonly scannerId: string;
+} {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { scanState: null, scannerId: DEV_NOOP_SCANNER_ID };
+  }
+  const item = value as Record<string, unknown>;
+  return {
+    scanState: isChatAttachmentScanState(item["scanState"]) ? item["scanState"] : null,
+    scannerId: scannerIdFromWire(item["scannerId"]),
+  };
+}
 
 export type ChatAttachmentScanner = {
   readonly identity: typeof DEV_NOOP_SCANNER_ID;
@@ -58,6 +93,7 @@ export function asScanTerminal(value: unknown): ChatAttachmentScanTerminal | nul
 export function toTrayAttachment(
   staged: StagedChatAttachment,
   scanState: ChatAttachmentScanState,
+  scannerId: string = DEV_NOOP_SCANNER_ID,
 ): ChatTrayAttachment {
   return {
     id: staged.id,
@@ -66,7 +102,7 @@ export function toTrayAttachment(
     expiresAt: staged.expiresAt,
     state: "staged",
     scanState,
-    scannerId: DEV_NOOP_SCANNER_ID,
+    scannerId: scannerIdFromWire(scannerId),
   };
 }
 

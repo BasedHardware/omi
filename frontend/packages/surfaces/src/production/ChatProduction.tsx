@@ -8,11 +8,11 @@ import type {
   StagedChatAttachment,
 } from "./ProductionChatStore.js";
 import {
-  DEV_NOOP_SCANNER_ID,
   asScanTerminal,
   attachmentsAreAdmissibleForSend,
   canRemoveTrayAttachment,
   canRetryAttachmentScan,
+  scanMetadataFromWire,
   toTrayAttachment,
   type ChatTrayAttachment,
 } from "./chat-attachment-scan.js";
@@ -479,10 +479,14 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
         setOperationError(t(locale, "chat.error"));
         return;
       }
-      const candidate = [...current, toTrayAttachment(staged, "scanning")];
+      const wire = scanMetadataFromWire(staged);
+      const initialScan = wire.scanState ?? "scanning";
+      const candidate = [...current, toTrayAttachment(staged, initialScan, wire.scannerId)];
       attachmentsRef.current = candidate;
       setAttachments(candidate);
-      await runScan(staged.id);
+      if (asScanTerminal(initialScan) === null && initialScan !== "bound") {
+        await runScan(staged.id);
+      }
     } catch {
       setOperationError(t(locale, "chat.error"));
     } finally {
@@ -768,14 +772,14 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                 <li
                   key={attachment.id}
                   data-attachment-scan={attachment.scanState}
-                  data-attachment-scanner={DEV_NOOP_SCANNER_ID}
+                  data-attachment-scanner={attachment.scannerId}
                 >
                   <span className="chat-attachment-meta">{t(locale, "chat.attachmentReady", {
                     mimeType: attachment.mimeType,
                     sizeBytes: attachment.sizeBytes,
                   })}</span>
                   <span className="chat-attachment-scan">{attachmentScanLabel(attachment.scanState, locale)}</span>
-                  <span className="chat-attachment-scanner">{t(locale, "chat.attachmentScanner")}</span>
+                  <span className="chat-attachment-scanner">{attachment.scannerId}</span>
                   {canRetryAttachmentScan(attachment.scanState) && (
                     <button
                       type="button"
