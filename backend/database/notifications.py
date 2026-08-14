@@ -107,11 +107,14 @@ def get_users_endpoints_in_timezones(time_zones: List[str]) -> List[UnifiedPushE
     fan-out parity with the FCM token path)."""
     if not time_zones:
         return []
-    wanted = set(time_zones)
     store = get_document_store()
     endpoints: List[UnifiedPushEndpoint] = []
-    for user in store.query('users', filters=[('time_zone', 'in', list(wanted))]):
-        endpoints.extend(get_all_endpoints(user.id))
+    # A Firestore 'in' filter rejects more than 30 values; chunk like the FCM sibling
+    # (get_users_for_daily_summary) so an hour bucket with >30 timezones still resolves (cubic 10887 B3).
+    unique = list(dict.fromkeys(time_zones))
+    for i in range(0, len(unique), 30):
+        for user in store.query('users', filters=[('time_zone', 'in', unique[i : i + 30])]):
+            endpoints.extend(get_all_endpoints(user.id))
     return endpoints
 
 
@@ -394,6 +397,15 @@ def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) ->
 
     users: List[Tuple[str, List[str], Any]] = []
 
+    # Which recipients this deployment delivers to: FCM tokens, or (in a UnifiedPush deployment, where
+    # NO user has FCM tokens) each user's UnifiedPush endpoints. Without this the "no tokens -> skip"
+    # below drops EVERY user and sends zero daily summaries on UnifiedPush (cubic PR 10887 B2). Lazy
+    # import: utils.push imports this module.
+    from utils.push.base import UNIFIEDPUSH
+    from utils.push.selector import resolve_push_backend
+
+    unifiedpush = resolve_push_backend() == UNIFIEDPUSH
+
     # 'Where in' query only supports 30 or fewer items in list so we split in chunks
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
 
@@ -417,26 +429,32 @@ def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) ->
                 if user_hour != target_local_hour:
                     continue
 
-                # Collect tokens from subcollection
-                tokens: List[str] = []
-                token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
-                for token_doc in token_docs:
-                    token_data = _typed_doc(token_doc)
-                    token_value = token_data.get('token')
-                    if token_value:
-                        tokens.append(str(token_value))
+                # Collect the recipients the active backend delivers to. For UnifiedPush the per-user
+                # send (_send_to_user) looks the endpoints up by uid, so the list only needs to be
+                # non-empty to keep the user in the fan-out; for FCM it carries the tokens to send.
+                recipients: List[Any]
+                if unifiedpush:
+                    recipients = list(get_all_endpoints(uid))
+                else:
+                    tokens: List[str] = []
+                    token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
+                    for token_doc in token_docs:
+                        token_data = _typed_doc(token_doc)
+                        token_value = token_data.get('token')
+                        if token_value:
+                            tokens.append(str(token_value))
+                    # Add legacy token if exists and not already in list
+                    legacy_token = user_data.get('fcm_token')
+                    if legacy_token and legacy_token not in tokens:
+                        tokens.append(str(legacy_token))
+                    recipients = tokens
 
-                # Add legacy token if exists and not already in list
-                legacy_token = user_data.get('fcm_token')
-                if legacy_token and legacy_token not in tokens:
-                    tokens.append(str(legacy_token))
-
-                # Skip users with no tokens
-                if not tokens:
+                # Skip users with no deliverable recipient on this backend
+                if not recipients:
                     continue
 
                 time_zone = user_data.get('time_zone')
-                chunk_users.append((uid, tokens, time_zone))
+                chunk_users.append((uid, recipients, time_zone))
 
         except Exception as e:
             logger.error(f"Error querying chunk for daily summary: {e}")

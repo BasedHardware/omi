@@ -15,6 +15,8 @@ from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
+from utils.push.base import UNIFIEDPUSH
+from utils.push.selector import resolve_push_backend
 from utils.webhooks import day_summary_webhook
 import database.daily_summaries as daily_summaries_db
 import logging
@@ -244,10 +246,18 @@ async def _send_notification_for_time(target_time: str, title: str, body: str) -
 async def _get_users_in_timezone(target_time: str) -> Any:
     timezones_in_time = _get_timezones_at_time(target_time)
     timezone_chunks = [timezones_in_time[i : i + 30] for i in range(0, len(timezones_in_time), 30)]
-    chunk_results = await asyncio.gather(
-        *[run_blocking(db_executor, notification_db.get_users_token_in_timezones, chunk) for chunk in timezone_chunks]
+    # send_bulk_notification treats its list as endpoints in UnifiedPush mode, so gather endpoints (not
+    # FCM tokens) as the recipients there — a UnifiedPush deployment has no tokens, so the morning
+    # notification would otherwise reach nobody (cubic PR 10887 B2).
+    fetch = (
+        notification_db.get_users_endpoints_in_timezones
+        if resolve_push_backend() == UNIFIEDPUSH
+        else notification_db.get_users_token_in_timezones
     )
-    return [token for chunk in chunk_results for token in chunk]
+    chunk_results = await asyncio.gather(
+        *[run_blocking(db_executor, fetch, chunk) for chunk in timezone_chunks]
+    )
+    return [recipient for chunk in chunk_results for recipient in chunk]
 
 
 def _get_timezones_at_time(target_time: str) -> List[str]:

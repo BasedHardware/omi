@@ -15,7 +15,7 @@ import pytest  # noqa: E402
 import database.notifications as notification_db  # noqa: E402
 from models.other import SaveUnifiedPushEndpointRequest  # noqa: E402
 from routers import notifications as notif_router  # noqa: E402
-from tests.store_fakes import FakeDocumentStore  # noqa: E402
+from tests.store_fakes import FakeDocumentStore, install_fake_db_client  # noqa: E402
 
 
 @pytest.fixture
@@ -144,3 +144,36 @@ def test_endpoint_request_requires_both_or_neither_webpush_keys():
         SaveUnifiedPushEndpointRequest(endpoint='e', time_zone='UTC', p256dh='p')  # only one -> rejected
     with pytest.raises(ValidationError):
         SaveUnifiedPushEndpointRequest(endpoint='e', time_zone='UTC', auth='a')
+
+
+def test_get_users_endpoints_in_timezones_chunks_over_30(fake_store):
+    # cubic PR 10887 B3: a Firestore 'in' filter rejects >30 values, so the timezone list must be
+    # chunked; register endpoints across 35 distinct timezones and expect all resolved (no crash).
+    tzs = [f"Zone/{i}" for i in range(35)]
+    for i, tz in enumerate(tzs):
+        notification_db.save_endpoint(
+            f"u{i}", {"endpoint": f"http://ntfy/{i}?up=1", "device_key": f"android_{i}", "time_zone": tz}
+        )
+    eps = notification_db.get_users_endpoints_in_timezones(tzs)
+    assert len(eps) == 35  # every timezone chunk was queried and its endpoints aggregated
+
+
+def test_daily_summary_includes_unifiedpush_users_without_fcm_tokens(monkeypatch):
+    # cubic PR 10887 B2: in a UnifiedPush deployment nobody has FCM tokens, so the "no tokens -> skip"
+    # dropped EVERY user and sent zero daily summaries. With backend=unifiedpush the fan-out must
+    # include a user who has endpoints (by uid; the per-user send resolves endpoints), and still skip
+    # a user with none.
+    store = FakeDocumentStore()
+    monkeypatch.setattr(notification_db, 'get_document_store', lambda: store)
+    install_fake_db_client(monkeypatch, store=store)
+    monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', 'unifiedpush')
+
+    notification_db.save_endpoint(
+        'u-has', {'endpoint': 'http://ntfy/a?up=1', 'device_key': 'android_a', 'time_zone': 'UTC'}
+    )
+    store.set('users/u-none', {'time_zone': 'UTC'})  # same tz/hour, but no UnifiedPush endpoint
+
+    users = notification_db.get_users_for_daily_summary(['UTC'], notification_db.DEFAULT_DAILY_SUMMARY_HOUR_LOCAL)
+    uids = {u[0] for u in users}
+    assert 'u-has' in uids  # UnifiedPush user is included (was skipped before this fix)
+    assert 'u-none' not in uids  # a user with no deliverable recipient is still skipped
