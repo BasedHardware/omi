@@ -157,6 +157,8 @@ plugins/example/tmp/
 
 backend/pretrained_models/
 backend/scripts/rag/*.json
+**/user_messages_with_bot_name.json
+**/plugin_data_by_persona_name.json
 backend/scripts/rag/visualizations/
 /backend/scripts/data/
 /backend/pretrained_models/
