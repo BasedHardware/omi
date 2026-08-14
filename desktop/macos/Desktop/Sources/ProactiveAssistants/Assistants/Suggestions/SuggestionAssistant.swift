@@ -20,8 +20,14 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   var isEnabled: Bool {
     get async {
+      // Deliberately independent of ContextBucketsFeature. The buckets rollout gated this
+      // on `!ContextBucketsFeature.isEnabled`, betting the context director would replace
+      // live suggestions — it delivered almost nothing, and with the flag at 100% of all
+      // users focus nudges went silent fleet-wide with no error logged (Aug 13–14 2026).
+      // If the director is ever meant to replace this assistant again, that must be an
+      // explicit, evidenced change — never a side effect of a rollout flag.
       await MainActor.run {
-        !ContextBucketsFeature.isEnabled && SuggestionAssistantSettings.shared.isEnabled
+        SuggestionAssistantSettings.shared.isEnabled
       }
     }
   }
