@@ -375,6 +375,9 @@ class _AppShellState extends State<AppShell> {
       context.read<MessageProvider>().refreshMessages();
       context.read<UsageProvider>().fetchSubscription();
       context.read<TaskIntegrationProvider>().loadFromBackend();
+      // Same fire-and-forget as task integrations: chat/settings must not
+      // treat an empty in-memory map as "not connected" after process death.
+      context.read<IntegrationProvider>().loadFromBackend();
 
       NotificationService.instance.saveNotificationToken();
     } else {
