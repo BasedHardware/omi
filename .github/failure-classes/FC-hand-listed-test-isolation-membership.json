@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-hand-listed-test-isolation-membership",
+  "violated_contract": "A test runner that must serialize the suites touching a process-global domain has to derive that membership from the property that makes a suite unsafe, not from a hand-maintained list. A list drifts silently: the next suite to adopt the same fixture stays in the parallel pool, a concurrent sibling mutates the shared state underneath it, and the suite fails with a production error payload that looks like a product bug rather than a scheduling defect.",
+  "canonical_prevention": "Derive the isolation cluster from the source signal (here: a test file's use of RuntimeOwnerAuthorityTestFixture, which transitions the process-global owner authority through the standard UserDefaults domain) and union it with any explicit list, so omission is not an opt-out. Prove the derivation in the runner's hermetic self-test with an adopter suite that is deliberately absent from the explicit list.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/scripts/swift-test-suites.sh",
+    "desktop/macos/tests/test-swift-test-suites.sh"
+  ],
+  "evidence_prs": [
+    9597
+  ],
+  "scope_hints": [
+    "desktop/macos/scripts/swift-test-suites.sh",
+    "desktop/macos/tests/**"
+  ],
+  "status": "open"
+}

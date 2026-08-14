@@ -133,8 +133,6 @@ enum SuggestionGateDecision: Equatable, Sendable {
   case skippedDisabled
   case skippedExcludedApp
   case skippedCooldown
-  case skippedSnoozed
-  case skippedQuietPeriod
   /// The user has not settled in this context long enough to be working in it.
   case skippedDwell
   /// Today's evaluation budget is spent.
@@ -149,6 +147,23 @@ enum SuggestionGateDecision: Equatable, Sendable {
 /// model, no I/O — so the cost contract ("no context switch, no Gemini call") is provable
 /// in a unit test.
 enum SuggestionGatePolicy {
+  /// How long the user must sit in a context before it is worth an evaluation.
+  ///
+  /// Maximum (level 5) is an explicit "show me everything, fast": open TikTok and the
+  /// nudge should land in seconds, so dwell drops to 10 s there. Every other level keeps
+  /// the deliberate 30 s — passing through a window is not a request for advice.
+  static func requiredDwell(frequencyLevel: Int) -> TimeInterval {
+    frequencyLevel >= 5 ? 10 : 30
+  }
+
+  /// Between-nudge cooldown, from the user's configured base.
+  ///
+  /// Maximum caps it at 30 s — a user who chose "Maximum" wants back-to-back nudges, not
+  /// one per three minutes. Every other level keeps the configured value untouched.
+  static func cooldown(base: TimeInterval, frequencyLevel: Int) -> TimeInterval {
+    frequencyLevel >= 5 ? min(base, 30) : base
+  }
+
   /// Ordered cheapest-first, and every branch is free. Switching apps is not evidence that
   /// the user wants advice — people cmd-tab hundreds of times a day — so dwell and the
   /// daily budget do most of the work here, and the caller adds a grounding check before
@@ -156,8 +171,6 @@ enum SuggestionGatePolicy {
   static func decide(
     isEnabled: Bool,
     isAppExcluded: Bool,
-    isSnoozed: Bool,
-    isWithinActivePeriod: Bool,
     now: Date,
     lastEvaluationAt: Date?,
     cooldown: TimeInterval,
@@ -168,8 +181,6 @@ enum SuggestionGatePolicy {
   ) -> SuggestionGateDecision {
     guard isEnabled else { return .skippedDisabled }
     guard !isAppExcluded else { return .skippedExcludedApp }
-    guard !isSnoozed else { return .skippedSnoozed }
-    guard isWithinActivePeriod else { return .skippedQuietPeriod }
     guard dwell >= requiredDwell else { return .skippedDwell }
     if let lastEvaluationAt, now.timeIntervalSince(lastEvaluationAt) < cooldown {
       return .skippedCooldown

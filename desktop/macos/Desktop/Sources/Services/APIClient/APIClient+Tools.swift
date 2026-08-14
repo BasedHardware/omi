@@ -8,11 +8,64 @@ extension APIClient {
     let toolName: String
     let resultText: String
     let isError: Bool
+    let sources: [ToolSource]?
 
     enum CodingKeys: String, CodingKey {
       case toolName = "tool_name"
       case resultText = "result_text"
       case isError = "is_error"
+      case sources
+    }
+  }
+
+  struct ToolSource: Decodable, Sendable {
+    let kind: String
+    let sourceID: String
+    let title: String
+    let preview: String
+    let createdAt: String?
+    let momentTimestampMs: Int?
+    let appName: String?
+    let url: String?
+
+    enum CodingKeys: String, CodingKey {
+      case kind, title, preview, url
+      case sourceID = "source_id"
+      case createdAt = "created_at"
+      case momentTimestampMs = "moment_timestamp_ms"
+      case appName = "app_name"
+    }
+
+    init(
+      kind: String,
+      sourceID: String,
+      title: String,
+      preview: String,
+      createdAt: String?,
+      momentTimestampMs: Int?,
+      appName: String?,
+      url: String?
+    ) {
+      self.kind = kind
+      self.sourceID = sourceID
+      self.title = title
+      self.preview = preview
+      self.createdAt = createdAt
+      self.momentTimestampMs = momentTimestampMs
+      self.appName = appName
+      self.url = url
+    }
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      kind = try container.decodeIfPresent(String.self, forKey: .kind) ?? ""
+      sourceID = try container.decodeIfPresent(String.self, forKey: .sourceID) ?? ""
+      title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+      preview = try container.decodeIfPresent(String.self, forKey: .preview) ?? ""
+      createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+      momentTimestampMs = try container.decodeIfPresent(Int.self, forKey: .momentTimestampMs)
+      appName = try container.decodeIfPresent(String.self, forKey: .appName)
+      url = try container.decodeIfPresent(String.self, forKey: .url)
     }
   }
 

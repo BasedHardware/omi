@@ -274,6 +274,35 @@
             "description": "Stable client-generated session ID. When provided, retries return the same conversation ID.",
             "title": "Client Session Id"
           },
+          "conversation_finalization_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user_stop",
+                  "finish_and_continue",
+                  "meeting_started",
+                  "meeting_ended",
+                  "max_duration_rotation",
+                  "crash_recovery",
+                  "retry"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Finalization Reason"
+          },
+          "conversation_role": {
+            "default": "ambient",
+            "enum": [
+              "ambient",
+              "meeting"
+            ],
+            "title": "Conversation Role",
+            "type": "string"
+          },
           "finished_at": {
             "anyOf": [
               {

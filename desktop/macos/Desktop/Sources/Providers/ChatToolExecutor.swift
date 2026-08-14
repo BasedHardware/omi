@@ -238,7 +238,11 @@ class ChatToolExecutor {
       return await executeSQL(toolCall.arguments, expectedOwnerID: expectedOwnerID)
 
     case .semanticSearch:
-      return await executeSemanticSearch(toolCall.arguments, expectedOwnerID: expectedOwnerID)
+      return await executeSemanticSearch(
+        toolCall.arguments,
+        runID: originatingRunId,
+        attemptID: originatingAttemptId,
+        expectedOwnerID: expectedOwnerID)
 
     case .getDailyRecap:
       return await executeDailyRecap(toolCall.arguments, expectedOwnerID: expectedOwnerID)
@@ -272,6 +276,8 @@ class ChatToolExecutor {
     case .getCanonicalGoals:
       return await executeGetCanonicalGoals(
         toolCall.arguments,
+        runID: originatingRunId,
+        attemptID: originatingAttemptId,
         expectedOwnerID: expectedOwnerID,
         authorizationSnapshot: currentOwnerAuthorizationSnapshot,
         api: backendAPIClient)
@@ -457,6 +463,8 @@ class ChatToolExecutor {
       .createActionItem, .updateActionItem, .createCalendarEvent:
       return await executeBackendTool(
         toolCall,
+        runID: originatingRunId,
+        attemptID: originatingAttemptId,
         expectedOwnerID: expectedOwnerID,
         api: backendAPIClient)
 
@@ -470,6 +478,8 @@ class ChatToolExecutor {
 
   private static func executeGetCanonicalGoals(
     _ arguments: [String: Any],
+    runID: String?,
+    attemptID: String?,
     expectedOwnerID: String?,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
     api: APIClient
@@ -496,7 +506,21 @@ class ChatToolExecutor {
         return value
       }
       let data = try JSONSerialization.data(withJSONObject: ["goals": result])
-      return String(data: data, encoding: .utf8) ?? #"{"goals":[]}"#
+      let text = String(data: data, encoding: .utf8) ?? #"{"goals":[]}"#
+      let sources = goals.prefix(20).map { goal in
+        APIClient.ToolSource(
+          kind: ChatCitationReference.Kind.goal.rawValue,
+          sourceID: goal.id,
+          title: goal.title,
+          preview: goal.desiredOutcome,
+          createdAt: nil,
+          momentTimestampMs: nil,
+          appName: nil,
+          url: nil)
+      }
+      let references = await ChatCitationProvenanceRegistry.shared.register(
+        sources, runID: runID, attemptID: attemptID)
+      return ChatCitationProvenanceRegistry.annotatedToolResult(text, references: references)
     } catch {
       return #"{"ok":false,"error":"canonical_goals_unavailable"}"#
     }
@@ -897,7 +921,18 @@ class ChatToolExecutor {
         ok: true,
         imageBytes: data.count,
         permissionTCCGranted: CGPreflightScreenCaptureAccess())
-      return #"{"ok":true,"evidence_attached":true}"#
+      let reference = await ChatCitationProvenanceRegistry.shared.register(
+        kind: .screenshot,
+        sourceID: String(screenshotID),
+        title: screenshot.windowTitle ?? screenshot.appName,
+        preview: screenshot.ocrText ?? "Screenshot evidence",
+        createdAt: ISO8601DateFormatter().string(from: screenshot.timestamp),
+        appName: screenshot.appName,
+        runID: runID,
+        attemptID: attemptID)
+      return ChatCitationProvenanceRegistry.annotatedToolResult(
+        #"{"ok":true,"evidence_attached":true}"#,
+        references: reference.map { [$0] } ?? [])
     } catch {
       ScreenContextToolTelemetry.trackToolResult(
         toolName: "show_rewind_evidence",
@@ -1604,6 +1639,8 @@ class ChatToolExecutor {
   /// Search screenshots using vector similarity
   private static func executeSemanticSearch(
     _ args: [String: Any],
+    runID: String?,
+    attemptID: String?,
     expectedOwnerID: String?
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
@@ -1637,6 +1674,7 @@ class ChatToolExecutor {
       dateFormatter.timeStyle = .short
 
       var lines: [String] = []
+      var sources = [APIClient.ToolSource]()
       var count = 0
 
       for result in vectorResults where result.similarity > 0.3 {
@@ -1667,6 +1705,16 @@ class ChatToolExecutor {
             .trimmingCharacters(in: .whitespacesAndNewlines)
           lines.append("   Content: \(preview)")
         }
+        sources.append(
+          APIClient.ToolSource(
+            kind: ChatCitationReference.Kind.screenshot.rawValue,
+            sourceID: String(result.screenshotId),
+            title: windowTitle.isEmpty ? screenshot.appName : windowTitle,
+            preview: screenshot.ocrText ?? "",
+            createdAt: ISO8601DateFormatter().string(from: screenshot.timestamp),
+            momentTimestampMs: nil,
+            appName: screenshot.appName,
+            url: nil))
 
         if count >= limit { break }
       }
@@ -1682,7 +1730,10 @@ class ChatToolExecutor {
       lines.insert("Found \(count) screenshot(s) matching \"\(query)\":", at: 0)
 
       log("Tool semantic_search returned \(count) results")
-      return lines.joined(separator: "\n")
+      let references = await ChatCitationProvenanceRegistry.shared.register(
+        sources, runID: runID, attemptID: attemptID)
+      return ChatCitationProvenanceRegistry.annotatedToolResult(
+        lines.joined(separator: "\n"), references: references)
 
     } catch {
       logError("Tool semantic_search failed", error: error)
@@ -3045,12 +3096,31 @@ class ChatToolExecutor {
 
   private static func executeBackendTool(
     _ toolCall: ToolCall,
+    runID: String?,
+    attemptID: String?,
     expectedOwnerID: String?,
     api: APIClient
   ) async -> String {
-    do {
-      let args = toolCall.arguments
+    let args = toolCall.arguments
 
+    func annotated(_ response: APIClient.ToolResponse) async -> String {
+      let sources: [APIClient.ToolSource]
+      if let typedSources = response.sources {
+        sources = typedSources
+      } else {
+        sources = await legacyListToolSources(
+          toolName: toolCall.name,
+          arguments: args,
+          expectedOwnerID: expectedOwnerID,
+          api: api)
+      }
+      let references = await ChatCitationProvenanceRegistry.shared.register(
+        sources, runID: runID, attemptID: attemptID)
+      return ChatCitationProvenanceRegistry.annotatedToolResult(
+        response.resultText, references: references)
+    }
+
+    do {
       // Validate date parameters before sending to backend
       var validatedStartDate: String? = nil
       var validatedEndDate: String? = nil
@@ -3076,7 +3146,7 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
-        return resp.resultText
+        return await annotated(resp)
 
       case "search_conversations":
         guard let query = args["query"] as? String, !query.isEmpty else {
@@ -3091,7 +3161,7 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
-        return resp.resultText
+        return await annotated(resp)
 
       case "get_memories":
         let resp = try await api.toolGetMemories(
@@ -3102,7 +3172,7 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
-        return resp.resultText
+        return await annotated(resp)
 
       case "search_memories":
         guard let query = args["query"] as? String, !query.isEmpty else {
@@ -3114,7 +3184,7 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
-        return resp.resultText
+        return await annotated(resp)
 
       case "get_action_items":
         var validatedDueStart: String? = nil
@@ -3140,7 +3210,7 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
-        return resp.resultText
+        return await annotated(resp)
 
       case "create_action_item":
         guard let desc = args["description"] as? String, !desc.isEmpty else {
@@ -3237,6 +3307,105 @@ class ChatToolExecutor {
     } catch {
       log("Backend tool error (\(toolCall.name)): \(error)")
       return "Error calling backend: \(error.localizedDescription)"
+    }
+  }
+
+  /// Compatibility for development servers that predate the typed `sources` field. It never
+  /// guesses from titles or prose: the same owner-bound list endpoint is queried with the same
+  /// filters, and its canonical entity IDs become the temporary typed projection. Once every
+  /// deployed backend returns `sources`, this path becomes an inert fallback.
+  private static func legacyListToolSources(
+    toolName: String,
+    arguments: [String: Any],
+    expectedOwnerID: String?,
+    api: APIClient
+  ) async -> [APIClient.ToolSource] {
+    guard isExpectedOwnerCurrent(expectedOwnerID) else { return [] }
+    let limit = min(max(arguments["limit"] as? Int ?? 20, 1), 128)
+    let offset = max(arguments["offset"] as? Int ?? 0, 0)
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let fallbackFormatter = ISO8601DateFormatter()
+    func date(_ key: String) -> Date? {
+      guard let value = arguments[key] as? String else { return nil }
+      return formatter.date(from: value) ?? fallbackFormatter.date(from: value)
+    }
+    func iso(_ value: Date?) -> String? {
+      value.map { formatter.string(from: $0) }
+    }
+
+    do {
+      switch toolName {
+      case "get_conversations":
+        let values = try await api.getConversations(
+          limit: limit,
+          offset: offset,
+          startDate: date("start_date"),
+          endDate: date("end_date"),
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+        guard isExpectedOwnerCurrent(expectedOwnerID) else { return [] }
+        return values.map {
+          APIClient.ToolSource(
+            kind: ChatCitationReference.Kind.conversation.rawValue,
+            sourceID: $0.id,
+            title: $0.title,
+            preview: $0.overview,
+            createdAt: iso($0.createdAt),
+            momentTimestampMs: nil,
+            appName: nil,
+            url: nil)
+        }
+
+      case "get_memories":
+        // The v3 list has no date-range filter. Refuse a potentially different result set rather
+        // than attach plausible-but-wrong memories when the legacy tool call was date-scoped.
+        guard arguments["start_date"] == nil, arguments["end_date"] == nil else { return [] }
+        let values = try await api.getMemories(
+          limit: limit,
+          offset: offset,
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+        guard isExpectedOwnerCurrent(expectedOwnerID) else { return [] }
+        return values.map {
+          APIClient.ToolSource(
+            kind: ChatCitationReference.Kind.memory.rawValue,
+            sourceID: $0.id,
+            title: $0.headline ?? "Memory",
+            preview: $0.content,
+            createdAt: iso($0.createdAt),
+            momentTimestampMs: nil,
+            appName: $0.sourceApp,
+            url: nil)
+        }
+
+      case "get_action_items":
+        let response = try await api.getActionItems(
+          limit: limit,
+          offset: offset,
+          completed: arguments["completed"] as? Bool,
+          startDate: date("start_date"),
+          endDate: date("end_date"),
+          dueStartDate: date("due_start_date"),
+          dueEndDate: date("due_end_date"),
+          expectedOwnerId: expectedOwnerID,
+          authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+        guard isExpectedOwnerCurrent(expectedOwnerID) else { return [] }
+        return response.items.map {
+          APIClient.ToolSource(
+            kind: ChatCitationReference.Kind.task.rawValue,
+            sourceID: $0.id,
+            title: $0.description,
+            preview: $0.contextSummary ?? $0.description,
+            createdAt: iso($0.createdAt),
+            momentTimestampMs: nil,
+            appName: nil,
+            url: nil)
+        }
+
+      default:
+        return []
+      }
+    } catch {
+      return []
     }
   }
 }

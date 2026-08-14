@@ -39,6 +39,7 @@ final class OnboardingPersistenceClearingTests: XCTestCase {
       // of the shared list, leaking the prior user's resume step + role to the
       // next account on the same Mac.
       "sbOnboardingResumeStep",
+      "sbOnboardingShortcutsCompleted",
       "onboardingRole",
     ]
     for key in required {

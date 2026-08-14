@@ -372,6 +372,49 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(snapshot.ownerSynchronizations, 1)
   }
 
+  func testPinnedPiMonoSessionsFetchTokenAfterHarnessSwitch() async throws {
+    XCTAssertFalse(
+      AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
+        preferredAdapterIsPiMono: false,
+        requestedCredentials: true,
+        isNonProduction: false),
+      "ACP/Hermes/OpenClaw must still start without a managed token")
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: true,
+        isNonProduction: false),
+      "production alternate-harness starts must still fetch the managed token")
+    XCTAssertTrue(
+      AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
+        preferredAdapterIsPiMono: true,
+        requestedCredentials: true,
+        isNonProduction: false))
+
+    var fetches = 0
+    let header = try await AgentRuntimeProcess.startupAuthHeader(
+      requiresCredentials: AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: true,
+        isNonProduction: false),
+      fetchAuthHeader: {
+        fetches += 1
+        return "Bearer pinned-session-token"
+      })
+    XCTAssertEqual(fetches, 1)
+    XCTAssertEqual(header, "Bearer pinned-session-token")
+
+    var skippedFetches = 0
+    let skipped = try await AgentRuntimeProcess.startupAuthHeader(
+      requiresCredentials: AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: false,
+        isNonProduction: true),
+      fetchAuthHeader: {
+        skippedFetches += 1
+        return "Bearer should-not-fetch"
+      })
+    XCTAssertEqual(skippedFetches, 0)
+    XCTAssertNil(skipped)
+  }
+
   func testNamedBundleStartupUsesValidSeededCredentialWithoutForcedRefresh() {
     XCTAssertFalse(
       AgentRuntimeCredentialPolicy.shouldForceRefreshAtStartup(
@@ -927,10 +970,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(
       bridgeSource.contains(
         "AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
-    XCTAssertTrue(
-      bridgeSource.contains(
-        "isPiMonoHarness\n      && AgentRuntimeCredentialPolicy.requiresManagedCredentials"))
-    XCTAssertTrue(bridgeSource.contains("if adapterId == AgentAdapterId.piMono.rawValue"))
+    XCTAssertTrue(bridgeSource.contains("shouldRequirePiMonoCredentials("))
+    XCTAssertTrue(bridgeSource.contains("shouldFetchManagedToken"))
+    XCTAssertFalse(bridgeSource.contains("if adapterId == AgentAdapterId.piMono.rawValue"))
     XCTAssertTrue(
       bridgeSource.contains(
         "if requiresCredentials {\n      ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)"))

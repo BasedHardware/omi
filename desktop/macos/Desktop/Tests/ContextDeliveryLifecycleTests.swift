@@ -114,9 +114,7 @@ final class ContextDeliveryLifecycleTests: XCTestCase {
       gate: ContextDeliveryGateInput(
         masterEnabled: true,
         frequencyLevel: 3,
-        snoozed: false,
         paywalled: false,
-        minuteOfDay: 12 * 60,
         cooldownSeconds: 10 * 60),
       now: now)
 
@@ -171,9 +169,7 @@ final class ContextDeliveryLifecycleTests: XCTestCase {
       gate: ContextDeliveryGateInput(
         masterEnabled: true,
         frequencyLevel: 4,
-        snoozed: false,
         paywalled: false,
-        minuteOfDay: 12 * 60,
         cooldownSeconds: 3 * 60),
       now: now)
 
@@ -184,9 +180,7 @@ final class ContextDeliveryLifecycleTests: XCTestCase {
     ContextDeliveryGateInput(
       masterEnabled: true,
       frequencyLevel: 5,
-      snoozed: false,
       paywalled: false,
-      minuteOfDay: 12 * 60,
       cooldownSeconds: 0)
   }
 

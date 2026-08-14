@@ -113,7 +113,13 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var distributionDebounceTimer: Timer?
   private(set) var latestCapturedFrame: CapturedFrame?
   /// Fallback interval: re-distribute even without context change to catch visual-only updates.
-  private let distributionFallbackInterval: TimeInterval = 60
+  /// Level-aware: Maximum re-flushes every 10 s so the suggestion dwell gate (10 s at
+  /// Maximum) sees an eligible frame seconds after a switch instead of at the next
+  /// minute mark. See `ProactiveAssistantOrchestrationPolicy.distributionFallbackInterval`.
+  private var distributionFallbackInterval: TimeInterval {
+    ProactiveAssistantOrchestrationPolicy.distributionFallbackInterval(
+      frequencyLevel: NotificationService.currentFrequencyLevel())
+  }
   private let messagingDistributionFallbackInterval: TimeInterval = 15
 
   /// Apps where new content can arrive while the user stays focused. Reusing the same
