@@ -735,7 +735,9 @@ def price_ids_match_plan_and_interval(
     if not current_interval:
         try:
             current_price = stripe.Price.retrieve(current_price_id)
-            current_interval = current_price.recurring.interval
+            recurring = getattr(current_price, 'recurring', None)
+            if recurring is not None:
+                current_interval = getattr(recurring, 'interval', None)
         except Exception as e:
             logger.error(f"Error retrieving current price interval: {sanitize(str(e))}")
             return False

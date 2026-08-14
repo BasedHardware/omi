@@ -183,6 +183,23 @@ def test_legacy_price_matches_current_price_with_same_plan_and_interval(monkeypa
     assert not sub.price_ids_match_plan_and_interval(legacy_price_id, "price_unlimited_annual")
 
 
+def test_price_interval_lookup_handles_price_without_recurring(monkeypatch, subscription_module):
+    sub = subscription_module
+    legacy_price_id = next(iter(sub.LEGACY_PRICE_MAP))
+    monkeypatch.setenv("STRIPE_UNLIMITED_MONTHLY_PRICE_ID", "price_unlimited_monthly")
+    monkeypatch.setenv("STRIPE_UNLIMITED_ANNUAL_PRICE_ID", "price_unlimited_annual")
+
+    # A legacy price whose Stripe object carries no recurring block (retrieved
+    # only after the known plan definitions fail to match) must not crash the
+    # interval lookup — it simply cannot be matched.
+    price_without_recurring = MagicMock()
+    del price_without_recurring.recurring
+    monkeypatch.setattr(sub.stripe.Price, "retrieve", MagicMock(return_value=price_without_recurring))
+
+    assert not sub.price_ids_match_plan_and_interval(legacy_price_id, "price_unlimited_monthly")
+    assert not sub.price_ids_match_plan_and_interval(legacy_price_id, "price_unlimited_annual")
+
+
 def test_reconcile_basic_subscription_without_stored_stripe_id(monkeypatch, subscription_module):
     sub = subscription_module
     stored = SimpleNamespace(plan=PlanType.basic, stripe_subscription_id=None, current_period_end=None)
