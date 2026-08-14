@@ -107,6 +107,31 @@ final class ScreenWatcher {
 
     var isRunning: Bool { loop != nil }
 
+    /// How long to wait before the next tick, given how long this one took.
+    ///
+    /// **The interval is a cadence, not a cooldown.** This loop used to sleep the full period *after*
+    /// the work, which quietly made the real cadence `interval + work` — and the work is not uniform:
+    /// a tick the dedup gate suppresses costs a capture and a hash, while a tick that stores costs
+    /// OCR, an accessibility walk and a HEIC encode on top. So the pipeline slowed down precisely on
+    /// the ticks that were producing something. Measured on this machine's own database, consecutive
+    /// stored frames averaged **3.79 s apart against a configured 3.0 s** — a 26% rate loss that no
+    /// setting asked for and nothing reported, and about two thirds of the measured shortfall against
+    /// the shipping app's Rewind capture, whose timer is 3 s of wall clock regardless of what its
+    /// indexer is doing.
+    ///
+    /// Sleeping only the remainder restores the promise. It cannot spin: when a tick outruns the
+    /// period this returns zero and the next tick starts at once, and a tick that took longer than
+    /// the period is by definition doing real work rather than looping. A backwards clock (NTP
+    /// correction, wake from sleep) makes `elapsed` negative and falls back to the whole period —
+    /// pausing rather than hammering the WindowServer is the safe direction for nonsense input.
+    ///
+    /// Pure and `nonisolated` so the cadence is assertable without a display, a WindowServer or a
+    /// three-second wait.
+    nonisolated static func sleepAfterTick(period: TimeInterval, elapsed: TimeInterval) -> TimeInterval {
+        guard elapsed.isFinite, elapsed > 0 else { return period }
+        return max(0, period - elapsed)
+    }
+
     func start(interval: TimeInterval = 3.0) {
         guard loop == nil else { return }
         let period = max(0.5, interval)
@@ -119,10 +144,12 @@ final class ScreenWatcher {
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
+                let startedAt = ContextTime.now
                 await self.tick()
-                // Sleep *after* the work. A repeating Timer would queue ticks behind a slow OCR
-                // pass and then fire them back-to-back; this loop simply runs a little later.
-                try? await Task.sleep(nanoseconds: UInt64(period * 1_000_000_000))
+                let sleep = Self.sleepAfterTick(
+                    period: period, elapsed: ContextTime.now - startedAt)
+                guard sleep > 0 else { continue }
+                try? await Task.sleep(nanoseconds: UInt64(sleep * 1_000_000_000))
             }
         }
         ContextLog.info("Screen watcher started (every \(period)s)", "screen")
@@ -157,6 +184,7 @@ final class ScreenWatcher {
         lastWindowTitle = nil
         lastFullPassAt = nil
         lastSkipReason = nil
+        census.reset()
         cachedContent = nil
         cachedContentAt = nil
         cachedCapture = nil
@@ -211,6 +239,8 @@ final class ScreenWatcher {
 
     private var lastSkipReason: String?
     private var lastErrorLoggedAt: Date?
+    /// What the last few hundred ticks concluded. See ``CaptureCensus``.
+    private var census = CaptureCensus()
     /// The last value handed to ``onStandDown``, so a steady state is announced once.
     private var standDown: ScreenStandDown?
 
@@ -262,7 +292,17 @@ final class ScreenWatcher {
     // MARK: - One tick
 
     private func tick() async {
-        guard !Task.isCancelled else { return }
+        let outcome = await tickOutcome()
+        // One line per few hundred ticks, not per tick. See ``CaptureCensus``.
+        if let line = census.record(outcome) { ContextLog.info(line, "screen") }
+    }
+
+    /// One pass of the loop, and what it concluded. Every path returns exactly one ``TickOutcome``
+    /// so the census can account for the whole cadence rather than only for the frames that survived
+    /// it — the distinction between "not firing often enough" and "firing and discarding" is the one
+    /// this pipeline could not previously make about itself.
+    private func tickOutcome() async -> TickOutcome {
+        guard !Task.isCancelled else { return .standDown }
         // First, because it is the only guard whose answer can change without anything on this Mac
         // moving: a grant is dropped by the OS, not by the user's hands. It used to be a bare
         // `hasPermission()` that logged once and idled — the exact shape of the twenty-nine-hour
@@ -270,13 +310,13 @@ final class ScreenWatcher {
         if let block = Permissions.screenBlock() {
             reportStandDown(.blocked(block))
             noteServed()
-            return
+            return .standDown
         }
         guard !ScreenPipeline.isScreenLocked() else {
             reportStandDown(.paused("Screen locked"))
             noteSkip("screen locked")
             noteServed()
-            return
+            return .standDown
         }
         // Settings > Capture > "Pause on Inactivity", which until now was a switch wired to nothing.
         // Read live rather than cached: the answer is a system counter, and caching it is how a
@@ -293,13 +333,13 @@ final class ScreenWatcher {
             reportStandDown(.paused(idlePause))
             noteSkip(idlePause)
             noteServed()
-            return
+            return .standDown
         }
         guard let frontApp = NSWorkspace.shared.frontmostApplication else {
             noteSkip("no frontmost application")
             // Nothing on screen to capture is not the WindowServer refusing us.
             noteServed()
-            return
+            return .standDown
         }
 
         let bundleID = frontApp.bundleIdentifier ?? ""
@@ -310,7 +350,7 @@ final class ScreenWatcher {
         guard bundleID != ScreenPipeline.dockBundleIdentifier else {
             noteSkip("Mission Control")
             noteServed()
-            return
+            return .refused
         }
         // Asked before the window is resolved so an app that must never be read costs no
         // WindowServer enumeration, and asked again below once there is a title to judge.
@@ -320,23 +360,23 @@ final class ScreenWatcher {
             // about whether capture works, so it must neither arm nor advance the stall clock —
             // otherwise an hour in front of Claude Desktop would raise a false alarm.
             noteServed()
-            return
+            return .refused
         }
         if let reason = exclusions.exclusionReason(for: CaptureSubject(bundleID: bundleID, appName: appName)) {
             noteSkip(reason.logDescription)
             noteServed()
-            return
+            return .refused
         }
 
         let front = await activeWindow(pid: frontApp.processIdentifier)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else { return .standDown }
         guard let front else {
             // **Not** served. A frontmost application whose windows are invisible to
             // `SCShareableContent` is the signature of a window-server connection that no longer
             // carries capture rights, which is what a grant dropped mid-life leaves behind.
             noteSkip("frontmost app has no capturable window: \(appName)")
             reportStall()
-            return
+            return .unavailable
         }
         let window = front.window
 
@@ -356,7 +396,7 @@ final class ScreenWatcher {
         guard !ScreenPipeline.isOwnOutput(appName: appName, bundleID: bundleID, title: windowTitle) else {
             noteSkip("own output: \(appName)")
             noteServed()
-            return
+            return .refused
         }
         let subject = CaptureSubject(
             bundleID: bundleID,
@@ -367,20 +407,20 @@ final class ScreenWatcher {
                 bundleID: bundleID,
                 appName: appName,
                 window: capturedWindow))
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else { return .standDown }
         let admission = exclusions.admit(subject)
         guard let ticket = admission.ticket else {
             noteSkip(admission.reason?.logDescription ?? "excluded")
             noteServed()
-            return
+            return .refused
         }
 
         let image = await capture(window)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else { return .standDown }
         guard let image else {
             // `capture` already logged; this is the second of the three refusal signatures.
             reportStall()
-            return
+            return .unavailable
         }
         lastSkipReason = nil
         // Pixels came back, so the WindowServer is answering this process. The one signal in the
@@ -410,7 +450,7 @@ final class ScreenWatcher {
             // to a different window — a duplicate row every 3 seconds would bury the timeline it is
             // meant to be.
             if appName != lastAppName || windowTitle != lastWindowTitle {
-                emit(
+                return emit(
                     Frame(
                         capturedAt: capturedAt,
                         appName: appName,
@@ -419,7 +459,7 @@ final class ScreenWatcher {
                     ticket: ticket,
                     axNodes: [])
             }
-            return
+            return .suppressed
         }
         // Only genuinely new screens enter the ring — it is a memory of *distinct* screens, and a
         // forced capture is by definition one already in it. Re-adding it would evict a real
@@ -450,16 +490,16 @@ final class ScreenWatcher {
             )
         }.value
 
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else { return .standDown }
         guard let processed else {
             // Pixels moved but no readable text arrived, in a window that is already the last row
             // stored — a spinner advancing, a progress bar filling, a repaint. The row would say
             // nothing the row before it does not already say, so it costs a row, an image, and an FTS
             // entry for nothing.
-            return
+            return .lowSignal
         }
 
-        emit(
+        return emit(
             Frame(
                 capturedAt: capturedAt,
                 appName: appName,
@@ -543,9 +583,10 @@ final class ScreenWatcher {
     /// so nothing would have cleaned it up if the unlink had failed.
     ///
     /// Internal rather than private because this ordering is the property under test.
+    @discardableResult
     func emit(
         _ frame: Frame, ticket: CaptureTicket, axNodes: [AXNodeRecord], imageData: Data? = nil
-    ) {
+    ) -> TickOutcome {
         var frame = frame
         // Re-judged with the accessibility text, not merely revalidated against the subject the
         // ticket was minted from. That text is read after admission — it is the one piece of
@@ -558,12 +599,12 @@ final class ScreenWatcher {
             // here with bytes already on disk.
             exclusions.discard(frame, reason: reason)
             noteSkip(reason.logDescription)
-            return
+            return .refused
         }
         // Nobody left to hand this to: capture was stopped while the tick was suspended in OCR or in
         // an accessibility walk, which is seconds of work. Returning before the write is what stops
         // a stopped recorder from leaving a screenshot — and an accessibility subtree — behind it.
-        guard let onFrame else { return }
+        guard let onFrame else { return .refused }
 
         if let imageData { frame.imagePath = writeImage(imageData, frame.capturedAt) }
         // Nodes before the frame, always. The frame carries a root hash into a table those rows have
@@ -573,6 +614,7 @@ final class ScreenWatcher {
         lastAppName = frame.appName
         lastWindowTitle = frame.windowTitle
         onFrame(frame)
+        return .stored
     }
 
     // MARK: - Window resolution
@@ -719,6 +761,68 @@ final class ScreenWatcher {
         if let lastErrorLoggedAt, now.timeIntervalSince(lastErrorLoggedAt) < 60 { return }
         lastErrorLoggedAt = now
         ContextLog.error(message, "screen")
+    }
+}
+
+// MARK: - What the ticks did
+
+/// What one tick of the screen loop concluded. Exactly one is recorded per tick.
+enum TickOutcome: String, CaseIterable {
+    /// The loop declined to look at all: no grant, screen locked, idle pause, nothing frontmost.
+    case standDown
+    /// This app refused the window — its own output, an exclusion, Mission Control.
+    case refused
+    /// The WindowServer had nothing to give: no capturable window, or the capture failed.
+    case unavailable
+    /// Pixels came back and the dedup gate recognised them.
+    case suppressed
+    /// Pixels came back, were read, and said nothing the newest row does not already say.
+    case lowSignal
+    /// A row was written.
+    case stored
+}
+
+/// A running count of what the screen loop is doing with its ticks.
+///
+/// **This exists because the frame-rate defect was invisible for want of exactly this number.** The
+/// app captured roughly half as many frames a day as the recorder it is meant to match, and nothing
+/// anywhere distinguished "we are not firing often enough" from "we are firing and throwing half of
+/// it away" — the two have completely different fixes, and the log could not tell them apart. Rows
+/// per hour are observable from the database; *attempts* per hour were observable from nowhere.
+///
+/// Deliberately a count and not a per-tick log line: a tick every three seconds for the life of the
+/// machine is 28,800 lines a day, which is not evidence, it is noise that buries evidence.
+struct CaptureCensus {
+    private(set) var counts: [TickOutcome: Int] = [:]
+    private(set) var ticks = 0
+
+    /// Ticks between summaries — ten minutes at the 3 s cadence.
+    static let reportEvery = 200
+
+    /// Records one tick and returns a line to log when the census is due, or nil.
+    mutating func record(_ outcome: TickOutcome) -> String? {
+        counts[outcome, default: 0] += 1
+        ticks += 1
+        guard ticks >= Self.reportEvery else { return nil }
+        let line = summary
+        counts.removeAll()
+        ticks = 0
+        return line
+    }
+
+    mutating func reset() {
+        counts.removeAll()
+        ticks = 0
+    }
+
+    /// Attempts, rows, and where the rest of the attempts went — the whole comparison in one line.
+    var summary: String {
+        let attempted = (counts[.suppressed] ?? 0) + (counts[.lowSignal] ?? 0) + (counts[.stored] ?? 0)
+        let breakdown = TickOutcome.allCases
+            .compactMap { outcome in counts[outcome].map { "\(outcome.rawValue) \($0)" } }
+            .joined(separator: ", ")
+        return "Capture census: \(ticks) ticks, \(attempted) reached the screen, "
+            + "\(counts[.stored] ?? 0) stored — \(breakdown)"
     }
 }
 

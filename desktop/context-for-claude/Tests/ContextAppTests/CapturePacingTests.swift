@@ -89,6 +89,80 @@ final class CapturePacingTests: XCTestCase {
         XCTAssertNotEqual(sameSnapshot, resizedWindow)
     }
 
+    // MARK: - The cadence is a cadence
+
+    /// **The interval is the time between ticks, not the time between the end of one and the start
+    /// of the next.**
+    ///
+    /// The loop used to sleep the whole period after the work, so the real cadence was
+    /// `interval + work` — and the work is not uniform. A tick the dedup gate suppresses costs a
+    /// capture and a hash; a tick that *stores* costs OCR, an accessibility walk and a HEIC encode
+    /// on top. So the pipeline throttled itself hardest on exactly the ticks that were producing
+    /// something. Measured against this machine's own database, consecutive stored frames averaged
+    /// 3.79 s apart on a 3.0 s setting — 26% of the capture rate lost to the placement of one
+    /// `sleep`, invisible in every setting and every log line.
+    func testTheTickCadenceDoesNotIncludeTheWork() {
+        XCTAssertEqual(ScreenWatcher.sleepAfterTick(period: 3.0, elapsed: 0.8), 2.2, accuracy: 0.001)
+        XCTAssertEqual(ScreenWatcher.sleepAfterTick(period: 3.0, elapsed: 0.25), 2.75, accuracy: 0.001)
+        XCTAssertEqual(
+            ScreenWatcher.sleepAfterTick(period: 3.0, elapsed: 0.79) + 0.79,
+            3.0, accuracy: 0.001,
+            "a tick plus its sleep must add up to the interval the user was promised")
+    }
+
+    /// …and it cannot become a busy loop, which is the failure mode a naive remainder invites.
+    ///
+    /// A tick that outruns the period returns zero and the next one starts at once — that tick was
+    /// doing seconds of real work, so there is nothing to spin on. A backwards clock (an NTP
+    /// correction, a wake from sleep) reads as a negative elapsed and falls back to the whole
+    /// period: waiting is the safe direction for nonsense, hammering the WindowServer is not.
+    func testAnOverrunningTickWaitsRatherThanSpinning() {
+        XCTAssertEqual(ScreenWatcher.sleepAfterTick(period: 3.0, elapsed: 3.0), 0)
+        XCTAssertEqual(ScreenWatcher.sleepAfterTick(period: 3.0, elapsed: 45), 0)
+
+        for nonsense in [-1, -.greatestFiniteMagnitude, .infinity, .nan, 0] as [TimeInterval] {
+            XCTAssertEqual(
+                ScreenWatcher.sleepAfterTick(period: 3.0, elapsed: nonsense), 3.0,
+                "an unreadable elapsed must fall back to the full interval: \(nonsense)")
+        }
+    }
+
+    // MARK: - Counting the ticks, not just the rows
+
+    /// **The number that was missing while the app captured at half the rate it should have.**
+    ///
+    /// Rows per hour were observable from the database; *attempts* per hour were observable from
+    /// nowhere, so "we are not firing often enough" and "we are firing and discarding half of it"
+    /// — two defects with completely different fixes — looked identical from outside. The census is
+    /// the seam that separates them.
+    func testTheCensusSeparatesAttemptsFromRows() {
+        var census = CaptureCensus()
+        for _ in 0..<10 { XCTAssertNil(census.record(.stored)) }
+        for _ in 0..<20 { XCTAssertNil(census.record(.suppressed)) }
+        for _ in 0..<5 { XCTAssertNil(census.record(.standDown)) }
+
+        let summary = census.summary
+        XCTAssertTrue(summary.contains("35 ticks"), summary)
+        XCTAssertTrue(
+            summary.contains("30 reached the screen"), "a stand-down never reached the screen: \(summary)")
+        XCTAssertTrue(summary.contains("10 stored"), summary)
+        XCTAssertTrue(summary.contains("suppressed 20"), "the reason has to be in the line: \(summary)")
+    }
+
+    /// A count that is never reported is not evidence, and one reported every tick is noise that
+    /// buries evidence. It arrives on a fixed number of ticks and starts again from zero.
+    func testTheCensusReportsOnceAndResets() {
+        var census = CaptureCensus()
+        var lines: [String] = []
+        for _ in 0..<(CaptureCensus.reportEvery * 2) {
+            if let line = census.record(.stored) { lines.append(line) }
+        }
+
+        XCTAssertEqual(lines.count, 2, "one line per \(CaptureCensus.reportEvery) ticks, no more")
+        XCTAssertTrue(lines[0].contains("\(CaptureCensus.reportEvery) ticks"), lines[0])
+        XCTAssertEqual(census.ticks, 0, "the window has to start again, or the counts compound")
+    }
+
     // MARK: - Pause on Inactivity
 
     /// The threshold, and why it is where it is: reading is inactivity, and this pipeline already
