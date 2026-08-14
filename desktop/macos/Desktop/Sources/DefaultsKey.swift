@@ -40,6 +40,8 @@ enum DefaultsKey: String {
   case chatBridgeMode = "chatBridgeMode"
   case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
   case multiChatEnabled = "multiChatEnabled"
+  /// Opt-in: proactive notifications are also spoken out loud on delivery.
+  case speakNotificationsAloud = "speakNotificationsAloud"
   case aiChatWorkingDirectory = "aiChatWorkingDirectory"
   case hasCompletedOnboarding = "hasCompletedOnboarding"
   case onboardingStep = "onboardingStep"
