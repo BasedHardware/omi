@@ -1,4 +1,5 @@
 import {
+  conversationGroupLabel,
   loadConversations,
   loadDesktopReads,
   loadMemories,
@@ -118,6 +119,9 @@ test('loads and normalizes all three exact desktop read routes', async () => {
           startedAt: '2026-08-14T01:00:00.000Z',
           finishedAt: '2026-08-14T01:30:00.000Z',
           status: 'completed',
+          source: 'omi',
+          visibility: 'private',
+          folderId: null,
           locked: false,
           discarded: false,
         }),
@@ -160,6 +164,25 @@ test('loads and normalizes all three exact desktop read routes', async () => {
       '/v1/memories?limit=50',
       '/v1/tasks',
     ].sort(),
+  );
+});
+
+test('groups validated UTC conversation timestamps by local calendar day', () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  expect(
+    conversationGroupLabel(new Date(2026, 7, 14, 1, 0).toISOString(), now),
+  ).toBe('Today');
+  expect(
+    conversationGroupLabel(new Date(2026, 7, 13, 23, 0).toISOString(), now),
+  ).toBe('Yesterday');
+  expect(
+    conversationGroupLabel(new Date(2026, 7, 10, 12, 0).toISOString(), now),
+  ).toBe(
+    new Date(2026, 7, 10, 12, 0).toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }),
   );
 });
 

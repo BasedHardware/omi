@@ -51,6 +51,7 @@ import {
 } from './src/chatClient';
 import {omiBackend} from './src/omiNative';
 import {
+  conversationGroupLabel,
   loadDesktopReads,
   loadMemories,
   taskGroup,
@@ -324,7 +325,7 @@ const ConversationRow = memo(function ConversationRow({
       ]}>
       <View style={styles.conversationRowMeta}>
         <Text style={styles.conversationRowTime}>
-          {formatConversationDate(item.startedAt)}
+          {formatConversationDate(item.startedAt ?? item.createdAt)}
         </Text>
         <Text
           accessibilityLabel={
@@ -365,55 +366,138 @@ function ConversationsPage({
     [outcome],
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [starredOnly, setStarredOnly] = useState(false);
+  const nowEpochMilliseconds = useRef(Date.now()).current;
   const selected = conversations.find(item => item.id === selectedId) ?? null;
   const error = outcome?.status === 'error' ? outcome.error : null;
-  const renderItem = useCallback(
-    ({item}: {item: ConversationProjection}) => (
-      <ConversationRow
-        item={item}
-        onPress={() => setSelectedId(item.id)}
-        selected={selectedId === item.id}
-      />
-    ),
-    [selectedId],
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    return conversations.filter(
+      item =>
+        (!starredOnly || item.starred) &&
+        (normalized === '' ||
+          item.title.toLocaleLowerCase().includes(normalized) ||
+          item.summary.toLocaleLowerCase().includes(normalized)),
+    );
+  }, [conversations, query, starredOnly]);
+  useEffect(() => {
+    if (
+      selectedId !== null &&
+      !filtered.some(item => item.id === selectedId)
+    ) {
+      setSelectedId(null);
+    }
+  }, [filtered, selectedId]);
+  const grouped = useMemo(
+    () =>
+      filtered.reduce<Array<{label: string; items: ConversationProjection[]}>>(
+        (groups, item) => {
+          const label = conversationGroupLabel(
+            item.startedAt ?? item.createdAt,
+            nowEpochMilliseconds,
+          );
+          const current = groups.find(group => group.label === label);
+          if (current !== undefined) {
+            current.items.push(item);
+          } else {
+            groups.push({label, items: [item]});
+          }
+          return groups;
+        },
+        [],
+      ),
+    [filtered, nowEpochMilliseconds],
   );
-  const keyExtractor = useCallback(
-    (item: ConversationProjection) => item.id,
-    [],
-  );
-  const empty = loading ? (
-    <View style={styles.projectionEmpty}>
-      <ActivityIndicator color="#888888" />
-      <Text style={styles.projectionEmptyCopy}>Loading…</Text>
-    </View>
-  ) : (
-    <View style={styles.projectionEmpty}>
-      <Text style={styles.projectionEmptyTitle}>
-        {error === null ? 'No conversations yet.' : 'Unable to load'}
-      </Text>
-      <Text style={styles.projectionEmptyCopy}>
-        {error ?? 'No conversations are available in this loaded page.'}
-      </Text>
-    </View>
-  );
+  const filtering = query.trim() !== '' || starredOnly;
 
   return (
     <View style={styles.conversationPage}>
       <Text style={styles.projectionTitle}>Conversations</Text>
+      <View style={styles.conversationDiscovery}>
+        <View style={styles.conversationSearchBox}>
+          <Search accessible={false} color="#777777" size={17} />
+          <TextInput
+            accessibilityLabel="Search loaded conversations"
+            onChangeText={setQuery}
+            placeholder="Search loaded conversations"
+            placeholderTextColor="#666666"
+            style={styles.memorySearchInput}
+            value={query}
+          />
+        </View>
+        <FocusPressable
+          accessibilityLabel="Show starred conversations"
+          accessibilityRole="button"
+          accessibilityState={{selected: starredOnly}}
+          onPress={() => setStarredOnly(value => !value)}
+          style={({pressed}) => [
+            styles.conversationStarFilter,
+            starredOnly && styles.conversationStarFilterActive,
+            pressed && styles.pressed,
+          ]}>
+          <Text
+            style={[
+              styles.conversationStarFilterText,
+              starredOnly && styles.conversationStarFilterTextActive,
+            ]}>
+            Starred
+          </Text>
+        </FocusPressable>
+      </View>
       <View style={styles.conversationContent}>
-        <FlatList
+        <ScrollView
           contentContainerStyle={styles.conversationList}
-          data={conversations}
-          keyExtractor={keyExtractor}
-          ListEmptyComponent={empty}
-          ListFooterComponent={
-            outcome?.status === 'success' ? (
-              <ReadStatus label="Conversations" page={outcome.value.page} />
-            ) : null
-          }
-          renderItem={renderItem}
-          style={styles.conversationListPane}
-        />
+          style={styles.conversationListPane}>
+          {loading && outcome === null ? (
+            <View style={styles.projectionEmpty}>
+              <ActivityIndicator color="#888888" />
+              <Text style={styles.projectionEmptyCopy}>
+                Loading conversations…
+              </Text>
+            </View>
+          ) : error !== null ? (
+            <View style={styles.projectionEmpty}>
+              <Text style={styles.projectionEmptyTitle}>
+                Conversations unavailable
+              </Text>
+              <Text style={styles.projectionEmptyCopy}>
+                Conversations could not be loaded.
+              </Text>
+            </View>
+          ) : grouped.length === 0 ? (
+            <View style={styles.projectionEmpty}>
+              <Text style={styles.projectionEmptyTitle}>
+                {filtering
+                  ? 'No loaded conversations match.'
+                  : 'No conversations yet.'}
+              </Text>
+              {filtering && (
+                <Text style={styles.projectionEmptyCopy}>
+                  Search and filters cover conversations already loaded on this
+                  device.
+                </Text>
+              )}
+            </View>
+          ) : (
+            grouped.map(group => (
+              <View key={group.label} style={styles.conversationGroup}>
+                <Text style={styles.conversationGroupTitle}>{group.label}</Text>
+                {group.items.map(item => (
+                  <ConversationRow
+                    item={item}
+                    key={item.id}
+                    onPress={() => setSelectedId(item.id)}
+                    selected={selectedId === item.id}
+                  />
+                ))}
+              </View>
+            ))
+          )}
+          {outcome?.status === 'success' && (
+            <ReadStatus label="Conversations" page={outcome.value.page} />
+          )}
+        </ScrollView>
         <View
           accessibilityLabel="Selected conversation metadata"
           style={styles.conversationDetail}>
@@ -2143,9 +2227,54 @@ const styles = StyleSheet.create({
   },
   resultSummary: {color: '#888888', fontSize: 12, lineHeight: 17, marginTop: 5},
   conversationPage: {flex: 1, paddingHorizontal: 28, paddingVertical: 24},
+  conversationDiscovery: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 9,
+    marginTop: 16,
+  },
+  conversationSearchBox: {
+    alignItems: 'center',
+    backgroundColor: '#202020',
+    borderColor: '#343434',
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 9,
+    paddingHorizontal: 14,
+  },
+  conversationStarFilter: {
+    alignItems: 'center',
+    borderColor: '#3a3a3a',
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 46,
+    paddingHorizontal: 15,
+  },
+  conversationStarFilterActive: {
+    backgroundColor: '#ffffff',
+    borderColor: '#ffffff',
+  },
+  conversationStarFilterText: {
+    color: '#a0a0a0',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  conversationStarFilterTextActive: {color: '#141414'},
   conversationContent: {flex: 1, flexDirection: 'row', gap: 16, marginTop: 18},
   conversationListPane: {flex: 1},
-  conversationList: {gap: 8, paddingBottom: 28},
+  conversationList: {gap: 16, paddingBottom: 28},
+  conversationGroup: {gap: 7},
+  conversationGroupTitle: {
+    color: '#858585',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.7,
+    paddingHorizontal: 3,
+    textTransform: 'uppercase',
+  },
   conversationRow: {
     backgroundColor: '#202020',
     borderColor: '#303030',

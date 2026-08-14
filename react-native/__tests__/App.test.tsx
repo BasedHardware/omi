@@ -872,6 +872,115 @@ test('renders the dedicated Tasks unavailable state without mutation controls', 
   expect(rendered).not.toContain('Delete task');
 });
 
+test('discovers loaded conversations by local search, star, and date groups', async () => {
+  const now = new Date(2026, 7, 14, 12, 0).getTime();
+  const dateNow = jest.spyOn(Date, 'now').mockReturnValue(now);
+  const requests: string[] = [];
+  const record = (
+    id: string,
+    title: string,
+    overview: string,
+    startedAt: string | null,
+    starred: boolean,
+  ) => ({
+    id,
+    structured: {title, overview},
+    created_at: new Date(2026, 7, 12, 12, 0).toISOString(),
+    updated_at: new Date(2026, 7, 14, 12, 0).toISOString(),
+    started_at: startedAt,
+    finished_at:
+      startedAt === null
+        ? null
+        : new Date(new Date(startedAt).getTime() + 30 * 60_000).toISOString(),
+    source: 'omi',
+    status: 'completed',
+    discarded: false,
+    starred,
+    visibility: 'private',
+    is_locked: false,
+    folder_id: null,
+  });
+  mockBackend.request.mockImplementation(async request => {
+    requests.push(request.path);
+    if (request.path === '/v1/conversations?limit=50&offset=0') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify([
+          record(
+            'today-a',
+            'Morning sync',
+            'Reviewed launch details',
+            new Date(2026, 7, 14, 9, 0).toISOString(),
+            true,
+          ),
+          record(
+            'yesterday',
+            'Design review',
+            'Discussed navigation',
+            new Date(2026, 7, 13, 9, 0).toISOString(),
+            false,
+          ),
+          record(
+            'today-b',
+            'Afternoon sync',
+            'Reviewed release details',
+            new Date(2026, 7, 14, 15, 0).toISOString(),
+            true,
+          ),
+          record('fallback', 'Saved note', 'No recording times', null, false),
+        ]),
+      };
+    }
+    return mockBackendResponse(request);
+  });
+  const renderer = await renderApp();
+  const conversations = renderer.root
+    .findAll(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityRole === 'tab',
+    )
+    .find(node => node.props.children[1].props.children === 'Conversations')!;
+  await ReactTestRenderer.act(async () => conversations.props.onPress());
+  const rendered = JSON.stringify(renderer.toJSON());
+  expect(rendered).toContain('Today');
+  expect(rendered).toContain('Yesterday');
+  expect(rendered.indexOf('Morning sync')).toBeLessThan(
+    rendered.indexOf('Afternoon sync'),
+  );
+  expect(rendered).toContain('Duration unavailable');
+  const beforeFiltering = requests.length;
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Search loaded conversations',
+      )
+      .props.onChangeText('navigation');
+  });
+  let filtered = JSON.stringify(renderer.toJSON());
+  expect(filtered).toContain('Design review');
+  expect(filtered).not.toContain('Morning sync');
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Search loaded conversations',
+      )
+      .props.onChangeText('');
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Show starred conversations',
+      )
+      .props.onPress();
+  });
+  filtered = JSON.stringify(renderer.toJSON());
+  expect(filtered).toContain('Morning sync');
+  expect(filtered).toContain('Afternoon sync');
+  expect(filtered).not.toContain('Design review');
+  expect(requests).toHaveLength(beforeFiltering);
+  dateNow.mockRestore();
+});
+
 test('opens a read-only selected-record pane from a loaded conversation row', async () => {
   const renderer = await renderApp();
   const conversations = renderer.root
@@ -910,6 +1019,17 @@ test('opens a read-only selected-record pane from a loaded conversation row', as
   );
   expect(mockBackend.request).not.toHaveBeenCalledWith(
     expect.objectContaining({path: '/v1/conversations/conversation-1'}),
+  );
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Search loaded conversations',
+      )
+      .props.onChangeText('does not match');
+  });
+  expect(JSON.stringify(renderer.toJSON())).toContain('Select a conversation');
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    'LOADED LIST METADATA',
   );
 });
 
@@ -984,6 +1104,9 @@ test('keeps successful reads visible and reports each unavailable domain', async
     .find(node => node.props.children[1].props.children === 'Conversations')!;
   await ReactTestRenderer.act(async () => conversations.props.onPress());
   expect(JSON.stringify(renderer.toJSON())).toContain(
+    'Conversations could not be loaded.',
+  );
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
     'desktop-conversations-read failed (503)',
   );
 

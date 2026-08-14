@@ -12,9 +12,34 @@ export type ConversationProjection = {
   finishedAt: string | null;
   starred: boolean;
   status: string;
+  source: string;
+  visibility: 'public' | 'private' | 'shared';
+  folderId: string | null;
   locked: boolean;
   discarded: boolean;
 };
+
+export function conversationGroupLabel(
+  value: string,
+  nowEpochMilliseconds: number,
+): string {
+  const date = new Date(value);
+  const now = new Date(nowEpochMilliseconds);
+  const localDay = (item: Date) =>
+    Date.UTC(item.getFullYear(), item.getMonth(), item.getDate()) / 86400000;
+  const difference = localDay(now) - localDay(date);
+  if (difference === 0) {
+    return 'Today';
+  }
+  if (difference === 1) {
+    return 'Yesterday';
+  }
+  return date.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
 
 export type MemoryProjection = {
   kind: 'memory';
@@ -295,7 +320,7 @@ export async function loadConversations(
       record.finished_at,
       `Conversation ${index} finished_at`,
     );
-    string(record.source, `Conversation ${index} source`);
+    const source = string(record.source, `Conversation ${index} source`);
     const status = string(record.status, `Conversation ${index} status`);
     const discarded = boolean(
       record.discarded,
@@ -325,6 +350,9 @@ export async function loadConversations(
       finishedAt,
       starred,
       status,
+      source,
+      visibility: visibility as ConversationProjection['visibility'],
+      folderId: record.folder_id as string | null,
       locked,
       discarded,
     };
