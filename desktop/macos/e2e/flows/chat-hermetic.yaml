@@ -15,7 +15,6 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentArtifactProjection.swift
   - desktop/macos/Desktop/Sources/Chat/AgentErrorClassifier.swift
   - desktop/macos/Desktop/Sources/Chat/AgentFailureTranscriptFormatter.swift
-  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeFailure.swift
   - desktop/macos/Desktop/Sources/Chat/AgentLifecycleDisplayProjection.swift
   - desktop/macos/Desktop/Sources/Chat/AgentLifecycleTranscriptProjection.swift
   - desktop/macos/Desktop/Sources/Chat/AuthorizedToolExecution.swift
@@ -41,14 +40,9 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdownChatTypography.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
-<<<<<<< HEAD
-  - desktop/macos/Desktop/Sources/Providers/ChatProvider+HarnessReset.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+MemoryCreation.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+OrphanRepair.swift
-  - desktop/macos/Desktop/Sources/Providers/AgentRuntimeRouting.swift
-  - desktop/macos/Desktop/Sources/Providers/AIProvider.swift
-  - desktop/macos/Desktop/Sources/AnalyticsManager.swift
   - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeCredentialPolicy.swift
   - desktop/macos/Desktop/Sources/Chat/ChatComposerDraft.swift
@@ -62,7 +56,6 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeJournalContracts.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
 preconditions:
   - automation_bridge_ready
