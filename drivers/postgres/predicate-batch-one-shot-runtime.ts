@@ -51,6 +51,12 @@ export interface PostgresPredicateBatchOneShotRuntimeOptions {
     job: Readonly<DurableMemoryWorkJob>,
     strategy: Readonly<RegisteredMemoryStrategy>,
   ) => Promise<ModelPort | null>;
+  /**
+   * Prices and bounds one adjudication batch, in the resolved adapter's own
+   * units. Injected rather than imported so this driver names no provider: the
+   * caller pairs it with whatever `resolve_model` returns.
+   */
+  readonly prompt_budget: PredicateBatchPromptBudget;
   readonly model_pipeline_exclusivity: AdmittedModelPipelineExclusivity;
   readonly resolve_model_pipeline_resource: (
     context: AuthorizedLedgerWriteContext,
@@ -136,6 +142,7 @@ export const createPostgresPredicateBatchOneShotRuntime = (
       return Object.freeze({ kind: "failed" as const, error_code: "dependency_unavailable" as const });
     },
     resolve_model: options.resolve_model,
+    prompt_budget: options.prompt_budget,
     load_current_parent: (context) => graphRepository.loadCurrentParent(context),
   });
   const service = defineConsolidationWorkService({
@@ -169,7 +176,9 @@ export const createPostgresPredicateBatchOneShotRuntime = (
     max_parent_rematerializations: options.max_parent_rematerializations,
     ...(options.observability ? { worker_observability: options.observability } : {}),
   });
-  const scheduler = definePredicateBatchWorkScheduler(acceptanceRepository, inputRepository);
+  const scheduler = definePredicateBatchWorkScheduler(
+    acceptanceRepository, inputRepository, options.prompt_budget,
+  );
   const dispatch = definePredicateBatchWorkDispatch({
     execution_repository: executionRepository,
     predicate_batch: service,

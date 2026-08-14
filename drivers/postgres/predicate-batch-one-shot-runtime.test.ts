@@ -7,6 +7,7 @@ import {
   registerMemoryStrategy,
 } from "../../core/consolidate/strategy-assignment";
 import type { PostgresTransactionPool } from "./connection";
+import { GLM_PREDICATE_BATCH_PROMPT_BUDGET } from "../model/predicate-batch-bindings";
 import { createPostgresPredicateBatchOneShotRuntime } from "./predicate-batch-one-shot-runtime";
 import {
   defineModelPipelineExclusivity,
@@ -46,6 +47,7 @@ const exclusivity = bindModelPipelineResourceAdmission(
   defineModelPipelineResourceAdmission([{ resource_digest: resourceDigest, max_concurrency: 1 }]),
 );
 const pipeline = {
+  prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
   model_pipeline_exclusivity: exclusivity,
   resolve_model_pipeline_resource: async () => Object.freeze({
     version: MODEL_PIPELINE_RESOURCE_VERSION,
@@ -82,6 +84,7 @@ describe("PostgreSQL predicate-batch one-shot runtime", () => {
     expect(() => construct([strategy], 0)).toThrow("invalid_parent_retry_bound");
     expect(() => createPostgresPredicateBatchOneShotRuntime({
       pool: unusedPool, strategies: [strategy], resolve_model: async () => null,
+      prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
       model_pipeline_exclusivity: {} as never,
       resolve_model_pipeline_resource: pipeline.resolve_model_pipeline_resource,
       max_parent_rematerializations: 2,

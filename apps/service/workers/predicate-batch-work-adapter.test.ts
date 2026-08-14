@@ -45,6 +45,7 @@ import {
   predicateBatchWorkInputManifest,
   type PredicateBatchInputSnapshot,
 } from "./predicate-batch-work-adapter";
+import { GLM_PREDICATE_BATCH_PROMPT_BUDGET } from "../../../drivers/model/predicate-batch-bindings";
 
 const digest = (character: string): string => character.repeat(64);
 const owner = "account:alice";
@@ -180,6 +181,7 @@ test("one exact predicate question produces one assertion plan and rematerialize
       }] };
     }),
     load_current_parent: async () => ({ kind: "found", parent_commit: null }),
+    prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
   });
   const produced = await adapter.produce(context, job, strategy, lossController.signal);
   expect(produced).toMatchObject({ kind: "produced", result_contract_version: DURABLE_MEMORY_GRAPH_PLAN_VERSION });
@@ -197,6 +199,7 @@ test("one exact predicate question produces one assertion plan and rematerialize
     load_input: async () => { throw new Error("materialize never reloads semantic input"); },
     resolve_model: async () => { throw new Error("materialize never resolves model"); },
     load_current_parent: async () => ({ kind: "found", parent_commit: "commit:later" }),
+    prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
   });
   const second = await secondAdapter.materialize(context, job, stored, strategy);
   expect(second).toMatchObject({ kind: "ready", result_kind: "successful" });
@@ -209,6 +212,7 @@ test("one exact predicate question produces one assertion plan and rematerialize
     load_input: async () => { throw new Error("not used"); },
     resolve_model: async () => { throw new Error("not used"); },
     load_current_parent: async () => ({ kind: "failed", error_code: "serialization_retryable" }),
+    prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
   });
   await expect(unavailableParent.materialize(context, job, stored, strategy)).resolves.toEqual({
     kind: "failed", error_code: "serialization_retryable",
@@ -222,6 +226,7 @@ test("a valid empty answer is durable successful-empty with no graph append", as
     load_input: async () => ({ kind: "found", snapshot: input }),
     resolve_model: async () => new DeterministicFakeModel({ assertions: [] }),
     load_current_parent: async () => { throw new Error("empty result needs no parent"); },
+    prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
   });
   const produced = await adapter.produce(context, job, strategy);
   if (produced.kind !== "produced") throw new Error("expected produced");
@@ -245,6 +250,7 @@ test("snapshot, manifest, question, owner, and strategy drift fail before model 
       load_input: async () => ({ kind: "found", snapshot: item.input }),
       resolve_model: async () => { modelCalls += 1; return new DeterministicFakeModel({ assertions: [] }); },
       load_current_parent: async () => ({ kind: "found", parent_commit: null }),
+      prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
     });
     await expect(adapter.produce(context, item.job, item.usedStrategy ?? strategy)).resolves.toEqual({
       kind: "failed", error_code: "dependency_unavailable",
@@ -260,6 +266,7 @@ test("snapshot, manifest, question, owner, and strategy drift fail before model 
     load_input: async () => ({ kind: "found", snapshot: base }),
     resolve_model: async () => { modelCalls += 1; return new DeterministicFakeModel({ assertions: [] }); },
     load_current_parent: async () => ({ kind: "found", parent_commit: null }),
+    prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
   });
   await expect(strategyAdapter.produce(context, leasedJob(base), wrongStrategy)).resolves.toEqual({
     kind: "failed", error_code: "dependency_unavailable",
@@ -281,6 +288,7 @@ test("malformed model output is not empty success and invoke failures stay conte
           })
         : new DeterministicFakeModel(response),
       load_current_parent: async () => ({ kind: "found", parent_commit: null }),
+      prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
     });
     const result = await adapter.produce(context, job, strategy);
     expect(result.kind).toBe("failed");
@@ -303,6 +311,7 @@ test("invented, self, cross-question, and invalid-role proposals cannot enter au
       { predicate_id: predicateIdForName("alpha relation"), target_predicate_id: predicateIdForName("bravo relation"), slot_aliases: [{ from_slot_id: "invented", to_slot_id: "object" }] },
     ] }),
     load_current_parent: async () => ({ kind: "found", parent_commit: null }),
+    prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
   });
   const produced = await adapter.produce(context, job, strategy);
   if (produced.kind !== "produced") throw new Error("expected rejected-proposal success");
@@ -316,6 +325,7 @@ test("dependency containers and stored inputs reject proxies and accessors witho
     load_input: async () => ({ kind: "not_found" }),
     resolve_model: async () => null,
     load_current_parent: async () => ({ kind: "failed", error_code: "dependency_unavailable" }),
+    prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
   }, {}) as never)).toThrow("invalid_dependencies");
 
   const accessor = {} as Record<string, unknown>;
@@ -324,6 +334,7 @@ test("dependency containers and stored inputs reject proxies and accessors witho
     load_input: async () => ({ kind: "found", snapshot: accessor as never }),
     resolve_model: async () => { throw new Error("must not resolve"); },
     load_current_parent: async () => ({ kind: "found", parent_commit: null }),
+    prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
   });
   await expect(adapter.produce(context, leasedJob(), strategy)).resolves.toEqual({
     kind: "failed", error_code: "dependency_unavailable",
@@ -339,6 +350,7 @@ test("an exact oversized question fails with prompt budget before model or paren
     load_input: async () => ({ kind: "found", snapshot: input }),
     resolve_model: async () => { modelCalls += 1; return new DeterministicFakeModel({ assertions: [] }); },
     load_current_parent: async () => { throw new Error("must not load parent"); },
+    prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
   });
   await expect(adapter.produce(context, job, strategy)).resolves.toEqual({
     kind: "failed", error_code: "prompt_budget_exceeded",
@@ -364,6 +376,7 @@ test("legacy predicate identity cannot become a successful durable question", as
     load_input: async () => ({ kind: "found", snapshot: input }),
     resolve_model: async () => { modelCalls += 1; return new DeterministicFakeModel({ assertions: [] }); },
     load_current_parent: async () => ({ kind: "found", parent_commit: null }),
+    prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
   });
   await expect(adapter.produce(context, job, strategy)).resolves.toEqual({
     kind: "failed", error_code: "dependency_unavailable",
@@ -386,6 +399,7 @@ test("the sealed predicate adapter runs through the single consolidation service
       }] };
     }),
     load_current_parent: async () => ({ kind: "found", parent_commit: null }),
+    prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
   });
   const inert = (kind: "promotion" | "identity_cluster" | "derived_group_dream") => defineConsolidationWorkAdapter(kind, {
     produce: async () => ({ kind: "failed", error_code: "dependency_unavailable" }),

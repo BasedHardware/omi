@@ -22,10 +22,9 @@ import {
 } from "../stores/durable-memory-work-repository";
 import { DURABLE_MEMORY_GRAPH_PLAN_VERSION } from "./durable-memory-graph-plan";
 import {
-  PREDICATE_BATCH_PROMPT_BUDGET,
   predicateBatchAdjudicationContract,
-  predicateBatchPromptCost,
 } from "./predicate-batch-contract";
+import { GLM_PREDICATE_BATCH_PROMPT_BUDGET } from "../../../drivers/model/predicate-batch-bindings";
 import { definePredicateBatchWorkAdapter } from "./predicate-batch-work-adapter";
 import {
   definePredicateBatchWorkInputRepository,
@@ -189,13 +188,13 @@ const memoryInput = () => {
 };
 
 const schedulerFor = (repository: ReturnType<typeof memoryAcceptance>["repository"]) =>
-  definePredicateBatchWorkScheduler(repository, memoryInput().repository);
+  definePredicateBatchWorkScheduler(repository, memoryInput().repository, GLM_PREDICATE_BATCH_PROMPT_BUDGET);
 
 describe("predicate batch work scheduler", () => {
   test("accepts deterministic jobs, replays them, and emits adapter-consumable manifests", async () => {
     const store = memoryAcceptance();
     const inputs = memoryInput();
-    const scheduler = definePredicateBatchWorkScheduler(store.repository, inputs.repository);
+    const scheduler = definePredicateBatchWorkScheduler(store.repository, inputs.repository, GLM_PREDICATE_BATCH_PROMPT_BUDGET);
     const input = snapshot();
     const first = await scheduler.schedule(context(), request(input));
     expect(first.kind).toBe("accepted");
@@ -230,6 +229,7 @@ describe("predicate batch work scheduler", () => {
       } }),
       resolve_model: async () => new DeterministicFakeModel({ assertions: [] }),
       load_current_parent: async () => ({ kind: "found", parent_commit: null }),
+      prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET,
     });
     await expect(adapter.produce(context("memories.work.execute"), leased, strategy))
       .resolves.toMatchObject({ kind: "produced" });
@@ -240,9 +240,9 @@ describe("predicate batch work scheduler", () => {
     const input = snapshot(predicates);
     const plan = planPredicateAlignmentQuestions(predicates, {
       owner_account_id: owner,
-      batch_prompt_budget: PREDICATE_BATCH_PROMPT_BUDGET,
+      batch_prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET.budget,
       max_questions_per_invocation: 1,
-      prompt_cost: predicateBatchPromptCost,
+      prompt_cost: GLM_PREDICATE_BATCH_PROMPT_BUDGET.cost,
       adjudication_contract: predicateBatchAdjudicationContract(strategy),
     });
     expect(plan.questions).toHaveLength(1);
@@ -295,6 +295,7 @@ describe("predicate batch work scheduler", () => {
         return { kind: "accepted", job: accepted.pending_job };
       }),
       memoryInput().repository,
+      GLM_PREDICATE_BATCH_PROMPT_BUDGET,
     );
     const outcome = await scheduler.schedule(context(), request(input, {
       max_jobs_per_invocation: MAX_PREDICATE_JOBS_PER_SCHEDULING_CALL,
@@ -320,6 +321,7 @@ describe("predicate batch work scheduler", () => {
           return { kind: "accepted", job: accepted.pending_job };
         }),
         memoryInput().repository,
+        GLM_PREDICATE_BATCH_PROMPT_BUDGET,
       );
       const outcome = await scheduler.schedule(context(), request(input, { max_jobs_per_invocation: 8 }));
       expect(outcome.kind).toBe("halted");
@@ -346,7 +348,7 @@ describe("predicate batch work scheduler", () => {
         },
         async load() { return { kind: "not_found" }; },
       });
-      const outcome = await definePredicateBatchWorkScheduler(acceptance, inputs)
+      const outcome = await definePredicateBatchWorkScheduler(acceptance, inputs, GLM_PREDICATE_BATCH_PROMPT_BUDGET)
         .schedule(context(), request());
       expect(outcome).toMatchObject({
         kind: "halted",
@@ -363,9 +365,9 @@ describe("predicate batch work scheduler", () => {
     const predicates = names(4).map(predicate);
     const plan = planPredicateAlignmentQuestions(predicates, {
       owner_account_id: owner,
-      batch_prompt_budget: PREDICATE_BATCH_PROMPT_BUDGET,
+      batch_prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET.budget,
       max_questions_per_invocation: 64,
-      prompt_cost: predicateBatchPromptCost,
+      prompt_cost: GLM_PREDICATE_BATCH_PROMPT_BUDGET.cost,
       adjudication_contract: predicateBatchAdjudicationContract(strategy),
     });
     const successes = plan.questions.map((question, index) => ({
@@ -379,6 +381,7 @@ describe("predicate batch work scheduler", () => {
     const scheduler = definePredicateBatchWorkScheduler(
       defineDurableMemoryWorkAcceptanceRepository(async () => { calls += 1; throw new Error("unused"); }),
       memoryInput().repository,
+      GLM_PREDICATE_BATCH_PROMPT_BUDGET,
     );
     const outcome = await scheduler.schedule(context(), request(snapshot(predicates, successes)));
     expect(outcome).toMatchObject({ kind: "already_complete", planned_jobs: 0, scheduled: [], halt: null });
@@ -394,6 +397,7 @@ describe("predicate batch work scheduler", () => {
         return { kind: "accepted", job: accepted.pending_job };
       }),
       memoryInput().repository,
+      GLM_PREDICATE_BATCH_PROMPT_BUDGET,
     );
     await expect(scheduler.schedule(context("memories.work.execute"), request()))
       .rejects.toThrow("capability_denied");
@@ -418,9 +422,9 @@ describe("predicate batch work scheduler", () => {
       .rejects.toThrow("invalid_source_snapshot");
     const plan = planPredicateAlignmentQuestions(snapshot().predicates, {
       owner_account_id: owner,
-      batch_prompt_budget: PREDICATE_BATCH_PROMPT_BUDGET,
+      batch_prompt_budget: GLM_PREDICATE_BATCH_PROMPT_BUDGET.budget,
       max_questions_per_invocation: 64,
-      prompt_cost: predicateBatchPromptCost,
+      prompt_cost: GLM_PREDICATE_BATCH_PROMPT_BUDGET.cost,
       adjudication_contract: predicateBatchAdjudicationContract(strategy),
     });
     const valid = plan.questions[0]!;
@@ -448,6 +452,7 @@ describe("predicate batch work scheduler", () => {
         return { kind: "accepted", job: accepted.pending_job };
       }),
       memoryInput().repository,
+      GLM_PREDICATE_BATCH_PROMPT_BUDGET,
     );
     const huge = names(2, 11_000).map(predicate);
     await expect(scheduler.schedule(context(), request(snapshot(huge))))
@@ -463,7 +468,12 @@ describe("predicate batch work scheduler", () => {
         calls += 1;
         return { kind: "accepted", job: accepted.pending_job };
       }),
+      memoryInput().repository,
+      GLM_PREDICATE_BATCH_PROMPT_BUDGET,
     );
+    // The input repository is never reached: both cases reject on the request
+    // container before scheduling touches it. It is named explicitly anyway so
+    // the prompt-budget binding lands in its own parameter slot.
     await expect(scheduler.schedule(context(), new Proxy(request(), {}) as never)).rejects.toThrow("invalid_request");
     const hostile = {} as Record<string, unknown>;
     Object.defineProperty(hostile, "predicates", { enumerable: true, get: () => { accessed += 1; return []; } });

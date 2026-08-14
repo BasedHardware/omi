@@ -59,6 +59,7 @@ import {
   PREDICATE_BATCH_SCHEDULING_SNAPSHOT_VERSION,
   definePredicateBatchWorkScheduler,
 } from "../../apps/service/workers/predicate-batch-work-scheduler";
+import { GLM_PREDICATE_BATCH_PROMPT_BUDGET } from "../model/predicate-batch-bindings";
 import {
   definePredicateBatchWorkInputRepository,
   materializeStagedPredicateBatchWorkInput,
@@ -2734,6 +2735,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
     const predicateScheduler = definePredicateBatchWorkScheduler(
       repository,
       predicateInputRepository,
+      GLM_PREDICATE_BATCH_PROMPT_BUDGET,
     );
     const predicateScheduleRequest = {
       snapshot: predicateSnapshot,
@@ -2751,6 +2753,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
         },
         async load() { return { kind: "not_found" }; },
       }),
+      GLM_PREDICATE_BATCH_PROMPT_BUDGET,
     );
     const missingInput = await missingInputScheduler.schedule(context, predicateScheduleRequest);
     expect(missingInput).toMatchObject({

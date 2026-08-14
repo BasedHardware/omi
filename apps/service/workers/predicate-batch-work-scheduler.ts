@@ -35,9 +35,9 @@ import {
 import { normalizeDurableMemoryWorkResultJson } from "../stores/durable-memory-work-result-repository";
 import { DURABLE_MEMORY_GRAPH_PLAN_VERSION } from "./durable-memory-graph-plan";
 import {
-  PREDICATE_BATCH_PROMPT_BUDGET,
+  assertPredicateBatchPromptBudget,
   predicateBatchAdjudicationContract,
-  predicateBatchPromptCost,
+  type PredicateBatchPromptBudget,
 } from "./predicate-batch-contract";
 import {
   PREDICATE_BATCH_INPUT_SNAPSHOT_VERSION,
@@ -234,7 +234,10 @@ const inputHaltCode = (
 export const definePredicateBatchWorkScheduler = (
   repository: DurableMemoryWorkAcceptanceRepository,
   inputRepository: PredicateBatchWorkInputRepository,
-): PredicateBatchWorkScheduler => Object.freeze({
+  promptBudgetValue: PredicateBatchPromptBudget,
+): PredicateBatchWorkScheduler => {
+  const promptBudget = assertPredicateBatchPromptBudget(promptBudgetValue);
+  return Object.freeze({
   [SCHEDULER_PORT]: true as const,
   async schedule(
     contextValue: AuthorizedLedgerWriteContext,
@@ -269,9 +272,9 @@ export const definePredicateBatchWorkScheduler = (
     }
     const plan = planPredicateAlignmentQuestions(snapshot.predicates, {
       owner_account_id: context.account_id,
-      batch_prompt_budget: PREDICATE_BATCH_PROMPT_BUDGET,
+      batch_prompt_budget: promptBudget.budget,
       max_questions_per_invocation: maxJobs,
-      prompt_cost: predicateBatchPromptCost,
+      prompt_cost: promptBudget.cost,
       adjudication_contract: predicateBatchAdjudicationContract(strategy),
       successful_questions: snapshot.successful_questions,
     });
@@ -279,7 +282,7 @@ export const definePredicateBatchWorkScheduler = (
       || plan.valid_successful_questions.length !== snapshot.successful_questions.length) {
       fail("invalid_source_snapshot");
     }
-    if (plan.questions.some((question) => question.prompt_cost > PREDICATE_BATCH_PROMPT_BUDGET)) {
+    if (plan.questions.some((question) => question.prompt_cost > promptBudget.budget)) {
       fail("unplannable_prompt");
     }
     const byPredicateId = new Map<string, Predicate[]>();
@@ -405,4 +408,5 @@ export const definePredicateBatchWorkScheduler = (
       halt: null,
     });
   },
-});
+  });
+};

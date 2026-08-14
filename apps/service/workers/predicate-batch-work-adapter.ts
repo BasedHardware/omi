@@ -46,9 +46,9 @@ import {
   type ConsolidationWorkAdapter,
 } from "./consolidation-work-service";
 import {
-  PREDICATE_BATCH_PROMPT_BUDGET,
+  assertPredicateBatchPromptBudget,
   predicateBatchAdjudicationContract,
-  predicateBatchPromptCost,
+  type PredicateBatchPromptBudget,
 } from "./predicate-batch-contract";
 
 export const PREDICATE_BATCH_INPUT_SNAPSHOT_VERSION = "predicate-batch-input-snapshot-v1" as const;
@@ -88,6 +88,11 @@ export interface PredicateBatchWorkAdapterDependencies {
     context: AuthorizedLedgerWriteContext,
     job: Readonly<DurableMemoryWorkJob>,
   ) => Promise<PredicateBatchParentLoadOutcome>;
+  /**
+   * Prices and bounds one adjudication batch. Supplied by the construction site
+   * so this worker never imports a provider; see `predicate-batch-contract.ts`.
+   */
+  readonly prompt_budget: PredicateBatchPromptBudget;
 }
 
 export interface PredicateBatchWorkAdapter {
@@ -124,14 +129,19 @@ const exactDependencies = (value: unknown): PredicateBatchWorkAdapterDependencie
     || Object.getPrototypeOf(value) !== Object.prototype) fail("invalid_dependencies");
   const objectValue = value as object;
   const keys = Reflect.ownKeys(objectValue);
-  if (keys.length !== 3 || keys.some((key) => typeof key !== "string")
-    || !(keys as string[]).every((key) => ["load_input", "resolve_model", "load_current_parent"].includes(key))) {
+  if (keys.length !== 4 || keys.some((key) => typeof key !== "string")
+    || !(keys as string[]).every((key) => [
+      "load_input", "resolve_model", "load_current_parent", "prompt_budget",
+    ].includes(key))) {
     fail("invalid_dependencies");
   }
   for (const key of keys as string[]) {
     const descriptor = Object.getOwnPropertyDescriptor(objectValue, key);
     if (!descriptor || !("value" in descriptor) || !descriptor.enumerable
-      || typeof descriptor.value !== "function" || isProxy(descriptor.value)) fail("invalid_dependencies");
+      || isProxy(descriptor.value)) fail("invalid_dependencies");
+    // `prompt_budget` is the one non-function member: a {cost, budget} pair.
+    if (key === "prompt_budget") assertPredicateBatchPromptBudget(descriptor.value);
+    else if (typeof descriptor.value !== "function") fail("invalid_dependencies");
   }
   return value as PredicateBatchWorkAdapterDependencies;
 };
@@ -207,13 +217,14 @@ const assertSnapshot = (
   snapshot: Readonly<PredicateBatchInputSnapshot>,
   job: Readonly<DurableMemoryWorkJob>,
   strategy: Readonly<RegisteredMemoryStrategy>,
+  promptBudget: PredicateBatchPromptBudget,
 ): { request: ReturnType<typeof preparePredicateAlignmentQuestion>["request"]; prompt_cost: number } => {
   assertPredicateBatchInputSnapshotMatchesJob(snapshot, job);
   const prepared = preparePredicateAlignmentQuestion(snapshot.predicates, job.owner_account_id);
   if (prepared.excluded_predicates.length || prepared.request.predicates.length < 2
     || predicateAlignmentBatchDigest(predicateBatchAdjudicationContract(strategy), prepared.request)
       !== snapshot.batch_question_digest) fail("invalid_question");
-  return { request: prepared.request, prompt_cost: predicateBatchPromptCost(prepared.request) };
+  return { request: prepared.request, prompt_cost: promptBudget.cost(prepared.request) };
 };
 
 const mapRetryable = (code: "batch_prompt_budget_exceeded" | "model_invoke_failed" | "model_response_invalid"):
@@ -258,8 +269,10 @@ export const definePredicateBatchWorkAdapter = (
         if (loaded.kind === "failed") return failed(loaded.error_code);
         if (loaded.kind !== "found") return failed("dependency_unavailable");
         snapshot = parsePredicateBatchInputSnapshot(loaded.snapshot);
-        const prepared = assertSnapshot(snapshot, job, strategy);
-        if (prepared.prompt_cost > PREDICATE_BATCH_PROMPT_BUDGET) return failed("prompt_budget_exceeded");
+        const prepared = assertSnapshot(snapshot, job, strategy, dependencies.prompt_budget);
+        if (prepared.prompt_cost > dependencies.prompt_budget.budget) {
+          return failed("prompt_budget_exceeded");
+        }
         request = prepared.request;
       } catch {
         return failed("dependency_unavailable");
@@ -275,10 +288,10 @@ export const definePredicateBatchWorkAdapter = (
       try {
         const alignment = await invokePredicateAlignment(model, snapshot.predicates, {
           owner_account_id: job.owner_account_id,
-          batch_prompt_budget: PREDICATE_BATCH_PROMPT_BUDGET,
+          batch_prompt_budget: dependencies.prompt_budget.budget,
           model_concurrency: 1,
           max_questions_per_invocation: 1,
-          prompt_cost: predicateBatchPromptCost,
+          prompt_cost: dependencies.prompt_budget.cost,
           adjudication_contract: predicateBatchAdjudicationContract(strategy),
         });
         if (alignment.excluded_predicates.length || alignment.batch_outcomes.length !== 1
