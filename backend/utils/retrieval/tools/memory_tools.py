@@ -63,8 +63,9 @@ def _parse_aware_iso(value: Optional[str]) -> Optional[datetime]:
 
 
 def _memory_in_scope(created_at: Optional[datetime], start_dt: Optional[datetime], end_dt: Optional[datetime]) -> bool:
-    if created_at is None:
-        return True
+    if start_dt or end_dt:
+        if created_at is None:
+            return False
     if start_dt and created_at < start_dt:
         return False
     if end_dt and created_at > end_dt:
@@ -209,10 +210,7 @@ def get_memories_tool(
             for memory in batch:
                 if memory.is_locked:
                     continue
-                created = memory.created_at
-                if start_dt and created and created < start_dt:
-                    continue
-                if end_dt and created and created > end_dt:
+                if not _memory_in_scope(memory.created_at, start_dt, end_dt):
                     continue
                 visible.append(memory)
             if len(batch) < fetch_limit:

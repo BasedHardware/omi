@@ -64,7 +64,7 @@ def _scoped_conversation_fetch(
     if statuses:
         raw_status = conv.get('status')
         status_val = getattr(raw_status, 'value', raw_status)
-        if status_val is not None and str(status_val) not in statuses:
+        if status_val is None or str(status_val) not in statuses:
             return [], f"No accessible conversation found for scoped id {conversation_id}."
     start_ts = start_dt.timestamp() if start_dt is not None else None
     end_ts = end_dt.timestamp() if end_dt is not None else None
@@ -251,6 +251,10 @@ def get_conversations_tool(
         if scoped_err:
             logger.info(f"⚠️ get_conversations_tool - {scoped_err}")
             return scoped_err
+        if offset > 0:
+            conversations_data = []
+        else:
+            conversations_data = conversations_data[:limit]
     else:
         # Get conversations
         conversations_data = conversations_db.get_conversations(

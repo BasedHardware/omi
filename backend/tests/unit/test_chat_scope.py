@@ -86,6 +86,7 @@ def test_get_conversations_tool_honors_conversation_scope():
         "transcript_segments": [],
         "discarded": False,
         "is_locked": False,
+        "status": "completed",
     }
     with (
         patch.object(tools.conversations_db, "get_conversations_by_id", return_value=[conv]) as get_one,
@@ -151,6 +152,7 @@ def test_get_conversations_tool_fail_closed_on_timeframe_scope():
         "transcript_segments": [],
         "discarded": False,
         "is_locked": False,
+        "status": "completed",
     }
     with (
         patch.object(tools.conversations_db, "get_conversations_by_id", return_value=[conv]),
@@ -246,3 +248,87 @@ def test_search_memories_tool_filters_matches_to_timeframe_scope():
         out = memory_tools.search_memories_tool.invoke({"query": "dogs"}, config=cfg)
     assert "IN_SCOPE_FACT" in out
     assert "LEAKED" not in out
+
+
+def test_search_memories_tool_excludes_untimed_matches_under_timeframe_scope():
+    import utils.retrieval.tools.memory_tools as memory_tools
+    from models.memories import MemoryCategory
+
+    cfg = {
+        "configurable": {
+            "user_id": "u1",
+            "chat_scope": {
+                "start_date": "2026-08-09T00:00:00+00:00",
+                "end_date": "2026-08-09T23:59:59+00:00",
+            },
+        }
+    }
+
+    untimed = MagicMock()
+    untimed.memory.is_locked = False
+    untimed.memory.created_at = None
+    untimed.memory.content = "UNTIMED"
+    untimed.memory.category = MemoryCategory.interesting
+    untimed.score = 0.99
+
+    service = MagicMock()
+    service.search.return_value = [untimed]
+    with (
+        patch.object(memory_tools, "MemoryService", return_value=service),
+        patch.object(memory_tools.notification_db, "get_user_time_zone", return_value="UTC"),
+    ):
+        out = memory_tools.search_memories_tool.invoke({"query": "dogs"}, config=cfg)
+    assert "UNTIMED" not in out
+    assert "no memories found" in out.lower()
+
+
+def test_get_conversations_tool_rejects_missing_status_under_scope():
+    cfg = {
+        "configurable": {
+            "user_id": "u1",
+            "conversations_collected": [],
+            "chat_scope": {"conversation_id": "only-me"},
+        }
+    }
+    conv = {
+        "id": "only-me",
+        "discarded": False,
+        "is_locked": False,
+        "created_at": datetime(2026, 8, 1, tzinfo=timezone.utc),
+    }
+    with (
+        patch.object(tools.conversations_db, "get_conversations_by_id", return_value=[conv]),
+        patch.object(tools.conversations_db, "get_conversations") as get_many,
+    ):
+        out = tools.get_conversations_tool.invoke({"statuses": "completed"}, config=cfg)
+    assert "no accessible conversation" in out.lower()
+    get_many.assert_not_called()
+
+
+def test_get_conversations_tool_scoped_offset_does_not_repeat_the_conversation():
+    cfg = {
+        "configurable": {
+            "user_id": "u1",
+            "conversations_collected": [],
+            "chat_scope": {"conversation_id": "only-me"},
+        }
+    }
+    conv = {
+        "id": "only-me",
+        "created_at": datetime(2026, 8, 1, tzinfo=timezone.utc),
+        "started_at": datetime(2026, 8, 1, tzinfo=timezone.utc),
+        "finished_at": datetime(2026, 8, 1, 1, tzinfo=timezone.utc),
+        "structured": {"title": "Scoped", "overview": "hi", "emoji": "🙂", "category": "other"},
+        "transcript_segments": [],
+        "discarded": False,
+        "is_locked": False,
+        "status": "completed",
+    }
+    with (
+        patch.object(tools.conversations_db, "get_conversations_by_id", return_value=[conv]),
+        patch.object(tools.conversations_db, "get_conversations") as get_many,
+        patch.object(tools.notification_db, "get_user_time_zone", return_value="UTC"),
+    ):
+        out = tools.get_conversations_tool.invoke({"offset": 1}, config=cfg)
+    assert out.startswith("No conversations found")
+    get_many.assert_not_called()
