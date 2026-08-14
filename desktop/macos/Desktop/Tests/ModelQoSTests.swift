@@ -43,18 +43,11 @@ final class ModelQoSTests: XCTestCase {
       ModelQoS.activeTier = tier
       XCTAssertEqual(ModelQoS.Claude.chat, "claude-sonnet-4-6")
       XCTAssertEqual(ModelQoS.Claude.floatingBar, "claude-sonnet-4-6")
-      XCTAssertEqual(ModelQoS.Claude.synthesis, "claude-haiku-4-5-20251001")
       XCTAssertEqual(ModelQoS.Claude.chatLabQuery, "claude-sonnet-4-20250514")
       XCTAssertEqual(ModelQoS.Claude.chatLabGrade, "claude-haiku-4-5-20251001")
       XCTAssertEqual(ModelQoS.Claude.defaultSelection, "claude-sonnet-4-6")
       XCTAssertEqual(ModelQoS.Claude.availableModels.map(\.label), ["Chat agent"])
     }
-  }
-
-  // MARK: - Synthesis uses Haiku (extraction workloads)
-
-  func testSynthesisUsesHaiku() {
-    XCTAssertEqual(ModelQoS.Claude.synthesis, "claude-haiku-4-5-20251001")
   }
 
   // MARK: - Chat uses Sonnet (user-facing)
@@ -79,7 +72,15 @@ final class ModelQoSTests: XCTestCase {
     ModelQoS.activeTier = .premium
     XCTAssertEqual(ModelQoS.Gemini.proactive, "gemini-2.5-flash")
     XCTAssertEqual(ModelQoS.Gemini.taskExtraction, "gemini-2.5-flash")
-    XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-2.5-flash")
+  }
+
+  /// Insight is Pro on every tier by design — the timer caps it at ~6 analyses/hour, and the
+  /// premium-tier drop to Flash tracked a click-through fall from 2.34% to under 1%.
+  func testInsightIsProOnEveryTier() {
+    for tier in ModelTier.allCases {
+      ModelQoS.activeTier = tier
+      XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-2.5-pro")
+    }
   }
 
   func testGeminiMaxUsesPro() {
@@ -144,7 +145,6 @@ final class ModelQoSTests: XCTestCase {
       allModels.formUnion([
         ModelQoS.Claude.chat,
         ModelQoS.Claude.floatingBar,
-        ModelQoS.Claude.synthesis,
         ModelQoS.Claude.chatLabQuery,
         ModelQoS.Claude.chatLabGrade,
         ModelQoS.Claude.defaultSelection,

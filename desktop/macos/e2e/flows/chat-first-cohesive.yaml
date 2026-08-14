@@ -23,6 +23,8 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentBridge+ChatFirst.swift
   - desktop/macos/Desktop/Sources/Chat/AgentClient.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  # save_knowledge_graph discovery_text resolves through backend KG extract SSOT.
+  - desktop/macos/Desktop/Sources/Services/KnowledgeGraphToolSupport.swift
   - desktop/macos/Desktop/Sources/Providers/ChatFirstBlockToolExecutor.swift
   - desktop/macos/Desktop/Sources/Chat/ChatFirstBlockValidation.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
@@ -38,6 +40,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstCaptureLinkPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstGoalsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstTasksPage.swift
+  - desktop/macos/Desktop/Sources/Stores/TasksStore+CanonicalTask.swift
   # S3-S6 load canonical goals, acknowledge focus, and mutate focused-goal state.
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CanonicalGoalsStore.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+TaskCatalog.swift

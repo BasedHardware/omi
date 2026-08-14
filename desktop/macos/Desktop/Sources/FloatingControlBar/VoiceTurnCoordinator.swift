@@ -408,27 +408,12 @@ final class VoiceTurnCoordinator {
     let before = model
     let reduction = domain.publish(fact)
     appendTimeline(fact: fact, before: before, after: model)
-    announceCaptureEdge(from: before.turn?.phase, to: model.turn?.phase)
     process(reduction.effects)
     presenter?.apply(projection)
     snapshotHandler?(model)
     for observer in snapshotObservers.values {
       observer(model)
     }
-  }
-
-  /// The mic opening and closing is the one voice moment the user performed rather than waited
-  /// for, so it is the one that answers back.
-  ///
-  /// It reads the reduced phase rather than the shortcut handler because hold, locked hands-free
-  /// and the automation bridge all reach recording through this reducer and nowhere else — one
-  /// edge each, no matter which of them drove it. `isRecording` spans the lock decision, so a hold
-  /// that becomes a locked turn is still a single opening.
-  private func announceCaptureEdge(from before: VoiceTurnPhase?, to after: VoiceTurnPhase?) {
-    let wasRecording = before?.isRecording ?? false
-    let isRecording = after?.isRecording ?? false
-    guard wasRecording != isRecording else { return }
-    OmiUISound.play(isRecording ? .captureStart : .captureEnd)
   }
 
   func timelineSnapshot() -> [VoiceTurnTimelineEntry] {

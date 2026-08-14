@@ -71,7 +71,7 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     }
   }
 
-  /// Maps every legacy-compatible automation name to its mounted cohort route.
+  /// Maps every legacy-compatible automation name to its mounted Chat-first route.
   /// Dashboard/Home are aliases for the canonical Chat surface: dispatch remains
   /// owned by `DesktopHomeView`, but the cohort never mounts a second Dashboard
   /// Home for either legacy name.
@@ -85,7 +85,6 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     case "rewind": return .more(.rewind)
     case "apps", "integrations": return .more(.apps)
     case "permissions": return .more(.permissions)
-    case "help": return .more(.help)
     case "settings": return .more(.settings)
     default: return nil
     }
@@ -97,7 +96,6 @@ enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
   case rewind
   case apps
   case permissions
-  case help
   case settings
 
   var stableName: String { rawValue }
@@ -108,7 +106,6 @@ enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
     case .rewind: return "Rewind"
     case .apps: return "Apps"
     case .permissions: return "Permissions"
-    case .help: return "Help from Founder"
     case .settings: return "Settings"
     }
   }
@@ -118,8 +115,7 @@ enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
     case .dashboard: return "house.fill"
     case .rewind: return "clock.arrow.circlepath"
     case .apps: return "puzzlepiece.fill"
-    case .permissions: return "exclamationmark.triangle.fill"
-    case .help: return "bubble.left.fill"
+    case .permissions: return PermissionNavSymbol.filled
     case .settings: return "gearshape.fill"
     }
   }
@@ -191,7 +187,7 @@ private struct ChatFirstPersistedNavigation: Codable, Equatable {
   var isSidebarCollapsed: Bool
 }
 
-/// Root-owned navigation and focus state for the cohort-only shell. The only
+/// Root-owned navigation and focus state for the universal shell. The only
 /// persisted values are route and collapse preference; a focus request is a
 /// transient deep-link contract and must be acknowledged by the destination
 /// only after that entity is visible.
@@ -199,17 +195,16 @@ private struct ChatFirstPersistedNavigation: Codable, Equatable {
 final class ChatFirstShellNavigation: ObservableObject {
   static let storageKey = "chatFirstShell.windowNavigation.v1"
 
-  /// Every mutation below is a navigation the user asked for — a rail press, a More page, a typed
-  /// Chat link — so the cue belongs on the property rather than on each of the three call sites.
-  /// The value assigned in `init` is a restore, not a navigation, and `didSet` correctly skips it.
-  @Published private(set) var route: ChatFirstRoute {
-    didSet { OmiUISound.play(.navigate) }
-  }
+  @Published private(set) var route: ChatFirstRoute
   /// The destination currently mounted by SwiftUI. This is deliberately
   /// separate from `route`: navigation commands are not complete until the
   /// requested target has actually appeared.
   @Published private(set) var visibleRoute: ChatFirstRoute?
   @Published private(set) var pendingFocus: ChatFirstPendingFocus?
+  /// A conversation fetched by ID for a Chat-first conversation link. Unlike
+  /// the paginated list, this transient value is the exact server record the
+  /// user validated and asked to open.
+  @Published private(set) var pendingConversation: ServerConversation?
   /// A related-entity link can intentionally land in a different primary
   /// destination (for example, a Goal's task list). This is transient like the
   /// focus itself and is never restored across launches.
@@ -224,6 +219,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   private let defaults: UserDefaults
   private let analytics: @MainActor (ChatFirstAnalyticsEvent) -> Void
   private var goalLinkResolutionGeneration: UInt = 0
+  private var conversationLinkResolutionGeneration: UInt = 0
 
   init(
     defaults: UserDefaults = .standard,
@@ -244,6 +240,7 @@ final class ChatFirstShellNavigation: ObservableObject {
       isSidebarCollapsed = false
     }
     pendingFocus = nil
+    pendingConversation = nil
     pendingFocusDestination = nil
     visibleRoute = nil
     lastAcknowledgedFocusKind = nil
@@ -256,15 +253,18 @@ final class ChatFirstShellNavigation: ObservableObject {
     origin: ChatFirstAnalyticsEvent.RouteOrigin = .sidebar
   ) {
     guard destination.isPrimaryDestination else { return }
+    // A direct tab selection supersedes any exact conversation deep-link that
+    // has not yet been consumed by the Conversations host.
+    pendingConversation = nil
     // Selecting the already-mounted tab is a no-op. Clearing visibleRoute here
     // used to leave the automation state permanently "not visible" because
     // SwiftUI correctly did not remount the unchanged destination.
     if route == destination {
-      invalidateGoalLinkResolutions()
+      invalidateLinkResolutions()
       clearFocus()
       return
     }
-    invalidateGoalLinkResolutions()
+    invalidateLinkResolutions()
     route = destination
     visibleRoute = nil
     clearFocus()
@@ -280,12 +280,13 @@ final class ChatFirstShellNavigation: ObservableObject {
   }
 
   func selectMore(_ page: ChatFirstMorePage) {
+    pendingConversation = nil
     if route == .more(page) {
-      invalidateGoalLinkResolutions()
+      invalidateLinkResolutions()
       clearFocus()
       return
     }
-    invalidateGoalLinkResolutions()
+    invalidateLinkResolutions()
     route = .more(page)
     visibleRoute = nil
     clearFocus()
@@ -300,11 +301,12 @@ final class ChatFirstShellNavigation: ObservableObject {
   }
 
   /// Preserves the typed focus contract while allowing a relationship link to
-  /// choose its destination. Destinations must remain in the cohort primary
+  /// choose its destination. Destinations must remain in the Chat-first primary
   /// navigation; no legacy page can receive a pending focus.
   func open(focus: ChatFirstPendingFocus, destination: ChatFirstRoute) {
     guard destination.isPrimaryDestination else { return }
-    invalidateGoalLinkResolutions()
+    pendingConversation = nil
+    invalidateLinkResolutions()
     route = destination
     visibleRoute = nil
     pendingFocus = focus
@@ -315,11 +317,28 @@ final class ChatFirstShellNavigation: ObservableObject {
     analytics(.routeEntered(route: destination.analyticsRoute, origin: .chatDeeplink))
   }
 
+  /// Opens a conversation whose detail was already validated by ID. Keeping
+  /// the fetched record on the navigation owner lets the Conversations page
+  /// present it even when the paginated list does not currently contain it.
+  func open(conversation: ServerConversation) {
+    guard !conversation.id.isEmpty else { return }
+    invalidateLinkResolutions()
+    route = .conversations
+    visibleRoute = nil
+    pendingFocus = nil
+    pendingFocusDestination = nil
+    focusedEntityID = nil
+    isFocusedEntityAcknowledged = false
+    pendingConversation = conversation
+    persistNavigation()
+    analytics(.routeEntered(route: .conversations, origin: .chatDeeplink))
+  }
+
   /// A Goal link validates asynchronously before it opens a typed focus. The
   /// root navigation owner fences overlapping link validations so a late result
   /// cannot replace the route selected by a newer link request.
   func beginGoalLinkResolution() -> UInt {
-    invalidateGoalLinkResolutions()
+    invalidateLinkResolutions()
     return goalLinkResolutionGeneration
   }
 
@@ -331,6 +350,28 @@ final class ChatFirstShellNavigation: ObservableObject {
   func completeGoalLinkResolution(goalID: String, generation: UInt) -> Bool {
     guard isCurrentGoalLinkResolution(generation) else { return false }
     open(focus: .goal(id: goalID))
+    return true
+  }
+
+  /// A conversation detail fetch can outlive the user's current route. The
+  /// generation belongs to the root navigation owner so a late response
+  /// cannot pull the user back to Conversations after a newer selection.
+  func beginConversationLinkResolution() -> UInt {
+    invalidateConversationLinkResolutions()
+    return conversationLinkResolutionGeneration
+  }
+
+  func isCurrentConversationLinkResolution(_ generation: UInt) -> Bool {
+    conversationLinkResolutionGeneration == generation
+  }
+
+  @discardableResult
+  func completeConversationLinkResolution(
+    conversation: ServerConversation,
+    generation: UInt
+  ) -> Bool {
+    guard isCurrentConversationLinkResolution(generation) else { return false }
+    open(conversation: conversation)
     return true
   }
 
@@ -386,7 +427,6 @@ final class ChatFirstShellNavigation: ObservableObject {
     case .apps: selectMore(.apps)
     case .settings: selectMore(.settings)
     case .permissions: selectMore(.permissions)
-    case .help: selectMore(.help)
     }
   }
 
@@ -402,8 +442,13 @@ final class ChatFirstShellNavigation: ObservableObject {
     isFocusedEntityAcknowledged = false
   }
 
-  private func invalidateGoalLinkResolutions() {
+  private func invalidateLinkResolutions() {
     goalLinkResolutionGeneration &+= 1
+    conversationLinkResolutionGeneration &+= 1
+  }
+
+  private func invalidateConversationLinkResolutions() {
+    conversationLinkResolutionGeneration &+= 1
   }
 
 }

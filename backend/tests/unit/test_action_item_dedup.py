@@ -259,3 +259,65 @@ class TestQueryConversationVectors:
 
         fake_embeddings.embed_query.assert_not_called()
         fake_index.query.assert_not_called()
+
+    def test_shared_query_vector_skips_reembed(self, monkeypatch, vector_db):
+        fake_index, fake_embeddings = _setup_mocks(
+            monkeypatch,
+            vector_db,
+            query_response={'matches': []},
+        )
+        shared = [0.1, 0.2, 0.3]
+
+        vector_db.query_vectors('coffee', 'uid-abc', query_vector=shared)
+
+        fake_embeddings.embed_query.assert_not_called()
+        assert fake_index.query.call_args.kwargs['vector'] is shared
+
+
+class TestSearchTranscriptChunksDateFilter:
+    """MCP date-scoped search must apply one-sided created_at filters on chunk search too."""
+
+    def test_start_date_only_builds_one_sided_filter(self, monkeypatch, vector_db):
+        fake_index, fake_embeddings = _setup_mocks(
+            monkeypatch,
+            vector_db,
+            query_response={'matches': []},
+        )
+
+        vector_db.search_transcript_chunks('uid-abc', 'coffee', starts_at=100, ends_at=None)
+
+        fake_embeddings.embed_query.assert_called_once_with('coffee')
+        kwargs = fake_index.query.call_args.kwargs
+        assert kwargs['filter'] == {'uid': 'uid-abc', 'created_at': {'$gte': 100}}
+        assert kwargs['namespace'] == vector_db.TRANSCRIPT_CHUNKS_NAMESPACE
+
+    def test_end_date_only_builds_one_sided_filter(self, monkeypatch, vector_db):
+        fake_index, _ = _setup_mocks(monkeypatch, vector_db, query_response={'matches': []})
+
+        vector_db.search_transcript_chunks('uid-abc', 'coffee', starts_at=None, ends_at=200)
+
+        kwargs = fake_index.query.call_args.kwargs
+        assert kwargs['filter'] == {'uid': 'uid-abc', 'created_at': {'$lte': 200}}
+
+    def test_both_bounds_and_shared_query_vector(self, monkeypatch, vector_db):
+        fake_index, fake_embeddings = _setup_mocks(
+            monkeypatch,
+            vector_db,
+            query_response={'matches': []},
+        )
+        shared = [0.5, 0.6]
+
+        vector_db.search_transcript_chunks('uid-abc', 'coffee', starts_at=100, ends_at=200, query_vector=shared)
+
+        fake_embeddings.embed_query.assert_not_called()
+        kwargs = fake_index.query.call_args.kwargs
+        assert kwargs['vector'] is shared
+        assert kwargs['filter'] == {'uid': 'uid-abc', 'created_at': {'$gte': 100, '$lte': 200}}
+
+    def test_invalid_date_filter_returns_empty_without_embedding(self, monkeypatch, vector_db):
+        fake_index, fake_embeddings = _setup_mocks(monkeypatch, vector_db, query_response={'matches': []})
+
+        assert vector_db.search_transcript_chunks('uid-abc', 'coffee', starts_at=300, ends_at=200) == []
+
+        fake_embeddings.embed_query.assert_not_called()
+        fake_index.query.assert_not_called()

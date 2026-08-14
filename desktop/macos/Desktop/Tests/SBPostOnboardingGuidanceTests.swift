@@ -221,7 +221,7 @@ final class SBPostOnboardingGuidanceTests: XCTestCase {
     var setup = SBSetupSnapshot()
     setup.canHear = true
 
-    setup.listening = .continuous
+    setup.listening = .always
     XCTAssertEqual(
       SBPostOnboardingGuidance.listeningCue(for: setup).title,
       "I'm listening now, and I'll remember what matters.")
@@ -229,29 +229,27 @@ final class SBPostOnboardingGuidanceTests: XCTestCase {
     setup.listening = .meetingsOnly
     XCTAssertEqual(
       SBPostOnboardingGuidance.listeningCue(for: setup).title,
-      "I'll start listening when your meetings start.")
+      "I'll start listening when a call starts.")
   }
 
-  func testNeverSystemAudioMeansMicrophoneOnly() {
+  func testOffMeansListeningDisabled() {
     XCTAssertEqual(
-      SBSetupSnapshot.Listening(systemAudioModeRaw: "never", canHear: true),
-      .microphoneOnly,
-      "Never disables system audio, not microphone capture")
+      SBSetupSnapshot.Listening(audioRecordingModeRaw: "off", canHear: true),
+      .disabled)
 
     var setup = SBSetupSnapshot()
     setup.canHear = true
-    setup.listening = .microphoneOnly
+    setup.listening = .disabled
 
     let cue = SBPostOnboardingGuidance.listeningCue(for: setup)
-    XCTAssertEqual(cue.title, "I'm listening through your microphone only.")
-    XCTAssertFalse(cue.title.lowercased().contains("meeting"))
+    XCTAssertEqual(cue.title, "I can't hear yet. Turn on the microphone in Settings whenever you want me to.")
   }
 
   func testUnavailableMicrophoneProducesDisabledListeningCue() {
     let setup = SBSetupSnapshot()
 
     XCTAssertEqual(
-      SBSetupSnapshot.Listening(systemAudioModeRaw: "always", canHear: false),
+      SBSetupSnapshot.Listening(audioRecordingModeRaw: "always", canHear: false),
       .disabled)
     XCTAssertEqual(SBPostOnboardingGuidance.listeningCue(for: setup).symbol, "mic.slash")
   }

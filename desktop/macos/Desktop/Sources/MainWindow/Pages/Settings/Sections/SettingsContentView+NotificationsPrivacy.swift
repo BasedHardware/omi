@@ -32,6 +32,8 @@ extension SettingsContentView {
 
             notificationFrequencySlider(settingId: "notifications.frequency")
 
+            GlassSeparator()
+
             // Sits under the master toggle and the frequency slider because both gate it:
             // frequency caps how often any proactive card is delivered, and this decides
             // whether live suggestions are generated at all.
@@ -129,7 +131,7 @@ extension SettingsContentView {
             GlassSeparator()
 
             settingRow(
-              title: "Summary Time", subtitle: "When to send your daily summary",
+              title: "Summary Time", subtitle: "When to send your daily summary (hour only)",
               settingId: "notifications.summarytime"
             ) {
               DatePicker(
@@ -141,7 +143,13 @@ extension SettingsContentView {
               .labelsHidden()
               .fixedSize()
               .onChange(of: dailySummaryTime) { _, selectedTime in
-                let hour = SettingsControlMetrics.dailySummaryHour(from: selectedTime)
+                // Storage is hour-only; snap minutes to :00 in the control so 20:45 never
+                // appears as a saved value that reopens as 20:00.
+                let canonical = SettingsControlMetrics.canonicalizeDailySummaryTime(selectedTime)
+                if canonical != selectedTime {
+                  dailySummaryTime = canonical
+                }
+                let hour = SettingsControlMetrics.dailySummaryHour(from: canonical)
                 guard hour != dailySummaryHour else { return }
                 dailySummaryHour = hour
                 updateDailySummarySettings(hour: hour)

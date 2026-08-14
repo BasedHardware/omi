@@ -90,7 +90,16 @@ class ManifestValidationTests(unittest.TestCase):
             with self.subTest(key=key):
                 manifest = fixture("app-only.json")
                 manifest[key] = value
-                with self.assertRaisesRegex(manifest_contract.ManifestError, "passed at tier T2"):
+                with self.assertRaisesRegex(manifest_contract.ManifestError, "T2, signed-smoke, or emergency"):
+                    manifest_contract.validate_manifest(manifest)
+
+    def test_rejects_numeric_qualification_passed_truthiness(self) -> None:
+        # ``0 == False`` in Python set membership; guard must reject non-boolean values.
+        for value in (0, 1):
+            with self.subTest(value=value):
+                manifest = fixture("app-only.json")
+                manifest["qualification_passed"] = value
+                with self.assertRaisesRegex(manifest_contract.ManifestError, "T2, signed-smoke, or emergency"):
                     manifest_contract.validate_manifest(manifest)
 
     def test_rejects_unknown_fields(self) -> None:

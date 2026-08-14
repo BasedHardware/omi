@@ -41,6 +41,21 @@ class WorkstreamProposal(BaseModel):
     anchor_task: TaskCreatePayload
 
 
+class CandidateCompatibilityMetadata(BaseModel):
+    """Released-client annotations retained outside the canonical task payload.
+
+    Staged-task clients historically supplied these fields for presentation and
+    ordering. They are carried on the Candidate envelope so the compatibility
+    projection remains lossless without weakening the strict task contract.
+    """
+
+    model_config = ConfigDict(extra='forbid')
+
+    metadata: Optional[str] = None
+    category: Optional[str] = None
+    relevance_score: Optional[int] = Field(default=None, ge=0, le=1000)
+
+
 class CandidateEnvelope(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
@@ -50,6 +65,7 @@ class CandidateEnvelope(BaseModel):
     workstream_id: Optional[StableId] = None
     evidence_refs: list[EvidenceRef] = Field(min_length=1)
     source_surface: str = Field(min_length=1, max_length=64)
+    compatibility: Optional[CandidateCompatibilityMetadata] = None
 
 
 class TaskCreateCandidate(CandidateEnvelope):
@@ -173,6 +189,10 @@ class CandidateCreate(RootModel[CandidateCreateUnion]):
     def source_surface(self) -> str:
         return self.root.source_surface
 
+    @property
+    def compatibility(self) -> Optional[CandidateCompatibilityMetadata]:
+        return self.root.compatibility
+
 
 class CandidateRecord(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -188,6 +208,7 @@ class CandidateRecord(BaseModel):
     workstream_id: Optional[StableId] = None
     evidence_refs: list[EvidenceRef] = Field(min_length=1)
     source_surface: str = Field(min_length=1, max_length=64)
+    compatibility: Optional[CandidateCompatibilityMetadata] = None
     candidate_id: StableId
     status: CandidateStatus = CandidateStatus.pending
     account_generation: int = Field(ge=0)
@@ -363,6 +384,7 @@ class CandidateMigrationRequest(BaseModel):
 
 __all__ = [
     'CandidateAction',
+    'CandidateCompatibilityMetadata',
     'CandidateCreate',
     'CandidateListResponse',
     'CandidateMigrationReport',

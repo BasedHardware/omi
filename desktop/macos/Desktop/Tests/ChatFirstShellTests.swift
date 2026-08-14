@@ -12,6 +12,39 @@ final class ChatFirstShellTests: XCTestCase {
     )
   }
 
+  private func conversation(id: String) -> ServerConversation {
+    ServerConversation(
+      id: id,
+      createdAt: Date(timeIntervalSince1970: 1_000),
+      updatedAt: Date(timeIntervalSince1970: 1_001),
+      startedAt: Date(timeIntervalSince1970: 1_000),
+      finishedAt: Date(timeIntervalSince1970: 1_060),
+      structured: Structured(
+        title: "Meeting notes",
+        overview: "Overview",
+        emoji: "",
+        category: "other",
+        actionItems: [],
+        events: []
+      ),
+      transcriptSegments: [],
+      transcriptSegmentsIncluded: false,
+      geolocation: nil,
+      photos: [],
+      appsResults: [],
+      source: .desktop,
+      language: "en",
+      status: .completed,
+      discarded: false,
+      deleted: false,
+      isLocked: false,
+      starred: false,
+      folderId: nil,
+      inputDeviceName: nil,
+      deferred: false
+    )
+  }
+
   func testSuccessfulSampleSelectsChatFirstAndCannotLiveSwap() throws {
     var sample = ChatFirstShellCapabilitySample()
     sample.resolve(
@@ -42,6 +75,25 @@ final class ChatFirstShellTests: XCTestCase {
 
     XCTAssertTrue(projection.chatFirstUi)
     XCTAssertEqual(projection.controlGeneration, 9)
+  }
+
+  func testOnlyLegacyShellUsesThePostOnboardingFloatingPopup() {
+    var enabled = ChatFirstShellCapabilitySample()
+    enabled.resolve(
+      control: enabledControl(),
+      requestedOwnerID: "owner-a",
+      ownerIsStillCurrent: true
+    )
+
+    XCTAssertFalse(
+      DesktopShellPresentationPolicy.usesLegacyPostOnboardingPopup(false, enabled.variant),
+      "chat-first starter prompts belong to the main chat")
+    XCTAssertTrue(
+      DesktopShellPresentationPolicy.usesLegacyPostOnboardingPopup(false, .legacy),
+      "the server-selected legacy shell retains its floating prompt")
+    XCTAssertTrue(
+      DesktopShellPresentationPolicy.usesLegacyPostOnboardingPopup(true, enabled.variant),
+      "the explicit legacy preference remains authoritative")
   }
 
   func testMissingStaleAndOwnerChangedSamplesFailClosed() {
@@ -89,6 +141,20 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertNil(restored.pendingFocus)
     XCTAssertNil(restored.focusedEntityID)
     XCTAssertFalse(restored.isFocusedEntityAcknowledged)
+  }
+
+  func testConversationDeepLinkCarriesFetchedRecordOutsidePaginatedList() throws {
+    let suiteName = "ChatFirstShellTests.conversation-deeplink.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    let fetched = conversation(id: "older-meeting-42")
+    navigation.open(conversation: fetched)
+
+    XCTAssertEqual(navigation.route, .conversations)
+    XCTAssertEqual(navigation.pendingConversation, fetched)
+    XCTAssertNil(navigation.pendingFocus)
   }
 
   func testBackNavigationReturnsToChatFromPrimaryAndSettingsRoutes() throws {
@@ -296,6 +362,46 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertEqual(events, [.routeEntered(route: .goals, origin: .chatDeeplink)])
   }
 
+  func testNewerConversationLinkResolutionPreventsAStaleCompletionFromNavigating() throws {
+    let suiteName = "ChatFirstShellTests.conversation-link-resolution.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+
+    let staleResolution = navigation.beginConversationLinkResolution()
+    let currentResolution = navigation.beginConversationLinkResolution()
+
+    XCTAssertFalse(
+      navigation.completeConversationLinkResolution(
+        conversation: conversation(id: "meeting-old"),
+        generation: staleResolution))
+    XCTAssertEqual(navigation.route, .chat)
+    XCTAssertNil(navigation.pendingConversation)
+    XCTAssertTrue(
+      navigation.completeConversationLinkResolution(
+        conversation: conversation(id: "meeting-new"),
+        generation: currentResolution))
+    XCTAssertEqual(navigation.route, .conversations)
+    XCTAssertEqual(navigation.pendingConversation?.id, "meeting-new")
+  }
+
+  func testDirectNavigationInvalidatesAnInFlightConversationLinkResolution() throws {
+    let suiteName = "ChatFirstShellTests.conversation-link-direct-navigation.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+
+    let resolution = navigation.beginConversationLinkResolution()
+    navigation.selectPrimary(.tasks)
+
+    XCTAssertFalse(
+      navigation.completeConversationLinkResolution(
+        conversation: conversation(id: "meeting-old"),
+        generation: resolution))
+    XCTAssertEqual(navigation.route, .tasks)
+    XCTAssertNil(navigation.pendingConversation)
+  }
+
   func testDirectNavigationInvalidatesAnInFlightGoalLinkResolution() throws {
     let suiteName = "ChatFirstShellTests.goal-link-direct-navigation.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -335,7 +441,6 @@ final class ChatFirstShellTests: XCTestCase {
 
   func testAutomationNavigationVisibilityAcceptsTheMountedShellForSharedNames() {
     XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "settings"), .more(.settings))
-    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "help"), .more(.help))
     XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "home"), .chat)
     XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "dashboard"), .chat)
 
@@ -480,7 +585,7 @@ final class ChatFirstShellTests: XCTestCase {
   func testChatFirstGlassBoundaryWrapsOnlyRoutesWithoutTheirOwnPanels() {
     let wrapped: [ChatFirstRoute] = [
       .conversations, .tasks, .goals, .memories,
-      .more(.apps), .more(.permissions), .more(.help), .more(.settings),
+      .more(.apps), .more(.permissions), .more(.settings),
     ]
     let selfContained: [ChatFirstRoute] = [.chat, .more(.dashboard), .more(.rewind)]
 
@@ -509,7 +614,7 @@ final class ChatFirstShellTests: XCTestCase {
 
     for route: ChatFirstRoute in [
       .conversations, .tasks, .goals, .memories,
-      .more(.apps), .more(.rewind), .more(.settings), .more(.permissions), .more(.help),
+      .more(.apps), .more(.rewind), .more(.settings), .more(.permissions),
     ] {
       XCTAssertFalse(
         HomeStageAutomationPolicy.mountsHomeStage(route),

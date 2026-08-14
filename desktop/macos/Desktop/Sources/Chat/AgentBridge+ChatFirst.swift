@@ -1,6 +1,6 @@
 import Foundation
 
-/// The cohort-only projection and journal façade. Keeping it separate makes
+/// The universal projection and journal façade. Keeping it separate makes
 /// the capability boundary visible without creating a second bridge or
 /// transcript owner.
 extension AgentBridge {

@@ -23,11 +23,13 @@ landing PRs that change product behavior. Engineering standards live in
 5. **Taste floor.** Stay on-brand. Prefer deleting dual paths over
    feature-flagging them forever.
 
-## Proposed canonical memory lifecycle
+## Proposed universal memory lifecycle
 
 The enforceable design note is
-[`INV-MEM-4`](docs/product/invariants/memory-promotion-authority.md). It remains
-`proposed` for the required seven-day unchanged period.
+[`INV-MEM-4`](docs/product/invariants/memory-promotion-authority.md), together
+with the universal-authority rule in
+[`INV-MEM-5`](docs/product/invariants/universal-memory-task-authority.md). Both
+remain `proposed` for the required seven-day unchanged period.
 
 All new memory intake starts as broad Short-term capture. Maintenance gives
 each pending item exactly one consolidation route: promote, archive, review, or
@@ -41,6 +43,16 @@ by canonical lineage so one logical memory appears once. Search/vector and
 compatibility projections are derived views: their updates are committed to
 the outbox with canonical state and retried from authoritative memory, never
 treated as memory authority themselves.
+
+This lifecycle is the product behavior for every authenticated account. A UID
+allowlist, dogfood cohort, store origin, client, or rollout document must not
+select a different memory or task-intelligence system. Historical flat memory
+documents remain readable through one read-only compatibility adapter so users
+retain their existing data without a bulk backfill. They are not a second
+mutation authority: all new intake and every mutation use canonical apply,
+privacy, lineage, graph, and outbox rules. The complete convergence and removal
+ledger lives in
+[`docs/epics/universal_memory_task_convergence.md`](docs/epics/universal_memory_task_convergence.md).
 
 ## Before you build
 

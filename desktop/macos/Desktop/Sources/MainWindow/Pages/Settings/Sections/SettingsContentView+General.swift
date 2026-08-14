@@ -67,48 +67,27 @@ extension SettingsContentView {
         }
       }
 
-      // Audio Recording toggle
+      // One recording policy; no independent enable switch or system-audio mode.
       settingsCard(settingId: "general.audiorecording") {
-        HStack(spacing: OmiSpacing.lg) {
-          SettingsIconTile(symbol: "mic.fill")
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack(spacing: OmiSpacing.lg) {
+            SettingsIconTile(symbol: "mic.fill")
 
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Audio Recording")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(Ink.primary)
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Audio Recording")
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
+                .foregroundColor(Ink.primary)
 
-            Text(
-              transcriptionError
-                ?? (isTranscribing
-                  ? (appState.isAwaitingMeeting
-                    ? "Waiting for a meeting…" : "Recording and transcribing audio")
-                  : "Audio recording is paused")
-            )
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(transcriptionError != nil ? SettingsInk.notice : Ink.secondary)
+              Text(audioRecordingStatusText)
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(audioRecordingNeedsAttention ? SettingsInk.notice : Ink.secondary)
+            }
+
+            Spacer()
+
+            AudioRecordingModeSwitcher(selection: audioRecordingModeBinding)
           }
 
-          Spacer()
-
-          if isTogglingTranscription {
-            ProgressView()
-              .scaleEffect(0.8)
-              .frame(width: 36, height: 20)
-          } else {
-            Toggle(
-              "",
-              isOn: Binding(
-                get: { isTranscribing },
-                set: { newValue in
-                  isTranscribing = newValue
-                  toggleTranscription(enabled: newValue)
-                }
-              )
-            )
-            .toggleStyle(OmiToggleStyle())
-            .labelsHidden()
-            .frame(width: 36, height: 20)
-          }
         }
       }
 
@@ -148,13 +127,14 @@ extension SettingsContentView {
                       // Banners off — user needs to change style in System Settings
                       appState.openNotificationPreferences()
                     } else {
-                      // Auth not granted — try lsregister repair first
+                      // Request the native prompt when possible; a prior denial opens
+                      // System Settings immediately without restarting notification services.
                       AnalyticsManager.shared.notificationRepairTriggered(
                         reason: "settings_fix_button",
                         previousStatus: "not_authorized",
                         currentStatus: "not_authorized"
                       )
-                      appState.repairNotificationAndFallback()
+                      appState.requestNotificationPermission()
                     }
                   } else {
                     appState.openNotificationPreferences()
@@ -186,53 +166,6 @@ extension SettingsContentView {
               RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
                 .fill(SettingsInk.notice.opacity(0.1))
             )
-          }
-        }
-      }
-
-      // System Audio capture mode (macOS 14.4+ — system audio capture requires Core Audio taps)
-      if #available(macOS 14.4, *) {
-        settingsCard(settingId: "general.systemaudio") {
-          VStack(alignment: .leading, spacing: OmiSpacing.md) {
-            HStack(spacing: OmiSpacing.lg) {
-              SettingsIconTile(symbol: "speaker.wave.2.fill")
-
-              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-                Text("System Audio")
-                  .scaledFont(size: OmiType.subheading, weight: .semibold)
-                  .foregroundColor(Ink.primary)
-
-                Text("Choose when Omi records audio from other apps (calls, videos, music).")
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(Ink.secondary)
-              }
-
-              Spacer()
-
-              SettingsMenuPicker(
-                selection: Binding(
-                  get: { systemAudioCaptureMode },
-                  set: { newValue in
-                    systemAudioCaptureMode = newValue
-                    setSystemAudioCaptureMode(newValue)
-                  }
-                )
-              ) {
-                Text("Always").tag(AssistantSettings.SystemAudioCaptureMode.always)
-                Text("Only during meetings").tag(
-                  AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings)
-                Text("Never").tag(AssistantSettings.SystemAudioCaptureMode.never)
-              }
-            }
-
-            if systemAudioCaptureMode == .onlyDuringMeetings {
-              Text(
-                "Omi captures other apps' audio only while you're in a call (e.g. Zoom, Teams, FaceTime). Detecting browser-based calls like Google Meet requires Screen Recording permission."
-              )
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-              .fixedSize(horizontal: false, vertical: true)
-            }
           }
         }
       }
@@ -310,6 +243,94 @@ extension SettingsContentView {
     }
   }
 
+  private var audioRecordingMode: AssistantSettings.AudioRecordingMode {
+    AssistantSettings.AudioRecordingMode(rawValue: audioRecordingModeRaw) ?? .onlyMeetings
+  }
+
+  private var audioRecordingModeBinding: Binding<AssistantSettings.AudioRecordingMode> {
+    Binding(
+      get: { audioRecordingMode },
+      set: { mode in
+        audioRecordingModeRaw = mode.rawValue
+        AnalyticsManager.shared.settingToggled(
+          setting: "audio_recording_mode_\(mode.rawValue)", enabled: mode != .off)
+        AssistantSettings.shared.audioRecordingMode = mode
+      }
+    )
+  }
+
+  private var audioRecordingNeedsAttention: Bool {
+    audioRecordingMode != .off && !appState.hasMicrophonePermission
+  }
+
+  private var audioRecordingStatusText: String {
+    if audioRecordingNeedsAttention { return "Microphone permission required" }
+    switch audioRecordingMode {
+    case .off:
+      return "Off — no ambient audio is recorded"
+    case .always:
+      return appState.isTranscribing ? "Always on — recording audio" : "Always on — ready to record"
+    case .onlyMeetings:
+      if appState.isAwaitingMeeting { return "Only Meetings — waiting for a call" }
+      return appState.isTranscribing ? "Only Meetings — recording a call" : "Only Meetings — ready"
+    }
+  }
+}
+
+/// The recording policy is a mode, so keep all three choices visible and one click away.
+/// This intentionally uses the same raised-segment treatment as the chat mode switcher instead of
+/// a menu: users should be able to compare the policies without opening another surface.
+private struct AudioRecordingModeSwitcher: View {
+  @Binding var selection: AssistantSettings.AudioRecordingMode
+
+  var body: some View {
+    HStack(spacing: 2) {
+      segment(.off, label: "Off")
+      segment(.always, label: "Always On")
+      segment(.onlyMeetings, label: "Only Meetings")
+    }
+    .padding(3)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
+        .fill(Ink.rowFill)
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
+        .strokeBorder(Ink.hairline, lineWidth: 1)
+    )
+    .frame(width: 310)
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel("Audio Recording")
+  }
+
+  private func segment(
+    _ mode: AssistantSettings.AudioRecordingMode,
+    label: String
+  ) -> some View {
+    let isSelected = selection == mode
+    return Button {
+      guard !isSelected else { return }
+      OmiMotion.withGated(.easeOut(duration: InkMotion.checkbox)) {
+        selection = mode
+      }
+    } label: {
+      Text(label)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
+        .lineLimit(1)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, OmiSpacing.xs)
+        .padding(.vertical, OmiSpacing.sm)
+        .background(
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+            .fill(isSelected ? Ink.surface : Color.clear)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous))
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
+    .accessibilityLabel(label)
+  }
 }
 
 /// The app's mute for its own interface sounds.
@@ -319,8 +340,8 @@ extension SettingsContentView {
 /// only needs somewhere local to hold the last read for SwiftUI to diff against.
 ///
 /// Deliberately separate from macOS's "Play user interface sound effects": that switch governs the
-/// clicks and swooshes, and this one governs everything Omi plays, including the completion chimes
-/// the system switch has no say over.
+/// swooshes, and this one governs everything Omi plays, including the completion chimes the system
+/// switch has no say over.
 private struct InterfaceSoundsRow: View {
   @State private var isEnabled = OmiUISound.isEnabled
 
@@ -333,7 +354,7 @@ private struct InterfaceSoundsRow: View {
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(Ink.primary)
 
-        Text("Clicks and chimes as you move around Omi.")
+        Text("Sounds for important arrivals and completions.")
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
       }
@@ -347,9 +368,6 @@ private struct InterfaceSoundsRow: View {
           set: { newValue in
             isEnabled = newValue
             OmiUISound.isEnabled = newValue
-            // The confirmation is the point: turning sounds on should be audible immediately, and
-            // turning them off cannot be — `play` is already muted by the line above.
-            OmiUISound.play(.commit)
           }
         )
       )
@@ -358,4 +376,5 @@ private struct InterfaceSoundsRow: View {
       .frame(width: 36, height: 20)
     }
   }
+
 }

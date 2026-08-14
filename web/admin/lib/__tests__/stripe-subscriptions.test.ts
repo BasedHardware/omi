@@ -10,6 +10,7 @@ import {
   isAnnual,
   OMI_PLAN_PRODUCTS,
   isAppSubscription,
+  isOmiPlanSubscription,
   listSubscriptions,
   monthlyAmount,
   productIdOf,
@@ -86,6 +87,31 @@ describe('monthlyAmount', () => {
 
   it('annualises through the same normalisation', () => {
     expect(annualAmount(sub([{ unit_amount: 12000, recurring: { interval: 'year' } }]))).toBeCloseTo(120);
+  });
+});
+
+
+describe('isOmiPlanSubscription', () => {
+  it('returns true if the subscription has an item with an Omi plan product', () => {
+    const planProduct = Object.keys(OMI_PLAN_PRODUCTS)[0];
+    expect(isOmiPlanSubscription(sub([{ unit_amount: 1000, product: planProduct }]))).toBe(true);
+  });
+
+  it('returns false if no items match an Omi plan product', () => {
+    expect(isOmiPlanSubscription(sub([{ unit_amount: 1000, product: 'prod_other' }]))).toBe(false);
+  });
+
+  it('returns false if the subscription has no items', () => {
+    expect(isOmiPlanSubscription(sub([]))).toBe(false);
+  });
+
+  it('returns true for a mixed subscription where only one item matches an Omi plan product', () => {
+    const planProduct = Object.keys(OMI_PLAN_PRODUCTS)[0];
+    const mixed = sub([
+      { unit_amount: 500, product: 'prod_other' },
+      { unit_amount: 1000, product: planProduct }
+    ]);
+    expect(isOmiPlanSubscription(mixed)).toBe(true);
   });
 });
 
