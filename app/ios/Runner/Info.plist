@@ -178,6 +178,8 @@
 					<string>flutter</string>
 					<key>UISceneDelegateClassName</key>
 					<string>FlutterSceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
 				</dict>
 			</array>
 		</dict>
