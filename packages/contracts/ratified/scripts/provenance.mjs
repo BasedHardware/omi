@@ -35,7 +35,7 @@ const inputs = [
   "scripts/package-boundary.mjs",
   "scripts/verify-ci.mjs",
   "tsconfig.base.json",
-  "pnpm-lock.yaml"
+  "bun.lock"
 ].map((path) => resolve(root, path));
 
 const manifest = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));

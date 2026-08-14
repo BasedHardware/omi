@@ -3,7 +3,7 @@
   "version": "0.8.0",
   "private": true,
   "description": "Reviewed Omi client/backend contract seam",
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "bun@1.3.14",
   "type": "module",
   "exports": {
     "./pagination/cursor": {
@@ -53,14 +53,14 @@
     "PROVENANCE.json"
   ],
   "scripts": {
-    "build": "node scripts/clean.mjs && tsc -p tsconfig.json",
-    "test": "node --test test/*.test.mjs",
+    "build": "bun scripts/clean.mjs && tsc -p tsconfig.json",
+    "test": "bun test test/*.test.mjs",
     "check:types": "tsc -p fixtures/clean-consumer/tsconfig.json --noEmit",
-    "check:markers": "node scripts/check-domain-markers.mjs",
-    "check:provenance": "node scripts/provenance.mjs --check",
-    "check:package": "node scripts/package-boundary.mjs --check",
-    "verify": "pnpm --ignore-workspace run build && pnpm --ignore-workspace run test && pnpm --ignore-workspace run check:types && pnpm --ignore-workspace run check:markers && pnpm --ignore-workspace run check:provenance && pnpm --ignore-workspace run check:package",
-    "verify:ci": "node scripts/verify-ci.mjs"
+    "check:markers": "bun scripts/check-domain-markers.mjs",
+    "check:provenance": "bun scripts/provenance.mjs --check",
+    "check:package": "bun scripts/package-boundary.mjs --check",
+    "verify": "bun run build && bun run test && bun run check:types && bun run check:markers && bun run check:provenance && bun run check:package",
+    "verify:ci": "bun scripts/verify-ci.mjs"
   },
   "devDependencies": {
     "typescript": "5.9.3"

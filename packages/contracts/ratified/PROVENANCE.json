@@ -29,6 +29,11 @@
   },
   "inputs": [
     {
+      "path": "bun.lock",
+      "sha256": "6d8d03787d616c534ba1357990ad7ac2fec30ee4a98e4e249cc416131d081787",
+      "bytes": 427
+    },
+    {
       "path": "fixtures/clean-consumer/conformance.mjs",
       "sha256": "05404bfab65b43623f38c87a1a1ec7ad0c80d5b7133b8eeaa8e491db167a35de",
       "bytes": 9074
@@ -100,18 +105,13 @@
     },
     {
       "path": "package.json",
-      "sha256": "726906eb7dc26f1643acefd83dc1e4838dd876eaa55ab763576cf17eba7e4ccf",
-      "bytes": 2412
-    },
-    {
-      "path": "pnpm-lock.yaml",
-      "sha256": "9747995ee6c20d5990a84006b6353d66070f7a2bb23b92133c1c81e02a1e5693",
-      "bytes": 439
+      "sha256": "abb21e07a2672dca7d1a4f343a4ba3a09bdf7a6fda6bbaebdfbaaec93fd8834a",
+      "bytes": 2283
     },
     {
       "path": "README.md",
-      "sha256": "a5574d89bf29c24a4a687fed163e0e411ff410c034cf1b23fdfb91e60280cc35",
-      "bytes": 11846
+      "sha256": "e449dbfc82d0d643caa677ecab0d8523fb62f7202685fe72cac65567b64e7d7c",
+      "bytes": 11849
     },
     {
       "path": "scripts/check-domain-markers.mjs",
@@ -130,13 +130,13 @@
     },
     {
       "path": "scripts/provenance.mjs",
-      "sha256": "8348e93122f9a8a2505d75a9fca4b4cb590e277a8de3c56ad6c65d36e63429df",
-      "bytes": 5122
+      "sha256": "50e80ef607d66955d43ace73b849ef1f7c17ee8a3fb4a0b97418e176676f300e",
+      "bytes": 5116
     },
     {
       "path": "scripts/verify-ci.mjs",
-      "sha256": "c4177c11bc430dd1dc943ced4b672bbfa9c0ea95df8aa199496f23316b41346f",
-      "bytes": 819
+      "sha256": "f582481663d02737a4fc0f22fbdd63f25140c19b93e4632e2d739fecb98a5de0",
+      "bytes": 774
     },
     {
       "path": "src/pagination/cursor.ts",
@@ -170,13 +170,13 @@
     },
     {
       "path": "test/contracts.test.mjs",
-      "sha256": "ade7dcb1c74a5c9c20e7d48a7f5384d5192a5a844bf41500c4f919e17cb78cb1",
-      "bytes": 36294
+      "sha256": "1f43379b7a7727d6a29d40ceaf072d6aa79852b20b9202cbb58a95d2abdb018a",
+      "bytes": 36296
     },
     {
       "path": "tsconfig.base.json",
-      "sha256": "834b77bf73d7d71ed7fa4d80e77a395b902cdcc66f1612def5a6c4febe5ecb93",
-      "bytes": 518
+      "sha256": "bb08f6f05da15867c0c79e0ca7508f705d7246721c5e604410d493d7b32ec483",
+      "bytes": 535
     },
     {
       "path": "tsconfig.json",
@@ -184,5 +184,5 @@
       "bytes": 133
     }
   ],
-  "sourceDigest": "d7c345d3903e9e144c496337a5199589e15d6566b2fcd34bcc3241270889588f"
+  "sourceDigest": "69601bc089bfe9f0d4551a73a854c44e4aa14b7a66aeb60413fc3d6b5eff5938"
 }

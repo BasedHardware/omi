@@ -7,7 +7,7 @@
 // Reads:  contracts/wire/listen/listen-protocol.schema.json
 // Writes: packages/wire-listen/src/listen_protocol.generated.ts
 //
-// Node >= 18, no packages. Run: node scripts/generate.mjs [--check]
+// Bun 1.3+, no packages. Run: bun scripts/generate.mjs [--check]
 // --check exits non-zero if the committed output differs from what would be generated.
 //
 // Generator choice: TS-native Node script (not Python) — the prototype already proved

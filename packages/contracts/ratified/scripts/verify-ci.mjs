@@ -12,11 +12,11 @@ try {
 }
 
 if (installedVersion !== manifest.devDependencies.typescript) {
-  run(["--ignore-workspace", "install", "--frozen-lockfile", "--ignore-scripts"]);
+  run(["install", "--frozen-lockfile", "--ignore-scripts"]);
 }
-run(["--ignore-workspace", "run", "verify"]);
+run(["run", "verify"]);
 
 function run(args) {
-  const result = spawnSync("pnpm", args, { cwd: root, stdio: "inherit" });
+  const result = spawnSync("bun", args, { cwd: root, stdio: "inherit" });
   if (result.status !== 0) process.exit(result.status ?? 1);
 }

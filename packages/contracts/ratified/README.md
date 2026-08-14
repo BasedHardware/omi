@@ -187,6 +187,6 @@ this bump performs or should be read as having performed.
 
 `PROVENANCE.json` binds reviewed inputs. `ARTIFACT.json` is deliberately outside the
 tarball so it can bind the tarball digest without a self-reference. The tarball includes
-versioned JSON conformance fixtures but excludes test/source scripts. `pnpm verify` checks both,
+versioned JSON conformance fixtures but excludes test/source scripts. `bun run verify` checks both,
 asserts the exact export/file allowlists, installs the tarball into an empty consumer, type-checks
 it, and runs the packed fixtures.

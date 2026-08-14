@@ -14,8 +14,8 @@
     "./fixtures/corpus.json": "./fixtures/corpus.json"
   },
   "scripts": {
-    "generate": "node scripts/generate.mjs",
-    "generate:check": "node scripts/generate.mjs --check",
+    "generate": "bun scripts/generate.mjs",
+    "generate:check": "bun scripts/generate.mjs --check",
     "build": "tsc -b",
     "test": "echo wire-listen:tested-via-testkit",
     "lint": "echo wire-listen:no-lint-yet"

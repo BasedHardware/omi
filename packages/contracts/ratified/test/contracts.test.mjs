@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import test from "node:test";
+import { test } from "bun:test";
 
 import {
   parseKeysetCursor,
@@ -76,7 +76,7 @@ test("a request without a declared contract version resolves to the floor, never
   // dist/projections/synthesized.js during this change: the first two
   // assertions below failed with "AssertionError [ERR_ASSERTION]: undefined
   // !== '1.0.0'" / "null !== '1.0.0'" before the mutation was reverted and
-  // `pnpm run build` restored the real dist output.
+  // `bun run build` restored the real dist output.
   assert.equal(resolveDeclaredContractVersion(undefined), APP_CONTRACT_FLOOR_VERSION);
   assert.equal(resolveDeclaredContractVersion(null), APP_CONTRACT_FLOOR_VERSION);
   assert.equal(resolveDeclaredContractVersion(""), APP_CONTRACT_FLOOR_VERSION);
