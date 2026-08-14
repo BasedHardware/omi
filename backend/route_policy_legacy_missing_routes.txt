@@ -58,7 +58,6 @@ backend-main:http:GET:/.well-known/oauth-protected-resource/v1/mcp/sse
 backend-main:http:GET:/.well-known/openai-apps-challenge
 backend-main:http:GET:/authorize
 backend-main:http:GET:/memory/admin/users/{uid}/non-active-route-report
-backend-main:http:GET:/memory/admin/users/{uid}/read-rollout-decision
 backend-main:http:GET:/memory/archive/search
 backend-main:http:GET:/memory/search
 backend-main:http:GET:/memory/vector/search

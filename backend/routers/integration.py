@@ -10,11 +10,8 @@ import database.conversations as conversations_db
 import utils.apps as apps_utils
 from utils.apps import verify_api_key
 import database.redis_db as redis_db
-import database.memories as memory_db
 from database._client import db as firestore_db
-from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem
-from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
+from utils.memory.memory_service import MemoryService, truncate_locked_memory_preview
 from database.redis_db import get_enabled_apps, r as redis_client
 import database.action_items as action_items_db
 import models.integrations as integration_models
@@ -267,33 +264,19 @@ def get_memories_via_integration(
     if not apps_utils.app_can_read_memories(app):
         raise HTTPException(status_code=403, detail="App does not have the capability to read memories")
 
-    memory_system = pin_memory_system(uid, db_client=firestore_db)
-    if memory_system == MemorySystem.CANONICAL:
-        memory_objects = memorydb_list_with_locked_preview(
-            MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset)
-        )
-        memory_items: List[integration_models.MemoryItem] = []
-        for memory in memory_objects:
-            try:
-                memory_items.append(integration_models.MemoryItem(**memory.dict()))
-            except Exception as e:  # noqa: BLE001
-                logger.error(f"Error parsing memory {memory.id}: {str(e)}")
-                continue
-        return {"memories": memory_items}
-
-    memories = memory_db.get_memories(uid, limit=limit, offset=offset)
-    for memory in memories:
-        if memory.get('is_locked', False):
-            content = memory.get('content', '')
-            memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+    memories = MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset)
     memory_items: List[integration_models.MemoryItem] = []
-    for fact in memories:
+    for memory in memories:
         try:
-            memory_items.append(integration_models.MemoryItem(**fact))
+            # Keep the released integration privacy contract: a locked memory
+            # may be listed, but only with its bounded preview.  MemoryService
+            # is the authority for both physical origins, so apply the same
+            # exposure rule after the universal read rather than trusting the
+            # route's former legacy-only branch.
+            exposed = truncate_locked_memory_preview(memory)
+            memory_items.append(integration_models.MemoryItem(**exposed.model_dump(mode='json')))
         except Exception as e:  # noqa: BLE001 - intentional broad catch: skip any malformed record
-            # One malformed/legacy record must not 500 the whole page; skip it (mirrors the
-            # conversation conversion guard in get_conversations_via_integration).
-            logger.error(f"Error parsing memory {fact.get('id')}: {str(e)}")
+            logger.error(f"Error parsing memory {getattr(memory, 'id', None)}: {str(e)}")
             continue
 
     return {"memories": memory_items}

@@ -11,7 +11,6 @@ from typing import Any, Callable, Optional
 from models.product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
-    legacy_safe_default_read_rollout_decision,
     read_default_read_rollout,
 )
 from utils.memory.default_read_surface import (
@@ -20,7 +19,6 @@ from utils.memory.default_read_surface import (
     parse_optional_default_read_datetime,
 )
 from utils.memory.product_memory_read_service import fetch_default_product_memory_search
-from utils.observability import record_fallback
 
 
 @dataclass(frozen=True)
@@ -31,31 +29,7 @@ class ChatMemorySearchResult:
 
     @property
     def should_use_legacy_fallback(self) -> bool:
-        return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
-
-
-def chat_legacy_read_authorized(result: ChatMemorySearchResult) -> bool:
-    """Whether an Omi chat memory read may serve the legacy `memories` surface.
-
-    True for an explicit legacy-safe decision, and for a legacy-cohort account whose
-    `memory_control/state` doc was never created (#10736): callers reach this only on
-    the non-canonical branch after `pin_memory_system`, where the absent doc is the
-    expected un-enrolled state and legacy reads are authoritative. Mirrors
-    `mcp_legacy_read_authorized` (#10095) and the Developer API guard (#10094); every
-    other deny reason stays fail-closed.
-    """
-    if result.read_decision == MemoryReadDecision.USE_LEGACY_SAFE:
-        return True
-    if result.read_decision == MemoryReadDecision.DENY_MEMORY and result.fallback_reason == 'missing_rollout_state':
-        record_fallback(
-            component='other',
-            from_mode='memory_default_read',
-            to_mode='legacy_memories',
-            reason='policy',
-            outcome='recovered',
-        )
-        return True
-    return False
+        return False
 
 
 CHAT_MEMORY_CONTENT_MAX_CHARS = 280
@@ -128,29 +102,15 @@ def list_default_chat_memories_decision_text(
     offset: int = 0,
     db_client: Any,
     now: Optional[datetime] = None,
-    allow_legacy_safe_fallback: bool = False,
 ) -> ChatMemorySearchResult:
     """Return explicit memory read-decision semantics for Omi chat get/list reads.
 
-    This mirrors the search-memory tool's denied/no-grant behavior: denied memory
-    control states return a safe no-memory response and do not downgrade to legacy
-    unless a caller deliberately opts into the legacy-safe compatibility wrapper.
+    Denied consumer grants return a safe no-memory response and never select a
+    second storage authority.
     """
 
     decision = read_default_read_rollout(uid=uid, db_client=db_client, consumer='omi_chat')
     if decision.read_decision != MemoryReadDecision.USE_MEMORY:
-        if allow_legacy_safe_fallback:
-            legacy_safe = legacy_safe_default_read_rollout_decision(
-                uid=uid,
-                source_path=decision.source_path,
-                consumer='omi_chat',
-                reason='chat_get_legacy_safe_fallback_explicit',
-            )
-            return ChatMemorySearchResult(
-                text=None,
-                read_decision=legacy_safe.read_decision,
-                fallback_reason=legacy_safe.fallback_reason,
-            )
         return ChatMemorySearchResult(
             text="No memories available for this request.",
             read_decision=decision.read_decision,
@@ -221,7 +181,6 @@ def search_memory_default_chat_memories_vector_text(
         vector_query=vector_query,
         required_projection_commit_id=required_projection_commit_id,
         now=now,
-        allow_legacy_safe_fallback=True,
     )
     if result.read_decision != MemoryReadDecision.USE_MEMORY:
         return None
@@ -237,31 +196,15 @@ def search_memory_default_chat_memories_vector_decision_text(
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
     now: Optional[datetime] = None,
-    allow_legacy_safe_fallback: bool = False,
 ) -> ChatMemorySearchResult:
     """Return explicit memory read-decision semantics for Omi chat vector reads.
 
-    The mature chat tool must not treat missing/malformed/no-grant rollout state
-    as `None` and silently downgrade to legacy. Only callers that deliberately
-    set `allow_legacy_safe_fallback=True` receive `USE_LEGACY_SAFE`; denied states
-    otherwise produce a safe no-memory response before vector or `memory_items`
-    reads.
+    Missing, malformed, or explicitly denied consumer grants produce a safe
+    no-memory response before vector or `memory_items` reads.
     """
 
     decision = read_default_read_rollout(uid=uid, db_client=db_client, consumer='omi_chat')
     if decision.read_decision != MemoryReadDecision.USE_MEMORY:
-        if allow_legacy_safe_fallback:
-            legacy_safe = legacy_safe_default_read_rollout_decision(
-                uid=uid,
-                source_path=decision.source_path,
-                consumer='omi_chat',
-                reason='chat_legacy_safe_fallback_explicit',
-            )
-            return ChatMemorySearchResult(
-                text=None,
-                read_decision=legacy_safe.read_decision,
-                fallback_reason=legacy_safe.fallback_reason,
-            )
         return ChatMemorySearchResult(
             text="No memories available for this request.",
             read_decision=decision.read_decision,

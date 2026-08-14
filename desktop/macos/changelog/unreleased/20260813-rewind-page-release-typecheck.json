@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a Rewind page compile failure that blocked the signed macOS Beta build"
+}

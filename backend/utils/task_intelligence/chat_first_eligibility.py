@@ -1,4 +1,4 @@
-"""Fail-closed, reusable server authority for the Chat-first cohort."""
+"""Fail-closed, reusable server authority for universal Chat-first access."""
 
 from dataclasses import dataclass
 from typing import Callable
@@ -23,11 +23,11 @@ def resolve_chat_first_eligibility(
     load_control: Callable[[str], TaskWorkflowControl] = task_control_db.get_task_workflow_control,
     resolve_rollout: Callable[..., TaskIntelligenceRolloutDecision] = resolve_task_intelligence_for_user,
 ) -> ChatFirstEligibility:
-    """Resolve the generation-bound cohort capability without fallback state.
+    """Resolve the generation-bound universal capability without fallback state.
 
     This is intentionally the only reusable server authority for chat-first
     ingress. Callers must invoke it before touching feature-specific stores,
-    metrics, or providers. Any control or canonical-memory failure fails closed.
+    metrics, or providers. Any task-control failure fails closed.
     """
 
     try:

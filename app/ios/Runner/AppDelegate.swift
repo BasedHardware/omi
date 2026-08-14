@@ -4,6 +4,7 @@ import UserNotifications
 import app_links
 import WatchConnectivity
 import AVFoundation
+import CallKit
 import Speech
 import WidgetKit
 
@@ -89,6 +90,9 @@ final class QuickActionsIconPatcher: NSObject {
   private var phoneMicController: PhoneMicController?
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
+  /// Retained so `calls` is populated; a throwaway `CXCallObserver()` can
+  /// report empty during an active call (see PhoneMicInterruptionMonitor).
+  private let bluetoothAudioCallObserver = CXCallObserver()
 
   var session: WCSession?
     var flutterWatchAPI: WatchRecorderFlutterAPI?
@@ -103,6 +107,7 @@ final class QuickActionsIconPatcher: NSObject {
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
     QuickActionsIconPatcher.shared.startObserving()
+    bluetoothAudioCallObserver.setDelegate(self, queue: nil)
       
       
       if WCSession.isSupported() {
@@ -205,6 +210,20 @@ final class QuickActionsIconPatcher: NSObject {
                     options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
                 )
                 try audioSession.setActive(true)
+                result(true)
+            } catch {
+                result(FlutterError(code: "AUDIO_SESSION_ERROR", message: error.localizedDescription, details: nil))
+            }
+        } else if call.method == "deactivateForBluetooth" {
+            // CallKit owns the session during a phone call. Phone-mic and
+            // Ray-Ban paths deactivate themselves; this is the matching
+            // teardown for BLE/wearable capture keep-alive.
+            if self.bluetoothAudioCallObserver.calls.contains(where: { !$0.hasEnded }) {
+                result(true)
+                return
+            }
+            do {
+                try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
                 result(true)
             } catch {
                 result(FlutterError(code: "AUDIO_SESSION_ERROR", message: error.localizedDescription, details: nil))
@@ -444,6 +463,10 @@ final class QuickActionsIconPatcher: NSObject {
 
 func registerPlugins(registry: FlutterPluginRegistry) {
   GeneratedPluginRegistrant.register(with: registry)
+}
+
+extension AppDelegate: CXCallObserverDelegate {
+    func callObserver(_ callObserver: CXCallObserver, callChanged call: CXCall) {}
 }
 
 extension AppDelegate: WCSessionDelegate {

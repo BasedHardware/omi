@@ -85,6 +85,26 @@ enum SettingsControlMetrics {
   static func dailySummaryHour(from date: Date, calendar: Calendar = .current) -> Int {
     calendar.component(.hour, from: date)
   }
+
+  /// Daily Summary persists hour only. Any minute the picker offers is snapped to `:00`
+  /// immediately so the control never shows a time that cannot round-trip.
+  static func canonicalizeDailySummaryTime(_ date: Date, calendar: Calendar = .current) -> Date {
+    dailySummaryDate(forHour: dailySummaryHour(from: date, calendar: calendar), referenceDate: date, calendar: calendar)
+  }
+
+  /// General → Notifications mirrors macOS TCC/banner style only. Product enablement lives in
+  /// Notifications & Privacy (master + frequency).
+  static func generalNotificationPermissionStatusText(
+    hasPermission: Bool, bannersDisabled: Bool
+  ) -> String {
+    if !hasPermission {
+      return "macOS notification permission is off"
+    }
+    if bannersDisabled {
+      return "Permission granted, but macOS banners are off"
+    }
+    return "macOS banners enabled"
+  }
 }
 
 struct SettingsMenuPicker<SelectionValue: Hashable, Content: View>: View {

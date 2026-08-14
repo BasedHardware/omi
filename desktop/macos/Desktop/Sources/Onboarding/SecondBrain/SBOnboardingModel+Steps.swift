@@ -489,6 +489,7 @@ extension SBOnboardingModel {
   /// NSMenu key equivalents that AppKit dispatches before local monitors). Both are
   /// restored on leave. This is why the earlier attempt's monitor never fired.
   func armShortcutSummon() {
+    shortcutRegistrationError = nil
     // Preserve a choice when the user returns with Back. A fresh stage still
     // starts empty, while an already-confirmed shortcut stays visible/editable.
     let rememberedSelection: ShortcutSettings.KeyboardShortcut?
@@ -513,7 +514,12 @@ extension SBOnboardingModel {
       shortcutTokens = rememberedSelection.displayTokens
       chosenShortcut = rememberedSelection
     } else {
+      // Same reset as `beginShortcutRecording` but with recording left off: the fresh
+      // stage shows the preset rows + a Custom button instead of entering capture mode,
+      // so `handleShortcutEvent` only recognizes the three preset candidates until the
+      // user explicitly taps Custom.
       beginShortcutRecording(isTalk: isTalk)
+      shortcutRecording = false
     }
     GlobalShortcutManager.shared.setRegistrationSuspended(true)
     if savedMainMenu == nil { savedMainMenu = NSApp.mainMenu }
@@ -604,6 +610,7 @@ extension SBOnboardingModel {
   /// Pick + persist a shortcut. `isTalk` → push-to-talk chord (held, drives the
   /// voice demo); otherwise the Ask-Omi open hotkey (tapped to open the window).
   func pickShortcut(_ shortcut: ShortcutSettings.KeyboardShortcut, isTalk: Bool) {
+    shortcutRegistrationError = nil
     chosenShortcut = shortcut
     chosenShortcutIsPTT = isTalk
     shortcutTokens = shortcut.displayTokens
@@ -623,6 +630,7 @@ extension SBOnboardingModel {
   }
 
   func beginShortcutRecording(isTalk: Bool) {
+    shortcutRegistrationError = nil
     chosenShortcut = nil
     chosenShortcutIsPTT = isTalk
     shortcutTokens = []
@@ -694,18 +702,28 @@ extension SBOnboardingModel {
   ///
   /// A key chord with no modifier is not a shortcut, it is a stolen letter: `askOmiShortcut` is
   /// registered as a **global** hotkey, so persisting a bare `L` makes every `L` typed anywhere on
-  /// the Mac open Omi, and the only way back is Settings. The copy invites it ("Press any key"),
-  /// and nothing downstream refuses it. Both offered open chords carry ⌘ and every offered talk
-  /// chord is modifier-only, so this rejects nothing the step actually presents.
+  /// the Mac open Omi, and the only way back is Settings. PTT is also observed system-wide, so a bare
+  /// letter would start a voice turn during ordinary typing. The copy invites it ("Press any key"),
+  /// and nothing downstream refuses it. Both offered open chords carry ⌘ and every offered talk chord
+  /// is modifier-only, so this rejects nothing the step actually presents.
   static func acceptsRecordedChord(_ shortcut: ShortcutSettings.KeyboardShortcut) -> Bool {
-    !shortcut.modifiers.isEmpty
+    ShortcutSettings.isSafePushToTalkShortcut(shortcut)
   }
 
   func answerShortcutOpen() {
-    advance(userAnswer: shortcutPressed ? "Works" : (shortcutPicked ? "Set" : "Skip"), to: .shortcutTalk)
+    guard shortcutPicked, shortcutPressed else { return }
+    guard GlobalShortcutManager.shared.validateAskOmiShortcutForOnboarding() == .registered else {
+      shortcutRegistrationError =
+        "That shortcut is already in use. Choose a different Open Omi shortcut and test it again."
+      shortcutPressed = false
+      return
+    }
+    advance(userAnswer: "Works", to: .shortcutTalk)
   }
   func answerShortcutTalk() {
-    advance(userAnswer: shortcutPressed ? "Works" : (shortcutPicked ? "Set" : "Skip"), to: .screenDemo)
+    guard shortcutPicked, shortcutPressed else { return }
+    UserDefaults.standard.set(true, forKey: Self.shortcutsCompletedKey)
+    advance(userAnswer: "Works", to: .screenDemo)
   }
 }
 

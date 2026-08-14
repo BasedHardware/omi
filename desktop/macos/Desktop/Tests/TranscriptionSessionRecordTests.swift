@@ -3,6 +3,18 @@ import XCTest
 @testable import Omi_Computer
 
 final class TranscriptionSessionRecordTests: XCTestCase {
+  func testConversationRoleDefaultsToAmbientForBackwardCompatibility() {
+    let record = TranscriptionSessionRecord(source: "desktop")
+
+    XCTAssertEqual(record.conversationRole, .ambient)
+  }
+
+  func testConversationRoleCanBePersistedAsMeeting() {
+    let record = TranscriptionSessionRecord(source: "desktop", conversationRole: .meeting)
+
+    XCTAssertEqual(record.conversationRole, .meeting)
+  }
+
   func testBackendIdentityExistsWhenBackendIdIsPresent() {
     let record = TranscriptionSessionRecord(
       source: "desktop",

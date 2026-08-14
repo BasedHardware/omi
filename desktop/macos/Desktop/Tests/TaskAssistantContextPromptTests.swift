@@ -70,4 +70,23 @@ final class TaskAssistantContextPromptTests: XCTestCase {
       activeTasks: [], completedTasks: [], deletedTasks: [], stagedTaskDescriptions: [], goals: [])
     XCTAssertEqual(TaskAssistant.contextEvidencePrompt(context), "")
   }
+
+  func testFullLegacyStagedListStillReservesCanonicalDedupSlots() {
+    let staged = (1...30).map { "Legacy staged task \($0)" }
+    let canonical = ["Canonical pending approve the PR", "Canonical accepted follow up"]
+
+    let merged = TaskAssistant.mergeDedupContextDescriptions(
+      staged: staged,
+      canonical: canonical,
+      limit: 30
+    )
+
+    XCTAssertEqual(merged.count, 30)
+    XCTAssertTrue(merged.contains("Canonical pending approve the PR"))
+    XCTAssertTrue(merged.contains("Canonical accepted follow up"))
+    XCTAssertFalse(
+      merged.contains("Legacy staged task 30"),
+      "a reserved canonical slot must displace the least-important staged overflow")
+    XCTAssertEqual(merged.suffix(2), canonical)
+  }
 }

@@ -8,7 +8,7 @@ routes, auth, Firestore persistence, vector upsert/delete calls, and result
 hydration run through production code.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from fakes.firestore import seed_conversation
 from fakes.vector_search import install_vector_search_fakes
@@ -24,8 +24,48 @@ def _install_fakes(monkeypatch):
     return vector_db, fake_index, fake_embeddings
 
 
-def test_memory_search_reindexes_updates_and_delete_removes_result(client, auth_headers, monkeypatch):
+def test_memory_search_reindexes_updates_and_delete_removes_result(client, auth_headers, fake_firestore, monkeypatch):
     vector_db, fake_index, fake_embeddings = _install_fakes(monkeypatch)
+
+    from database.memory_vector_metadata import canonical_memory_provider_id
+    from utils.memory.canonical_required_processing import (
+        ProcessedRequiredMemory,
+        process_required_memory_item,
+    )
+    import utils.memory.short_term_promotion as promotion
+    from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects
+
+    real_side_effects = promotion._canonical_outbox_side_effects
+
+    def e2e_side_effects(*, db_client):
+        effects = real_side_effects(db_client=db_client)
+        return CanonicalMemoryOutboxSideEffects(
+            projection_upsert=lambda _item, _generation: True,
+            projection_delete=lambda _uid, _memory_id, _generation: True,
+            vector_upsert=effects.vector_upsert,
+            vector_delete=effects.vector_delete,
+        )
+
+    monkeypatch.setattr(promotion, "_canonical_outbox_side_effects", e2e_side_effects)
+
+    def process_and_drain(memory_id: str, run_id: str, *, process: bool = True) -> None:
+        if process:
+            processed = process_required_memory_item(
+                "123",
+                memory_id,
+                db_client=fake_firestore,
+                processor=lambda item: ProcessedRequiredMemory(content=item.content),
+                now=datetime.now(timezone.utc),
+            )
+            assert processed.processed is True
+        result = promotion._drain_canonical_outbox(
+            "123",
+            db_client=fake_firestore,
+            run_id=run_id,
+            now=datetime.now(timezone.utc) + timedelta(days=1),
+        )
+        assert result["errors"] == []
+        assert result["retryable_failure_count"] == 0
 
     create = client.post(
         "/v3/memories",
@@ -38,6 +78,7 @@ def test_memory_search_reindexes_updates_and_delete_removes_result(client, auth_
     )
     assert create.status_code == 200, create.text
     memory_id = create.json()["id"]
+    process_and_drain(memory_id, "e2e-retrieval-create")
 
     search = client.post(
         "/v1/tools/memories/search",
@@ -47,7 +88,10 @@ def test_memory_search_reindexes_updates_and_delete_removes_result(client, auth_
     assert search.status_code == 200, search.text
     assert "canary deployments" in search.json()["result_text"]
 
-    assert fake_embeddings.text_for_id(f"123-{memory_id}") == "David prefers canary deployments for backend rollouts"
+    assert (
+        fake_embeddings.text_for_id(canonical_memory_provider_id("123", memory_id))
+        == "David prefers canary deployments for backend rollouts"
+    )
 
     update = client.patch(
         f"/v3/memories/{memory_id}",
@@ -55,6 +99,7 @@ def test_memory_search_reindexes_updates_and_delete_removes_result(client, auth_
         headers=auth_headers,
     )
     assert update.status_code == 200, update.text
+    process_and_drain(memory_id, "e2e-retrieval-update")
 
     old_search = client.post(
         "/v1/tools/memories/search",
@@ -74,6 +119,7 @@ def test_memory_search_reindexes_updates_and_delete_removes_result(client, auth_
 
     delete = client.delete(f"/v3/memories/{memory_id}", headers=auth_headers)
     assert delete.status_code == 200, delete.text
+    process_and_drain(memory_id, "e2e-retrieval-delete", process=False)
 
     after_delete = client.post(
         "/v1/tools/memories/search",

@@ -5,8 +5,8 @@ import SwiftUI
 
 // MARK: - Memory Graph Page
 
-/// One explicit compatibility boundary: canonical-memory users get the atlas,
-/// while the established graph remains available until a user is migrated.
+/// One explicit compatibility boundary: the assertion-backed graph gets the atlas,
+/// while the established graph remains a read-only historical projection.
 enum MemoryGraphPresentationMode: Equatable {
   case canonicalAtlas
   case legacyBrainMap

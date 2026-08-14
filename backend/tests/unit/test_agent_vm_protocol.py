@@ -687,6 +687,62 @@ def test_execute_sql_serializes_sqlite_rows(tmp_path: Path) -> None:
     }
 
 
+def test_execute_sql_allows_fts5_reads(tmp_path: Path) -> None:
+    _, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE VIRTUAL TABLE documents USING fts5(title, body)")
+    connection.executemany(
+        "INSERT INTO documents (title, body) VALUES (?, ?)",
+        [("one", "hello world"), ("two", "other text")],
+    )
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+
+    assert json.loads(module.execute_sql("SELECT rowid, title FROM documents WHERE documents MATCH 'hello'")) == {
+        "rows": [{"rowid": 1, "title": "one"}],
+        "count": 1,
+    }
+
+
+def test_execute_sql_clears_authorizer_after_error(tmp_path: Path) -> None:
+    _, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE screenshots (id TEXT)")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+
+    result = json.loads(module.execute_sql("SELECT missing FROM screenshots"))
+
+    assert result["error"]
+    module.runtime.db.execute("CREATE TABLE after_authorizer_cleanup (value TEXT)")
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "DELETE FROM screenshots",
+        "UPDATE screenshots SET id = 'changed'",
+        "SELECT 1; DROP TABLE screenshots",
+        "SELECT * FROM pragma_journal_mode()",
+    ],
+)
+def test_execute_sql_denies_destructive_queries(tmp_path: Path, query: str) -> None:
+    _, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE screenshots (id TEXT)")
+    connection.execute("INSERT INTO screenshots VALUES ('one')")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+
+    result = json.loads(module.execute_sql(query))
+
+    assert result["error"]
+    assert [tuple(row) for row in module.runtime.db.execute("SELECT id FROM screenshots").fetchall()] == [("one",)]
+
+
 def test_sync_groups_rows_by_present_columns(tmp_path: Path) -> None:
     app, module = load_app(tmp_path)
     connection = sqlite3.connect(module.runtime.db_path)

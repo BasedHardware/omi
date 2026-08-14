@@ -268,6 +268,13 @@ class ShortcutSettings: ObservableObject {
     }
   }
 
+  /// PTT is observed system-wide. A bare character would start a voice turn whenever the user types
+  /// that character in another app, so every PTT binding needs at least one modifier. Modifier-only
+  /// presets (Option, Fn, Control, or Right Command) remain valid.
+  static func isSafePushToTalkShortcut(_ shortcut: KeyboardShortcut) -> Bool {
+    !shortcut.modifiers.isEmpty
+  }
+
   static let askOmiCommandOShortcut = KeyboardShortcut(keyCode: 31, keyDisplay: "O", modifiers: .command)
   static let askOmiCommandReturnShortcut = KeyboardShortcut(keyCode: 36, keyDisplay: "↩", modifiers: .command)
   static let askOmiCommandShiftReturnShortcut = KeyboardShortcut(
@@ -367,6 +374,28 @@ class ShortcutSettings: ObservableObject {
 
   /// Empty means Automatic. A non-empty value is a stable CoreAudio device UID
   /// selected specifically for push-to-talk, independent of the macOS default input.
+  /// The one microphone choice, shared by transcription and push-to-talk.
+  ///
+  /// Push-to-talk used to carry its own picker in Shortcuts settings, so a user could
+  /// select a microphone in one place and still be recorded by another. There is one
+  /// physical microphone; there is now one setting, the transcription one.
+  static var unifiedMicrophoneUID: String {
+    migratePTTMicrophoneChoiceIfNeeded()
+    return UserDefaults.standard.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+  }
+
+  /// Carry a PTT-only choice into the shared setting once, so unifying does not silently
+  /// discard a microphone the user deliberately picked.
+  static func migratePTTMicrophoneChoiceIfNeeded() {
+    let defaults = UserDefaults.standard
+    guard !defaults.bool(forKey: .shortcutPTTMicrophoneMergedIntoPreferred) else { return }
+    defaults.set(true, forKey: .shortcutPTTMicrophoneMergedIntoPreferred)
+    let legacy = defaults.string(forKey: DefaultsKey.shortcutPTTInputDeviceUID.rawValue) ?? ""
+    let current = defaults.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+    guard !legacy.isEmpty, current.isEmpty else { return }
+    defaults.set(legacy, forKey: AudioCaptureService.preferredInputUIDDefaultsKey)
+  }
+
   @Published var pttInputDeviceUID: String {
     didSet { UserDefaults.standard.set(pttInputDeviceUID, forKey: .shortcutPTTInputDeviceUID) }
   }
@@ -580,11 +609,13 @@ class ShortcutSettings: ObservableObject {
   private static let pttShortcutDefaultsKey = "shortcut_pttKey"
 
   private init() {
+    let restoredPTT = Self.loadShortcut(
+      forKey: Self.pttShortcutDefaultsKey,
+      legacyMapper: Self.legacyPTTShortcut
+    )
     self.pttShortcut =
-      Self.loadShortcut(
-        forKey: Self.pttShortcutDefaultsKey,
-        legacyMapper: Self.legacyPTTShortcut
-      ) ?? Self.pttPresets[0]
+      restoredPTT.flatMap { Self.isSafePushToTalkShortcut($0) ? $0 : nil }
+      ?? Self.pttPresets[0]
 
     // A saved ⌘O binding is honored as-is — no ⌘O → ⌃⌥O migration. It does register and it does
     // fire globally; what it also does is consume ⌘O before any other app sees it. That is a cost

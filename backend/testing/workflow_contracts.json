@@ -122,25 +122,20 @@
       "risk": "high",
       "sources": [
         "backend/utils/memory/legacy_backfill.py",
-        "backend/utils/memory/legacy_backfill_bulk_support.py",
+        "backend/utils/memory/legacy_backfill_support.py",
         "backend/utils/memory/legacy_backfill_inventory.py",
-        "backend/utils/memory/bulk_legacy_backfill.py",
-        "backend/utils/memory/canonical_legacy_backfill.py",
-        "backend/scripts/backfill_legacy_memories.py",
-        "backend/scripts/bulk_backfill_legacy_memories.py"
+        "backend/scripts/backfill_legacy_memories.py"
       ],
       "tests": [
         "tests/unit/test_ws_c_backfill.py",
-        "tests/unit/test_bulk_legacy_backfill.py",
-        "tests/unit/test_bulk_backfill_legacy_memories_cli.py",
-        "tests/unit/test_canonical_legacy_backfill.py"
+        "tests/unit/test_backfill_legacy_memories_cli.py"
       ],
       "checks": ["no_large_tuple_results"],
       "invariants": [
         "completed checkpoints recognize required-processing and quarantined pending-admission destinations without derived side effects",
         "partial checkpoints resume idempotently",
-        "bulk runs stop at user, row, token, pause, and wall-clock governors without enabling reads",
-        "bulk inventory and structured summaries never return raw memory content",
+        "repair runs are explicitly UID-scoped, resumable, and dry-run by default",
+        "inventory and structured summaries never return raw memory content",
         "legacy/domain timestamps are preserved while rows await required processing",
         "unreviewed bulk legacy rows remain hidden pending-admission candidates",
         "legacy rows never reach long-term, vector, keyword, or KG without processing admission"
@@ -151,7 +146,6 @@
       "risk": "high",
       "sources": ["backend/utils/memory/canonical_memory_adapter.py"],
       "tests": [
-        "tests/unit/test_ws_i_write_convergence.py",
         "tests/unit/test_ws_j_delete_privacy.py",
         "tests/unit/test_canonical_kg_promotion.py"
       ],

@@ -1,0 +1,3 @@
+{
+  "change": "Renamed the floating bar's right-click action to Hide for 2 hours — it now only hides the bar; notifications keep arriving (previously it silently muted all of them)"
+}

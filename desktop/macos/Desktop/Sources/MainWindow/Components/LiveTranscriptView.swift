@@ -169,9 +169,9 @@ private struct LiveTranscriptExpandTap: ViewModifier {
   /// and the pointing-hand cursor is always popped when the card stops being
   /// hovered — SwiftUI doesn't deliver an `onHover(false)` when the view leaves
   /// the hierarchy. Two exit paths are handled explicitly: `onDisappear`
-  /// (recording stops and the `if appState.isTranscribing` card is removed) and
-  /// the tap handler (expanding draws the full-screen overlay over the card,
-  /// which stays mounted, so `onDisappear` never fires there).
+  /// (capture pauses and the `if appState.isLiveCapturing` card is removed) and
+  /// the tap handler (expanding replaces the page, which also unmounts the card;
+  /// popping here keeps the cursor from lingering for a frame).
   @State private var didPushCursor = false
 
   private func setHovered(_ hovering: Bool) {
@@ -189,8 +189,7 @@ private struct LiveTranscriptExpandTap: ViewModifier {
     if let onExpand {
       content
         .onTapGesture {
-          // Pop the pointing-hand before the overlay covers the still-mounted
-          // card, otherwise it lingers over the full-screen transcript.
+          // Pop the pointing-hand before the page swaps away the card.
           setHovered(false)
           onExpand()
         }
@@ -203,8 +202,9 @@ private struct LiveTranscriptExpandTap: ViewModifier {
   }
 }
 
-/// Full-screen live transcript, presented when the user clicks the compact live
-/// transcript card. Observes the monitor directly so it keeps updating live.
+/// Full-panel live transcript, presented in place of the Conversations list when
+/// the user expands the compact live card. Observes the monitor directly so it
+/// keeps updating live. Hosted on the same glass panel — paints no ground of its own.
 struct ConversationsLiveTranscriptFullScreen: View {
   @ObservedObject private var monitor = LiveTranscriptMonitor.shared
   var onCollapse: () -> Void
@@ -251,7 +251,6 @@ struct ConversationsLiveTranscriptFullScreen: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Color.clear)
   }
 }
 

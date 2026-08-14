@@ -6,7 +6,7 @@ import SwiftUI
 class ViewModelContainer: ObservableObject {
   // Shared stores (single source of truth)
   let tasksStore = TasksStore.shared
-  /// Cohort-only canonical goal projection. It is injected only by the
+  /// Universal canonical goal projection. It is injected only by the
   /// capability-gated chat-first shell.
   let canonicalGoalsStore = CanonicalGoalsStore()
   /// Process-launch anchor for startup warmups. Captured at container init

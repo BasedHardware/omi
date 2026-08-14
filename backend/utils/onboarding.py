@@ -44,6 +44,7 @@ class OnboardingHandler:
         self.silence_timer: Optional[asyncio.Task[None]] = None
         self.is_checking_answer = False
         self.completed = False
+        self.started = False
         self.start_time: Optional[float] = None  # Track when onboarding started
         self.last_segment_end: float = 0.0  # Track end time for question segment timing
 
@@ -161,6 +162,20 @@ class OnboardingHandler:
             await self._complete_onboarding()
         else:
             await self.send_current_question()
+
+    async def start(self) -> None:
+        """Start the question flow after the client has attached its listener.
+
+        The client explicitly requests this transition so the first question cannot
+        race the WebSocket subscription that consumes it. Repeated requests are safe
+        and do not inject duplicate question segments.
+        """
+        if self.completed or self.started:
+            return
+
+        self.start_time = time.time()
+        await self.send_current_question()
+        self.started = True
 
     async def _check_answer(self) -> None:
         """Use AI to check if question was answered"""

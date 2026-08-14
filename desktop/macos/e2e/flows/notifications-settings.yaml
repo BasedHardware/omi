@@ -11,6 +11,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistantTelemetry.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistantTelemetry.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationService.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationSpeech.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/FloatingBarNotificationPreviewPolicy.swift
   - desktop/macos/Desktop/Sources/AnalyticsManager.swift
   - desktop/macos/Desktop/Sources/PostHogManager.swift
@@ -33,6 +34,7 @@ steps:
       name: settings_notifications_snapshot
     expect:
       ok: true
+      result.detail.schema: "enabled,frequency,frequency_label,has_permission,banners_disabled"
 
   - id: S3
     name: Set notification frequency balanced

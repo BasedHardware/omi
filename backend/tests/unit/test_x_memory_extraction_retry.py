@@ -11,7 +11,6 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 from models.memories import Memory, MemoryCategory
 from utils import x_connector
-from utils.memory.memory_system import MemorySystem
 
 
 async def _inline_run_blocking(_executor, func, *args, **kwargs):
@@ -70,7 +69,6 @@ def test_pending_x_source_is_acknowledged_only_after_memory_writes_succeed(monke
     memory = Memory(content='User prefers tea', category=MemoryCategory.interesting)
 
     monkeypatch.setattr(x_connector, 'extract_memories_from_text', lambda *args: [memory])
-    monkeypatch.setattr(x_connector, 'resolve_memory_system', lambda *args, **kwargs: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         x_connector.x_posts_db,
         'mark_memory_extraction_completed',
@@ -81,7 +79,7 @@ def test_pending_x_source_is_acknowledged_only_after_memory_writes_succeed(monke
         def __init__(self, **_kwargs):
             pass
 
-        def write(self, *_args, **_kwargs):
+        def create_external_memory_batch(self, *_args, **_kwargs):
             raise HTTPException(status_code=503, detail='canonical write unavailable')
 
     monkeypatch.setattr(x_connector, 'MemoryService', FailingMemoryService)

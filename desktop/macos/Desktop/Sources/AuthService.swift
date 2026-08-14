@@ -2550,8 +2550,7 @@ class AuthService {
     // screenAnalysisEnabled: Don't removeObject here — SettingsSyncManager overwrites
     // it from the server within ~200ms of sign-in. Instead, onboarding force-starts
     // monitoring regardless of this setting.
-    // transcriptionEnabled: removeObject works since nothing writes it back.
-    UserDefaults.standard.removeObject(forKey: "transcriptionEnabled")
+    UserDefaults.standard.removeObject(forKey: AssistantSettings.audioRecordingModeDefaultsKey)
 
     if acceptedAccountDeletion {
       UserDefaults.standard.removeObject(forKey: .acceptedAccountDeletionOwnerId)

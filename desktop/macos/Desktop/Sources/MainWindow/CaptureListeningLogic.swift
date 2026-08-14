@@ -21,8 +21,15 @@ enum CaptureListeningLogic {
     isCaptureMonitoring || ProactiveAssistantsPlugin.shared.isMonitoring
   }
 
-  static func listeningCaptureMode(raw: String) -> AssistantSettings.SystemAudioCaptureMode {
-    AssistantSettings.SystemAudioCaptureMode(rawValue: raw) ?? .onlyDuringMeetings
+  /// The top-bar / Home listening readout. A session that is only *armed* (Only Meetings, no
+  /// call) is inactive — the mic is paused, so lighting the green dot would lie.
+  static func listeningStatus(appState: AppState) -> HomeStatusState {
+    if appState.transcriptionServiceError != nil { return .blocked }
+    return appState.isLiveCapturing ? .active : .inactive
+  }
+
+  static func audioRecordingMode(raw: String) -> AssistantSettings.AudioRecordingMode {
+    AssistantSettings.AudioRecordingMode(rawValue: raw) ?? .onlyMeetings
   }
 
   static func listeningModeTitle(appState: AppState, raw: String) -> String {
@@ -45,50 +52,36 @@ enum CaptureListeningLogic {
         return name
       }
     }
-    switch listeningCaptureMode(raw: raw) {
+    switch audioRecordingMode(raw: raw) {
+    case .off:
+      return "Off"
     case .always:
-      return "Always"
-    case .onlyDuringMeetings:
-      return appState.isAwaitingMeeting ? "Meetings only" : "In meeting"
-    case .never:
-      return "Mic only"
+      return "Always On"
+    case .onlyMeetings:
+      return appState.isAwaitingMeeting ? "Only Meetings" : "In Meeting"
     }
   }
 
   // MARK: Actions
 
   static func toggleListening(
-    appState: AppState, transcriptionEnabled: Binding<Bool>, isTogglingListening: Binding<Bool>
+    appState: AppState, audioRecordingModeRaw: Binding<String>, isTogglingListening: Binding<Bool>
   ) {
-    let enabled = !appState.isTranscribing
+    let currentMode = audioRecordingMode(raw: audioRecordingModeRaw.wrappedValue)
+    let nextMode: AssistantSettings.AudioRecordingMode = currentMode == .off ? .onlyMeetings : .off
+    let enabled = nextMode != .off
     if enabled && !appState.hasMicrophonePermission {
       appState.requestMicrophonePermission()
       return
     }
 
     isTogglingListening.wrappedValue = true
-    transcriptionEnabled.wrappedValue = enabled
-    AssistantSettings.shared.transcriptionEnabled = enabled
-    AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
-    NotificationCenter.default.post(
-      name: .toggleTranscriptionRequested,
-      object: nil,
-      userInfo: ["enabled": enabled]
-    )
+    audioRecordingModeRaw.wrappedValue = nextMode.rawValue
+    AssistantSettings.shared.audioRecordingMode = nextMode
+    AnalyticsManager.shared.settingToggled(setting: "audio_recording_mode_\(nextMode.rawValue)", enabled: enabled)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
       isTogglingListening.wrappedValue = false
     }
-  }
-
-  static func toggleListeningMode(raw: Binding<String>) {
-    let nextMode: AssistantSettings.SystemAudioCaptureMode =
-      listeningCaptureMode(raw: raw.wrappedValue) == .onlyDuringMeetings ? .always : .onlyDuringMeetings
-    raw.wrappedValue = nextMode.rawValue
-    AssistantSettings.shared.systemAudioCaptureMode = nextMode
-    AnalyticsManager.shared.settingToggled(
-      setting: "meetings_only_listening",
-      enabled: nextMode == .onlyDuringMeetings
-    )
   }
 
   static func toggleCapture(
