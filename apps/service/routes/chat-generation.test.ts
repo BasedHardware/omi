@@ -2160,22 +2160,6 @@ describe("ratified chat generation wire red proofs", () => {
         });
       },
     });
-    const context = createDeterministicChatGenerationContextSource({
-      candidates: [{
-        sourceKind: "memory",
-        sourceId: "memory:gateway-acceptance",
-        claimId: "claim:gateway-acceptance",
-        evidenceId: "evidence:gateway-acceptance",
-        ownerAccountId: ACCOUNT,
-        sourceHash: `sha256:${"d".repeat(64)}`,
-        capturedAt: 1,
-        expiresAt: null,
-        redactedPreview: "The user prefers concise action plans.",
-        tokenEstimate: 6,
-        inclusionReason: "authorized acceptance context",
-        policyDecision: "included",
-      }],
-    });
     const source = createGatewayChatGenerationSource({
       gatewayUrl: `http://127.0.0.1:${gateway.port}`,
       laneId: "omi:auto:chat-agent",
@@ -2190,11 +2174,10 @@ describe("ratified chat generation wire red proofs", () => {
         db: firstDb,
         stores: firstStores,
         ownerAccountId: ACCOUNT,
-        memoryCount: 0,
+        memoryCount: 2,
         accountTimezone: "UTC",
         devSecretLabel: "gateway-generation-acceptance-proof",
         generationSource: source,
-        generationContext: context,
       });
 
       const admittedResponse = await post(first, create("gateway-joined-acceptance"));
@@ -2227,14 +2210,17 @@ describe("ratified chat generation wire red proofs", () => {
           deterministic: false,
         },
       }));
-      expect(agentInitial).toContainEqual(expect.objectContaining({
+      const contextReceipt = agentInitial.find((event) => event.kind === "context_receipt");
+      expect((contextReceipt?.details as { readonly tokenEstimate?: number }).tokenEstimate)
+        .toBeGreaterThan(0);
+      expect(contextReceipt).toMatchObject({
         kind: "context_receipt",
         details: expect.objectContaining({
           sourceKind: "context-packet",
-          policyDecision: "included",
-          tokenEstimate: 6,
+          policyDecision: expect.stringMatching(/^(included|degraded)$/u),
+          redactedPreview: "structured context packet",
         }),
-      }));
+      });
       expect(agentInitial).toContainEqual(expect.objectContaining({
         kind: "usage",
         details: expect.objectContaining({
@@ -2265,9 +2251,11 @@ describe("ratified chat generation wire red proofs", () => {
         stream: true,
         stream_options: { include_usage: true },
       });
-      expect(JSON.stringify(gatewayRequest?.body.messages)).toContain(
-        "The user prefers concise action plans.",
-      );
+      const gatewayMessagesJson = JSON.stringify(gatewayRequest?.body.messages);
+      expect(gatewayMessagesJson).toContain("memory_projection");
+      expect(gatewayMessagesJson).toContain("authorized_memory_projection");
+      expect(gatewayMessagesJson).not.toContain("mem1_");
+      expect(gatewayMessagesJson).not.toContain("cit1_");
 
       const canonicalReplayBefore = await (await generationEvents(first, generationId)).text();
       const agentReplayBefore = await (await agentEvents(first, generationId)).text();
@@ -2284,11 +2272,10 @@ describe("ratified chat generation wire red proofs", () => {
         db: secondDb,
         stores: secondStores,
         ownerAccountId: ACCOUNT,
-        memoryCount: 0,
+        memoryCount: 2,
         accountTimezone: "UTC",
         devSecretLabel: "gateway-generation-acceptance-proof",
         generationSource: source,
-        generationContext: context,
       });
       const canonicalReplayAfter = await (await generationEvents(second, generationId)).text();
       const agentReplayAfter = await (await agentEvents(second, generationId)).text();
@@ -2306,6 +2293,8 @@ describe("ratified chat generation wire red proofs", () => {
       expect(publicProjection).not.toContain(gatewayToken);
       expect(publicProjection).not.toContain(privateProviderField);
       expect(publicProjection).not.toContain(rawProviderField);
+      expect(publicProjection).not.toContain("mem1_");
+      expect(publicProjection).not.toContain("cit1_");
       expect(publicProjection).not.toMatch(/"(?:private|raw|arguments|credentials?)"\s*:/u);
     } finally {
       gateway.stop(true);

@@ -35,6 +35,7 @@ const waitUntil = async (condition: () => boolean | Promise<boolean>, timeoutMs 
 const spawnService = async (
   databasePath: string,
   readinessPath: string,
+  extraEnv: Record<string, string> = {},
 ): Promise<{ readonly child: Bun.Subprocess; readonly readiness: Readiness }> => {
   const child = Bun.spawn([process.execPath, "apps/service/bin/dev-server.ts"], {
     cwd: process.cwd(),
@@ -45,6 +46,7 @@ const spawnService = async (
       OMI_RUN_ID: RUN,
       OMI_DEV_READY_RECORD: readinessPath,
       TZ: "UTC",
+      ...extraEnv,
     },
     stdout: "ignore",
     stderr: "pipe",
@@ -126,10 +128,10 @@ const cutOverTasks = async (token: string): Promise<void> => {
   })).status).toBe(200);
 };
 
-const chatPayload = (shell: "macos" | "ios") => ({
+const chatPayload = (shell: "macos" | "ios", id = `subprocess-chat-${shell}`) => ({
   op: "create",
   opId: `op-subprocess-${shell}`,
-  id: `subprocess-chat-${shell}`,
+  id,
   at: shell === "macos" ? 1_786_352_400_000 : 1_786_352_400_001,
   text: `synthetic ${shell}`,
   sender: "human",
@@ -140,6 +142,28 @@ const chatPayload = (shell: "macos" | "ios") => ({
   messageSource: "desktop_chat",
   metadata: null,
   attachmentIds: [],
+});
+
+const parseSseBlocks = (text: string): readonly Record<string, unknown>[] =>
+  Object.freeze(text.split("\n\n")
+    .filter((block) => block.trim().length > 0)
+    .map((block) => JSON.parse(block.split("\n")
+      .find((line) => line.startsWith("data: "))!.slice(6)) as Record<string, unknown>));
+
+const fetchGenerationEvents = (
+  token: string,
+  generationId: string,
+  shell: "macos" | "ios" = "macos",
+): Promise<Response> => fetch(`${BASE_URL}/v1/chat-generations/${generationId}/events`, {
+  headers: authorizedHeaders(token, shell),
+});
+
+const fetchAgentEvents = (
+  token: string,
+  generationId: string,
+  shell: "macos" | "ios" = "macos",
+): Promise<Response> => fetch(`${BASE_URL}/v1/chat-generations/${generationId}/agent-events`, {
+  headers: authorizedHeaders(token, shell),
 });
 
 const listen = async (token: string, shell: "macos" | "ios"): Promise<void> => {
@@ -266,6 +290,91 @@ test("real dev-server owns one durable SQLite service for all seven domains", as
       .toEqual([]);
   } finally {
     if (child !== null) await stopService(child);
+    rmSync(directory, { recursive: true, force: true });
+  }
+}, 20_000);
+
+test("dev-server entrypoint completes a gateway-backed chat turn with default memory context", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "omi-dev-server-gateway-proof-"));
+  const databasePath = join(directory, "qa.sqlite");
+  const readinessPath = join(directory, "readiness.json");
+  const gatewayToken = "subprocess-loopback-gateway-token";
+  const gateway = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const body = await request.json() as Record<string, unknown>;
+      const messagesJson = JSON.stringify(body.messages);
+      if (!messagesJson.includes("memory_projection")) {
+        return new Response("missing memory context", { status: 500 });
+      }
+      return new Response([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Subprocess gateway " } }] })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [{ delta: { content: "answer." } }],
+          usage: { prompt_tokens: 7, completion_tokens: 2, total_tokens: 9 },
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""), {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  });
+  let child: Bun.Subprocess | null = null;
+  try {
+    const spawned = await spawnService(databasePath, readinessPath, {
+      OMI_LLM_GATEWAY_URL: `http://127.0.0.1:${gateway.port}`,
+      OMI_LLM_GATEWAY_SERVICE_TOKEN: gatewayToken,
+    });
+    child = spawned.child;
+    const token = spawned.readiness.devToken;
+    const admitted = await postJson(
+      "/v1/chat-messages",
+      token,
+      chatPayload("macos", "subprocess-gateway-chat"),
+      "macos",
+    );
+    expect(admitted.status).toBe(201);
+    const admission = await admitted.json() as {
+      readonly generation: { readonly id: string };
+    };
+    const generationId = admission.generation.id;
+    const canonicalBody = await (await fetchGenerationEvents(token, generationId)).text();
+    const canonicalFrames = parseSseBlocks(canonicalBody);
+    expect(canonicalFrames.filter((frame) => frame.kind === "done")).toHaveLength(1);
+    expect(canonicalFrames.at(-1)).toMatchObject({
+      kind: "done",
+      message: { text: "Subprocess gateway answer.", generationOutcome: "completed" },
+    });
+
+    const agentBody = await (await fetchAgentEvents(token, generationId)).text();
+    const agentEvents = parseSseBlocks(agentBody);
+    expect(agentEvents.every((event) => event.runId === generationId)).toBe(true);
+    expect(agentEvents).toContainEqual(expect.objectContaining({
+      kind: "capability_receipt",
+      details: expect.objectContaining({
+        adapter: "omi-llm-gateway",
+      }),
+    }));
+    const contextReceipt = agentEvents.find((event) => event.kind === "context_receipt");
+    expect((contextReceipt?.details as { readonly tokenEstimate?: number }).tokenEstimate)
+      .toBeGreaterThan(0);
+    expect(contextReceipt).toMatchObject({
+      kind: "context_receipt",
+      details: expect.objectContaining({
+        sourceKind: "context-packet",
+        redactedPreview: "structured context packet",
+      }),
+    });
+
+    const publicProjection = [canonicalBody, agentBody].join("\n");
+    expect(publicProjection).not.toContain(gatewayToken);
+    expect(publicProjection).not.toContain("mem1_");
+    expect(publicProjection).not.toContain("cit1_");
+  } finally {
+    if (child !== null) await stopService(child);
+    gateway.stop(true);
     rmSync(directory, { recursive: true, force: true });
   }
 }, 20_000);
