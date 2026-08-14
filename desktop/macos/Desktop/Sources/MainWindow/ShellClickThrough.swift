@@ -27,7 +27,9 @@ import OmiTheme
 /// Pure policy: which points of the shell window own the pointer.
 enum ShellClickThroughPolicy {
   /// Interactive band kept along the window's frame edge so the chrome-less, resizable window can
-  /// still be resized by grabbing its (invisible) edge. Matches AppKit's effective resize zone.
+  /// still be resized by grabbing its visible silhouette. The glass is inset by this same amount
+  /// (`DesktopWindowLayoutPolicy.windowInset`), so the grab is the panel edge, not an outer
+  /// invisible frame. Matches AppKit's effective resize zone.
   static let resizeRim: CGFloat = 8
 
   static func acceptsMouseHit(

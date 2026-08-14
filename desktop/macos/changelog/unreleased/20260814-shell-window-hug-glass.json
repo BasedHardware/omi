@@ -1,3 +1,3 @@
 {
-  "change": "Sized the main window to the floating glass so clicks beside the panels reach the desktop instead of an invisible border"
+  "change": "Sized the main window to the floating glass, with a light lift instead of a thick shadow halo, so clicks and resize land on the panel edge"
 }

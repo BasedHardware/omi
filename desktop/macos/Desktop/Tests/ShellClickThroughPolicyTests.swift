@@ -1,3 +1,4 @@
+import OmiTheme
 import XCTest
 
 @testable import Omi_Computer
@@ -43,6 +44,12 @@ final class ShellClickThroughPolicyTests: XCTestCase {
   }
 
   func testResizableWindowKeepsAnInteractiveEdgeRim() {
+    XCTAssertEqual(
+      DesktopWindowLayoutPolicy.windowInset, ShellClickThroughPolicy.resizeRim,
+      "the glass must sit on the resize rim or grabbing the panel edge misses the window frame")
+    XCTAssertLessThanOrEqual(
+      InkGlassShadow.ambient.padding, DesktopWindowLayoutPolicy.windowInset + 2,
+      "a shadow that needs more room than the inset clips into a thick black band around the glass")
     XCTAssertTrue(
       ShellClickThroughPolicy.acceptsMouseHit(
         localPoint: NSPoint(x: 4, y: 350),

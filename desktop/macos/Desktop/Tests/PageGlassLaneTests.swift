@@ -152,10 +152,10 @@ final class PageGlassLaneTests: XCTestCase {
           "at \(size) the panel reaches the \(edge) edge: that is a ground spanning the window, not a "
             + "panel floating on the desktop")
       }
-      // The horizontal margin is the page's own, never smaller — a panel one point inside the frame
+      // The horizontal margin is the window inset, never smaller — a panel one point inside the frame
       // is a full-bleed sheet with a rounding error, not a floating object.
-      XCTAssertGreaterThanOrEqual(leading, ChatComposerLayout.pageMargin - 0.5)
-      XCTAssertGreaterThanOrEqual(trailing, ChatComposerLayout.pageMargin - 0.5)
+      XCTAssertGreaterThanOrEqual(leading, DesktopWindowLayoutPolicy.windowInset - 0.5)
+      XCTAssertGreaterThanOrEqual(trailing, DesktopWindowLayoutPolicy.windowInset - 0.5)
       // …and it is centred, so neither side is the one that got the desktop.
       XCTAssertEqual(leading, trailing, accuracy: 0.5, "the panel drifted off the window's axis")
     }

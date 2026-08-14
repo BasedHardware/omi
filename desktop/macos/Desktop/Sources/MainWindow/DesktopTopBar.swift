@@ -170,11 +170,11 @@ enum TopNavigationLayoutMetrics {
   /// `PageGlassLaneLayout.laneWidth` both delegate here, so the bar and whatever is under it cannot
   /// drift apart.
   ///
-  /// The lane **fills the window** minus one page margin on each side. The 900 pt readable cap is
-  /// a window-max (`DesktopWindowLayoutPolicy.maximumContentWidth`), not an internal inset: capping
-  /// here inside a larger window is what drew the invisible click border around the glass.
+  /// The lane **fills the window** minus the resize-rim inset on each side. The 900 pt readable
+  /// cap is a window-max (`DesktopWindowLayoutPolicy.maximumContentWidth`), not an internal inset:
+  /// capping here inside a larger window is what drew the invisible click border around the glass.
   static func contentLaneWidth(for availableWidth: CGFloat) -> CGFloat {
-    max(0, availableWidth - (ChatComposerLayout.pageMargin * 2))
+    max(0, availableWidth - (DesktopWindowLayoutPolicy.windowInset * 2))
   }
 
   /// The bar's own height.
