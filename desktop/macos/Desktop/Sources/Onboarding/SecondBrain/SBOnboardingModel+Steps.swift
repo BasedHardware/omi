@@ -6,23 +6,6 @@ import Foundation
 // MARK: - Permissions (one at a time)
 
 extension SBOnboardingModel {
-  static func preferredLanguageCodes(localeCode: String?) -> [String] {
-    let common = ["en", "es", "fr", "de", "pt", "ja", "zh", "ko", "hi"]
-    let preferred = ([localeCode].compactMap { $0 } + common)
-      .map(AssistantSettings.normalizeTranscriptionLanguageCode)
-    return preferred.reduce(into: []) { codes, code in
-      if !codes.contains(code) { codes.append(code) }
-    }
-  }
-
-  static func languageSelection(for draft: String) -> (code: String, name: String)? {
-    let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return nil }
-    let code = AssistantSettings.normalizeTranscriptionLanguageCode(trimmed)
-    guard let language = AssistantSettings.supportedLanguages.first(where: { $0.code == code }) else { return nil }
-    return language
-  }
-
   /// Nothing is asked of macOS until the user clicks. The probes this has to do
   /// first are cross-process, so the click dispatches onto the model's actor
   /// rather than blocking the button.
@@ -371,10 +354,7 @@ extension SBOnboardingModel {
 
   func finishFilesStep() {
     guard localFileProfileState.isTerminal else { return }
-    let answer =
-      thread.last?.isOmi == true && thread.last?.text == message(for: .files)
-      ? (fdaState == .on ? "Allowed" : "Skip") : nil
-    advance(userAnswer: answer, to: .accessibility)
+    advance(userAnswer: nil, to: .accessibility)
   }
   func answerAccessibility() { advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation) }
   func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
@@ -851,16 +831,6 @@ extension SBOnboardingModel {
 // MARK: - Agents (do things for you)
 
 extension SBOnboardingModel {
-  static func agentTogglePresentation(for state: String, detail: String) -> AgentTogglePresentation {
-    switch state {
-    case "connecting": return .init(isOn: true, isDisabled: true, detail: "connecting…")
-    case "on": return .init(isOn: true, isDisabled: true, detail: detail)
-    case "idle": return .init(isOn: false, isDisabled: false, detail: detail)
-    case "unavailable": return .init(isOn: false, isDisabled: true, detail: "not installed")
-    default: return .init(isOn: false, isDisabled: true, detail: "checking…")
-    }
-  }
-
   var agentRows: [(id: String, name: String, detail: String)] {
     [
       ("openclaw", "OpenClaw", "runs tasks on your Mac"),

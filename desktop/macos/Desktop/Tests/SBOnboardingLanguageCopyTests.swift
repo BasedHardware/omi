@@ -7,46 +7,27 @@ final class SBOnboardingLanguageCopyTests: XCTestCase {
 
   func testLanguagePickerCopyExplainsTheSpokenLanguagePreference() {
     XCTAssertEqual(SBOnboardingLanguageCopy.question, "What language should Omi listen and reply in?")
+    XCTAssertEqual(SBOnboardingLanguageCopy.detectedLanguageDetail, "· detected from your Mac")
+    XCTAssertEqual(SBOnboardingLanguageCopy.continueAction(for: "English"), "Continue in English")
+    XCTAssertEqual(SBOnboardingLanguageCopy.changeSpokenLanguageAction, "Change spoken language")
   }
 
-  func testLanguageStepStartsWithAnEmptyDraft() {
+  func testDetectedLanguageDetailIsShownOnlyForAMacLocalePrefill() {
     let model = SBOnboardingModel(appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
 
-    XCTAssertEqual(model.languageDraft, "")
+    model.prefillDetectedLanguage(from: "es")
+
+    XCTAssertEqual(model.languageDraft, "Spanish")
+    XCTAssertTrue(model.languageIsDetectedFromMac)
   }
 
-  func testLanguageSelectionRejectsEmptyAndPartialInput() {
-    XCTAssertNil(SBOnboardingModel.languageSelection(for: ""))
-    XCTAssertNil(SBOnboardingModel.languageSelection(for: "   \n"))
-    XCTAssertNil(SBOnboardingModel.languageSelection(for: "Span"))
-    XCTAssertEqual(SBOnboardingModel.languageSelection(for: "Spanish")?.code, "es")
-  }
-
-  func testLanguageSuggestionsPreferTheCurrentLocaleThenCommonLanguages() {
-    XCTAssertEqual(
-      SBOnboardingModel.preferredLanguageCodes(localeCode: "fr").prefix(4),
-      ["fr", "en", "es", "de"]
-    )
-  }
-
-  func testLanguageSuggestionsNormalizeLocaleCodes() {
-    XCTAssertEqual(SBOnboardingModel.preferredLanguageCodes(localeCode: "zh").first, "zh-CN")
-  }
-
-  func testLanguageSuggestionsKeepTheCurrentRegion() {
-    XCTAssertEqual(SBOnboardingModel.preferredLanguageCodes(localeCode: "zh-TW").first, "zh-TW")
-  }
-
-  func testResumedLanguageHydratesFromANormalizedPersistedCode() {
-    let previousLanguages = AssistantSettings.shared.voiceLanguages
-    let hadExplicitLanguages = AssistantSettings.shared.hasExplicitVoiceLanguages
-    defer { AssistantSettings.shared.voiceLanguages = hadExplicitLanguages ? previousLanguages : [] }
-
-    AssistantSettings.shared.voiceLanguages = ["zh"]
+  func testExistingLanguageDraftIsNotRelabeledAsMacDetected() {
     let model = SBOnboardingModel(appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
-    model.begin()
+    model.languageDraft = "English"
 
-    XCTAssertEqual(model.languageDraft, "Chinese (Simplified)")
-    model.streamTask?.cancel()
+    model.prefillDetectedLanguage(from: "es")
+
+    XCTAssertEqual(model.languageDraft, "English")
+    XCTAssertFalse(model.languageIsDetectedFromMac)
   }
 }

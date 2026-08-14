@@ -4,6 +4,12 @@ import Foundation
 
 enum SBOnboardingLanguageCopy {
   static let question = "What language should Omi listen and reply in?"
+  static let detectedLanguageDetail = "· detected from your Mac"
+  static let changeSpokenLanguageAction = "Change spoken language"
+
+  static func continueAction(for language: String) -> String {
+    "Continue in \(language)"
+  }
 }
 
 /// The height-relevant identity of a step's widget — see `SBOnboardingModel.widgetShape`.
@@ -79,14 +85,7 @@ final class SBOnboardingModel: ObservableObject {
     }
   }
 
-  struct AgentTogglePresentation: Equatable {
-    let isOn: Bool
-    let isDisabled: Bool
-    let detail: String
-  }
-
   typealias FileScanRunner = @MainActor (AppState) async -> LocalFileProfileState
-  typealias StreamSleeper = @MainActor (UInt64) async -> Void
 
   @Published var step: Step = .promise
   @Published var thread: [Msg] = []
@@ -98,6 +97,8 @@ final class SBOnboardingModel: ObservableObject {
   // Per-step answers / state
   @Published var nameDraft = ""
   @Published var languageDraft = ""
+  @Published private(set) var languageIsDetectedFromMac = false
+  @Published var languageName: String?
   @Published var howHeard: String?
   @Published var roleDraft = ""
   @Published var role: String?
@@ -185,11 +186,8 @@ final class SBOnboardingModel: ObservableObject {
   /// question never lets an earlier request finish after the user's revision.
   private let answerWriteGate = OnboardingAnswerWriteGate()
   let fileScanRunner: FileScanRunner
-  let streamSleeper: StreamSleeper
   private let onComplete: (() -> Void)?
   var streamTask: Task<Void, Never>?
-  var streamGeneration = 0
-  var displayedSteps: [Step] = []
   var localFileScanTask: Task<Void, Never>?
   var localFileScanID: UUID?
   /// Permission-grant pollers, one per permission key. Keyed so requesting a
@@ -242,16 +240,12 @@ final class SBOnboardingModel: ObservableObject {
         memoryCount: coordinator.localFileMemoriesSaved,
         deniedFolders: outcome.deniedUserFolders)
     },
-    streamSleeper: @escaping StreamSleeper = { nanoseconds in
-      try? await Task.sleep(nanoseconds: nanoseconds)
-    },
     onComplete: (() -> Void)?
   ) {
     self.appState = appState
     self.chatProvider = chatProvider
     self.importConnectorStatusStore = importConnectorStatusStore
     self.fileScanRunner = fileScanRunner
-    self.streamSleeper = streamSleeper
     self.onComplete = onComplete
     // Isolate any onboarding chat/voice turns to the throwaway `.onboarding()`
     // journal surface so they never pollute the real Chat tab. Cleared on
@@ -329,7 +323,7 @@ final class SBOnboardingModel: ObservableObject {
     case .screenDemo:
       return "Here's the fun part."
     case .agents:
-      return "Which AI assistants do you use? Turn on each installed assistant you want me to work with."
+      return "Want me to do things for you? Connect an agent and I'll put it to work."
     case .context:
       return "The more I can see, the more I can help. Connect anything you want me to know:"
     case .capture:
@@ -474,24 +468,17 @@ final class SBOnboardingModel: ObservableObject {
 
   func streamMessage(for step: Step) {
     streamTask?.cancel()
-    streamGeneration &+= 1
-    let generation = streamGeneration
-    if displayedSteps.last != step {
-      displayedSteps.append(step)
-    }
     showWidget = false
     typing = true
     let full = message(for: step)
     streamTask = Task { [weak self] in
-      guard let self else { return }
-      await self.streamSleeper(700_000_000)
-      guard !Task.isCancelled, self.streamGeneration == generation else { return }
+      try? await Task.sleep(nanoseconds: 700_000_000)
+      guard let self, !Task.isCancelled else { return }
       self.typing = false
       self.streamingText = "▍"
       let words = full.split(separator: " ").map(String.init)
       var i = 0
       while i < words.count {
-        guard !Task.isCancelled, self.streamGeneration == generation else { return }
         i += 1 + Int.random(in: 0...1)
         let shown = words.prefix(min(i, words.count)).joined(separator: " ")
         if i < words.count {
@@ -499,9 +486,10 @@ final class SBOnboardingModel: ObservableObject {
         } else {
           self.streamingText = full
         }
-        await self.streamSleeper(UInt64((55 + Int.random(in: 0...95)) * 1_000_000))
+        if Task.isCancelled { return }
+        try? await Task.sleep(nanoseconds: UInt64((55 + Int.random(in: 0...95)) * 1_000_000))
       }
-      guard !Task.isCancelled, self.streamGeneration == generation else { return }
+      guard !Task.isCancelled else { return }
       self.thread.append(Msg(isOmi: true, text: full))
       self.streamingText = nil
       self.showWidget = true
@@ -513,6 +501,7 @@ final class SBOnboardingModel: ObservableObject {
   /// appears — used to kick off per-step live work (screen capture, demo setup).
   private func onStepShown(_ step: Step) {
     switch step {
+    case .language: prefillDetectedLanguage()
     case .mic: precheckPerm("microphone")
     case .systemAudio: precheckPerm("system_audio")
     case .screen: precheckPerm("screen_recording")
@@ -540,54 +529,18 @@ final class SBOnboardingModel: ObservableObject {
     streamMessage(for: target)
   }
 
+  /// Return to the immediately preceding onboarding stage without discarding
+  /// any answer the user already supplied. The conversational transcript stays
+  /// intact; the re-rendered widget is the editable source of truth for that
+  /// stage, so a user can revise (for example) Student to Founder.
   func goBack() {
-    guard let previous = previousStep(before: step) else { return }
+    guard let previous = Step(rawValue: step.rawValue - 1) else { return }
     teardownStep(step)
     cancelPermissionPollForCurrentStep()
-    streamGeneration &+= 1
-    streamTask?.cancel()
-    streamTask = nil
-    typing = false
-    streamingText = nil
-    retractCurrentExchange()
-    if displayedSteps.last == step {
-      displayedSteps.removeLast()
-    }
+    rehydrateDrafts()
     step = previous
-    if displayedSteps.last != previous {
-      displayedSteps.append(previous)
-    }
     UserDefaults.standard.set(previous.rawValue, forKey: Self.resumeStepKey)
-    if thread.contains(where: { $0.isOmi && $0.text == message(for: previous) }) {
-      showWidget = true
-      onStepShown(previous)
-    } else {
-      streamMessage(for: previous)
-    }
-  }
-
-  private func retractCurrentExchange() {
-    if thread.last?.isOmi == false {
-      thread.removeLast()
-    }
-    if thread.last?.isOmi == true, thread.last?.text == message(for: step) {
-      thread.removeLast()
-    }
-    if thread.last?.isOmi == false {
-      thread.removeLast()
-    }
-  }
-
-  private func previousStep(before current: Step) -> Step? {
-    if displayedSteps.last == current, let previous = displayedSteps.dropLast().last {
-      return previous
-    }
-    var rawValue = current.rawValue - 1
-    while let candidate = Step(rawValue: rawValue) {
-      guard let key = permissionKey(for: candidate), isGranted(key) else { return candidate }
-      rawValue -= 1
-    }
-    return nil
+    streamMessage(for: previous)
   }
 
   var canGoBack: Bool {
@@ -649,13 +602,10 @@ final class SBOnboardingModel: ObservableObject {
       let saved = UserDefaults.standard.string(forKey: DefaultsKey.onboardingHowDidYouHearSource)
       if let saved, !saved.isEmpty { howHeard = saved }
     }
-    if languageDraft.isEmpty, AssistantSettings.shared.hasExplicitVoiceLanguages,
-      let code = AssistantSettings.shared.voiceLanguages.first,
-      let language = AssistantSettings.supportedLanguages.first(where: {
-        $0.code == AssistantSettings.normalizeTranscriptionLanguageCode(code)
-      })
+    if languageDraft.isEmpty, languageName == nil, let code = AssistantSettings.shared.voiceLanguages.first,
+      let match = AssistantSettings.supportedLanguages.first(where: { $0.code == code })
     {
-      languageDraft = language.name
+      languageDraft = match.name
     }
   }
 
@@ -687,7 +637,9 @@ final class SBOnboardingModel: ObservableObject {
   /// Set the user's spoken language locally + on the backend (mirrors the legacy
   /// confirmLanguages, single-primary). Advances optimistically.
   func pickLanguage(code: String, name: String) {
+    languageName = name
     languageDraft = name
+    languageIsDetectedFromMac = false
     AssistantSettings.shared.voiceLanguages = [code]
     answerWriteGate.enqueue(.language) { [code] in
       _ = try? await APIClient.shared.updateUserLanguage(code)
@@ -695,9 +647,30 @@ final class SBOnboardingModel: ObservableObject {
     advance(userAnswer: name, to: .role)
   }
 
+  /// Auto-detect the Mac's language and pre-fill it so the picker defaults to it
+  /// (the user can still type to change). Only fills an empty field once.
+  func prefillDetectedLanguage() {
+    let raw = Locale.current.language.languageCode?.identifier ?? Locale.preferredLanguages.first ?? "en"
+    prefillDetectedLanguage(from: raw)
+  }
+
+  /// Records that the draft came from the Mac locale, rather than a saved or
+  /// fallback language, so the UI can accurately disclose its source.
+  func prefillDetectedLanguage(from raw: String) {
+    guard languageDraft.isEmpty, languageName == nil else { return }
+    let code = AssistantSettings.normalizeTranscriptionLanguageCode(raw)
+    if let match = AssistantSettings.supportedLanguages.first(where: { $0.code == code }) {
+      languageDraft = match.name
+      languageIsDetectedFromMac = true
+    }
+  }
+
   func answerLanguageText() {
-    guard let language = Self.languageSelection(for: languageDraft) else { return }
-    pickLanguage(code: language.code, name: language.name)
+    let raw = languageDraft.trimmingCharacters(in: .whitespaces)
+    guard !raw.isEmpty else { return }
+    let code = AssistantSettings.normalizeTranscriptionLanguageCode(raw)
+    let name = AssistantSettings.supportedLanguages.first { $0.code == code }?.name ?? raw
+    pickLanguage(code: code, name: name)
   }
 
   func pickRole(_ r: String) {

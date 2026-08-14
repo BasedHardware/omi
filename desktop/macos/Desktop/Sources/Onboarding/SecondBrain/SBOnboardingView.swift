@@ -42,7 +42,6 @@ struct SBOnboardingView: View {
   /// Language step: false shows the detected default + Continue; true reveals the picker.
   @State private var languageChanging = false
   @State private var showAIAssistants = false
-  @FocusState private var languageFieldFocused: Bool
 
   init(
     appState: AppState,
@@ -126,7 +125,6 @@ struct SBOnboardingView: View {
           VStack(alignment: .leading, spacing: 14) {
             ForEach(model.thread) { msg in
               messageRow(msg)
-                .transition(.opacity.combined(with: .move(edge: .trailing)))
             }
             if let streaming = model.streamingText {
               omiRow(streaming)
@@ -210,11 +208,7 @@ struct SBOnboardingView: View {
 
   @ViewBuilder private var backButton: some View {
     if model.canGoBack {
-      Button(action: {
-        OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-          model.goBack()
-        }
-      }) {
+      Button(action: { model.goBack() }) {
         Text("← Back")
           .inkStyle(InkType.statusLabel, color: Ink.secondary)
           .padding(.horizontal, 14).padding(.vertical, 7)
@@ -388,21 +382,17 @@ struct SBOnboardingView: View {
         let filter = draft.lowercased()
         let matches: [(code: String, name: String)] =
           filter.isEmpty
-          ? SBOnboardingModel.preferredLanguageCodes(
-            localeCode: Locale.current.identifier
-          ).compactMap { code in all.first { $0.code == code } }
+          ? Array(all.prefix(6))
           : Array(
             all.filter { $0.name.lowercased().contains(filter) || $0.code.lowercased().hasPrefix(filter) }.prefix(6))
-        TextField("Type a language\u{2026}", text: $model.languageDraft)
+        TextField("Type a language…", text: $model.languageDraft)
           .textFieldStyle(.plain).inkStyle(InkType.rowCopy, color: Ink.primary)
           .padding(.horizontal, 13).padding(.vertical, 10)
           .glassField()
-          .focused($languageFieldFocused)
-          .onAppear { languageFieldFocused = true }
           .onSubmit { if let first = matches.first { model.pickLanguage(code: first.code, name: first.name) } }
         if !matches.isEmpty {
           VStack(spacing: 0) {
-            ForEach(matches, id: \\.code) { lang in
+            ForEach(matches, id: \.code) { lang in
               Button {
                 model.pickLanguage(code: lang.code, name: lang.name)
               } label: {
@@ -422,8 +412,6 @@ struct SBOnboardingView: View {
           .glassCard(cornerRadius: PageGlass.chipRadius)
         }
       }
-      SBInkButton(title: "Continue", isDefaultAction: true) { model.answerLanguageText() }
-        .disabled(SBOnboardingModel.languageSelection(for: draft) == nil)
     }
     .frame(maxWidth: 340, alignment: .leading)
   }
@@ -814,13 +802,11 @@ struct SBOnboardingView: View {
         .padding(.vertical, 12)
         if showAIAssistants {
           GlassSeparator()
-          ForEach(Array(model.agentRows.enumerated()), id: \\.element.id) { i, row in
+          ForEach(Array(model.agentRows.enumerated()), id: \.element.id) { i, row in
             connectRow(id: row.id, row.name, row.detail, state: model.agentStates[row.id] ?? "idle") {
               model.connectAgent(row.id)
             }
             if i < model.agentRows.count - 1 { GlassSeparator() }
-          }
-        }
           }
         }
       }
@@ -830,7 +816,6 @@ struct SBOnboardingView: View {
     }
     .frame(maxWidth: 380, alignment: .leading)
   }
-
 
   private var contextWidget: some View {
     VStack(alignment: .leading, spacing: 12) {
