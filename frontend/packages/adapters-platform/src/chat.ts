@@ -36,6 +36,10 @@ export function platformChatGenerationPath(generationId: string): string {
   return `/v1/chat-generations/${encodeURIComponent(generationId)}`;
 }
 
+export function platformChatAgentApprovalsPath(generationId: string): string {
+  return `${platformChatGenerationPath(generationId)}/agent-approvals`;
+}
+
 export type ChatAdmitResult =
   | {
       ok: true;
@@ -500,6 +504,47 @@ export async function cancelChatGeneration(
   return {
     ok: false,
     failure: classifyStatus(response, `cancel chat generation ${generationId}`),
+  };
+}
+
+export type ChatAgentApprovalResolution = "approved" | "denied" | "cancelled";
+
+/** Resolve the pending approval for a generation. Approval ids never leave the server. */
+export async function resolveChatAgentApproval(
+  http: HttpClient,
+  generationId: string,
+  resolution: ChatAgentApprovalResolution,
+): Promise<{ ok: true } | { ok: false; failure: WriteFailure }> {
+  if (
+    resolution !== "approved" &&
+    resolution !== "denied" &&
+    resolution !== "cancelled"
+  ) {
+    return {
+      ok: false,
+      failure: {
+        kind: "permanent",
+        reason: "validation",
+        detail: `resolve chat agent approval ${generationId}: invalid resolution`,
+      },
+    };
+  }
+  const response = await http.request(
+    "POST",
+    platformChatAgentApprovalsPath(generationId),
+    { resolution },
+  );
+  if (
+    (response.status === 200 || response.status === 202) &&
+    isRecord(response.json) &&
+    isRecord(response.json["outcome"]) &&
+    typeof response.json["outcome"]["kind"] === "string"
+  ) {
+    return { ok: true };
+  }
+  return {
+    ok: false,
+    failure: classifyStatus(response, `resolve chat agent approval ${generationId}`),
   };
 }
 
