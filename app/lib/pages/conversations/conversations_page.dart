@@ -74,7 +74,8 @@ bool shouldReleaseConversationLoadMoreLatch({
   required String? currentRequestKey,
   required String requestKey,
   required bool succeeded,
-}) => !succeeded && currentRequestKey == requestKey;
+}) =>
+    !succeeded && currentRequestKey == requestKey;
 
 String conversationLoadMoreFilterKey({
   required String query,
@@ -85,16 +86,17 @@ String conversationLoadMoreFilterKey({
   required bool discarded,
   required bool shortOnly,
   required int shortThreshold,
-}) => [
-  query,
-  folderId ?? '',
-  speakerId ?? '',
-  date?.toIso8601String() ?? '',
-  starredOnly,
-  discarded,
-  shortOnly,
-  shortThreshold,
-].join('|');
+}) =>
+    [
+      query,
+      folderId ?? '',
+      speakerId ?? '',
+      date?.toIso8601String() ?? '',
+      starredOnly,
+      discarded,
+      shortOnly,
+      shortThreshold,
+    ].join('|');
 
 _ConversationPageSnapshot _conversationPageSnapshot(
   ConversationProvider conversations,
@@ -309,20 +311,18 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     if (isSearch) {
       unawaited(provider.searchMoreConversations());
     } else {
-      unawaited(
-        provider.getMoreConversationsFromServer().then((succeeded) {
-          if (mounted &&
-              shouldReleaseConversationLoadMoreLatch(
-                currentRequestKey: _lastLoadMoreRequestKey,
-                requestKey: requestKey,
-                succeeded: succeeded,
-              )) {
-            // A failed page fetch leaves the server cursor unchanged; release
-            // the latch so the next scroll can retry the same offset.
-            _lastLoadMoreRequestKey = null;
-          }
-        }),
-      );
+      unawaited(provider.getMoreConversationsFromServer().then((succeeded) {
+        if (mounted &&
+            shouldReleaseConversationLoadMoreLatch(
+              currentRequestKey: _lastLoadMoreRequestKey,
+              requestKey: requestKey,
+              succeeded: succeeded,
+            )) {
+          // A failed page fetch leaves the server cursor unchanged; release
+          // the latch so the next scroll can retry the same offset.
+          _lastLoadMoreRequestKey = null;
+        }
+      }));
     }
     return true;
   }
@@ -494,8 +494,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final bool showRecordings =
-            convoProvider.previousQuery.isEmpty &&
+        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly &&
             !convoProvider.showDailySummaries;
@@ -511,8 +510,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         final bool isWaitingForInitialData = _isBootstrapping && snapshot.conversations.isEmpty && !hasRecordings;
-        final bool isShowingConversationSkeleton =
-            isWaitingForInitialData ||
+        final bool isShowingConversationSkeleton = isWaitingForInitialData ||
             convoProvider.isLoadingConversations ||
             convoProvider.isFetchingConversations ||
             convoProvider.isAwaitingInitialFetchRetry;

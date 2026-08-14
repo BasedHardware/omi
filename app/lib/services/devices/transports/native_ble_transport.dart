@@ -32,7 +32,7 @@ class NativeBleTransport extends DeviceTransport {
   int _audioSilenceResubscribes = 0;
 
   NativeBleTransport(this._peripheralUuid, {this.requiresBond = false, BleHostApi? hostApi})
-    : _hostApi = hostApi ?? BleHostApi() {
+      : _hostApi = hostApi ?? BleHostApi() {
     BleBridge.instance.registerPeripheral(
       peripheralUuid: _peripheralUuid,
       onConnectionState: _handleConnectionState,
