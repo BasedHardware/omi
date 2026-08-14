@@ -902,9 +902,7 @@ function UsageSectionContent({
   const currentPriceId = subscription?.current_price_id;
   useEffect(() => {
     if (cachedPlans && cachedPlans.length > 0) {
-      const activePlan = cachedPlans.find(
-        (p) => p.is_active || p.id === currentPriceId,
-      );
+      const activePlan = cachedPlans.find((p) => p.is_active || p.id === currentPriceId);
       if (activePlan) {
         setSelectedPriceId(activePlan.id);
       } else if (!selectedPriceId) {
@@ -996,7 +994,9 @@ function UsageSectionContent({
     setError(null);
 
     try {
-      const isCurrentPlan = selectedOption?.is_active;
+      const isCurrentPlan =
+        selectedOption?.is_active ||
+        selectedOption?.id === subscription?.current_price_id;
 
       if (isCancelingSubscription && selectedPriceId !== subscription?.current_price_id) {
         setError('Plan changes are available after your current subscription ends.');
@@ -1038,6 +1038,11 @@ function UsageSectionContent({
       const result = await getCustomerPortal();
       if (result?.url) {
         window.open(result.url, '_blank');
+        const handleFocus = () => {
+          onSubscriptionUpdate();
+          window.removeEventListener('focus', handleFocus);
+        };
+        window.addEventListener('focus', handleFocus);
       } else {
         setError('Failed to open payment portal');
       }
@@ -1277,7 +1282,7 @@ function UsageSectionContent({
                               {option.price_string}
                             </p>
                             {option.description && (
-                              <p className="text-xs text-purple-400 mt-2 font-medium">
+                              <p className="text-xs text-text-secondary mt-2 font-medium">
                                 {option.description}
                               </p>
                             )}
@@ -1430,7 +1435,7 @@ function UsageSectionContent({
                           {option.price_string}
                         </p>
                         {option.description && (
-                          <p className="text-xs text-purple-400 mt-1">
+                          <p className="text-xs text-text-secondary mt-1">
                             {option.description}
                           </p>
                         )}
@@ -1485,7 +1490,9 @@ function UsageSectionContent({
                 disabled={
                   isLoading ||
                   !selectedPriceId ||
-                  (!isCancelingSubscription && selectedOption?.is_active) ||
+                  (!isCancelingSubscription &&
+                    (selectedOption?.is_active ||
+                      selectedOption?.id === subscription?.current_price_id)) ||
                   (isCancelingSubscription &&
                     selectedPriceId !== subscription?.current_price_id)
                 }
@@ -1503,7 +1510,8 @@ function UsageSectionContent({
                   </span>
                 ) : isCancelingSubscription ? (
                   'Reactivate Subscription'
-                ) : selectedOption?.is_active ? (
+                ) : selectedOption?.is_active ||
+                  selectedOption?.id === subscription?.current_price_id ? (
                   'Current Plan'
                 ) : (
                   'Change Plan'

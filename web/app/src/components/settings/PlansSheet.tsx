@@ -47,9 +47,12 @@ export function PlansSheet({
   const isCanceling_ = subscription?.cancel_at_period_end;
 
   useEffect(() => {
+    let cancelled = false;
+
     if (open) {
       // Use cached plans if available, otherwise fetch
       if (cachedPlans && cachedPlans.length > 0) {
+        if (cancelled) return;
         setPricingOptions(cachedPlans);
         const activePlan = cachedPlans.find(
           (p) => p.is_active || p.id === subscription?.current_price_id,
@@ -61,16 +64,20 @@ export function PlansSheet({
         }
         setIsLoadingPlans(false);
       } else {
-        loadPlans();
+        loadPlans(cancelled);
       }
     }
-  }, [open, cachedPlans]);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, cachedPlans, subscription?.current_price_id]);
 
-  const loadPlans = async () => {
+  const loadPlans = async (cancelled = false) => {
     setIsLoadingPlans(true);
     setError(null);
     try {
       const response = await getAvailablePlans();
+      if (cancelled) return;
       if (response && response.plans) {
         setPricingOptions(response.plans);
         // Pre-select current active plan or first plan
