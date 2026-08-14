@@ -19,6 +19,15 @@ final class MediaPlaybackIdleExemptionTests: XCTestCase {
       90)
   }
 
+  /// The gate-facing wrapper mirrors the pure policy and logs once per episode; its
+  /// idle arithmetic must match the policy exactly.
+  func testDetectorEffectiveIdleMatchesPolicy() {
+    let playing = MediaPlaybackDetector(cacheTTL: 10) { true }
+    XCTAssertEqual(playing.effectiveIdleSeconds(hidIdleSeconds: 3600, threshold: 60), 0)
+    let silent = MediaPlaybackDetector(cacheTTL: 10) { false }
+    XCTAssertEqual(silent.effectiveIdleSeconds(hidIdleSeconds: 90, threshold: 60), 90)
+  }
+
   /// The capture loop polls every second; the IOKit assertion table must not be
   /// walked on every tick.
   func testDetectorCachesProbeWithinTTL() {
