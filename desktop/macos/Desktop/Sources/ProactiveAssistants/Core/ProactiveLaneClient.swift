@@ -18,6 +18,7 @@ struct ProactiveLaneResult: Equatable, Sendable {
 enum ProactiveLaneClientError: LocalizedError {
   case invalidResponse
   case http(status: Int, retryAfterSeconds: Int?)
+  case quotaCooldown(retryAfterSeconds: Int)
   case ownerChanged
 
   var errorDescription: String? {
@@ -26,6 +27,8 @@ enum ProactiveLaneClientError: LocalizedError {
       return "proactive_invalid_response"
     case .http(let statusCode, _):
       return "proactive_http_error status=\(statusCode)"
+    case .quotaCooldown(_):
+      return "proactive_quota_cooldown status=429"
     case .ownerChanged:
       return "proactive_owner_changed"
     }
@@ -59,6 +62,8 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
     switch failure {
     case "http_error":
       return "http_error status=\(status ?? 0)"
+    case "quota_cooldown":
+      return "quota_cooldown status=\(status ?? 0)"
     case "network":
       return "network error_type=\(errorType ?? "unknown")"
     default:
@@ -71,6 +76,8 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
       switch laneError {
       case .http(let status, _):
         return ProactiveLaneFailureClassification(failure: "http_error", status: status, errorType: nil)
+      case .quotaCooldown(_):
+        return ProactiveLaneFailureClassification(failure: "quota_cooldown", status: 429, errorType: nil)
       case .invalidResponse:
         return ProactiveLaneFailureClassification(failure: "invalid_response", status: nil, errorType: nil)
       case .ownerChanged:
@@ -111,12 +118,16 @@ actor ProactiveLaneClient {
   static let shared = ProactiveLaneClient()
   static var backendBaseURL: String { DesktopBackendEnvironment.rustBackendURL() }
   static let defaultQuotaCooldownSeconds = 10 * 60
+  static let minQuotaCooldownSeconds = 60
+  static let maxQuotaCooldownSeconds = 60 * 60
   private let session: URLSession
   private let baseURL: () -> String
   private let authorization: () async throws -> String
   private let now: @Sendable () -> Date
-  private var quotaCooldownUntil: Date?
-  private var loggedQuotaSkip = false
+  private var quotaCooldownUntil: [String: Date] = [:]
+  private var loggedQuotaSkip: Set<String> = []
+  private var loggedQuotaClamp: Set<String> = []
+  private var cooldownOwner: String?
 
   init(
     session: URLSession = .shared,
@@ -144,7 +155,9 @@ actor ProactiveLaneClient {
     maxCompletionTokens: Int = 1024,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ProactiveLaneResult {
-    try checkQuotaCooldown()
+    let currentOwner = authorizationSnapshot?.ownerID
+    clearCooldownsIfOwnerChanged(currentOwner)
+    try checkQuotaCooldown(operation: operation)
     if let authorizationSnapshot {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw ProactiveLaneClientError.ownerChanged
@@ -204,7 +217,7 @@ actor ProactiveLaneClient {
       let retryAfter: Int?
       if http.statusCode == 429 {
         retryAfter = Self.parseRetryAfterSeconds(from: http)
-        armQuotaCooldown(retryAfterSeconds: retryAfter)
+        armQuotaCooldown(operation: operation, retryAfterSeconds: retryAfter)
       } else {
         retryAfter = nil
       }
@@ -213,26 +226,46 @@ actor ProactiveLaneClient {
     return try Self.parseEnvelope(data)
   }
 
-  private func checkQuotaCooldown() throws {
-    guard let until = quotaCooldownUntil else { return }
-    let current = now()
-    if current >= until {
-      quotaCooldownUntil = nil
-      loggedQuotaSkip = false
-      return
-    }
-    if !loggedQuotaSkip {
-      loggedQuotaSkip = true
-      log("Proactive lane skipped: quota_cooldown")
-    }
-    let remaining = max(1, Int(ceil(until.timeIntervalSince(current))))
-    throw ProactiveLaneClientError.http(status: 429, retryAfterSeconds: remaining)
+  private func clearCooldownsIfOwnerChanged(_ owner: String?) {
+    guard cooldownOwner != owner else { return }
+    cooldownOwner = owner
+    guard !quotaCooldownUntil.isEmpty || !loggedQuotaSkip.isEmpty || !loggedQuotaClamp.isEmpty else { return }
+    quotaCooldownUntil.removeAll()
+    loggedQuotaSkip.removeAll()
+    loggedQuotaClamp.removeAll()
+    log("Proactive lane cooldowns cleared: owner changed")
   }
 
-  private func armQuotaCooldown(retryAfterSeconds: Int?) {
-    let delay = retryAfterSeconds.flatMap { $0 > 0 ? $0 : nil } ?? Self.defaultQuotaCooldownSeconds
-    quotaCooldownUntil = now().addingTimeInterval(TimeInterval(delay))
-    loggedQuotaSkip = false
+  private func checkQuotaCooldown(operation: String) throws {
+    guard let until = quotaCooldownUntil[operation] else { return }
+    let current = now()
+    if current >= until {
+      quotaCooldownUntil[operation] = nil
+      loggedQuotaSkip.remove(operation)
+      loggedQuotaClamp.remove(operation)
+      return
+    }
+    if !loggedQuotaSkip.contains(operation) {
+      loggedQuotaSkip.insert(operation)
+      log("Proactive lane skipped: quota_cooldown operation=\(operation)")
+    }
+    let remaining = max(1, Int(ceil(until.timeIntervalSince(current))))
+    throw ProactiveLaneClientError.quotaCooldown(retryAfterSeconds: remaining)
+  }
+
+  private func armQuotaCooldown(operation: String, retryAfterSeconds: Int?) {
+    let requested = retryAfterSeconds.flatMap { $0 > 0 ? $0 : nil } ?? Self.defaultQuotaCooldownSeconds
+    let delay = min(max(requested, Self.minQuotaCooldownSeconds), Self.maxQuotaCooldownSeconds)
+    let newDeadline = now().addingTimeInterval(TimeInterval(delay))
+    if let existing = quotaCooldownUntil[operation], existing > newDeadline {
+      return
+    }
+    quotaCooldownUntil[operation] = newDeadline
+    loggedQuotaSkip.remove(operation)
+    if delay != requested, !loggedQuotaClamp.contains(operation) {
+      loggedQuotaClamp.insert(operation)
+      log("Proactive lane quota cooldown clamped: operation=\(operation) duration=\(delay)")
+    }
   }
 
   static func parseRetryAfterSeconds(from response: HTTPURLResponse) -> Int? {

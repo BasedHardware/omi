@@ -238,6 +238,23 @@ final class ContextProactivityEngineTests: XCTestCase {
     XCTAssertNil(json["error_type"])
   }
 
+  func testQuotaCooldownIsADistinctProvenanceClassFromHttp429() throws {
+    let skipped = ProactiveLaneFailureClassification.classify(
+      ProactiveLaneClientError.quotaCooldown(retryAfterSeconds: 12))
+    XCTAssertEqual(skipped.failure, "quota_cooldown")
+    XCTAssertEqual(skipped.status, 429)
+    XCTAssertEqual(skipped.logDescription, "quota_cooldown status=429")
+    let json = try provenanceObject(skipped.provenanceJSON)
+    XCTAssertEqual(json["failure"] as? String, "quota_cooldown")
+    XCTAssertEqual((json["status"] as? NSNumber)?.intValue, 429)
+    XCTAssertNil(json["error_type"])
+
+    let http = ProactiveLaneFailureClassification.classify(
+      ProactiveLaneClientError.http(status: 429, retryAfterSeconds: 12))
+    XCTAssertNotEqual(skipped.failure, http.failure)
+    XCTAssertEqual(try provenanceObject(http.provenanceJSON)["failure"] as? String, "http_error")
+  }
+
   func testDecisionDecodeFailureRecordsADistinctClassFromHttpFailure() throws {
     let http = ProactiveLaneFailureClassification.classify(
       ProactiveLaneClientError.http(status: 429, retryAfterSeconds: nil))
@@ -406,6 +423,26 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
     let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
     XCTAssertEqual(provenance["failure"] as? String, "http_error")
     XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 429)
+  }
+
+  func testEngineRecordsQuotaCooldownProvenanceOnSelfSuppressedLaneError() async throws {
+    let deliveryID = try await seedAttemptedDelivery()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0)
+
+    await engine.recordDirectorFailure(
+      deliveryID: deliveryID,
+      error: ProactiveLaneClientError.quotaCooldown(retryAfterSeconds: 30))
+
+    let row = try await fetchDelivery(id: deliveryID)
+    XCTAssertEqual(row["lifecycleState"] as String?, "failed")
+    XCTAssertEqual(row["decisionType"] as String?, "silence")
+    let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
+    XCTAssertEqual(provenance["failure"] as? String, "quota_cooldown")
+    XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 429)
+    XCTAssertNil(provenance["error_type"])
   }
 
   func testEngineRecordsDecodeProvenanceDistinctFromHttpError() async throws {
