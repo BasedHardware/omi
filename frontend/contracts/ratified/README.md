@@ -132,7 +132,7 @@ Ruling of record: `DAVID-tasks-read-epoch-and-ci`, signed by David in person.
 **D1** - the tasks read mirrors the memories read model: reader-scoped opaque
 ids, cursor pagination, and a completeness envelope, served through the same
 registered composition rule 16 guards. **D2** - full parity with all thirteen
-fields `frontend/contracts/src/domain/tasks.ts` declares, because the point of
+fields `core/contracts/src/domain/tasks.ts` declares, because the point of
 parity is flip-ability: the surface renders identically off either generation,
 so the factory change is one line and so is its rollback. `id` is the ratified
 opaque ref, never the legacy server id, and the local slug/server-id alias
