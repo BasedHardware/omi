@@ -60,6 +60,8 @@ final class RewindTrackView: NSView {
     var onScrubEnd: (() -> Void)?
     /// Called while the user pinches. The model turns it into a visible window.
     var onZoom: ((RewindZoom.Target) -> Void)?
+    /// Called with +1 or −1 when the track is stepped without a pointer. One capture per step.
+    var onStep: ((Int) -> Void)?
 
     private var tooltipWindow: NSWindow?
     private var trackingAreaAdded: NSTrackingArea?
@@ -498,16 +500,33 @@ final class RewindTrackView: NSView {
 
     // MARK: - Tooltip
 
-    /// The frame under the pointer, by the same time-linear mapping the scrub uses — so the tooltip
-    /// can never disagree with what a click would select.
-    private func frame(under event: NSEvent) -> RewindFrame? {
-        let point = convert(event.locationInWindow, from: nil)
-        guard let index = frames.nearestIndex(to: instant(atX: point.x)) else { return nil }
+    /// The frame under a point on the track, by the same time-linear mapping the scrub uses — so the
+    /// tooltip can never disagree with what a click would select.
+    private func frame(atX x: CGFloat) -> RewindFrame? {
+        guard let index = frames.nearestIndex(to: instant(atX: x)) else { return nil }
         return frames[index]
     }
 
     private func showTooltip(for event: NSEvent) {
-        guard let frame = frame(under: event), let window else {
+        guard let window else {
+            hideTooltip()
+            return
+        }
+        showTooltip(
+            atX: convert(event.locationInWindow, from: nil).x,
+            near: window.convertPoint(toScreen: event.locationInWindow),
+            in: window)
+    }
+
+    /// Whether a tooltip is on screen. Exposed so the teardown rules below are assertable.
+    var tooltipIsVisible: Bool { tooltipWindow?.isVisible ?? false }
+
+    /// The tooltip's presentation, split from the event that triggers it for exactly the reason
+    /// `handleScroll` and `handleMagnification` are split from theirs: an `NSEvent` carrying a real
+    /// screen position cannot be constructed outside the window server, so this is the seam a test
+    /// can drive, and it is the production path from the first line after the event is unpacked.
+    func showTooltip(atX x: CGFloat, near onScreen: NSPoint, in window: NSWindow) {
+        guard let frame = frame(atX: x) else {
             hideTooltip()
             return
         }
@@ -522,7 +541,6 @@ final class RewindTrackView: NSView {
         let size = NSSize(
             width: text.size().width + padding.width, height: text.size().height + padding.height)
 
-        let onScreen = window.convertPoint(toScreen: event.locationInWindow)
         let origin = NSPoint(x: onScreen.x - size.width / 2, y: onScreen.y + 26)
 
         if let tooltipWindow {
@@ -546,12 +564,22 @@ final class RewindTrackView: NSView {
         tooltip.ignoresMouseEvents = true
         tooltip.isReleasedWhenClosed = false
         tooltip.contentView = container
-        tooltip.orderFront(nil)
+        // **A child of the timeline, not a peer of it.** A `.floating` borderless window ordered
+        // front on its own outlives whatever put it there: the only two things that take this one
+        // down are a mouse-exit and the view leaving its window, and *neither happens when the
+        // timeline is simply ordered out* — ⌘W, the red button, or the tutorial's dismiss all leave
+        // the pointer sitting over a track that is no longer on screen. The pill then floats over
+        // the desktop, above every other application, naming a moment from a window that is gone.
+        // AppKit orders a child window out with its parent and brings it back with it, which is the
+        // rule this needs and the one it was not getting.
+        window.addChildWindow(tooltip, ordered: .above)
         tooltipWindow = tooltip
     }
 
     private func hideTooltip() {
-        tooltipWindow?.orderOut(nil)
+        guard let tooltip = tooltipWindow else { return }
+        tooltip.parent?.removeChildWindow(tooltip)
+        tooltip.orderOut(nil)
         tooltipWindow = nil
     }
 
@@ -574,6 +602,51 @@ final class RewindTrackView: NSView {
         formatter.dateFormat = "h:mm:ss a"
         return formatter
     }()
+
+    // MARK: - Accessibility
+
+    /// **The track is a slider, and before this it was nothing at all.**
+    ///
+    /// A custom `NSView` is not an accessibility element unless it says so, and this one draws
+    /// everything it shows — the segments, the badges, the handle — in `draw(_:)`. So VoiceOver saw
+    /// an empty rectangle where the window's primary control is: the one thing on screen that says
+    /// where in the day you are had no role, no label and no value, and the timeline's position was
+    /// not readable by anyone not looking at it.
+    ///
+    /// `.slider` rather than `.group` because that is what it is — one value along a continuum — and
+    /// because the role is what makes VoiceOver offer increment and decrement, which is the whole of
+    /// operating it without a pointer. The step is one capture rather than a number of seconds:
+    /// seconds would land between two frames at a fine zoom and on the same frame at a coarse one,
+    /// where "the next capture" means the same thing at every zoom and always moves the picture.
+    override func isAccessibilityElement() -> Bool { true }
+
+    override func accessibilityRole() -> NSAccessibility.Role? { .slider }
+
+    override func accessibilityLabel() -> String? { "Timeline" }
+
+    /// The moment under the playhead, and what owned the screen at it.
+    ///
+    /// Read off the same `playheadAt` the handle is drawn from and the same frame a click would
+    /// select, so what VoiceOver says and what the window shows cannot drift apart. Nil rather than
+    /// a placeholder on a day with nothing on it: there is no position to report.
+    override func accessibilityValue() -> Any? {
+        guard let playheadAt, let index = frames.nearestIndex(to: playheadAt) else { return nil }
+        let frame = frames[index]
+        let time = Self.tooltipFormatter.string(from: Date(timeIntervalSince1970: frame.capturedAt))
+        return "\(frame.appName) at \(time)"
+    }
+
+    override func accessibilityPerformIncrement() -> Bool {
+        guard onStep != nil else { return false }
+        onStep?(1)
+        return true
+    }
+
+    override func accessibilityPerformDecrement() -> Bool {
+        guard onStep != nil else { return false }
+        onStep?(-1)
+        return true
+    }
 }
 
 /// The tooltip's own content view. A plain `NSView` drawing a material-backed capsule rather than an
@@ -618,6 +691,10 @@ struct RewindTrack: NSViewRepresentable {
     var onScrubEnd: () -> Void = {}
     var spanBounds: ClosedRange<Double> = RewindZoom.minimumSpan...RewindZoom.maximumSpan
     var onZoom: (RewindZoom.Target) -> Void = { _ in }
+    /// Defaulted for the same call site as `onZoom`: the Settings preview is synthetic and has no
+    /// playhead to step. Nil-defaulting the view's own closure rather than this one is what makes
+    /// the preview report itself as an unadjustable slider instead of one that does nothing.
+    var onStep: ((Int) -> Void)?
 
     func makeNSView(context: Context) -> RewindTrackView {
         let view = RewindTrackView()
@@ -625,6 +702,7 @@ struct RewindTrack: NSViewRepresentable {
         view.onTravel = onTravel
         view.onScrubEnd = onScrubEnd
         view.onZoom = onZoom
+        view.onStep = onStep
         return view
     }
 
@@ -635,6 +713,7 @@ struct RewindTrack: NSViewRepresentable {
         view.onTravel = onTravel
         view.onScrubEnd = onScrubEnd
         view.onZoom = onZoom
+        view.onStep = onStep
         view.apply(
             blocks: blocks,
             frames: frames,

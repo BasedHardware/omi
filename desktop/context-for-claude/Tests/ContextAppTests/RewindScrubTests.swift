@@ -433,7 +433,7 @@ final class RewindScrubTests: XCTestCase {
     /// A real `ContextStore` at the real 3 s capture tick, because the defect these assert is
     /// specifically about deltas smaller than half of that interval.
     @MainActor
-    private func loadedModel(spacing: Double = 3, count: Int = 400) throws -> Loaded {
+    private func loadedModel(spacing: Double = 3, count: Int = 400) async throws -> Loaded {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("rewind-scrub-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -458,6 +458,7 @@ final class RewindScrubTests: XCTestCase {
         // test that advanced it by sleeping would fail on a loaded machine.
         model.clock = { 0 }
         model.loadInitial()
+        await model.settle()
         XCTAssertEqual(model.frames.count, count, "the fixture did not load")
         return Loaded(model: model, frames: model.frames, spacing: spacing)
     }
@@ -471,8 +472,8 @@ final class RewindScrubTests: XCTestCase {
     /// whose deltas decay towards zero, at any zoom. This is what "the scrolling does not feel
     /// smooth" was, mechanically.
     @MainActor
-    func testASubCaptureScrollMovesThePlayheadInsteadOfBeingDiscarded() throws {
-        let loaded = try loadedModel()
+    func testASubCaptureScrollMovesThePlayheadInsteadOfBeingDiscarded() async throws {
+        let loaded = try await loadedModel()
         let model = loaded.model
         let anchor = loaded.frames[200].capturedAt
         model.park(at: anchor)
@@ -498,8 +499,8 @@ final class RewindScrubTests: XCTestCase {
     /// what keeps a fast scrub level with the pointer instead of trailing a fixed number of
     /// milliseconds behind it.
     @MainActor
-    func testTheDissolveTracksThePlayheadRatherThanAFixedAnimation() throws {
-        let loaded = try loadedModel()
+    func testTheDissolveTracksThePlayheadRatherThanAFixedAnimation() async throws {
+        let loaded = try await loadedModel()
         let model = loaded.model
         let anchor = loaded.frames[200].capturedAt
         model.park(at: anchor)
@@ -523,8 +524,8 @@ final class RewindScrubTests: XCTestCase {
     /// Left parked between two captures, the stage would hold a permanent composite of two different
     /// screens — an image that never existed, held as steadily as one that did.
     @MainActor
-    func testASettleLandsThePlayheadOnARealCaptureWithNoDissolveLeftShowing() throws {
-        let loaded = try loadedModel()
+    func testASettleLandsThePlayheadOnARealCaptureWithNoDissolveLeftShowing() async throws {
+        let loaded = try await loadedModel()
         let model = loaded.model
         let anchor = loaded.frames[200].capturedAt
 
@@ -556,8 +557,8 @@ final class RewindScrubTests: XCTestCase {
     /// A flick carries past its last event. macOS sends most of this inertia itself and the timeline
     /// used to discard all of it; what is added here is only the overshoot that finishes it off.
     @MainActor
-    func testAFlickCoastsPastWhereItsLastEventLeftIt() throws {
-        let loaded = try loadedModel()
+    func testAFlickCoastsPastWhereItsLastEventLeftIt() async throws {
+        let loaded = try await loadedModel()
         let model = loaded.model
         model.park(at: loaded.frames[100].capturedAt)
 
@@ -579,7 +580,7 @@ final class RewindScrubTests: XCTestCase {
 
         // A single event has no elapsed time to measure a speed from — a wheel-mouse notch — so it
         // settles where it is instead of guessing a velocity and flying off.
-        let wheel = try loadedModel()
+        let wheel = try await loadedModel()
         wheel.model.park(at: wheel.frames[100].capturedAt)
         wheel.model.travel(by: 1.4)
         wheel.model.endScrub()
@@ -590,8 +591,8 @@ final class RewindScrubTests: XCTestCase {
 
     /// Anything the user does next wins over a settle that is still running.
     @MainActor
-    func testNewInputCancelsASettleInProgress() throws {
-        let loaded = try loadedModel()
+    func testNewInputCancelsASettleInProgress() async throws {
+        let loaded = try await loadedModel()
         let model = loaded.model
         let anchor = loaded.frames[200].capturedAt
 
@@ -616,20 +617,24 @@ final class RewindScrubTests: XCTestCase {
         model.load(day: Calendar.current.startOfDay(for: Date(timeIntervalSince1970: 1)))
         XCTAssertFalse(
             model.isSettling,
-            "a settle towards yesterday's capture must not survive a day change")
+            "a settle towards yesterday's capture must not survive a day change — and it must end "
+                + "when the day is asked for, not when the read of it lands")
+        await model.settle()
+        XCTAssertFalse(model.isSettling)
     }
 
     /// **A moment arriving from outside the track parks on a capture; only the pointer sits between
     /// two.** A search result for a spoken line names an arbitrary instant, and there is no gesture
     /// behind it to settle, so landing mid-interval would leave a dissolve nobody is driving.
     @MainActor
-    func testAMomentFromOutsideTheTrackParksOnACapture() throws {
-        let loaded = try loadedModel()
+    func testAMomentFromOutsideTheTrackParksOnACapture() async throws {
+        let loaded = try await loadedModel()
         let model = loaded.model
         // Deliberately between two captures, which is where a spoken line's timestamp actually falls.
         let between = loaded.frames[150].capturedAt + 1.37
 
         model.focus(on: between)
+        await model.settle()
 
         XCTAssertEqual(
             try XCTUnwrap(model.playheadAt), try XCTUnwrap(model.currentFrame).capturedAt,

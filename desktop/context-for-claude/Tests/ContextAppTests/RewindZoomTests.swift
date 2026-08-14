@@ -282,7 +282,7 @@ final class RewindZoomTests: XCTestCase {
     /// so they are whatever the machine running this thinks a day is. Nothing here depends on the
     /// wall clock: the day is a fixed instant, and its length is measured rather than assumed.
     @MainActor
-    private func loadedModel(frameSpacing: Double = 600) throws -> Loaded {
+    private func loadedModel(frameSpacing: Double = 600) async throws -> Loaded {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("rewind-zoom-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -308,6 +308,7 @@ final class RewindZoomTests: XCTestCase {
 
         let model = RewindModel(store: store, day: day)
         model.loadInitial()
+        await model.settle()
         XCTAssertFalse(model.frames.isEmpty, "the fixture did not load")
         return Loaded(model: model, dayStart: dayStart, dayEnd: dayEnd)
     }
@@ -316,9 +317,9 @@ final class RewindZoomTests: XCTestCase {
     /// the same window down to the last fraction of a second — because both go through
     /// `setTrackWindow` and neither owns any arithmetic of its own.
     @MainActor
-    func testTheMagnifierButtonsAndAPinchLandOnExactlyTheSameWindow() throws {
-        let byButton = try loadedModel()
-        let byPinch = try loadedModel()
+    func testTheMagnifierButtonsAndAPinchLandOnExactlyTheSameWindow() async throws {
+        let byButton = try await loadedModel()
+        let byPinch = try await loadedModel()
 
         let anchor = try XCTUnwrap(byButton.model.currentFrame?.capturedAt)
         let before = byButton.model.trackWindow
@@ -340,8 +341,8 @@ final class RewindZoomTests: XCTestCase {
     /// The bounds hold through the model, where the ceiling is the loaded day rather than the
     /// constant — and the buttons report the state they are actually in.
     @MainActor
-    func testZoomingRepeatedlyStopsAtBothBoundsThroughTheModel() throws {
-        let loaded = try loadedModel()
+    func testZoomingRepeatedlyStopsAtBothBoundsThroughTheModel() async throws {
+        let loaded = try await loadedModel()
         let model = loaded.model
 
         XCTAssertFalse(model.canZoomTrackOut, "the window opens showing the whole day")
@@ -369,8 +370,8 @@ final class RewindZoomTests: XCTestCase {
     /// very next scroll — the window would snap back across twelve hours and the stretch the user was
     /// looking at would be gone. The playhead comes along instead.
     @MainActor
-    func testPinchingSomewhereElseTakesThePlayheadWithItSoTheNextScrollStaysThere() throws {
-        let loaded = try loadedModel()
+    func testPinchingSomewhereElseTakesThePlayheadWithItSoTheNextScrollStaysThere() async throws {
+        let loaded = try await loadedModel()
         let model = loaded.model
 
         let opened = try XCTUnwrap(model.currentFrame?.capturedAt)

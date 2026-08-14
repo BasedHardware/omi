@@ -9,11 +9,15 @@ import SwiftUI
 /// the screen chosen from the pointer rather than `NSScreen.main`, and `isReleasedWhenClosed = false`
 /// so closing the window keeps the instance and its loaded day alive for the next open.
 ///
-/// **This is the app's second window now, not its first.** The search surface is the main window
-/// (`SearchBarWindow`), and the timeline is what a *moment* opens into: a result card, the menu bar's
-/// row, or the global shortcut. It used to stand aside whenever the search panel came up, which was
-/// right while search was a borderless slab that landed over it and is wrong now that search is an
-/// ordinary window the user can move — so the yield, and everything that served it, is gone.
+/// **This is the app's second window now, not its first.** Activity is what the app opens on
+/// (`SearchBarWindow`), and the timeline is what a *moment* opens into: a result card, an activity
+/// tile, the panel's own Timeline pill, or the menu bar's row.
+///
+/// **It used to stand aside whenever the search panel came up, and that is deliberately not coming
+/// back.** `SearchPanelEvent.opened` never meant "a window appeared" — it meant "present() was
+/// called", including on a panel already on screen — and a window ordered out on that fact had no
+/// `.closed` coming to bring it back. The panel dismisses itself on Escape and dismisses itself the
+/// moment it opens this window, so there is nothing left for a yield to solve.
 @MainActor
 enum RewindWindow {
 
@@ -22,8 +26,18 @@ enum RewindWindow {
     static let defaultSize = NSSize(width: 1180, height: 760)
     static let minimumSize = NSSize(width: 820, height: 560)
 
+    /// How often an open timeline looks for captures made since it read its day.
+    ///
+    /// Deliberately slow. The capture tick is three seconds and nobody sits watching a timeline for
+    /// the next frame to appear, so this exists so a window left open all afternoon is not still
+    /// claiming the day ended at the hour it was opened — not so the track animates. Each tick costs
+    /// one `COUNT(*)` over an indexed range (`RewindModel.hasUnreadCaptures`) and reads nothing
+    /// further unless that count moved.
+    static let liveRefreshInterval: TimeInterval = 30
+
     private static var current: NSWindow?
     private static var model: RewindModel?
+    private static var liveRefreshTimer: Timer?
 
     /// Opens the window, or brings the existing one forward with its state intact.
     ///
@@ -36,6 +50,11 @@ enum RewindWindow {
         onSearch: @escaping (String) -> Void = { _ in }
     ) {
         if let window = current {
+            // The day this window holds was read when it was last opened, and capture has gone on
+            // writing since. Opening the timeline again is exactly the moment to catch up — without
+            // it the track stops at whatever hour the first open happened to fall on, for the rest
+            // of the process. Nothing the user left in place moves; see `RewindModel.refresh`.
+            model?.refresh()
             window.makeKeyAndOrderFront(nil)
             // Activation stays, on this branch and the two below. The timeline is secondary now, but
             // every route into it is an explicit ask — a result card, a menu row, the chord — and an
@@ -120,8 +139,31 @@ enum RewindWindow {
         ])
 
         current = window
+        startLiveRefresh()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Keeps an open timeline level with what capture is writing.
+    ///
+    /// Only while the window is actually on screen, and never in the middle of a settle: `refresh()`
+    /// moves nothing by construction, but a re-span behind a gesture that is still landing is a risk
+    /// worth not taking for a catch-up nobody is waiting on. A hidden window catches up on its next
+    /// `present`, which is the moment it matters.
+    ///
+    /// The tick itself is a `Task` because both halves of the catch-up — the count and the day —
+    /// happen off the main actor now. What the timer does here is decide whether to ask; the model
+    /// owns the asking, so this window never has to know which read is safe to run where.
+    private static func startLiveRefresh() {
+        liveRefreshTimer?.invalidate()
+        let timer = Timer(timeInterval: liveRefreshInterval, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                guard current?.isVisible == true, let model else { return }
+                Task { @MainActor in await model.refreshIfCapturesLanded() }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        liveRefreshTimer = timer
     }
 
     /// Opens the timeline **at a moment**, or moves an already-open one to it.

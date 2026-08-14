@@ -124,10 +124,14 @@ final class TimelineHandoffTests: XCTestCase {
 
     /// - Parameter loadNow: whether the model has already read a day. False is the "opening the
     ///   window *at* a moment" order, where the focus arrives before the first read.
+    /// - Parameter emptyDaysBetween: calendar days with nothing on them between each captured day.
+    ///   Zero is a run of consecutive days; anything higher is the shape the real database has, where
+    ///   six of the last fourteen days hold captures and the rest hold nothing.
     @MainActor
     private func makeCapture(
-        dayCount: Int = 3, spacing: Double = 900, loadNow: Bool = true, name: String = "handoff"
-    ) throws -> Capture {
+        dayCount: Int = 3, spacing: Double = 900, loadNow: Bool = true, name: String = "handoff",
+        emptyDaysBetween: Int = 0
+    ) async throws -> Capture {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -140,7 +144,9 @@ final class TimelineHandoffTests: XCTestCase {
         var days: [Date] = []
         for back in stride(from: dayCount - 1, through: 0, by: -1) {
             days.append(
-                try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -back, to: newest)))
+                try XCTUnwrap(
+                    Calendar.current.date(
+                        byAdding: .day, value: -back * (emptyDaysBetween + 1), to: newest)))
         }
 
         for day in days {
@@ -160,6 +166,7 @@ final class TimelineHandoffTests: XCTestCase {
         let model = RewindModel(store: store, day: days[days.count - 1])
         if loadNow {
             model.loadInitial()
+            await model.settle()
             XCTAssertFalse(model.frames.isEmpty, "the fixture did not load")
         }
         return Capture(store: store, model: model, days: days, spacing: spacing)
@@ -173,8 +180,8 @@ final class TimelineHandoffTests: XCTestCase {
     /// difference between the two is asserted side by side so a refactor that quietly routes the
     /// card back through `scrub` fails here.
     @MainActor
-    func testFocusingAMomentFromAnotherDayLoadsThatDayAndParksThePlayheadOnIt() throws {
-        let fixture = try makeCapture()
+    func testFocusingAMomentFromAnotherDayLoadsThatDayAndParksThePlayheadOnIt() async throws {
+        let fixture = try await makeCapture()
         let model = fixture.model
         let oldest = fixture.days[0]
         XCTAssertEqual(model.day, fixture.days[2], "the window opens on the newest day with captures")
@@ -192,6 +199,7 @@ final class TimelineHandoffTests: XCTestCase {
 
         // …and what the seam does.
         model.focus(on: target)
+        await model.settle()
         XCTAssertEqual(model.day, oldest)
         let landed = try XCTUnwrap(model.currentFrame?.capturedAt)
         XCTAssertLessThanOrEqual(
@@ -207,16 +215,18 @@ final class TimelineHandoffTests: XCTestCase {
     /// from the same afternoon would re-run the day's two queries and reset the track zoom under the
     /// user for no reason.
     @MainActor
-    func testFocusingAnotherMomentInTheSameDayMovesThePlayheadWithoutReloading() throws {
-        let fixture = try makeCapture()
+    func testFocusingAnotherMomentInTheSameDayMovesThePlayheadWithoutReloading() async throws {
+        let fixture = try await makeCapture()
         let model = fixture.model
         let day = fixture.days[2].timeIntervalSince1970
 
         model.focus(on: day + 8 * 3_600)
+        await model.settle()
         let framesLoaded = model.frames
         let morning = try XCTUnwrap(model.currentFrame?.capturedAt)
 
         model.focus(on: day + 20 * 3_600)
+        await model.settle()
         let evening = try XCTUnwrap(model.currentFrame?.capturedAt)
 
         XCTAssertGreaterThan(evening, morning + 11 * 3_600)
@@ -234,14 +244,15 @@ final class TimelineHandoffTests: XCTestCase {
     /// today. The control half of the test is the same fixture without a focus, which must still
     /// open on the newest day.
     @MainActor
-    func testAskingForAMomentBeforeTheFirstReadStillOpensThatMomentsDay() throws {
-        let control = try makeCapture(loadNow: false, name: "handoff-control")
+    func testAskingForAMomentBeforeTheFirstReadStillOpensThatMomentsDay() async throws {
+        let control = try await makeCapture(loadNow: false, name: "handoff-control")
         control.model.loadInitial()
+        await control.model.settle()
         XCTAssertEqual(
             control.model.day, control.days[2],
             "with nothing asked for, the window still opens on the newest day that has captures")
 
-        let fixture = try makeCapture(loadNow: false)
+        let fixture = try await makeCapture(loadNow: false)
         let model = fixture.model
         let target = fixture.days[0].timeIntervalSince1970 + 9 * 3_600
 
@@ -250,6 +261,7 @@ final class TimelineHandoffTests: XCTestCase {
         model.focus(on: target)
 
         model.loadInitial()
+        await model.settle()
 
         XCTAssertEqual(model.day, fixture.days[0], "the opening read chose the newest day anyway")
         let landed = try XCTUnwrap(model.currentFrame?.capturedAt)
@@ -264,19 +276,152 @@ final class TimelineHandoffTests: XCTestCase {
     /// *other* day's picture, which would be a confident wrong answer about what the user asked to
     /// see.
     @MainActor
-    func testAMomentOnADayWithNoFramesOpensThatDayEmptyRatherThanSomewhereElse() throws {
-        let fixture = try makeCapture()
+    func testAMomentOnADayWithNoFramesOpensThatDayEmptyRatherThanSomewhereElse() async throws {
+        let fixture = try await makeCapture()
         let model = fixture.model
         // A day before the fixture's oldest, which has nothing in it at all.
         let silent = try XCTUnwrap(
             Calendar.current.date(byAdding: .day, value: -1, to: fixture.days[0]))
 
         model.focus(on: silent.timeIntervalSince1970 + 11 * 3_600)
+        await model.settle()
 
         XCTAssertEqual(model.day, silent)
         XCTAssertTrue(model.frames.isEmpty)
         XCTAssertNil(model.currentFrame, "an empty day has no frame, and inventing one would be a lie")
         XCTAssertNil(model.loadError, "an empty day is not a failed read, and must not say it was")
+    }
+
+    // MARK: - Reaching the whole record, not just the loaded day
+
+    /// **Every captured day is reachable, and the empty ones are stepped over.**
+    ///
+    /// The window is day-scoped by construction — `travel(by:)` and `setPlayheadInstant` clamp the
+    /// playhead to the loaded day's first and last frame, `step(_:)` clamps to `frames`, and the
+    /// segment chevrons walk `blocks`, which is one day's activity — so before this the only route to
+    /// another day at all was the popover calendar. The claim here is the one a user makes: from the
+    /// newest day, pressing "previous day" enough times reaches the oldest day that has captures.
+    ///
+    /// The press count is asserted, not just the destination. Nine calendar days separate the three
+    /// captured ones in this fixture; a control that walked the calendar would need nine presses and
+    /// would show seven empty screens on the way, which is the ergonomic half of the same bug.
+    @MainActor
+    func testSteppingBackReachesTheOldestCapturedDayAndStepsOverTheEmptyOnes() async throws {
+        let fixture = try await makeCapture(name: "handoff-days", emptyDaysBetween: 3)
+        let model = fixture.model
+        XCTAssertEqual(model.day, fixture.days[2], "the window opens on the newest captured day")
+        XCTAssertFalse(model.hasNextDay, "nothing was captured after the newest captured day")
+        XCTAssertTrue(model.hasPreviousDay)
+
+        var visited: [Date] = []
+        while model.hasPreviousDay {
+            model.goToAdjacentDay(forward: false)
+            await model.settle()
+            visited.append(model.day)
+            XCTAssertLessThan(
+                visited.count, fixture.days.count + 1,
+                "the step is walking calendar days rather than captured ones")
+        }
+
+        XCTAssertEqual(
+            visited, [fixture.days[1], fixture.days[0]],
+            "an empty day was landed on, or a captured one was skipped")
+        XCTAssertFalse(model.frames.isEmpty, "the oldest day was reached but read as empty")
+        XCTAssertEqual(
+            model.currentFrame?.capturedAt, model.frames.last?.capturedAt,
+            "stepping back arrives at the start of the day rather than the end of it, which is "
+                + "backwards for somebody travelling backwards")
+        XCTAssertTrue(
+            model.dayRange.contains(model.day),
+            "the picker cannot express the day the window is on")
+
+        // …and forward again, which arrives at the *first* capture of each day for the same reason.
+        model.goToAdjacentDay(forward: true)
+        await model.settle()
+        XCTAssertEqual(model.day, fixture.days[1])
+        XCTAssertEqual(model.currentFrame?.capturedAt, model.frames.first?.capturedAt)
+        model.goToAdjacentDay(forward: true)
+        await model.settle()
+        XCTAssertEqual(model.day, fixture.days[2])
+        XCTAssertFalse(model.hasNextDay)
+    }
+
+    /// **The picker's range is whole days, and the oldest captured day is inside it.**
+    ///
+    /// The defect, exactly: the range was `coverage.lowerBound...coverage.upperBound` — two capture
+    /// *instants*. Capture on the oldest day began at 22:32 on the real database, and the only value
+    /// the picker's binding can produce for a day is its midnight (`load(day:)` normalises), so the
+    /// oldest day resolved to a value below the range's own lower bound. It was the one day with
+    /// captures the calendar would not select, and opening the window on it left the picker holding a
+    /// selection outside its own range.
+    ///
+    /// The second assertion is what stops this from proving nothing: it states that the old,
+    /// instant-bounded range really did exclude the day, so a revert fails here.
+    @MainActor
+    func testTheDayPickerRangeCoversTheOldestCapturedDay() async throws {
+        let fixture = try await makeCapture(name: "handoff-range")
+        let model = fixture.model
+        let coverage = try XCTUnwrap(model.coverage)
+
+        XCTAssertTrue(
+            model.dayRange.contains(fixture.days[0]),
+            "the oldest captured day is outside the range the date picker may travel over")
+        XCTAssertTrue(model.dayRange.contains(fixture.days[2]))
+
+        let firstCapture = Date(timeIntervalSince1970: coverage.lowerBound)
+        let lastCapture = Date(timeIntervalSince1970: coverage.upperBound)
+        let byInstant = firstCapture...lastCapture
+        XCTAssertFalse(
+            byInstant.contains(fixture.days[0]),
+            "this fixture's oldest day begins at midnight, so bounding by instants would have "
+                + "worked and this test proves nothing — capture must start later in the day")
+
+        // The selection is inside the range on every day the user can be standing on.
+        for day in fixture.days {
+            model.load(day: day)
+            await model.settle()
+            XCTAssertTrue(model.dayRange.contains(model.day), "\(day) is outside the picker's range")
+        }
+    }
+
+    /// A day with no captures is shown as empty, says so, and can still be left in either direction.
+    ///
+    /// The gaps are real — the Mac was off, or asleep — so the picker's contiguous range will land
+    /// somebody on one, and the day controls are what get them off it. Both are asserted: that the
+    /// day reads as empty rather than as a failed read, and that the way out still works from a day
+    /// whose own contents are nothing.
+    @MainActor
+    func testADayWithNoCapturesShowsAsEmptyAndCanStillBeLeft() async throws {
+        let fixture = try await makeCapture(name: "handoff-empty", emptyDaysBetween: 3)
+        let model = fixture.model
+        let empty = try XCTUnwrap(
+            Calendar.current.date(byAdding: .day, value: 1, to: fixture.days[0]))
+
+        model.load(day: empty)
+        await model.settle()
+
+        XCTAssertEqual(model.day, empty)
+        XCTAssertTrue(model.frames.isEmpty)
+        XCTAssertNil(model.currentFrame)
+        XCTAssertNil(
+            model.loadError,
+            "an empty day is not a failed read — the stage says nothing was captured on it")
+        XCTAssertFalse(
+            model.timestampLabel.contains(" at "),
+            "the pill named a time of day on a day nothing was captured: \(model.timestampLabel)")
+        XCTAssertTrue(model.dayRange.contains(empty))
+
+        // Both ways out are live, and each lands on a day that has something on it.
+        XCTAssertTrue(model.hasPreviousDay)
+        XCTAssertTrue(model.hasNextDay)
+        model.goToAdjacentDay(forward: true)
+        await model.settle()
+        XCTAssertEqual(model.day, fixture.days[1])
+        XCTAssertFalse(model.frames.isEmpty)
+        model.goToAdjacentDay(forward: false)
+        await model.settle()
+        XCTAssertEqual(model.day, fixture.days[0])
+        XCTAssertFalse(model.frames.isEmpty)
     }
 
     // MARK: - Both kinds of result, end to end
@@ -289,7 +434,7 @@ final class TimelineHandoffTests: XCTestCase {
     /// half of the surface that has no picture — a conversation card carries the moment the line was
     /// *spoken*, and opening it shows what was on screen while it was being said.
     @MainActor
-    func testActivatingEitherKindOfResultLandsOnTheMomentItNames() throws {
+    func testActivatingEitherKindOfResultLandsOnTheMomentItNames() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("handoff-kinds-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -347,9 +492,11 @@ final class TimelineHandoffTests: XCTestCase {
 
         let model = RewindModel(store: store)
         model.loadInitial()
+        await model.settle()
         XCTAssertEqual(model.day, today, "the timeline opens on today, so both hits require a day change")
 
         model.focus(on: screen.capturedAt)
+        await model.settle()
         XCTAssertEqual(model.day, lastWeek)
         XCTAssertEqual(
             model.currentFrame?.id, screen.frame?.id,
@@ -358,9 +505,11 @@ final class TimelineHandoffTests: XCTestCase {
         // Back to today between the two, so the conversation hit is a real day change of its own
         // rather than riding on the previous one.
         model.load(day: today)
+        await model.settle()
         XCTAssertEqual(model.day, today)
 
         model.focus(on: spoken.capturedAt)
+        await model.settle()
         XCTAssertEqual(model.day, lastWeek)
         let heard = try XCTUnwrap(model.currentFrame?.capturedAt)
         XCTAssertLessThanOrEqual(
@@ -386,8 +535,17 @@ final class TimelineHandoffTests: XCTestCase {
     /// four-card page as before.
     @MainActor
     func testTheKeyboardStepsThroughTheResultsAndStopsAtBothEnds() {
-        // Four cards, three across: rows [0 1 2] [3].
-        let moments = (1...4).map { Self.screenMoment(id: Int64($0), at: 1_700_000_000 + Double($0)) }
+        // One full row and one card under it, whatever the grid is that week. Written off
+        // `resultColumns` rather than as a literal: this page was four cards when the grid was three
+        // across, and widening the panel to four made those same four cards a *single* row — at
+        // which point ↑ has no row above it, the assertion below stopped describing the geometry it
+        // names, and a real navigation test failed for a reason that had nothing to do with
+        // navigation. A ragged second row is what this test is about, so ask for one.
+        let cards = SearchLayout.resultColumns + 1
+        let moments = (1...cards).map {
+            Self.screenMoment(id: Int64($0), at: 1_700_000_000 + Double($0))
+        }
+        let last = moments.count - 1
         let model = SearchResultsModel(moments: moments, query: "invoice")
 
         // At rest the keyboard is in the field, which is what makes Return mean "ask again".
@@ -406,7 +564,7 @@ final class TimelineHandoffTests: XCTestCase {
 
         for _ in 0..<10 { model.move(.down) }
         XCTAssertEqual(
-            model.selectedMoment?.id, moments[3].id,
+            model.selectedMoment?.id, moments[last].id,
             "the selection wrapped or ran off the end — either one loses the user's place")
         for _ in 0..<10 { model.move(.up) }
         XCTAssertEqual(
@@ -416,7 +574,7 @@ final class TimelineHandoffTests: XCTestCase {
         // ↑ from the field enters at the far end, which is what an "up from nothing" press means.
         model.clearSelection()
         model.move(.up)
-        XCTAssertEqual(model.selectedMoment?.id, moments[3].id)
+        XCTAssertEqual(model.selectedMoment?.id, moments[last].id)
 
         // An empty answer has nothing to select, and pressing the key at it is not an error.
         let empty = SearchResultsModel(moments: [])

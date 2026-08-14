@@ -94,10 +94,33 @@ final class RewindModel: ObservableObject {
     /// The span the date picker may travel over, from the database.
     @Published private(set) var coverage: ClosedRange<Double>?
 
+    /// **True while a read that will replace what the window shows is in flight** — the first read
+    /// of the process, and a day change. False during a `refresh()`, which changes nothing at all
+    /// until it lands.
+    ///
+    /// The distinction is what the stage draws, and it is the difference between two sentences that
+    /// are not interchangeable. A day being read has no frames *yet*; a day that was read and holds
+    /// none was never captured on. Collapsing them prints "Nothing was captured on this day" over
+    /// every day for as long as its read takes, which on the day a user actually opens the window is
+    /// a confident wrong answer that then corrects itself — the flash this flag exists to prevent.
+    @Published private(set) var isReadingDay = false
+
+    /// The capture the timeline lands on when it leaves the loaded day — the **last** capture of the
+    /// nearest earlier day that has one, and the **first** of the nearest later day. Nil at the ends
+    /// of the record, which is what dims the two day controls.
+    ///
+    /// Held rather than asked for on demand because the view reads them on every render and they are
+    /// database reads; they change exactly once per day load, so that is where they are refreshed.
+    /// Instants rather than days, because the answer to "where in that day" comes free with the seek:
+    /// stepping back arrives at the end of the previous day and stepping forward at the start of the
+    /// next, which is what continuing to travel in one direction means.
+    @Published private(set) var previousDayCapture: Double?
+    @Published private(set) var nextDayCapture: Double?
+
     /// Set when a day could not be read at all, so the window can say so instead of looking empty.
     @Published private(set) var loadError: String?
 
-    /// True once a day has actually been read — i.e. `reload()` has run at least once.
+    /// True once a day has actually been read — i.e. one day read has landed.
     ///
     /// Not cosmetic: it is what tells `focus(on:)` whether the window is far enough along to be moved
     /// somewhere, or whether the instant has to wait for the first read (see `pendingFocus`).
@@ -146,6 +169,26 @@ final class RewindModel: ObservableObject {
 
     // MARK: - Loading
 
+    /// **Which read a landing belongs to.**
+    ///
+    /// Every read is started on the main actor, runs off it, and comes back to it, so a day the user
+    /// has already left can land after the day they moved to. Stepping days quickly is not exotic —
+    /// the day chevrons are two clicks apart — and an older read that absorbed would put yesterday's
+    /// frames under today's date pill with nothing on screen admitting it. The counter is bumped by
+    /// whoever starts a read and checked by whoever lands one; anything that does not match the
+    /// current value is thrown away. Copied deliberately from `ActivityStore`, which solved the same
+    /// problem the same way rather than each surface inventing its own rule.
+    ///
+    /// Readable rather than private because a discard rule nobody can observe is a discard rule
+    /// nobody can assert: the tests hold a generation, move the window past it, and hand the model
+    /// the read it has already left.
+    private(set) var readGeneration = 0
+
+    /// The read in flight, or nil. Held so a second `loadInitial` cannot start a duplicate opening
+    /// read, so a poll can tell whether asking again is worth anything, and so `settle()` has
+    /// something to wait on.
+    private var readTask: Task<Void, Never>?
+
     /// Reads the coverage window, then loads the newest day that actually holds frames.
     ///
     /// Opening on "today" would show an empty window every morning before the first capture, and on a
@@ -155,18 +198,38 @@ final class RewindModel: ObservableObject {
     /// Unless the window was opened *at* a moment, in which case that moment's day is the one to
     /// read: a search result from last week that opened today's timeline would be the feature not
     /// working at all.
+    ///
+    /// **The reads themselves happen off the main actor**, in two stages: the coverage span and the
+    /// app→bundle map decide *which* day to read, and the day is read after them. Both stages grow
+    /// with the user's history — a year of capture is half a million rows — and neither may be paid
+    /// for in the turn of the run loop that is supposed to be drawing the window.
     func loadInitial() {
-        coverage = (try? RewindQueries.coverage(store)) ?? nil
-        if let pending = pendingFocus {
-            day = Self.day(containing: pending)
-        } else if let newest = coverage?.upperBound {
-            day = Calendar.current.startOfDay(for: Date(timeIntervalSince1970: newest))
+        // The view can appear more than once for one window — it is ordered out and back in, and the
+        // hosting view is re-attached — and reading from scratch here a second time would discard
+        // the day the user navigated to and jump back to the newest one. Appearing again is a reason
+        // to catch up with what capture has written since, not a reason to start over.
+        guard !hasLoaded else {
+            refresh()
+            return
         }
-        AppIconCache.shared.setBundleIds((try? RewindQueries.bundleIdsByApp(store)) ?? [:])
-        reload()
-        if let pending = pendingFocus {
-            pendingFocus = nil
-            park(at: pending)
+        // …and appearing again *while the first read is still in flight* is not a reason to run it
+        // twice. The second read would land on top of the first with the same answer, at the cost of
+        // reading the whole day again.
+        guard readTask == nil else { return }
+
+        readGeneration &+= 1
+        let generation = readGeneration
+        let store = self.store
+        clearForDayChange()
+        isReadingDay = true
+        readTask = Task { [weak self] in
+            let opening = await Task.detached(priority: .userInitiated) {
+                RewindModel.readOpening(store: store)
+            }.value
+            guard let self, generation == self.readGeneration else { return }
+            self.absorb(opening: opening)
+            await self.performDayRead(generation: generation)
+            self.finishRead(generation: generation)
         }
     }
 
@@ -176,28 +239,32 @@ final class RewindModel: ObservableObject {
         guard normalised != day else { return }
         day = normalised
         loader.purge()
-        reload()
+        beginDayRead()
     }
 
-    private func reload() {
-        let bounds = dayBounds
-        do {
-            frames = try RewindQueries.frames(store, since: bounds.start, until: bounds.end)
-            // Segments come from the existing activity query rather than a second implementation.
-            // It run-length-collapses consecutive same-app frames, splits on a gap longer than two
-            // minutes, and drops stretches under fifteen seconds — which is the day's shape, already
-            // tested, and it counts image-less frames the frame array cannot show.
-            blocks = try Queries.activity(store, since: bounds.start, until: bounds.end)
-            loadError = nil
-        } catch {
-            frames = []
-            blocks = []
-            loadError = "Could not read this day: \(error.localizedDescription)"
+    /// Starts the read of whatever `day` now is, discarding whatever the window was showing.
+    ///
+    /// The clear is immediate and the read is not, and that ordering is deliberate: the date pill
+    /// already names the new day the moment `load(day:)` returns, so leaving the old day's frames on
+    /// the stage would be one day's picture under another day's label. `isReadingDay` is what stops
+    /// the gap reading as "nothing was captured".
+    private func beginDayRead() {
+        readGeneration &+= 1
+        let generation = readGeneration
+        clearForDayChange()
+        isReadingDay = true
+        readTask = Task { [weak self] in
+            await self?.performDayRead(generation: generation)
+            self?.finishRead(generation: generation)
         }
+    }
 
-        // A day change is the end of every gesture that was in flight over the old one: a settle
-        // still ticking towards yesterday's capture would land the playhead on an index that now
-        // means a different moment entirely.
+    /// Everything a day change ends, applied on the spot rather than when the read lands.
+    ///
+    /// A settle still ticking towards yesterday's capture would land the playhead on an index that
+    /// now means a different moment entirely, and it must not be allowed to keep running for the
+    /// length of a read.
+    private func clearForDayChange() {
         endGlide()
         velocity = 0
         lastTravelAt = nil
@@ -206,13 +273,213 @@ final class RewindModel: ObservableObject {
         liveText = nil
         showsLiveText = false
         imageZoom = 1
+        frames = []
+        blocks = []
+        loadError = nil
+        playhead = nil
+        playheadAt = nil
+        resetTrackWindow()
+        refreshImage()
+    }
+
+    /// One day read, off the main actor, absorbed back on it. **The single place a day is read.**
+    private func performDayRead(generation: Int) async {
+        let store = self.store
+        let bounds = dayBounds
+        let read = await Task.detached(priority: .userInitiated) {
+            RewindModel.readDay(store: store, since: bounds.start, until: bounds.end)
+        }.value
+        guard generation == readGeneration else { return }
+        absorb(day: read)
+    }
+
+    /// What the opening read decided: how far the record runs, and which day to open on.
+    private func absorb(opening: RewindOpeningRead) {
+        coverage = opening.coverage
+        if let pending = pendingFocus {
+            day = Self.day(containing: pending)
+        } else if let newest = opening.coverage?.upperBound {
+            day = Calendar.current.startOfDay(for: Date(timeIntervalSince1970: newest))
+        }
+        AppIconCache.shared.setBundleIds(opening.bundleIds)
+    }
+
+    /// A day landing. Internal rather than private because the discard rule above is only worth
+    /// having if it is asserted, and asserting it means handing the model a read from a generation
+    /// it has already left.
+    func absorb(day read: RewindDayRead, generation: Int) {
+        guard generation == readGeneration else { return }
+        absorb(day: read)
+    }
+
+    private func absorb(day read: RewindDayRead) {
+        frames = read.frames
+        blocks = read.blocks
+        loadError = read.failure
+        previousDayCapture = read.previousDayCapture
+        nextDayCapture = read.nextDayCapture
+
         playhead = frames.isEmpty ? nil : frames.count - 1
         playheadAt = frames.last?.capturedAt
         resetTrackWindow()
         refreshImage()
+        isReadingDay = false
         // Last, and only here: this is the single place a day is actually read, so it is the single
         // place that can honestly say one has been.
         hasLoaded = true
+        consumePendingFocus()
+    }
+
+    /// Clears the read in flight, if it is still the one this model is waiting for.
+    ///
+    /// A chain whose generation has moved on leaves the handle alone: the newer read owns it, and
+    /// clearing it here would tell `settle()` and the poll that nothing is being read while a read
+    /// is in fact running.
+    private func finishRead(generation: Int) {
+        guard generation == readGeneration else { return }
+        readTask = nil
+    }
+
+    /// **Waits for whatever read is in flight**, and is the seam the tests drive.
+    ///
+    /// The app never calls it: every landing publishes, and SwiftUI redraws. A test cannot observe a
+    /// publish, and one that slept for a plausible number of milliseconds instead would be a test
+    /// that fails on a loaded machine. The loop rather than a single `await` is for the read that
+    /// starts *another* read — the opening chain's second stage, and the day load a late focus
+    /// forces — so `settle()` returns when the model is actually at rest.
+    func settle() async {
+        while let task = readTask { await task.value }
+    }
+
+    /// **Re-reads the loaded day without moving anything the user put where it is.**
+    ///
+    /// Capture keeps writing while this window exists, and a day is read exactly once — when it is
+    /// loaded. `RewindWindow` holds the model for the life of the process, and every route back
+    /// into the timeline reuses it: the panel's Timeline pill, the menu bar's row, a result card, an
+    /// activity tile. So without this, the second open of a day shows the first open's frames. The
+    /// track stops at whatever hour the window first happened to be opened, and the captures made
+    /// since are unreachable — including through the date picker, which reloads only on a *change*
+    /// of day.
+    ///
+    /// The sharp form of it is not staleness but a lie. A card naming a moment captured since that
+    /// read travels through `focus(on:)`, whose `load(day:)` is a no-op when the day is already
+    /// loaded; `park(at:)` then clamps to the stale last frame. The click lands somewhere else
+    /// entirely and the date pill states that other moment's time, with nothing on screen admitting
+    /// the difference.
+    ///
+    /// Nothing the user chose is touched: the playhead keeps the instant it was on, the visible
+    /// window keeps its start and its span, and the image zoom is left alone. A refresh that also
+    /// jumped to the newest capture would be a window that fights the person scrubbing it, which is
+    /// the opposite failure and not worth trading for.
+    ///
+    /// **Nothing on screen changes until the read lands**, which is what makes this safe to run
+    /// under a gesture: the read is off the main actor, the user keeps scrubbing while it runs, and
+    /// the absorb below re-derives the playhead's *index* from the instant the user left it on
+    /// rather than from anything the read decided.
+    func refresh() {
+        guard hasLoaded else { return }
+        // A read already in flight is a fresher answer than this one would be, and it consumes any
+        // pending focus itself. Starting a second one would be two reads of the same day racing to
+        // land, which is exactly what the generation counter exists to make harmless — and paying
+        // for twice.
+        guard readTask == nil else { return }
+
+        readGeneration &+= 1
+        let generation = readGeneration
+        let store = self.store
+        let bounds = dayBounds
+        // Deliberately *not* `isReadingDay`: this read replaces nothing until it lands, so the
+        // window keeps showing the day it already has and the stage says nothing about a read
+        // nobody asked for.
+        readTask = Task { [weak self] in
+            let read = await Task.detached(priority: .userInitiated) {
+                RewindModel.readDay(store: store, since: bounds.start, until: bounds.end)
+            }.value
+            self?.absorb(refresh: read, generation: generation)
+            self?.finishRead(generation: generation)
+        }
+    }
+
+    /// A refresh landing. Internal for the same reason `absorb(day:generation:)` is.
+    func absorb(refresh read: RewindDayRead, generation: Int) {
+        guard generation == readGeneration else { return }
+        // Whatever else this read decides, the moment it was asked *for* is still owed an answer:
+        // `focus(on:)` hands the instant over and lets the read that lands park on it, so every
+        // path out of here has to consume it — including the two that change nothing.
+        defer { consumePendingFocus() }
+
+        // A read that fails says nothing about the day already on screen, which was read
+        // successfully and is still true for the moment it names. Keeping it beats replacing a
+        // real day with an error message about a read nobody asked for.
+        guard read.failure == nil else { return }
+        guard read.frames != frames || read.blocks != blocks else { return }
+
+        let previousFrame = currentFrame?.id
+        frames = read.frames
+        blocks = read.blocks
+        previousDayCapture = read.previousDayCapture
+        nextDayCapture = read.nextDayCapture
+
+        // The playhead is an *instant*, so it survives the array changing underneath it and only the
+        // index it resolves to has to be re-derived. Retention may also have taken the captures it
+        // was sitting between, which is what the clamp is for — the same clamp `setPlayheadInstant`
+        // applies, stated here because the position itself is not changing and that guard would
+        // refuse the write.
+        if let at = playheadAt, let first = frames.first?.capturedAt, let last = frames.last?.capturedAt {
+            let clamped = min(max(first, at), last)
+            playheadAt = clamped
+            playhead = frames.nearestIndex(to: clamped)
+        } else {
+            // Either the day held nothing when it was read and holds something now — the first
+            // capture of a day the window was already open on — or retention has just emptied it.
+            playhead = frames.isEmpty ? nil : 0
+            playheadAt = frames.first?.capturedAt
+        }
+        // A different capture under the playhead invalidates boxes measured on the old one, for the
+        // same reason a scrub does.
+        if currentFrame?.id != previousFrame { liveText = nil }
+        refreshImage()
+        keepPlayheadVisible()
+    }
+
+    /// **The cheap question**: has anything showable been written to the loaded day since it was
+    /// read?
+    ///
+    /// Separate from `refresh()` because it is what a poll can afford to ask. A day is ~1,500 rows
+    /// and `refresh()` materialises all of them plus the day's activity; this is one `COUNT(*)` over
+    /// the same indexed range, which is precisely what `RewindQueries.frameCount` exists for. On the
+    /// overwhelmingly common tick — nothing written since the last look — it is the only read that
+    /// happens at all.
+    ///
+    /// Cheap is not free, and it is still a read whose cost grows with the day: `async` rather than
+    /// a computed property because a `COUNT(*)` on the main actor every thirty seconds is a hitch on
+    /// a schedule. The count is compared against the frame array *after* the await, because what the
+    /// poll is asking is whether what is on screen now is behind — not whether it was when the
+    /// question was put.
+    ///
+    /// False when the count cannot be read: a failed count is not evidence that the day changed, and
+    /// re-reading a day on the strength of a failure is how a broken store becomes a busy loop.
+    func hasUnreadCaptures() async -> Bool {
+        guard hasLoaded else { return false }
+        let store = self.store
+        let bounds = dayBounds
+        let latest = await Task.detached(priority: .utility) {
+            try? RewindQueries.frameCount(store, since: bounds.start, until: bounds.end)
+        }.value
+        guard let latest else { return false }
+        return latest != frames.count
+    }
+
+    /// The whole of what the live-capture poll does: ask the cheap question, and re-read only if the
+    /// answer moved. Held here rather than in `RewindWindow` so the window never has to know which
+    /// of these reads is safe to run where.
+    func refreshIfCapturesLanded() async {
+        guard hasLoaded, readTask == nil, !isSettling else { return }
+        guard await hasUnreadCaptures() else { return }
+        // Re-asked after the await: the count took a moment, and a settle or a day change started in
+        // that moment owns the window more than this catch-up does.
+        guard readTask == nil, !isSettling else { return }
+        refresh()
     }
 
     /// The local day an instant belongs to, as its midnight.
@@ -271,13 +538,50 @@ final class RewindModel: ObservableObject {
     /// corrected: the day loads, the playhead has nothing to sit on, and the stage says nothing was
     /// captured. Jumping to the nearest *other* day's picture would be a confident wrong answer about
     /// what the user asked to see.
+    ///
+    /// **The park waits for the read**, and that is the one thing about this that had to change when
+    /// the reads left the main actor. Parking straight away would resolve the instant against the
+    /// frames of the read the window is *replacing* — the stale last frame, which is the exact
+    /// failure `refresh()` exists to prevent — so the instant is held and consumed by whichever read
+    /// lands next. Every landing path consumes it, including the ones that decide nothing changed.
     func focus(on instant: Double) {
-        guard hasLoaded else {
-            pendingFocus = instant
+        pendingFocus = instant
+        // Nothing has been read yet, so there is no day to compare against: the opening read picks
+        // the instant's day itself and consumes the instant when it lands.
+        guard hasLoaded else { return }
+
+        let target = Self.day(containing: instant)
+        if target == day {
+            // Already the day on screen, so `load(day:)` would do nothing — and what it would do
+            // nothing about is the read being old. A moment can be newer than the last time this day
+            // was looked at, because capture keeps writing while the timeline sits open; parking
+            // without catching up clamps to the stale last frame, so the card names one moment and
+            // the window shows another. See `refresh()`.
+            refresh()
+            // A refresh that declined to start — because a read is already in flight — is not a
+            // dropped focus: that read consumes the instant when it lands.
+        } else {
+            load(day: target)
+        }
+    }
+
+    /// Parks on the instant the window was asked to open at, once there is a day under it.
+    ///
+    /// The day guard is for the one ordering that would otherwise land in the wrong place: a focus
+    /// arriving *after* the opening read has chosen the newest day but *before* its day read has
+    /// landed. `park(at:)` resolves within the loaded day, so consuming it there would clamp a
+    /// last-Tuesday instant onto today's first frame. Loading the right day and holding the instant
+    /// for that read is the only correct answer, and it terminates: the day it loads is the day the
+    /// instant belongs to, so the next landing consumes it.
+    private func consumePendingFocus() {
+        guard let pending = pendingFocus else { return }
+        let target = Self.day(containing: pending)
+        guard target == day else {
+            load(day: target)
             return
         }
-        load(day: Self.day(containing: instant))
-        park(at: instant)
+        pendingFocus = nil
+        park(at: pending)
     }
 
     /// Moves the playhead to **exactly** `instant`, wherever between two captures that falls. The
@@ -427,27 +731,116 @@ final class RewindModel: ObservableObject {
     // MARK: - Segment navigation
 
     /// The chevrons on the frame's edges: jump to the previous or next activity block.
-    ///
-    /// Jumps to the block's **first frame** rather than to its start instant, because a block's
-    /// boundary can fall in a gap where no frame exists and landing there would show whichever frame
-    /// happened to be nearest, which reads as the chevron overshooting.
     func goToAdjacentSegment(forward: Bool) {
-        guard let at = currentFrame?.capturedAt else { return }
-        let candidates = forward
+        guard let index = adjacentSegmentFrame(forward: forward) else { return }
+        setPlayhead(index)
+    }
+
+    /// **The frame a segment chevron would land on**, or nil when there is nowhere to go that way.
+    ///
+    /// The chevron's enabled state and its action are the same question asked twice, so they are
+    /// computed once. Asking `blocks` whether a later one exists and then *separately* asking
+    /// `frames` where to land is how a control ends up lit while doing nothing.
+    ///
+    /// It lands on the block's **first showable frame**, never on its start instant, and that is the
+    /// substantive part. `Queries.activity` counts every row, including the 8.7% that have no
+    /// picture, so a block's `startedAt` regularly names a frame the scrubbable array does not
+    /// contain — and image-less rows cluster at exactly these boundaries, because the dedupe gate
+    /// records an app/title transition without paying for a capture. Parking on that instant asks
+    /// `nearestIndex(to:)` for the closest showable frame, whose tie-break goes to the *earlier*
+    /// one: at an app switch with no gap, the block before ends three seconds before the block after
+    /// begins, so "next segment" landed on the last frame of the segment it was leaving. The
+    /// playhead did not move, the next press recomputed the same candidate, and the chevron was dead
+    /// for the rest of the day.
+    ///
+    /// Hence the progress requirement below: a landing that is not strictly past where the playhead
+    /// already is does not count, and the search walks on to the next block rather than stalling. A
+    /// block whose every row is image-less is skipped for the same reason — it has no frame of its
+    /// own to show, and stopping there would be a press that does nothing.
+    private func adjacentSegmentFrame(forward: Bool) -> Int? {
+        guard let at = currentFrame?.capturedAt else { return nil }
+        let starts = forward
             ? blocks.filter { $0.startedAt > at }.map(\.startedAt)
             : blocks.filter { $0.endedAt < at }.map(\.startedAt).reversed().map { $0 }
-        guard let target = candidates.first else { return }
-        park(at: target)
+        for start in starts {
+            guard let index = firstFrameIndex(atOrAfter: start) else { continue }
+            let landing = frames[index].capturedAt
+            guard forward ? landing > at : landing < at else { continue }
+            return index
+        }
+        return nil
     }
 
-    var hasPreviousSegment: Bool {
-        guard let at = currentFrame?.capturedAt else { return false }
-        return blocks.contains { $0.endedAt < at }
+    /// The first showable frame at or after `instant`, by binary search. Nil when the day holds none.
+    ///
+    /// Distinct from `nearestIndex(to:)` on purpose: "nearest" is right for a pointer, which is
+    /// somewhere between two captures and means the one it is closest to, and wrong for a boundary,
+    /// which means the first capture on the far side of it.
+    private func firstFrameIndex(atOrAfter instant: Double) -> Int? {
+        var low = 0
+        var high = frames.count
+        while low < high {
+            let mid = low + (high - low) / 2
+            if frames[mid].capturedAt < instant { low = mid + 1 } else { high = mid }
+        }
+        return low < frames.count ? low : nil
     }
 
-    var hasNextSegment: Bool {
-        guard let at = currentFrame?.capturedAt else { return false }
-        return blocks.contains { $0.startedAt > at }
+    var hasPreviousSegment: Bool { adjacentSegmentFrame(forward: false) != nil }
+
+    var hasNextSegment: Bool { adjacentSegmentFrame(forward: true) != nil }
+
+    // MARK: - Day navigation
+
+    /// **Step to the nearest day that actually holds captures**, in either direction.
+    ///
+    /// The way out of the loaded day, and the reason the window can reach the whole record rather
+    /// than the day it happens to have open. Everything else that moves the playhead is bounded by
+    /// the loaded day by construction — `travel(by:)` and `setPlayheadInstant` clamp to the day's
+    /// first and last frame, `step(_:)` clamps to `frames`, and the segment chevrons walk `blocks`,
+    /// which is one day's activity — so before this the only route to another day at all was the
+    /// popover calendar.
+    ///
+    /// It skips the empty days rather than walking through them. Six of the fourteen days on this
+    /// machine hold captures; stepping a calendar day at a time would mean eight presses and eight
+    /// blank screens between the sixth of the month and the thirteenth, which is a control nobody
+    /// would press twice. The seek does it in one read — see `RewindQueries.nearestCapture`.
+    ///
+    /// Routed through `focus(on:)` rather than `load(day:)` so the arrival is the same seam a search
+    /// result travels through: the day loads *and* the playhead parks on the capture the seek found,
+    /// which is the last one of the previous day going back and the first one of the next day going
+    /// forward.
+    func goToAdjacentDay(forward: Bool) {
+        guard let instant = forward ? nextDayCapture : previousDayCapture else { return }
+        focus(on: instant)
+    }
+
+    var hasPreviousDay: Bool { previousDayCapture != nil }
+    var hasNextDay: Bool { nextDayCapture != nil }
+
+    /// The days the date picker may travel over, as **whole days**.
+    ///
+    /// Whole days is the substantive part. `coverage` reports two *instants* — the first and last
+    /// capture — and handing those to the picker as its range bounds meant its lower bound was the
+    /// moment capture began on the oldest day, 22:32 on the real database. The picker's selection is
+    /// a day, and `load(day:)` normalises every day to its midnight, so the only value the binding
+    /// can ever produce for that day is a midnight that falls *below* the range's own lower bound:
+    /// the oldest day the user has — 144 captures of it — was the one day the picker could not
+    /// select, and opening the window on it left the picker holding a selection outside its own
+    /// range. Widening to the day either instant belongs to is the whole fix.
+    ///
+    /// The loaded day is folded in as well, so the range always contains the selection whatever else
+    /// is true — a day focused from a search result that predates the coverage read, or a day
+    /// captured after the window opened, would otherwise fall outside it.
+    ///
+    /// Days *inside* the range may hold nothing, and that is not a defect to be designed away: the
+    /// record has gaps, the picker says which days exist at its two ends, and a day with no captures
+    /// says so on the stage. What the range must never do is exclude a day that has them.
+    var dayRange: ClosedRange<Date> {
+        guard let coverage else { return day...day }
+        let oldest = Self.day(containing: coverage.lowerBound)
+        let newest = Self.day(containing: coverage.upperBound)
+        return min(oldest, newest, day)...max(oldest, newest, day)
     }
 
     // MARK: - Track window (the *track* zoom)
@@ -693,10 +1086,30 @@ final class RewindModel: ObservableObject {
             self.isRecognizing = false
             // The playhead may have moved while Vision ran; boxes measured on another frame must
             // never be drawn over this one.
-            guard self.currentFrame?.id == wanted else { return }
+            guard self.currentFrame?.id == wanted else {
+                // **The request outlives the frame it was made for.** A pass takes most of a second,
+                // and both callers above are refused outright while one is running: pressing the
+                // control during a pass, or stepping a frame with it already on, used to leave
+                // nothing scheduled at all — the discarded result was the only work in flight, so
+                // the button stayed dark until it was toggled off and on again. Re-asking for the
+                // frame that is *now* under the playhead is what makes the press mean something.
+                if Self.shouldRerunRecognition(showsLiveText: self.showsLiveText) {
+                    self.recognizeLiveText()
+                }
+                return
+            }
             self.liveText = result ?? LiveTextResult(imageSize: .zero, blocks: [])
         }
     }
+
+    /// Whether a pass that finished on a frame the playhead has since left should be run again.
+    ///
+    /// A named decision rather than an `if` inside a `Task`, so the rule is assertable without
+    /// Vision, a real HEIC and a race: the recognition itself is the platform's, but *what we do
+    /// when it lands late* is ours and is the half that shipped wrong. Yes exactly when the control
+    /// is still on — a user who turned it off while the pass ran has withdrawn the request, and
+    /// chasing the playhead after that would be work nobody is waiting for.
+    nonisolated static func shouldRerunRecognition(showsLiveText: Bool) -> Bool { showsLiveText }
 
     /// Whether the Live Text control should read as available.
     ///
@@ -711,9 +1124,14 @@ final class RewindModel: ObservableObject {
     // MARK: - Display strings
 
     /// The date/time pill, e.g. `Jul 29, 2026 at 10:21 PM`.
+    ///
+    /// A day with no captures gets the date alone. There is no time to name on it — the pill used to
+    /// read `Aug 3, 2026 at 12:00 AM`, which is not a moment anything was recorded at, it is the
+    /// midnight the day is keyed by, and pairing it with an empty stage reads as a frame that failed
+    /// to load rather than as a day nothing was captured on.
     var timestampLabel: String {
         guard let at = currentFrame?.capturedAt else {
-            return RewindModel.pillFormatter.string(from: day)
+            return RewindModel.dayFormatter.string(from: day)
         }
         return RewindModel.pillFormatter.string(from: Date(timeIntervalSince1970: at))
     }
@@ -723,4 +1141,83 @@ final class RewindModel: ObservableObject {
         formatter.dateFormat = "MMM d, yyyy 'at' h:mm a"
         return formatter
     }()
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter
+    }()
+
+    // MARK: - The reads themselves
+
+    /// The coverage span and the app→bundle map.
+    ///
+    /// `nonisolated` and `static`: this runs on a detached task and must touch no actor state — the
+    /// same rule, for the same reason, as `ActivityStore.readOpening`. Both throws are swallowed
+    /// here rather than propagated, because neither answer is one the window can do anything about:
+    /// no coverage means the date picker spans the loaded day, and no bundle map means icons fall
+    /// back to their app names.
+    nonisolated static func readOpening(store: ContextStore) -> RewindOpeningRead {
+        RewindOpeningRead(
+            coverage: (try? RewindQueries.coverage(store)) ?? nil,
+            bundleIds: (try? RewindQueries.bundleIdsByApp(store)) ?? [:])
+    }
+
+    /// One day: its frames, its shape, and the way out of it in either direction.
+    ///
+    /// All four reads happen here, in one hop off the main actor, so a day arrives as a single value
+    /// the model absorbs in one turn. Four separate hops would let the window render three times
+    /// with three-quarters of a day in it.
+    ///
+    /// The two seeks are deliberately *not* inside the day's own `catch`: which days exist either
+    /// side of this one is what the window needs most when the loaded day is empty or unreadable,
+    /// and losing the way out along with the contents would strand the user on the one day they can
+    /// see least.
+    nonisolated static func readDay(store: ContextStore, since: Double, until: Double) -> RewindDayRead {
+        var frames: [RewindFrame] = []
+        var blocks: [ActivityBlock] = []
+        var failure: String?
+        do {
+            frames = try RewindQueries.frames(store, since: since, until: until)
+            // Segments come from the existing activity query rather than a second implementation.
+            // It run-length-collapses consecutive same-app frames, splits on a gap longer than two
+            // minutes, and drops stretches under fifteen seconds — which is the day's shape, already
+            // tested, and it counts image-less frames the frame array cannot show.
+            blocks = try Queries.activity(store, since: since, until: until)
+        } catch {
+            frames = []
+            blocks = []
+            failure = "Could not read this day: \(error.localizedDescription)"
+        }
+        return RewindDayRead(
+            frames: frames,
+            blocks: blocks,
+            previousDayCapture:
+                (try? RewindQueries.nearestCapture(store, from: since, direction: .backward)) ?? nil,
+            nextDayCapture:
+                (try? RewindQueries.nearestCapture(store, from: until, direction: .forward)) ?? nil,
+            failure: failure)
+    }
+}
+
+// MARK: - Read results
+
+/// What the opening read came back with — everything needed to decide *which* day to read.
+struct RewindOpeningRead: Sendable {
+    let coverage: ClosedRange<Double>?
+    let bundleIds: [String: String]
+}
+
+/// One day of the timeline, as the model absorbs it.
+///
+/// A value rather than four writes from a background thread: it crosses the actor boundary once,
+/// and every field of it is applied in the same turn of the main actor.
+struct RewindDayRead: Sendable {
+    let frames: [RewindFrame]
+    let blocks: [ActivityBlock]
+    let previousDayCapture: Double?
+    let nextDayCapture: Double?
+    /// Set when the day's own read threw. **Distinct from an empty day**, which is an ordinary
+    /// outcome and must not be reported as a failure.
+    let failure: String?
 }
