@@ -153,6 +153,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   static let alwaysOnTopLevel = NSWindow.Level(
     rawValue: Int(CGWindowLevelForKey(.assistiveTechHighWindow))
   )
+  /// Always-on overlay: present on every Space, pinned through Mission Control,
+  /// and omitted from Cmd-` cycling. Click and hover still reach the panel;
+  /// `.transient` would let AppKit scoop it during Space switches.
+  static let overlayCollectionBehavior: NSWindow.CollectionBehavior = [
+    .canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle,
+  ]
   static let notchExpandedWidth: CGFloat = 382
   private static let notificationWidth: CGFloat = 508
   private static let notificationHeight: CGFloat = 128
@@ -205,6 +211,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   var notchRetractionScheduler: DelayedActionScheduling = TaskDelayedActionScheduler()
   var notchRetractionCancellation: DelayedActionCancellation?
   var notchRetractionGeneration = 0
+  var notchRevealGeneration = 0
+  var notchRevealCancellation: DelayedActionCancellation?
   /// Saved center point from before chat opened, used to restore position on close.
   private var preChatCenter: NSPoint?
   /// Token incremented each time a windowDidResignKey dismiss animation starts.
@@ -251,7 +259,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     Self.screenHasCameraHousing(screenForPlacement)
   }
   private var screenForPlacement: NSScreen? {
-    self.screen ?? NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
+    FloatingBarPlacementScreenPolicy.screenForRecentering(
+      barScreen: self.screen,
+      cursorScreen: Self.screenContainingCursor(),
+      mainScreen: NSScreen.main,
+      firstScreen: NSScreen.screens.first
+    )
+  }
+
+  private static func screenContainingCursor() -> NSScreen? {
+    let mouseLocation = NSEvent.mouseLocation
+    return NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) })
+  }
+
+  private func screenUnderCursor() -> NSScreen? {
+    Self.screenContainingCursor()
   }
   private var notchSideWidth: CGFloat {
     if state.showingAIConversation {
@@ -408,7 +430,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     contentRect: NSRect, styleMask style: NSWindow.StyleMask,
     backing backingStoreType: NSWindow.BackingStoreType = .buffered, defer flag: Bool = false
   ) {
-    let initialScreen = NSScreen.main ?? NSScreen.screens.first
+    let initialScreen = FloatingBarPlacementScreenPolicy.screenForRecentering(
+      barScreen: Optional<NSScreen>.none,
+      cursorScreen: Self.screenContainingCursor(),
+      mainScreen: NSScreen.main,
+      firstScreen: NSScreen.screens.first
+    )
     let initialUsesNotchIsland = FloatingControlBarWindow.shouldUseNotchIsland(
       displayHasCameraHousing: FloatingControlBarWindow.screenHasCameraHousing(initialScreen),
       hasActiveIsland: false,
@@ -435,8 +462,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     self.isOpaque = false
     self.backgroundColor = .clear
     self.hasShadow = false
+    // NSPanel defaults hidesOnDeactivate to true, which orders the notch out
+    // when another app activates. isFloatingPanel is the overlay companion;
+    // re-assert always-on-top after it so AppKit cannot drop us to .floating.
+    self.isFloatingPanel = true
+    self.hidesOnDeactivate = false
     self.level = Self.alwaysOnTopLevel
-    self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+    self.collectionBehavior = Self.overlayCollectionBehavior
     self.isMovableByWindowBackground = false
     self.acceptsMouseMovedEvents = true
     self.delegate = self
@@ -477,12 +509,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   override func makeKeyAndOrderFront(_ sender: Any?) {
     cancelPendingRetraction()
+    applySurfaceLevel()
     super.makeKeyAndOrderFront(sender)
     syncMouseInterception()
   }
 
   override func orderFrontRegardless() {
     cancelPendingRetraction()
+    applySurfaceLevel()
     super.orderFrontRegardless()
     syncMouseInterception()
   }
@@ -491,16 +525,22 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     notchRetractionGeneration &+= 1
     notchRetractionCancellation?.cancel()
     notchRetractionCancellation = nil
-    state.notchRevealProgress = 1
+    cancelInFlightNotchReveal()
+    state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
     super.orderOut(sender)
     syncMouseInterception()
   }
 
   // MARK: - Window Level
 
-  /// Reasserts the bar's always-on-top level, yielding only while one of our
-  /// own menus is open (menus render at .popUpMenu and must stay clickable).
-  private func applySurfaceLevel() {
+  /// Reasserts the bar's always-on-top overlay chrome, yielding only the
+  /// window *level* while one of our own menus is open (menus render at
+  /// .popUpMenu and must stay clickable). hidesOnDeactivate is written every
+  /// pass so a later AppKit/default restore cannot hide the notch on deactivate.
+  func applySurfaceLevel() {
+    isFloatingPanel = true
+    hidesOnDeactivate = false
+    collectionBehavior = Self.overlayCollectionBehavior
     level = menuTrackingDepth > 0 ? .popUpMenu : Self.alwaysOnTopLevel
   }
 
@@ -624,6 +664,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   private func updateNotchIslandState() {
+    if FloatingBarPlacementScreenPolicy.shouldHoldIslandModeWhileScreenIsReassigning(
+      isVisible: isVisible,
+      barScreenMissing: self.screen == nil
+    ) {
+      applySurfaceLevel()
+      return
+    }
     let usesNotch = notchModeEnabled
     // Leaving the idle pill for the active island on a non-notch display —
     // remember the pill's exact spot so we can restore it when we return
@@ -782,6 +829,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       }
     }
 
+    NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.restoreDurableBarIfAppKitOrderedItOut()
+        self?.validatePositionOnScreenChange(reason: "workspace_did_wake")
+      }
+    }
+
     draggableBarCancellable = ShortcutSettings.shared.$draggableBarEnabled
       .dropFirst()
       .sink { [weak self] _ in
@@ -800,14 +856,22 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   // Internal so the regression test can exercise the same workspace-transition
   // path that the NSWorkspace observer invokes.
   func performSpacesTransitionGrowIn() {
+    restoreDurableBarIfAppKitOrderedItOut()
+    let previousUsesNotchIsland = state.usesNotchIsland
     updateNotchIslandState()
-    guard notchModeEnabled, isVisible else { return }
     // Do not replay the reveal "pop" on Space changes; preserve chat size while
     // non-chat surfaces recover their canonical frame from this callback.
-    state.notchRevealProgress = 1
-    guard !state.showingAIConversation else { return }
+    state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
     let targetFrame = defaultFrameForCurrentState()
-    guard !Self.framesEquivalent(frame, targetFrame) else { return }
+    guard
+      FloatingBarPlacementScreenPolicy.shouldReconcileFrameAfterSpaceChange(
+        isVisible: isVisible,
+        showingAIConversation: state.showingAIConversation,
+        islandModeChanged: previousUsesNotchIsland != state.usesNotchIsland,
+        frameChanged: !Self.framesEquivalent(frame, targetFrame),
+        barScreenMissing: self.screen == nil
+      )
+    else { return }
     resizeToFrame(targetFrame, makeResizable: styleMask.contains(.resizable), animated: false)
   }
 
@@ -930,22 +994,26 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     resizeWorkItem = nil
     frameAnimationToken += 1
     let token = frameAnimationToken
+    notchRevealGeneration &+= 1
+    let revealGeneration = notchRevealGeneration
     isResizingProgrammatically = true
     alphaValue = 1
     state.notchRevealProgress = 0.001
     setFrame(targetFrame, display: true, animate: false)
 
     OmiMotion.withGated(.easeOut(duration: duration)) {
-      state.notchRevealProgress = 1
+      state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
     }
 
     DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-      guard let self, self.frameAnimationToken == token else { return }
-      self.setFrame(targetFrame, display: true, animate: false)
-      self.state.notchRevealProgress = 1
-      self.alphaValue = 1
-      self.isResizingProgrammatically = false
+      guard let self else { return }
+      if self.frameAnimationToken == token {
+        self.setFrame(targetFrame, display: true, animate: false)
+        self.alphaValue = 1
+        self.isResizingProgrammatically = false
+      }
     }
+    scheduleNotchRevealCompletion(generation: revealGeneration, after: duration)
   }
 
   private enum NotchPointerMode {
@@ -1510,18 +1578,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     let heightProgress = targetSize.height > 0 ? startHeight / targetSize.height : 1
     let startProgress = min(1, max(0.001, min(widthProgress, heightProgress)))
 
-    frameAnimationToken += 1
-    let token = frameAnimationToken
+    notchRevealGeneration &+= 1
+    let revealGeneration = notchRevealGeneration
     state.notchRevealProgress = startProgress
 
     OmiMotion.withGated(.easeOut(duration: duration)) {
-      state.notchRevealProgress = 1
+      state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
     }
 
-    DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-      guard let self, self.frameAnimationToken == token else { return }
-      self.state.notchRevealProgress = 1
-    }
+    scheduleNotchRevealCompletion(generation: revealGeneration, after: duration)
   }
 
   func clearVisibleConversationFromUI() {
@@ -1697,7 +1762,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       } ?? false
 
     if alreadyAtTarget, wasResizable == makeResizable {
-      frameAnimationToken += 1
+      // Hover / Space / display revalidation often land here. Bumping
+      // frameAnimationToken cancelled in-flight retract/reveal completions
+      // and left the island scaled into the camera housing.
       pendingFrameAnimationTarget = nil
       isResizingProgrammatically = false
       return
@@ -2106,11 +2173,18 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// Pop the notch in from a near-zero scale the first time it is revealed via
   /// Push-to-Talk (it stays hidden at launch on notched displays).
   func playNotchRevealAnimation() {
-    guard notchModeEnabled else { return }
-    state.notchRevealProgress = 0.01
-    OmiMotion.withGated(.easeOut(duration: 0.24)) {
-      state.notchRevealProgress = 1
+    guard notchModeEnabled else {
+      state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+      return
     }
+    notchRevealCancellation?.cancel()
+    notchRevealGeneration &+= 1
+    let generation = notchRevealGeneration
+    state.notchRevealProgress = FloatingBarNotchRevealPolicy.retractedProgress
+    OmiMotion.withGated(.easeOut(duration: 0.24)) {
+      state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+    }
+    scheduleNotchRevealCompletion(generation: generation, after: 0.24)
   }
 
   /// Mirror of the reveal: shrink the island back into the camera housing,
@@ -2128,7 +2202,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     notchRetractionGeneration &+= 1
     notchRetractionCancellation?.cancel()
     notchRetractionCancellation = nil
-    state.notchRevealProgress = 1
+    cancelInFlightNotchReveal()
+    state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
   }
 
   func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
@@ -2268,19 +2343,29 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   private func geometryScreenVisibleFrame() -> NSRect {
-    let targetScreen = self.screen ?? NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
-    return targetScreen?.visibleFrame ?? .zero
+    screenForPlacement?.visibleFrame ?? .zero
   }
 
   private var topInsetForPillFallback: CGFloat {
     Self.topInsetWhenNotchModeFallsBackToPill
   }
 
-  /// Center the bar near the top of the main screen.
+  /// Center the bar near the top of the display it already occupies.
   private func centerOnMainScreen() {
-    // Use the screen that has the key window, or fall back to main screen
-    let targetScreen = NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
-    guard let screen = targetScreen else {
+    if FloatingBarPlacementScreenPolicy.shouldSkipVisibleBarLayoutUntilScreenReturns(
+      isVisible: isVisible,
+      barScreenMissing: self.screen == nil
+    ) {
+      return
+    }
+    guard
+      let screen = FloatingBarPlacementScreenPolicy.screenForRecentering(
+        barScreen: self.screen,
+        cursorScreen: screenUnderCursor(),
+        mainScreen: NSScreen.main,
+        firstScreen: NSScreen.screens.first
+      )
+    else {
       self.center()
       return
     }
@@ -2319,7 +2404,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
   }
 
+  func restoreDurableBarIfAppKitOrderedItOut() {
+    guard !isVisible else { return }
+    let manager = FloatingControlBarManager.shared
+    guard
+      FloatingBarDurableVisibilityPolicy.shouldRestoreWhenAppKitOrderedOut(
+        isEnabled: manager.isEnabled,
+        isSnoozed: manager.isSnoozed,
+        hasBeenPresentedThisSession: manager.hasRevealedNotchThisSession)
+    else { return }
+    state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+    orderFrontRegardless()
+  }
+
   private func validatePositionOnScreenChange(reason: String) {
+    restoreDurableBarIfAppKitOrderedItOut()
     guard !isUserDragging else { return }
     updateNotchIslandState()
     // Non-draggable mode: always restore to default position on screen change
@@ -2364,7 +2463,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// actual screen so an idle bar cannot render as the legacy pill inside a
   /// notch-sized window (which is visually hidden by the camera housing).
   func windowDidChangeScreen(_ notification: Notification) {
-    guard !isUserDragging, let screen = screenForPlacement else { return }
+    restoreDurableBarIfAppKitOrderedItOut()
+    guard !isUserDragging else { return }
+    if FloatingBarPlacementScreenPolicy.shouldSkipVisibleBarLayoutUntilScreenReturns(
+      isVisible: isVisible,
+      barScreenMissing: self.screen == nil
+    ) {
+      return
+    }
+    guard let screen = self.screen else { return }
 
     let previousUsesNotchIsland = state.usesNotchIsland
     updateNotchIslandState()
@@ -5092,6 +5199,7 @@ extension FloatingControlBarWindow {
   func cancelPendingDismiss() {
     resignKeyAnimationToken += 1
     frameAnimationToken += 1
+    restoreNotchRevealProgressIfWindowStillVisible()
     if !ShortcutSettings.shared.draggableBarEnabled {
       pendingRestoreFrame = nil
     }
