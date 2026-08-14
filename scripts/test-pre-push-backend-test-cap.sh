@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# The pre-push hooks export their own repository environment; an author pushing
+# with a backend hatch set (e.g. PRE_PUSH_SKIP_BACKEND_UNIT_TESTS=1) must not
+# leak into this lane — the cap logic has to run regardless of how the author
+# is pushing.
+unset PRE_PUSH_SKIP_BACKEND_UNIT_TESTS PRE_PUSH_SKIP_BACKEND_TYPECHECK PRE_PUSH_SKIP_BACKEND_RUNTIME_ENV
+
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
