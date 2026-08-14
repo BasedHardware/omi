@@ -70,12 +70,27 @@ package final class InkGlassHitRegionView: NSView {
 
 /// SwiftUI mount for the marker. Attach as a `.background` so it spans exactly the surface that
 /// should own the pointer.
-package struct InkGlassHitRegionReporter: NSViewRepresentable {
+///
+/// Mounted at zero opacity, which is load-bearing rather than decorative. The marker paints nothing
+/// on screen, but `ImageRenderer` cannot rasterise an `NSViewRepresentable` and substitutes an
+/// opaque placeholder for it — so a marker at full opacity reads as *painted content covering its
+/// whole host* to every pixel-truth test of a surface that mounts one, which is a claim about the
+/// app that is not true. At zero opacity the placeholder contributes no pixels while the AppKit view
+/// stays mounted, unhidden and registered — SwiftUI applies the opacity to the host layer, not to the
+/// view's own `alphaValue`, which is what `InkGlassHitRegions.containsPoint` reads.
+/// `InkGlassHitRegionReporterTests` holds both halves.
+package struct InkGlassHitRegionReporter: View {
   package init() {}
 
-  package func makeNSView(context: Context) -> InkGlassHitRegionView {
+  package var body: some View {
+    InkGlassHitRegionMarker().opacity(0)
+  }
+}
+
+private struct InkGlassHitRegionMarker: NSViewRepresentable {
+  func makeNSView(context: Context) -> InkGlassHitRegionView {
     InkGlassHitRegionView(frame: .zero)
   }
 
-  package func updateNSView(_ view: InkGlassHitRegionView, context: Context) {}
+  func updateNSView(_ view: InkGlassHitRegionView, context: Context) {}
 }

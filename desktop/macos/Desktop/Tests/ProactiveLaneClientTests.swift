@@ -275,32 +275,48 @@ final class ProactiveLaneClientTests: XCTestCase {
     try await complete(operation: ModelQoS.Proactivity.reasoningOperation, prompt: "reason", on: client)
   }
 
+  /// Two 429s for the same operation, the second carrying a much shorter `Retry-After`, must leave
+  /// the longer deadline standing.
+  ///
+  /// They have to be genuinely **in flight together**: an armed cooldown short-circuits the network
+  /// before the request is built (`testExtractionSkipsNetworkDuringQuotaCooldown…` above), so a
+  /// second window can only ever be observed by a request that was already past the gate when the
+  /// first one armed. Issuing them one after the other never reaches the code this is about — the
+  /// second call returns from the cooldown and no second `Retry-After` is ever parsed. The rendezvous
+  /// holds both inside `complete` until both are past the gate, so the overlap is a fact of the test
+  /// rather than a race it happens to win.
   func testLaterShorterRetryWindowDoesNotShortenActiveCooldown() async throws {
     ProactiveLaneURLStub.reset()
     let clock = ManualDateClock(Date(timeIntervalSince1970: 1_800_000_000))
+    let bothPastTheGate = RequestRendezvous(count: 2)
     let client = ProactiveLaneClient(
       session: makeStubSession(),
       baseURL: { "https://proactive.test" },
-      authorization: { "Bearer test" },
+      authorization: {
+        await bothPastTheGate.arrive()
+        return "Bearer test"
+      },
       now: { clock.now })
 
-    // First 429 arms a long cooldown (300s).
     ProactiveLaneURLStub.enqueue(
       statusCode: 429, body: Data(), headers: ["Retry-After": "300"])
-    do {
-      _ = try await completeExtraction(on: client)
-      XCTFail("expected 429")
-    } catch ProactiveLaneClientError.http(_, _) {}
-
-    // A second overlapping 429 with a much shorter window must not shorten it.
     ProactiveLaneURLStub.enqueue(
       statusCode: 429, body: Data(), headers: ["Retry-After": "60"])
-    do {
-      _ = try await completeExtraction(on: client)
-      XCTFail("expected quota cooldown")
-    } catch ProactiveLaneClientError.quotaCooldown(_) {}
 
-    XCTAssertEqual(ProactiveLaneURLStub.requestCount, 2)
+    async let first = overlappingExtractionOutcome(on: client)
+    async let second = overlappingExtractionOutcome(on: client)
+    for outcome in await [first, second] {
+      guard case ProactiveLaneClientError.http(let status, _)? = outcome else {
+        return XCTFail(
+          "both overlapping requests must reach the server and throw 429, got "
+            + String(describing: outcome))
+      }
+      XCTAssertEqual(status, 429)
+    }
+
+    XCTAssertEqual(
+      ProactiveLaneURLStub.requestCount, 2,
+      "both overlapping requests must have reached the server, or the shorter window was never seen")
 
     // Advance 70s — past the short window but inside the long one.
     clock.advance(by: 70)
@@ -342,6 +358,40 @@ final class ProactiveLaneClientTests: XCTestCase {
     configuration.protocolClasses = [ProactiveLaneURLStub.self]
     configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
     return URLSession(configuration: configuration)
+  }
+}
+
+/// One extraction attempt, run outside the test's isolation so a pair of them can overlap in
+/// `async let`. Returns what it threw rather than asserting, so the assertions stay in the test body.
+private func overlappingExtractionOutcome(on client: ProactiveLaneClient) async -> Error? {
+  do {
+    _ = try await client.complete(
+      operation: ModelQoS.Proactivity.extractionOperation,
+      prompt: "extract",
+      jsonSchema: ["type": "object"])
+    return nil
+  } catch {
+    return error
+  }
+}
+
+/// Holds every caller until `count` of them have arrived, then releases them together.
+private actor RequestRendezvous {
+  private let count: Int
+  private var waiting: [CheckedContinuation<Void, Never>] = []
+
+  init(count: Int) {
+    self.count = count
+  }
+
+  func arrive() async {
+    guard waiting.count + 1 < count else {
+      let released = waiting
+      waiting = []
+      for continuation in released { continuation.resume() }
+      return
+    }
+    await withCheckedContinuation { waiting.append($0) }
   }
 }
 
