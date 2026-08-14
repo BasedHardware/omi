@@ -28,8 +28,35 @@ struct SettingsGeneralPane: View {
         + "off. It does not restrict Claude: the MCP tools still read what was captured here, so "
         + "whatever you ask Claude about still reaches Anthropic."
 
+    /// **The four strings the reset row is made of**, internal for the same reason the Airgap subtitle
+    /// and `SettingsStoragePane`'s three confirmation strings are: they are the whole of what the user
+    /// is told before a press that takes over their screen for several minutes, and copy nothing reads
+    /// is copy nothing can hold to its claims.
+    ///
+    /// Every clause of the subtitle is a promise `OnboardingReset` keeps: it clears three defaults and
+    /// touches nothing else — no sign-out, no TCC call, no write to the capture database, no
+    /// `context.settings.*` key. The sentence exists because "reset" is a word people reasonably read
+    /// as "wipe", and a row that made them find out by pressing it would be the failure.
+    static let resetSubtitle =
+        "Starts the first-run experience over: the opening sequence, the setup cards, then the "
+        + "walkthrough. Nothing is deleted — what you have captured, your settings, your permissions "
+        + "and your sign-in all stay exactly as they are."
+
+    static let resetConfirmationTitle = "Run setup again?"
+
+    /// Says what happens to the window the press came from, because it happens immediately and a
+    /// window that vanishes without having been mentioned reads as a crash.
+    static let resetConfirmationMessage =
+        "Settings closes and the opening sequence starts, followed by the setup cards and the "
+        + "walkthrough. It takes a few minutes, and you can leave at any point. Nothing is deleted: "
+        + "your recordings, transcripts, settings, permissions and sign-in are untouched."
+
+    static let resetConfirmationAction = "Run setup again"
+
     /// Bumped whenever the provider says something changed, which is what re-reads the recorders.
     @State private var shortcutGeneration = 0
+    /// Whether the reset row's confirmation is on screen. Plain view state — see the modifier below.
+    @State private var isConfirmingReset = false
     @State private var recording: ShortcutAction?
     @State private var rejection: String?
     @State private var isLaunchAtLoginOn = LoginItem.isEnabled
@@ -183,9 +210,51 @@ struct SettingsGeneralPane: View {
                 }
             }
 
+            // Its own section rather than a fourth row under "Startup and privacy": this one does not
+            // set a preference, it starts something, and a button that takes over the screen for a
+            // few minutes should not be sitting in a stack of switches.
+            SettingsSection(title: "Setup") {
+                SettingsRow(
+                    icon: "arrow.counterclockwise",
+                    title: "Run setup again",
+                    subtitle: Self.resetSubtitle
+                ) {
+                    Button("Run setup again") {
+                        Sound.effect(.click)
+                        isConfirmingReset = true
+                    }
+                    .controlSize(.small)
+                }
+            }
+
             SettingsSection(title: "About") {
                 UpdatesSettingsRow(updater: ContextUpdater.shared)
             }
+        }
+        // **Asked before it happens**, because the cost of a mis-click is the whole flow: the intro,
+        // six cards and the walkthrough, over a user who meant to press the row above.
+        //
+        // The presentation is bound to plain view state, unlike `SettingsStoragePane`'s — which binds
+        // to its model with a no-op setter because SwiftUI is free to write `isPresented = false`
+        // before it runs the tapped button's action, and there that ordering nulled the pending
+        // selection the action was about to commit. Nothing here is parked anywhere: the action reads
+        // no state at all, so there is nothing a dismissal can take out from under it.
+        //
+        // No `.destructive` role either, and that is a claim rather than an oversight — red in a macOS
+        // dialog means data is about to go, and nothing here deletes anything. The message says so
+        // outright, because "reset" is a word users have every reason to read as "wipe".
+        .confirmationDialog(
+            Self.resetConfirmationTitle,
+            isPresented: $isConfirmingReset,
+            titleVisibility: .visible
+        ) {
+            Button(Self.resetConfirmationAction) {
+                Sound.effect(.click)
+                OnboardingReset.restart()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(Self.resetConfirmationMessage)
         }
         .onAppear {
             isLaunchAtLoginOn = LoginItem.isEnabled

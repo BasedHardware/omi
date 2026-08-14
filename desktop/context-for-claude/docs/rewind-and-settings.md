@@ -77,8 +77,17 @@ a control on the right (toggle, dropdown, button, shortcut recorder, or radio).
 | Codex also uses ⌘⌘ | Coast and Codex both use ⌘⌘. | accent button: `Switch Codex to ⌥⌥` |
 | Launch on Login | Whether the app automatically starts when you sign in to your computer. | toggle, on |
 | Airgap Mode | *(Coast's own copy: "Suppresses telemetry, update checks, and remote favicon requests. Takes effect after relaunch.")* | toggle, off |
+| Run setup again | Starts the first-run experience over: the opening sequence, the setup cards, then the walkthrough. Nothing is deleted. | button: `Run setup again`, then a confirmation |
 | Updates | Version 1.0 (131000) | button: `Update Now` |
 | Automatic Updates | Check for new versions automatically. | toggle, on |
+
+**"Run setup again" is a walkthrough, not an uninstall.** It clears exactly three defaults —
+`context.onboarded`, `context.onboarding.step`, `context.tutorial.step` — in one owner
+(`Sources/ContextApp/Onboarding/OnboardingReset.swift`), then re-enters the launch path
+(`ContextAppDelegate.surfaceSomethingForTheUser`) so the eight-second cinematic really does play
+again. It never signs out, never touches a TCC grant or the capture database, and never clears a
+`context.settings.*` key; the Settings window closes on the way, which the confirmation says first.
+Guard tests: `Tests/ContextAppTests/OnboardingResetTests.swift`.
 
 **Do not ship Coast's Airgap copy.** It was transcribed from their screenshot and describes *their*
 app; taken as our requirement it produced a switch that suppressed favicon requests and nothing else

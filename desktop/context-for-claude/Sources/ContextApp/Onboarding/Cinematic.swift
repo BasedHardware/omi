@@ -345,11 +345,16 @@ final class SystemCinematicCues: CinematicCues {
 /// Whether this install has already been onboarded.
 ///
 /// Reads `context.onboarded`, the flag `OnboardingView` sets when the flow finishes and
-/// `ContextApp` already gates the window on — this only ever reads it, so there is exactly one
-/// writer in the product. The cinematic is gated separately from the window so that a future
-/// "show me that again" entry point gets the card without the eight-second intro.
+/// `ContextApp` already gates the window on — this only ever reads it. There is exactly one writer
+/// of the *true* value (`OnboardingView.sealTheRun`) and exactly one clearer (`OnboardingReset`, the
+/// Settings row that starts setup over); nothing else in the product touches it.
+///
+/// The cinematic is gated separately from the window because the two questions have different
+/// answers. Settings' "Run setup again" is the deliberate case that wants the intro — it spends both
+/// records, so this gate reads a genuine first run and plays — and a *resumed* run is the case that
+/// must not have it, which is the paragraph on `shouldPlay` below.
 struct CinematicGate {
-    /// Owned by `OnboardingView`. Read-only here.
+    /// Set by `OnboardingView`, cleared by `OnboardingReset`. Read-only here.
     static let onboardedKey = "context.onboarded"
 
     private let defaults: UserDefaults?

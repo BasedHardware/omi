@@ -26,9 +26,10 @@ import Foundation
 struct OnboardingResume {
 
     /// Namespaced with the app's other `context.*` defaults. Not the same key as
-    /// `context.onboarded`: that one is a terminal fact ("this install is set up") with one writer,
-    /// and overloading it to also mean "and here is where you were" is how a flag ends up unable to
-    /// express the state between the two.
+    /// `context.onboarded`: that one is a terminal fact ("this install is set up") written in exactly
+    /// one place (`OnboardingView.sealTheRun`) and cleared in exactly one other (`OnboardingReset`,
+    /// which spends this record in the same breath), and overloading it to also mean "and here is
+    /// where you were" is how a flag ends up unable to express the state between the two.
     static let key = "context.onboarding.step"
 
     /// **Stable tokens, deliberately not `rawValue`.**

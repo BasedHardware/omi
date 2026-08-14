@@ -1543,7 +1543,10 @@ final class OnboardingSealsTheRunOnEveryExitTests: XCTestCase {
     }
 
     /// One writer for the terminal flag, which is what the rest of the product is documented against:
-    /// `CinematicGate` calls itself read-only "so there is exactly one writer in the product".
+    /// `CinematicGate` calls itself read-only and names the two places that are not — this one, which
+    /// is the only thing that sets it, and `OnboardingReset`, which is the only thing that clears it
+    /// (Settings' "Run setup again"). This holds up the first half; `OnboardingResetTests` holds up
+    /// the second.
     func testOnlySealTheRunWritesTheOnboardedFlag() throws {
         let source = try onboardingViewSource()
         XCTAssertEqual(

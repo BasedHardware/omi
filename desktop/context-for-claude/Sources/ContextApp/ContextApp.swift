@@ -202,7 +202,8 @@ enum LaunchLanding: Equatable {
 /// activation policy before any window can steal focus, fonts before anything draws, capture before
 /// the user can look at its status, onboarding last.
 final class ContextAppDelegate: NSObject, NSApplicationDelegate {
-    /// Set by the onboarding flow once the user has finished it.
+    /// Set by the onboarding flow once the user has finished it, and cleared only by
+    /// `OnboardingReset` — Settings' "Run setup again", which puts the install back to a first run.
     private static let onboardedKey = "context.onboarded"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -377,8 +378,14 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     /// minimised anything — a Dock click did nothing whatsoever, which is the definition of an app
     /// that cannot be found. `SearchBarWindow.present()` is idempotent and brings the panel forward,
     /// so the answer to "show me the app" is the same surface every time.
+    ///
+    /// **A third caller joined launch and the Dock icon**: `OnboardingReset.restart()`, which spends
+    /// the records this reads and then asks the same question a first launch asks. It is not private
+    /// for that reason alone — a reset that opened `OnboardingWindow` itself would be a second opinion
+    /// about what an un-onboarded install shows, and the first flow to earn a place in `landing` would
+    /// find only one of the two updated.
     @MainActor
-    private static func surfaceSomethingForTheUser() {
+    static func surfaceSomethingForTheUser() {
         switch landing(
             onboarded: UserDefaults.standard.bool(forKey: onboardedKey),
             onboardingInProgress: OnboardingResume().step != nil,
