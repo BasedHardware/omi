@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  type PressableProps,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -51,6 +52,7 @@ import {
   type DomainReadOutcome,
   type ReadPageState,
 } from './src/desktopReadClient';
+import {subscribeDesktopSearchCommand} from './src/desktopCommands';
 
 type NavigationIcon = React.ComponentType<{
   accessible?: boolean;
@@ -81,6 +83,27 @@ type ReadsPhase =
   | 'saved-but-refresh-failed'
   | 'unavailable';
 
+function FocusPressable({onBlur, onFocus, style, ...props}: PressableProps) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <Pressable
+      {...props}
+      onBlur={event => {
+        setFocused(false);
+        onBlur?.(event);
+      }}
+      onFocus={event => {
+        setFocused(true);
+        onFocus?.(event);
+      }}
+      style={state => [
+        typeof style === 'function' ? style(state) : style,
+        focused && styles.focusRing,
+      ]}
+    />
+  );
+}
+
 function NavItem({
   label,
   icon: Icon,
@@ -97,7 +120,7 @@ function NavItem({
   onPress: () => void;
 }) {
   return (
-    <Pressable
+    <FocusPressable
       accessibilityRole="tab"
       accessibilityState={{selected: active}}
       onPress={onPress}
@@ -122,7 +145,7 @@ function NavItem({
         ]}>
         {label}
       </Text>
-    </Pressable>
+    </FocusPressable>
   );
 }
 
@@ -337,6 +360,7 @@ function App(): React.JSX.Element {
   const readOutcomesRef = useRef<DesktopReadOutcomes | null>(null);
   const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [projectionFilter, setProjectionFilter] =
     useState<ProjectionFilter>('all');
   const searchRef = useRef<TextInput>(null);
@@ -495,6 +519,14 @@ function App(): React.JSX.Element {
   }, [route]);
 
   useEffect(() => {
+    const subscription = subscribeDesktopSearchCommand(() => {
+      setRoute('Home');
+      searchRef.current?.focus();
+    });
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
     let active = true;
     AccessibilityInfo.isReduceMotionEnabled().then(enabled => {
       if (active) {
@@ -601,7 +633,7 @@ function App(): React.JSX.Element {
             railExpanded && styles.railHeaderExpanded,
           ]}>
           <Text style={styles.wordmark}>omi</Text>
-          <Pressable
+          <FocusPressable
             accessibilityLabel={
               railExpanded ? 'Collapse sidebar' : 'Expand sidebar'
             }
@@ -616,7 +648,7 @@ function App(): React.JSX.Element {
             ) : (
               <PanelLeft color="#888888" size={20} strokeWidth={2} />
             )}
-          </Pressable>
+          </FocusPressable>
         </View>
       )}
       <View style={[styles.navItems, compact && styles.navItemsCompact]}>
@@ -703,7 +735,7 @@ function App(): React.JSX.Element {
           value={draft}
         />
         <View style={styles.composerActions}>
-          <Pressable
+          <FocusPressable
             accessibilityLabel="Attach file unavailable"
             accessibilityRole="button"
             disabled
@@ -712,8 +744,8 @@ function App(): React.JSX.Element {
               pressed && styles.pressed,
             ]}>
             <Paperclip color="#666666" size={18} strokeWidth={2} />
-          </Pressable>
-          <Pressable
+          </FocusPressable>
+          <FocusPressable
             accessibilityLabel="Dictation unavailable"
             accessibilityRole="button"
             disabled
@@ -722,9 +754,9 @@ function App(): React.JSX.Element {
               pressed && styles.pressed,
             ]}>
             <Mic color="#666666" size={18} strokeWidth={2} />
-          </Pressable>
+          </FocusPressable>
           <View style={styles.actionSpacer} />
-          <Pressable
+          <FocusPressable
             accessibilityLabel={
               activeGenerationId !== null
                 ? 'Stop response'
@@ -754,7 +786,7 @@ function App(): React.JSX.Element {
                 strokeWidth={2}
               />
             )}
-          </Pressable>
+          </FocusPressable>
         </View>
       </View>
     </View>
@@ -822,7 +854,7 @@ function App(): React.JSX.Element {
                                 </Text>
                                 {(readsPhase === 'saved-but-refresh-failed' ||
                                   readsPhase === 'unavailable') && (
-                                  <Pressable
+                                  <FocusPressable
                                     accessibilityLabel="Retry saved data"
                                     accessibilityRole="button"
                                     onPress={() => refreshReads(false)}
@@ -833,7 +865,7 @@ function App(): React.JSX.Element {
                                     <Text style={styles.retryButtonText}>
                                       Retry
                                     </Text>
-                                  </Pressable>
+                                  </FocusPressable>
                                 )}
                               </View>
                             )}
@@ -857,7 +889,11 @@ function App(): React.JSX.Element {
                             <Text style={styles.searchTitle}>
                               Search what you’ve seen and heard
                             </Text>
-                            <View style={styles.searchBox}>
+                            <View
+                              style={[
+                                styles.searchBox,
+                                searchFocused && styles.focusRing,
+                              ]}>
                               <Search
                                 accessible={false}
                                 color="#888888"
@@ -867,7 +903,9 @@ function App(): React.JSX.Element {
                               <TextInput
                                 accessibilityLabel="Search Home"
                                 autoFocus
+                                onBlur={() => setSearchFocused(false)}
                                 onChangeText={setSearchQuery}
+                                onFocus={() => setSearchFocused(true)}
                                 placeholder="Search conversations and memories"
                                 placeholderTextColor="#777777"
                                 ref={searchRef}
@@ -875,7 +913,7 @@ function App(): React.JSX.Element {
                                 value={searchQuery}
                               />
                               {searchQuery !== '' && (
-                                <Pressable
+                                <FocusPressable
                                   accessibilityLabel="Clear search"
                                   accessibilityRole="button"
                                   onPress={() => {
@@ -887,13 +925,13 @@ function App(): React.JSX.Element {
                                     pressed && styles.pressed,
                                   ]}>
                                   <Text style={styles.clearSearchText}>×</Text>
-                                </Pressable>
+                                </FocusPressable>
                               )}
                             </View>
                             <View style={styles.searchActions}>
                               <View style={styles.filters}>
                                 {filterLabels.map(filter => (
-                                  <Pressable
+                                  <FocusPressable
                                     accessibilityRole="button"
                                     key={filter.value}
                                     onPress={() =>
@@ -912,10 +950,10 @@ function App(): React.JSX.Element {
                                       ]}>
                                       {filter.label}
                                     </Text>
-                                  </Pressable>
+                                  </FocusPressable>
                                 ))}
                               </View>
-                              <Pressable
+                              <FocusPressable
                                 accessibilityLabel="Open Chat"
                                 accessibilityRole="button"
                                 onPress={() => setRoute('Chat')}
@@ -929,7 +967,7 @@ function App(): React.JSX.Element {
                                   strokeWidth={2}
                                 />
                                 <Text style={styles.chatPillText}>Chat</Text>
-                              </Pressable>
+                              </FocusPressable>
                             </View>
                             <Text style={styles.timelineLabel}>LATEST</Text>
                           </View>
@@ -945,7 +983,7 @@ function App(): React.JSX.Element {
                       contentContainerStyle={styles.chatScrollContent}
                       style={styles.chatScroll}>
                       <View style={styles.home}>
-                        <Pressable
+                        <FocusPressable
                           accessibilityLabel="Back to Home"
                           accessibilityRole="button"
                           onPress={() => setRoute('Home')}
@@ -959,7 +997,7 @@ function App(): React.JSX.Element {
                             strokeWidth={2}
                           />
                           <Text style={styles.backButtonText}>Home</Text>
-                        </Pressable>
+                        </FocusPressable>
                         <OmiMark />
                         <Text style={styles.greeting}>I’m ready.</Text>
                         <View style={styles.currents}>
@@ -994,7 +1032,7 @@ function App(): React.JSX.Element {
                         </View>
                         <View style={styles.prompts}>
                           {quickPrompts.map(prompt => (
-                            <Pressable
+                            <FocusPressable
                               accessibilityRole="button"
                               key={prompt}
                               onPress={() => setDraft(prompt)}
@@ -1003,7 +1041,7 @@ function App(): React.JSX.Element {
                                 pressed && styles.pressed,
                               ]}>
                               <Text style={styles.promptText}>{prompt}</Text>
-                            </Pressable>
+                            </FocusPressable>
                           ))}
                         </View>
                       </View>
@@ -1081,6 +1119,7 @@ const styles = StyleSheet.create({
     top: 0,
   },
   activePillHidden: {opacity: 0},
+  focusRing: {borderColor: '#ffffff', borderWidth: 2},
   navText: {color: '#b0b0b0', fontSize: 14, fontWeight: '600'},
   navTextCollapsed: {opacity: 0, width: 0},
   navTextActive: {color: '#141414'},

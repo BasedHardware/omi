@@ -11,6 +11,8 @@ const mockReact = React;
 let mockViewportWidth = 1200;
 let mockReduceMotion = false;
 let mockReduceMotionListener: ((enabled: boolean) => void) | undefined;
+let mockDesktopSearchListener: (() => void) | undefined;
+const mockSearchFocus = jest.fn();
 type MockRequest = {body?: string; id: string; method: string; path: string};
 type MockResponse = {body: string | null; id: string; status: number};
 const mockBackend = {
@@ -35,6 +37,12 @@ jest.mock('react-native', () => {
       ReactRuntime.createElement(name, props, children);
   const Text = component('Text');
   const View = component('View');
+  const TextInput = ReactRuntime.forwardRef(
+    (props: Record<string, unknown>, ref: React.Ref<unknown>) => {
+      ReactRuntime.useImperativeHandle(ref, () => ({focus: mockSearchFocus}));
+      return ReactRuntime.createElement('TextInput', props);
+    },
+  );
   class MockAnimatedValue {
     value: number;
     setValue = jest.fn((value: number) => {
@@ -98,14 +106,25 @@ jest.mock('react-native', () => {
     },
     FlatList,
     KeyboardAvoidingView: component('KeyboardAvoidingView'),
-    NativeModules: {},
-    Platform: {OS: 'ios'},
+    NativeEventEmitter: jest.fn(() => ({
+      addListener: (_event: string, listener: () => void) => {
+        mockDesktopSearchListener = listener;
+        return {remove: jest.fn()};
+      },
+    })),
+    NativeModules: {
+      OmiDesktopCommands: {
+        addListener: jest.fn(),
+        removeListeners: jest.fn(),
+      },
+    },
+    Platform: {OS: 'macos'},
     Pressable: component('Pressable'),
     SafeAreaView: component('SafeAreaView'),
     ScrollView: component('ScrollView'),
     StyleSheet: {create: <T,>(styles: T) => styles},
     Text,
-    TextInput: component('TextInput'),
+    TextInput,
     useWindowDimensions: () => ({
       fontScale: 1,
       height: 900,
@@ -214,6 +233,8 @@ beforeEach(() => {
   mockViewportWidth = 1200;
   mockReduceMotion = false;
   mockReduceMotionListener = undefined;
+  mockDesktopSearchListener = undefined;
+  mockSearchFocus.mockClear();
   mockBackend.cancelGenerationEvents.mockResolvedValue(undefined);
   mockBackend.generationEvents.mockResolvedValue('');
   mockBackend.request.mockImplementation(async request => {
@@ -456,6 +477,45 @@ test('does not borrow Home active navigation semantics for Chat', async () => {
   );
   expect(pill.props.style).toEqual(
     expect.arrayContaining([expect.objectContaining({opacity: 0})]),
+  );
+});
+
+test('routes the native macOS search command to Home and focuses search', async () => {
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+  mockSearchFocus.mockClear();
+
+  await ReactTestRenderer.act(async () => mockDesktopSearchListener?.());
+
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Home stage'),
+  ).toBeDefined();
+  expect(mockSearchFocus).toHaveBeenCalled();
+});
+
+test('shows a visible focus ring for keyboard-focused controls and search', async () => {
+  const renderer = await renderApp();
+  const home = renderer.root.findAll(
+    node =>
+      String(node.type) === 'Pressable' &&
+      node.props.accessibilityRole === 'tab',
+  )[0];
+  await ReactTestRenderer.act(async () => home.props.onFocus({}));
+  expect(home.props.style({pressed: false})).toEqual(
+    expect.arrayContaining([expect.objectContaining({borderWidth: 2})]),
+  );
+
+  const search = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Search Home',
+  );
+  await ReactTestRenderer.act(async () => search.props.onFocus());
+  const searchBox = search.parent!;
+  expect(searchBox.props.style).toEqual(
+    expect.arrayContaining([expect.objectContaining({borderWidth: 2})]),
   );
 });
 

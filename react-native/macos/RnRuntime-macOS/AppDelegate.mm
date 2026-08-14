@@ -1,4 +1,5 @@
 #import "AppDelegate.h"
+#import "OmiDesktopCommandsModule.h"
 
 #import <React/RCTBundleURLProvider.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
@@ -13,7 +14,33 @@
   self.initialProps = @{};
   self.dependencyProvider = [RCTAppDependencyProvider new];
 
-  return [super applicationDidFinishLaunching:notification];
+  [super applicationDidFinishLaunching:notification];
+  [self installDesktopSearchCommand];
+}
+
+- (void)installDesktopSearchCommand
+{
+  NSMenu *mainMenu = NSApplication.sharedApplication.mainMenu;
+  NSMenuItem *editItem = [mainMenu itemWithTitle:@"Edit"];
+  NSMenu *editMenu = editItem.submenu;
+  if (editMenu == nil) {
+    editItem = [[NSMenuItem alloc] initWithTitle:@"Edit" action:nil keyEquivalent:@""];
+    editMenu = [[NSMenu alloc] initWithTitle:@"Edit"];
+    editItem.submenu = editMenu;
+    [mainMenu addItem:editItem];
+  }
+  NSMenuItem *searchItem = [[NSMenuItem alloc] initWithTitle:@"Search"
+                                                      action:@selector(focusOmiSearch:)
+                                               keyEquivalent:@"k"];
+  searchItem.keyEquivalentModifierMask = NSEventModifierFlagCommand;
+  searchItem.target = self;
+  [editMenu addItem:searchItem];
+}
+
+- (void)focusOmiSearch:(id)sender
+{
+  [NSNotificationCenter.defaultCenter postNotificationName:OmiDesktopSearchCommandNotification
+                                                      object:nil];
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge

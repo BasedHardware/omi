@@ -12,6 +12,7 @@
 		514201552437B4B40078DB4F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 514201532437B4B40078DB4F /* Main.storyboard */; };
 		514201582437B4B40078DB4F /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 514201572437B4B40078DB4F /* main.m */; };
 		A10401000000000000000001 /* OmiBackendModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10401000000000000000002 /* OmiBackendModule.mm */; };
+		A10402000000000000000001 /* OmiDesktopCommandsModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10402000000000000000002 /* OmiDesktopCommandsModule.mm */; };
 		976153F7B9245696A8FEEA7A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 42B252A9C22C38646AC0EFED /* PrivacyInfo.xcprivacy */; };
 		9B6348701CA8A259BF932BD8 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 42B252A9C22C38646AC0EFED /* PrivacyInfo.xcprivacy */; };
 		DA2AA05EC605ADA710BAA8FE /* libPods-RnRuntime-macOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */; };
@@ -31,6 +32,8 @@
 		514201592437B4B40078DB4F /* RnRuntime.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RnRuntime.entitlements; sourceTree = "<group>"; };
 		A10401000000000000000002 /* OmiBackendModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiBackendModule.mm; sourceTree = "<group>"; };
 		A10401000000000000000003 /* OmiBackendModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiBackendModule.h; sourceTree = "<group>"; };
+		A10402000000000000000002 /* OmiDesktopCommandsModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiDesktopCommandsModule.mm; sourceTree = "<group>"; };
+		A10402000000000000000003 /* OmiDesktopCommandsModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiDesktopCommandsModule.h; sourceTree = "<group>"; };
 		8C7DEB25EEE8A944361796CD /* Pods-RnRuntime-macOS.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RnRuntime-macOS.release.xcconfig"; path = "Target Support Files/Pods-RnRuntime-macOS/Pods-RnRuntime-macOS.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-RnRuntime-macOS.a"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -86,6 +89,8 @@
 				514201592437B4B40078DB4F /* RnRuntime.entitlements */,
 				A10401000000000000000003 /* OmiBackendModule.h */,
 				A10401000000000000000002 /* OmiBackendModule.mm */,
+				A10402000000000000000003 /* OmiDesktopCommandsModule.h */,
+				A10402000000000000000002 /* OmiDesktopCommandsModule.mm */,
 			);
 			path = "RnRuntime-macOS";
 			sourceTree = "<group>";
@@ -319,6 +324,7 @@
 				514201582437B4B40078DB4F /* main.m in Sources */,
 				5142014D2437B4B30078DB4F /* AppDelegate.mm in Sources */,
 				A10401000000000000000001 /* OmiBackendModule.mm in Sources */,
+				A10402000000000000000001 /* OmiDesktopCommandsModule.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
