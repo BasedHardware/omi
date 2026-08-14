@@ -266,8 +266,25 @@ final class ToolsTests: XCTestCase {
         for (name, arguments) in calls {
             let text = try toolText(name: name, arguments: arguments, store: store)
 
+            // **Either disclosure counts, and the reason there are two is worth recording.**
+            //
+            // The tool has two ways of saying the local read failed, and which one it reaches for
+            // depends on whether the *Omi* half found anything: with nothing to show it prints the
+            // reader-fault footer, and with related memories to show it leads with the headline
+            // instead. This assertion used to name only the footer, and it held for one reason —
+            // `ContextPaths.omiDatabaseURL` was resolving to an empty test fixture rather than to
+            // the user's real Omi database (see `OmiMemoryStoreTests`), so the Omi half was always
+            // empty in this process and the second branch was unreachable. With that scan fixed,
+            // this test now reads whatever memories the machine running it happens to hold.
+            //
+            // Naming both sentences keeps every guard this test exists for — the read must be
+            // disclosed, and the three claims below must never appear — without the answer
+            // depending on the developer's own account. It does not close the underlying gap:
+            // `Tools` reaches `OmiBackend.shared`, which reaches `OmiMemoryStore.shared`, so this
+            // suite still reads a real local database when one is installed.
             XCTAssertTrue(
-                text.contains("present on this Mac but could not be read"),
+                text.contains("present on this Mac but could not be read")
+                    || text.contains("the search could not run"),
                 "\(name) hid a failed local read, said: \(text)")
             // The exact wording that used to appear here, and the reason this test exists: the
             // reader fell back to the "no database at all" sentence for a database that was

@@ -66,6 +66,25 @@ enum OmiKeyResolver {
         return nil
     }
 
+    /// What the key file looks like from the outside — modification time and size — so a rewrite can
+    /// be noticed without opening it.
+    ///
+    /// The app rewrites this file out of band (a fresh sign-in, a key the backend rejected, a new
+    /// mint) and tells nobody: this process is spawned per Claude session, and the session can
+    /// outlive the credential it started with by hours. Asking one `stat` before every remote read is
+    /// what makes the new key take effect on the next tool call rather than the next Claude restart,
+    /// and it is cheap enough to do on that path — unlike re-reading and re-normalizing the contents,
+    /// which would also reprint the permissions warning above on every call.
+    ///
+    /// nil when there is no file, which is itself a revision: "no key" → "a key" has to be noticed
+    /// too, because the MCP server is routinely spawned before the user has signed in.
+    static func keyFileRevision() -> String? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: keyFileURL.path) else { return nil }
+        let modified = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
+        return "\(modified)/\(size)"
+    }
+
     // MARK: Sources
 
     private static func fromEnvironment() -> String? {
@@ -99,6 +118,30 @@ enum OmiKeyResolver {
         // Quotes survive a copy-paste out of a shell or a JSON blob more often than not.
         value = value.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
         return value.isEmpty ? nil : value
+    }
+}
+
+/// Where the credential comes from, as a *source* rather than a value.
+///
+/// The distinction is the whole of this file's account-recovery behaviour: a value read once at
+/// construction is a value that cannot be repaired, and this client is built once per process into
+/// `OmiBackend.shared`. Everything that reads the credential goes through here, so a rewritten key
+/// file and a rejected key have exactly one place to be noticed.
+struct OmiCredentialSource: Sendable {
+    /// The credential as it is right now. Called only when `revision` says the file moved, or after a
+    /// rejection — never on a hot path.
+    let read: @Sendable () -> (key: String, source: OmiKeySource)?
+    /// A cheap value that changes whenever the key file does. Asked before every read.
+    let revision: @Sendable () -> String?
+
+    static let live = OmiCredentialSource(
+        read: { OmiKeyResolver.resolve() },
+        revision: { OmiKeyResolver.keyFileRevision() })
+
+    /// A credential that cannot change — the shape the tests that are about something else want, and
+    /// the shape the environment-variable override actually has.
+    static func fixed(_ credential: (key: String, source: OmiKeySource)?) -> OmiCredentialSource {
+        OmiCredentialSource(read: { credential }, revision: { nil })
     }
 }
 
@@ -151,8 +194,13 @@ public enum OmiBackendError: Error, Sendable, Equatable {
         }
     }
 
-    /// True when retrying inside one Claude session is pointless, so the failure is cached for the
-    /// life of the process instead of burning the hourly budget on a call that cannot succeed.
+    /// True when retrying with the same credential is pointless, so the failure is cached for the
+    /// life of *that credential* instead of burning the hourly budget on a call that cannot succeed.
+    ///
+    /// Not for the life of the process, which is what it used to mean and what made a 401 permanent:
+    /// the app re-provisions the key file underneath a running session, so "this key is rejected" and
+    /// "this account is unreachable" are different claims. `ResponseCache` scopes these entries to the
+    /// credential that produced them for exactly that reason.
     var isTerminal: Bool {
         switch self {
         // 404 included: an id the account does not hold will not start existing mid-session.
@@ -379,7 +427,7 @@ public final class OmiBackend: @unchecked Sendable {
     /// `AirgapEgressTests` there.
     public static let egressClientName = "omi-backend"
 
-    private let credential: (key: String, source: OmiKeySource)?
+    private let credentials: CredentialReader
     private let cache = ResponseCache()
     private let seen = SeenRange()
     /// Reads Airgap Mode. A closure rather than a stored `Bool` because the answer has to be taken
@@ -399,11 +447,11 @@ public final class OmiBackend: @unchecked Sendable {
     /// Deliberately not public: the credential never leaves this module, and no caller outside it
     /// can hand one in or read one back out.
     init(
-        credential: (key: String, source: OmiKeySource)? = OmiKeyResolver.resolve(),
+        credential: OmiCredentialSource = .live,
         isAirgapped: @escaping @Sendable () -> Bool = { MCPNetworkEgress.isAirgapped() },
         transport: (@Sendable (URLRequest) -> Result<Data, OmiBackendError>)? = nil
     ) {
-        self.credential = credential
+        self.credentials = CredentialReader(credential)
         self.isAirgapped = isAirgapped
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = Self.requestTimeout
@@ -416,10 +464,23 @@ public final class OmiBackend: @unchecked Sendable {
         self.transport = transport ?? { request in Self.perform(request, on: session) }
     }
 
-    public var isConfigured: Bool { credential != nil }
+    /// A credential that cannot change, for callers that are testing something else.
+    convenience init(
+        credential: (key: String, source: OmiKeySource)?,
+        isAirgapped: @escaping @Sendable () -> Bool = { MCPNetworkEgress.isAirgapped() },
+        transport: (@Sendable (URLRequest) -> Result<Data, OmiBackendError>)? = nil
+    ) {
+        self.init(credential: .fixed(credential), isAirgapped: isAirgapped, transport: transport)
+    }
+
+    /// Both of these re-read the key on demand rather than answering from a snapshot taken at
+    /// construction. `status` renders straight off them, and it is the tool a reader is sent to when
+    /// something looks wrong — reporting a credential the process has already stopped using is the
+    /// one thing it may never do.
+    public var isConfigured: Bool { credentials.current() != nil }
 
     /// The *name* of the source, never the key.
-    public var keySourceLabel: String? { credential?.source.label }
+    public var keySourceLabel: String? { credentials.current()?.source.label }
 
     /// Oldest / newest conversation start this process has seen from Omi, across every call made so
     /// far. Cheap extra evidence for `status` that costs no request.
@@ -680,7 +741,12 @@ public final class OmiBackend: @unchecked Sendable {
         query: [URLQueryItem],
         ttl: TimeInterval
     ) -> OmiResult<T> {
-        guard let credential else { return .unavailable(.notConfigured) }
+        // Asked *before* the cache, because this read is what notices the app having rewritten the
+        // key file: a rejection cached against the superseded key must never get to answer first.
+        // That ordering is the whole fix — a process that latched a 401 at breakfast was still
+        // reporting the account unreachable at lunchtime, over a key file that had been replaced
+        // with a working one in between and a `curl` with those exact bytes returning 200.
+        guard let credential = credentials.current() else { return .unavailable(.notConfigured) }
         guard var components = URLComponents(url: Self.baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)
         else { return .unavailable(.malformedResponse("could not build a URL for \(path)")) }
         components.queryItems = query.isEmpty ? nil : query
@@ -689,7 +755,7 @@ public final class OmiBackend: @unchecked Sendable {
         }
 
         let cacheKey = url.absoluteString
-        if let cached = cache.lookup(cacheKey) {
+        if let cached = cache.lookup(cacheKey, generation: credential.generation) {
             switch cached {
             case let .success(data): return decode(type, data, path: path, method: "GET")
             case let .failure(error): return .unavailable(error)
@@ -716,21 +782,29 @@ public final class OmiBackend: @unchecked Sendable {
             return .unavailable(.airgapped)
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = Self.requestTimeout
-        request.setValue("Bearer \(credential.key)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("context-for-claude-mcp/1.0", forHTTPHeaderField: "User-Agent")
+        let (result, used) = authorized(credential, path: path, method: "GET") { key in
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.timeoutInterval = Self.requestTimeout
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("context-for-claude-mcp/1.0", forHTTPHeaderField: "User-Agent")
+            return request
+        }
 
-        switch send(request, path: path, method: "GET") {
+        switch result {
         case let .success(data):
-            cache.store(cacheKey, .success(data), ttl: ttl)
+            cache.store(cacheKey, .success(data), ttl: ttl, generation: used.generation)
             return decode(type, data, path: path, method: "GET")
         case let .failure(error):
-            // Terminal failures are held for the life of the process; a transient one is held only
-            // briefly, so a flaky network recovers within the session without hammering the budget.
-            cache.store(cacheKey, .failure(error), ttl: error.isTerminal ? .greatestFiniteMagnitude : 60)
+            // Terminal failures are held for the life of the credential that earned them; a
+            // transient one is held only briefly, so a flaky network recovers within the session
+            // without hammering the budget. Stored against the credential actually used, which is
+            // the retried one when there was a retry.
+            cache.store(
+                cacheKey, .failure(error),
+                ttl: error.isTerminal ? .greatestFiniteMagnitude : 60,
+                generation: used.generation)
             return .unavailable(error)
         }
     }
@@ -742,7 +816,7 @@ public final class OmiBackend: @unchecked Sendable {
         query: [URLQueryItem] = [],
         body: Data? = nil
     ) -> OmiResult<T> {
-        guard let credential else { return .unavailable(.notConfigured) }
+        guard let credential = credentials.current() else { return .unavailable(.notConfigured) }
         guard var components = URLComponents(url: Self.baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)
         else { return .unavailable(.malformedResponse("could not build a URL for \(path)")) }
         components.queryItems = query.isEmpty ? nil : query
@@ -754,19 +828,52 @@ public final class OmiBackend: @unchecked Sendable {
             return .unavailable(.airgapped)
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.timeoutInterval = Self.requestTimeout
-        request.setValue("Bearer \(credential.key)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("context-for-claude-mcp/1.0", forHTTPHeaderField: "User-Agent")
-        request.httpBody = body
+        let (result, _) = authorized(credential, path: path, method: method) { key in
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            request.timeoutInterval = Self.requestTimeout
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("context-for-claude-mcp/1.0", forHTTPHeaderField: "User-Agent")
+            request.httpBody = body
+            return request
+        }
 
-        switch send(request, path: path, method: method) {
+        switch result {
         case let .success(data): return decode(type, data, path: path, method: method)
         case let .failure(error): return .unavailable(error)
         }
+    }
+
+    /// Sends a request carrying the credential, and answers a 401 by re-reading the key file once.
+    ///
+    /// **One re-read and one retry per call, and that is the ceiling.** The key on disk is rewritten
+    /// by the app, not by this process, so a rejection is worth exactly one look at what is there
+    /// now: if the file has changed the new key is tried immediately, and if it has not — or if the
+    /// replacement is rejected too — that is the account's answer and this stops asking. Anything
+    /// looser turns a revoked key into a request storm against a rate limit of 300 an hour, and the
+    /// second 401 tells the caller nothing the first one did not.
+    ///
+    /// It answers with the credential the reported result actually belongs to, because that is what
+    /// the caller must cache the result against.
+    private func authorized(
+        _ credential: CredentialReader.Value,
+        path: String,
+        method: String,
+        _ build: (String) -> URLRequest
+    ) -> (result: Result<Data, OmiBackendError>, credential: CredentialReader.Value) {
+        let first = send(build(credential.key), path: path, method: method)
+        guard case .failure(.unauthorized) = first else { return (first, credential) }
+
+        credentials.invalidate()
+        // An unchanged key means there is nothing new to try: the file has not moved since this call
+        // started, so re-sending it would only spend the budget to be told the same thing.
+        guard let replacement = credentials.current(), replacement.key != credential.key else {
+            return (first, credential)
+        }
+        MCPServer.note("omi: the key was rejected; a newer one is in \(replacement.source.label) — retrying once")
+        return (send(build(replacement.key), path: path, method: method), replacement)
     }
 
     /// Runs `request` through whatever transport this instance was built with, and names the failure
@@ -898,21 +1005,86 @@ private extension String {
 
 // MARK: - Process-local state
 
+/// The credential as it is *now*, re-read rather than remembered.
+///
+/// **This process outlives its own credential.** `context-for-claude-mcp` is spawned per Claude
+/// session, and a session runs for as long as someone leaves Claude open; the app rewrites
+/// `~/Library/Application Support/ContextForClaude/mcp-key` whenever it re-provisions and has no way
+/// to tell this process it did. Reading the file once at construction therefore meant a key replaced
+/// mid-session was never picked up, and every account-backed tool spent the rest of the day telling
+/// Claude the history was unreachable while the file on disk answered 200 — the worst failure this
+/// product has, because Claude then states with confidence that the user has no history.
+///
+/// Lazily, on demand, and with no timer: the revision is a `stat`, taken on the same call that was
+/// going to open a socket anyway. `invalidate()` is the other trigger — a rejection is the strongest
+/// possible hint that the key on disk has moved on.
+private final class CredentialReader: @unchecked Sendable {
+    /// A credential and the generation it belongs to. The generation moves only when the key itself
+    /// changes, so it is safe to hold results against: a file merely touched must not throw away
+    /// cached failures that are still true of the same key.
+    struct Value: Sendable {
+        let key: String
+        let source: OmiKeySource
+        let generation: Int
+    }
+
+    private let lock = NSLock()
+    private let source: OmiCredentialSource
+    private var cached: Value?
+    private var lastRevision: String?
+    private var hasRead = false
+    private var generation = 0
+
+    init(_ source: OmiCredentialSource) { self.source = source }
+
+    func current() -> Value? {
+        lock.lock()
+        defer { lock.unlock() }
+        let revision = source.revision()
+        if hasRead, revision == lastRevision { return cached }
+
+        let read = source.read()
+        if read?.key != cached?.key { generation += 1 }
+        cached = read.map { Value(key: $0.key, source: $0.source, generation: generation) }
+        hasRead = true
+        lastRevision = revision
+        return cached
+    }
+
+    /// Makes the next `current()` go back to disk regardless of what the revision says. Called on a
+    /// 401 and nowhere else.
+    func invalidate() {
+        lock.lock()
+        hasRead = false
+        lock.unlock()
+    }
+}
+
 /// In-process response cache. The rate limit is 300 reads an hour and Claude re-asks the same
 /// question constantly inside one session, so repeating a call is a bug, not a cost.
 private final class ResponseCache: @unchecked Sendable {
     private struct Entry {
         let expiresAt: Double
+        let generation: Int
         let result: Result<Data, OmiBackendError>
     }
 
     private let lock = NSLock()
     private var entries: [String: Entry] = [:]
 
-    func lookup(_ key: String) -> Result<Data, OmiBackendError>? {
+    func lookup(_ key: String, generation: Int) -> Result<Data, OmiBackendError>? {
         lock.lock()
         defer { lock.unlock() }
         guard let entry = entries[key] else { return nil }
+        // **A failure belongs to the credential that earned it.** `.unauthorized` is cached forever
+        // so a revoked key cannot burn the hourly budget, and that is right — but "forever" has to
+        // end when the key does, or a re-provisioned Mac keeps being told its own account is
+        // unreachable. A success is kept either way: it is the account's data, and the account did
+        // not change when its key did.
+        if case .failure = entry.result, entry.generation != generation {
+            entries.removeValue(forKey: key)
+            return nil
+        }
         guard entry.expiresAt > Date().timeIntervalSince1970 else {
             entries.removeValue(forKey: key)
             return nil
@@ -920,12 +1092,12 @@ private final class ResponseCache: @unchecked Sendable {
         return entry.result
     }
 
-    func store(_ key: String, _ result: Result<Data, OmiBackendError>, ttl: TimeInterval) {
+    func store(_ key: String, _ result: Result<Data, OmiBackendError>, ttl: TimeInterval, generation: Int) {
         lock.lock()
         defer { lock.unlock() }
         let expiry = ttl == .greatestFiniteMagnitude ? Double.greatestFiniteMagnitude
             : Date().timeIntervalSince1970 + ttl
-        entries[key] = Entry(expiresAt: expiry, result: result)
+        entries[key] = Entry(expiresAt: expiry, generation: generation, result: result)
     }
 
     func remove(matching path: String) {
