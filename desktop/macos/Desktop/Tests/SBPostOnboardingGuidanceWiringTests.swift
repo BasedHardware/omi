@@ -91,14 +91,14 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertTrue(setup.connectedAgentNames.isEmpty)
   }
 
-  func testSetupSnapshotUsesMicrophoneOnlyForNeverSystemAudio() {
+  func testSetupSnapshotReportsAudioRecordingOff() {
     let model = makeModel()
     appState?.hasMicrophonePermission = true
-    let previousMode = AssistantSettings.shared.systemAudioCaptureMode
-    AssistantSettings.shared.systemAudioCaptureMode = .never
-    defer { AssistantSettings.shared.systemAudioCaptureMode = previousMode }
+    let previousMode = AssistantSettings.shared.audioRecordingMode
+    AssistantSettings.shared.audioRecordingMode = .off
+    defer { AssistantSettings.shared.audioRecordingMode = previousMode }
 
-    XCTAssertEqual(model.postOnboardingSetup.listening, .microphoneOnly)
+    XCTAssertEqual(model.postOnboardingSetup.listening, .disabled)
   }
 
   func testSetupSnapshotRejectsStaleOrBrokenScreenCapture() {
@@ -192,11 +192,11 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     model.skip()
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldArmPopup())
 
-    // What the popup's dismiss handler persists.
-    PostOnboardingPromptSuggestions.shouldShowPopup = false
-    PostOnboardingPromptSuggestions.isDismissed = true
+    PostOnboardingPromptSuggestions.consume()
 
     XCTAssertFalse(PostOnboardingPromptSuggestions.shouldArmPopup())
+    XCTAssertFalse(PostOnboardingPromptSuggestions.shouldShowPopup)
+    XCTAssertTrue(PostOnboardingPromptSuggestions.isDismissed)
   }
 
   /// The flag alone must never raise an empty popup — that is the shape the first half of this bug

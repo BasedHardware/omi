@@ -2619,12 +2619,12 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(byok.values.count) usable user keys")
     }
 
+    let shouldFetchManagedToken = AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+      requestedCredentials: requiresCredentials,
+      isNonProduction: AppBuild.isNonProduction,
+      hermeticFaultModelToken: hermeticFaultModelToken)
     let requiresPiMonoCredentials =
-      preferredAdapterId == .piMono
-      && AgentRuntimeCredentialPolicy.requiresManagedCredentials(
-        requestedCredentials: requiresCredentials,
-        isNonProduction: AppBuild.isNonProduction,
-        hermeticFaultModelToken: hermeticFaultModelToken)
+      preferredAdapterId == .piMono && shouldFetchManagedToken
     let authService = await MainActor.run { AuthService.shared }
     let forceRefreshToken =
       preferredAdapterId == .piMono
@@ -2632,7 +2632,7 @@ actor AgentRuntimeProcess {
         isNonProduction: AppBuild.isNonProduction,
         isDesktopLocalProfile: DesktopLocalProfile.isEnabled)
     let authHeader = try? await Self.startupAuthHeader(
-      requiresCredentials: requiresPiMonoCredentials,
+      requiresCredentials: shouldFetchManagedToken,
       fetchAuthHeader: {
         try await authService.getAuthHeader(
           forceRefresh: forceRefreshToken,

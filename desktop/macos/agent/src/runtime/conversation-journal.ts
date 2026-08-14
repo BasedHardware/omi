@@ -3725,6 +3725,13 @@ function chatFirstIntentBlocks(
           summary: nonEmptyString(block.summary, "chat-first capture summary"),
         };
       }
+      case "conversationLink":
+        return {
+          type,
+          id,
+          conversationId: nonEmptyString(block.conversation_id, "chat-first conversation ID"),
+          summary: nonEmptyString(block.summary, "chat-first conversation summary"),
+        };
       default:
         throw new Error("Chat-first intent block type is invalid");
     }
@@ -3931,6 +3938,11 @@ function validateContentBlocks(blocks: readonly ConversationContentBlock[]): Con
       if (block.summary.length === 0 || block.summary.length > 200) throw new Error("Capture summary is out of bounds");
       if (block.momentTimestampMs !== undefined && (!Number.isSafeInteger(block.momentTimestampMs) || block.momentTimestampMs < 0)) {
         throw new Error("Capture moment timestamp is invalid");
+      }
+    } else if (block.type === "conversationLink") {
+      nonEmpty(block.conversationId, "conversation ID");
+      if (block.summary.length === 0 || block.summary.length > 200) {
+        throw new Error("Conversation summary is out of bounds");
       }
     }
     return structuredClone(block);

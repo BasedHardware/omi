@@ -2,6 +2,6 @@
   "version": "0.12.169",
   "date": "2026-08-13",
   "changes": [
-    "Improved proactive suggestions so near-term tasks are recognized at the right time and ungrounded contexts stay silent"
+    "Improved proactive-notification monitoring so missing analytics configuration is reported accurately"
   ]
 }

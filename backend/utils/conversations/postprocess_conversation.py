@@ -24,6 +24,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _minimum_audio_duration(transcript_segments: List[TranscriptSegment]) -> float:
+    if not transcript_segments:
+        return 10.0
+    transcript_duration = transcript_segments[-1].end - transcript_segments[0].start
+    return max(10.0, transcript_duration - 10.0)
+
+
 # TODO: this pipeline vs groq+pyannote diarization 3.1, probably the latter is better.
 # TODO: should consider storing non beautified segments, and beautify on read?
 def postprocess_conversation(
@@ -48,9 +55,8 @@ def postprocess_conversation(
         return 400, "Conversation can't be post-processed again"
 
     aseg = AudioSegment.from_wav(file_path)
-    if (
-        aseg.duration_seconds < 10
-    ):  # TODO: validate duration more accurately, segment.last.end - segment.first.start - 10
+
+    if aseg.duration_seconds < _minimum_audio_duration(conversation.transcript_segments):
         # TODO: fix app, sometimes audio uploaded is wrong, is too short.
         logger.info('postprocess_conversation: Audio duration is too short, seems wrong.')
         conversations_db.set_postprocessing_status(uid, conversation.id, PostProcessingStatus.canceled)
