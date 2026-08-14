@@ -148,6 +148,11 @@ env:
     value: "off"
   - name: MEMORY_V3_GET_ENABLED
     value: "false"
+  - name: MEMORY_V3_CURSOR_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MEMORY_V3_CURSOR_SECRET
   - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
     value: "false"
   - name: FAL_KEY

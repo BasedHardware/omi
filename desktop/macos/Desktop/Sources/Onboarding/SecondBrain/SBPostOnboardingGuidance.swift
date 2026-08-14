@@ -14,25 +14,21 @@ import Foundation
 struct SBSetupSnapshot: Equatable, Sendable {
   enum Listening: String, Equatable, Sendable {
     case disabled
-    case continuous
+    case always
     case meetingsOnly
-    case microphoneOnly
 
-    /// Keeps the setup snapshot independent of the live settings object while
-    /// preserving the capture semantics users see elsewhere in the app:
-    /// `.never` disables system audio, but leaves the microphone listening.
-    init(systemAudioModeRaw: String, canHear: Bool) {
+    init(audioRecordingModeRaw: String, canHear: Bool) {
       guard canHear else {
         self = .disabled
         return
       }
-      switch systemAudioModeRaw {
-      case AssistantSettings.SystemAudioCaptureMode.always.rawValue:
-        self = .continuous
-      case AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue:
+      switch audioRecordingModeRaw {
+      case AssistantSettings.AudioRecordingMode.always.rawValue:
+        self = .always
+      case AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue:
         self = .meetingsOnly
-      case AssistantSettings.SystemAudioCaptureMode.never.rawValue:
-        self = .microphoneOnly
+      case AssistantSettings.AudioRecordingMode.off.rawValue:
+        self = .disabled
       default:
         // An unknown persisted value is not evidence for a more permissive
         // mode. AssistantSettings normally heals this before it reaches us,
@@ -224,7 +220,7 @@ enum SBPostOnboardingGuidance {
         symbol: "mic.slash",
         title: "I can't hear yet. Turn on the microphone in Settings whenever you want me to.",
         keys: [])
-    case .continuous:
+    case .always:
       return SBOrientationCue(
         id: "listening",
         symbol: "ear",
@@ -233,14 +229,8 @@ enum SBPostOnboardingGuidance {
     case .meetingsOnly:
       return SBOrientationCue(
         id: "listening",
-        symbol: "calendar",
-        title: "I'll start listening when your meetings start.",
-        keys: [])
-    case .microphoneOnly:
-      return SBOrientationCue(
-        id: "listening",
-        symbol: "mic",
-        title: "I'm listening through your microphone only.",
+        symbol: "person.2",
+        title: "I'll start listening when a call starts.",
         keys: [])
     }
   }
@@ -278,7 +268,7 @@ extension SBOnboardingModel {
     return SBSetupSnapshot(
       role: role ?? roleDraft,
       listening: SBSetupSnapshot.Listening(
-        systemAudioModeRaw: appState.effectiveSystemAudioMode.rawValue,
+        audioRecordingModeRaw: appState.audioRecordingMode.rawValue,
         canHear: canHear),
       // Match the dashboard's capture health contract. TCC can remain granted
       // after signing changes or a ScreenCaptureKit failure, so permission or

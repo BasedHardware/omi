@@ -12,8 +12,9 @@ private final class WeakMeetingDetector: @unchecked Sendable {
 /// Detects whether a conferencing call ("meeting") is currently active by scanning on-screen
 /// windows for known call apps (see `ConferencingApps`).
 ///
-/// Used to gate system-audio capture in "Only during meetings" mode. It is created and started
-/// **only** while a recording is active in that mode, so there is zero overhead otherwise.
+/// Used to gate system-audio capture in "Only during meetings" mode and to rotate logical
+/// conversations at call boundaries while Always mode keeps the microphone live. It exists only
+/// while microphone transcription is active, so there is zero overhead otherwise.
 ///
 /// Transitions **on** as soon as a call is detected, but transitions **off** only after a grace
 /// period of sustained "no meeting" (hysteresis) to avoid flapping when a call window briefly

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat failing immediately after switching to Claude, Hermes, or OpenClaw while an Omi AI conversation was still open"
+}

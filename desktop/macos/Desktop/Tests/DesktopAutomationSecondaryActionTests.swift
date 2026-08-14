@@ -222,6 +222,25 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertTrue(body.contains("cloud_sync"))
   }
 
+  func testNotificationBridgeRetiresActivePeriodContract() throws {
+    let source = try bridgeSource()
+    for retiredSurface in [
+      "set_notification_active_period",
+      "notification_active_period_start_minute",
+      "notification_active_period_end_minute",
+      "active_period_start",
+      "active_period_end",
+    ] {
+      XCTAssertFalse(source.contains(retiredSurface), "retired notification surface remains: \(retiredSurface)")
+    }
+
+    let snapshotBody = try actionBody(named: "settings_notifications_snapshot", in: source)
+    for key in ["enabled", "frequency", "frequency_label", "has_permission", "banners_disabled"] {
+      XCTAssertTrue(snapshotBody.contains("\"\(key)\""))
+    }
+    XCTAssertTrue(snapshotBody.contains("\"schema\""))
+  }
+
   func testSubscriptionSnapshotReadsBillingAPI() throws {
     let source = try bridgeSource()
     let body = try actionBody(named: "subscription_snapshot", in: source)

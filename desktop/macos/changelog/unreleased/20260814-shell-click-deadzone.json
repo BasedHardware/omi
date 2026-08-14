@@ -1,0 +1,3 @@
+{
+  "change": "Fixed invisible dead zones around the main window and notch panel swallowing clicks: clicking another app now reaches it and brings it forward"
+}
