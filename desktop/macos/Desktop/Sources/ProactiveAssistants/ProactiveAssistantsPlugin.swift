@@ -902,7 +902,9 @@ public class ProactiveAssistantsPlugin: NSObject {
       app: appName ?? "",
       windowTitle: currentWindowTitle,
       idleSeconds: idleSeconds,
-      now: now
+      now: now,
+      forceHeartbeatCapture: SuggestionPacing.forcesHeartbeatCapture(
+        frequencyLevel: NotificationService.currentFrequencyLevel())
     ) {
     case .skip:
       return

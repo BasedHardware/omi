@@ -838,6 +838,14 @@ final class SuggestionPacingTests: XCTestCase {
     }
   }
 
+  /// Maximum forces a real frame every base heartbeat; calm levels keep the preview path.
+  func testOnlyMaximumForcesHeartbeatCapture() {
+    XCTAssertTrue(SuggestionPacing.forcesHeartbeatCapture(frequencyLevel: 5))
+    for level in [0, 1, 2, 3, 4] {
+      XCTAssertFalse(SuggestionPacing.forcesHeartbeatCapture(frequencyLevel: level))
+    }
+  }
+
   /// Passive watching produces no input; Maximum keeps capture alive for five minutes of
   /// stillness while calmer levels keep the long-standing 60s gate.
   func testMaximumExtendsCaptureIdleWindowOnly() {

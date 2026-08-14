@@ -561,6 +561,13 @@ enum SuggestionPacing {
     frequencyLevel >= maximumLevel
   }
 
+  /// Whether same-context heartbeats force a full capture (no preview-similarity skip,
+  /// no backoff growth). Maximum's cadence needs a real frame every base heartbeat even
+  /// on a mostly-static page; calm levels keep the cost-saving preview path.
+  static func forcesHeartbeatCapture(frequencyLevel: Int) -> Bool {
+    frequencyLevel >= maximumLevel
+  }
+
   /// Idle window before screen capture pauses. Watching a feed or a video produces no
   /// input; at Maximum the user has explicitly asked to be nudged during exactly that,
   /// so capture stays live for five minutes of stillness instead of one.

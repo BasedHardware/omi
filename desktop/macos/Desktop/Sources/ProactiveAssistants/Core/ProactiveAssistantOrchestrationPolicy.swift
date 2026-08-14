@@ -370,7 +370,8 @@ struct ProactiveCaptureTrigger {
     app: String,
     windowTitle: String?,
     idleSeconds: TimeInterval,
-    now: Date
+    now: Date,
+    forceHeartbeatCapture: Bool = false
   ) -> Decision {
     if idleSeconds >= idleThreshold {
       // User is idle: keep last context but do not capture.
@@ -399,6 +400,17 @@ struct ProactiveCaptureTrigger {
 
     // Same context: only sample on heartbeat. The heartbeat interval grows when
     // recent previews are all similar, so static screens are probed less often.
+    // Maximum notification level opts out of both the growth and the preview
+    // similarity skip: its cadence contract needs a real frame at least every base
+    // heartbeat, and a mostly-static feed page must still be evaluated.
+    if forceHeartbeatCapture {
+      if now.timeIntervalSince(lastCaptureTime) >= heartbeatInterval {
+        lastCaptureTime = now
+        consecutiveSimilarPreviews = 0
+        return .capture
+      }
+      return .skip
+    }
     if now.timeIntervalSince(lastCaptureTime) >= effectiveHeartbeatInterval {
       return .preview
     }
