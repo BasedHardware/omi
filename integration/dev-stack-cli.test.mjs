@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
@@ -167,7 +167,10 @@ test("RED-PROOF mismatched readiness cleans up the exact service and logger proc
   assert.deepEqual(portPids(8788), gatewayBefore);
   assert.deepEqual(processIdsMatching(`${runRoot}/runs/expected-run/logs/service.log`), []);
   assert.equal(existsSync(join(runRoot, "service-owner.json")), false);
-  assert.equal(existsSync(join(runRoot, "runs", "expected-run")), false);
+  const logPath = join(runRoot, "runs", "expected-run", "logs", "service.log");
+  assert.equal(existsSync(join(runRoot, "runs", "expected-run")), true);
+  assert.equal(existsSync(logPath), true);
+  assert.doesNotMatch(readFileSync(logPath, "utf8"), /new-failed-run-secret/);
 });
 
 test("RED-PROOF --stop frees the local test gateway this harness started", () => {
@@ -193,4 +196,26 @@ test("RED-PROOF --stop refuses a gateway it did not start", async () => {
   for (const pid of listenerPids) assert.doesNotThrow(() => process.kill(pid, 0));
   assert.deepEqual(portPids(8788), listenerPids);
   void result;
+});
+
+test("RED-PROOF a failed assert leaves the sanitized run log readable", () => {
+  const rootPair = roots();
+  writeService(rootPair, "process.env.OMI_RUN_ID");
+  mkdirSync(join(rootPair.core, "core/packages/surfaces"), { recursive: true });
+  mkdirSync(join(rootPair.core, "core/shells/macos/scripts"), { recursive: true });
+  mkdirSync(join(rootPair.core, "core/shells/ios/scripts"), { recursive: true });
+  const macos = join(rootPair.core, "core/shells/macos/scripts/dev-run-macos.sh");
+  const ios = join(rootPair.core, "core/shells/ios/scripts/dev-run-ios.sh");
+  writeFileSync(macos, "#!/bin/bash\nexit 1\n");
+  writeFileSync(ios, "#!/bin/bash\nexit 1\n");
+  chmodSync(macos, 0o755);
+  chmodSync(ios, 0o755);
+  writeFileSync(join(rootPair.core, "core/package.json"), "{not-json");
+
+  const result = run(["--assert", "--run-id", "run-keep-logs"], rootPair);
+  assert.notEqual(result.status, 0, `${result.stdout}${result.stderr}`);
+  assert.match(result.stderr, /core workspace build failed|see the run-scoped core build log/);
+  const logPath = join(scratch, "run-root", "runs", "run-keep-logs", "logs", "core-build.log");
+  assert.equal(existsSync(logPath), true, `${result.stdout}${result.stderr}`);
+  assert.match(readFileSync(logPath, "utf8"), /\S/, `${result.stdout}${result.stderr}`);
 });
