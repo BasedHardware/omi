@@ -4,8 +4,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
-/// Users often paste one key and miss the banner saying all four are required
-/// at the same time. Non-nil while 1–3 keys (in `BYOKProvider.allCases` order)
+/// Users often paste one key and miss the banner saying a valid LLM key is
+/// required. Non-nil while 1–3 keys (in `BYOKProvider.allCases` order)
 /// are entered, listing the ones still missing.
 func byokMissingKeysHint(_ keys: [String]) -> String? {
   let missing = zip(BYOKProvider.allCases, keys).filter { $0.1.isEmpty }.map(\.0.displayName)
@@ -275,8 +275,8 @@ extension SettingsContentView {
         await FloatingBarUsageLimiter.shared.fetchPlan()
         await MainActor.run {
           // Clear any sticky paywall flag from a prior `freemium_threshold_reached`
-          // event — once all 4 BYOK keys validate, the user is on the free BYOK
-          // plan and shouldn't be locked out of capture/transcription anymore.
+          // event — once the selected LLM BYOK key validates, the user is on the
+          // free BYOK plan and shouldn't be locked out of capture/transcription.
           AppState.current?.isPaywalled = false
           byokKeyStatuses = results
           byokActivationError = nil
