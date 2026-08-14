@@ -347,17 +347,37 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
     )
 
 
-def test_runtime_emits_speaker_suggestion_event():
+def test_runtime_emits_speaker_suggestion_event(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
     runtime = object.__new__(ListenSessionRuntime)
-    runtime.request = SimpleNamespace(speaker_auto_assign_enabled=True)
+    runtime.request = SimpleNamespace(uid='user-1', speaker_auto_assign_enabled=True)
+    runtime.recording_session_id = 'recording-1'
+    runtime.state = SimpleNamespace(current_conversation_id='conversation-1')
     emitted_events = []
+    product_events = []
     runtime.send_event = emitted_events.append
+    monkeypatch.setattr(runtime_module, 'emit_product_event', lambda **event: product_events.append(event))
 
     runtime.emit_speaker_suggestion(4, 'person-123', 'Avery', 'segment-123')
 
     assert emitted_events[0].event_type == 'speaker_label_suggestion'
     assert emitted_events[0].speaker_id == 4
     assert emitted_events[0].person_name == 'Avery'
+    assert product_events == [
+        {
+            'uid': 'user-1',
+            'event': 'Speaker Identity Proposed',
+            'properties': {
+                'recording_id': 'recording-1',
+                'conversation_id': 'conversation-1',
+                'speaker_id': 4,
+                'matched_existing_person': True,
+                'auto_assign_enabled': True,
+                'proposal_source': 'live_speaker_identification',
+            },
+        }
+    ]
 
 
 class _LiveSTTAttempt:
