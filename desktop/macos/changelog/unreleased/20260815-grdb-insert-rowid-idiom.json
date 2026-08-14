@@ -1,0 +1,3 @@
+{
+  "change": "Hardened how desktop records are saved so a newly created row cannot silently lose its database id"
+}
