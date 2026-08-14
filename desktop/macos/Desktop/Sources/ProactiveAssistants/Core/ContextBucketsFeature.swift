@@ -2,6 +2,9 @@ import Foundation
 
 enum ContextBucketsFeature {
   static let flagName = "context_buckets"
+  /// Remote stop for the beta channel. Inverted on purpose: absent, unresolved, and false
+  /// all mean "run the pipeline", so only an explicit true switches it off.
+  static let killSwitchFlagName = "context_buckets_kill"
   private static let localQAOverrideName = "OMI_FORCE_CONTEXT_BUCKETS"
 
   /// PostHog feature flags fail closed while unavailable or uninitialized, so the
@@ -26,7 +29,19 @@ enum ContextBucketsFeature {
     // beta installs had a null person-side channel and 11 reported `stable`, so
     // person-property targeting resolved for roughly a sixth of the channel. Bundle
     // identity is exact and available before any network call.
+    //
+    // Enablement does not consult `context_buckets` either, because that flag inherits the
+    // same problem from the other side: its audience can only be described with a static
+    // cohort or the unreliable person property, so a *newly installed* beta client matches
+    // neither and would silently get nothing. PostHog rejects behavioral cohorts in flag
+    // targeting, so there is no server-side expression of "is running the beta build" that
+    // stays correct as users arrive. Bundle identity already answers that question exactly.
+    //
+    // What remains useful remotely is the ability to stop the pipeline, so beta reads only
+    // the kill switch, and reads it fail-open: an unreachable or uninitialized PostHog must
+    // not switch the dogfood channel off by accident. Stable is gated out above, so this
+    // default cannot reach it.
     guard AppBuild.isBetaProductionBundle else { return false }
-    return PostHogManager.shared.isFeatureEnabled(flagName)
+    return !PostHogManager.shared.isFeatureEnabled(killSwitchFlagName)
   }
 }
