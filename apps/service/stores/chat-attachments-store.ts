@@ -9,9 +9,23 @@ import {
   isAllowedChatAttachmentMimeType,
   type AllowedChatAttachmentMimeType,
 } from "../chat/attachment-policy";
+import {
+  advanceAttachmentScan,
+  attachmentScanAdmissible,
+  beginAttachmentScan,
+  DEV_NOOP_SCANNER_ID,
+  type AttachmentScanClock,
+} from "../chat/attachment-scanner";
 import type { ChatAttachmentMetadata } from "./chat-messages-store";
 
-export type ChatAttachmentState = "staged" | "bound";
+export type ChatAttachmentState =
+  | "staged"
+  | "scanning"
+  | "clean"
+  | "rejected"
+  | "timed_out"
+  | "error"
+  | "bound";
 
 export interface ChatAttachmentRecord {
   readonly id: string;
@@ -22,6 +36,8 @@ export interface ChatAttachmentRecord {
   readonly mimeType: AllowedChatAttachmentMimeType;
   readonly sizeBytes: number;
   readonly state: ChatAttachmentState;
+  readonly scannerId: typeof DEV_NOOP_SCANNER_ID;
+  readonly scanningStartedAt: number | null;
   readonly stagedAt: number;
   readonly stageExpiresAt: number;
   readonly boundMessageId: string | null;
@@ -60,6 +76,9 @@ export interface BindChatAttachmentsInput extends ResolveChatAttachmentsInput {
 
 export interface ChatAttachmentsStore extends ChatAttachmentContentPort {
   stage(input: StageChatAttachmentInput): ChatAttachmentRecord;
+  advanceScan(id: string, clock: AttachmentScanClock): ChatAttachmentRecord | null;
+  retryScan(id: string, clock: AttachmentScanClock): ChatAttachmentRecord | null;
+  removeUnbound(id: string, accountId: string): boolean;
   resolveForAdmission(input: ResolveChatAttachmentsInput): ResolveChatAttachmentsOutcome;
   bindToMessage(input: BindChatAttachmentsInput): ResolveChatAttachmentsOutcome;
   projectMessageAttachments(input: {
@@ -101,6 +120,8 @@ const metadataOf = (record: ChatAttachmentRecord, now: number): ChatAttachmentMe
         && now < record.contentExpiresAt
       ? record.contentReference
       : null,
+    scanState: record.state === "bound" ? "bound" : record.state,
+    scannerId: record.scannerId,
   });
 
 const canResolve = (
@@ -111,7 +132,14 @@ const canResolve = (
   && record.scope === input.scope
   && (record.state === "bound"
     ? record.boundMessageId === input.messageId
-    : input.nowEpochMilliseconds < record.stageExpiresAt);
+    : attachmentScanAdmissible(record.state) && input.nowEpochMilliseconds < record.stageExpiresAt);
+
+const scanInputOf = (record: ChatAttachmentRecord): Parameters<typeof advanceAttachmentScan>[0] => ({
+  scannerId: record.scannerId,
+  state: record.state === "bound" ? "bound" : record.state,
+  scanningStartedAt: record.scanningStartedAt,
+  stagedAt: record.stagedAt,
+});
 
 export const createInMemoryChatAttachmentsStore = (): InMemoryChatAttachmentsStore => {
   const rows = new Map<string, ChatAttachmentRecord>();
@@ -144,6 +172,17 @@ export const createInMemoryChatAttachmentsStore = (): InMemoryChatAttachmentsSto
     });
   };
 
+  const applyScan = (record: ChatAttachmentRecord, clock: AttachmentScanClock): ChatAttachmentRecord => {
+    const next = record.state === "staged"
+      ? beginAttachmentScan(scanInputOf(record), { clock })
+      : advanceAttachmentScan(scanInputOf(record), { clock });
+    return detachRecord({
+      ...record,
+      state: next.state,
+      scanningStartedAt: next.scanningStartedAt,
+    });
+  };
+
   return Object.freeze({
     stage(input): ChatAttachmentRecord {
       if (input.id.length === 0 || input.contentReference.length === 0
@@ -167,6 +206,8 @@ export const createInMemoryChatAttachmentsStore = (): InMemoryChatAttachmentsSto
         mimeType: input.mimeType,
         sizeBytes: input.content.byteLength,
         state: "staged",
+        scannerId: DEV_NOOP_SCANNER_ID,
+        scanningStartedAt: null,
         stagedAt: input.stagedAt,
         stageExpiresAt: input.stageExpiresAt,
         boundMessageId: null,
@@ -178,6 +219,35 @@ export const createInMemoryChatAttachmentsStore = (): InMemoryChatAttachmentsSto
       return detachRecord(record);
     },
 
+    advanceScan(id, clock): ChatAttachmentRecord | null {
+      const record = rows.get(id);
+      if (record === undefined || record.state === "bound") return null;
+      const updated = applyScan(record, clock);
+      rows.set(id, updated);
+      return detachRecord(updated);
+    },
+
+    retryScan(id, clock): ChatAttachmentRecord | null {
+      const record = rows.get(id);
+      if (record === undefined || record.state === "bound" || record.state === "staged"
+        || record.state === "scanning" || record.state === "clean") return null;
+      const restarted = detachRecord({
+        ...record,
+        ...beginAttachmentScan(scanInputOf(record), { clock }),
+      });
+      rows.set(id, restarted);
+      return applyScan(restarted, clock);
+    },
+
+    removeUnbound(id, accountId): boolean {
+      const record = rows.get(id);
+      if (record === undefined || record.accountId !== accountId || record.state === "bound") {
+        return false;
+      }
+      rows.delete(id);
+      return true;
+    },
+
     resolveForAdmission: resolve,
 
     bindToMessage(input): ResolveChatAttachmentsOutcome {
@@ -185,7 +255,7 @@ export const createInMemoryChatAttachmentsStore = (): InMemoryChatAttachmentsSto
       if (ready.kind === "not_found") return ready;
       for (const id of input.attachmentIds) {
         const record = rows.get(id)!;
-        if (record.state === "staged") {
+        if (record.state === "clean") {
           rows.set(id, detachRecord({
             ...record,
             state: "bound",

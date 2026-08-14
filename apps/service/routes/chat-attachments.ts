@@ -244,7 +244,7 @@ export const registerChatAttachmentsRoute = (
 
     try {
       const stagedAt = deps.nowEpochMilliseconds();
-      const staged = deps.attachments.stage({
+      let record = deps.attachments.stage({
         id: deps.attachmentId(),
         contentReference: deps.contentReference(),
         accountId: principal.uid,
@@ -255,13 +255,18 @@ export const registerChatAttachmentsRoute = (
         stagedAt,
         stageExpiresAt: stagedAt + ATTACHMENT_STAGING_TTL_MS,
       });
+      const clock = { now: deps.nowEpochMilliseconds };
+      record = deps.attachments.advanceScan(record.id, clock) ?? record;
+      record = deps.attachments.advanceScan(record.id, clock) ?? record;
       return response({
         attachment: {
-          id: staged.id,
-          mimeType: staged.mimeType,
-          sizeBytes: staged.sizeBytes,
-          state: "staged",
-          expiresAt: new Date(staged.stageExpiresAt).toISOString(),
+          id: record.id,
+          mimeType: record.mimeType,
+          sizeBytes: record.sizeBytes,
+          state: record.state === "bound" ? "bound" : "staged",
+          scanState: record.state,
+          scannerId: record.scannerId,
+          expiresAt: new Date(record.stageExpiresAt).toISOString(),
         },
       }, 201);
     } catch {

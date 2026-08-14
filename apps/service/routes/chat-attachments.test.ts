@@ -8,6 +8,7 @@ import {
 } from "../app-facing";
 import type { ChatGenerationSource } from "../chat/generation-source";
 import type { ChatGenerationSupervisor } from "../chat/generation-supervisor";
+import { DEV_NOOP_SCANNER_ID } from "../chat/attachment-scanner";
 import { sniffChatAttachmentMimeType } from "./chat-attachments";
 import {
   ATTACHMENT_STAGING_TTL_MS,
@@ -109,6 +110,16 @@ const send = (
   }),
 }));
 
+const advanceToClean = (
+  stores: InMemoryLocalServiceStores,
+  id: string,
+  now: number,
+): void => {
+  const clock = { now: () => now };
+  stores.chatAttachments.advanceScan(id, clock);
+  stores.chatAttachments.advanceScan(id, clock);
+};
+
 describe("POST /v1/chat-attachments", () => {
   test("stages sniffed content, normalizes the basename, and returns only opaque staging metadata", async () => {
     const { db, local, now } = boot();
@@ -124,6 +135,8 @@ describe("POST /v1/chat-attachments", () => {
         mimeType: "application/pdf",
         sizeBytes: pdf().byteLength,
         state: "staged",
+        scanState: "clean",
+        scannerId: DEV_NOOP_SCANNER_ID,
         expiresAt: new Date(now.value + ATTACHMENT_STAGING_TTL_MS).toISOString(),
       },
     });
@@ -136,6 +149,8 @@ describe("POST /v1/chat-attachments", () => {
       mediaType: "application/pdf",
       sizeBytes: pdf().byteLength,
       contentReference: "content-opaque-01",
+      scanState: "bound",
+      scannerId: DEV_NOOP_SCANNER_ID,
     }]);
     db.close();
   });
@@ -233,6 +248,7 @@ describe("attachment ownership, binding and staging boundaries", () => {
         stagedAt: now.value,
         stageExpiresAt: now.value + ATTACHMENT_STAGING_TTL_MS,
       });
+      advanceToClean(stores, `count-${index}`, now.value);
     }
     expect((await send(local, "too-many", [
       "count-0", "count-1", "count-2", "count-3", "count-4",
@@ -240,7 +256,7 @@ describe("attachment ownership, binding and staging boundaries", () => {
     expect((await send(local, "duplicate", ["count-0", "count-0"])).status).toBe(422);
     expect(stores.chatMessages.readSnapshotSequence("attachment-owner")).toBe(0);
     expect(stores.chatAttachments.snapshotAccount("attachment-owner").rows
-      ?.every((row) => row.state === "staged")).toBe(true);
+      ?.every((row) => row.state === "clean")).toBe(true);
     db.close();
   });
 
@@ -268,6 +284,7 @@ describe("attachment ownership, binding and staging boundaries", () => {
       stagedAt: 1_786_352_400_000,
       stageExpiresAt: 1_786_352_400_000 + ATTACHMENT_STAGING_TTL_MS,
     });
+    advanceToClean(stores, "wrong-scope", 1_786_352_400_000);
 
     const foreign = await send(second.local, "foreign-attempt", ["owned-a"]);
     const unknown = await send(second.local, "unknown-attempt", ["does-not-exist"]);

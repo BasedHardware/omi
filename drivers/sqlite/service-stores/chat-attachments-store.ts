@@ -6,9 +6,17 @@ import {
   isAllowedChatAttachmentMimeType,
   type AllowedChatAttachmentMimeType,
 } from "../../../apps/service/chat/attachment-policy";
+import {
+  advanceAttachmentScan,
+  attachmentScanAdmissible,
+  beginAttachmentScan,
+  DEV_NOOP_SCANNER_ID,
+  type AttachmentScanClock,
+} from "../../../apps/service/chat/attachment-scanner";
 import type {
   BindChatAttachmentsInput,
   ChatAttachmentRecord,
+  ChatAttachmentState,
   ChatAttachmentsStore,
   ResolveChatAttachmentsInput,
   ResolveChatAttachmentsOutcome,
@@ -25,7 +33,9 @@ interface StoredAttachmentRow {
   readonly display_name: string;
   readonly mime_type: AllowedChatAttachmentMimeType;
   readonly size_bytes: number;
-  readonly attachment_state: "staged" | "bound";
+  readonly attachment_state: ChatAttachmentState;
+  readonly scanner_id: typeof DEV_NOOP_SCANNER_ID;
+  readonly scanning_started_at: number | null;
   readonly staged_at: number;
   readonly stage_expires_at: number;
   readonly bound_message_id: string | null;
@@ -34,10 +44,12 @@ interface StoredAttachmentRow {
   readonly content_bytes: Uint8Array | null;
 }
 
+const SCAN_STATES = "'staged','scanning','clean','rejected','timed_out','error','bound'";
+
 const SELECT_FIELDS = `
   id, content_reference, account_id, attachment_scope, display_name, mime_type,
-  size_bytes, attachment_state, staged_at, stage_expires_at, bound_message_id,
-  bound_at, content_expires_at, content_bytes
+  size_bytes, attachment_state, scanner_id, scanning_started_at, staged_at,
+  stage_expires_at, bound_message_id, bound_at, content_expires_at, content_bytes
 `;
 
 const detachBytes = (value: Uint8Array | null): Uint8Array | null =>
@@ -52,6 +64,8 @@ const fromRow = (row: StoredAttachmentRow): ChatAttachmentRecord => Object.freez
   mimeType: row.mime_type,
   sizeBytes: row.size_bytes,
   state: row.attachment_state,
+  scannerId: row.scanner_id,
+  scanningStartedAt: row.scanning_started_at,
   stagedAt: row.staged_at,
   stageExpiresAt: row.stage_expires_at,
   boundMessageId: row.bound_message_id,
@@ -73,6 +87,8 @@ const metadataOf = (row: StoredAttachmentRow, now: number): ChatAttachmentMetada
         && now < row.content_expires_at
       ? row.content_reference
       : null,
+    scanState: row.attachment_state,
+    scannerId: row.scanner_id,
   });
 
 const canResolve = (
@@ -83,7 +99,15 @@ const canResolve = (
   && row.attachment_scope === input.scope
   && (row.attachment_state === "bound"
     ? row.bound_message_id === input.messageId
-    : input.nowEpochMilliseconds < row.stage_expires_at);
+    : attachmentScanAdmissible(row.attachment_state)
+      && input.nowEpochMilliseconds < row.stage_expires_at);
+
+const scanInputOf = (row: StoredAttachmentRow) => ({
+  scannerId: row.scanner_id,
+  state: row.attachment_state,
+  scanningStartedAt: row.scanning_started_at,
+  stagedAt: row.staged_at,
+});
 
 export class SqliteChatAttachmentsStore implements ChatAttachmentsStore {
   constructor(private readonly db: Database) {
@@ -97,27 +121,29 @@ export class SqliteChatAttachmentsStore implements ChatAttachmentsStore {
         display_name TEXT NOT NULL,
         mime_type TEXT NOT NULL,
         size_bytes INTEGER NOT NULL CHECK (size_bytes > 0),
-        attachment_state TEXT NOT NULL CHECK (attachment_state IN ('staged', 'bound')),
+        attachment_state TEXT NOT NULL CHECK (attachment_state IN (${SCAN_STATES})),
+        scanner_id TEXT NOT NULL,
+        scanning_started_at INTEGER,
         staged_at INTEGER NOT NULL CHECK (staged_at >= 0),
         stage_expires_at INTEGER NOT NULL CHECK (stage_expires_at > staged_at),
         bound_message_id TEXT,
         bound_at INTEGER,
         content_expires_at INTEGER,
-        content_bytes BLOB,
-        CHECK (
-          (attachment_state = 'staged' AND bound_message_id IS NULL
-            AND bound_at IS NULL AND content_expires_at IS NULL
-            AND content_reference IS NOT NULL AND content_bytes IS NOT NULL)
-          OR
-          (attachment_state = 'bound' AND bound_message_id IS NOT NULL
-            AND bound_at IS NOT NULL AND content_expires_at IS NOT NULL)
-        )
+        content_bytes BLOB
       );
       CREATE INDEX IF NOT EXISTS service_chat_attachments_owner_message
         ON service_chat_attachments (account_id, attachment_scope, bound_message_id, id);
       CREATE INDEX IF NOT EXISTS service_chat_attachments_staging_expiry
         ON service_chat_attachments (attachment_state, stage_expires_at);
     `);
+    const columns = this.db.query("PRAGMA table_info(service_chat_attachments)").all() as Array<{ name: string }>;
+    const names = new Set(columns.map((column) => column.name));
+    if (!names.has("scanner_id")) {
+      this.db.exec("ALTER TABLE service_chat_attachments ADD COLUMN scanner_id TEXT NOT NULL DEFAULT 'dev-noop-scanner';");
+    }
+    if (!names.has("scanning_started_at")) {
+      this.db.exec("ALTER TABLE service_chat_attachments ADD COLUMN scanning_started_at INTEGER;");
+    }
   }
 
   stage(input: StageChatAttachmentInput): ChatAttachmentRecord {
@@ -132,9 +158,10 @@ export class SqliteChatAttachmentsStore implements ChatAttachmentsStore {
     const inserted = this.db.query(`
       INSERT INTO service_chat_attachments (
         id, content_reference, account_id, attachment_scope, display_name,
-        mime_type, size_bytes, attachment_state, staged_at, stage_expires_at,
-        bound_message_id, bound_at, content_expires_at, content_bytes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'staged', ?, ?, NULL, NULL, NULL, ?)
+        mime_type, size_bytes, attachment_state, scanner_id, scanning_started_at,
+        staged_at, stage_expires_at, bound_message_id, bound_at, content_expires_at,
+        content_bytes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'staged', ?, NULL, ?, ?, NULL, NULL, NULL, ?)
       ON CONFLICT DO NOTHING
     `).run(
       input.id,
@@ -144,12 +171,48 @@ export class SqliteChatAttachmentsStore implements ChatAttachmentsStore {
       input.displayName,
       input.mimeType,
       input.content.byteLength,
+      DEV_NOOP_SCANNER_ID,
       input.stagedAt,
       input.stageExpiresAt,
       input.content,
     );
     if (inserted.changes !== 1) throw new TypeError("chat attachment opaque identity collision");
     return fromRow(this.readRow(input.id)!);
+  }
+
+  advanceScan(id: string, clock: AttachmentScanClock): ChatAttachmentRecord | null {
+    const row = this.readRow(id);
+    if (row === null || row.attachment_state === "bound") return null;
+    const next = row.attachment_state === "staged"
+      ? beginAttachmentScan(scanInputOf(row), { clock })
+      : advanceAttachmentScan(scanInputOf(row), { clock });
+    this.db.query(`
+      UPDATE service_chat_attachments
+      SET attachment_state = ?, scanning_started_at = ?
+      WHERE id = ?
+    `).run(next.state, next.scanningStartedAt, id);
+    return fromRow(this.readRow(id)!);
+  }
+
+  retryScan(id: string, clock: AttachmentScanClock): ChatAttachmentRecord | null {
+    const row = this.readRow(id);
+    if (row === null || row.attachment_state === "bound" || row.attachment_state === "staged"
+      || row.attachment_state === "scanning" || row.attachment_state === "clean") return null;
+    const restarted = beginAttachmentScan(scanInputOf(row), { clock });
+    this.db.query(`
+      UPDATE service_chat_attachments
+      SET attachment_state = ?, scanning_started_at = ?
+      WHERE id = ?
+    `).run(restarted.state, restarted.scanningStartedAt, id);
+    return this.advanceScan(id, clock);
+  }
+
+  removeUnbound(id: string, accountId: string): boolean {
+    const deleted = this.db.query(`
+      DELETE FROM service_chat_attachments
+      WHERE id = ? AND account_id = ? AND attachment_state != 'bound'
+    `).run(id, accountId);
+    return deleted.changes === 1;
   }
 
   resolveForAdmission(input: ResolveChatAttachmentsInput): ResolveChatAttachmentsOutcome {
@@ -174,7 +237,7 @@ export class SqliteChatAttachmentsStore implements ChatAttachmentsStore {
           attachment_state = 'bound', bound_message_id = ?, bound_at = ?,
           content_expires_at = ?
         WHERE id = ? AND account_id = ? AND attachment_scope = ?
-          AND attachment_state = 'staged' AND stage_expires_at > ?
+          AND attachment_state = 'clean' AND stage_expires_at > ?
       `).run(
         input.messageId,
         input.nowEpochMilliseconds,

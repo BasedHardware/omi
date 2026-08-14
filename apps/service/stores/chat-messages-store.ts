@@ -18,6 +18,8 @@ export interface ChatAttachmentMetadata {
   readonly mediaType: string;
   readonly sizeBytes: number;
   readonly contentReference: string | null;
+  readonly scanState?: string;
+  readonly scannerId?: string;
 }
 
 /** The canonical durable Chat record served by history. */

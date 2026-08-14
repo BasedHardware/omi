@@ -13,6 +13,7 @@ import {
   ATTACHMENT_STAGING_TTL_MS,
   MAIN_CHAT_ATTACHMENT_SCOPE,
 } from "../../../apps/service/chat/attachment-policy";
+import { DEV_NOOP_SCANNER_ID } from "../../../apps/service/chat/attachment-scanner";
 import type { ChatGenerationSupervisor } from "../../../apps/service/chat/generation-supervisor";
 import { createInMemoryChatAdmission } from "../../../apps/service/stores/chat-admission";
 import type {
@@ -41,17 +42,23 @@ const inertSupervisor = (): ChatGenerationSupervisor => Object.freeze({
   recoverInterrupted: (): void => {},
 });
 
-const stage = (store: ChatAttachmentsStore, id = "attachment-1", now = 1_000) => store.stage({
-  id,
-  contentReference: `${id}-content-reference`,
-  accountId: ACCOUNT,
-  scope: MAIN_CHAT_ATTACHMENT_SCOPE,
-  displayName: "proof.pdf",
-  mimeType: "application/pdf",
-  content: PDF,
-  stagedAt: now,
-  stageExpiresAt: now + ATTACHMENT_STAGING_TTL_MS,
-});
+const stage = (store: ChatAttachmentsStore, id = "attachment-1", now = 1_000) => {
+  const record = store.stage({
+    id,
+    contentReference: `${id}-content-reference`,
+    accountId: ACCOUNT,
+    scope: MAIN_CHAT_ATTACHMENT_SCOPE,
+    displayName: "proof.pdf",
+    mimeType: "application/pdf",
+    content: PDF,
+    stagedAt: now,
+    stageExpiresAt: now + ATTACHMENT_STAGING_TTL_MS,
+  });
+  const clock = { now: () => now };
+  store.advanceScan(record.id, clock);
+  store.advanceScan(record.id, clock);
+  return record;
+};
 
 const message = (store: ChatAttachmentsStore, id = "attachment-1"): ChatMessageRecord => {
   const resolved = store.resolveForAdmission({
@@ -136,7 +143,7 @@ describe("attachment admission atomicity", () => {
       })).toThrow(`injected ${failure === "binding" ? "bindToMessage"
         : failure === "message" ? "admitHuman"
         : failure === "quota" ? "putEntitlement" : "append"} failure`);
-      expect(stores.chatAttachments.snapshotAccount(ACCOUNT).rows?.[0]?.state).toBe("staged");
+      expect(stores.chatAttachments.snapshotAccount(ACCOUNT).rows?.[0]?.state).toBe("clean");
       expect(stores.chatMessages.readMessage(ACCOUNT, "message-1")).toBeNull();
       expect(stores.settings.readEntitlement(ACCOUNT)?.used).toBe(0);
       expect(stores.chatEvents.listUnterminated()).toEqual([]);
@@ -168,7 +175,7 @@ describe("attachment admission atomicity", () => {
       })).toThrow();
       expect((db.query(`
         SELECT attachment_state AS state FROM service_chat_attachments WHERE id = ?
-      `).get("attachment-1") as { state: string }).state).toBe("staged");
+      `).get("attachment-1") as { state: string }).state).toBe("clean");
       expect(messages.readMessage(ACCOUNT, "message-1")).toBeNull();
       expect(settings.readEntitlement(ACCOUNT)?.used).toBe(0);
       expect(events.listUnterminated()).toEqual([]);
@@ -348,6 +355,8 @@ describe("SQLite attachment retention and restart", () => {
         mediaType: "application/pdf",
         sizeBytes: PDF.byteLength,
         contentReference: null,
+        scanState: "bound",
+        scannerId: DEV_NOOP_SCANNER_ID,
       });
       expect(secondStores.chatAttachments.loadForGeneration({
         accountId: ACCOUNT,

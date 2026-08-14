@@ -86,10 +86,14 @@ import {
 } from "./routes/chat-messages";
 import type { ChatGenerationRetentionPolicy } from "./stores/chat-generation-events-store";
 import {
+  createAgentRunEventSupervisor,
   createInMemoryAgentRunEventStore,
   type AgentRunEventStore,
 } from "./chat/agent-run-events";
+import { createAgentApprovalCoordinator, type AgentApprovalCoordinator } from "./chat/agent-approval-coordinator";
+import { createSafeWriteToolRegistry } from "./chat/safe-write-tool";
 import { registerChatAgentRunRoutes } from "./routes/chat-agent-runs";
+import { registerChatAgentApprovalRoutes } from "./routes/chat-agent-approvals";
 import { registerChatAttachmentsRoute } from "./routes/chat-attachments";
 import {
   isActionItemsCompatInvocation,
@@ -403,6 +407,7 @@ export interface LocalService {
     readonly chatEvents: ChatGenerationEventsStore;
     readonly chatAdmission: ChatAdmission;
     readonly agentRunEvents: AgentRunEventStore;
+    readonly agentApprovalCoordinator: AgentApprovalCoordinator;
   };
 }
 
@@ -705,6 +710,17 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   });
   chatSupervisor.recoverInterrupted();
 
+  const agentApprovalEvents = createAgentRunEventSupervisor({
+    events: agentRunEvents,
+    nowEpochMilliseconds: chatNowEpochMilliseconds,
+    eventId: (runId, sequence, kind) => `${runId}:event:${sequence}:${kind}`,
+  });
+  const agentApprovalCoordinator = createAgentApprovalCoordinator({
+    registry: createSafeWriteToolRegistry(),
+    events: agentApprovalEvents,
+    nowEpochMilliseconds: chatNowEpochMilliseconds,
+  });
+
   /**
    * The tasks read's prepared ports, per principal.
    *
@@ -872,6 +888,12 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       stores.chatMessages.readHumanByGeneration(accountId, generationId) !== null,
     scheduler: options.generationStreamScheduler,
   });
+  registerChatAgentApprovalRoutes(app, {
+    resolvePrincipal,
+    coordinator: agentApprovalCoordinator,
+    resolveGenerationOwner: (accountId, generationId) =>
+      stores.chatMessages.readHumanByGeneration(accountId, generationId) !== null,
+  });
   registerChatAttachmentsRoute(app, {
     resolvePrincipal,
     attachments: stores.chatAttachments,
@@ -942,6 +964,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       chatAdmission: stores.chatAdmission,
       chatFinalization: stores.chatFinalization,
       agentRunEvents,
+      agentApprovalCoordinator,
     }),
   });
 };
