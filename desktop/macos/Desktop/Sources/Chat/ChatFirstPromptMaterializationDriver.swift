@@ -250,11 +250,46 @@ extension APIClient {
         )
       }
     )
-    return try await post(
-      "v1/chat/materialize-prompts",
-      body: body,
-      includeBYOK: false,
-      expectedOwnerId: ownerID
-    )
+    do {
+      return try await post(
+        "v2/chat/materialize-prompts",
+        body: body,
+        includeBYOK: false,
+        expectedOwnerId: ownerID
+      )
+    } catch {
+      // Desktop Beta/Stable artifacts can outlive the independently deployed
+      // Python backend. A missing v2 route is the one safe compatibility case:
+      // the released v1 contract returns the legacy block union and therefore
+      // intentionally omits meeting-link blocks, while preserving questions,
+      // tasks, goals, and captures. Do not hide auth, generation, or transient
+      // failures behind a second request.
+      guard ChatFirstMaterializationEndpointPolicy.shouldFallbackToV1(for: error) else {
+        throw error
+      }
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "chat_first_materialization",
+        from: "v2",
+        to: "v1",
+        reason: "v2_route_missing",
+        outcome: .degraded)
+      log("Chat-first v2 materialization unavailable; retrying released v1 contract")
+      return try await post(
+        "v1/chat/materialize-prompts",
+        body: body,
+        includeBYOK: false,
+        expectedOwnerId: ownerID
+      )
+    }
+  }
+}
+
+enum ChatFirstMaterializationEndpointPolicy {
+  static func shouldFallbackToV1(for error: Error) -> Bool {
+    guard let apiError = error as? APIError else { return false }
+    if case .httpError(let statusCode, _) = apiError {
+      return statusCode == 404
+    }
+    return false
   }
 }

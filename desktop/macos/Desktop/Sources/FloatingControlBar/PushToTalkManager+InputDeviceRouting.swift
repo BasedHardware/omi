@@ -158,7 +158,7 @@ private final class SnapshotStore: @unchecked Sendable {
 extension PushToTalkManager {
   /// Non-blocking. Kicks the next HAL read and answers from the last one that landed.
   func preferredPTTInputOverrideDeviceID() -> AudioDeviceID? {
-    let selectedUID = ShortcutSettings.shared.pttInputDeviceUID
+    let selectedUID = ShortcutSettings.unifiedMicrophoneUID
     let snapshot = PTTInputDeviceRouting.currentSnapshot(selectedUID: selectedUID)
     if let snapshot, !selectedUID.isEmpty, snapshot.selectedDeviceID == nil {
       log("PushToTalkManager: selected PTT microphone is unavailable — using Automatic")
@@ -240,6 +240,6 @@ extension PushToTalkManager {
   /// Warms the routing snapshot at the start of a turn, before the turn's own setup
   /// work, so the HAL read overlaps that work instead of gating capture on it.
   func warmPTTInputRouting() {
-    PTTInputDeviceRouting.refresh(selectedUID: ShortcutSettings.shared.pttInputDeviceUID)
+    PTTInputDeviceRouting.refresh(selectedUID: ShortcutSettings.unifiedMicrophoneUID)
   }
 }

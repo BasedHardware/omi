@@ -230,6 +230,7 @@ class LiveConversationController:
             call_id=request.call_id if self.host.is_multi_channel else None,
             client_device_id=context.client_device_id,
             client_platform=context.platform,
+            external_data={'conversation_role': request.conversation_role},
         )
         await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,

@@ -270,8 +270,16 @@ enum ShellSummon {
         windowDisplayKey: window.screen.flatMap(ShellSummonPlacement.displayKey(for:)),
         cursorDisplayKey: landingScreen.flatMap(ShellSummonPlacement.displayKey(for:)))
 
-    if appliedPresentation == .summoned, repositions, let screen = landingScreen ?? window.screen {
-      window.setFrame(landingFrame(on: screen), display: true)
+    if repositions, let screen = landingScreen ?? window.screen {
+      // Onboarding is an anchored first-run surface, but it still needs a deterministic first
+      // placement. SwiftUI may restore the shell's previous frame at launch; leaving that frame in
+      // place puts a new user's onboarding card in a lower-right corner. Summoned shells keep their
+      // per-display placement policy; anchored shells are centred for the launch hand-off.
+      let frame =
+        appliedPresentation == .summoned
+        ? landingFrame(on: screen)
+        : ShellSummonPlacement.centered(window.frame.size, in: screen.visibleFrame)
+      window.setFrame(frame, display: true)
     } else if let screen = NSScreen.main, !screen.visibleFrame.intersects(window.frame) {
       // Anchored, or nothing to land on: the window may still be stranded on a display that went away.
       window.center()

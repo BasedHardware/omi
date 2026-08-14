@@ -146,9 +146,12 @@ struct ChatProactivePushRow: View {
     HStack(alignment: .top, spacing: OmiSpacing.sm) {
       Image(systemName: badge.systemImage)
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundColor(Ink.accent)
+        // Neutral, not accent: a notification badge is ambient history, not the one
+        // actionable element `Ink.accent` is reserved for (see Ink.swift). Blue here made
+        // every past notification shout for attention it does not want.
+        .foregroundColor(Ink.secondary)
         .frame(width: 24, height: 24)
-        .background(Ink.accent.opacity(0.1), in: Circle())
+        .background(Ink.rowFill, in: Circle())
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text(badge.label)
@@ -240,5 +243,50 @@ struct BackgroundAgentSummary: Equatable {
       prompt: remainder.isEmpty ? "Background agent" : remainder,
       output: output
     )
+  }
+}
+
+/// Footer actions for an assistant row. A finished reply is rateable as soon as
+/// it has copyable text; waiting for `isSynced` hid thumbs on the live tail
+/// because completion clears streaming before the journal remote id lands.
+/// Persistence of that rating is `ChatMessageRatingPersistence` — show the
+/// buttons now, PATCH after sync.
+enum ChatBubbleMetadataBand: Equatable {
+  case hidden
+  case timestampOnly
+  case actions
+
+  static func of(_ message: ChatMessage) -> Self {
+    guard message.sender == .ai, !message.isStreaming else { return .hidden }
+    guard !message.copyableText.isEmpty else { return .timestampOnly }
+    return .actions
+  }
+}
+
+/// Visible identity for `ChatBubble`'s Equatable skip. Sync, metadata, and
+/// structured blocks change the footer and tool rail without changing `text`.
+enum ChatBubbleIdentity {
+  static func equal(
+    _ lhs: ChatMessage,
+    _ rhs: ChatMessage,
+    appIDs: (String?, String?),
+    showsOmiMark: (Bool, Bool),
+    isDuplicate: (Bool, Bool)
+  ) -> Bool {
+    guard !lhs.isStreaming && !rhs.isStreaming else { return false }
+    return lhs.id == rhs.id
+      && lhs.text == rhs.text
+      && lhs.rating == rhs.rating
+      && lhs.isSynced == rhs.isSynced
+      && lhs.copyableText == rhs.copyableText
+      && lhs.displayResources == rhs.displayResources
+      && lhs.journalStatus == rhs.journalStatus
+      && lhs.citations.map(\.id) == rhs.citations.map(\.id)
+      && (lhs.metadata != nil) == (rhs.metadata != nil)
+      && ChatContentBlockCodec.comparisonData(lhs.contentBlocks)
+        == ChatContentBlockCodec.comparisonData(rhs.contentBlocks)
+      && appIDs.0 == appIDs.1
+      && showsOmiMark.0 == showsOmiMark.1
+      && isDuplicate.0 == isDuplicate.1
   }
 }

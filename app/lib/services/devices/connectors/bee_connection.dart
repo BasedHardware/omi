@@ -20,7 +20,7 @@ class BeeDeviceConnection extends CustomDeviceConnection {
   String get controlCharacteristicUuid => "05e1f93c-d8d0-5ed8-dd88-379e4c1a3e3e";
 
   @override
-  String get audioCharacteristicUuid => "b189a505-a86c-11ee-a5fb-8f2089a49e7e";
+  String get audioCharacteristicUuid => beeAudioCharacteristicUuid;
 
   @override
   int get unmuteCommandCode => 0xC006;

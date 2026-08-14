@@ -3,6 +3,18 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
+  func testMaterializationFallsBackOnlyWhenV2RouteIsMissing() {
+    XCTAssertTrue(
+      ChatFirstMaterializationEndpointPolicy.shouldFallbackToV1(
+        for: APIError.httpError(statusCode: 404)))
+    XCTAssertFalse(
+      ChatFirstMaterializationEndpointPolicy.shouldFallbackToV1(
+        for: APIError.httpError(statusCode: 401)))
+    XCTAssertFalse(
+      ChatFirstMaterializationEndpointPolicy.shouldFallbackToV1(
+        for: APIError.httpError(statusCode: 500)))
+  }
+
   func testPolicyRequiresTranscriptReadinessAndDebouncesForegroundFlapping() {
     let now = Date(timeIntervalSinceReferenceDate: 10_000)
 
@@ -126,6 +138,102 @@ final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
     XCTAssertEqual(driver.acknowledgementBatches, [pendingReceipts, pendingReceipts])
   }
 
+  @MainActor
+  func testMeetingCompletionBypassesForegroundDebounceOnlyWhileChatIsVisible() async {
+    let now = Date(timeIntervalSinceReferenceDate: 10_000)
+    let driver = FakePromptMaterializationDriver(
+      context: ChatFirstMaterializationContext(ownerID: "owner", controlGeneration: 3),
+      pendingReceipts: .empty,
+      response: ChatFirstMaterializePromptsResponse(intents: [])
+    )
+    let coordinator = ChatFirstPromptMaterializationCoordinator(now: { now })
+    coordinator.activate(driver: driver)
+
+    XCTAssertFalse(coordinator.meetingConversationDidComplete(windowForeground: true))
+    coordinator.chatTranscriptFirstPageDidLoad()
+    for _ in 0..<20 where driver.fetchReceiptBatches.count < 1 { await Task.yield() }
+    XCTAssertEqual(driver.fetchReceiptBatches.count, 1)
+
+    XCTAssertTrue(coordinator.meetingConversationDidComplete(windowForeground: true))
+    for _ in 0..<20 where driver.fetchReceiptBatches.count < 2 { await Task.yield() }
+    XCTAssertEqual(driver.fetchReceiptBatches.count, 2)
+
+    coordinator.chatTranscriptDidDisappear()
+    XCTAssertFalse(coordinator.meetingConversationDidComplete(windowForeground: true))
+  }
+
+  @MainActor
+  func testMeetingCompletionDuringFetchCoalescesOneImmediateFollowUp() async {
+    let driver = FakePromptMaterializationDriver(
+      context: ChatFirstMaterializationContext(ownerID: "owner", controlGeneration: 3),
+      pendingReceipts: .empty,
+      response: ChatFirstMaterializePromptsResponse(intents: [])
+    )
+    driver.suspendNextFetch = true
+    let coordinator = ChatFirstPromptMaterializationCoordinator()
+    coordinator.activate(driver: driver)
+
+    coordinator.chatTranscriptFirstPageDidLoad()
+    for _ in 0..<20 where !driver.isFetchSuspended { await Task.yield() }
+    XCTAssertEqual(driver.fetchReceiptBatches.count, 1)
+    XCTAssertTrue(coordinator.meetingConversationDidComplete(windowForeground: true))
+
+    driver.resumeFetch()
+    for _ in 0..<40 where driver.fetchReceiptBatches.count < 2 { await Task.yield() }
+    XCTAssertEqual(driver.fetchReceiptBatches.count, 2)
+  }
+
+  @MainActor
+  func testBackgroundCompletionDuringFetchWaitsForForegroundForFollowUp() async {
+    let driver = FakePromptMaterializationDriver(
+      context: ChatFirstMaterializationContext(ownerID: "owner", controlGeneration: 3),
+      pendingReceipts: .empty,
+      response: ChatFirstMaterializePromptsResponse(intents: [])
+    )
+    driver.suspendNextFetch = true
+    let coordinator = ChatFirstPromptMaterializationCoordinator()
+    coordinator.activate(driver: driver)
+
+    coordinator.chatTranscriptFirstPageDidLoad()
+    for _ in 0..<20 where !driver.isFetchSuspended { await Task.yield() }
+    XCTAssertEqual(driver.fetchReceiptBatches.count, 1)
+    XCTAssertTrue(coordinator.meetingConversationDidComplete(windowForeground: false))
+
+    driver.resumeFetch()
+    for _ in 0..<40 { await Task.yield() }
+    XCTAssertEqual(driver.windowForegroundValues, [true])
+
+    XCTAssertTrue(coordinator.mainWindowDidBecomeForeground())
+    for _ in 0..<40 where driver.windowForegroundValues.count < 2 { await Task.yield() }
+    XCTAssertEqual(driver.windowForegroundValues, [true, true])
+  }
+
+  @MainActor
+  func testBackgroundMeetingCompletionWaitsForForegroundWithoutSpendingDebounce() async {
+    let driver = FakePromptMaterializationDriver(
+      context: ChatFirstMaterializationContext(ownerID: "owner", controlGeneration: 3),
+      pendingReceipts: .empty,
+      response: ChatFirstMaterializePromptsResponse(intents: [])
+    )
+    let coordinator = ChatFirstPromptMaterializationCoordinator()
+    coordinator.activate(driver: driver)
+
+    coordinator.chatTranscriptFirstPageDidLoad()
+    for _ in 0..<20 where driver.windowForegroundValues.count < 1 { await Task.yield() }
+    XCTAssertEqual(driver.windowForegroundValues, [true])
+
+    XCTAssertTrue(coordinator.meetingConversationDidComplete(windowForeground: false))
+    // A background completion is queued locally. The backend intentionally
+    // returns no intents for a background request, so it must not consume the
+    // coordinator's 60-second foreground debounce window.
+    for _ in 0..<20 { await Task.yield() }
+    XCTAssertEqual(driver.windowForegroundValues, [true])
+
+    XCTAssertTrue(coordinator.mainWindowDidBecomeForeground())
+    for _ in 0..<20 where driver.windowForegroundValues.count < 2 { await Task.yield() }
+    XCTAssertEqual(driver.windowForegroundValues, [true, true])
+  }
+
   func testArrivalScrollPolicyFollowsFreshChatButPreservesScrollback() {
     XCTAssertEqual(
       ChatArrivalScrollPolicy.action(oldCount: 0, newCount: 2, mode: .followingBottom),
@@ -148,7 +256,11 @@ private final class FakePromptMaterializationDriver: ChatFirstPromptMaterializat
   private var storedPendingReceipts: ChatFirstPromptReceiptBatch
   private let response: ChatFirstMaterializePromptsResponse
   var acknowledgementError: Error?
+  var suspendNextFetch = false
+  private(set) var isFetchSuspended = false
+  private var fetchContinuation: CheckedContinuation<Void, Never>?
   private(set) var fetchReceiptBatches: [ChatFirstPromptReceiptBatch] = []
+  private(set) var windowForegroundValues: [Bool] = []
   private(set) var acknowledgementBatches: [ChatFirstPromptReceiptBatch] = []
   private(set) var materializedBatches: [[ChatFirstPromptIntent]] = []
 
@@ -173,11 +285,25 @@ private final class FakePromptMaterializationDriver: ChatFirstPromptMaterializat
   func fetchPrompts(
     ownerID _: String,
     controlGeneration _: Int,
-    windowForeground _: Bool,
+    windowForeground: Bool,
     receipts: ChatFirstPromptReceiptBatch
   ) async throws -> ChatFirstMaterializePromptsResponse {
     fetchReceiptBatches.append(receipts)
+    windowForegroundValues.append(windowForeground)
+    if suspendNextFetch {
+      suspendNextFetch = false
+      await withCheckedContinuation {
+        isFetchSuspended = true
+        fetchContinuation = $0
+      }
+    }
     return response
+  }
+
+  func resumeFetch() {
+    isFetchSuspended = false
+    fetchContinuation?.resume()
+    fetchContinuation = nil
   }
 
   func acknowledge(_ receipts: ChatFirstPromptReceiptBatch) async throws {
