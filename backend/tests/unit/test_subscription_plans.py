@@ -152,6 +152,11 @@ def test_can_pay_basic_stale_defers_plan_change_until_cancellation_ends(monkeypa
         current_price_id="price_current",
     )
     monkeypatch.setattr(sub, "find_active_paid_subscription_for_user", lambda uid: pending)
+    monkeypatch.setattr(
+        sub,
+        "price_ids_match_plan_and_interval",
+        lambda current_price_id, target_price_id: current_price_id == target_price_id,
+    )
 
     # Different target price must be deferred even though Firestore is basic.
     can_pay, reason = sub.can_user_make_payment("u1", target_price_id="price_target")
@@ -162,6 +167,33 @@ def test_can_pay_basic_stale_defers_plan_change_until_cancellation_ends(monkeypa
     can_pay, reason = sub.can_user_make_payment("u1", target_price_id="price_current")
     assert can_pay is True
     assert "reactivate" in reason
+
+
+def test_legacy_price_matches_current_price_with_same_plan_and_interval(monkeypatch, subscription_module):
+    sub = subscription_module
+    legacy_price_id = next(iter(sub.LEGACY_PRICE_MAP))
+    monkeypatch.setenv("STRIPE_UNLIMITED_MONTHLY_PRICE_ID", "price_unlimited_monthly")
+    monkeypatch.setenv("STRIPE_UNLIMITED_ANNUAL_PRICE_ID", "price_unlimited_annual")
+
+    legacy_price = MagicMock()
+    legacy_price.recurring.interval = "month"
+    monkeypatch.setattr(sub.stripe.Price, "retrieve", MagicMock(return_value=legacy_price))
+
+    assert sub.price_ids_match_plan_and_interval(legacy_price_id, "price_unlimited_monthly")
+    assert not sub.price_ids_match_plan_and_interval(legacy_price_id, "price_unlimited_annual")
+
+
+def test_reconcile_basic_subscription_without_stored_stripe_id(monkeypatch, subscription_module):
+    sub = subscription_module
+    stored = SimpleNamespace(plan=PlanType.basic, stripe_subscription_id=None, current_period_end=None)
+    recovered = MagicMock()
+    recovered.model_dump.return_value = {"stripe_subscription_id": "sub_recovered"}
+    users_db = SimpleNamespace(update_user_subscription=MagicMock())
+    monkeypatch.setattr(sub, "users_db", users_db)
+    monkeypatch.setattr(sub, "find_active_paid_subscription_for_user", lambda uid: recovered)
+
+    assert sub.reconcile_basic_plan_with_stripe("u1", stored) is recovered
+    users_db.update_user_subscription.assert_called_once_with("u1", {"stripe_subscription_id": "sub_recovered"})
 
 
 def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subscription_module):

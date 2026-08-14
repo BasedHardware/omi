@@ -183,6 +183,31 @@ def test_reactivate_falls_back_to_stripe_when_local_subscription_is_stale():
     assert result["status"] == "reactivated"
     # The Stripe-side subscription must be reactivated, not a new checkout created.
     mock_modify.assert_called_once_with("sub_from_stripe", cancel_at_period_end=False)
+    router.set_credits_invalidation_signal.assert_called_once_with("u1")
+    router.record_fallback.assert_called_once_with(
+        component="other",
+        from_mode="firestore_subscription",
+        to_mode="stripe_subscription",
+        reason="local_heal",
+        outcome="recovered",
+        log=router.logger,
+    )
+
+
+def test_reactivate_records_exhausted_recovery_when_stripe_has_no_subscription(payment_router):
+    router = payment_router
+    router.users_db.get_user_subscription.return_value = SimpleNamespace(stripe_subscription_id=None)
+    router.find_active_paid_subscription_for_user.return_value = None
+
+    assert router._try_reactivate_subscription("u1", "price_same") is None
+    router.record_fallback.assert_called_once_with(
+        component="other",
+        from_mode="firestore_subscription",
+        to_mode="stripe_subscription",
+        reason="local_heal",
+        outcome="exhausted",
+        log=router.logger,
+    )
 
 
 def test_checkout_catches_stripe_invalid_request_error():
@@ -253,6 +278,11 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     sub_mod.adapt_plans_for_legacy_client = MagicMock()
     sub_mod.clear_trial_paywall_cache = MagicMock()
     sub_mod.find_active_paid_subscription_for_user = MagicMock()
+    sub_mod.price_ids_match_plan_and_interval = MagicMock(return_value=True)
+
+    fallback_mod = types.ModuleType("utils.observability.fallback")
+    fallback_mod.record_fallback = MagicMock()
+    sys.modules["utils.observability.fallback"] = fallback_mod
 
     stripe_utils_mod = sys.modules["utils.stripe"]
     stripe_utils_mod.base_url = "http://test/"

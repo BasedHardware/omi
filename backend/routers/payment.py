@@ -32,7 +32,9 @@ from utils.subscription import (
     adapt_plans_for_legacy_client,
     clear_trial_paywall_cache,
     find_active_paid_subscription_for_user,
+    price_ids_match_plan_and_interval,
 )
+from utils.observability.fallback import record_fallback
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -298,12 +300,22 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
         dict with reactivation details if successful, None otherwise
     """
     current_subscription = users_db.get_user_subscription(uid)
+    recovered_from_stripe = False
     if not current_subscription or not current_subscription.stripe_subscription_id:
         # The local row may be missing/stale (e.g. read-after-write lag or a
         # sync issue). Stripe is the recovery source of truth: find the active
         # paid subscription there and use its id to attempt reactivation.
         current_subscription = find_active_paid_subscription_for_user(uid)
+        recovered_from_stripe = True
         if not current_subscription or not current_subscription.stripe_subscription_id:
+            record_fallback(
+                component='other',
+                from_mode='firestore_subscription',
+                to_mode='stripe_subscription',
+                reason='local_heal',
+                outcome='exhausted',
+                log=logger,
+            )
             return None
 
     try:
@@ -316,12 +328,23 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
             current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
 
             # If resubscribing to the same plan, just remove cancellation
-            if current_price_id == target_price_id:
+            current_interval = stripe_sub_dict['items']['data'][0]['price'].get('recurring', {}).get('interval')
+            if price_ids_match_plan_and_interval(current_price_id, target_price_id, current_interval):
                 stripe.Subscription.modify(current_subscription.stripe_subscription_id, cancel_at_period_end=False)
 
                 # Update our database
                 current_subscription.cancel_at_period_end = False
                 users_db.update_user_subscription(uid, current_subscription.model_dump())
+                set_credits_invalidation_signal(uid)
+                if recovered_from_stripe:
+                    record_fallback(
+                        component='other',
+                        from_mode='firestore_subscription',
+                        to_mode='stripe_subscription',
+                        reason='local_heal',
+                        outcome='recovered',
+                        log=logger,
+                    )
 
                 # Calculate next billing date
                 next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end'], tz=timezone.utc).strftime(
@@ -335,6 +358,16 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                 }
     except Exception as e:
         logger.error(f"Error checking for reactivation: {e}")
+
+    if recovered_from_stripe:
+        record_fallback(
+            component='other',
+            from_mode='firestore_subscription',
+            to_mode='stripe_subscription',
+            reason='local_heal',
+            outcome='exhausted',
+            log=logger,
+        )
 
     return None
 
