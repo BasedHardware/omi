@@ -136,13 +136,29 @@ extension View {
 /// *because* the question above it is its context, and this row has none.
 struct ChatProactivePushRow: View {
   let text: String
+  let kind: ProactiveNotificationKind
+
+  private var badge: ProactiveNotificationBadge {
+    ProactiveNotificationBadge(kind: kind)
+  }
 
   var body: some View {
-    HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
-      Image(systemName: "bell")
+    HStack(alignment: .top, spacing: OmiSpacing.sm) {
+      Image(systemName: badge.systemImage)
         .scaledFont(size: OmiType.caption, weight: .semibold)
+        // Neutral, not accent: a notification badge is ambient history, not the one
+        // actionable element `Ink.accent` is reserved for (see Ink.swift). Blue here made
+        // every past notification shout for attention it does not want.
         .foregroundColor(Ink.secondary)
-      OmiMarkdown(text: text, sender: .ai)
+        .frame(width: 24, height: 24)
+        .background(Ink.rowFill, in: Circle())
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text(badge.label)
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+          .foregroundColor(Ink.secondary)
+        OmiMarkdown(text: text, sender: .ai)
+      }
       Spacer(minLength: 0)
     }
     .padding(.horizontal, OmiSpacing.md)
@@ -155,17 +171,35 @@ struct ChatProactivePushRow: View {
         .stroke(Ink.glassEdge, lineWidth: 1)
     )
     .accessibilityElement(children: .combine)
-    .accessibilityLabel("Omi noticed: \(text)")
+    .accessibilityLabel("\(badge.label): \(text)")
   }
 }
 
-/// Visibility rule for the quiet timeline's per-message metadata row
-/// (rating / copy / info / timestamp). Keyboard parity is part of the
-/// contract: focus on any metadata control must reveal the row, otherwise
-/// Tab / Full Keyboard Access ends up on an invisible button.
-enum ChatBubbleMetadataReveal {
-  static func isVisible(hovering: Bool, controlFocused: Bool, transientFeedback: Bool) -> Bool {
-    hovering || controlFocused || transientFeedback
+struct ProactiveNotificationBadge: Equatable {
+  let label: String
+  let systemImage: String
+
+  /// Shared glyph contract: Insight uses `sparkles` everywhere; Suggestion keeps `lightbulb`.
+  static let insightSystemImage = "sparkles"
+  static let suggestionSystemImage = "lightbulb"
+
+  init(kind: ProactiveNotificationKind) {
+    switch kind {
+    case .suggestion:
+      (label, systemImage) = ("Suggestion", Self.suggestionSystemImage)
+    case .insight:
+      (label, systemImage) = ("Insight", Self.insightSystemImage)
+    case .task:
+      (label, systemImage) = ("Task", "checkmark.circle")
+    case .memory:
+      (label, systemImage) = ("Memory", "brain.head.profile")
+    case .goal:
+      (label, systemImage) = ("Goal", "target")
+    case .resurface:
+      (label, systemImage) = ("Resurfaced", "clock.arrow.circlepath")
+    case .general:
+      (label, systemImage) = ("Notification", "bell")
+    }
   }
 }
 
@@ -209,5 +243,50 @@ struct BackgroundAgentSummary: Equatable {
       prompt: remainder.isEmpty ? "Background agent" : remainder,
       output: output
     )
+  }
+}
+
+/// Footer actions for an assistant row. A finished reply is rateable as soon as
+/// it has copyable text; waiting for `isSynced` hid thumbs on the live tail
+/// because completion clears streaming before the journal remote id lands.
+/// Persistence of that rating is `ChatMessageRatingPersistence` — show the
+/// buttons now, PATCH after sync.
+enum ChatBubbleMetadataBand: Equatable {
+  case hidden
+  case timestampOnly
+  case actions
+
+  static func of(_ message: ChatMessage) -> Self {
+    guard message.sender == .ai, !message.isStreaming else { return .hidden }
+    guard !message.copyableText.isEmpty else { return .timestampOnly }
+    return .actions
+  }
+}
+
+/// Visible identity for `ChatBubble`'s Equatable skip. Sync, metadata, and
+/// structured blocks change the footer and tool rail without changing `text`.
+enum ChatBubbleIdentity {
+  static func equal(
+    _ lhs: ChatMessage,
+    _ rhs: ChatMessage,
+    appIDs: (String?, String?),
+    showsOmiMark: (Bool, Bool),
+    isDuplicate: (Bool, Bool)
+  ) -> Bool {
+    guard !lhs.isStreaming && !rhs.isStreaming else { return false }
+    return lhs.id == rhs.id
+      && lhs.text == rhs.text
+      && lhs.rating == rhs.rating
+      && lhs.isSynced == rhs.isSynced
+      && lhs.copyableText == rhs.copyableText
+      && lhs.displayResources == rhs.displayResources
+      && lhs.journalStatus == rhs.journalStatus
+      && lhs.citations.map(\.id) == rhs.citations.map(\.id)
+      && (lhs.metadata != nil) == (rhs.metadata != nil)
+      && ChatContentBlockCodec.comparisonData(lhs.contentBlocks)
+        == ChatContentBlockCodec.comparisonData(rhs.contentBlocks)
+      && appIDs.0 == appIDs.1
+      && showsOmiMark.0 == showsOmiMark.1
+      && isDuplicate.0 == isDuplicate.1
   }
 }

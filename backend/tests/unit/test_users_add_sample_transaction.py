@@ -27,6 +27,9 @@ def users_db():
     client_stub.delete_collection_recursive = MagicMock(name="delete_collection_recursive")
     client_stub.document_id_from_seed = MagicMock(name="document_id_from_seed")
     client_stub.get_firestore_client = MagicMock(name="get_firestore_client", return_value=client_stub.db)
+    client_stub.get_customer_firestore_client = MagicMock(
+        name="get_customer_firestore_client", return_value=client_stub.db
+    )
 
     firestore_stub = ModuleType("google.cloud.firestore")
     google_pkg = ModuleType("google")

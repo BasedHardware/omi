@@ -1884,6 +1884,46 @@ class TestBetaIdentityServing:
         assert "https://example.com/dl/omi-beta.dmg" in resp.text
 
     @pytest.mark.asyncio
+    async def test_channel_beta_alone_serves_beta_identity_dmg(self):
+        # The exact request shape macos.omi.me/beta produces: the URL-map redirect carries
+        # only channel=beta and cannot append identity=beta. With identity defaulting to
+        # "stable", the public beta link served the stable-identity omi.dmg (production
+        # bundle id + production services) from the beta pointer — so "download the beta"
+        # installed a prod build. The channel a user asks for implies its identity.
+        entries = [
+            _beta_live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _dmg_asset(), _beta_dmg_asset("https://example.com/dl/omi-beta.dmg")],
+                metadata={"edSignature": "sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/latest", params={"channel": "beta"})
+
+        assert resp.status_code == 200
+        assert "https://example.com/dl/omi-beta.dmg" in resp.text
+        assert "https://example.com/omi.dmg" not in resp.text
+
+    @pytest.mark.asyncio
+    async def test_explicit_identity_stable_on_beta_channel_is_preserved(self):
+        # Tooling may genuinely want the cross product; deriving identity only applies
+        # when the parameter is absent.
+        entries = [
+            _beta_live_entry(
+                channel="beta",
+                assets=[_zip_asset(), _dmg_asset(), _beta_dmg_asset("https://example.com/dl/omi-beta.dmg")],
+                metadata={"edSignature": "sig"},
+            ),
+        ]
+        with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/download/latest", params={"channel": "beta", "identity": "stable"})
+
+        assert resp.status_code == 200
+        assert "https://example.com/omi.dmg" in resp.text
+
+    @pytest.mark.asyncio
     async def test_download_beta_endpoint_falls_back_to_stable_dmg_pre_rollout(self):
         # Public macos.omi.me/beta must not 404 while no live beta release ships
         # beta-identity artifacts; the strict guard stays on the Sparkle feed.

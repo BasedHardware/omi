@@ -22,6 +22,7 @@ def test_child_env_for_offline_mode() -> None:
     assert child["PROVIDER_MODE"] == "offline"
     assert child["OMI_HARNESS_INSTANCE"] == "default"
     assert child["FIREBASE_API_KEY"] == config.LOCAL_FIREBASE_API_KEY
+    assert child["OMI_LLM_GATEWAY_FEATURE_MODE"] == "off"
 
 
 def test_child_env_for_real_mode() -> None:
@@ -45,6 +46,8 @@ def test_nondefault_port_offset_propagates_to_every_harness_service() -> None:
     assert cfg.typesense_port == 8429
     assert cfg.backend_url == "http://127.0.0.1:8321"
     assert cfg.desktop_backend_url == "http://127.0.0.1:10522"
+    assert cfg.llm_gateway_url == "http://127.0.0.1:9401"
+    assert cfg.llm_gateway_service_token == f"{config.LOCAL_LLM_GATEWAY_SERVICE_TOKEN}:{cfg.instance}"
 
     backend_env = config.child_env_for(cfg)
     desktop_env = config.desktop_backend_child_env_for(cfg)
@@ -54,3 +57,38 @@ def test_nondefault_port_offset_propagates_to_every_harness_service() -> None:
     assert backend_env["TYPESENSE_HOST_PORT"] == "8429"
     assert backend_env["PORT"] == "8321"
     assert desktop_env["PORT"] == "10522"
+    assert backend_env["OMI_LLM_GATEWAY_URL"] == cfg.llm_gateway_url
+    assert desktop_env["OMI_LLM_GATEWAY_URL"] == cfg.llm_gateway_url
+    assert backend_env["OMI_LLM_GATEWAY_SERVICE_TOKEN"] == cfg.llm_gateway_service_token
+    assert desktop_env["OMI_LLM_GATEWAY_SERVICE_TOKEN"] == cfg.llm_gateway_service_token
+    assert backend_env["OMI_LLM_GATEWAY_FEATURE_MODE"] == "gateway"
+    assert desktop_env["OMI_LLM_GATEWAY_FEATURE_MODE"] == "gateway"
+
+
+def test_offline_child_env_uses_direct_llm_feature_mode() -> None:
+    cfg = config.HarnessConfig(
+        repo_root=REPO_ROOT,
+        instance="offline-qa",
+        provider_mode="offline",
+        layout=safety.layout_for_instance(REPO_ROOT, "offline-qa"),
+    )
+    backend_env = config.child_env_for(cfg)
+    desktop_env = config.desktop_backend_child_env_for(cfg)
+    assert backend_env["OMI_LLM_GATEWAY_FEATURE_MODE"] == "off"
+    assert desktop_env["OMI_LLM_GATEWAY_FEATURE_MODE"] == "off"
+    assert desktop_env["OMI_LLM_STUB"] == "1"
+
+
+def test_llm_gateway_port_override_is_isolated_from_shared_default() -> None:
+    cfg = config.load_config(
+        REPO_ROOT,
+        env={
+            "OMI_HARNESS_PORT_OFFSET": "10",
+            "OMI_HARNESS_LLM_GATEWAY_PORT": "19080",
+            "OMI_LOCAL_INSTANCE": "qa-offset",
+        },
+    )
+    assert cfg.llm_gateway_port == 19080
+    assert cfg.llm_gateway_url == "http://127.0.0.1:19080"
+    assert cfg.llm_gateway_service_token.endswith(":qa-offset")
+    assert config.child_env_for(cfg)["OMI_LLM_GATEWAY_URL"] == "http://127.0.0.1:19080"

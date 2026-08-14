@@ -62,6 +62,14 @@ echo ""
 echo "Running e2e tests..."
 echo "================================"
 
+# The suite exercises normal universal memory CRUD. Production manifests keep
+# MEMORY_MODE=off until the operator completes the rollout proof, while this
+# hermetic harness must explicitly opt into the enabled mode. Preserve an
+# explicit `E2E_MEMORY_MODE=off` override so incident-fence tests can still run
+# with intake paused
+# without inheriting a production-oriented shell environment accidentally.
+export MEMORY_MODE="${E2E_MEMORY_MODE:-read}"
+
 if [ "$#" -eq 0 ]; then
     set -- -v --tb=short
 fi

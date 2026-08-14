@@ -50,6 +50,16 @@ enum PostOnboardingPromptSuggestions {
   static func shouldArmPopup() -> Bool {
     shouldShowPopup && !isDismissed && !suggestions().isEmpty
   }
+
+  /// Consume the one-shot post-onboarding guidance regardless of which shell handled it.
+  ///
+  /// The main-chat opener and the legacy floating popup read the same saved suggestions. Keeping
+  /// separate dismissal writes let either surface remain armed after the user had already acted on
+  /// the other one, so chat-first users could see (and submit) the same prompt through both chats.
+  static func consume() {
+    shouldShowPopup = false
+    isDismissed = true
+  }
 }
 
 @MainActor

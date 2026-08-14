@@ -989,7 +989,7 @@ final class DesktopDiagnosticsManager {
     var header = ["# Omi Desktop Diagnostics"]
     header.append("generated_at: \(ISO8601DateFormatter.desktopDiagnostics.string(from: Date()))")
     header.append("privacy: redacted_local_export")
-    for key in ["build", "build_number", "os_version", "device_model", "system_audio_mode"] {
+    for key in ["build", "build_number", "os_version", "device_model", "audio_recording_mode"] {
       if let value = meta[key] {
         header.append("\(key): \(value)")
       }
@@ -1083,8 +1083,8 @@ final class DesktopDiagnosticsManager {
     "conversation", "transcript", "prompt", "response", "message", "memory", "title",
     "window", "screen", "ocr", "clipboard",
   ]
-
   private func redactSensitive(_ line: String, strictCloudRedaction: Bool = false) -> String {
+    if DiagnosticLogRedactionPolicy.shouldSkipRegexRedaction(line) { return "[redacted-oversize-log-line]" }
     let normalized = line.lowercased()
     if strictCloudRedaction, normalized.contains("device=[") {
       return "[redacted-device-bearing-log-line]"
@@ -1267,8 +1267,8 @@ final class DesktopDiagnosticsManager {
       "os_version": osVersionString(),
       "device_model": deviceModel(),
     ]
-    properties["system_audio_mode"] =
-      UserDefaults.standard.string(forKey: "systemAudioCaptureMode") ?? "onlyDuringMeetings"
+    properties["audio_recording_mode"] =
+      UserDefaults.standard.string(forKey: AssistantSettings.audioRecordingModeDefaultsKey) ?? "onlyMeetings"
     return properties
   }
 

@@ -124,6 +124,16 @@ class ProactiveDeliveryHealthTests(unittest.TestCase):
         self.assertIn("gh issue edit", scheduled_job)
         self.assertIn("gh issue close", scheduled_job)
 
+    def test_workflow_treats_missing_posthog_config_as_neutral(self) -> None:
+        # omi-test-quality: source-inspection -- the scheduled job must not turn missing Actions config into a red alarm.
+        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        scheduled_job = workflow.split("  proactive-health:\n", 1)[1]
+        self.assertIn("required_config=(POSTHOG_PERSONAL_API_KEY POSTHOG_PROJECT_ID POSTHOG_HOST)", scheduled_job)
+        self.assertIn("status=unconfigured", scheduled_job)
+        self.assertIn("No health alarm was created or updated.", scheduled_job)
+        self.assertIn('"status": "monitor_error"', scheduled_job)
+        self.assertNotIn("steps.health.outputs.status == 'unconfigured'", scheduled_job)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -104,9 +104,6 @@ def merge():
     canonical_activation_stub = ModuleType("utils.memory.canonical_activation")
     setattr(canonical_activation_stub, "canonical_write_enabled", MagicMock(return_value=False))
 
-    surface_routing_stub = ModuleType("utils.memory.surface_routing")
-    setattr(surface_routing_stub, "pin_memory_system", MagicMock(return_value=_MemorySystem.LEGACY))
-
     fakes: dict[str, ModuleType] = {
         "database": database_pkg,
         "database._client": client_stub,
@@ -121,7 +118,6 @@ def merge():
         "utils.memory.memory_service": memory_service_stub,
         "utils.memory.memory_system": memory_system_stub,
         "utils.memory.canonical_activation": canonical_activation_stub,
-        "utils.memory.surface_routing": surface_routing_stub,
     }
     fakes.update(model_stubs)
 

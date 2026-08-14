@@ -20,10 +20,10 @@ REQUIRED_SOURCE_CHECK_NAMES = (
     "Desktop Swift Release Compile",
 )
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
-# Desktop Swift CI regularly takes 30-45 minutes. Keep a 60-minute exact-SHA
-# gate budget so healthy builds are not timed out while still running. Override
+# Desktop Swift CI can consume the full 90-minute job budget. Keep the planner's
+# exact-SHA wait aligned so healthy builds are not timed out while still running. Override
 # via CI_GATE_TIMEOUT_SECONDS or --source-check-wait-seconds.
-SOURCE_CHECK_WAIT_SECONDS = 60 * 60
+SOURCE_CHECK_WAIT_SECONDS = 90 * 60
 SOURCE_CHECK_POLL_SECONDS = 30
 MAX_SOURCE_STATUS_POLLS = 20
 CI_GATE_TIMEOUT_ENV = "CI_GATE_TIMEOUT_SECONDS"

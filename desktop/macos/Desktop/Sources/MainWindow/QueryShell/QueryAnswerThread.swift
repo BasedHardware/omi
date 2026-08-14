@@ -12,9 +12,8 @@
 //  owns nothing — `QueryShellHome` sends through the same `sendMessage` the composer uses, and this
 //  file only draws the result.
 //
-//  Citation chips are built from the answer's own `captureLink` / `memoryLink` content blocks, which
-//  is the live provenance the backend actually emits. `ChatMessage.citations` is *not* used: nothing
-//  in the app ever constructs one, so a chip strip built on it would be permanently empty.
+//  Inline citation controls are bound to typed provenance carried by the answer. The renderer keeps
+//  unresolved numeric markers as text; it never guesses a destination from a summary.
 //
 //  Brand: `Ink` semantics only (INV-UI-1).
 //
@@ -24,8 +23,7 @@ import SwiftUI
 
 struct QueryAnswerThread: View {
   @ObservedObject var chatProvider: ChatProvider
-  let onOpenConversation: (String) -> Void
-  let onOpenMemories: () -> Void
+  let onOpenCitation: (ChatCitationReference) -> Void
   /// Re-sends the question that failed, through the host's one send — never a second send path. The
   /// host holds that question, because the composer is emptied by the send that failed.
   let onRetry: () -> Void
@@ -38,7 +36,7 @@ struct QueryAnswerThread: View {
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       ChatMessagesView(
-        messages: chatProvider.messages,
+        messages: citationSafeMessages,
         conversationIdentity: chatProvider.currentSessionId
           ?? ChatConversationIdentity.mainChatDefault,
         isSending: chatProvider.isSending,
@@ -50,6 +48,7 @@ struct QueryAnswerThread: View {
         onRate: { messageId, rating in
           Task { await chatProvider.rateMessage(messageId, rating: rating) }
         },
+        onOpenInlineCitation: onOpenCitation,
         sessionsLoadError: chatProvider.sessionsLoadError.map {
           UserFacingErrorPresentation.message(from: $0, while: .chatSessions)
         },
@@ -120,12 +119,6 @@ struct QueryAnswerThread: View {
         .accessibilityIdentifier("query-shell-answer-error")
       }
 
-      if !sources.isEmpty {
-        QueryCitationStrip(
-          sources: sources,
-          onOpenConversation: onOpenConversation,
-          onOpenMemories: onOpenMemories)
-      }
     }
     .accessibilityIdentifier("query-shell-answer")
     .onAppear { reportChatFirstTranscriptPageIfReady() }
@@ -149,49 +142,32 @@ struct QueryAnswerThread: View {
     chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptFirstPageDidLoad()
   }
 
-  /// Where the newest answer came from. Only the latest assistant turn, because a strip that
-  /// accumulates every source in the session stops being a citation and becomes a bibliography.
-  private var sources: [QueryAnswerSource] {
-    guard let latest = chatProvider.messages.last(where: { $0.sender == .ai }) else { return [] }
-    return QueryAnswerSource.from(blocks: latest.contentBlocks)
-  }
-}
-
-/// One place the answer came from.
-struct QueryAnswerSource: Identifiable, Equatable {
-  enum Origin: Equatable {
-    case conversation(id: String)
-    case memory
-  }
-
-  let id: String
-  let origin: Origin
-  let summary: String
-
-  var glyph: String {
-    switch origin {
-    case .conversation: return "text.bubble"
-    case .memory: return "brain.head.profile"
-    }
-  }
-
-  /// Reads the two link blocks the backend emits for provenance and ignores everything else a turn
-  /// carries — tool calls, thinking, task cards are not sources.
-  static func from(blocks: [ChatContentBlock]) -> [QueryAnswerSource] {
-    blocks.compactMap { block in
-      switch block {
-      case .captureLink(let id, let conversationId, _, let summary):
-        return QueryAnswerSource(
-          id: id, origin: .conversation(id: conversationId),
-          summary: summary.isEmpty ? "Conversation" : summary)
-      case .memoryLink(let id, _, let summary):
-        return QueryAnswerSource(
-          id: id, origin: .memory, summary: summary.isEmpty ? "Memory" : summary)
-      default:
-        return nil
+  /// The legacy shell has no exact goal destination. Preserve the historical source preview but
+  /// make its marker unavailable before it reaches the renderer, instead of presenting a button
+  /// whose action cannot honor the cited identity. Chat-first keeps its typed goal route.
+  private var citationSafeMessages: [ChatMessage] {
+    guard chatFirstRichBlockContext == nil else { return chatProvider.messages }
+    return chatProvider.messages.map { message in
+      var message = message
+      message.contentBlocks = message.contentBlocks.map { block in
+        guard case .citation(let id, let reference) = block, reference.kind == .goal else {
+          return block
+        }
+        return .citation(
+          id: id,
+          reference: ChatCitationReference(
+            ordinal: reference.ordinal,
+            kind: .unavailable,
+            sourceID: "",
+            title: reference.displayTitle,
+            preview: reference.preview,
+            createdAt: reference.createdAt,
+            appName: reference.appName))
       }
+      return message
     }
   }
+
 }
 
 /// A turn that failed without a structured card.
@@ -237,54 +213,5 @@ private struct QueryAnswerFailureNotice: View {
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
     .glassCard(cornerRadius: PageGlass.rowRadius)
-  }
-}
-
-private struct QueryCitationStrip: View {
-  let sources: [QueryAnswerSource]
-  let onOpenConversation: (String) -> Void
-  let onOpenMemories: () -> Void
-
-  var body: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: 6) {
-        ForEach(sources) { source in
-          QueryCitationChip(source: source) {
-            switch source.origin {
-            case .conversation(let id): onOpenConversation(id)
-            case .memory: onOpenMemories()
-            }
-          }
-        }
-      }
-      .padding(.bottom, 2)
-    }
-    .accessibilityIdentifier("query-shell-citations")
-  }
-}
-
-private struct QueryCitationChip: View {
-  let source: QueryAnswerSource
-  let action: () -> Void
-
-  @State private var isHovering = false
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: 6) {
-        Image(systemName: source.glyph)
-          .scaledFont(size: OmiType.micro, weight: .semibold)
-        Text(source.summary)
-          .scaledFont(size: OmiType.caption, weight: .regular)
-          .lineLimit(1)
-      }
-      .foregroundStyle(GlassShell.controlLabel(isProminent: isHovering))
-      .padding(.horizontal, 10)
-      .frame(height: QueryShellLayout.chipHeight)
-      .glassChip(isActive: false)
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
-    .help("Open the source this came from")
   }
 }

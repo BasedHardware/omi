@@ -16,6 +16,10 @@ from ._client import db
 transactional = getattr(firestore, 'transactional', lambda fn: fn)  # pyright: ignore[reportUnknownMemberType]
 
 
+def _usage_client(firestore_client: Any | None) -> Any:
+    return firestore_client if firestore_client is not None else db
+
+
 def _typed_doc(doc: Any) -> Dict[str, Any]:
     raw: object = doc.to_dict()
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
@@ -109,6 +113,8 @@ def record_chat_quota_question(
     message_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
     platform: Optional[str] = None,
+    *,
+    firestore_client: Any | None = None,
 ) -> bool:
     """Record one accepted visible backend chat question exactly once.
 
@@ -123,7 +129,8 @@ def record_chat_quota_question(
     doc_id = now.strftime('%Y-%m-%d')
     event_id = hashlib.sha256(f'{uid}:{idempotency_key}'.encode('utf-8')).hexdigest()
 
-    user_ref = db.collection('users').document(uid)
+    client = _usage_client(firestore_client)
+    user_ref = client.collection('users').document(uid)
     usage_ref = user_ref.collection('llm_usage').document(doc_id)
     event_ref = user_ref.collection('chat_quota_events').document(event_id)
     event_data: Dict[str, Any] = {
@@ -136,7 +143,7 @@ def record_chat_quota_question(
         'date': doc_id,
     }
 
-    transaction = db.transaction()
+    transaction = client.transaction()
     return _record_chat_quota_question_transaction(transaction, usage_ref, event_ref, event_data, doc_id)
 
 
@@ -311,6 +318,8 @@ def record_llm_usage_bucket(
     cost_usd: float = 0.0,
     bucket: str = 'desktop_chat',
     account: str = 'omi',
+    *,
+    firestore_client: Any | None = None,
 ) -> None:
     """Record LLM token usage into a flat bucket with atomic increments.
 
@@ -318,7 +327,7 @@ def record_llm_usage_bucket(
     (``{bucket}_{account}``) for per-account breakdown.
     """
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-    ref = db.collection("users").document(uid).collection("llm_usage").document(today)
+    ref = _usage_client(firestore_client).collection("users").document(uid).collection("llm_usage").document(today)
 
     acct_key = f'{bucket}_{account}'
     update: Dict[str, Any] = {

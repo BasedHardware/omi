@@ -160,8 +160,9 @@ the release-evidence layer (`#9523`) will consume.
 - **Monitor credentials:** the scheduled job reads the repository Actions secret
   `POSTHOG_PERSONAL_API_KEY` and Actions variables `POSTHOG_PROJECT_ID` and `POSTHOG_HOST`. It deliberately
   does not use the approval-protected `prod` environment, which would leave hourly
-  checks waiting for a human. Missing/invalid credentials produce `monitor_error`
-  and open the same durable issue; they never turn the metric green.
+  checks waiting for a human. Missing configuration produces a neutral `unconfigured`
+  result and no health alarm because no measurement occurred. A configured query that
+  fails produces `monitor_error` and opens the durable issue; neither state turns the metric green.
 - **Delivery outcomes:** each `Advice Generated` event carries an opaque
   process-local `delivery_id`. `Advice Delivery Outcome` records a closed
   `outcome` (`delivered`, `suppressed`, or `failed`) and bounded `reason`.

@@ -1,130 +1,74 @@
 import pytest
+from pydantic import ValidationError
 
-from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID
-from models.task_intelligence import TaskWorkflowMode
-from utils.task_intelligence import rollout as rollout_module
+from models.task_intelligence import TaskIntelligenceRolloutDecision, TaskWorkflowControl, TaskWorkflowMode
 from utils.task_intelligence.rollout import (
+    effective_task_workflow_control,
     resolve_chat_first_ui,
     resolve_task_intelligence_for_user,
     resolve_task_intelligence_rollout,
 )
-from utils.memory.memory_system import MemorySystem
 
 
 @pytest.mark.parametrize('mode', list(TaskWorkflowMode))
-@pytest.mark.parametrize('memory_eligible', [False, True])
-def test_rollout_matrix_uses_memory_membership_as_the_only_eligibility_input(mode, memory_eligible):
+@pytest.mark.parametrize('memory_eligible', [False, True, None])
+def test_rollout_is_universal_and_ignores_retired_memory_diagnostic(mode, memory_eligible):
     decision = resolve_task_intelligence_rollout(
         uid='user-1', workflow_mode=mode, memory_cohort_eligible=memory_eligible, account_generation=7
     )
 
     assert decision.workflow_mode == mode
-    assert decision.memory_cohort_eligible is memory_eligible
+    assert decision.memory_cohort_eligible is True  # constant compatibility diagnostic
     assert decision.account_generation == 7
-    assert decision.legacy_reads_authoritative is (not memory_eligible)
-    assert decision.legacy_writes_enabled is (not memory_eligible)
-    assert decision.canonical_sidecar_writes_enabled is memory_eligible
-    assert decision.canonical_reads_authoritative is memory_eligible
-    assert decision.compatibility_projection_required is memory_eligible
-    assert decision.intelligence_evaluation_enabled is memory_eligible
-    assert decision.intelligence_product_enabled is memory_eligible
-
-
-@pytest.mark.parametrize('mode', list(TaskWorkflowMode))
-@pytest.mark.parametrize('memory_eligible', [False, True])
-def test_chat_first_ui_uses_the_same_canonical_membership_decision(mode, memory_eligible):
-    rollout = resolve_task_intelligence_rollout(
-        uid='user-1', workflow_mode=mode, memory_cohort_eligible=memory_eligible, account_generation=7
-    )
-
-    assert resolve_chat_first_ui(rollout) is memory_eligible
-
-
-def test_production_resolver_uses_authoritative_memory_selector(monkeypatch):
-    calls = []
-
-    def fake_resolve_memory_system(uid, *, db_client=None):
-        calls.append((uid, db_client))
-        return MemorySystem.CANONICAL
-
-    monkeypatch.setattr(rollout_module, 'resolve_memory_system', fake_resolve_memory_system)
-    db_client = object()
-
-    decision = resolve_task_intelligence_for_user(
-        uid='user-1', workflow_mode='read', account_generation=3, db_client=db_client
-    )
-
-    assert calls == [('user-1', db_client)]
-    assert decision.memory_cohort_eligible is True
+    assert decision.legacy_reads_authoritative is False
+    assert decision.legacy_writes_enabled is False
+    assert decision.canonical_sidecar_writes_enabled is True
+    assert decision.canonical_reads_authoritative is True
+    assert decision.compatibility_projection_required is False
+    assert decision.intelligence_evaluation_enabled is True
     assert decision.intelligence_product_enabled is True
+    assert resolve_chat_first_ui(decision) is True
 
 
-def test_production_resolver_fails_closed_for_legacy_memory_user(monkeypatch):
-    monkeypatch.setattr(rollout_module, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.LEGACY)
+@pytest.mark.parametrize('uid', ['former-cohort-user', 'new-user', 'fixture-user'])
+def test_production_resolver_has_one_decision_for_every_authenticated_uid(uid):
+    decision = resolve_task_intelligence_for_user(uid=uid, workflow_mode='off', account_generation=3)
 
-    decision = resolve_task_intelligence_for_user(uid='user-1', workflow_mode='read')
-
-    assert decision.canonical_reads_authoritative is False
-    assert decision.memory_cohort_eligible is False
-    assert decision.intelligence_evaluation_enabled is False
-    assert decision.intelligence_product_enabled is False
-
-
-def test_removed_first_user_cannot_reenable_tasks_or_chat_first_via_stale_read_control():
-    decision = resolve_task_intelligence_for_user(
-        uid='vi7SA9ckQCe4ccobWNxlbdcNdC23',
-        workflow_mode='read',
-        account_generation=7,
-    )
-
-    assert decision.legacy_reads_authoritative is True
-    assert decision.legacy_writes_enabled is True
-    assert decision.intelligence_product_enabled is False
-    assert resolve_chat_first_ui(decision) is False
-
-
-def test_noncanonical_dev_fixture_cannot_bypass_the_code_owned_cohort(monkeypatch):
-    monkeypatch.setattr(rollout_module, 'resolve_memory_system', lambda uid, db_client=None: MemorySystem.LEGACY)
-
-    decision = resolve_task_intelligence_for_user(uid='fixture-user', workflow_mode='read')
-
-    assert decision.memory_cohort_eligible is False
-    assert decision.intelligence_product_enabled is False
-
-
-def test_deploy_smoke_fixture_uses_the_same_static_membership_predicate():
-    """The dev deploy gate must be entitled through the cohort, not a bypass."""
-
-    from config.canonical_memory_cohort import DEV_WHAT_MATTERS_NOW_SMOKE_UID, is_canonical_memory_user
-
-    assert WHAT_MATTERS_NOW_SMOKE_UID == DEV_WHAT_MATTERS_NOW_SMOKE_UID
-    assert is_canonical_memory_user(WHAT_MATTERS_NOW_SMOKE_UID) is True
-
-    decision = resolve_task_intelligence_for_user(uid=WHAT_MATTERS_NOW_SMOKE_UID, workflow_mode='read')
-
-    assert decision.memory_cohort_eligible is True
     assert decision.intelligence_product_enabled is True
+    assert decision.canonical_reads_authoritative is True
+    assert decision.legacy_writes_enabled is False
+    assert resolve_chat_first_ui(decision) is True
 
 
-def test_local_chat_first_harness_uses_the_same_static_membership_predicate():
-    from config.canonical_memory_cohort import (
-        LOCAL_CHAT_FIRST_E2E_ENABLED_UID,
-        is_canonical_memory_user,
-    )
-    from config.chat_first_e2e_fixture import (
-        CHAT_FIRST_E2E_ENABLED_PRINCIPAL,
-        CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL,
-    )
+def test_effective_control_keeps_generation_fence_but_exposes_universal_capability():
+    control = TaskWorkflowControl(workflow_mode='off', account_generation=4)
+    rollout = resolve_task_intelligence_for_user(uid='user-1', workflow_mode='off', account_generation=4)
 
-    assert CHAT_FIRST_E2E_ENABLED_PRINCIPAL == LOCAL_CHAT_FIRST_E2E_ENABLED_UID
-    assert is_canonical_memory_user(CHAT_FIRST_E2E_ENABLED_PRINCIPAL) is True
-    assert is_canonical_memory_user(CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL) is False
+    effective = effective_task_workflow_control(control, rollout)
+
+    assert effective.account_generation == 4
+    assert effective.workflow_mode is TaskWorkflowMode.read
+    assert effective.chat_first_ui is True
 
 
 def test_rollout_rejects_invalid_identity_and_generation():
     with pytest.raises(ValueError, match='uid is required'):
-        resolve_task_intelligence_rollout(uid='', workflow_mode='off', memory_cohort_eligible=False)
+        resolve_task_intelligence_rollout(uid='', workflow_mode='off')
     with pytest.raises(ValueError, match='nonnegative'):
-        resolve_task_intelligence_rollout(
-            uid='user-1', workflow_mode='write', memory_cohort_eligible=True, account_generation=-1
+        resolve_task_intelligence_rollout(uid='user-1', workflow_mode='write', account_generation=-1)
+
+
+def test_compatibility_cohort_diagnostic_cannot_be_false():
+    with pytest.raises(ValidationError):
+        TaskIntelligenceRolloutDecision(
+            uid='user-1',
+            workflow_mode=TaskWorkflowMode.read,
+            memory_cohort_eligible=False,
+            legacy_reads_authoritative=False,
+            legacy_writes_enabled=False,
+            intelligence_evaluation_enabled=True,
+            canonical_sidecar_writes_enabled=True,
+            canonical_reads_authoritative=True,
+            compatibility_projection_required=False,
+            intelligence_product_enabled=True,
         )

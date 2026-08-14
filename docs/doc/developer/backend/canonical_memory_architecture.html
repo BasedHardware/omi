@@ -261,7 +261,7 @@
       quarantined revision from the eligible query. If storage blocks both
       terminal commits, later jobs retry only those routes without another LLM
       call. A durable cursor advances the stable ordered scan past a blocked
-      page and resets after reaching later work, so the cohort remains failed
+      page and resets after reaching later work, so the blocked page remains failed
       rather than reporting silent success without pinning newer sources.
     </p>
 
@@ -280,10 +280,10 @@
     <h2>Scheduled maintenance gate</h2>
     <div class="warning">
       <p>
-        Scheduled maintenance is gated by
-        <code>MEMORY_CANONICAL_MAINTENANCE_ENABLED</code> and the canonical
-        cohort. Cloud Scheduler owns cadence; no separate promotion or interval
-        gate exists.
+        Scheduled maintenance is gated globally by
+        <code>MEMORY_CANONICAL_MAINTENANCE_ENABLED</code> and inventories the
+        bounded universal maintenance registry. Cloud Scheduler owns cadence;
+        no UID allowlist, promotion timer, or separate interval gate exists.
       </p>
     </div>
   </main>

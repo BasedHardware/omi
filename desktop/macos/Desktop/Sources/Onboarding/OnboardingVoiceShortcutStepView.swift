@@ -168,7 +168,7 @@ struct OnboardingVoiceShortcutStepView: View {
         .disabled(isRecordingCustomShortcut)
       }
 
-      Text("You can use one key or a combination like ⌘ J.")
+      Text("Use a modifier key or a combination like ⌘ J.")
         .inkStyle(InkType.statusLabel, color: Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
 
@@ -347,6 +347,11 @@ struct OnboardingVoiceShortcutStepView: View {
     guard let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(event, allowModifierOnly: true) else {
       captureError = "Press the key combination you want to use."
       return false
+    }
+
+    guard ShortcutSettings.isSafePushToTalkShortcut(shortcut) else {
+      captureError = "Push-to-talk needs a modifier so regular typing won't start a voice turn."
+      return true
     }
 
     pendingModifierOnlyShortcut = nil

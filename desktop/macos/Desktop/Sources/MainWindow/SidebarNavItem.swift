@@ -54,7 +54,7 @@ enum SidebarNavItem: Int, CaseIterable {
     case .rewind: return "clock.arrow.circlepath"
     case .apps: return "puzzlepiece.fill"
     case .settings: return "gearshape.fill"
-    case .permissions: return "exclamationmark.triangle.fill"
+    case .permissions: return PermissionNavSymbol.filled
     }
   }
   /// Minimum tier level required to access this item (0 = always available)

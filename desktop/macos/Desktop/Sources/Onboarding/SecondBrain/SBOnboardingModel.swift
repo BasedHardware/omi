@@ -24,6 +24,7 @@ struct SBOnboardingWidgetShape: Equatable {
   var screenDemoReady: Bool
   var screenDemoUnavailable: Bool
   var screenDemoDone: Bool
+  var shortcutRegistrationError: String? = nil
 }
 
 /// Drives the Second Brain conversational onboarding: a real chat with Omi that
@@ -38,22 +39,18 @@ struct SBOnboardingWidgetShape: Equatable {
 @MainActor
 final class SBOnboardingModel: ObservableObject {
   enum CaptureSelection: Equatable {
-    case onlyDuringMeetings
-    case continuous
+    case onlyMeetings
+    case always
 
-    var systemAudioCaptureMode: AssistantSettings.SystemAudioCaptureMode {
+    var audioRecordingMode: AssistantSettings.AudioRecordingMode {
       switch self {
-      case .onlyDuringMeetings: .onlyDuringMeetings
-      case .continuous: .always
+      case .onlyMeetings: .onlyMeetings
+      case .always: .always
       }
-    }
-
-    var startsListeningImmediately: Bool {
-      self == .continuous
     }
   }
 
-  static let defaultCaptureSelection: CaptureSelection = .onlyDuringMeetings
+  static let defaultCaptureSelection: CaptureSelection = .onlyMeetings
 
   enum Step: Int, CaseIterable {
     case promise, name, howHeard, language, role
@@ -127,6 +124,10 @@ final class SBOnboardingModel: ObservableObject {
   @Published var shortcutPicked = false
   @Published var shortcutPressed = false
   @Published var shortcutRecording = false
+  /// Set when the chosen Open Omi chord passed the local test press but Carbon could not claim it.
+  /// Keep the stage active so the user can choose another chord instead of finishing with a shortcut
+  /// that appears to work only inside onboarding.
+  @Published var shortcutRegistrationError: String?
   /// Set when the user pressed a bare key while recording. `acceptsRecordedChord` refuses it — a
   /// bare `L` bound as a **global** hotkey makes every `L` typed anywhere open Omi — and the refusal
   /// used to be silent, so the step simply stopped responding with nothing said. Cleared the moment
@@ -316,9 +317,9 @@ final class SBOnboardingModel: ObservableObject {
     // Both steps used to invite "press any key", and `acceptsRecordedChord` then refused a bare key
     // in silence — correct (a global bare `L` is unrecoverable) but unexplained. Name the rule.
     case .shortcutOpen:
-      return "How do you want to open me? Choose one, or press your own — it needs ⌘, ⌃ or ⌥."
+      return "How do you want to open me? Choose one, or pick Custom to set your own — it needs ⌘, ⌃ or ⌥."
     case .shortcutTalk:
-      return "And to talk to me hands-free? Choose one, or hold your own modifier key."
+      return "And to talk to me hands-free? Choose one, or pick Custom to hold your own modifier key."
     case .screenDemo:
       return "Here's the fun part."
     case .agents:
@@ -347,7 +348,8 @@ final class SBOnboardingModel: ObservableObject {
       permission: permissionKey(for: step).map { permissionPrimaryAction($0) },
       screenDemoReady: screenDemoPTTReady,
       screenDemoUnavailable: screenDemoPTTUnavailable,
-      screenDemoDone: screenDemoDone
+      screenDemoDone: screenDemoDone,
+      shortcutRegistrationError: shortcutRegistrationError
     )
   }
 
@@ -377,6 +379,11 @@ final class SBOnboardingModel: ObservableObject {
   /// in System Settings) resumes where you left off instead of restarting.
   static let resumeStepKey = "sbOnboardingResumeStep"
 
+  /// Persisted when the user completes both required shortcut stages through the
+  /// new onboarding flow. Legacy resume states persisted before shortcuts were
+  /// mandatory lacked this flag, so `begin()` clamps them back through the steps.
+  static let shortcutsCompletedKey = "sbOnboardingShortcutsCompleted"
+
   func begin() {
     guard thread.isEmpty && streamingText == nil else { return }
     // Re-hydrate the editable drafts from what was already saved, so stepping
@@ -390,8 +397,20 @@ final class SBOnboardingModel: ObservableObject {
     let savedRaw = UserDefaults.standard.integer(forKey: Self.resumeStepKey)
     recordSetupStateDisagreementAtRead(savedRaw: savedRaw)
     if savedRaw > Step.promise.rawValue, let resumed = Step(rawValue: savedRaw) {
+      // A legacy resume state persisted before shortcuts were mandatory bypasses the new
+      // required gate. Clamp it back to the first shortcut stage so the user completes both.
+      let shortcutsDone = UserDefaults.standard.bool(forKey: Self.shortcutsCompletedKey)
+      var effective = resumed
+      // Clamp values >= shortcutTalk (not just >) because a legacy resume at exactly
+      // shortcutTalk without the completion flag means the user never selected or
+      // exercised Open Omi — completing only the Talk stage would set the flag and
+      // bypass Open Omi entirely.
+      if !shortcutsDone, effective.rawValue >= Step.shortcutTalk.rawValue {
+        effective = .shortcutOpen
+        UserDefaults.standard.set(Step.shortcutOpen.rawValue, forKey: Self.resumeStepKey)
+      }
       // Skip a resumed permission step the user granted while away.
-      let target = firstUnaskedStep(from: resumed)
+      let target = firstUnaskedStep(from: effective)
       step = target
       streamMessage(for: target)
       return
@@ -528,6 +547,15 @@ final class SBOnboardingModel: ObservableObject {
     step != .promise
   }
 
+  /// The full-onboarding escape hatch stays unavailable until both required shortcut stages have
+  /// been completed. A persisted flag records that the user went through both stages; legacy resume
+  /// states from before shortcuts were mandatory are clamped back in `begin()`, so the only way to
+  /// reach a stage past `shortcutTalk` with this flag set is through the guarded shortcut answers.
+  var canSkipOnboarding: Bool {
+    step.rawValue > Step.shortcutTalk.rawValue
+      && UserDefaults.standard.bool(forKey: Self.shortcutsCompletedKey)
+  }
+
   /// Tear down any live monitors/tasks a step installed before leaving it.
   private func teardownStep(_ step: Step) {
     switch step {
@@ -660,13 +688,13 @@ final class SBOnboardingModel: ObservableObject {
   // MARK: capture choice → completes onboarding
 
   func capture(_ selection: CaptureSelection) {
-    AssistantSettings.shared.systemAudioCaptureMode = selection.systemAudioCaptureMode
-    complete(startListening: selection.startsListeningImmediately)
+    AssistantSettings.shared.audioRecordingMode = selection.audioRecordingMode
+    complete()
   }
 
   /// The one handoff both exit paths run when onboarding ends.
   ///
-  /// `skip()` and `complete(startListening:)` used to carry byte-identical
+  /// `skip()` and `complete()` used to carry byte-identical
   /// copies of this sequence, which is how the post-onboarding guidance came to
   /// be produced by neither: there was no single place that owned "onboarding is
   /// over, hand the user to the app". There is now, so a step added here can
@@ -709,7 +737,7 @@ final class SBOnboardingModel: ObservableObject {
   }
 
   /// Replicates the essential real side-effects of the legacy handleOnboardingComplete().
-  private func complete(startListening: Bool) {
+  private func complete() {
     // Do NOT mark file indexing complete here. Onboarding never actually scans, so
     // setting this flag "faked" the Files connector as connected while indexing
     // nothing — and, worse, permanently suppressed the Home view's automatic
@@ -734,7 +762,7 @@ final class SBOnboardingModel: ObservableObject {
       }
     }
     Task { [appState] in
-      if startListening { appState.startTranscription() }
+      appState.startTranscription()
       await appState.reconcileCapture()
     }
     // NOTE: previously this created a "Run omi for two days…" welcome task. That
