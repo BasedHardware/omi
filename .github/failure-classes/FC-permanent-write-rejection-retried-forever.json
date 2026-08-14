@@ -10,8 +10,5 @@
     "backend/database/**",
     "backend/services/conversation_finalization.py"
   ],
-  "canonical_prevention_artifact": [
-    "backend/database/_client.py"
-  ],
   "status": "open"
 }

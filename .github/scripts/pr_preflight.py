@@ -155,6 +155,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--head-branch", help="PR head branch, used for release-changelog policy")
     parser.add_argument("--list", action="store_true", help="Print selected checks without running them")
     parser.add_argument(
+        "--changed-files",
+        type=Path,
+        help="Use this path list instead of git diff base...head (one path per line).",
+    )
+    parser.add_argument(
         "--suggest",
         action="store_true",
         help="Print paste-ready product-invariant and failure-class PR guidance for the diff and exit 0",
@@ -173,7 +178,14 @@ def main() -> int:
     try:
         args.base = resolve_base(root, args.base)
         merge_base = run_git(root, "merge-base", args.base, args.head)
-        files = changed_files(root, args.base, args.head)
+        if args.changed_files is not None:
+            files = [
+                line
+                for line in args.changed_files.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        else:
+            files = changed_files(root, args.base, args.head)
     except (RangeBaseError, subprocess.CalledProcessError) as exc:
         detail = exc.stderr.strip() if isinstance(exc, subprocess.CalledProcessError) else str(exc)
         print(f"FAIL: could not resolve preflight diff: {detail}", file=sys.stderr)
@@ -273,7 +285,7 @@ def main() -> int:
         if metadata:
             print(f"PR metadata: {metadata.source}, updated_at={metadata.updated_at}")
         elif any(check.name == "product-invariants" for check in checks):
-            print("PR metadata: none (product-invariants will use an empty body)")
+            print("PR metadata: none (product-invariants and failure-class deferred until a PR body exists)")
 
         body_path = temp / "pr-body.txt"
         body_path.write_text(metadata.body if metadata else "", encoding="utf-8")
@@ -293,6 +305,8 @@ def main() -> int:
         ]
         if skip_changelog:
             command.append("--skip-changelog")
+        if metadata is None:
+            command.append("--skip-pr-body-checks")
         result = subprocess.run(command, cwd=root, check=False)
 
     elapsed = time.monotonic() - started

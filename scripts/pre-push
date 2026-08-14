@@ -4,6 +4,20 @@ set -eo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
+# Test seam: prove path-scoping without a remote range base. A backend-only
+# list must exit 0 here so the arriving hook cannot break backend-only pushes.
+# An empty list is not "backend-only" — fail closed and run the battery.
+if [ -n "${PRE_PUSH_CHANGED_FILES_FILE:-}" ]; then
+  declare -a CHANGED_FILES=()
+  while IFS= read -r file; do
+    [ -n "$file" ] && CHANGED_FILES+=("$file")
+  done < "$PRE_PUSH_CHANGED_FILES_FILE"
+  if [ "${#CHANGED_FILES[@]}" -gt 0 ] && ! scripts/frontend-pre-push-scope "${CHANGED_FILES[@]}"; then
+    echo "Skipping frontend pre-push battery: no frontend/ or toolchain paths in this push."
+    exit 0
+  fi
+fi
+
 # Git exports repository-local variables to hooks. Once the checkout root is
 # known, clear them so child tools that inspect their own Git checkout (for
 # example Flutter deriving its SDK version) do not reopen this worktree.
@@ -71,6 +85,26 @@ if [ "${#CHANGED_FILES[@]}" -gt 0 ]; then
     [ -n "$file" ] && UNIQUE_CHANGED_FILES+=("$file")
   done < <(printf '%s\n' "${CHANGED_FILES[@]}" | sort -u)
   CHANGED_FILES=("${UNIQUE_CHANGED_FILES[@]}")
+fi
+
+if [ -n "${PRE_PUSH_CHANGED_FILES_FILE:-}" ]; then
+  CHANGED_FILES=()
+  while IFS= read -r file; do
+    [ -n "$file" ] && CHANGED_FILES+=("$file")
+  done < "$PRE_PUSH_CHANGED_FILES_FILE"
+fi
+
+if [ "${#CHANGED_FILES[@]}" -gt 0 ] && ! scripts/frontend-pre-push-scope "${CHANGED_FILES[@]}"; then
+  echo "Skipping frontend pre-push battery: no frontend/ or toolchain paths in this push."
+  exit 0
+fi
+
+if [ "${#CHANGED_FILES[@]}" -gt 0 ]; then
+  declare -a SCOPED_CHANGED_FILES=()
+  while IFS= read -r file; do
+    [ -n "$file" ] && SCOPED_CHANGED_FILES+=("$file")
+  done < <(scripts/frontend-pre-push-scope --print "${CHANGED_FILES[@]}")
+  CHANGED_FILES=("${SCOPED_CHANGED_FILES[@]}")
 fi
 
 echo "Pre-push diff summary:"
@@ -194,7 +228,7 @@ check_pr_preflight() {
   #   scripts/pr-preflight --suggest
   #   scripts/pr-preflight --pr-body-file /tmp/pr-body.md
   # or: OMI_PR_BODY_FILE=/tmp/pr-body.md git push
-  scripts/pr-preflight --lane local --base "$BASE_REMOTE_REF" --head HEAD --head-branch "$CURRENT_BRANCH"
+  scripts/pr-preflight --lane local --base "$BASE_REMOTE_REF" --head HEAD --head-branch "$CURRENT_BRANCH" --changed-files "$CHANGED_FILES_LIST"
   if [ "$has_supplied_pr_body" -eq 1 ]; then
     ci_prediction_note_verified "shared PR contract, hygiene, and supplied PR body"
   else
@@ -807,24 +841,10 @@ check_gauntlet_evidence_if_needed() {
 }
 
 run_step check_pr_preflight
-run_step python3 .github/scripts/check-desktop-prod-promotion-policy.py
-run_step python3 .github/scripts/check-deployment-concurrency.py --self-test
-run_step python3 .github/scripts/check-deployment-concurrency.py
-run_step check_backend_runtime_env_if_needed
-run_step check_backend_typecheck_if_needed
-run_step check_runtime_image_source_closure_if_needed
-run_step check_backend_unit_tests_if_needed
-run_step check_openapi_contract_if_needed
-run_step check_release_process_guards_if_needed
-run_step check_workflows_if_needed
-run_step check_flutter_generated_if_needed
-run_step check_desktop_flow_lint_if_needed
-run_step check_windows_kgworker_native_closure_if_needed
-run_step check_desktop_swift_if_needed
-run_step check_desktop_rust_if_needed
-run_step check_desktop_launcher_tests_if_needed
-run_step check_desktop_tool_surfaces_if_needed
-run_step check_gauntlet_evidence_if_needed
+# Old-monorepo always-on desktop/backend/workflow gates stay in this file so
+# their PRE_PUSH_SKIP_* hatches remain discoverable, but they are not invoked
+# here: those trees were not imported. The arriving battery is preflight
+# (failure class, manifest checks) plus dart format 120.
 run_step check_optional_formatters
 
 print_ci_prediction_summary

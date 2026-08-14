@@ -113,6 +113,8 @@ DESKTOP_AGENT_RUNTIME_INPUTS = {
 def _load_desktop_flow_lint_inputs() -> frozenset[str]:
     """Load the lint's own source inventory without importing PyYAML."""
     path = REPO_ROOT / "desktop/macos/scripts/desktop_flow_contract.py"
+    if not path.is_file():
+        return frozenset()
     spec = importlib.util.spec_from_file_location("desktop_flow_contract", path)
     if spec is None or spec.loader is None:  # pragma: no cover - repository corruption
         raise RuntimeError(f"cannot load desktop flow contract from {path}")

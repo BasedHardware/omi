@@ -9,8 +9,5 @@
   "scope_hints": [
     "backend/database/**"
   ],
-  "canonical_prevention_artifact": [
-    "backend/database/_client.py"
-  ],
   "status": "open"
 }
