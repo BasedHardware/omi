@@ -287,6 +287,11 @@ html[data-platform="desktop"] main[data-route="chat"] .chat-composer {
   color: var(--content-secondary);
 }
 
+.chat-attachment-scan,
+.chat-attachment-scanner {
+  font-size: var(--type-label-size);
+}
+
 .chat-message-attachments {
   display: grid;
   gap: var(--space-xs);

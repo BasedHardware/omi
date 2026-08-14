@@ -9,6 +9,17 @@ import {
   messageKey,
   reconcileMessages,
 } from "../src/production/chat-reconcile.ts";
+import {
+  ATTACHMENT_SCAN_TIMEOUT_MS,
+  DEV_NOOP_SCANNER_ID,
+  asScanTerminal,
+  attachmentsAreAdmissibleForSend,
+  canRemoveTrayAttachment,
+  canRetryAttachmentScan,
+  createDevNoopAttachmentScanner,
+  isAdmissibleForBind,
+  toTrayAttachment,
+} from "../src/production/chat-attachment-scan.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => readFile(resolve(root, relative), "utf8");
@@ -146,9 +157,64 @@ test("ChatProduction avoids numeric attachment literals and fixture imports", as
   assert.match(source, /attachmentCapState\(capabilities/);
   assert.match(source, /data-route="chat"/);
   assert.match(source, /surface-notices/);
+  assert.match(source, /data-attachment-scan/);
+  assert.match(source, /DEV_NOOP_SCANNER_ID/);
+  assert.doesNotMatch(source, /antivirus|\bmalware\b|\bvirus\b/i);
+  const scanSource = await read("src/production/chat-attachment-scan.ts");
+  assert.match(scanSource, /"dev-noop-scanner"/);
+  assert.match(scanSource, /ATTACHMENT_SCAN_TIMEOUT_MS = 5_000/);
   // The chrome route union was widened by FE-SURFACES, so Chat now marks itself active
   // rather than borrowing Home's highlight. Chat is deliberately not a visible nav
   // destination yet — where it sits is a chrome design decision, not a surface author's.
   assert.match(source, /<ProductionChrome locale=\{locale\} active="chat"/);
   assert.doesNotMatch(source, /active="home"/);
+});
+
+test("dev-noop-scanner is fail-closed and times out on an injected clock", async () => {
+  // red-proof: treating any non-clean state as admissible, or reading Date.now(),
+  // must fail the exact terminal and timeout assertions below.
+  const staged = {
+    id: "opaque-scan",
+    mimeType: "application/pdf",
+    sizeBytes: 100,
+    expiresAt: "2026-08-11T12:00:00.000Z",
+    state: "staged",
+  };
+  assert.equal(DEV_NOOP_SCANNER_ID, "dev-noop-scanner");
+  assert.equal(isAdmissibleForBind("clean"), true);
+  assert.equal(isAdmissibleForBind("scanning"), false);
+  assert.equal(isAdmissibleForBind("staged"), false);
+  assert.equal(isAdmissibleForBind("rejected"), false);
+  assert.equal(isAdmissibleForBind("timed_out"), false);
+  assert.equal(isAdmissibleForBind("error"), false);
+  assert.equal(isAdmissibleForBind("bound"), false);
+  assert.equal(canRetryAttachmentScan("rejected"), true);
+  assert.equal(canRetryAttachmentScan("timed_out"), true);
+  assert.equal(canRetryAttachmentScan("error"), true);
+  assert.equal(canRetryAttachmentScan("scanning"), false);
+  assert.equal(canRetryAttachmentScan("clean"), false);
+  assert.equal(canRetryAttachmentScan("bound"), false);
+  assert.equal(canRemoveTrayAttachment("bound"), false);
+  assert.equal(canRemoveTrayAttachment("scanning"), true);
+  assert.equal(canRemoveTrayAttachment("error"), true);
+  assert.equal(asScanTerminal("clean"), "clean");
+  assert.equal(asScanTerminal("antivirus-clean"), null);
+  assert.equal(asScanTerminal("bound"), null);
+  const tray = toTrayAttachment(staged, "scanning");
+  assert.equal(tray.scannerId, "dev-noop-scanner");
+  assert.equal(tray.scanState, "scanning");
+  assert.equal(tray.state, "staged");
+  assert.equal(attachmentsAreAdmissibleForSend([tray]), false);
+  assert.equal(attachmentsAreAdmissibleForSend([{ ...tray, scanState: "clean" }]), true);
+
+  const scanner = createDevNoopAttachmentScanner();
+  assert.equal(scanner.identity, "dev-noop-scanner");
+  assert.equal(await scanner.scan(staged), "clean");
+
+  let now = 0;
+  const clock = { now: () => now };
+  const timed = createDevNoopAttachmentScanner({ clock, startedAt: 0 });
+  assert.equal(await timed.scan(staged), "clean");
+  now = ATTACHMENT_SCAN_TIMEOUT_MS;
+  assert.equal(await timed.scan(staged), "timed_out");
 });
