@@ -44,6 +44,36 @@ import Foundation
 ///   been minted, a mint that could not run. All of that is gone. `OmiAPI` attaches the session the
 ///   user is already signed in with.
 ///
+/// ## One read is one page, and successive reads walk the account in
+///
+/// **A read used to be the newest page of each source and nothing else, forever.** Every source came
+/// back at `maxPerSource` on a real account — the log said `200 conversations, 200 memories, 200
+/// tasks` — while the shipping Omi app beside it had already paged 1,996 rows in and was still
+/// going. One page is not a corpus, and a surface denominated in the account's rows cannot tell the
+/// two apart from the outside.
+///
+/// So the reader carries a cursor (`AccountCorpus`) and **each successive `read` fetches the next
+/// page of exactly one source, round-robin, and answers with everything gathered so far**. That
+/// shape is deliberate and the alternatives were worse:
+///
+/// - **The paging cannot live in the store.** The store holds an `ActivityAccountReading`, and in
+///   the app that value is `ActivityLocalMemories` wrapping this one. A per-page request travelling
+///   as a new seam method would stop at that decorator, which knows nothing about pages; a per-page
+///   *result* travelling back on `ActivityAccountFeed` would be dropped the moment the decorator
+///   rebuilt the feed to merge this Mac's memories in. The one thing that crosses it unchanged is a
+///   `read` and the rows it answers with, so that is what paging is expressed in.
+/// - **One source per read, not three.** Three racing requests are right for the first read, which
+///   is a screen nobody is looking at yet; they are wrong thirty times over. Round-robin keeps one
+///   request in flight, which is the whole of this surface's politeness budget — see the rate-limit
+///   note above for what happened the last time this panel was generous with someone's account.
+/// - **Bounded twice.** A source stops when a page comes back empty (`ServerPaging`'s rule: a
+///   *short* page is not the end, because these routes post-filter after Firestore's limit), when it
+///   has failed `failureLimit` times in a row, or when it has spent `maximumPagesPerSource`. A
+///   backend that pages forever costs a bounded number of requests, not a hot loop.
+///
+/// The caller drives it: `ActivityStore` reads again while the answer keeps growing and stops when
+/// it does not. Nothing here schedules its own work.
+///
 /// ## Retries live in `OmiAPI`, not here
 ///
 /// There is no ladder in this file. `OmiAPI` already spends exactly one forced token refresh on a
@@ -77,6 +107,10 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
     /// Why the last read found nothing to read, for the empty copy. A reference so the diagnosis
     /// survives this struct being copied into the task that reads with it.
     private let diagnosis = AccountDiagnosis()
+    /// Every page gathered so far, and where each source's next one starts. A reference for the same
+    /// reason `diagnosis` is: the store copies this struct into the task it reads with, and a cursor
+    /// that reset on every copy would fetch page one for the rest of the session.
+    private let corpus = AccountCorpus()
 
     init(
         isAirgapped: @escaping @Sendable () -> Bool = { NetworkEgress.isSuppressed(.omiAPI) },
@@ -114,6 +148,22 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
     /// the thing it is a copy of, one 503 at a time.
     static let maxPerSource = 200
 
+    /// How many pages of one source a reader will ever ask for.
+    ///
+    /// A hundred pages of two hundred rows is twenty thousand of *one* kind — several times the
+    /// largest account this has been measured against, and a hard stop for a backend that pages
+    /// forever. It also bounds the whole surface's appetite: three sources, one request each per
+    /// page, is at most three hundred requests for the life of a window and no more.
+    static let maximumPagesPerSource = 100
+
+    /// Consecutive failures before a source stops being asked.
+    ///
+    /// The reference's stall limit, for the reference's reason: one page can fail for a reason the
+    /// next one will not repeat, three in a row is an endpoint that is down, and asking a fourth
+    /// time is how a client becomes the reason a limit stays tripped. A source that stops here is
+    /// reported as *not answered*, so nothing downstream reads the rows it did manage as complete.
+    static let failureLimit = 3
+
     private static let category = "activity"
 
     // MARK: - Reading
@@ -140,52 +190,96 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
         // among the most recent things the account holds", which is the only claim we can support.
         let placement = until ?? now()
 
-        async let conversationRows = attempt(
-            "conversations", fetchConversations, Self.conversationQuery(limit: bounded))
-        async let memoryRows = attemptMemories(limit: bounded)
-        // Tasks are read unwindowed on purpose — the seam says so, and it is right: an open
-        // commitment matters today whenever it was written. The endpoint does accept `start_date`
-        // and `due_start_date`, but the first bounds *creation* and the second bounds the due date,
-        // and windowing by either would drop the undated commitments that matter most.
-        async let taskPage = attempt("action-items", fetchTasks, ["limit": String(bounded)])
+        // **A read gathers until it has something new, or until every open source has been tried
+        // once.** One page is one request and that is the normal case; the loop exists for the end
+        // of a source, where the page that proves it is over returns nothing. The caller's only
+        // signal is whether the answer grew, so a read that reported "no growth" the moment
+        // conversations ran out would stop the walk with the other two sources half-read.
+        //
+        // `tried` is what keeps that from becoming a retry ladder: a source that has already been
+        // asked in this read is not asked again, whatever it answered. One attempt per source per
+        // read, here as everywhere else in this file — `OmiAPI` has already done the retrying.
+        var tried: Set<ActivityAccountSource> = []
+        pages: for _ in ActivityAccountSource.allCases.indices {
+            let before = await corpus.rowCount()
+            switch await corpus.next(skipping: tried) {
+            case .opening:
+                // The opening read has asked all three already; there is nothing left to try.
+                await readOpeningPage(limit: bounded)
+                break pages
+            case .page(let source, let offset):
+                tried.insert(source)
+                await readPage(source, offset: offset, limit: bounded)
+            case .settled:
+                // Every source has ended, failed out, spent its budget or been asked already.
+                // Nothing more is asked, and the answer is what is already held — which is what
+                // makes a caller that reads once more than it needed to cost nothing.
+                break pages
+            }
+            if await corpus.rowCount() > before { break }
+        }
 
-        let conversations = await conversationRows
-        let memories = await memoryRows
-        let tasks = await taskPage
+        let held = await corpus.held()
 
-        guard conversations.rows != nil || memories.rows != nil || tasks.rows != nil else {
+        guard !held.answered.isEmpty else {
             // **Which failure it was decides what the user is told.** A rejection the session could
             // not survive means "sign in again"; a rate limit means "this will clear on its own";
             // anything else means "I couldn't reach it". All three are far from "you have no
             // memories", which is what an unreasoned empty feed renders as.
-            let failures = [conversations.failure, memories.failure, tasks.failure].compactMap { $0 }
-            await diagnosis.record(Self.reason(whenNothingAnswered: failures))
+            await diagnosis.record(Self.reason(whenNothingAnswered: held.failures))
             return .unreachable
         }
         await diagnosis.record(nil)
 
-        // **Which sources answered, not merely that one did.** The rows below cannot carry the
-        // distinction on their own — an endpoint that 503'd and an account that holds no memories
-        // both produce an empty array — so it travels beside them. Everything downstream that has to
-        // tell "said nothing" from "said nothing yet" reads this, and `ActivityAccountCaching` in
-        // particular refuses to overwrite the last good answer for a source that is not in it.
-        var answered: Set<ActivityAccountSource> = []
-        if conversations.rows != nil { answered.insert(.conversations) }
-        if memories.rows != nil { answered.insert(.memories) }
-        if tasks.rows != nil { answered.insert(.tasks) }
-
         let feed = ActivityAccountFeed(
-            conversations: (conversations.rows ?? []).compactMap { $0.activity(placedAt: placement) },
-            memories: (memories.rows ?? []).compactMap { $0.activity(placedAt: placement) },
-            tasks: (tasks.rows?.actionItems ?? []).compactMap { $0.activity(placedAt: placement) },
-            answered: answered,
-            memoriesBeginPastHead: memories.beganPastHead)
+            conversations: held.conversations.compactMap { $0.activity(placedAt: placement) },
+            memories: held.memories.compactMap { $0.activity(placedAt: placement) },
+            tasks: held.tasks.compactMap { $0.activity(placedAt: placement) },
+            answered: held.answered,
+            memoriesBeginPastHead: held.memoriesBeginPastHead)
         // Counts only. Titles, memory content and task text are the user's own words and none of
         // them belong in a log line.
         ContextLog.info(
             "Account feed: \(feed.conversations.count) conversations, \(feed.memories.count) memories, "
                 + "\(feed.tasks.count) tasks", Self.category)
         return feed
+    }
+
+    /// The first read: the newest page of all three sources, raced.
+    ///
+    /// The three reads race here and nowhere else. This is the read the panel's first paint is
+    /// blocked on, so serial reads would cost the sum of three round trips to show one screen; every
+    /// page after this one lands behind a list the reader can already use, where a second request in
+    /// flight buys nothing and spends someone's account.
+    private func readOpeningPage(limit: Int) async {
+        async let conversationRows = attempt(
+            "conversations", fetchConversations, Self.conversationQuery(limit: limit, offset: 0))
+        async let memoryRows = attemptMemories(limit: limit, offset: 0)
+        // Tasks are read unwindowed on purpose — the seam says so, and it is right: an open
+        // commitment matters today whenever it was written. The endpoint does accept `start_date`
+        // and `due_start_date`, but the first bounds *creation* and the second bounds the due date,
+        // and windowing by either would drop the undated commitments that matter most.
+        async let taskPage = attempt("action-items", fetchTasks, Self.taskQuery(limit: limit, offset: 0))
+
+        await corpus.commit(conversations: await conversationRows)
+        await corpus.commit(memories: await memoryRows)
+        await corpus.commit(tasks: await taskPage)
+    }
+
+    /// One page of one source, at the offset the cursor asked for.
+    private func readPage(_ source: ActivityAccountSource, offset: Int, limit: Int) async {
+        switch source {
+        case .conversations:
+            let outcome = await attempt(
+                "conversations", fetchConversations, Self.conversationQuery(limit: limit, offset: offset))
+            await corpus.commit(conversations: outcome)
+        case .memories:
+            await corpus.commit(memories: await attemptMemories(limit: limit, offset: offset))
+        case .tasks:
+            let outcome = await attempt(
+                "action-items", fetchTasks, Self.taskQuery(limit: limit, offset: offset))
+            await corpus.commit(tasks: outcome)
+        }
     }
 
     /// Reads memories, and steps past the first row when the backend cannot serve the first page.
@@ -211,16 +305,26 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
     ///
     /// The retry is deliberately *not* a general policy in `attempt`: conversations and action-items
     /// have no equivalent split, and stepping their offsets would silently drop a row for nothing.
-    private func attemptMemories(limit: Int) async -> SourceOutcome<[WireMemory]> {
+    ///
+    /// **Only the first page ever steps, and every later page is asked for plainly.** The branch that
+    /// fails is selected by `offset == 0` and nothing else, so a page at offset 400 is already on the
+    /// working implementation and a 503 there means what a 503 usually means. The step is also why
+    /// the offset the request actually used travels back on the outcome: a page that began at 1 and
+    /// returned 200 rows ends at row 200, so the next one starts at 201. Advancing by the page size
+    /// from the offset we *asked* for would skip the row the step landed on — the one row this
+    /// arrangement can afford to lose is the newest memory, and it has already been spent.
+    private func attemptMemories(limit: Int, offset: Int) async -> SourceOutcome<[WireMemory]> {
         do {
-            return SourceOutcome(rows: try await fetchMemories(Self.memoryQuery(limit: limit)), failure: nil)
+            let rows = try await fetchMemories(Self.memoryQuery(limit: limit, offset: offset))
+            return SourceOutcome(rows: rows, failure: nil, offset: offset)
         } catch {
-            // Only a 503 means the failing branch. A 500, a timeout or a rejection is not the split
-            // above, and re-asking at a different offset would spend a request to be told the same
-            // thing — so those fall through to the shared classification below, unretried.
-            guard case .http(503, _)? = error as? OmiAPIError else {
+            // Only a 503 on the first page means the failing branch. A 500, a timeout, a rejection —
+            // or a 503 at any other offset — is not the split above, and re-asking at a different
+            // offset would spend a request to be told the same thing, so those fall through to the
+            // shared classification below, unretried.
+            guard offset == 0, case .http(503, _)? = error as? OmiAPIError else {
                 ContextLog.error("Account memories unavailable: \(Self.reason(for: error))", Self.category)
-                return SourceOutcome(rows: nil, failure: Self.classify(error))
+                return SourceOutcome(rows: nil, failure: Self.classify(error), offset: offset)
             }
             ContextLog.info(
                 "Account memories: the first page is unavailable; asking again from the second row",
@@ -230,7 +334,8 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
             // Flagged only when the retry actually produced rows: a page that failed twice is not a
             // page missing its head, it is no page at all.
             return SourceOutcome(
-                rows: stepped.rows, failure: stepped.failure, beganPastHead: stepped.rows != nil)
+                rows: stepped.rows, failure: stepped.failure, offset: Self.firstPageStep,
+                beganPastHead: stepped.rows != nil)
         }
     }
 
@@ -240,16 +345,20 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
     /// What one source came back with: its rows, or `nil` for "this source did not answer" so the
     /// caller can tell a missing source from an empty one — plus, when it did not, the shape of
     /// failure that decides what the reader is told.
-    private struct SourceOutcome<Row: Sendable>: Sendable {
+    fileprivate struct SourceOutcome<Row: Sendable>: Sendable {
         let rows: Row?
         let failure: SourceFailure?
+        /// The offset the request that produced these rows actually carried, which is not always the
+        /// one it was asked for — see `attemptMemories`. The cursor advances from this, never from
+        /// the offset it handed out.
+        var offset = 0
         /// True when this page had to start past its own first row to be served. Only memories can
         /// set it; see `attemptMemories`.
         var beganPastHead = false
     }
 
     /// Why a source came back with nothing, in the only three shapes anything downstream acts on.
-    private enum SourceFailure: Sendable, Equatable {
+    fileprivate enum SourceFailure: Sendable, Equatable {
         /// A 401 that survived `OmiAPI`'s one forced token refresh. The account refused this Mac's
         /// session, and only the user can fix it.
         case rejected
@@ -290,12 +399,15 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
         _ fetch: @escaping @Sendable ([String: String]) async throws -> Row,
         _ query: [String: String]
     ) async -> SourceOutcome<Row> {
+        // Read back rather than passed alongside: the cursor advances from the offset the request
+        // actually carried, and a second copy of it in a parameter is a second thing to get wrong.
+        let offset = Int(query["offset"] ?? "0") ?? 0
         do {
-            return SourceOutcome(rows: try await fetch(query), failure: nil)
+            return SourceOutcome(rows: try await fetch(query), failure: nil, offset: offset)
         } catch {
             let failure = Self.classify(error)
             ContextLog.error("Account \(source) unavailable: \(Self.reason(for: error))", Self.category)
-            return SourceOutcome(rows: nil, failure: failure)
+            return SourceOutcome(rows: nil, failure: failure, offset: offset)
         }
     }
 
@@ -356,13 +468,20 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
     /// discarded conversation is one the user threw away — it has no business reappearing on a
     /// timeline of their day. `sources` is deliberately *not* sent: this shows the account, and
     /// filtering to this Mac's own uploads would hide everything the phone recorded.
-    private static func conversationQuery(limit: Int) -> [String: String] {
+    private static func conversationQuery(limit: Int, offset: Int) -> [String: String] {
         [
             "limit": String(limit),
-            "offset": "0",
+            "offset": String(offset),
             "statuses": "completed,processing",
             "include_discarded": "false",
         ]
+    }
+
+    /// `GET /v1/action-items` pages on `offset` and answers with an authoritative `has_more`, which
+    /// is the one source here that can say it has reached the end without spending a request to
+    /// prove it.
+    private static func taskQuery(limit: Int, offset: Int) -> [String: String] {
+        ["limit": String(limit), "offset": String(offset)]
     }
 
     /// `device_scope` is left alone: its default is `all`, which is what this wants, and sending
@@ -386,6 +505,187 @@ private actor AccountDiagnosis {
     }
 
     func reason() -> ActivityAccountUnreachableReason? { last }
+}
+
+// MARK: - Everything the account has handed over so far
+
+/// The paging cursor and the rows it has gathered, for one signed-in session.
+///
+/// An actor for the reason `AccountDiagnosis` is one: `OmiActivityFeed` is a struct that gets copied
+/// into whatever task reads with it, and paging state that copied with it would restart at page one
+/// on every read. Everything mutable in this file lives here, so nothing else needs a lock.
+///
+/// **The two rules that make offset paging against this backend correct** are `ServerPaging`'s, and
+/// both are load-bearing:
+///
+/// 1. **A short page is not the last page.** `/v3/memories` and `/v1/conversations` both fetch
+///    `limit` documents and then drop the rejected, superseded and unparseable ones *in Python*, so
+///    a request for 200 routinely answers 197. Reading that as the end is silent and total — the
+///    account's other thousands of rows become unreachable for the rest of the session. Only an
+///    empty page ends a source, which costs exactly one extra request at the end of each one.
+/// 2. **An offset is not a stable cursor.** The memories query orders by mutable `scoring`, so a row
+///    can move between two pages fetched seconds apart and arrive in both — or in neither. Pages are
+///    therefore merged by identity, first sighting wins, and the cursor advances by the rows a page
+///    actually *returned* rather than by the page size, which cannot skip a row under either
+///    interpretation of where the backend applies its own filtering.
+private actor AccountCorpus {
+
+    /// What the next read has to do.
+    enum Step: Sendable, Equatable {
+        /// Nothing has been read yet: the newest page of all three sources, raced.
+        case opening
+        /// One page of one source. The offset is where that source's rows left off.
+        case page(ActivityAccountSource, offset: Int)
+        /// Every source has ended, failed out or spent its budget. No request is worth making.
+        case settled
+    }
+
+    /// The whole corpus as one answer, plus what may be claimed about it.
+    struct Held: Sendable {
+        var conversations: [WireConversation] = []
+        var memories: [WireMemory] = []
+        var tasks: [WireActionItem] = []
+        /// Sources whose rows here are the account's own answer as far as they go. A source that is
+        /// currently failing, that has never answered, or that ran out of page budget with rows
+        /// still behind it is *not* in here — which is what stops anything downstream reporting a
+        /// partial corpus as a complete one.
+        var answered: Set<ActivityAccountSource> = []
+        /// The most recent failure of each source that has one, for the reader's diagnosis.
+        var failures: [OmiActivityFeed.SourceFailure] = []
+        var memoriesBeginPastHead = false
+    }
+
+    private var conversations: [WireConversation] = []
+    private var memories: [WireMemory] = []
+    private var tasks: [WireActionItem] = []
+    private var seen: [ActivityAccountSource: Set<String>] = [:]
+    private var state: [ActivityAccountSource: SourceState] = [:]
+    private var didOpen = false
+    private var memoriesBeganPastHead = false
+    /// Which source the round-robin resumes at.
+    private var rotation = 0
+
+    private struct SourceState {
+        var nextOffset = 0
+        var pages = 0
+        var failures = 0
+        var everAnswered = false
+        /// A page came back empty, or the source told us there is no more.
+        var isExhausted = false
+        var lastFailure: OmiActivityFeed.SourceFailure?
+
+        /// Whether this source is worth another request.
+        var isOpen: Bool {
+            !isExhausted && failures < OmiActivityFeed.failureLimit
+                && pages < OmiActivityFeed.maximumPagesPerSource
+        }
+
+        /// Whether the rows held for it may be presented as the account's own answer.
+        ///
+        /// A source that spent its whole page budget is deliberately *not* one: it stopped with
+        /// pages very possibly still behind it, and something downstream would read that as an
+        /// inventory. Reaching the end on the last page of the budget is the one exception — the
+        /// empty page proves there was nothing left, whatever the budget said.
+        var isAnswered: Bool {
+            guard everAnswered, failures == 0 else { return false }
+            return isExhausted || pages < OmiActivityFeed.maximumPagesPerSource
+        }
+    }
+
+    /// The next thing to fetch, and the only place the rotation moves.
+    ///
+    /// Round-robin rather than "finish one source then start the next" so that a long source cannot
+    /// hold the other two behind it: a spine whose conversations are all in but whose tasks have not
+    /// started is a spine with a whole kind missing from every day it draws.
+    /// - Parameter skipping: sources the caller has already asked in this read. A page that answered
+    ///   with nothing is not a reason to ask the same source again a moment later.
+    func next(skipping: Set<ActivityAccountSource> = []) -> Step {
+        guard didOpen else {
+            didOpen = true
+            return .opening
+        }
+        let sources = ActivityAccountSource.allCases
+        for turn in 0..<sources.count {
+            let source = sources[(rotation + turn) % sources.count]
+            guard !skipping.contains(source) else { continue }
+            let current = state[source] ?? SourceState()
+            guard current.isOpen else { continue }
+            rotation = (rotation + turn + 1) % sources.count
+            return .page(source, offset: current.nextOffset)
+        }
+        return .settled
+    }
+
+    func commit(conversations outcome: OmiActivityFeed.SourceOutcome<[WireConversation]>) {
+        record(.conversations, outcome, received: outcome.rows?.count)
+        for row in outcome.rows ?? [] where insert(.conversations, id: row.id) {
+            conversations.append(row)
+        }
+    }
+
+    func commit(memories outcome: OmiActivityFeed.SourceOutcome<[WireMemory]>) {
+        if outcome.beganPastHead { memoriesBeganPastHead = true }
+        record(.memories, outcome, received: outcome.rows?.count)
+        for row in outcome.rows ?? [] where insert(.memories, id: row.id) {
+            memories.append(row)
+        }
+    }
+
+    func commit(tasks outcome: OmiActivityFeed.SourceOutcome<WireActionItemPage>) {
+        record(.tasks, outcome, received: outcome.rows?.actionItems.count)
+        // The one source that can say it has reached the end without an empty page to prove it.
+        if let page = outcome.rows, !page.hasMore { state[.tasks]?.isExhausted = true }
+        for row in outcome.rows?.actionItems ?? [] where insert(.tasks, id: row.id) {
+            tasks.append(row)
+        }
+    }
+
+    /// How many rows are held over every source — the reader's own version of the growth signal the
+    /// caller reads, and cheaper than building a whole `Held` to count one.
+    func rowCount() -> Int { conversations.count + memories.count + tasks.count }
+
+    func held() -> Held {
+        Held(
+            conversations: conversations,
+            memories: memories,
+            tasks: tasks,
+            answered: Set(state.filter { $0.value.isAnswered }.keys),
+            failures: state.values.compactMap(\.lastFailure),
+            memoriesBeginPastHead: memoriesBeganPastHead)
+    }
+
+    /// Moves one source's cursor by what its page did.
+    ///
+    /// - Parameter received: the rows the page returned **before** anything here dropped duplicates
+    ///   or rows with no id, or nil when it did not answer. It is the raw count that the offset has
+    ///   to advance by; advancing by the rows worth keeping would re-request the ones already
+    ///   discarded, forever.
+    private func record<Row>(
+        _ source: ActivityAccountSource, _ outcome: OmiActivityFeed.SourceOutcome<Row>, received: Int?
+    ) {
+        var current = state[source] ?? SourceState()
+        current.pages += 1
+        if let received {
+            current.failures = 0
+            current.lastFailure = nil
+            current.everAnswered = true
+            current.nextOffset = outcome.offset + max(received, 0)
+            // `ServerPaging`: only an empty page is the end. A short one is the backend's own
+            // post-filtering, and reading it as the end is how the rest of an account disappears.
+            if received == 0 { current.isExhausted = true }
+        } else {
+            current.failures += 1
+            current.lastFailure = outcome.failure
+        }
+        state[source] = current
+    }
+
+    /// Whether this row is one we have not already been handed. A row with no id cannot be
+    /// identified, so it cannot be diffed, deduplicated or rendered — the projection drops it too.
+    private func insert(_ source: ActivityAccountSource, id: String?) -> Bool {
+        guard let id, !id.isEmpty else { return false }
+        return seen[source, default: []].insert(id).inserted
+    }
 }
 
 // MARK: - Wire shapes

@@ -979,3 +979,230 @@ private actor AskedQueries {
     func record(_ query: [String: String]) { queries.append(query) }
     var offsets: [String] { queries.map { $0["offset"] ?? "absent" } }
 }
+
+// MARK: - One read is one page, and successive reads walk the account in
+
+/// **The defect these are written from: the reader only ever held the first page.**
+///
+/// Every source came back at `maxPerSource` on the real account — the app's own log said
+/// `200 conversations, 200 memories, 200 tasks` — while the shipping Omi app beside it had already
+/// paged 1,996 rows in and was still going. A first page is not a corpus, and nothing downstream can
+/// tell the two apart from the outside.
+///
+/// So the reader carries a cursor and each successive read fetches the next page of exactly one
+/// source, round-robin, answering with everything gathered so far. What follows is the whole of that
+/// contract: where the next page starts, what ends a source, and what bounds it when nothing does.
+extension OmiActivityFeedTests {
+
+    /// Successive reads walk every source in, one page per read, and the answer is cumulative.
+    ///
+    /// **One request in flight, and only the first read races.** The opening read is the one the
+    /// panel's first paint is blocked on, so its three sources go together; every page behind it
+    /// lands under a list the reader can already use, where a second concurrent request buys nothing
+    /// and spends someone's account — which is how this surface got itself rate limited off
+    /// `/v1/mcp/*` in the first place.
+    func testSuccessiveReadsPageEverySourceInOneAtATime() async {
+        let backend = PagingBackend(conversations: 5, memories: 5, tasks: 5)
+        let feed = Self.feed(over: backend)
+
+        let last = await Self.readUntilSettled(feed, limit: 2)
+
+        XCTAssertEqual(last.conversations.count, 5, "every page, not the first one")
+        XCTAssertEqual(last.memories.count, 5)
+        XCTAssertEqual(last.tasks.count, 5)
+        XCTAssertEqual(
+            last.conversations.map(\.id), ["c0", "c1", "c2", "c3", "c4"],
+            "in the order the account sent them, with no row arriving twice")
+
+        // **A short page is not the last page** — `ServerPaging`'s rule, and the reason for the
+        // request at offset 5. These routes fetch `limit` documents and then drop the discarded and
+        // unparseable ones in Python, so a page of one where two were asked for is routine and
+        // reading it as the end is how the rest of an account disappears. Only the empty page ends
+        // it, and it costs exactly one extra request per source.
+        let conversationAsks = await backend.asks("conversations")
+        XCTAssertEqual(conversationAsks, [0, 2, 4, 5], "0, 2, the short page at 4, then the empty one")
+        let memoryAsks = await backend.asks("memories")
+        XCTAssertEqual(memoryAsks, [0, 2, 4, 5])
+        // Except for the one source that can say so itself: `/v1/action-items` answers with an
+        // authoritative `has_more`, so there is no empty page to spend a request on.
+        let taskAsks = await backend.asks("tasks")
+        XCTAssertEqual(taskAsks, [0, 2, 4], "`has_more: false` is the end, without a page to prove it")
+    }
+
+    /// **The one row the memories step spends is the only row it spends.**
+    ///
+    /// `GET /v3/memories` at `offset: 0` runs a Firestore keyset scan that 503s for real accounts,
+    /// so the first page is re-asked from `offset: 1` — see `attemptMemories`. That costs the newest
+    /// memory, deliberately and once. The danger is the *next* page: a cursor that advanced by the
+    /// page size from the offset it asked for (0 + 2) rather than from the one the request carried
+    /// (1 + 2) would step back over a row it already holds, or — with the arithmetic the other way
+    /// round — skip one it never fetched. Neither is visible on screen; both are silent holes in the
+    /// account.
+    func testTheSteppedFirstMemoryPageNeitherSkipsNorRepeatsARow() async {
+        let backend = PagingBackend(conversations: 0, memories: 5, tasks: 0, memoriesFirstPageFails: true)
+        let feed = Self.feed(over: backend)
+
+        let last = await Self.readUntilSettled(feed, limit: 2)
+
+        XCTAssertEqual(
+            last.memories.map(\.id), ["m1", "m2", "m3", "m4"],
+            "every memory but the newest, which is the documented cost of the step — and each once")
+        let asks = await backend.asks("memories")
+        XCTAssertEqual(
+            asks, [0, 1, 3, 5],
+            "asked at 0, stepped to 1, and then advanced from the offset the request actually used")
+        XCTAssertTrue(last.memoriesBeginPastHead, "the page began past its own head, and says so")
+    }
+
+    /// A source that keeps failing stops being asked, and its rows are never presented as complete.
+    ///
+    /// Three attempts is the reference's stall limit, for the reference's reason: one page can fail
+    /// for a reason the next will not repeat, three in a row is an endpoint that is down, and a
+    /// client that answers a refusal by asking again is how a limit stays tripped. It stays out of
+    /// `answered` for as long as it is failing, which is what keeps the corner saying "still
+    /// counting" over a corpus that really is incomplete.
+    func testAFailingSourceIsBoundedAndIsNeverReportedAsAnswered() async {
+        let backend = PagingBackend(conversations: 5, memories: 5, tasks: 0, failing: ["memories"])
+        let feed = Self.feed(over: backend)
+
+        let last = await Self.readUntilSettled(feed, limit: 2)
+
+        let asks = await backend.asks("memories")
+        XCTAssertEqual(asks.count, OmiActivityFeed.failureLimit, "three attempts, then it is left alone")
+        XCTAssertFalse(
+            last.answered.contains(.memories),
+            "a source that is down has rows behind it, whatever the other two managed")
+        XCTAssertTrue(last.answered.contains(.conversations), "and it does not take the others with it")
+        XCTAssertEqual(last.conversations.count, 5)
+    }
+
+    /// **A backend that pages forever costs a bounded number of requests.** The account is walked
+    /// in behind a live surface, so the failure mode of getting this wrong is not a wrong number on
+    /// screen — it is this Mac asking someone's account for pages until the app is quit.
+    func testAnEndlessBackendIsStoppedByThePageBudget() async {
+        let backend = PagingBackend(conversations: .max, memories: 0, tasks: 0)
+        let feed = Self.feed(over: backend)
+
+        let last = await Self.readUntilSettled(feed, limit: 1, reads: OmiActivityFeed.maximumPagesPerSource * 2)
+
+        let asks = await backend.asks("conversations")
+        XCTAssertEqual(asks.count, OmiActivityFeed.maximumPagesPerSource, "the budget, and not one page more")
+        XCTAssertFalse(
+            last.answered.contains(.conversations),
+            "it stopped with pages still behind it, so nothing may read what it holds as everything")
+    }
+
+    /// Reading past the end costs nothing. The store reads once more than it needs to — that is how
+    /// it learns the account has run out — and that read must not be a request.
+    func testReadingPastTheEndSendsNothing() async {
+        let backend = PagingBackend(conversations: 1, memories: 1, tasks: 1)
+        let feed = Self.feed(over: backend)
+
+        _ = await Self.readUntilSettled(feed, limit: 2)
+        let spent = await backend.asks("conversations").count + backend.asks("memories").count
+            + backend.asks("tasks").count
+        _ = await feed.read(since: nil, until: nil, limit: 2)
+        _ = await feed.read(since: nil, until: nil, limit: 2)
+        let after = await backend.asks("conversations").count + backend.asks("memories").count
+            + backend.asks("tasks").count
+
+        XCTAssertEqual(after, spent, "a settled corpus is answered from what is already held")
+    }
+
+    // MARK: - Driving the pages
+
+    /// Reads until the reader stops asking for anything, the way `ActivityStore` does: again while
+    /// the answer keeps growing, and once more to find out that it has stopped.
+    private static func readUntilSettled(
+        _ feed: OmiActivityFeed, limit: Int, reads: Int = 40
+    ) async -> ActivityAccountFeed {
+        var last = await feed.read(since: nil, until: nil, limit: limit)
+        for _ in 0..<reads {
+            let next = await feed.read(since: nil, until: nil, limit: limit)
+            let grew = next.rowCount > last.rowCount
+            last = next
+            if !grew { break }
+        }
+        return last
+    }
+
+    private static func feed(over backend: PagingBackend) -> OmiActivityFeed {
+        OmiActivityFeed(
+            isAirgapped: { false },
+            isSignedIn: { true },
+            fetchConversations: { try await backend.conversations($0) },
+            fetchMemories: { try await backend.memories($0) },
+            fetchTasks: { try await backend.tasks($0) },
+            now: { placement })
+    }
+}
+
+/// A backend that pages the way these three routes do, and remembers every offset it was asked for.
+///
+/// `conversations`/`memories`/`tasks` are row counts rather than fixtures because what is under test
+/// is the arithmetic of the cursor: which offset the next page starts at, what ends a source, and
+/// what happens when one of them will not answer at all. The row shapes themselves are covered by
+/// the decoding tests above.
+private actor PagingBackend {
+    private let counts: [String: Int]
+    /// Sources that refuse every request, however it is shaped.
+    private let failing: Set<String>
+    /// Whether `offset: 0` 503s, as `/v3/memories` currently does for real accounts.
+    private let memoriesFirstPageFails: Bool
+    private var asked: [String: [Int]] = [:]
+
+    init(
+        conversations: Int, memories: Int, tasks: Int,
+        failing: Set<String> = [], memoriesFirstPageFails: Bool = false
+    ) {
+        counts = ["conversations": conversations, "memories": memories, "tasks": tasks]
+        self.failing = failing
+        self.memoriesFirstPageFails = memoriesFirstPageFails
+    }
+
+    func asks(_ source: String) -> [Int] { asked[source] ?? [] }
+
+    func conversations(_ query: [String: String]) throws -> [WireConversation] {
+        try page("conversations", query).map { index in
+            WireConversation(
+                id: "c\(index)", createdAt: nil, startedAt: WireInstant(seconds: 1_786_000_000 + Double(index)),
+                finishedAt: nil,
+                structured: WireConversation.WireStructured(title: "Talk \(index)", overview: nil, emoji: "🎙️"))
+        }
+    }
+
+    func memories(_ query: [String: String]) throws -> [WireMemory] {
+        let rows = try page("memories", query)
+        return rows.map { index in
+            WireMemory(
+                id: "m\(index)", content: "Fact \(index)",
+                capturedAt: WireInstant(seconds: 1_786_000_000 + Double(index)), createdAt: nil,
+                updatedAt: nil, conversationId: nil)
+        }
+    }
+
+    func tasks(_ query: [String: String]) throws -> WireActionItemPage {
+        let rows = try page("tasks", query)
+        let total = counts["tasks"] ?? 0
+        let items = rows.map { index in
+            WireActionItem(
+                id: "t\(index)", text: "Do \(index)", completed: false,
+                createdAt: WireInstant(seconds: 1_786_000_000 + Double(index)), dueAt: nil, completedAt: nil)
+        }
+        return WireActionItemPage(actionItems: items, hasMore: (rows.last.map { $0 + 1 } ?? 0) < total)
+    }
+
+    /// The rows one request covers, recording the offset it carried.
+    private func page(_ source: String, _ query: [String: String]) throws -> Range<Int> {
+        let offset = Int(query["offset"] ?? "0") ?? 0
+        let limit = Int(query["limit"] ?? "1") ?? 1
+        asked[source, default: []].append(offset)
+        if failing.contains(source) { throw OmiAPIError.http(500, "") }
+        if source == "memories", memoriesFirstPageFails, offset == 0 {
+            throw OmiAPIError.http(503, "Canonical memory unavailable")
+        }
+        let total = counts[source] ?? 0
+        guard offset < total else { return offset..<offset }
+        return offset..<min(offset + limit, total)
+    }
+}

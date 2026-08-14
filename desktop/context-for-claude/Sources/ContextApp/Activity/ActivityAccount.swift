@@ -176,6 +176,14 @@ struct ActivityAccountFeed: Sendable, Equatable {
     static let empty = ActivityAccountFeed()
 
     var isEmpty: Bool { conversations.isEmpty && memories.isEmpty && tasks.isEmpty }
+
+    /// How many rows this feed carries, over every source.
+    ///
+    /// **The hydrator's only progress signal**, and the reference's too: a reader that pages answers
+    /// with everything it has gathered so far, so an answer that is no bigger than the last one is
+    /// how a caller learns the account has run out of pages — or that the page it just asked for did
+    /// not arrive. Neither is worth another request, and the difference between them is `answered`.
+    var rowCount: Int { conversations.count + memories.count + tasks.count }
 }
 
 /// The account, as the spine needs to see it.

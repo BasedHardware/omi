@@ -7,16 +7,22 @@
 //  and it deliberately holds no authority — no writes, no second cache, no third opinion about what
 //  was captured.
 //
-//  **The account is read once per time window, and it is allowed to say nothing.** An unreachable
+//  **The account is read a page at a time, and it is allowed to say nothing.** An unreachable
 //  account is an ordinary state, not an error: the store keeps `accountReachable` so the empty copy
 //  can tell "nobody answered" from "there was nothing", and the local half of the stream is composed
 //  either way.
 //
-//  **Once per window is right for an answer and wrong for a failure.** A read that failed for a
-//  reason that heals on its own — a rate limit, a timeout, no route — leaves the panel empty until
-//  the user moves the window, which is a surface that stays broken long after the thing that broke
-//  it has gone. So those reasons, and only those, are re-read on a bounded schedule; see
-//  `scheduleAccountReread`.
+//  **One page is not a corpus.** The reader answers with everything it has gathered so far and
+//  fetches one more page each time it is asked, so this reads again while the answer keeps growing
+//  and stops when it does not — the reference's background hydrator, in the shape this seam allows.
+//  The first page is what the panel paints; the rest of the account arrives underneath a list that
+//  is already readable, and `corpusSettled` is what tells the corner whether the number it is
+//  showing has stopped moving. See `absorb(account:reason:generation:)`.
+//
+//  **A read that failed is not a read that finished.** A failure for a reason that heals on its own
+//  — a rate limit, a timeout, no route — would otherwise leave the panel empty until the user moves
+//  the window, which is a surface that stays broken long after the thing that broke it has gone. So
+//  those reasons, and only those, are re-read on a bounded schedule; see `scheduleAccountReread`.
 //
 //  **Days are read one at a time, newest first, and a few at a time.** A Mac with a year of capture
 //  has a year of days, and reading them all before the first paint would put a spinner in front of
@@ -176,7 +182,15 @@ final class ActivityStore: ObservableObject {
     /// `sessionCeiling` is, and more urgently: this one crosses a network, so an unbounded read is a
     /// request whose size is the user's whole history and whose cost is the first paint of the
     /// panel. Well past what any reader scrolls in one window, and far short of an account dump.
-    nonisolated static let accountCeiling = 300
+    ///
+    /// **It is the reader's own per-source cap and not a number above it, which is what makes a
+    /// truncated read detectable.** `OmiActivityFeed` clamps every source to `maxPerSource`, so any
+    /// ceiling above that is a number nobody honours: this asked for 300, got exactly 200 back three
+    /// times over, and had no way to tell one page of a long account from an account holding exactly
+    /// two hundred. Asking for what the reader will actually give is the page size, and a page size
+    /// the reader honours is what makes "this page was the last one" a sound claim rather than a
+    /// clamp mistaken for an inventory.
+    nonisolated static let accountCeiling = OmiActivityFeed.maxPerSource
 
     /// The coalescing window for recomposition.
     ///
@@ -359,6 +373,11 @@ final class ActivityStore: ObservableObject {
         accountRetry?.cancel()
         accountRetry = nil
         accountRereads = 0
+        // Hydration belongs to the window too. The reader's own cursor does not reset — the pages it
+        // has already fetched are the same pages whichever window is open, because no source here is
+        // fetched by date — so a re-opened window costs no re-reads, only a fresh budget.
+        accountCorpusIsWhole = false
+        accountReads = 0
         corpusSettled = false
         isPreparing = store() != nil
         readFailure = nil
@@ -393,7 +412,14 @@ final class ActivityStore: ObservableObject {
     /// is the other's precondition. It is `Task` rather than `Task.detached` because `read` is the
     /// seam's own `async` — where it does its work is the implementation's decision, not this
     /// store's.
+    ///
+    /// **One read of this window at a time, and the guard is not a nicety.** Three things call this:
+    /// the window opening, the healing ladder, and hydration — and hydration reads again whenever a
+    /// read grew the corpus. Two overlapping reads would each grow the corpus and each start their
+    /// own successor, so a second reader is not a duplicate request, it is a doubling one.
     private func readAccount(generation: Int) {
+        guard accountReadInFlight != generation else { return }
+        accountReadInFlight = generation
         let since = self.since
         let until = self.until
         Task { [weak self, account] in
@@ -407,13 +433,34 @@ final class ActivityStore: ObservableObject {
         }
     }
 
+    /// The generation of the account read currently in flight, if there is one.
+    ///
+    /// Stamped with the generation rather than a bare flag so that a window opening while an old
+    /// read is still out cannot be refused a read of its own — and so that the stale read, when it
+    /// lands, cannot clear a flag that now belongs to somebody else.
+    private var accountReadInFlight: Int?
+
+    /// How many reads one window may spend walking the account in.
+    ///
+    /// The reader has its own per-source page budget and is the real bound; this is the backstop for
+    /// a reader that does not — a fake, a preview, an account that grows faster than it is read —
+    /// so that "read again while it keeps growing" can never be a loop without an end.
+    nonisolated static let maximumAccountReads = 400
+
     /// What the account answered, for the window that asked.
     private func absorb(
         account feed: ActivityAccountFeed,
         reason: ActivityAccountUnreachableReason?,
         generation: Int
     ) {
+        if accountReadInFlight == generation { accountReadInFlight = nil }
         guard generation == self.generation else { return }
+        // **The paged reader answers with everything it has gathered, so growth is the signal.** A
+        // read that added rows means there are more pages behind it and the next one is worth
+        // making; a read that added none has either reached the end of the account or failed, and
+        // neither improves by asking again — the healing ladder below owns the second case.
+        let grew = feed.rowCount > accountFeed.rowCount
+        let wasFirst = !accountSettled
         accountFeed = feed
         accountSettled = true
         accountReachable = feed.reachable
@@ -436,8 +483,52 @@ final class ActivityStore: ObservableObject {
         } else {
             scheduleAccountReread(reason, generation: generation)
         }
-        recompose()
+
+        // **The corpus is whole when the last read added nothing *and* every source answered it.**
+        // A read that added nothing because a source failed is not an inventory of the account — it
+        // is the same partial page it was before, and the corner may not present it as final. The
+        // ladder above may yet heal that source, and a read that grows again reopens this.
+        accountCorpusIsWhole =
+            !grew && (feed.answered.count == ActivityAccountSource.allCases.count || !feed.reachable)
+        if grew, accountReads < Self.maximumAccountReads {
+            accountReads += 1
+            readAccount(generation: generation)
+        }
+        // Stated here as well as inside composition, for the reason the day walk states it there: a
+        // page that adds no row recomposes nothing, and a surface that only ever settled inside
+        // `recompose` would go on saying "still counting" after the last page had landed.
+        updateCorpusSettled()
+
+        // **The first answer paints; every page after it grows the list underneath the reader.**
+        // Composition costs the size of the corpus rather than the size of the page that arrived, so
+        // recomposing on the spot for each of a few dozen pages would spend the whole walk rebuilding
+        // a list somebody is trying to read. Same bargain the day walk already makes.
+        //
+        // The last page is the exception: `corpusSettled` is decided above and `corpusTotal` inside
+        // composition, so leaving the final page to a coalescing timer would put the settled sentence
+        // on screen beside a total that is still one page short of it.
+        if wasFirst || accountCorpusIsWhole {
+            recompose()
+        } else {
+            recomposeSoon()
+        }
     }
+
+    // MARK: - Hydration
+
+    /// Whether every page the account holds is in.
+    ///
+    /// **This is the corner's honesty, and it is not the same claim as "the read came back".** The
+    /// account is read one page per source at a time and the first of those pages came back at the
+    /// cap on the real account — 200 conversations, 200 memories, 200 tasks — while the shipping Omi
+    /// app beside it had already paged 1,996 rows in and was still going. A surface that settled on
+    /// the first answer stated `3,334 things in everything Omi has kept` over the newest two hundred
+    /// of each kind. The reference draws the same sentence from `SpineHydrator.state == .whole` and
+    /// keeps saying `so far · still counting` until every page is in; this is that signal.
+    private var accountCorpusIsWhole = false
+
+    /// How many reads this window has spent on the account. Bounded by `maximumAccountReads`.
+    private var accountReads = 0
 
     // MARK: - Healing
 
@@ -667,6 +758,15 @@ final class ActivityStore: ObservableObject {
         // every frame of the day; the rows only ever draw the sample. A total summed over the stream
         // would therefore report a five-figure day as the two hundred frames the strips could hold.
         corpusTotal = composed.isEmpty ? nil : composed.reduce(0) { $0 + $1.thingCount }
+        // **Counts only, and it is the line this surface was missing.** The corner states one number
+        // over four kinds, so a corner that looks wrong is unreadable without the breakdown behind
+        // it: `3,334` was read as a frame count for want of this line, when it was 2,700 frames and
+        // 634 account rows. None of the user's own words are in it — see `ContextLog`.
+        ContextLog.info(
+            "Corpus: \(composed.count) days · \(composed.reduce(0) { $0 + $1.momentCount }) moments · "
+                + "\(composed.reduce(0) { $0 + $1.conversationCount }) conversations · "
+                + "\(composed.reduce(0) { $0 + $1.memoryCount }) memories · "
+                + "\(composed.reduce(0) { $0 + $1.taskCount }) tasks", "activity")
         updateCorpusSettled()
         refilter()
     }
@@ -677,8 +777,16 @@ final class ActivityStore: ObservableObject {
     /// composes nothing.** A day whose read came back empty is absorbed without recomposing (there
     /// is no new row to draw), so a surface that only settled inside `recompose` would keep saying
     /// "still counting" for the rest of the session on any Mac whose oldest days hold no capture.
+    ///
+    /// **A page is not a corpus, and that is the half that was missing.** `accountSettled` says only
+    /// that a read came *back*; settling on it alone let the corner state `3,334 things in everything
+    /// Omi has kept` as a finished figure over the newest two hundred of each kind, while the
+    /// shipping app beside it read `4,491 so far · still counting`. `accountCorpusIsWhole` is the
+    /// real signal — the reference's `SpineHydrator.state == .whole`, reached when the account has
+    /// no more pages to give rather than when the first of them arrived.
     private func updateCorpusSettled() {
-        corpusSettled = accountSettled && !isPreparing && queue.isEmpty && active == 0
+        corpusSettled =
+            accountSettled && accountCorpusIsWhole && !isPreparing && queue.isEmpty && active == 0
     }
 
     private func refilter() {

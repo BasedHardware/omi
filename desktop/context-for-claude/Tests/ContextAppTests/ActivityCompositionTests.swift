@@ -850,6 +850,84 @@ final class ActivityCompositionTests: XCTestCase {
         XCTAssertEqual(day.thingCount, 3)
     }
 
+    /// **Every kind the header counts is a kind the list drew, one for one.**
+    ///
+    /// The day header carries four numbers and only one of them is read off the rows
+    /// (`ActivityDay.matchCount`); the other three are sums the composer keeps beside them, which is
+    /// exactly the drift the reference avoids by deriving its memory and task counts from the rows.
+    /// Soloing a kind is what makes the two comparable — a soloed stream draws nothing else — and it
+    /// is also how this was checked on the real screen: `219 results · of 3,339`, `216 results`,
+    /// `200 results`, against a header sum of 219 conversations, 216 memories and 200 tasks.
+    ///
+    /// The memory column is the one that could realistically drift: a day's memories are two
+    /// populations (loose ones on their own clock, attached ones re-seated from another day) summed
+    /// in two places, and only this catches a header counting one the list did not draw.
+    func testEveryDayHeaderCountAgreesWithTheRowsTheListDraws() {
+        let days = compose(
+            account: ActivityAccountFeed(
+                conversations: [
+                    accountConversation(id: "c1", start: at(day: 10, hour: 9), minutes: 30),
+                    accountConversation(id: "c2", start: at(day: 10, hour: 14), minutes: 20),
+                ],
+                memories: [
+                    // Attached: extracted from c1 and timestamped the *next* morning, so it is
+                    // counted on day 10 and would be counted on day 11 by any sum built from its own
+                    // clock.
+                    accountMemory(id: "m1", at: at(day: 11, hour: 8), conversation: "c1"),
+                    accountMemory(id: "m2", at: at(day: 10, hour: 10)),
+                    accountMemory(id: "m3", at: at(day: 10, hour: 10, minute: 20)),
+                    // Names a conversation nothing in this stream holds: loose, on its own day.
+                    accountMemory(id: "m4", at: at(day: 11, hour: 15), conversation: "gone"),
+                ],
+                tasks: [
+                    accountTask(id: "t1", at: at(day: 10, hour: 16)),
+                    accountTask(id: "t2", at: at(day: 10, hour: 16, minute: 10)),
+                    accountTask(id: "t3", at: at(day: 11, hour: 9)),
+                ]),
+            screen: screen(10, [moment(id: 1, at: at(day: 10, hour: 20))]))
+
+        for (kind, counted) in [
+            (ActivityKind.conversations, \ActivityDay.conversationCount),
+            (ActivityKind.memories, \ActivityDay.memoryCount),
+            (ActivityKind.tasks, \ActivityDay.taskCount),
+            (ActivityKind.rewind, \ActivityDay.momentCount),
+        ] {
+            let soloed = ActivityComposer.filter(days, kind: kind, query: "")
+            XCTAssertEqual(
+                soloed.reduce(0) { $0 + $1.matchCount },
+                days.reduce(0) { $0 + $1[keyPath: counted] },
+                "the headers count \(kind.title) the list does not draw")
+        }
+    }
+
+    /// **The corner counts the account's rows, including on days this Mac has no capture for.**
+    ///
+    /// The report that opened this said the corner was "almost exactly the frame count" and was
+    /// therefore ignoring the account. It was not: `3,334` was 2,700 showable frames plus 634
+    /// account rows, and the resemblance to the 3,345 rows in `frames` was a coincidence — the
+    /// surface counts *showable* frames (`imagePath IS NOT NULL`), which were 2,702 of them.
+    ///
+    /// What makes that worth a test rather than a note is the second half: the local day walk only
+    /// ever reaches days that hold capture, so a corpus summed from day headers would miss the
+    /// account's rows entirely unless the composer opens days for them. On the real account it opens
+    /// 26 of them — 8 days of capture, 34 days composed.
+    @MainActor
+    func testTheCorpusCountsAccountRowsOnDaysThisMacNeverCaptured() {
+        let days = compose(
+            account: ActivityAccountFeed(
+                conversations: [
+                    accountConversation(id: "c1", start: at(day: 3, hour: 9), minutes: 30)
+                ],
+                memories: [accountMemory(id: "m1", at: at(day: 4, hour: 11))],
+                tasks: [accountTask(id: "t1", at: at(day: 5, hour: 12))]),
+            screen: screen(10, [moment(id: 1, at: at(day: 10, hour: 20))]))
+
+        XCTAssertEqual(days.count, 4, "three account days the capture walk would never have opened")
+        XCTAssertEqual(
+            ActivityStore(days: days, calendar: Self.calendar).corpusTotal, 4,
+            "one frame plus a conversation, a memory and a task")
+    }
+
     /// **An unreachable account is not an empty one.** The local half of the stream still composes —
     /// a signed-out Mac shows the screen moments it has — and the empty copy says something else
     /// entirely when there is nothing left to show.
@@ -1264,6 +1342,85 @@ extension ActivityCompositionTests {
         XCTAssertEqual(afterSignOut, 2, "signing out asks nothing")
     }
 
+    /// **A full page is not a finished count, and the corner may not present one as the other.**
+    ///
+    /// The account is read a page at a time, so the newest `accountCeiling` rows of each kind are
+    /// all the *first* read can ever have counted. On the real account every source came back at the
+    /// cap — 200 conversations, 200 memories, 200 tasks — while the shipping Omi app beside it had
+    /// paged 1,996 rows in and was still going; the corner nevertheless said `3,334 things in
+    /// everything Omi has kept`, in the settled form, as a finished figure.
+    ///
+    /// So the store reads again while the answer keeps growing, and settles only when it stops. The
+    /// reference resolves the same sentence from `SpineHydrator.state == .whole` and reads
+    /// `4,491 so far · still counting` until every page is in.
+    @MainActor
+    func testTheCornerSettlesOnlyOnceTheAccountHasNoMorePagesToGive() async {
+        let account = PagingAccount(pages: 3, rowsPerPage: 200, at: at(day: 10, hour: 9))
+        let store = ActivityStore(store: { nil }, account: account, calendar: Self.calendar)
+
+        store.start()
+        await Self.settle()
+
+        let reads = await account.reads
+        XCTAssertEqual(reads, 4, "three pages, then the read that finds there is no fourth")
+        XCTAssertEqual(store.corpusTotal, 600, "every page is counted, not just the first")
+        XCTAssertTrue(store.corpusSettled, "the account ran out of pages, so the count is finished")
+        XCTAssertEqual(
+            ActivityCount.sentence(
+                matching: 0, total: store.corpusTotal ?? 0, isFiltering: false,
+                isSettled: store.corpusSettled),
+            "600 things in everything Omi has kept")
+    }
+
+    /// And the corner may not claim a finished count while pages are still landing.
+    ///
+    /// Held mid-walk by an account that hands over one page and then stops answering: the rows on
+    /// screen are real and the reader may read them, but they are not everything Omi has kept and
+    /// the sentence has to say so.
+    @MainActor
+    func testAPartialAccountKeepsTheCornerCounting() async {
+        let account = PagingAccount(pages: 1, rowsPerPage: 200, at: at(day: 10, hour: 9), thenFails: true)
+        let store = ActivityStore(store: { nil }, account: account, calendar: Self.calendar)
+
+        store.start()
+        await Self.settle()
+
+        XCTAssertEqual(store.corpusTotal, 200)
+        XCTAssertFalse(
+            store.corpusSettled,
+            "a source that stopped answering has rows behind it, and a full page is not an inventory")
+        XCTAssertEqual(
+            ActivityCount.sentence(
+                matching: 0, total: store.corpusTotal ?? 0, isFiltering: false,
+                isSettled: store.corpusSettled),
+            "200 so far · still counting everything Omi has kept")
+    }
+
+    /// **Hydration is bounded, whatever the account does.** A reader whose pages never run out — a
+    /// backend paging forever, an account growing faster than it is read — must cost a bounded
+    /// number of requests rather than a loop that owns the session.
+    @MainActor
+    func testAnAccountThatNeverRunsOutIsStillReadABoundedNumberOfTimes() async {
+        let account = PagingAccount(pages: .max, rowsPerPage: 1, at: at(day: 10, hour: 9))
+        let store = ActivityStore(store: { nil }, account: account, calendar: Self.calendar)
+
+        store.start()
+        await Self.settle()
+
+        let reads = await account.reads
+        XCTAssertEqual(
+            reads, ActivityStore.maximumAccountReads + 1,
+            "the first read, then the budget — and then it stops asking")
+        XCTAssertFalse(store.corpusSettled, "it stopped early, so it may not claim to have it all")
+    }
+
+    /// The ask has to be a number the reader will actually honour, or a page and an inventory are
+    /// indistinguishable: this asked for 300, was clamped to 200 three times over, and read the
+    /// clamp as the whole account.
+    func testTheAccountCeilingIsTheOneTheReaderEnforces() {
+        XCTAssertEqual(ActivityStore.accountCeiling, OmiActivityFeed.maxPerSource)
+    }
+
     private static func settle() async {
         for _ in 0..<20 { await Task.yield() }
         try? await Task.sleep(for: .milliseconds(50))
@@ -1309,3 +1466,48 @@ private struct CountingAccount: ActivityAccountReading {
         return .unreachable
     }
 }
+
+/// An account that pages, as the real reader does: every read answers with everything handed over
+/// so far, plus one more page, until there are none left.
+///
+/// The cumulative shape is the seam's, not a convenience — `OmiActivityFeed` holds its own cursor
+/// and answers with the whole of what it has gathered, because the one thing that crosses
+/// `ActivityLocalMemories` unchanged is a read and the rows it answers with.
+private actor PagingAccount: ActivityAccountReading {
+    let pages: Int
+    let rowsPerPage: Int
+    let at: Date
+    /// Whether the account stops answering once its scripted pages have been handed over, rather
+    /// than answering with what it holds. A source that is failing has rows behind it.
+    let thenFails: Bool
+    private(set) var reads = 0
+    private var handed = 0
+
+    init(pages: Int, rowsPerPage: Int, at: Date, thenFails: Bool = false) {
+        self.pages = pages
+        self.rowsPerPage = rowsPerPage
+        self.at = at
+        self.thenFails = thenFails
+    }
+
+    func read(since: Double?, until: Double?, limit: Int) async -> ActivityAccountFeed {
+        reads += 1
+        if handed < pages { handed += 1 }
+        // A source that is failing is absent from `answered` while the rows it did hand over stay in
+        // the feed — which is exactly what the real reader does with a page that did not arrive.
+        return feed(answered: thenFails && handed >= pages ? [.memories, .tasks] : Set(ActivityAccountSource.allCases))
+    }
+
+    private func feed(answered: Set<ActivityAccountSource>) -> ActivityAccountFeed {
+        ActivityAccountFeed(
+            conversations: (0..<(handed * rowsPerPage)).map {
+                ActivityAccountConversation(
+                    id: "c\($0)", title: "Standup", emoji: "🎬",
+                    startedAt: at.timeIntervalSince1970 + Double($0),
+                    finishedAt: at.timeIntervalSince1970 + Double($0) + 60,
+                    overview: nil)
+            },
+            answered: answered)
+    }
+}
+
