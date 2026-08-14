@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-concurrent-capture-contention",
+  "violated_contract": "Omi's periodic screen capture must yield while another app is actively capturing the screen (screenshot app, screen recorder, or call screen share); issuing ScreenCaptureKit requests during an external capture contends in WindowServer capture arbitration and can stall or terminate the other app's capture.",
+  "canonical_prevention": "Detect the external capture (frontmost screenshot app, share-indicator window) and pause the capture loop through ProactiveScreenshotCaptureGate with a post-capture backoff, instead of capturing and handling the fallout.",
+  "evidence_prs": [6819],
+  "scope_hints": ["desktop/macos/**"],
+  "status": "open"
+}

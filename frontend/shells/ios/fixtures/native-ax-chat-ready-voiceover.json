@@ -1,0 +1,22 @@
+{
+  "schema": "omi.polish.matrix-coordinate/v1",
+  "kind": "ax_snapshot",
+  "domain": "chat",
+  "shell": "ios",
+  "state": "ready",
+  "theme": "light",
+  "width": "regular",
+  "accessibility": "voiceover",
+  "run_id": "ios-ax-chat-ready-voiceover-20260811",
+  "capture_class": "native_fixture",
+  "source_tier": "native_shell",
+  "source_shas": {
+    "core": "267b861b56137dda2b0f3bc3bf96a9128d9bff30",
+    "platform": "7a2d37808521d7225dcc75a6e76bb1f02ce9e9e2"
+  },
+  "viewport": {
+    "width": 834,
+    "height": 1194,
+    "scale": 3
+  }
+}

@@ -1,0 +1,91 @@
+html[data-surface-lab="true"] {
+  color-scheme: dark;
+  min-width: 320px;
+  background: #0b0b0d;
+}
+
+html[data-surface-lab="true"] body {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(139, 92, 246, .13), transparent 28rem),
+    #0b0b0d;
+}
+
+html[data-surface-lab="true"] #root { padding: 0; }
+
+.surface-lab {
+  width: min(100%, 1680px);
+  margin: 0 auto;
+  padding: 32px;
+  color: #f7f7f8;
+  font: 14px/1.45 system-ui, sans-serif;
+}
+
+.surface-lab button, .surface-lab input {
+  min-height: 40px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 12px;
+  color: inherit;
+  background: rgba(255, 255, 255, .06);
+}
+
+.surface-lab button { padding: 8px 13px; cursor: pointer; }
+.surface-lab button:hover { background: rgba(255, 255, 255, .1); }
+.surface-lab button[aria-selected="true"], .surface-lab button[aria-pressed="true"] { border-color: #a78bfa; background: rgba(139, 92, 246, .22); }
+.surface-lab button:focus-visible, .surface-lab input:focus-visible, .surface-lab a:focus-visible { outline: 2px solid #a78bfa; outline-offset: 3px; }
+
+.surface-lab-hero, .surface-lab-control-row, .surface-lab-state-panel, .surface-lab-preview > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.surface-lab-hero { margin-bottom: 28px; }
+.surface-lab-hero h1 { margin: 2px 0; font-size: clamp(30px, 4vw, 48px); letter-spacing: -.04em; }
+.surface-lab-hero p { margin: 0; color: #aaaab3; }
+.surface-lab-kicker { color: #a78bfa !important; font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.surface-lab-dev-rig, .surface-lab-preview a { color: #ddd6fe; text-decoration: none; }
+.surface-lab-dev-rig { padding: 10px 14px; border: 1px solid rgba(167, 139, 250, .35); border-radius: 12px; }
+
+.surface-lab-controls, .surface-lab-state-panel {
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 20px;
+  background: rgba(27, 27, 31, .82);
+  backdrop-filter: blur(18px);
+}
+
+.surface-lab-surface-tabs, .surface-lab-mode, .surface-lab-states { display: flex; flex-wrap: wrap; gap: 8px; }
+.surface-lab-surface-tabs { margin-bottom: 14px; }
+.surface-lab-control-row label { display: flex; align-items: center; gap: 9px; color: #aaaab3; }
+.surface-lab-control-row input { width: 112px; padding: 8px 10px; }
+.surface-lab-state-panel { align-items: flex-start; }
+.surface-lab-state-panel h2 { margin: 0; font-size: 20px; }
+.surface-lab-state-panel p { max-width: 420px; margin: 3px 0 0; color: #aaaab3; }
+.surface-lab-states { justify-content: flex-end; }
+
+.surface-lab-previews { display: grid; gap: 22px; align-items: start; }
+.surface-lab-previews-compare { grid-template-columns: minmax(390px, .42fr) minmax(720px, 1fr); }
+.surface-lab-preview { min-width: 0; overflow: hidden; border: 1px solid rgba(255, 255, 255, .12); border-radius: 22px; background: #151519; box-shadow: 0 24px 80px rgba(0, 0, 0, .32); }
+.surface-lab-preview > header { min-height: 58px; padding: 10px 16px; border-bottom: 1px solid rgba(255, 255, 255, .1); }
+.surface-lab-preview > header div { display: grid; }
+.surface-lab-preview > header span { color: #8f8f99; font-size: 12px; }
+.surface-lab-frame-wrap { overflow: auto; background: #050506; }
+.surface-lab-preview iframe { display: block; width: 100%; height: min(844px, calc(100vh - 130px)); min-height: 620px; border: 0; background: white; }
+.surface-lab-preview-mobile { width: min(100%, 390px); justify-self: center; }
+.surface-lab-preview-mobile iframe { width: 390px; height: 844px; }
+
+@media (max-width: 1100px) {
+  .surface-lab { padding: 20px; }
+  .surface-lab-previews-compare { grid-template-columns: 1fr; }
+  .surface-lab-preview-mobile { justify-self: start; }
+}
+
+@media (max-width: 640px) {
+  .surface-lab { padding: 14px; }
+  .surface-lab-hero, .surface-lab-control-row, .surface-lab-state-panel { align-items: stretch; flex-direction: column; }
+  .surface-lab-states { justify-content: flex-start; }
+  .surface-lab-preview-mobile { width: 100%; }
+  .surface-lab-preview-mobile iframe { width: 390px; max-width: 100%; }
+}
