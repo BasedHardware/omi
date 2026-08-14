@@ -49,6 +49,7 @@ import {
   loadDesktopReads,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
+  type ConversationProjection,
   type DomainReadOutcome,
   type ReadPageState,
 } from './src/desktopReadClient';
@@ -263,6 +264,211 @@ function ProjectionList({
       ListHeaderComponent={header ?? null}
       renderItem={renderItem}
     />
+  );
+}
+
+function formatConversationDate(value: string | null): string {
+  if (value === null) {
+    return 'Time unavailable';
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+  }).format(new Date(value));
+}
+
+function formatConversationDuration(
+  startedAt: string | null,
+  finishedAt: string | null,
+): string {
+  if (startedAt === null || finishedAt === null) {
+    return 'Duration unavailable';
+  }
+  const duration = Date.parse(finishedAt) - Date.parse(startedAt);
+  if (!Number.isFinite(duration) || duration < 0) {
+    return 'Duration unavailable';
+  }
+  const minutes = Math.round(duration / 60_000);
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes === 0
+    ? `${hours} hr`
+    : `${hours} hr ${remainingMinutes} min`;
+}
+
+const ConversationRow = memo(function ConversationRow({
+  item,
+  selected,
+  onPress,
+}: {
+  item: ConversationProjection;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <FocusPressable
+      accessibilityLabel={`Open conversation ${item.title}`}
+      accessibilityRole="button"
+      accessibilityState={{selected}}
+      onPress={onPress}
+      style={({pressed}) => [
+        styles.conversationRow,
+        selected && styles.conversationRowSelected,
+        pressed && styles.pressed,
+      ]}>
+      <View style={styles.conversationRowMeta}>
+        <Text style={styles.conversationRowTime}>
+          {formatConversationDate(item.startedAt)}
+        </Text>
+        <Text
+          accessibilityLabel={
+            item.starred ? 'Starred conversation' : 'Not starred'
+          }
+          style={styles.conversationRowStar}>
+          {item.starred ? '★' : '☆'}
+        </Text>
+      </View>
+      <Text numberOfLines={1} style={styles.resultTitle}>
+        {item.title}
+      </Text>
+      <Text numberOfLines={2} style={styles.resultSummary}>
+        {item.summary}
+      </Text>
+      <Text style={styles.conversationRowDuration}>
+        {formatConversationDuration(item.startedAt, item.finishedAt)}
+      </Text>
+    </FocusPressable>
+  );
+});
+
+function ConversationsPage({
+  outcome,
+  loading,
+}: {
+  outcome: DomainReadOutcome<DesktopReadProjection> | null;
+  loading: boolean;
+}) {
+  const conversations = useMemo(
+    () =>
+      outcome?.status === 'success'
+        ? outcome.value.items.filter(
+            (item): item is ConversationProjection =>
+              item.kind === 'conversation',
+          )
+        : [],
+    [outcome],
+  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = conversations.find(item => item.id === selectedId) ?? null;
+  const error = outcome?.status === 'error' ? outcome.error : null;
+  const renderItem = useCallback(
+    ({item}: {item: ConversationProjection}) => (
+      <ConversationRow
+        item={item}
+        onPress={() => setSelectedId(item.id)}
+        selected={selectedId === item.id}
+      />
+    ),
+    [selectedId],
+  );
+  const keyExtractor = useCallback(
+    (item: ConversationProjection) => item.id,
+    [],
+  );
+  const empty = loading ? (
+    <View style={styles.projectionEmpty}>
+      <ActivityIndicator color="#888888" />
+      <Text style={styles.projectionEmptyCopy}>Loading…</Text>
+    </View>
+  ) : (
+    <View style={styles.projectionEmpty}>
+      <Text style={styles.projectionEmptyTitle}>
+        {error === null ? 'No conversations yet.' : 'Unable to load'}
+      </Text>
+      <Text style={styles.projectionEmptyCopy}>
+        {error ?? 'No conversations are available in this loaded page.'}
+      </Text>
+    </View>
+  );
+
+  return (
+    <View style={styles.conversationPage}>
+      <Text style={styles.projectionTitle}>Conversations</Text>
+      <View style={styles.conversationContent}>
+        <FlatList
+          contentContainerStyle={styles.conversationList}
+          data={conversations}
+          keyExtractor={keyExtractor}
+          ListEmptyComponent={empty}
+          ListFooterComponent={
+            outcome?.status === 'success' ? (
+              <ReadStatus label="Conversations" page={outcome.value.page} />
+            ) : null
+          }
+          renderItem={renderItem}
+          style={styles.conversationListPane}
+        />
+        <View
+          accessibilityLabel="Selected conversation metadata"
+          style={styles.conversationDetail}>
+          {selected === null ? (
+            <View style={styles.conversationDetailEmpty}>
+              <Text style={styles.projectionEmptyTitle}>
+                Select a conversation
+              </Text>
+              <Text style={styles.projectionEmptyCopy}>
+                Choose a loaded row to review its saved metadata.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.conversationDetailEyebrow}>
+                LOADED LIST METADATA
+              </Text>
+              <Text style={styles.conversationDetailTitle}>
+                {selected.title}
+              </Text>
+              <Text style={styles.conversationDetailSummary}>
+                {selected.summary}
+              </Text>
+              <View style={styles.conversationDetailFields}>
+                <Text style={styles.conversationDetailField}>
+                  Started · {formatConversationDate(selected.startedAt)}
+                </Text>
+                <Text style={styles.conversationDetailField}>
+                  Finished · {formatConversationDate(selected.finishedAt)}
+                </Text>
+                <Text style={styles.conversationDetailField}>
+                  Duration ·{' '}
+                  {formatConversationDuration(
+                    selected.startedAt,
+                    selected.finishedAt,
+                  )}
+                </Text>
+                <Text style={styles.conversationDetailField}>
+                  Status · {selected.status}
+                </Text>
+                <Text style={styles.conversationDetailField}>
+                  {selected.locked ? 'Locked record' : 'Unlocked record'}
+                </Text>
+                <Text style={styles.conversationDetailField}>
+                  {selected.discarded ? 'Discarded record' : 'Active record'}
+                </Text>
+              </View>
+              <Text style={styles.conversationDetailNotice}>
+                No fetched conversation detail, transcript, playback, folders,
+                or actions are shown here.
+              </Text>
+            </>
+          )}
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -482,7 +688,7 @@ function App(): React.JSX.Element {
     ].sort((left, right) => {
       const timestamp = (item: DesktopReadProjection) =>
         item.kind === 'conversation'
-          ? Date.parse(item.startedAt)
+          ? Date.parse(item.startedAt ?? item.createdAt)
           : item.kind === 'memory'
           ? item.timestamp ?? 0
           : 0;
@@ -1046,6 +1252,11 @@ function App(): React.JSX.Element {
                         </View>
                       </View>
                     </ScrollView>
+                  ) : route === 'Conversations' ? (
+                    <ConversationsPage
+                      loading={readsPhase === 'initial-loading'}
+                      outcome={routeOutcome}
+                    />
                   ) : (
                     <ProjectionPage
                       loading={readsPhase === 'initial-loading'}
@@ -1382,6 +1593,63 @@ const styles = StyleSheet.create({
     marginTop: 7,
   },
   resultSummary: {color: '#888888', fontSize: 12, lineHeight: 17, marginTop: 5},
+  conversationPage: {flex: 1, paddingHorizontal: 28, paddingVertical: 24},
+  conversationContent: {flex: 1, flexDirection: 'row', gap: 16, marginTop: 18},
+  conversationListPane: {flex: 1},
+  conversationList: {gap: 8, paddingBottom: 28},
+  conversationRow: {
+    backgroundColor: '#202020',
+    borderColor: '#303030',
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  conversationRowSelected: {borderColor: '#ffffff'},
+  conversationRowMeta: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  conversationRowTime: {color: '#777777', fontSize: 11, fontWeight: '600'},
+  conversationRowStar: {color: '#d0d0d0', fontSize: 16, lineHeight: 18},
+  conversationRowDuration: {color: '#777777', fontSize: 11, marginTop: 9},
+  conversationDetail: {
+    backgroundColor: '#202020',
+    borderColor: '#303030',
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    padding: 20,
+  },
+  conversationDetailEmpty: {flex: 1, justifyContent: 'center'},
+  conversationDetailEyebrow: {
+    color: '#777777',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+  },
+  conversationDetailTitle: {
+    color: '#f2f2f2',
+    fontSize: 21,
+    fontWeight: '600',
+    lineHeight: 27,
+    marginTop: 10,
+  },
+  conversationDetailSummary: {
+    color: '#a0a0a0',
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  conversationDetailFields: {gap: 8, marginTop: 22},
+  conversationDetailField: {color: '#d0d0d0', fontSize: 13, lineHeight: 18},
+  conversationDetailNotice: {
+    color: '#777777',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 24,
+  },
   composerWrap: {paddingBottom: 16, paddingHorizontal: 20, paddingTop: 12},
   composer: {
     alignSelf: 'center',

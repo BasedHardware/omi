@@ -6,9 +6,14 @@ export type ConversationProjection = {
   title: string;
   summary: string;
   searchableText: string;
-  startedAt: string;
-  finishedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
   starred: boolean;
+  status: string;
+  locked: boolean;
+  discarded: boolean;
 };
 
 export type MemoryProjection = {
@@ -102,6 +107,18 @@ function integer(value: unknown, label: string): number {
 
 function nullableInteger(value: unknown, label: string): number | null {
   return value === null ? null : integer(value, label);
+}
+
+function timestamp(value: unknown, label: string): string {
+  const result = string(value, label);
+  if (!Number.isFinite(Date.parse(result))) {
+    throw new Error(`${label} is malformed`);
+  }
+  return result;
+}
+
+function nullableTimestamp(value: unknown, label: string): string | null {
+  return value === null ? null : timestamp(value, label);
 }
 
 function optionalTimestamp(
@@ -226,19 +243,28 @@ export async function loadConversations(
       structured.overview,
       `Conversation ${index} overview`,
     );
-    const startedAt = string(
+    const createdAt = timestamp(
+      record.created_at,
+      `Conversation ${index} created_at`,
+    );
+    const updatedAt = timestamp(
+      record.updated_at,
+      `Conversation ${index} updated_at`,
+    );
+    const startedAt = nullableTimestamp(
       record.started_at,
       `Conversation ${index} started_at`,
     );
-    const finishedAt = string(
+    const finishedAt = nullableTimestamp(
       record.finished_at,
       `Conversation ${index} finished_at`,
     );
-    string(record.created_at, `Conversation ${index} created_at`);
-    string(record.updated_at, `Conversation ${index} updated_at`);
     string(record.source, `Conversation ${index} source`);
-    string(record.status, `Conversation ${index} status`);
-    boolean(record.discarded, `Conversation ${index} discarded`);
+    const status = string(record.status, `Conversation ${index} status`);
+    const discarded = boolean(
+      record.discarded,
+      `Conversation ${index} discarded`,
+    );
     const starred = boolean(record.starred, `Conversation ${index} starred`);
     const visibility = string(
       record.visibility,
@@ -247,7 +273,7 @@ export async function loadConversations(
     if (!['public', 'private', 'shared'].includes(visibility)) {
       throw new Error(`Conversation ${index} visibility is malformed`);
     }
-    boolean(record.is_locked, `Conversation ${index} is_locked`);
+    const locked = boolean(record.is_locked, `Conversation ${index} is_locked`);
     if (record.folder_id !== null && typeof record.folder_id !== 'string') {
       throw new Error(`Conversation ${index} folder_id is malformed`);
     }
@@ -257,9 +283,14 @@ export async function loadConversations(
       title,
       summary,
       searchableText: `${title}\n${summary}`,
+      createdAt,
+      updatedAt,
       startedAt,
       finishedAt,
       starred,
+      status,
+      locked,
+      discarded,
     };
   });
   const hasMore = items.length === 50;

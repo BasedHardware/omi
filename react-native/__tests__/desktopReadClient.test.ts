@@ -110,6 +110,13 @@ test('loads and normalizes all three exact desktop read routes', async () => {
           title: 'Morning walk',
           summary: 'Discussed the launch.',
           searchableText: 'Morning walk\nDiscussed the launch.',
+          createdAt: '2026-08-14T01:00:00.000Z',
+          updatedAt: '2026-08-14T02:00:00.000Z',
+          startedAt: '2026-08-14T01:00:00.000Z',
+          finishedAt: '2026-08-14T01:30:00.000Z',
+          status: 'completed',
+          locked: false,
+          discarded: false,
         }),
       ],
       page: expect.objectContaining({complete: true, hasMore: false}),
@@ -290,6 +297,35 @@ test('marks a full conversation window as potentially incomplete', async () => {
     completenessStatus: 'unknown',
     reasons: ['limit_reached'],
   });
+});
+
+test('keeps nullable conversation times while rejecting invalid metadata', async () => {
+  const backend = backendFor(() => ({
+    status: 200,
+    body: JSON.stringify([
+      {...conversation, started_at: null, finished_at: null},
+    ]),
+  }));
+
+  await expect(loadConversations(backend)).resolves.toMatchObject({
+    items: [
+      expect.objectContaining({
+        startedAt: null,
+        finishedAt: null,
+        status: 'completed',
+        locked: false,
+        discarded: false,
+      }),
+    ],
+  });
+
+  const malformed = backendFor(() => ({
+    status: 200,
+    body: JSON.stringify([{...conversation, updated_at: 'not-a-time'}]),
+  }));
+  await expect(loadConversations(malformed)).rejects.toThrow(
+    'updated_at is malformed',
+  );
 });
 
 test('retains successful domains when one desktop read fails', async () => {

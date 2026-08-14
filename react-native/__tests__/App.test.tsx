@@ -565,6 +565,47 @@ test('navigates to rewritten-backend read projections and replays the stage tran
   );
 });
 
+test('opens a read-only selected-record pane from a loaded conversation row', async () => {
+  const renderer = await renderApp();
+  const conversations = renderer.root
+    .findAll(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityRole === 'tab',
+    )
+    .find(node => node.props.children[1].props.children === 'Conversations')!;
+
+  await ReactTestRenderer.act(async () => conversations.props.onPress());
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Open conversation QA bridge check',
+      )
+      .props.onPress();
+  });
+
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output).toContain('LOADED LIST METADATA');
+  expect(
+    renderer.root.find(
+      node =>
+        String(node.type) === 'Text' &&
+        Array.isArray(node.props.children) &&
+        node.props.children[0] === 'Status · ' &&
+        node.props.children[1] === 'completed',
+    ),
+  ).toBeDefined();
+  expect(output).toContain('Unlocked record');
+  expect(output).toContain('Active record');
+  expect(output).toContain(
+    'No fetched conversation detail, transcript, playback, folders, or actions are shown here.',
+  );
+  expect(mockBackend.request).not.toHaveBeenCalledWith(
+    expect.objectContaining({path: '/v1/conversations/conversation-1'}),
+  );
+});
+
 test('keeps successful reads visible and reports each unavailable domain', async () => {
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/chat-messages?limit=50') {
