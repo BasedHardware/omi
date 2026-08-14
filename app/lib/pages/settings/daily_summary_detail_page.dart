@@ -14,6 +14,7 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/daily_summary_journey.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
@@ -511,23 +512,6 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     );
   }
 
-  // Get short name from full address (first part before comma)
-  String _getShortLocationName(String? address) {
-    if (address == null || address.isEmpty) return context.l10n.unknown;
-    final parts = address.split(',');
-    return parts.first.trim();
-  }
-
-  // Parse time string to minutes for comparison (e.g., "14:42" -> 882)
-  int _parseTimeToMinutes(String? timeStr) {
-    if (timeStr == null || timeStr.isEmpty) return 0;
-    final parts = timeStr.split(':');
-    if (parts.length != 2) return 0;
-    final hours = int.tryParse(parts[0]) ?? 0;
-    final minutes = int.tryParse(parts[1]) ?? 0;
-    return hours * 60 + minutes;
-  }
-
   // Format time from "17:00" to "5PM" format
   String _formatTimeTo12Hour(String? timeStr) {
     if (timeStr == null || timeStr.isEmpty) return '';
@@ -544,42 +528,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     }
   }
 
-  // Merge adjacent same locations and return timeline data (chronologically sorted)
-  List<_TimelineLocation> _buildTimelineLocations(List<LocationPin> locations) {
-    if (locations.isEmpty) return [];
-
-    // Sort locations by time chronologically (earliest first)
-    final sortedLocations = List<LocationPin>.from(locations);
-    sortedLocations.sort((a, b) => _parseTimeToMinutes(a.time).compareTo(_parseTimeToMinutes(b.time)));
-
-    final timeline = <_TimelineLocation>[];
-    _TimelineLocation? current;
-
-    for (final loc in sortedLocations) {
-      final shortName = _getShortLocationName(loc.address);
-
-      if (current == null || current.shortName != shortName) {
-        // New location (different from previous)
-        current = _TimelineLocation(
-          shortName: shortName,
-          latitude: loc.latitude,
-          longitude: loc.longitude,
-          startTime: loc.time,
-          endTime: loc.time,
-        );
-        timeline.add(current);
-      } else {
-        // Same location as previous, extend the end time
-        current.endTime = loc.time;
-      }
-    }
-
-    return timeline;
-  }
-
   Widget _buildLocationsMap(DailySummary summary) {
-    // Build timeline with merged adjacent locations
-    final timelineLocations = _buildTimelineLocations(summary.locations);
+    final timelineLocations = buildTimelineLocations(summary.locations, unknownLabel: context.l10n.unknown);
 
     // Get all coordinates as LatLng
     final points = summary.locations.map((l) => LatLng(l.latitude, l.longitude)).toList();
@@ -869,7 +819,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     );
   }
 
-  Widget _buildTimelineItem(_TimelineLocation location, int index) {
+  Widget _buildTimelineItem(TimelineLocation location, int index) {
     final startFormatted = _formatTimeTo12Hour(location.startTime);
     final endFormatted = _formatTimeTo12Hour(location.endTime);
     final timeText = startFormatted.isNotEmpty
@@ -970,21 +920,4 @@ Future<bool?> showDeleteRecapConfirmDialog(BuildContext context) {
       ],
     ),
   );
-}
-
-// Helper class for timeline locations
-class _TimelineLocation {
-  final String shortName;
-  final double latitude;
-  final double longitude;
-  final String? startTime;
-  String? endTime;
-
-  _TimelineLocation({
-    required this.shortName,
-    required this.latitude,
-    required this.longitude,
-    this.startTime,
-    this.endTime,
-  });
 }
