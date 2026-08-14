@@ -59,17 +59,6 @@ enum ChatQueryFailureDisposition: Equatable, Sendable {
         return .failed(.authentication)
       case .agentRuntimeFailure(let failure) where failure.failureCode == .authentication:
         return .failed(.authentication)
-      case .agentRuntimeFailure(let failure) where failure.failureCode == .quotaExceeded:
-        return .failed(.quota)
-      case .agentRuntimeFailure(let failure):
-        switch AgentErrorClassifier.classify(failure).code {
-        case .providerBillingExhausted, .planLimitReached:
-          return .failed(.quota)
-        case .providerAuthExpired, .credentialLeakSuspected:
-          return .failed(.authentication)
-        default:
-          return .failed(.agentRuntime)
-        }
       case .failedToStart:
         return .failed(.bridgeStartFailed)
       case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
@@ -83,6 +72,8 @@ enum ChatQueryFailureDisposition: Equatable, Sendable {
         return .failed(.concurrentRequest)
       case .quotaExceeded:
         return .failed(.quota)
+      case .agentRuntimeFailure:
+        return .failed(.agentRuntime)
       case .agentError:
         return .failed(.agentError)
       }
@@ -242,20 +233,6 @@ struct ChatQueryErrorDetail: Equatable, Sendable {
   let failureSource: String?
   let adapterId: String?
   let provider: String?
-  let recoveryAction: String?
-  let recoveryOutcome: String?
-  let retryDisposition: String?
-
-  private static func boundedFailureCode(_ code: String) -> String? {
-    switch code {
-    case "adapter_not_registered", "binding_failed", "stale_binding",
-      "adapter_execution_failed", "provider_auth_required", "adapter_process_exited",
-      "adapter_config_invalid", "adapter_process_error":
-      return code
-    default:
-      return nil
-    }
-  }
 
   static func from(_ error: Error?) -> ChatQueryErrorDetail? {
     guard let bridgeError = error as? BridgeError else { return nil }
@@ -268,10 +245,7 @@ struct ChatQueryErrorDetail: Equatable, Sendable {
         failureCode: nil,
         failureSource: nil,
         adapterId: nil,
-        provider: nil,
-        recoveryAction: nil,
-        recoveryOutcome: nil,
-        retryDisposition: nil)
+        provider: nil)
     case .agentRuntimePayloadIncomplete:
       // The missing components are diagnostics for the local log only; PostHog
       // gets the bounded code.
@@ -281,61 +255,19 @@ struct ChatQueryErrorDetail: Equatable, Sendable {
         failureCode: nil,
         failureSource: nil,
         adapterId: nil,
-        provider: nil,
-        recoveryAction: nil,
-        recoveryOutcome: nil,
-        retryDisposition: nil)
+        provider: nil)
     case .agentRuntimeFailure(let failure):
-      let classified = AgentErrorClassifier.classify(failure)
-      let classifierOwnsCode: Bool
-      switch classified.code {
-      case .providerBillingExhausted, .planLimitReached:
-        classifierOwnsCode = true
-      case .providerAuthExpired, .credentialLeakSuspected:
-        classifierOwnsCode = failure.failureCode == .unknown
-      default:
-        classifierOwnsCode = false
-      }
       return ChatQueryErrorDetail(
-        errorCode: classifierOwnsCode ? classified.code.rawValue : failure.failureCode.rawValue,
-        retryable: classifierOwnsCode ? classified.retryable : failure.retryable,
-        failureCode: boundedFailureCode(failure.code),
+        errorCode: failure.failureCode.rawValue,
+        retryable: failure.retryable,
+        failureCode: failure.code,
         failureSource: failure.source,
         adapterId: failure.adapterId,
-        provider: failure.provider,
-        recoveryAction: failure.recoveryAction == "worker_recycled" ? "worker_recycled" : nil,
-        recoveryOutcome: ["recovered", "stop_failed", "binding_stale_failed"].contains(failure.recoveryOutcome ?? "")
-          ? failure.recoveryOutcome : nil,
-        retryDisposition: failure.retryDisposition == "next_send" ? "next_send" : nil)
+        provider: failure.provider)
     default:
       return nil
     }
   }
-}
-
-func recordAgentRuntimeRecoveryDiagnostics(_ error: Error?) -> ChatQueryErrorDetail? {
-  let detail = ChatQueryErrorDetail.from(error)
-  if let bridgeError = error as? BridgeError,
-    case .agentRuntimeFailure(let failure) = bridgeError,
-    let technicalMessage = failure.technicalMessage
-  {
-    log("ChatProvider: agent runtime technical failure: \(technicalMessage)")
-  }
-  if detail?.recoveryAction == "worker_recycled" {
-    DesktopDiagnosticsManager.shared.recordFallback(
-      area: "agent_runtime",
-      from: "pi_mono_worker",
-      to: "fresh_pi_mono_worker",
-      reason: "local_heal",
-      outcome: detail?.recoveryOutcome == "recovered" ? .degraded : .exhausted,
-      extra: [
-        "recovery_action": "worker_recycled",
-        "retry_disposition": detail?.retryDisposition ?? "unknown",
-        "recovery_outcome": detail?.recoveryOutcome ?? "unknown",
-      ]
-    )
-  }
-  return detail
 }
 
 enum ChatQueryTelemetryEvent: Equatable, Sendable {
@@ -411,9 +343,6 @@ extension ChatQueryTelemetryEvent {
         if let failureSource = detail.failureSource { properties["failure_source"] = failureSource }
         if let adapterId = detail.adapterId { properties["adapter_id"] = adapterId }
         if let provider = detail.provider { properties["provider"] = provider }
-        if let recoveryAction = detail.recoveryAction { properties["recovery_action"] = recoveryAction }
-        if let recoveryOutcome = detail.recoveryOutcome { properties["recovery_outcome"] = recoveryOutcome }
-        if let retryDisposition = detail.retryDisposition { properties["retry_disposition"] = retryDisposition }
       }
     case .cancelled(let eventContext, let durationMs, let reason, let partialResponse):
       eventName = "chat_agent_query_cancelled"

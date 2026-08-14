@@ -77,7 +77,7 @@ enum HomeAskBarPalette {
   }
 }
 
-enum HomeStatusState: Equatable {
+enum HomeStatusState {
   case active
   case inactive
   case blocked

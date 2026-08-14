@@ -151,10 +151,6 @@ actor AgentSyncService {
     TableSpec(name: "observations", appendOnly: true, excludedColumns: []),
   ]
 
-  static var syncedTableNames: Set<String> {
-    Set(tableSpecs.map(\.name))
-  }
-
   private let tables = AgentSyncService.tableSpecs
   private static let requiredRemoteTables = Set(tableSpecs.map(\.name))
 

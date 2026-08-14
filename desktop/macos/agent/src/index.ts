@@ -1593,7 +1593,6 @@ async function main(): Promise<void> {
         const harness = new piMonoClasses!.PiMonoAdapter({
           omiApiBaseUrl: process.env.OMI_API_BASE_URL,
           authToken: piMonoAuthToken,
-          onDisposed: () => piMonoAdapters.delete(harness),
         });
         piMonoAdapters.add(harness);
         return new piMonoClasses!.PiMonoRuntimeAdapter(harness);
@@ -1921,9 +1920,7 @@ async function main(): Promise<void> {
             await startAcpProcess();
             await initializeAcp();
           } else if (adapterId === "pi-mono") {
-            if (!(await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN))) {
-              throw new Error(adapterActivationError("pi-mono"));
-            }
+            await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
           } else if (adapterId === "hermes") {
             if (!(await ensureHermesAdapter())) {
               throw new Error(adapterActivationError("hermes"));

@@ -31,12 +31,6 @@ List<SyncedConversationPointer> sortSyncedConversationPointers(Iterable<SyncedCo
 }
 
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
-  /// Machine-readable error state consumed by sync surfaces, which own the
-  /// localized copy. Providers must not embed user-facing English in state.
-  static const pendingUploadErrorCode = 'sync_pending_upload';
-
-  static bool isPendingUploadError(String? message) => message == pendingUploadErrorCode;
-
   // Services
   final AudioPlayerUtils _audioPlayerUtils = AudioPlayerUtils.instance;
   final IWalService? _walServiceOverride;
@@ -631,10 +625,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       if (permanentFailures > 0) {
         final hint = result?.localUploadPermanentError;
         final errorMessage = _formatSyncError(
-          hint != null ? Exception(hint) : Exception('Upload failed unexpectedly'),
+          hint != null ? Exception(hint) : Exception('Upload failed. Check your connection and try again'),
           failedWal,
         );
-        DebugLogManager.logWarning('SyncProvider: $context had $permanentFailures permanent local upload failure(s)');
+        DebugLogManager.logWarning(
+          'SyncProvider: $context had $permanentFailures permanent local upload failure(s)',
+        );
         _updateSyncState(_syncState.toError(message: errorMessage, failedWal: failedWal));
       } else if (localFailures > 0) {
         DebugLogManager.logWarning(
@@ -687,9 +683,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } else if (baseMessage.toLowerCase().contains('temporarily unavailable')) {
       baseMessage = 'Server is temporarily unavailable. Try again later';
     } else if (baseMessage.toLowerCase().contains('upload failed')) {
-      // Keep state locale-neutral; the sync pages resolve this code through
-      // AppLocalizations at render time.
-      return pendingUploadErrorCode;
+      baseMessage = 'Upload failed. Check your connection and try again';
     }
 
     if (wal != null) {

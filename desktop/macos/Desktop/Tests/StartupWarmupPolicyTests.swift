@@ -17,6 +17,13 @@ final class StartupWarmupPolicyTests: XCTestCase {
     )
   }
 
+  func testCrispInitialPollWaitsUntilAfterDeferredWarmupStarts() {
+    XCTAssertGreaterThan(
+      StartupWarmupPolicy.crispInitialPollDelay,
+      StartupWarmupPolicy.deferredWarmupDelay
+    )
+  }
+
   func testAgentVMProvisioningWaitsUntilAfterDeferredWarmupStarts() {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.agentVMProvisioningDelay,
@@ -291,7 +298,9 @@ final class StartupWarmupPolicyTests: XCTestCase {
     XCTAssertTrue(source.contains("id: .initialFileIndexing"))
     XCTAssertTrue(source.contains("id: .proactiveAssistantsStart"))
     XCTAssertTrue(source.contains("viewModelContainer.resetStartupState()"))
-    XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups()"))
+    XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups(preserveCrispReadState: true)"))
+    XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups(preserveCrispReadState: false)"))
+    XCTAssertTrue(source.contains("CrispManager.shared.stop(preserveReadState: preserveCrispReadState)"))
     XCTAssertTrue(source.contains("NSApplication.willTerminateNotification"))
   }
 

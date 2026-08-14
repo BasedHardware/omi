@@ -142,9 +142,7 @@ enum ChatTranscriptLayout {
   static let regularRowSpacing: CGFloat = OmiSpacing.lg
   static let consecutiveUserRowSpacing: CGFloat = OmiSpacing.sm
   /// A reply and the question that caused it are one exchange, not two events.
-  /// `md` rather than `sm`: the user bubble's own bottom padding already hugs
-  /// the text, so `sm` left the next assistant line sitting on the bubble.
-  static let replySpacing: CGFloat = OmiSpacing.md
+  static let replySpacing: CGFloat = OmiSpacing.sm
 
   /// The gap *before* `current`, given the row above it.
   ///
@@ -335,7 +333,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   let onLoadMore: () async -> Void
   let onRate: (String, Int?) -> Void
   var onCitationTap: ((Citation) -> Void)? = nil
-  var onOpenInlineCitation: ((ChatCitationReference) -> Void)? = nil
   var sessionsLoadError: String? = nil
   var onRetry: (() -> Void)? = nil
   /// Token that increments each time the local user sends a message.
@@ -358,7 +355,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Horizontal inset of the message column. Home passes 0 so bubbles align
   /// exactly with the ask bar's edges; other surfaces keep the default gutter.
   var horizontalContentPadding: CGFloat = ChatComposerLayout.transcriptEdgeInset
-  /// Explicitly enables chat-first controls only in the Chat-first shell's main
+  /// Explicitly enables chat-first controls only in the cohort shell's main
   /// Chat route. Nil keeps shared transcript projections safe elsewhere.
   var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   /// Optional transcript-window override for callers with a smaller initial
@@ -911,7 +908,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           onCitationTap: { citation in
             onCitationTap?(citation)
           },
-          onOpenInlineCitation: onOpenInlineCitation,
           isDuplicate: duplicateMessageIDs.contains(message.id),
           onCancelTurn: onCancelTurn,
           onOpenAgent: onOpenAgent,

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a freeze that could make the whole app unclickable — including the sign-in buttons — right after launch"
+}

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from config.chat_first_e2e_fixture import (
     CHAT_FIRST_E2E_ENABLED_PRINCIPAL,
-    CHAT_FIRST_E2E_DISABLED_PRINCIPAL,
+    CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL,
     fixture_uid_for_principal,
     is_chat_first_e2e_fixture_uid,
     is_chat_first_e2e_harness_runtime,
@@ -19,12 +19,14 @@ import database.chat_first_intents as intents_db
 from models.chat_first import ChatFirstSubject, ProactiveDeferral
 from models.chat_first_e2e import ChatFirstE2EFixtureCase
 from models.task_intelligence import TaskWorkflowMode
+from utils.memory.memory_system import MemorySystem
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 import utils.task_intelligence.chat_first_e2e_fixture as fixture
 import utils.task_intelligence.rollout as rollout
 import routers.chat_first_e2e as fixture_router
 
 ENABLED_UID = 'auth-emulator-enabled-fixture'
-DISABLED_UID = 'auth-emulator-disabled-fixture'
+OUT_OF_COHORT_UID = 'auth-emulator-out-of-cohort-fixture'
 
 
 class _Snapshot:
@@ -114,6 +116,7 @@ class _Firestore:
 
 @pytest.fixture
 def firestore(monkeypatch, tmp_path):
+    set_canonical_cohort(monkeypatch, ENABLED_UID)
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
     manifest_dir = tmp_path / 'manifests'
     manifest_dir.mkdir()
@@ -122,7 +125,7 @@ def firestore(monkeypatch, tmp_path):
             {
                 'users': {
                     CHAT_FIRST_E2E_ENABLED_PRINCIPAL: ENABLED_UID,
-                    CHAT_FIRST_E2E_DISABLED_PRINCIPAL: DISABLED_UID,
+                    CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL: OUT_OF_COHORT_UID,
                 }
             }
         ),
@@ -142,7 +145,7 @@ def test_harness_runtime_and_fixture_identities_are_local_offline_only(monkeypat
             {
                 'users': {
                     CHAT_FIRST_E2E_ENABLED_PRINCIPAL: ENABLED_UID,
-                    CHAT_FIRST_E2E_DISABLED_PRINCIPAL: DISABLED_UID,
+                    CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL: OUT_OF_COHORT_UID,
                 }
             }
         ),
@@ -152,11 +155,10 @@ def test_harness_runtime_and_fixture_identities_are_local_offline_only(monkeypat
     for stage in ('local', 'offline'):
         assert is_chat_first_e2e_harness_runtime(stage=stage)
         assert fixture_uid_for_principal(CHAT_FIRST_E2E_ENABLED_PRINCIPAL) == ENABLED_UID
-        assert fixture.fixture_uid_for_case(ChatFirstE2EFixtureCase.disabled_control) == DISABLED_UID
-        assert is_chat_first_e2e_fixture_uid(DISABLED_UID, stage=stage)
+        assert is_chat_first_e2e_fixture_uid(OUT_OF_COHORT_UID, stage=stage)
     for stage in ('dev', 'prod', ''):
         assert not is_chat_first_e2e_harness_runtime(stage=stage)
-        assert not is_chat_first_e2e_fixture_uid(DISABLED_UID, stage=stage)
+        assert not is_chat_first_e2e_fixture_uid(OUT_OF_COHORT_UID, stage=stage)
     monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
     assert not is_chat_first_e2e_harness_runtime()
 
@@ -166,7 +168,7 @@ def test_fixture_identity_is_fail_closed_without_live_auth_uid_manifest(monkeypa
     monkeypatch.delenv('OMI_HARNESS_STATE_ROOT', raising=False)
 
     assert fixture_uid_for_principal(CHAT_FIRST_E2E_ENABLED_PRINCIPAL) is None
-    assert not is_chat_first_e2e_fixture_uid(DISABLED_UID)
+    assert not is_chat_first_e2e_fixture_uid(OUT_OF_COHORT_UID)
 
 
 def test_fixture_router_is_defensively_hidden_when_directly_included_outside_local(monkeypatch):
@@ -274,7 +276,7 @@ def test_unreachable_control_case_only_affects_the_prepared_local_fixture(firest
     )
 
     assert fixture.is_control_unreachable(ENABLED_UID)
-    assert not fixture.is_control_unreachable(DISABLED_UID)
+    assert not fixture.is_control_unreachable(OUT_OF_COHORT_UID)
     fixture.prepare_fixture(ENABLED_UID, fixture_case=ChatFirstE2EFixtureCase.enabled)
     assert not fixture.is_control_unreachable(ENABLED_UID)
 
@@ -306,24 +308,25 @@ def test_advance_clock_makes_fixture_deferrals_due_without_changing_chat_clock(f
     assert firestore.rows[path]['due_at'] < datetime.now(timezone.utc)
 
 
-def test_fixture_identity_is_fail_closed_but_task_rollout_is_universal(firestore):
+def test_fixture_identity_and_cohort_are_fail_closed(firestore, monkeypatch):
     with pytest.raises(fixture.ChatFirstE2EFixtureIdentityError):
         fixture.prepare_fixture('regular-user', fixture_case=ChatFirstE2EFixtureCase.enabled)
     with pytest.raises(fixture.ChatFirstE2EFixtureIdentityError):
         fixture.prepare_fixture(
-            DISABLED_UID,
+            OUT_OF_COHORT_UID,
             fixture_case=ChatFirstE2EFixtureCase.enabled,
         )
 
+    monkeypatch.setattr(rollout, 'resolve_memory_system', lambda *args, **kwargs: MemorySystem.LEGACY)
     enabled = rollout.resolve_task_intelligence_for_user(
         uid=ENABLED_UID,
         workflow_mode=TaskWorkflowMode.read,
         account_generation=1,
     )
-    disabled_fixture = rollout.resolve_task_intelligence_for_user(
-        uid=DISABLED_UID,
+    out_of_cohort = rollout.resolve_task_intelligence_for_user(
+        uid=OUT_OF_COHORT_UID,
         workflow_mode=TaskWorkflowMode.read,
         account_generation=1,
     )
-    assert enabled.intelligence_product_enabled is True
-    assert disabled_fixture.intelligence_product_enabled is True
+    assert enabled.intelligence_product_enabled is False
+    assert out_of_cohort.intelligence_product_enabled is False

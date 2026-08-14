@@ -89,7 +89,6 @@ extension ChatProvider {
       divergences.insert(.ordering)
     }
     messages = updatedMessages
-    flushPendingMessageRatings()
 
     for divergence in divergences {
       DesktopDiagnosticsManager.shared.recordStateAuthoritySignal(

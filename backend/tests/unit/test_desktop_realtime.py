@@ -1,6 +1,5 @@
 import json
 
-from fastapi import HTTPException
 import httpx
 import pytest
 
@@ -37,7 +36,7 @@ async def test_openai_mint_returns_ephemeral_token_and_persists_no_secret(monkey
     monkeypatch.setattr(desktop_realtime, "_persist_session", persist)
 
     async def run(_executor, function, *_args):
-        assert function is desktop_realtime.enforce_desktop_chat_quota
+        assert function is desktop_realtime.is_trial_paywalled
         return False
 
     monkeypatch.setattr(desktop_realtime, "run_blocking", run)
@@ -61,7 +60,7 @@ async def test_mint_classifies_provider_quota_error(monkeypatch):
     )
 
     async def run(_executor, function, *_args):
-        assert function is desktop_realtime.enforce_desktop_chat_quota
+        assert function is desktop_realtime.is_trial_paywalled
         return False
 
     monkeypatch.setattr(desktop_realtime, "run_blocking", run)
@@ -85,7 +84,7 @@ async def test_usage_clamps_negative_tokens_and_records_realtime_breakdown(monke
     calls = []
 
     async def run(_executor, function, *args):
-        if function is desktop_realtime.enforce_desktop_chat_quota:
+        if function is desktop_realtime.is_trial_paywalled:
             return False
         calls.append((function, args))
 
@@ -110,7 +109,7 @@ async def test_usage_clamps_negative_tokens_and_records_realtime_breakdown(monke
 @pytest.mark.asyncio
 async def test_usage_with_no_positive_tokens_skips_firestore(monkeypatch):
     async def fail(_executor, function, *_args):
-        if function is desktop_realtime.enforce_desktop_chat_quota:
+        if function is desktop_realtime.is_trial_paywalled:
             return False
         raise AssertionError("usage write should not run")
 
@@ -121,39 +120,3 @@ async def test_usage_with_no_positive_tokens_skips_firestore(monkeypatch):
     )
 
     assert response.status_code == 204
-
-
-@pytest.mark.asyncio
-async def test_mint_blocks_quota_before_provider_token_request(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "platform-key")
-
-    async def run(_executor, function, *_args):
-        assert function is desktop_realtime.enforce_desktop_chat_quota
-        raise HTTPException(status_code=402, detail={"error": "quota_exceeded"})
-
-    async def fail(*_args, **_kwargs):
-        raise AssertionError("provider token should not be requested")
-
-    monkeypatch.setattr(desktop_realtime, "run_blocking", run)
-    monkeypatch.setattr(desktop_realtime, "_post_json", fail)
-
-    with pytest.raises(HTTPException) as error:
-        await desktop_realtime.mint_session(desktop_realtime.MintRequest(provider="openai"), "user-1")
-
-    assert error.value.status_code == 402
-
-
-@pytest.mark.asyncio
-async def test_usage_blocks_quota_before_recording(monkeypatch):
-    async def run(_executor, function, *_args):
-        assert function is desktop_realtime.enforce_desktop_chat_quota
-        raise HTTPException(status_code=402, detail={"error": "quota_exceeded"})
-
-    monkeypatch.setattr(desktop_realtime, "run_blocking", run)
-
-    with pytest.raises(HTTPException) as error:
-        await desktop_realtime.report_usage(
-            desktop_realtime.UsageReport(provider="openai", input_text_tokens=1), "user-1"
-        )
-
-    assert error.value.status_code == 402

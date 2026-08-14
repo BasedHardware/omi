@@ -5,16 +5,14 @@ import Foundation
 class AssistantSettings {
   static let shared = AssistantSettings()
 
-  /// The one user-owned policy for ambient audio recording.
-  /// Runtime permission/provider failures may prevent the selected policy from running, but no
-  /// second preference is allowed to override it.
-  enum AudioRecordingMode: String, CaseIterable {
-    case off
+  /// Controls when system audio (audio from other apps — calls, videos, music) is captured
+  /// during a recording. `always` = capture for the whole recording; `onlyDuringMeetings` =
+  /// capture only while a conferencing call is detected (default); `never` = never.
+  enum SystemAudioCaptureMode: String {
     case always
-    case onlyMeetings
+    case onlyDuringMeetings
+    case never
   }
-
-  nonisolated static let audioRecordingModeDefaultsKey = "audioRecordingMode"
 
   // MARK: - UserDefaults Keys
 
@@ -22,14 +20,14 @@ class AssistantSettings {
   private let glowOverlayEnabledKey = "assistantsGlowOverlayEnabled"
   private let analysisDelayKey = "assistantsAnalysisDelay"
   private let screenAnalysisEnabledKey = "screenAnalysisEnabled"
+  private let transcriptionEnabledKey = "transcriptionEnabled"
   private let transcriptionLanguageKey = "transcriptionLanguage"
   private let transcriptionAutoDetectKey = "transcriptionAutoDetect"
   private let voiceLanguagesKey = "voiceAssistantLanguages"
   private let transcriptionVocabularyKey = "transcriptionVocabulary"
   private let vadGateEnabledKey = "vadGateEnabled"
   private let batchTranscriptionEnabledKey = "batchTranscriptionEnabled"
-  private let legacyTranscriptionEnabledKey = "transcriptionEnabled"
-  private let legacySystemAudioCaptureModeKey = "systemAudioCaptureMode"
+  private let systemAudioCaptureModeKey = "systemAudioCaptureMode"
 
   // MARK: - Default Values
 
@@ -37,61 +35,30 @@ class AssistantSettings {
   private let defaultGlowOverlayEnabled = false
   private let defaultAnalysisDelay = 60  // seconds (1 minute)
   private let defaultScreenAnalysisEnabled = true
+  private let defaultTranscriptionEnabled = true
   private let defaultTranscriptionLanguage = "en"
   private let defaultTranscriptionAutoDetect = true
   private let defaultTranscriptionVocabulary: [String] = []
   private let defaultVadGateEnabled = false
   private let defaultBatchTranscriptionEnabled = false
-  private let defaultAudioRecordingMode: AudioRecordingMode = .onlyMeetings
+  private let defaultSystemAudioCaptureMode: SystemAudioCaptureMode = .onlyDuringMeetings
   private(set) var transcriptionVocabularyRevision: UInt64 = 0
 
   private init() {
-    migrateLegacyAudioRecordingSettings()
     // Register defaults
     UserDefaults.standard.register(defaults: [
       cooldownIntervalKey: defaultCooldownInterval,
       glowOverlayEnabledKey: defaultGlowOverlayEnabled,
       analysisDelayKey: defaultAnalysisDelay,
       screenAnalysisEnabledKey: defaultScreenAnalysisEnabled,
-      Self.audioRecordingModeDefaultsKey: defaultAudioRecordingMode.rawValue,
+      transcriptionEnabledKey: defaultTranscriptionEnabled,
       transcriptionLanguageKey: defaultTranscriptionLanguage,
       transcriptionAutoDetectKey: defaultTranscriptionAutoDetect,
       transcriptionVocabularyKey: defaultTranscriptionVocabulary,
       vadGateEnabledKey: defaultVadGateEnabled,
       batchTranscriptionEnabledKey: defaultBatchTranscriptionEnabled,
+      systemAudioCaptureModeKey: defaultSystemAudioCaptureMode.rawValue,
     ])
-  }
-
-  /// Collapses the former enable switch + system-audio picker into one policy. A user who had
-  /// system audio disabled but ambient microphone recording enabled remains in Always rather than
-  /// being silently turned off; system-audio permission is now a runtime capability, not a mode.
-  static func migratedAudioRecordingMode(
-    legacyTranscriptionEnabled: Bool?,
-    legacySystemAudioModeRaw: String?
-  ) -> AudioRecordingMode {
-    if legacyTranscriptionEnabled == false { return .off }
-    switch legacySystemAudioModeRaw {
-    case "always", "never": return .always
-    case "onlyDuringMeetings": return .onlyMeetings
-    default: return .onlyMeetings
-    }
-  }
-
-  private func migrateLegacyAudioRecordingSettings() {
-    let defaults = UserDefaults.standard
-    if defaults.object(forKey: Self.audioRecordingModeDefaultsKey) == nil {
-      let legacyEnabled = defaults.object(forKey: legacyTranscriptionEnabledKey) as? Bool
-      let legacyMode = defaults.string(forKey: legacySystemAudioCaptureModeKey)
-      defaults.set(
-        Self.migratedAudioRecordingMode(
-          legacyTranscriptionEnabled: legacyEnabled,
-          legacySystemAudioModeRaw: legacyMode
-        ).rawValue,
-        forKey: Self.audioRecordingModeDefaultsKey
-      )
-    }
-    defaults.removeObject(forKey: legacyTranscriptionEnabledKey)
-    defaults.removeObject(forKey: legacySystemAudioCaptureModeKey)
   }
 
   // MARK: - Properties
@@ -153,15 +120,12 @@ class AssistantSettings {
     }
   }
 
-  /// The single persisted source of truth for whether and when ambient audio is recorded.
-  var audioRecordingMode: AudioRecordingMode {
-    get {
-      let raw = UserDefaults.standard.string(forKey: Self.audioRecordingModeDefaultsKey)
-      return AudioRecordingMode(rawValue: raw ?? "") ?? defaultAudioRecordingMode
-    }
+  /// Whether transcription should be enabled
+  var transcriptionEnabled: Bool {
+    get { UserDefaults.standard.bool(forKey: transcriptionEnabledKey) }
     set {
-      UserDefaults.standard.set(newValue.rawValue, forKey: Self.audioRecordingModeDefaultsKey)
-      NotificationCenter.default.post(name: .audioRecordingModeDidChange, object: nil)
+      UserDefaults.standard.set(newValue, forKey: transcriptionEnabledKey)
+      NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
     }
   }
 
@@ -306,6 +270,23 @@ class AssistantSettings {
     }
   }
 
+  /// When system audio (audio from other apps) is captured during a recording.
+  /// Default `.onlyDuringMeetings` limits system audio capture to detected conferencing calls.
+  /// The hidden `disableSystemAudioCapture` debug UserDefault still forces "never" — see `AppState.effectiveSystemAudioMode`.
+  /// Posts `.systemAudioCaptureModeDidChange` so an active recording can re-apply the gate live.
+  var systemAudioCaptureMode: SystemAudioCaptureMode {
+    get {
+      let raw =
+        UserDefaults.standard.string(forKey: systemAudioCaptureModeKey)
+        ?? defaultSystemAudioCaptureMode.rawValue
+      return SystemAudioCaptureMode(rawValue: raw) ?? defaultSystemAudioCaptureMode
+    }
+    set {
+      UserDefaults.standard.set(newValue.rawValue, forKey: systemAudioCaptureModeKey)
+      NotificationCenter.default.post(name: .systemAudioCaptureModeDidChange, object: nil)
+    }
+  }
+
   /// Returns vocabulary with "Omi" always included (for DeepGram)
   var effectiveVocabulary: [String] {
     var vocab = Set(transcriptionVocabulary)
@@ -319,12 +300,13 @@ class AssistantSettings {
     glowOverlayEnabled = defaultGlowOverlayEnabled
     analysisDelay = defaultAnalysisDelay
     screenAnalysisEnabled = defaultScreenAnalysisEnabled
-    audioRecordingMode = defaultAudioRecordingMode
+    transcriptionEnabled = defaultTranscriptionEnabled
     transcriptionLanguage = defaultTranscriptionLanguage
     transcriptionAutoDetect = defaultTranscriptionAutoDetect
     transcriptionVocabulary = defaultTranscriptionVocabulary
     vadGateEnabled = defaultVadGateEnabled
     batchTranscriptionEnabled = defaultBatchTranscriptionEnabled
+    systemAudioCaptureMode = defaultSystemAudioCaptureMode
   }
 
   // MARK: - Supported Languages
@@ -519,7 +501,7 @@ extension Notification.Name {
   static let assistantMonitoringStateDidChange = Notification.Name("assistantMonitoringStateDidChange")
   static let assistantMonitoringToggleRequested = Notification.Name("assistantMonitoringToggleRequested")
   static let transcriptionSettingsDidChange = Notification.Name("transcriptionSettingsDidChange")
-  static let audioRecordingModeDidChange = Notification.Name("audioRecordingModeDidChange")
+  static let systemAudioCaptureModeDidChange = Notification.Name("systemAudioCaptureModeDidChange")
   static let voiceLanguagesDidChange = Notification.Name("voiceLanguagesDidChange")
 }
 

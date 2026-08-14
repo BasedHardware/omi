@@ -32,38 +32,6 @@ struct AccessibilityProbeSignals: Sendable, Equatable {
   var axCallsWork: Bool
 }
 
-enum NotificationPermissionEnableAction: Equatable {
-  case refresh
-  case requestSystemPrompt
-  case openSystemSettings
-}
-
-enum NotificationPermissionPolicy {
-  static func enableAction(for status: UNAuthorizationStatus) -> NotificationPermissionEnableAction {
-    switch status {
-    case .notDetermined: .requestSystemPrompt
-    case .denied: .openSystemSettings
-    case .authorized, .provisional: .refresh
-    @unknown default: .openSystemSettings
-    }
-  }
-
-  static func isGranted(_ status: UNAuthorizationStatus) -> Bool {
-    switch status {
-    case .authorized, .provisional: true
-    case .notDetermined, .denied: false
-    @unknown default: false
-    }
-  }
-
-  static func hasVisibleAlertSurface(
-    status: UNAuthorizationStatus,
-    alertStyle: UNAlertStyle
-  ) -> Bool {
-    isGranted(status) && alertStyle != .none
-  }
-}
-
 @MainActor
 extension AppState {
   func openScreenRecordingPreferences() {
@@ -80,37 +48,60 @@ extension AppState {
   }
 
   func requestNotificationPermission() {
+    // First check current authorization status
     UserNotificationCallbackBridge.authorizationStatus { [weak self] authorizationStatus in
       guard let self else { return }
-      self.notificationAuthorizationStatus = authorizationStatus
 
-      switch NotificationPermissionPolicy.enableAction(for: authorizationStatus) {
-      case .refresh:
-        self.checkNotificationPermission()
-      case .openSystemSettings:
-        self.openNotificationPreferences()
-      case .requestSystemPrompt:
-        NSApp.activate()
-        UserNotificationCallbackBridge.requestAuthorization { [weak self] result in
-          guard let self else { return }
-          if let errorDescription = result.errorDescription {
-            log(
-              "Notification permission request failed; opening System Settings: \(errorDescription)"
-            )
-            self.openNotificationPreferences()
+      if authorizationStatus == .notDetermined {
+        // First time - show the system prompt
+        let shellWasSuspended = ShellSummon.suspendForPermissionPrompt()
+        NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
+          reason: "launch_disabled_error",
+          previousStatus: "notDetermined"
+        ) { [weak self] _ in
+          MainActor.assumeIsolated {
+            if shellWasSuspended { ShellSummon.restoreAfterPermissionPrompt() }
+            self?.checkNotificationPermission()
           }
-          self.refreshNotificationPermissionAfterSystemSettings()
         }
+      } else if authorizationStatus == .denied {
+        // Previously denied - open System Settings so user can enable manually
+        self.openNotificationPreferences()
       }
+      // If already authorized, checkNotificationPermission() will handle it
     }
   }
 
-  /// Compatibility entry point for older settings surfaces. A normal permission click must never
-  /// unregister the app or restart usernoted/NotificationCenter: those operations close system UI,
-  /// invalidate in-flight authorization callbacks, and make the toggle appear stuck.
+  /// Repair notification registration via lsregister, then fall back to System Settings if still broken.
+  /// Called from sidebar and settings "Fix" buttons when auth is not authorized.
   func repairNotificationAndFallback() {
-    log("Notification permission action requested from Settings")
-    requestNotificationPermission()
+    log("Fix button tapped — running lsregister repair for notifications")
+    NotificationRegistrationRepair.repair(reason: "settings_fix_button", includeUnregister: true) {
+      [weak self] _ in
+      NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
+        reason: "settings_fix_button_retry",
+        previousStatus: "post_repair"
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.checkNotificationPermission() }
+      }
+    }
+
+    // Wait for repair + re-authorization, then check if it worked
+    DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
+      UserNotificationCallbackBridge.notificationSettings { [weak self] settings in
+        let isNowGranted = settings.authorizationStatus == .authorized
+        self?.hasNotificationPermission = isNowGranted
+        self?.notificationAlertStyle = settings.alertStyle
+        if isNowGranted {
+          log("Notification repair succeeded — auth is now authorized")
+        } else {
+          log(
+            "Notification repair didn't restore auth (status=\(settings.authorizationStatus.rawValue)) — opening System Settings"
+          )
+          self?.openNotificationPreferences()
+        }
+      }
+    }
   }
 
   // MARK: - Permission Status Checks
@@ -255,14 +246,10 @@ extension AppState {
     // belongs to the explicit notification Fix/request actions above.
     // Dispatch async to avoid calling UNUserNotificationCenter.current() during
     // SwiftUI view body evaluation, which triggers an assertion in UserNotifications.
-    notificationPermissionRefreshGeneration &+= 1
-    let generation = notificationPermissionRefreshGeneration
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       UserNotificationCallbackBridge.notificationSettings { settings in
-        guard generation == self.notificationPermissionRefreshGeneration else { return }
-        let isNowGranted = NotificationPermissionPolicy.isGranted(settings.authorizationStatus)
-        self.notificationAuthorizationStatus = settings.authorizationStatus
+        let isNowGranted = settings.authorizationStatus == .authorized
         self.hasNotificationPermission = isNowGranted
         self.notificationAlertStyle = settings.alertStyle
 
@@ -313,16 +300,6 @@ extension AppState {
         }
       }
     }  // end DispatchQueue.main.async
-  }
-
-  /// Notification settings may take a short moment to propagate after System Settings changes.
-  /// Re-read a bounded number of times and let the generation fence discard stale callbacks.
-  func refreshNotificationPermissionAfterSystemSettings() {
-    for delay in [0.0, 0.25, 0.75, 1.5] {
-      DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-        self?.checkNotificationPermission()
-      }
-    }
   }
 
   /// Screen recording was granted while this process was running, so capture

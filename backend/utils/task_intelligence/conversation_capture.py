@@ -1,4 +1,4 @@
-"""Conversation extraction adapter for the universal Candidate lifecycle.
+"""Conversation extraction adapter for the canonical Candidate lifecycle.
 
 Keeping this boundary out of the conversation coordinator prevents task persistence
 details from leaking into the already broad processing module and gives legacy test
@@ -14,17 +14,11 @@ from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope, TaskCre
 from models.candidate import CandidateAction
 from utils.task_intelligence import candidate_service
 from utils.task_intelligence.backend_capture import BackendCaptureSignals, adapt_backend_capture
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
 
 def capture_enabled(uid: str) -> bool:
-    """Return whether the universal Candidate capture path is available.
-
-    The released helper name is retained for conversation coordinator
-    compatibility. Authenticated ownership is checked by the route/store
-    boundaries; memory enrollment is not consulted here.
-    """
-
-    return bool(uid)
+    return resolve_memory_system(uid) == MemorySystem.CANONICAL
 
 
 def _concrete_deliverable(action_item: Any) -> bool:
@@ -121,40 +115,21 @@ def process_before_legacy(
     action_items: Sequence[Any],
     transcript_segments: Sequence[Any] = (),
 ) -> bool:
-    """Capture proposals before the compatibility writer.
-
-    A rejected policy result has no Candidate representation. In that case we
-    explicitly return ``False`` before writing any other Candidate so the
-    caller runs its existing action-item writer for the complete extraction.
-    This is the no-drop fence: one ignored extraction item cannot make the
-    whole conversation disappear or create a mixed duplicate write.
-    """
-
+    """Capture proposals before the legacy writer; return true when legacy is bypassed."""
     control = task_control_db.get_task_workflow_control(uid)
     if not capture_enabled(uid):
         return False
-    occurrences = _semantic_occurrences(action_items)
-    decisions = [
-        (
-            action_item,
-            semantic_key,
-            occurrence,
-            (
-                _capture_decision(action_item, conversation_id, transcript_segments)
-                if transcript_segments
-                else _capture_decision(action_item, conversation_id)
-            ),
+    for action_item, semantic_key, occurrence in _semantic_occurrences(action_items):
+        decision = (
+            _capture_decision(action_item, conversation_id, transcript_segments)
+            if transcript_segments
+            else _capture_decision(action_item, conversation_id)
         )
-        for action_item, semantic_key, occurrence in occurrences
-    ]
-    if any(decision.candidate is None for _, _, _, decision in decisions):
-        return False
-    for _, semantic_key, occurrence, decision in decisions:
-        proposal = decision.candidate
-        assert proposal is not None, "candidate policy fence must run before writes"
+        if decision.candidate is None:
+            continue
         candidate = candidate_service.create_candidate(
             uid,
-            proposal,
+            decision.candidate,
             idempotency_key=_idempotency_key(conversation_id, semantic_key, occurrence),
             account_generation=control.account_generation,
         )
@@ -182,9 +157,8 @@ def reconcile_after_legacy(
     action_items: Sequence[Any],
     task_ids: Sequence[str],
 ) -> None:
-    # Compatibility fallback writes complete action-item rows when the shared
-    # policy intentionally rejects one extraction item. Do not synthesize a
-    # partial Candidate sidecar after that writer.
+    # Enrolled users take the canonical path before the legacy writer. Legacy
+    # users keep the existing writer untouched, so no post-write sidecar exists.
     return None
 
 

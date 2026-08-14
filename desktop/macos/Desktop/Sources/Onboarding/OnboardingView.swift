@@ -656,7 +656,7 @@ struct OnboardingView: View {
     }
     if AppBuild.usesLazyDevPermissions {
       AssistantSettings.shared.screenAnalysisEnabled = false
-      AssistantSettings.shared.audioRecordingMode = .off
+      AssistantSettings.shared.transcriptionEnabled = false
       log("OnboardingView: Lazy dev permissions enabled, skipping monitoring/transcription autostart")
     } else {
       startMonitoringIfNeeded()

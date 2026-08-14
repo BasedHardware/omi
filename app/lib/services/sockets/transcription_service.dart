@@ -187,10 +187,6 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     return;
   }
 
-  Future requestFirstOnboardingQuestion() async {
-    await sendText(jsonEncode({'type': 'start_onboarding'}));
-  }
-
   @override
   void onClosed([int? closeCode]) {
     _listeners.forEach((k, v) {

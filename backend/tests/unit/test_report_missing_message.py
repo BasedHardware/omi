@@ -98,12 +98,11 @@ def chat_router():
     return mod
 
 
-@pytest.mark.parametrize('handler_name', ['report_message_v1', 'report_message'])
-def test_report_missing_message_returns_404_not_500(chat_router, handler_name):
+def test_report_missing_message_returns_404_not_500(chat_router):
     # get_message returns None for an unknown id; the handler must translate that into a
     # 404, not crash trying to unpack None into (message, doc_id).
     with patch.object(chat_router.chat_db, "get_message", return_value=None):
         with pytest.raises(HTTPException) as exc:
-            getattr(chat_router, handler_name)(message_id="does-not-exist", uid="u1")
+            chat_router.report_message(message_id="does-not-exist", uid="u1")
 
     assert exc.value.status_code == 404

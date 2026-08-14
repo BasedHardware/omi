@@ -11,19 +11,6 @@ import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// Keep integer stepping for small goals without asking RenderSlider to paint
-/// one division per unit for arbitrarily large targets.
-///
-/// A target of one billion previously produced one billion divisions. Flutter
-/// walks the divisions during every slider paint even when tick marks are
-/// hidden, which can block the UI thread for several seconds.
-@visibleForTesting
-int? goalSliderDivisions(double targetValue) {
-  if (!targetValue.isFinite || targetValue <= 0 || targetValue > 100) return null;
-  final roundedTarget = targetValue.round();
-  return targetValue == roundedTarget ? roundedTarget : null;
-}
-
 /// Multi-goal widget supporting up to 3 goals with minimalistic UI
 class GoalsWidget extends StatefulWidget {
   const GoalsWidget({super.key, this.onRefresh});
@@ -598,10 +585,8 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       },
       child: GestureDetector(
         onTap: () {
+          PlatformManager.instance.analytics.goalItemTappedForEdit(goalId: goal.id, source: 'home');
           _editGoal(goal);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            PlatformManager.instance.analytics.goalItemTappedForEdit(goalId: goal.id, source: 'home');
-          });
         },
         child: Container(
           margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
@@ -653,7 +638,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 value: goal.currentValue.clamp(0.0, goal.targetValue),
                                 min: 0,
                                 max: goal.targetValue,
-                                divisions: goalSliderDivisions(goal.targetValue),
+                                divisions: goal.targetValue >= 1 ? goal.targetValue.toInt() : null,
                                 onChanged: (value) => _updateGoalProgressUI(goal, value),
                                 onChangeEnd: (value) {
                                   PlatformManager.instance.analytics.goalProgressChanged(

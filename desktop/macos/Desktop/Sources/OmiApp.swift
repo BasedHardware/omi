@@ -339,10 +339,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       }
     }
 
-    // Proactive notifications are back ON by default at Balanced (focus/insight
-    // categories only). Run the one-time migration before any assistant can fire;
-    // turning notifications off again in Settings sticks.
-    NotificationService.migrateToBalancedDefaultIfNeeded()
+    // Proactive notifications are now OFF by default for everyone. Run the one-time
+    // migration before any assistant can fire, so existing users are flipped to Off
+    // once (they can re-enable in Settings).
+    NotificationService.migrateToOffByDefaultIfNeeded()
 
     // Force macOS to use the correct app icon (bypasses icon cache).
     // Apply squircle mask with proper margins because NSApp.applicationIconImage
@@ -920,7 +920,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     let audioRecordingView = makeToggleItemView(
       title: "Audio Recording",
       iconName: "mic.fill",
-      isOn: !paywalled && AssistantSettings.shared.audioRecordingMode != .off,
+      isOn: !paywalled && AssistantSettings.shared.transcriptionEnabled,
       action: #selector(audioRecordingToggled(_:))
     )
     audioRecordingItem.view = audioRecordingView
@@ -1227,7 +1227,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     screenCaptureSwitch?.state =
       (!paywalled && ProactiveAssistantsPlugin.shared.isMonitoring) ? .on : .off
     audioRecordingSwitch?.state =
-      (!paywalled && AssistantSettings.shared.audioRecordingMode != .off) ? .on : .off
+      (!paywalled && AssistantSettings.shared.transcriptionEnabled) ? .on : .off
   }
 
   func menuDidClose(_ menu: NSMenu) {

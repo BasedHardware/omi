@@ -56,7 +56,7 @@ KEYS = [
     "playwrightUseExtension",
     "disabledSkillsJSON",
     "screenAnalysisEnabled",
-    "audioRecordingMode",
+    "transcriptionEnabled",
     "dashboardWidgetsCollapsed",
     "tasksChatPanelWidth",
 
@@ -92,23 +92,6 @@ def defaults_export(domain):
     return plistlib.loads(proc.stdout)
 
 
-def source_audio_recording_mode(source):
-    mode = source.get("audioRecordingMode")
-    if mode in {"off", "always", "onlyMeetings"}:
-        return mode
-
-    # Preserve intent from bundles created before Audio Recording became the
-    # single preference. The old "never" value disabled only system audio, so
-    # "always" is the closest equivalent for its still-enabled microphone.
-    if source.get("transcriptionEnabled") is False:
-        return "off"
-    return {
-        "always": "always",
-        "onlyDuringMeetings": "onlyMeetings",
-        "never": "always",
-    }.get(source.get("systemAudioCaptureMode"), "onlyMeetings")
-
-
 source = defaults_export(src)
 if not source:
     print(f"No defaults found for {src}; applying target-only dev defaults")
@@ -125,7 +108,14 @@ if not env_truthy("OMI_DEV_EAGER_PERMISSIONS"):
         {
             "devLazyPermissionsEnabled": True,
             "screenAnalysisEnabled": True,
-            "audioRecordingMode": "off",
+            "transcriptionEnabled": False,
+            # Use systemAudioCaptureMode="never" (a user-visible setting) instead of
+            # disableSystemAudioCapture (a hidden kill switch). The hidden flag is
+            # checked by AppState.effectiveSystemAudioMode BEFORE the user-visible
+            # mode, so seeding it would trap system audio off even after the
+            # developer picks "Always" in Settings. systemAudioCaptureMode can be
+            # toggled freely from the Settings UI.
+            "systemAudioCaptureMode": "never",
         }
     )
     # Never carry over the hidden kill switch from a previous seed or the source.
@@ -138,10 +128,12 @@ else:
     selected.update(
         {
             "devLazyPermissionsEnabled": False,
-            # Restore the one user-facing audio preference so a previously
-            # quiet-seeded bundle runs the normal startup path.
+            # Restore capture flags so a previously quiet-seeded bundle runs
+            # the full eager startup path. Fall back to True (normal default)
+            # when the source domain doesn't define them.
             "screenAnalysisEnabled": source.get("screenAnalysisEnabled", True),
-            "audioRecordingMode": source_audio_recording_mode(source),
+            "transcriptionEnabled": source.get("transcriptionEnabled", True),
+            "systemAudioCaptureMode": source.get("systemAudioCaptureMode", "always"),
         }
     )
     target_data.pop("screenAnalysisAutoStartFixed_v2", None)
@@ -156,13 +148,7 @@ with tempfile.NamedTemporaryFile(suffix=".plist") as plist:
 
 # Keys removed from target_data above need to be explicitly deleted from the
 # target domain — `defaults import` merges and never removes keys.
-for key in (
-    "disableSystemAudioCapture",
-    "screenAnalysisAutoStartFixed_v2",
-    "screenAnalysisAutoStartFixed_v3",
-    "transcriptionEnabled",
-    "systemAudioCaptureMode",
-):
+for key in ("disableSystemAudioCapture", "screenAnalysisAutoStartFixed_v2", "screenAnalysisAutoStartFixed_v3"):
     if key not in target_data:
         subprocess.run(["defaults", "delete", target, key], check=False)
 

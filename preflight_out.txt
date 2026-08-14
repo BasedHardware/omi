@@ -1,0 +1,76 @@
+bash scripts/dev-harness/run-python.sh .github/scripts/pr_preflight.py --lane local --base origin/main
+Check manifest: lane=local platform=linux exclusive_platform=False base=676f5639a298 head=HEAD files=13
+  SELECTED check-manifest-contract: manifest validity and workflow drift guard
+  SELECTED product-file-line-count-ratchet: #9838 freezes oversized product files; #9836's chat_completions.rs collision chain (#9384/#9638/#9692), transcribe.py's undocumented growth, and the FC-5 RealtimeHubController chain show why
+  SELECTED product-file-line-count-ratchet-tests: oversized product-file ratchet must reject growth, reject threshold crossings, and ratchet splits down
+  SELECTED diff-hygiene: all changes must be free of whitespace errors and conflict markers
+  SELECTED architecture-guardrails: advisory size checks plus oversized package-map baseline ratchet
+  SELECTED product-invariants: changed paths determine required invariant citations
+  SELECTED failure-class-protocol: fix commits declare a validated semantic failure class
+  SELECTED failure-class-guard-artifact-ratchet: FC-split-mutation-authority was declared on 30 first-parent integration changes in the 90 days to Jul 24 2026 while its definition still listed evidence_prs [9365, 9597] and named no guard artifact; a recurring class must produce a reusable guard surface, not more paperwork
+  SELECTED desktop-changelog-data: repository-wide desktop changelog schema contract
+  SELECTED desktop-changelog-entry: desktop files changed
+  SELECTED brand-ui: INV-UI-1 applies to changed UI sources
+  SELECTED deferred-work-markers: new deferred-work markers must cite a tracking issue
+  SELECTED web-llm-gateway-only: SCA-118: production web LLM traffic must not regain direct provider SDKs, URLs, or credentials
+  SELECTED backend-async-blockers: backend Python changed
+  SELECTED backend-datetime-sort-sentinel-ratchet: #9571/#9600 reject naive datetime min/max fallbacks in backend sort keys
+  SELECTED backend-route-policy-baseline: new backend routes must declare reviewed policy instead of growing the legacy baseline
+  SELECTED firestore-query-coverage: serving Firestore compound queries cannot add unregistered or unsupported debt
+  SELECTED lifecycle-headers: rollout scaffolding may require lifecycle headers
+  SELECTED version-prefixed-filenames: repository-wide version-prefixed filename contract
+  SELECTED backend-import-purity: backend production Python changes must retain import-time purity
+  SELECTED backend-runtime-image-source-closure: #9857: deployable Python images must contain the transitive first-party imports of their runtime entrypoints
+  SELECTED backend-workflow-contracts: workflow boundary sources changed
+  SELECTED conversation-lifecycle-write-guard: conversation lifecycle has one mutation owner
+  SELECTED desktop-swiftlint-baseline: #9843 Ticket 07: SwiftLint baseline is down-only; swiftlint:disable requires named rule + reason
+  SELECTED desktop-test-quality: desktop Swift production or test structure changed
+  SELECTED desktop-backend-release-boundary: desktop-backend candidates must prove immutable OCI-index-to-linux/amd64 lineage, authenticated streamed chat with terminal usage, and managed voice-provider paths before any Cloud Run traffic shift
+  SELECTED desktop-backend-release-boundary-fixtures: mutation fixtures reject traffic-before-proof, mutable/stale/wrong-platform images, automatic production deploys, baked runtime credentials, and chat-contract drift
+  SELECTED desktop-backend-candidate-probe-fixtures: candidate evidence must require two authenticated streamed chat turns with terminal usage, bounded streaming, Firestore readiness, and secure token handling
+  SKIPPED desktop-e2e-flow-coverage: platform-only (requires macos, running on linux)
+  SKIPPED desktop-swift-format-lint: platform-only (requires macos, running on linux)
+  SKIPPED desktop-swiftlint: platform-only (requires macos, running on linux)
+==> check-manifest-contract
+............................................
+----------------------------------------------------------------------
+Ran 44 tests in 2.427s
+
+OK
+<== PASS check-manifest-contract (2.86s)
+==> product-file-line-count-ratchet
+FAIL: invalid line-count ratchet baseline /app/.github/scripts/product_file_line_count_ratchet_baseline/backend-routers.json: Expecting property name enclosed in double quotes: line 3 column 1 (char 15)
+<== FAIL product-file-line-count-ratchet (0.33s)
+Manifest checks failed: product-file-line-count-ratchet
+PR preflight failed in 3.64s.
+PR preflight: lane=local base=origin/main (676f5639a298) head=HEAD files=13
+  SELECTED check-manifest-contract: manifest validity and workflow drift guard
+  SELECTED product-file-line-count-ratchet: #9838 freezes oversized product files; #9836's chat_completions.rs collision chain (#9384/#9638/#9692), transcribe.py's undocumented growth, and the FC-5 RealtimeHubController chain show why
+  SELECTED product-file-line-count-ratchet-tests: oversized product-file ratchet must reject growth, reject threshold crossings, and ratchet splits down
+  SELECTED diff-hygiene: all changes must be free of whitespace errors and conflict markers
+  SELECTED architecture-guardrails: advisory size checks plus oversized package-map baseline ratchet
+  SELECTED product-invariants: changed paths determine required invariant citations
+  SELECTED failure-class-protocol: fix commits declare a validated semantic failure class
+  SELECTED failure-class-guard-artifact-ratchet: FC-split-mutation-authority was declared on 30 first-parent integration changes in the 90 days to Jul 24 2026 while its definition still listed evidence_prs [9365, 9597] and named no guard artifact; a recurring class must produce a reusable guard surface, not more paperwork
+  SELECTED desktop-changelog-data: repository-wide desktop changelog schema contract
+  SELECTED desktop-changelog-entry: desktop files changed
+  SELECTED brand-ui: INV-UI-1 applies to changed UI sources
+  SELECTED deferred-work-markers: new deferred-work markers must cite a tracking issue
+  SELECTED web-llm-gateway-only: SCA-118: production web LLM traffic must not regain direct provider SDKs, URLs, or credentials
+  SELECTED backend-async-blockers: backend Python changed
+  SELECTED backend-datetime-sort-sentinel-ratchet: #9571/#9600 reject naive datetime min/max fallbacks in backend sort keys
+  SELECTED backend-route-policy-baseline: new backend routes must declare reviewed policy instead of growing the legacy baseline
+  SELECTED firestore-query-coverage: serving Firestore compound queries cannot add unregistered or unsupported debt
+  SELECTED lifecycle-headers: rollout scaffolding may require lifecycle headers
+  SELECTED version-prefixed-filenames: repository-wide version-prefixed filename contract
+  SELECTED backend-import-purity: backend production Python changes must retain import-time purity
+  SELECTED backend-runtime-image-source-closure: #9857: deployable Python images must contain the transitive first-party imports of their runtime entrypoints
+  SELECTED backend-workflow-contracts: workflow boundary sources changed
+  SELECTED conversation-lifecycle-write-guard: conversation lifecycle has one mutation owner
+  SELECTED desktop-swiftlint-baseline: #9843 Ticket 07: SwiftLint baseline is down-only; swiftlint:disable requires named rule + reason
+  SELECTED desktop-test-quality: desktop Swift production or test structure changed
+  SELECTED desktop-backend-release-boundary: desktop-backend candidates must prove immutable OCI-index-to-linux/amd64 lineage, authenticated streamed chat with terminal usage, and managed voice-provider paths before any Cloud Run traffic shift
+  SELECTED desktop-backend-release-boundary-fixtures: mutation fixtures reject traffic-before-proof, mutable/stale/wrong-platform images, automatic production deploys, baked runtime credentials, and chat-contract drift
+  SELECTED desktop-backend-candidate-probe-fixtures: candidate evidence must require two authenticated streamed chat turns with terminal usage, bounded streaming, Firestore readiness, and secure token handling
+PR metadata: /app/draft.md, updated_at=local file
+make: *** [Makefile:58: preflight] Error 1

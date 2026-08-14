@@ -2,7 +2,7 @@ import Foundation
 import OmiTheme
 import SwiftUI
 
-/// Universal device-capture archive. This is intentionally a read-only
+/// Cohort-only device-capture archive. This is intentionally a read-only
 /// archive surface: no chat history, composer, search, edit, or delete paths
 /// are inherited from the legacy Conversations page.
 @MainActor

@@ -4,16 +4,6 @@ import XCTest
 
 @MainActor
 final class ShortcutSettingsTests: XCTestCase {
-  func testPushToTalkRequiresAtLeastOneModifier() {
-    let bareU = ShortcutSettings.KeyboardShortcut(keyCode: 32, keyDisplay: "U")
-    let commandU = ShortcutSettings.KeyboardShortcut(keyCode: 32, keyDisplay: "U", modifiers: .command)
-    let optionOnly = ShortcutSettings.KeyboardShortcut(modifierOnly: .option)
-
-    XCTAssertFalse(ShortcutSettings.isSafePushToTalkShortcut(bareU))
-    XCTAssertTrue(ShortcutSettings.isSafePushToTalkShortcut(commandU))
-    XCTAssertTrue(ShortcutSettings.isSafePushToTalkShortcut(optionOnly))
-  }
-
   func testAskOmiDefaultShortcutIsCommandO() {
     XCTAssertEqual(ShortcutSettings.defaultAskOmiShortcut, ShortcutSettings.askOmiCommandOShortcut)
     XCTAssertEqual(ShortcutSettings.defaultAskOmiShortcut.displayTokens, ["⌘", "O"])

@@ -271,6 +271,8 @@ struct OnboardingChatView: View {
               .id("quick-replies")
             }
 
+            // Retry "Open System Settings" button — shown when a permission grant
+            // is pending but System Settings didn't open (or user closed it)
             if let pending = pendingPermissionType,
               quickReplyOptions.isEmpty && !chatProvider.isSending
             {
@@ -278,8 +280,7 @@ struct OnboardingChatView: View {
                 switch pending {
                 case "screen_recording": return !appState.hasScreenRecordingPermission
                 case "microphone": return !appState.hasMicrophonePermission
-                case "notifications": return !appState.hasNotificationPermission
-                case "accessibility": return !appState.hasAccessibilityPermission || appState.isAccessibilityBroken
+                case "accessibility": return !appState.hasAccessibilityPermission
                 case "automation": return !appState.hasAutomationPermission
                 case "full_disk_access": return !appState.hasFullDiskAccess
                 default: return false
@@ -290,23 +291,26 @@ struct OnboardingChatView: View {
                   .frame(maxWidth: .infinity, alignment: .leading)
                   .padding(.leading, OmiSpacing.page)
 
-                HStack(spacing: OmiSpacing.md) {
-                  Button("Open \(permissionLabel(pending)) Settings") { openSettingsForPermission(pending) }
-                    .buttonStyle(InkButtonStyle(kind: .primary))
-                  Button("Skip for now") {
-                    guard pendingPermissionType == pending else { return }
-                    pendingPermissionType = nil
-                    permissionHelpTimer?.cancel()
-                    permissionHelpTimer = nil
-                    PermissionDragGuidance.dismiss()
-                    Task { await chatProvider.sendMessage("Skip") }
+                Button(action: {
+                  openSettingsForPermission(pending)
+                }) {
+                  HStack(spacing: OmiSpacing.xs) {
+                    Image(systemName: "gear")
+                      .font(.system(size: 12))
+                    Text("Open \(permissionLabel(pending)) Settings")
+                      .font(.system(size: 13, weight: .medium))
                   }
-                  .buttonStyle(InkButtonStyle(kind: .secondary))
+                  .foregroundColor(Ink.surface)
+                  .padding(.horizontal, OmiSpacing.lg)
+                  .padding(.vertical, OmiSpacing.sm)
+                  .background(Capsule(style: .continuous).fill(Ink.primary))
                 }
+                .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, OmiSpacing.page)
               }
             }
+
             // "Continue" button — shown only after AI calls complete_onboarding
             // and no pending questions or permissions remain.
             if onboardingCompleted && !chatProvider.isSending && quickReplyOptions.isEmpty
@@ -509,10 +513,6 @@ struct OnboardingChatView: View {
   private func openSettingsForPermission(_ type: String) {
     if type == "screen_recording" {
       ScreenCaptureService.openScreenRecordingPreferences()
-      return
-    }
-    if type == "notifications" {
-      appState.openNotificationPreferences()
       return
     }
     let urlString: String? = {
@@ -1853,8 +1853,7 @@ struct OnboardingChatBubble: View {
         return false
       case .discoveryCard:
         return true
-      case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
-        .citation:
+      case .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink:
         return false
       case .agentSpawn, .agentCompletion:
         return true

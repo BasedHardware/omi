@@ -6,8 +6,6 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/FeedbackView.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
-  - desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift
-  - desktop/macos/Desktop/Sources/Observability/DiagnosticLogRedactionPolicy.swift
 preconditions:
   - automation_bridge_ready
 

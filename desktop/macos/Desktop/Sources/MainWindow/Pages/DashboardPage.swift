@@ -223,7 +223,7 @@ struct DashboardPage: View {
   /// Present only for the capability-gated main-window Home chat. Shared
   /// Dashboard callers leave this nil and keep journaled rich blocks inert.
   var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
-  /// The Chat-first shell reuses dashboard content under More, but Chat itself
+  /// The cohort shell reuses dashboard content under More, but Chat itself
   /// has one primary home. Legacy callers leave this nil and retain their
   /// inline Home chat exactly as before.
   var onOpenPrimaryChat: (() -> Void)? = nil
@@ -253,8 +253,9 @@ struct DashboardPage: View {
   @State private var showingGoalDetail = false
   @AppStorage("dashboardWidgetsCollapsed") private var widgetsCollapsed = false
   @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
-  @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) private var audioRecordingModeRaw =
-    AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
+  @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
+  @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
+    AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
   @State private var homeMode: HomeStageMode = .hub
   @State private var didReportChatFirstTranscriptPage = false
@@ -281,8 +282,12 @@ struct DashboardPage: View {
     CaptureListeningLogic.isCaptureLive(isCaptureMonitoring: isCaptureMonitoring)
   }
 
+  private var listeningCaptureMode: AssistantSettings.SystemAudioCaptureMode {
+    CaptureListeningLogic.listeningCaptureMode(raw: systemAudioCaptureModeRaw)
+  }
+
   private var listeningModeTitle: String {
-    CaptureListeningLogic.listeningModeTitle(appState: appState, raw: audioRecordingModeRaw)
+    CaptureListeningLogic.listeningModeTitle(appState: appState, raw: systemAudioCaptureModeRaw)
   }
 
   private static let homeStageMaxWidth: CGFloat = 1360
@@ -897,7 +902,7 @@ struct DashboardPage: View {
   private func rollingSuggestionIcon(_ kind: HomeKnowsRowKind) -> String {
     switch kind {
     case .task: return "circle"
-    case .insight: return ProactiveNotificationBadge.insightSystemImage
+    case .insight: return "lightbulb"
     case .question: return "bubble.left"
     }
   }
@@ -1634,12 +1639,13 @@ struct DashboardPage: View {
           title: transcriptionUnavailable ? "Transcription unavailable" : "Listening",
           systemImage: transcriptionUnavailable
             ? "exclamationmark.triangle.fill"
-            : (appState.isLiveCapturing ? "waveform.circle.fill" : "mic.circle"),
-          status: CaptureListeningLogic.listeningStatus(appState: appState),
+            : (appState.isTranscribing ? "waveform.circle.fill" : "mic.circle"),
+          status: transcriptionUnavailable ? .blocked : (appState.isTranscribing ? .active : .inactive),
           modeTitle: listeningModeTitle,
-          isAwaitingMeeting: appState.isAwaitingMeeting,
+          isMeetingsOnly: listeningCaptureMode == .onlyDuringMeetings,
           isToggling: isTogglingListening,
-          action: toggleListening
+          action: toggleListening,
+          modeAction: toggleListeningMode
         )
         // Settings lives in the nav rail (bottom-left) — no duplicate gear here.
       }
@@ -1800,8 +1806,11 @@ struct DashboardPage: View {
 
   private func toggleListening() {
     CaptureListeningLogic.toggleListening(
-      appState: appState, audioRecordingModeRaw: $audioRecordingModeRaw,
-      isTogglingListening: $isTogglingListening)
+      appState: appState, transcriptionEnabled: $transcriptionEnabled, isTogglingListening: $isTogglingListening)
+  }
+
+  private func toggleListeningMode() {
+    CaptureListeningLogic.toggleListeningMode(raw: $systemAudioCaptureModeRaw)
   }
 
   private func toggleCapture() {
@@ -2204,16 +2213,16 @@ struct DashboardPage: View {
   }
 
   private var shouldShowSuggestionBanner: Bool {
-    !routesChatToPrimaryShell && !postOnboardingSuggestions.isEmpty
-      && !PostOnboardingPromptSuggestions.isDismissed
+    !postOnboardingSuggestions.isEmpty && !PostOnboardingPromptSuggestions.isDismissed
   }
 
   private func dismissSuggestionBanner() {
-    PostOnboardingPromptSuggestions.consume()
+    PostOnboardingPromptSuggestions.shouldShowPopup = false
+    PostOnboardingPromptSuggestions.isDismissed = true
   }
 
   private func handleSuggestedPrompt(_ suggestion: String) {
-    PostOnboardingPromptSuggestions.consume()
+    PostOnboardingPromptSuggestions.shouldShowPopup = false
     FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
   }
 
@@ -2410,7 +2419,7 @@ private struct HomeKnowsRowView: View {
   private var leadingIcon: String {
     switch row.kind {
     case .task: return "circle"
-    case .insight: return ProactiveNotificationBadge.insightSystemImage
+    case .insight: return "lightbulb"
     case .question: return "bubble.left"
     }
   }
@@ -3873,25 +3882,13 @@ struct HomeListeningStatusButton: View {
   let systemImage: String
   let status: HomeStatusState
   let modeTitle: String
-  /// Only Meetings wait: the session is armed, the mic is paused, and a click turns
-  /// listening off. Help/VoiceOver must not reuse the "Off" sentence for that.
-  let isAwaitingMeeting: Bool
+  let isMeetingsOnly: Bool
   let isToggling: Bool
   let action: () -> Void
+  let modeAction: () -> Void
 
-  /// Hover / VoiceOver copy. An armed Only Meetings wait is inactive (mic paused)
-  /// but not off — a click turns listening off, it does not start it.
-  static func helpText(
-    status: HomeStatusState, modeTitle: String, isAwaitingMeeting: Bool
-  ) -> String {
-    if status == .inactive && isAwaitingMeeting {
-      return
-        "Listening: waiting for a call (\(modeTitle)). Nothing is being transcribed. Click to turn off."
-    }
-    return "Listening: \(status.text), \(modeTitle)"
-  }
-
-  // Hover reveals the selected mode, but Settings owns the only picker.
+  // Single pill-level hover flag so moving between the title and the mode
+  // toggle never flickers the revealed controls.
   @State private var isHovering = false
 
   var body: some View {
@@ -3933,9 +3930,29 @@ struct HomeListeningStatusButton: View {
       }
       .buttonStyle(.plain)
       .disabled(isToggling)
-      .help(Self.helpText(status: status, modeTitle: modeTitle, isAwaitingMeeting: isAwaitingMeeting))
-      .accessibilityLabel(
-        Self.helpText(status: status, modeTitle: modeTitle, isAwaitingMeeting: isAwaitingMeeting))
+      .help("Listening: \(status.text), \(modeTitle)")
+      .accessibilityLabel("Listening \(status.text), \(modeTitle)")
+
+      // Divider + mode toggle are revealed only on hover to keep the
+      // resting pill compact.
+      if isHovering {
+        Rectangle()
+          .fill(Ink.separator)
+          .frame(width: 1, height: 18)
+          .transition(.opacity)
+
+        Button(action: modeAction) {
+          Image(systemName: isMeetingsOnly ? "person.2.fill" : "person.fill")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundStyle(modeIconColor)
+            .frame(width: 30, height: 34)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(isMeetingsOnly ? "Switch to always listening" : "Switch to meetings only")
+        .accessibilityLabel(isMeetingsOnly ? "Switch Listening to Always" : "Switch Listening to Meetings Only")
+        .transition(.opacity)
+      }
     }
     .foregroundStyle(status.isActive ? HomePalette.ink : (status.isBlocked ? status.indicator : HomePalette.muted))
     .background(
@@ -3950,6 +3967,10 @@ struct HomeListeningStatusButton: View {
     .frame(height: 34)
     .onHover { isHovering = $0 }
     .omiAnimation(.easeInOut(duration: 0.14), value: isHovering)
+  }
+
+  private var modeIconColor: Color {
+    status.isActive ? HomePalette.green : HomePalette.muted
   }
 
   private var statusFill: Color {

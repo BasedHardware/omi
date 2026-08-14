@@ -14,8 +14,6 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 
-from desktop_proactive_delivery_health import PostHogQueryError, collect_from_env, doctor_metric
-
 from desktop_release_doctor_report import (
     METRIC_CONTRACTS,
     REPORT_TYPE,
@@ -279,14 +277,6 @@ def collect_snapshot(
     match = TAG_RE.fullmatch(release_tag)
     assert match is not None
     legacy_id = f"v{match.group('version')}+{match.group('build')}"
-    metrics = {name: _unavailable("metric collection is advisory work not yet wired") for name in METRIC_CONTRACTS}
-    try:
-        metrics["proactive_delivery"] = doctor_metric(collect_from_env())
-    except (PostHogQueryError, ValueError, OSError) as error:
-        metrics["proactive_delivery"] = _unavailable(
-            f"proactive delivery query unavailable: {type(error).__name__}"
-        )
-
     return {
         "schema_version": SCHEMA_VERSION,
         "release_id": release_tag,
@@ -363,7 +353,9 @@ def collect_snapshot(
             "reason": "independent backend provenance comes from live health identity and deploy evidence",
         },
         "codemagic": _unavailable("Codemagic API is not yet a release-control dependency"),
-        "metrics": metrics,
+        "metrics": {
+            name: _unavailable("metric collection is advisory work not yet wired") for name in METRIC_CONTRACTS
+        },
     }
 
 

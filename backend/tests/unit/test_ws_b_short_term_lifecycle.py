@@ -88,7 +88,7 @@ from models.product_memory import (
     ProcessingState,
     MemoryItem,
 )
-from tests.unit.fixtures.canonical_memory_fakes import (
+from tests.unit.test_ws_i_write_convergence import (
     _sample_memory_payload,
     _trusted_account_generation,
 )
@@ -283,10 +283,10 @@ def _canonical_db_with_control(uid: str = "uid-canonical") -> _PromotionFakeDb:
     )
 
 
-def _configure_universal_memory(monkeypatch, *uids: str) -> None:
-    from tests.unit.universal_memory_test_helpers import configure_universal_memory
+def _set_canonical_cohort(monkeypatch, *uids: str) -> None:
+    from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 
-    configure_universal_memory(monkeypatch, *uids)
+    set_canonical_cohort(monkeypatch, *uids)
 
 
 def _seed_canonical_short_term(
@@ -305,9 +305,9 @@ def _seed_canonical_short_term(
 
 
 def _set_canonical(monkeypatch, uid: str) -> None:
-    from tests.unit.universal_memory_test_helpers import configure_universal_memory
+    from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 
-    configure_universal_memory(monkeypatch, uid)
+    set_canonical_cohort(monkeypatch, uid)
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
@@ -351,11 +351,11 @@ def _process(uid: str, memory_id: str, db: _Db, *, content: str):
 
 
 @pytest.fixture(autouse=True)
-def _reset_universal_memory(monkeypatch):
-    from tests.unit.universal_memory_test_helpers import reset_universal_memory_fixture
+def _clear_cohort(monkeypatch):
+    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
 
     _load_runtime()
-    reset_universal_memory_fixture(monkeypatch)
+    clear_canonical_cohort(monkeypatch)
 
 
 def test_required_submission_is_visible_pending_short_term_but_not_default_memory(

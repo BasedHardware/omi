@@ -90,7 +90,6 @@ SCHEMA_GROUPS = {
             'TaskCreatePayload',
             'TaskChangePayload',
             'GoalMetric',
-            'CandidateCompatibilityMetadata',
             'CandidateRecord',
             'CandidateListResponse',
             'CandidateResolutionReceipt',

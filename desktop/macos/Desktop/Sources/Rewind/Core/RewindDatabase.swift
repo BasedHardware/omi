@@ -458,10 +458,8 @@ actor RewindDatabase {
     // Create directory if needed (withIntermediateDirectories creates parents too)
     try FileManager.default.createDirectory(at: omiDir, withIntermediateDirectories: true)
 
-    // Migrate data from legacy path if this is first launch with per-user paths.
-    // Remember an anonymous-directory source so context-bucket migration can
-    // fall back to the signed-out legacy defaults key after an early init.
-    let migratedLegacyOwnerID = migrateFromLegacyPathIfNeeded(to: omiDir)
+    // Migrate data from legacy path if this is first launch with per-user paths
+    migrateFromLegacyPathIfNeeded(to: omiDir)
 
     let dbPath = omiDir.appendingPathComponent("omi.db").path
     let flagPath = omiDir.appendingPathComponent(".omi_running").path
@@ -580,7 +578,7 @@ actor RewindDatabase {
     openedForUserId = expectedUserId
     consecutiveQueryIOErrors = 0
 
-    try migrate(activeQueue, legacyOwnerFallback: migratedLegacyOwnerID)
+    try migrate(activeQueue)
 
     // After unclean shutdown, do a cheap schema sanity check (not a full DB scan).
     // PRAGMA quick_check scans the ENTIRE database regardless of the (N) argument
@@ -637,14 +635,12 @@ actor RewindDatabase {
     }
   }
 
-  private func migrateFromLegacyPathIfNeeded(to userDir: URL) -> String? {
+  private func migrateFromLegacyPathIfNeeded(to userDir: URL) {
     // The legacy `Omi` root is shared historical state. A named bundle that
     // now has an identity-derived profile must never claim it: the first
     // bundle to launch would otherwise move data belonging to Omi/Omi Dev
     // or another old named bundle into its isolated root.
-    guard Self.shouldMigrateLegacyStorage(isolatedStorage: DesktopLocalProfile.usesIsolatedStorage) else {
-      return nil
-    }
+    guard Self.shouldMigrateLegacyStorage(isolatedStorage: DesktopLocalProfile.usesIsolatedStorage) else { return }
     let fileManager = FileManager.default
     let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
     let omiDir = appSupport.appendingPathComponent("Omi", isDirectory: true)
@@ -670,15 +666,14 @@ actor RewindDatabase {
       let hasContent = ["omi.db", "Screenshots", "Videos", "backups"].contains {
         fileManager.fileExists(atPath: anonymousDir.appendingPathComponent($0).path)
       }
-      guard hasContent else { return nil }
+      guard hasContent else { return }
       sourceDir = anonymousDir
     } else {
-      return nil  // Nothing to migrate
+      return  // Nothing to migrate
     }
 
     // Don't migrate to ourselves
-    guard sourceDir.path != userDir.path else { return nil }
-    let migratedLegacyOwnerID = sourceDir.path == anonymousDir.path ? "signed-out" : nil
+    guard sourceDir.path != userDir.path else { return }
 
     log("RewindDatabase: Migrating data from \(sourceDir.path) to \(userDir.path)")
 
@@ -706,12 +701,8 @@ actor RewindDatabase {
     // NOT proceed to delete it — abort the whole migration and leave source +
     // dest intact. initialize() retries migration on the next launch, once the
     // transient cause (locked DB, momentary IO error) has likely cleared.
-    guard checkpointWALBeforeMigration(in: userDir, label: "dest", fileManager: fileManager) else {
-      return nil
-    }
-    guard checkpointWALBeforeMigration(in: sourceDir, label: "source", fileManager: fileManager) else {
-      return nil
-    }
+    guard checkpointWALBeforeMigration(in: userDir, label: "dest", fileManager: fileManager) else { return }
+    guard checkpointWALBeforeMigration(in: sourceDir, label: "source", fileManager: fileManager) else { return }
 
     // Delete WAL/SHM and running flag at source AND destination — do NOT migrate them.
     // Stale WAL/SHM at the destination (from a prior partial migration or crash) would
@@ -776,7 +767,6 @@ actor RewindDatabase {
     }
 
     log("RewindDatabase: Legacy migration complete")
-    return migratedLegacyOwnerID
   }
 
   static func shouldMigrateLegacyStorage(isolatedStorage: Bool) -> Bool {
@@ -1145,7 +1135,7 @@ actor RewindDatabase {
 
   // MARK: - Migrations
 
-  private func migrate(_ queue: DatabasePool, legacyOwnerFallback: String? = nil) throws {
+  private func migrate(_ queue: DatabasePool) throws {
     var migrator = DatabaseMigrator()
 
     // Migration 1: Create screenshots table
@@ -1524,12 +1514,6 @@ actor RewindDatabase {
         on: "transcription_sessions",
         columns: ["clientConversationId"]
       )
-    }
-
-    migrator.registerMigration("addTranscriptionConversationRole") { db in
-      try db.alter(table: "transcription_sessions") { t in
-        t.add(column: "conversationRole", .text).notNull().defaults(to: "ambient")
-      }
     }
 
     // Migration 11: Create live_notes table for AI-generated notes during recording
@@ -2568,20 +2552,9 @@ actor RewindDatabase {
       }
     }
 
-    let contextBucketOwnerID = openedForUserId ?? targetUserId()
-    ContextBucketSchema.registerMigration(
-      on: &migrator,
-      defaults: .standard,
-      ownerID: contextBucketOwnerID,
-      fallbackOwnerID: legacyOwnerFallback)
-
     RewindAbandonedVideoChunkQuarantine.registerMigration(on: &migrator)
 
     try migrator.migrate(queue)
-    try ContextBucketSchema.removeMigratedLegacyDefaults(
-      afterMigrating: queue,
-      defaults: .standard,
-      ownerID: contextBucketOwnerID)
   }
 
   // MARK: - OCR Precision Reduction Migration

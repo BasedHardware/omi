@@ -873,18 +873,14 @@ actor AgentBridge {
       generation: generation,
       authorizationSnapshot: authorizationSnapshot)
     let registeredThisCall = !registered || !processWasAlive
-    let hermeticFaultModelToken = AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
-      isNonProduction: AppBuild.isNonProduction,
-      bundleIdentifier: AppBuild.bundleIdentifier)
-    let shouldFetchManagedToken = AgentRuntimeCredentialPolicy.requiresManagedCredentials(
-      requestedCredentials: requiresCredentials,
-      isNonProduction: AppBuild.isNonProduction,
-      hermeticFaultModelToken: hermeticFaultModelToken)
-    let requiresPiMonoCredentials = AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
-      preferredAdapterIsPiMono: isPiMonoHarness,
-      requestedCredentials: requiresCredentials,
-      isNonProduction: AppBuild.isNonProduction,
-      hermeticFaultModelToken: hermeticFaultModelToken)
+    let requiresManagedCredentials =
+      isPiMonoHarness
+      && AgentRuntimeCredentialPolicy.requiresManagedCredentials(
+        requestedCredentials: requiresCredentials,
+        isNonProduction: AppBuild.isNonProduction,
+        hermeticFaultModelToken: AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
+          isNonProduction: AppBuild.isNonProduction,
+          bundleIdentifier: AppBuild.bundleIdentifier))
     var acquiredRegistration = false
     do {
       if registeredThisCall {
@@ -912,14 +908,13 @@ actor AgentBridge {
       let authorityNeedsSynchronization =
         !status.isSynchronized(
           ownerID: ownerID,
-          requiresCredentials: requiresPiMonoCredentials)
+          requiresCredentials: requiresManagedCredentials)
         || synchronizedRuntimeAuthorityEpoch != status.epoch
         || synchronizedRuntimeAuthorityOwnerID != ownerID
-        || (shouldFetchManagedToken && status.credentialOwnerID != ownerID)
       if authorityNeedsSynchronization {
         await synchronizeRuntimeAuthority(
           authorizationSnapshot: authorizationSnapshot,
-          requiresCredentials: shouldFetchManagedToken)
+          requiresCredentials: requiresManagedCredentials)
         try assertLifecycleFlightCurrent(
           id: flightID,
           generation: generation,
@@ -932,7 +927,7 @@ actor AgentBridge {
         guard
           synchronized.isSynchronized(
             ownerID: ownerID,
-            requiresCredentials: requiresPiMonoCredentials)
+            requiresCredentials: requiresManagedCredentials)
         else {
           throw BridgeError.authMissing
         }
@@ -998,21 +993,9 @@ actor AgentBridge {
       id: flightID,
       generation: generation,
       authorizationSnapshot: authorizationSnapshot)
-    let hermeticFaultModelToken = AgentRuntimeCredentialPolicy.hermeticFaultModelToken(
-      isNonProduction: AppBuild.isNonProduction,
-      bundleIdentifier: AppBuild.bundleIdentifier)
-    let shouldFetchManagedToken = AgentRuntimeCredentialPolicy.requiresManagedCredentials(
-      requestedCredentials: true,
-      isNonProduction: AppBuild.isNonProduction,
-      hermeticFaultModelToken: hermeticFaultModelToken)
-    let requiresPiMonoCredentials = AgentRuntimeCredentialPolicy.shouldRequirePiMonoCredentials(
-      preferredAdapterIsPiMono: isPiMonoHarness,
-      requestedCredentials: true,
-      isNonProduction: AppBuild.isNonProduction,
-      hermeticFaultModelToken: hermeticFaultModelToken)
     await synchronizeRuntimeAuthority(
       authorizationSnapshot: authorizationSnapshot,
-      requiresCredentials: shouldFetchManagedToken)
+      requiresCredentials: isPiMonoHarness)
     try assertLifecycleFlightCurrent(
       id: flightID,
       generation: generation,
@@ -1026,7 +1009,7 @@ actor AgentBridge {
     guard
       status.isSynchronized(
         ownerID: ownerID,
-        requiresCredentials: requiresPiMonoCredentials)
+        requiresCredentials: isPiMonoHarness)
     else {
       throw BridgeError.authMissing
     }
@@ -1174,8 +1157,10 @@ actor AgentBridge {
   ) async throws -> AgentDefaultExecutionProfile {
     let authorization = try captureAuthorization()
     try await start(authorizationSnapshot: authorization)
-    ensureTokenRefreshTask(authorizationSnapshot: authorization)
-    _ = try? await refreshAuthToken(authorizationSnapshot: authorization)
+    if adapterId == AgentAdapterId.piMono.rawValue {
+      ensureTokenRefreshTask(authorizationSnapshot: authorization)
+      _ = try? await refreshAuthToken(authorizationSnapshot: authorization)
+    }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
       throw BridgeError.authMissing
     }
@@ -1914,9 +1899,9 @@ actor AgentBridge {
   }
 
   /// Node starts with a non-authoritative local placeholder owner. Every
-  /// harness must replace it before the first owner-scoped RPC. When a managed
-  /// token is available it is pushed even for ACP/Hermes/OpenClaw so a pinned
-  /// pi-mono session can still register; missing token only fails a pi-mono start.
+  /// harness must replace it before the first owner-scoped RPC; pi-mono also
+  /// receives the credential it needs, while local adapters use an owner-only
+  /// handshake and remain independent of managed-cloud token availability.
   nonisolated static func synchronizeAuthorityForStart(
     requiresCredentials: Bool,
     refreshCredentials: () async throws -> Bool,

@@ -43,17 +43,6 @@ final class TaskNavigationRequestStore {
   private(set) var pendingTarget: Target?
   private(set) var pendingTask: TaskActionItem?
   private(set) var pendingCandidate: OmiAPI.CandidateRecord?
-  private var runtimeOwnerObserver: NSObjectProtocol?
-
-  init() {
-    runtimeOwnerObserver = NotificationCenter.default.addObserver(
-      forName: .runtimeOwnerDidChange,
-      object: nil,
-      queue: .main
-    ) { [weak self] _ in
-      Task { @MainActor [weak self] in self?.clear() }
-    }
-  }
 
   func request(task: TaskActionItem) {
     pendingTarget = .task(task.id)
@@ -296,7 +285,7 @@ final class DashboardIntelligenceStore: ObservableObject {
       emitPresentedInterventions(recommendations)
     } catch APIError.httpError(let statusCode, _) where statusCode == 404 {
       guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
-      // Users without the intelligence capability retain calm
+      // Canonical-read users outside the intelligence cohort retain calm
       // dashboard behavior while canonical Goals remain available.
       recommendations = []
     } catch {
@@ -350,7 +339,7 @@ final class DashboardIntelligenceStore: ObservableObject {
     let opened = await recommendationActionHandler(recommendation)
     guard requireCurrentOwner(ownerScope) else { return false }
     if opened {
-      await ContextSubjectBindingService.shared.bindRecentContext(
+      TaskContextSubjectMatcher.shared.bindRecentContext(
         to: TaskContextSubject(
           kind: recommendation.subjectKind,
           id: recommendation.subjectID,

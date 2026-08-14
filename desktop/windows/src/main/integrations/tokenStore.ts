@@ -26,9 +26,7 @@ export function loadRefreshToken(): { refreshToken: string; email?: string } | n
     if (!raw.refreshToken) return null
     const dec = safeStorage.decryptString(Buffer.from(raw.refreshToken, 'base64'))
     return { refreshToken: dec, email: raw.email }
-  } catch (error) {
-    // Corrupt/unreadable secure storage must not look like "never connected".
-    console.warn('[google] failed to load refresh token from secure storage:', error)
+  } catch {
     return null
   }
 }

@@ -232,31 +232,21 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   return [];
 }
 
-Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
+Future<ServerConversation?> getConversationById(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return (item: null, ok: false);
+  if (response == null) return null;
   if (response.statusCode == 200) {
-    return (item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>), ok: true);
+    return ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   } else if (response.statusCode == 402) {
-    // Locked conversations are still returned by the list endpoint as a
-    // redacted completed row, but their detail endpoint intentionally returns
-    // 402. Treat that response as an authoritative terminal result for
-    // lifecycle reconciliation so a stale Processing card is cleared.
-    Logger.debug('Conversation is locked/redacted: $conversationId');
-    return (item: null, ok: true);
-  } else if (response.statusCode == 404) {
-    return (item: null, ok: true);
+    Logger.debug('Unlimited Plan Required for conversation: $conversationId');
+    return null;
   }
-  return (item: null, ok: false);
-}
-
-Future<ServerConversation?> getConversationById(String conversationId) async {
-  return (await getConversationByIdResult(conversationId)).item;
+  return null;
 }
 
 Future<bool> updateConversationTitle(String conversationId, String title) async {

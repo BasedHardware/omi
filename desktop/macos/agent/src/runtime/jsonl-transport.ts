@@ -685,16 +685,11 @@ function boundedTerminalFailure(result: Awaited<ReturnType<AgentRuntimeKernel["e
     code,
     failureCode: persisted?.failureCode,
     userMessage,
-    technicalMessage: persisted?.technicalMessage
-      ? sanitizeProcessDiagnostic(persisted.technicalMessage)
-      : undefined,
+    technicalMessage: persisted?.technicalMessage,
     source: persisted?.source ?? "runtime",
     adapterId: persisted?.adapterId,
     provider: persisted?.provider,
     retryable: persisted?.retryable ?? false,
-    recoveryAction: persisted?.recoveryAction,
-    recoveryOutcome: persisted?.recoveryOutcome,
-    retryDisposition: persisted?.retryDisposition,
   });
 }
 

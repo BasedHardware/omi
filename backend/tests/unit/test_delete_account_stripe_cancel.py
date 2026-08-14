@@ -54,8 +54,6 @@ def users_service():
         "utils.other.endpoints": AutoMockModule("utils.other.endpoints"),
         "utils.memory": _pkg("utils.memory"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),
-        "utils.memory.memory_service": AutoMockModule("utils.memory.memory_service"),
-        "utils.memory.memory_system": AutoMockModule("utils.memory.memory_system"),
         "utils.other.storage": AutoMockModule("utils.other.storage"),
         "utils.twilio_service": AutoMockModule("utils.twilio_service"),
     }

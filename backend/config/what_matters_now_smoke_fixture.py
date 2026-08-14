@@ -2,7 +2,9 @@
 
 import os
 
-WHAT_MATTERS_NOW_SMOKE_UID = 'omi-dev-what-matters-now-smoke-v1'
+from config.canonical_memory_cohort import DEV_WHAT_MATTERS_NOW_SMOKE_UID
+
+WHAT_MATTERS_NOW_SMOKE_UID = DEV_WHAT_MATTERS_NOW_SMOKE_UID
 
 
 def is_development_smoke_fixture(uid: str, *, stage: str | None = None) -> bool:

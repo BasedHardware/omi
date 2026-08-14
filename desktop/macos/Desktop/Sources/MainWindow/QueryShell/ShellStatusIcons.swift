@@ -222,20 +222,13 @@ enum ShellStatusTooltip {
   /// `mode` is `CaptureListeningLogic.listeningModeTitle` — "In meeting", "Always", a named mic. The
   /// mode is not decoration: "listening" with no qualifier is a claim the meetings-only mode does not
   /// actually make.
-  ///
-  /// `isAwaitingMeeting` is the Only Meetings wait: the session is armed, the mic is paused, and a
-  /// click turns listening *off* rather than starting it. That must not reuse the "off / click to
-  /// start" sentence.
-  static func audio(state: HomeStatusState, mode: String, isAwaitingMeeting: Bool = false) -> String {
+  static func audio(state: HomeStatusState, mode: String) -> String {
     switch state {
     case .blocked:
       return "Audio — transcription unavailable. Open Settings to reconnect."
     case .active:
       return "Audio — listening (\(mode)). Click to stop."
     case .inactive:
-      if isAwaitingMeeting {
-        return "Audio — waiting for a call (\(mode)). Nothing is being transcribed. Click to turn off."
-      }
       return "Audio — off. Nothing is being transcribed. Click to start."
     }
   }
@@ -328,8 +321,9 @@ struct ShellStatusIcons: View {
   @State private var isTogglingListening = false
 
   @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
-  @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) private var audioRecordingModeRaw =
-    AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
+  @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
+  @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
+    AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
 
   var body: some View {
     HStack(spacing: 2) {
@@ -362,16 +356,18 @@ struct ShellStatusIcons: View {
 
   // MARK: Derived state
 
+  private var transcriptionUnavailable: Bool { appState.transcriptionServiceError != nil }
+
   private var listeningState: HomeStatusState {
-    CaptureListeningLogic.listeningStatus(appState: appState)
+    if transcriptionUnavailable { return .blocked }
+    return appState.isTranscribing ? .active : .inactive
   }
 
   private var listeningTooltip: String {
     ShellStatusTooltip.audio(
       state: listeningState,
       mode: CaptureListeningLogic.listeningModeTitle(
-        appState: appState, raw: audioRecordingModeRaw),
-      isAwaitingMeeting: appState.isAwaitingMeeting)
+        appState: appState, raw: systemAudioCaptureModeRaw))
   }
 
   private var captureState: HomeStatusState {
@@ -385,7 +381,7 @@ struct ShellStatusIcons: View {
   private func toggleListening() {
     CaptureListeningLogic.toggleListening(
       appState: appState,
-      audioRecordingModeRaw: $audioRecordingModeRaw,
+      transcriptionEnabled: $transcriptionEnabled,
       isTogglingListening: $isTogglingListening)
   }
 

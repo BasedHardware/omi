@@ -826,7 +826,7 @@ struct FloatingControlBarView: View {
 
   @ViewBuilder
   private var barContextMenu: some View {
-    Button("Hide for 2 hours") {
+    Button("Disable for 2 hours") {
       FloatingControlBarManager.shared.snooze(
         for: FloatingControlBarManager.snoozeTwoHoursDuration
       )
@@ -1037,7 +1037,7 @@ struct FloatingControlBarView: View {
       isVoicePresentationActive: state.isVoicePresentationActive,
       isShowingConversation: state.showingAIConversation,
       openMainChat: {
-        AppDelegate.summonWindowTarget()?.openMainAppChat()
+        (NSApp.delegate as? AppDelegate)?.openMainAppChat()
       }
     )
   }
@@ -2089,7 +2089,7 @@ private struct AgentMainChatView: View {
             DiscoveryCard(title: title, summary: summary, fullText: fullText)
               .frame(maxWidth: .infinity, alignment: .leading)
           // Rich controls are main-chat-only; floating/notch stays passive.
-          case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
+          case .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink:
             EmptyView()
           case .agentSpawn(
             _, let pillId, let sessionId, let runId, let title, let objective, let provider

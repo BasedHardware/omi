@@ -91,11 +91,6 @@ enum ChatFirstBlockWire {
       var result: [String: Any] = ["type": type, "conversation_id": conversationID, "summary": summary]
       if let timestamp = block["momentTimestampMs"] as? Int { result["moment_timestamp_ms"] = timestamp }
       return result
-    case "conversationLink":
-      guard let conversationID = block["conversationId"] as? String, let summary = block["summary"] as? String else {
-        return nil
-      }
-      return ["type": type, "conversation_id": conversationID, "summary": summary]
     case "memoryLink":
       guard let memoryID = block["memoryId"] as? String, let summary = block["summary"] as? String else { return nil }
       return ["type": type, "memory_id": memoryID, "summary": summary]
@@ -150,11 +145,6 @@ enum ChatFirstBlockWire {
       var result: [String: Any] = ["type": type, "id": id, "conversationId": conversationID, "summary": summary]
       if let timestamp = block["moment_timestamp_ms"] as? Int { result["momentTimestampMs"] = timestamp }
       return result
-    case "conversationLink":
-      guard let conversationID = block["conversation_id"] as? String, let summary = block["summary"] as? String else {
-        return nil
-      }
-      return ["type": type, "id": id, "conversationId": conversationID, "summary": summary]
     case "memoryLink":
       guard let memoryID = block["memory_id"] as? String, let summary = block["summary"] as? String else { return nil }
       return ["type": type, "id": id, "memoryId": memoryID, "summary": summary]

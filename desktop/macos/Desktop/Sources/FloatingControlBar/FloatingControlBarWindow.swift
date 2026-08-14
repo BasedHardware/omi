@@ -153,12 +153,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   static let alwaysOnTopLevel = NSWindow.Level(
     rawValue: Int(CGWindowLevelForKey(.assistiveTechHighWindow))
   )
-  /// Always-on overlay: present on every Space, pinned through Mission Control,
-  /// and omitted from Cmd-` cycling. Click and hover still reach the panel;
-  /// `.transient` would let AppKit scoop it during Space switches.
-  static let overlayCollectionBehavior: NSWindow.CollectionBehavior = [
-    .canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle,
-  ]
   static let notchExpandedWidth: CGFloat = 382
   private static let notificationWidth: CGFloat = 508
   private static let notificationHeight: CGFloat = 128
@@ -205,14 +199,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   private var draggableBarCancellable: AnyCancellable?
   private let cursorScreenTracker = CursorScreenTracker()
   private var pttHintCancellable: AnyCancellable?
-  var mouseInterceptionReconciler: FloatingBarMouseInterceptionReconciler?
   private var previousVoiceResponseGlowActive = false
   private var resizeWorkItem: DispatchWorkItem?
-  var notchRetractionScheduler: DelayedActionScheduling = TaskDelayedActionScheduler()
-  var notchRetractionCancellation: DelayedActionCancellation?
-  var notchRetractionGeneration = 0
-  var notchRevealGeneration = 0
-  var notchRevealCancellation: DelayedActionCancellation?
   /// Saved center point from before chat opened, used to restore position on close.
   private var preChatCenter: NSPoint?
   /// Token incremented each time a windowDidResignKey dismiss animation starts.
@@ -230,7 +218,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// The idle pill frame captured just before morphing into the active island
   /// on a non-notch display, so the pill returns to the exact same spot.
   private var savedPillFrame: NSRect?
-  var frameAnimationToken: Int = 0
+  private var frameAnimationToken: Int = 0
   private var pendingFrameAnimationTarget: NSRect?
   private var startupDisplayRevalidationWorkItems: [DispatchWorkItem] = []
   /// In-process NSMenus (bar context menus, the model picker) render at
@@ -259,21 +247,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     Self.screenHasCameraHousing(screenForPlacement)
   }
   private var screenForPlacement: NSScreen? {
-    FloatingBarPlacementScreenPolicy.screenForRecentering(
-      barScreen: self.screen,
-      cursorScreen: Self.screenContainingCursor(),
-      mainScreen: NSScreen.main,
-      firstScreen: NSScreen.screens.first
-    )
-  }
-
-  private static func screenContainingCursor() -> NSScreen? {
-    let mouseLocation = NSEvent.mouseLocation
-    return NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) })
-  }
-
-  private func screenUnderCursor() -> NSScreen? {
-    Self.screenContainingCursor()
+    self.screen ?? NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
   }
   private var notchSideWidth: CGFloat {
     if state.showingAIConversation {
@@ -430,12 +404,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     contentRect: NSRect, styleMask style: NSWindow.StyleMask,
     backing backingStoreType: NSWindow.BackingStoreType = .buffered, defer flag: Bool = false
   ) {
-    let initialScreen = FloatingBarPlacementScreenPolicy.screenForRecentering(
-      barScreen: Optional<NSScreen>.none,
-      cursorScreen: Self.screenContainingCursor(),
-      mainScreen: NSScreen.main,
-      firstScreen: NSScreen.screens.first
-    )
+    let initialScreen = NSScreen.main ?? NSScreen.screens.first
     let initialUsesNotchIsland = FloatingControlBarWindow.shouldUseNotchIsland(
       displayHasCameraHousing: FloatingControlBarWindow.screenHasCameraHousing(initialScreen),
       hasActiveIsland: false,
@@ -462,13 +431,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     self.isOpaque = false
     self.backgroundColor = .clear
     self.hasShadow = false
-    // NSPanel defaults hidesOnDeactivate to true, which orders the notch out
-    // when another app activates. isFloatingPanel is the overlay companion;
-    // re-assert always-on-top after it so AppKit cannot drop us to .floating.
-    self.isFloatingPanel = true
-    self.hidesOnDeactivate = false
     self.level = Self.alwaysOnTopLevel
-    self.collectionBehavior = Self.overlayCollectionBehavior
+    self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     self.isMovableByWindowBackground = false
     self.acceptsMouseMovedEvents = true
     self.delegate = self
@@ -499,48 +463,19 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     } else {
       centerOnMainScreen()
     }
-    syncMouseInterception()
     scheduleStartupDisplayRevalidation()
   }
 
   deinit {
     menuTrackingObservers.forEach(NotificationCenter.default.removeObserver)
-  }
-
-  override func makeKeyAndOrderFront(_ sender: Any?) {
-    cancelPendingRetraction()
-    applySurfaceLevel()
-    super.makeKeyAndOrderFront(sender)
-    syncMouseInterception()
-  }
-
-  override func orderFrontRegardless() {
-    cancelPendingRetraction()
-    applySurfaceLevel()
-    super.orderFrontRegardless()
-    syncMouseInterception()
-  }
-
-  override func orderOut(_ sender: Any?) {
-    notchRetractionGeneration &+= 1
-    notchRetractionCancellation?.cancel()
-    notchRetractionCancellation = nil
-    cancelInFlightNotchReveal()
-    state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
-    super.orderOut(sender)
-    syncMouseInterception()
+    interceptionMonitors.forEach(NSEvent.removeMonitor)
   }
 
   // MARK: - Window Level
 
-  /// Reasserts the bar's always-on-top overlay chrome, yielding only the
-  /// window *level* while one of our own menus is open (menus render at
-  /// .popUpMenu and must stay clickable). hidesOnDeactivate is written every
-  /// pass so a later AppKit/default restore cannot hide the notch on deactivate.
-  func applySurfaceLevel() {
-    isFloatingPanel = true
-    hidesOnDeactivate = false
-    collectionBehavior = Self.overlayCollectionBehavior
+  /// Reasserts the bar's always-on-top level, yielding only while one of our
+  /// own menus is open (menus render at .popUpMenu and must stay clickable).
+  private func applySurfaceLevel() {
     level = menuTrackingDepth > 0 ? .popUpMenu : Self.alwaysOnTopLevel
   }
 
@@ -664,13 +599,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   private func updateNotchIslandState() {
-    if FloatingBarPlacementScreenPolicy.shouldHoldIslandModeWhileScreenIsReassigning(
-      isVisible: isVisible,
-      barScreenMissing: self.screen == nil
-    ) {
-      applySurfaceLevel()
-      return
-    }
     let usesNotch = notchModeEnabled
     // Leaving the idle pill for the active island on a non-notch display —
     // remember the pill's exact spot so we can restore it when we return
@@ -829,15 +757,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       }
     }
 
-    NSWorkspace.shared.notificationCenter.addObserver(
-      forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
-    ) { [weak self] _ in
-      Task { @MainActor in
-        self?.restoreDurableBarIfAppKitOrderedItOut()
-        self?.validatePositionOnScreenChange(reason: "workspace_did_wake")
-      }
-    }
-
     draggableBarCancellable = ShortcutSettings.shared.$draggableBarEnabled
       .dropFirst()
       .sink { [weak self] _ in
@@ -856,22 +775,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   // Internal so the regression test can exercise the same workspace-transition
   // path that the NSWorkspace observer invokes.
   func performSpacesTransitionGrowIn() {
-    restoreDurableBarIfAppKitOrderedItOut()
-    let previousUsesNotchIsland = state.usesNotchIsland
     updateNotchIslandState()
+    guard notchModeEnabled, isVisible else { return }
     // Do not replay the reveal "pop" on Space changes; preserve chat size while
     // non-chat surfaces recover their canonical frame from this callback.
-    state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+    state.notchRevealProgress = 1
+    guard !state.showingAIConversation else { return }
     let targetFrame = defaultFrameForCurrentState()
-    guard
-      FloatingBarPlacementScreenPolicy.shouldReconcileFrameAfterSpaceChange(
-        isVisible: isVisible,
-        showingAIConversation: state.showingAIConversation,
-        islandModeChanged: previousUsesNotchIsland != state.usesNotchIsland,
-        frameChanged: !Self.framesEquivalent(frame, targetFrame),
-        barScreenMissing: self.screen == nil
-      )
-    else { return }
+    guard !Self.framesEquivalent(frame, targetFrame) else { return }
     resizeToFrame(targetFrame, makeResizable: styleMask.contains(.resizable), animated: false)
   }
 
@@ -994,26 +905,22 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     resizeWorkItem = nil
     frameAnimationToken += 1
     let token = frameAnimationToken
-    notchRevealGeneration &+= 1
-    let revealGeneration = notchRevealGeneration
     isResizingProgrammatically = true
     alphaValue = 1
     state.notchRevealProgress = 0.001
     setFrame(targetFrame, display: true, animate: false)
 
     OmiMotion.withGated(.easeOut(duration: duration)) {
-      state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+      state.notchRevealProgress = 1
     }
 
     DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
-      guard let self else { return }
-      if self.frameAnimationToken == token {
-        self.setFrame(targetFrame, display: true, animate: false)
-        self.alphaValue = 1
-        self.isResizingProgrammatically = false
-      }
+      guard let self, self.frameAnimationToken == token else { return }
+      self.setFrame(targetFrame, display: true, animate: false)
+      self.state.notchRevealProgress = 1
+      self.alphaValue = 1
+      self.isResizingProgrammatically = false
     }
-    scheduleNotchRevealCompletion(generation: revealGeneration, after: duration)
   }
 
   private enum NotchPointerMode {
@@ -1094,12 +1001,50 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   // an invisible click sink over everything beneath it — other apps, and Omi's own centered shell
   // (dead top-bar pills). The window-level mechanism is `ignoresMouseEvents`, kept in sync with
   // the pointer: ignored while the pointer is over dead margin, interactive over visible content.
+  // Two monitors are required — the local one sees moves while we are interactive; the global one
+  // while we are ignored (events then belong to the window below).
+  private nonisolated(unsafe) var interceptionMonitors: [Any] = []
+
+  fileprivate func syncMouseInterception() {
+    let mouse = NSEvent.mouseLocation
+    let shouldInteract: Bool
+    if frame.contains(mouse) {
+      let local = NSPoint(x: mouse.x - frame.minX, y: mouse.y - frame.minY)
+      shouldInteract = acceptsMouseHit(inContentPoint: local)
+    } else {
+      // Pointer elsewhere: stay interactive so tracking areas fire the moment it arrives.
+      shouldInteract = true
+    }
+    if ignoresMouseEvents == shouldInteract {
+      ignoresMouseEvents = !shouldInteract
+    }
+  }
+
+  private func installMouseInterceptionSync() {
+    // Monitor handlers are delivered on the main thread; hop back into MainActor explicitly.
+    let sync: @Sendable () -> Void = { [weak self] in
+      DispatchQueue.main.async { self?.syncMouseInterception() }
+    }
+    let global = NSEvent.addGlobalMonitorForEvents(
+      matching: [.mouseMoved, .leftMouseDragged],
+      handler: { _ in sync() })
+    if let global { interceptionMonitors.append(global) }
+    let local = NSEvent.addLocalMonitorForEvents(
+      matching: [.mouseMoved],
+      handler: { event in
+        sync()
+        return event
+      })
+    if let local { interceptionMonitors.append(local) }
+    syncMouseInterception()
+  }
+
   /// Non-production diagnostics seam for the `debug_hit_probe` bridge action.
   func automationAcceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
     acceptsMouseHit(inContentPoint: point)
   }
 
-  func acceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
+  fileprivate func acceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
     guard notchModeEnabled else { return true }
     // Only content that visibly fills the window may own the whole frame: an expanded
     // response panel or a notification card. A conversation that is merely open (ask input,
@@ -1132,17 +1077,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         horizontalOutset: horizontalOutset
       )
     }
-    // Surface-filling content (expanded response, notification card) owns the visible
-    // surface only, never the whole window: the frame keeps transparent glow outsets
-    // around the surface, and those margins must keep passing clicks through to other
-    // apps beneath — otherwise they are an invisible dead zone that also stops the
-    // click-away from reaching (and activating) whatever the user clicked on.
-    return FloatingControlBarGeometry.notchSurfaceContentContainsLocal(
-      localPoint: point,
-      windowSize: frame.size,
-      bottomOutset: Self.notchGlowOutsetBottom,
-      horizontalOutset: Self.notchGlowOutsetX
-    )
+    return true
   }
 
   private func observeNotchAgentPills() {
@@ -1450,7 +1385,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       // AI conversation instead of leaving the compact pill visible — unless a
       // queued notification was just flushed; hiding now would swallow it, and
       // its dismissal re-hides the bar anyway.
-      if self.shouldOrderOutAfterConversationClose {
+      if !FloatingControlBarManager.shared.isEnabled && self.state.currentNotification == nil {
         self.orderOut(nil)
       }
     }
@@ -1571,7 +1506,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       closeAIConversation()
       return
     }
-    if routePrimaryTextInputToMainAppAfterAgentExit() { return }
+
     state.leaveAgentSurface()
     if state.conversationSurface == .mainInput {
       resizeForMainInputAfterAgentExit()
@@ -1588,15 +1523,18 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     let heightProgress = targetSize.height > 0 ? startHeight / targetSize.height : 1
     let startProgress = min(1, max(0.001, min(widthProgress, heightProgress)))
 
-    notchRevealGeneration &+= 1
-    let revealGeneration = notchRevealGeneration
+    frameAnimationToken += 1
+    let token = frameAnimationToken
     state.notchRevealProgress = startProgress
 
     OmiMotion.withGated(.easeOut(duration: duration)) {
-      state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+      state.notchRevealProgress = 1
     }
 
-    scheduleNotchRevealCompletion(generation: revealGeneration, after: duration)
+    DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+      guard let self, self.frameAnimationToken == token else { return }
+      self.state.notchRevealProgress = 1
+    }
   }
 
   func clearVisibleConversationFromUI() {
@@ -1772,9 +1710,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       } ?? false
 
     if alreadyAtTarget, wasResizable == makeResizable {
-      // Hover / Space / display revalidation often land here. Bumping
-      // frameAnimationToken cancelled in-flight retract/reveal completions
-      // and left the island scaled into the camera housing.
+      frameAnimationToken += 1
       pendingFrameAnimationTarget = nil
       isResizingProgrammatically = false
       return
@@ -2090,7 +2026,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   /// Resize window for PTT state (expanded when listening, compact circle when idle)
   func resizeForPTTState(expanded: Bool) {
-    if expanded { cancelPendingRetraction() }
     if notchModeEnabled {
       if state.showingAIConversation {
         return
@@ -2115,6 +2050,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       animationDuration: 0.18
     )
   }
+
   /// Size the notch to fit the "thinking" indicator (active width) while a PTT
   /// query is being processed, then collapse it back once the response takes
   /// over. Voice listening and the open conversation surface own sizing while
@@ -2183,18 +2119,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// Pop the notch in from a near-zero scale the first time it is revealed via
   /// Push-to-Talk (it stays hidden at launch on notched displays).
   func playNotchRevealAnimation() {
-    guard notchModeEnabled else {
-      state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
-      return
-    }
-    notchRevealCancellation?.cancel()
-    notchRevealGeneration &+= 1
-    let generation = notchRevealGeneration
-    state.notchRevealProgress = FloatingBarNotchRevealPolicy.retractedProgress
+    guard notchModeEnabled else { return }
+    state.notchRevealProgress = 0.01
     OmiMotion.withGated(.easeOut(duration: 0.24)) {
-      state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+      state.notchRevealProgress = 1
     }
-    scheduleNotchRevealCompletion(generation: generation, after: 0.24)
   }
 
   /// Mirror of the reveal: shrink the island back into the camera housing,
@@ -2205,20 +2134,22 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       completion()
       return
     }
-    beginNotchRetraction(then: completion)
-  }
-
-  private func cancelPendingRetraction() {
-    notchRetractionGeneration &+= 1
-    notchRetractionCancellation?.cancel()
-    notchRetractionCancellation = nil
-    cancelInFlightNotchReveal()
-    state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
+    frameAnimationToken += 1
+    let token = frameAnimationToken
+    OmiMotion.withGated(.easeIn(duration: 0.18)) {
+      state.notchRevealProgress = 0.01
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+      guard let self, self.frameAnimationToken == token else { return }
+      completion()
+      // Leave the island ready to render for show paths that skip the
+      // reveal (e.g. showTemporarily) — the next reveal re-zeroes it.
+      self.state.notchRevealProgress = 1
+    }
   }
 
   func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
     guard !state.showingAIConversation else { return }
-    cancelPendingRetraction()
     state.currentNotification = notification
     let barHeight =
       notchModeEnabled
@@ -2353,29 +2284,19 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   private func geometryScreenVisibleFrame() -> NSRect {
-    screenForPlacement?.visibleFrame ?? .zero
+    let targetScreen = self.screen ?? NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
+    return targetScreen?.visibleFrame ?? .zero
   }
 
   private var topInsetForPillFallback: CGFloat {
     Self.topInsetWhenNotchModeFallsBackToPill
   }
 
-  /// Center the bar near the top of the display it already occupies.
+  /// Center the bar near the top of the main screen.
   private func centerOnMainScreen() {
-    if FloatingBarPlacementScreenPolicy.shouldSkipVisibleBarLayoutUntilScreenReturns(
-      isVisible: isVisible,
-      barScreenMissing: self.screen == nil
-    ) {
-      return
-    }
-    guard
-      let screen = FloatingBarPlacementScreenPolicy.screenForRecentering(
-        barScreen: self.screen,
-        cursorScreen: screenUnderCursor(),
-        mainScreen: NSScreen.main,
-        firstScreen: NSScreen.screens.first
-      )
-    else {
+    // Use the screen that has the key window, or fall back to main screen
+    let targetScreen = NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
+    guard let screen = targetScreen else {
       self.center()
       return
     }
@@ -2414,21 +2335,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
   }
 
-  func restoreDurableBarIfAppKitOrderedItOut() {
-    guard !isVisible else { return }
-    let manager = FloatingControlBarManager.shared
-    guard
-      FloatingBarDurableVisibilityPolicy.shouldRestoreWhenAppKitOrderedOut(
-        isEnabled: manager.isEnabled,
-        isSnoozed: manager.isSnoozed,
-        hasBeenPresentedThisSession: manager.hasRevealedNotchThisSession)
-    else { return }
-    state.notchRevealProgress = FloatingBarNotchRevealPolicy.revealedProgress
-    orderFrontRegardless()
-  }
-
   private func validatePositionOnScreenChange(reason: String) {
-    restoreDurableBarIfAppKitOrderedItOut()
     guard !isUserDragging else { return }
     updateNotchIslandState()
     // Non-draggable mode: always restore to default position on screen change
@@ -2473,15 +2380,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// actual screen so an idle bar cannot render as the legacy pill inside a
   /// notch-sized window (which is visually hidden by the camera housing).
   func windowDidChangeScreen(_ notification: Notification) {
-    restoreDurableBarIfAppKitOrderedItOut()
-    guard !isUserDragging else { return }
-    if FloatingBarPlacementScreenPolicy.shouldSkipVisibleBarLayoutUntilScreenReturns(
-      isVisible: isVisible,
-      barScreenMissing: self.screen == nil
-    ) {
-      return
-    }
-    guard let screen = self.screen else { return }
+    guard !isUserDragging, let screen = screenForPlacement else { return }
 
     let previousUsesNotchIsland = state.usesNotchIsland
     updateNotchIslandState()
@@ -2534,7 +2433,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   @objc func windowDidMove(_ notification: Notification) {
-    syncMouseInterception()
     // Only persist position when the user is physically dragging the bar.
     // Programmatic moves (resize animations, chat open/close) should not
     // overwrite the saved position — that causes silent drift.
@@ -2565,7 +2463,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   func windowDidResize(_ notification: Notification) {
-    syncMouseInterception()
     // Response size persistence is committed when the user finishes dragging
     // the resize grip. Persisting ordinary resize notifications here records
     // programmatic min-height transitions as user preferences because AppKit
@@ -2601,11 +2498,6 @@ enum VoiceOwnerBoundDispatch<Value: Sendable>: Sendable {
   case dispatched(Value)
 }
 
-enum TypedOwnerBoundDispatch<Value: Sendable>: Sendable {
-  case rejectedOwnerChange
-  case dispatched(Value)
-}
-
 enum OwnerBoundNotificationPresentationResult: Equatable {
   case rejectedOwnerChange
   case windowUnavailable
@@ -2622,7 +2514,6 @@ class FloatingControlBarManager {
   private static let kAskOmiEnabled = "askOmiBarEnabled"
   private static let kSnoozedUntil = "floatingBar_snoozedUntil"
   private static let recentNotificationReuseInterval: TimeInterval = 60
-  private static let durableProvenanceReuseInterval: TimeInterval = 30 * 24 * 60 * 60
   static let snoozeTwoHoursDuration: TimeInterval = 2 * 60 * 60
 
   struct NotificationProjectionSnapshot: Equatable {
@@ -2672,16 +2563,6 @@ class FloatingControlBarManager {
     return .dispatched(await dispatch())
   }
 
-  static func performOwnerBoundTypedDispatch<Value: Sendable>(
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
-    dispatch: () async -> Value
-  ) async -> TypedOwnerBoundDispatch<Value> {
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
-      return .rejectedOwnerChange
-    }
-    return .dispatched(await dispatch())
-  }
-
   private struct StoredNotificationMessage {
     let ownerID: String
     let context: FloatingBarNotificationContext?
@@ -2697,11 +2578,6 @@ class FloatingControlBarManager {
   private struct PendingNotificationContext {
     let message: ChatMessage
     let context: FloatingBarNotificationContext?
-  }
-
-  private struct NotificationPresentationCallbacks {
-    let onPresented: () -> Void
-    let onDropped: () -> Void
   }
 
   var window: FloatingControlBarWindow?
@@ -2794,8 +2670,6 @@ class FloatingControlBarManager {
   private var mostRecentNotificationKey: OwnerNotificationKey?
   private var ownerChangeCancellable: AnyCancellable?
   private var pendingNotificationContext: PendingNotificationContext?
-  private var notificationAuthorizationSnapshots: [UUID: RuntimeOwnerAuthorizationSnapshot] = [:]
-  private var notificationPresentationCallbacks: [UUID: NotificationPresentationCallbacks] = [:]
   private var activeQueryGeneration: Int = 0
   private var selectedFloatingModel: String {
     let selected = ShortcutSettings.shared.selectedModel
@@ -2840,14 +2714,13 @@ class FloatingControlBarManager {
     return snoozedUntil > Date()
   }
 
-  /// Hide the bar for the given duration. This is a statement about the BAR only:
-  /// notifications keep flowing and present via the temp-show path (card pops over the
-  /// hidden bar, then the bar re-hides). It used to also drop the queue and gate all
-  /// proactive delivery, which silently muted an hour of movie-watching after one
-  /// right-click on "Disable for 2 hours".
+  /// Hide the bar and suppress notifications for the given duration.
   func snooze(for duration: TimeInterval) {
     let until = Date().addingTimeInterval(duration)
     snoozedUntil = until
+    notificationDismissWorkItem?.cancel()
+    notificationDismissWorkItem = nil
+    pendingNotifications.removeAll()
     if let window, window.state.currentNotification != nil {
       window.dismissNotification(animated: false)
     }
@@ -2880,6 +2753,7 @@ class FloatingControlBarManager {
     }
     snoozeTimer = timer
   }
+
   private init() {
     ownerChangeCancellable = NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)
       .sink { [weak self] _ in
@@ -2893,16 +2767,9 @@ class FloatingControlBarManager {
     activeQueryGeneration &+= 1
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
-    Self.recordQueuedInsightOutcomes(pendingNotifications, reason: .staleOwner)
     pendingNotifications.removeAll()
     pendingNotificationJournalWrites.removeAll()
     storedNotificationMessages.removeAll()
-    notificationAuthorizationSnapshots.removeAll()
-    let droppedCallbacks = notificationPresentationCallbacks.values.map(\.onDropped)
-    notificationPresentationCallbacks.removeAll()
-    for callback in droppedCallbacks {
-      callback()
-    }
     mostRecentNotificationKey = nil
     pendingNotificationContext = nil
     if window?.state.currentNotification != nil {
@@ -2910,6 +2777,7 @@ class FloatingControlBarManager {
     }
     window?.state.clearVisibleConversation()
   }
+
   var notificationProjectionSnapshot: NotificationProjectionSnapshot {
     NotificationProjectionSnapshot(
       queuedCount: pendingNotifications.count,
@@ -2921,27 +2789,14 @@ class FloatingControlBarManager {
   @MainActor
   static func performOwnerBoundNotificationAdmission<Value>(
     ownerID: String,
-    authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     currentOwnerID: @escaping @MainActor () -> String? = {
       RuntimeOwnerIdentity.currentOwnerId()
     },
     record: @MainActor () async -> Value?
   ) async -> Value? {
     guard !ownerID.isEmpty, currentOwnerID() == ownerID else { return nil }
-    let authorizationSnapshot =
-      suppliedAuthorizationSnapshot
-      ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
-    if let authorizationSnapshot {
-      guard
-        authorizationSnapshot.ownerID == ownerID,
-        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
-      else { return nil }
-    }
     guard let value = await record() else { return nil }
     guard currentOwnerID() == ownerID else { return nil }
-    if let authorizationSnapshot {
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return nil }
-    }
     return value
   }
 
@@ -3380,24 +3235,13 @@ class FloatingControlBarManager {
     message: String,
     assistantId: String,
     sound: NotificationSound,
-    kind: ProactiveNotificationKind? = nil,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    insightDeliveryID: UUID? = nil,
-    screenshotData: Data? = nil,
-    authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
-    onPresented: (() -> Void)? = nil,
-    onDropped: (() -> Void)? = nil
+    screenshotData: Data? = nil
   ) -> OwnerBoundNotificationPresentationResult {
-    guard !ownerID.isEmpty,
-      let authorizationSnapshot = suppliedAuthorizationSnapshot
-        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID),
-      authorizationSnapshot.ownerID == ownerID,
-      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
-    else {
+    guard !ownerID.isEmpty, RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
       log("FloatingControlBarManager: rejecting notification from stale runtime owner")
-      onDropped?()
       return .rejectedOwnerChange
     }
     let notification = FloatingBarNotification(
@@ -3405,64 +3249,34 @@ class FloatingControlBarManager {
       title: title,
       message: message,
       assistantId: assistantId,
-      kind: kind,
       context: context,
       action: action,
       suggestionTelemetryIdentity: suggestionTelemetryIdentity,
-      insightDeliveryID: insightDeliveryID,
       screenshotData: screenshotData
     )
     guard let window else {
       log("FloatingControlBarManager: dropping notification because window is not set up")
-      onDropped?()
       return .windowUnavailable
     }
 
-    notificationAuthorizationSnapshots[notification.id] = authorizationSnapshot
+    if isSnoozed {
+      log(
+        "FloatingControlBarManager: dropping notification because bar is snoozed until \(snoozedUntil?.description ?? "?")"
+      )
+      return .suppressed
+    }
 
     if !window.state.showingAIConversation {
       persistNotificationMessageIfNeeded(notification)
     }
 
     if window.state.currentNotification != nil || window.state.showingAIConversation {
-      if let onPresented {
-        notificationPresentationCallbacks[notification.id] = NotificationPresentationCallbacks(
-          onPresented: onPresented,
-          onDropped: onDropped ?? {}
-        )
-      }
-      if let evicted = Self.appendAdviceNotification(notification, to: &pendingNotifications) {
-        notificationAuthorizationSnapshots.removeValue(forKey: evicted.id)
-        notificationPresentationCallbacks.removeValue(forKey: evicted.id)?.onDropped()
-      }
+      pendingNotifications.append(notification)
       return .queued
     }
 
-    if let onPresented {
-      notificationPresentationCallbacks[notification.id] = NotificationPresentationCallbacks(
-        onPresented: onPresented,
-        onDropped: onDropped ?? {}
-      )
-    }
-    guard presentNotification(notification, in: window) else {
-      return .rejectedOwnerChange
-    }
+    presentNotification(notification, in: window)
     return .presented
-  }
-
-  /// Read-only presentation check used before context-director candidate
-  /// graduation. It prevents expensive/durable work when the bar cannot accept
-  /// a notification, while `showNotification` remains the final race-safe gate.
-  func contextNotificationPreflight(
-    ownerID: String,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-  ) -> OwnerBoundNotificationPresentationResult {
-    guard !ownerID.isEmpty,
-      authorizationSnapshot.ownerID == ownerID,
-      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
-    else { return .rejectedOwnerChange }
-    guard window != nil else { return .windowUnavailable }
-    return .queued
   }
 
   func dismissCurrentNotification() {
@@ -3476,22 +3290,15 @@ class FloatingControlBarManager {
     else { return }
     while !pendingNotifications.isEmpty {
       let nextNotification = pendingNotifications.removeFirst()
-      guard
-        let authorizationSnapshot = notificationAuthorizationSnapshots[nextNotification.id],
-        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-        nextNotification.ownerID == authorizationSnapshot.ownerID
-      else {
-        notificationPresentationCallbacks.removeValue(forKey: nextNotification.id)?.onDropped()
-        notificationAuthorizationSnapshots.removeValue(forKey: nextNotification.id)
+      guard nextNotification.ownerID == RuntimeOwnerIdentity.currentOwnerId() else {
         log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
-        Self.recordInsightDeliveryOutcome(
-          for: nextNotification, outcome: .suppressed, reason: .staleOwner)
         continue
       }
       presentNotification(nextNotification, in: window)
       return
     }
   }
+
   /// Detach the floating UI from any in-flight chat streaming.
   func cancelChat(keepVoiceAlive: Bool = false, stopProvider: Bool = false) {
     activeQueryGeneration += 1
@@ -4053,19 +3860,10 @@ class FloatingControlBarManager {
     _ = openNotificationConversation(notificationID: notification.id, in: window)
   }
 
-  @discardableResult
-  private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) -> Bool
-  {
-    guard
-      let authorizationSnapshot = notificationAuthorizationSnapshots[notification.id],
-      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      notification.ownerID == authorizationSnapshot.ownerID
-    else {
-      notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
-      notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
+  private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) {
+    guard notification.ownerID == RuntimeOwnerIdentity.currentOwnerId() else {
       log("FloatingControlBarManager: refusing to present stale-owner notification")
-      Self.recordInsightDeliveryOutcome(for: notification, outcome: .suppressed, reason: .staleOwner)
-      return false
+      return
     }
     persistNotificationMessageIfNeeded(notification)
 
@@ -4096,12 +3894,9 @@ class FloatingControlBarManager {
     }
 
     window.showNotification(notification)
-    let callbacks = notificationPresentationCallbacks.removeValue(forKey: notification.id)
-    callbacks?.onPresented()
     if let suggestionIdentity = notification.suggestionTelemetryIdentity {
       AnalyticsManager.shared.suggestionAssistantDeliveryOutcome(.delivered, identity: suggestionIdentity)
     }
-    Self.recordAdvicePresentation(notification)
     AnalyticsManager.shared.notificationSent(
       notificationId: notification.id.uuidString,
       title: notification.title,
@@ -4115,7 +3910,6 @@ class FloatingControlBarManager {
     }
     notificationDismissWorkItem = dismissWorkItem
     DispatchQueue.main.asyncAfter(deadline: .now() + 6.0, execute: dismissWorkItem)
-    return true
   }
 
   private func dismissNotificationAndAdvanceQueue(trackDismissal: Bool) {
@@ -4123,10 +3917,6 @@ class FloatingControlBarManager {
 
     let dismissedNotification = window.state.currentNotification
     window.dismissNotification()
-    if let dismissedNotification {
-      notificationPresentationCallbacks.removeValue(forKey: dismissedNotification.id)?.onDropped()
-      notificationAuthorizationSnapshots.removeValue(forKey: dismissedNotification.id)
-    }
 
     if trackDismissal, let dismissedNotification {
       AnalyticsManager.shared.notificationDismissed(
@@ -4141,16 +3931,8 @@ class FloatingControlBarManager {
     if !window.state.showingAIConversation {
       while !pendingNotifications.isEmpty {
         let nextNotification = pendingNotifications.removeFirst()
-        guard
-          let authorizationSnapshot = notificationAuthorizationSnapshots[nextNotification.id],
-          RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-          nextNotification.ownerID == authorizationSnapshot.ownerID
-        else {
-          notificationPresentationCallbacks.removeValue(forKey: nextNotification.id)?.onDropped()
-          notificationAuthorizationSnapshots.removeValue(forKey: nextNotification.id)
+        guard nextNotification.ownerID == RuntimeOwnerIdentity.currentOwnerId() else {
           log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
-          Self.recordInsightDeliveryOutcome(
-            for: nextNotification, outcome: .suppressed, reason: .staleOwner)
           continue
         }
         presentNotification(nextNotification, in: window)
@@ -4158,10 +3940,7 @@ class FloatingControlBarManager {
       }
     }
 
-    // "Hide for 2 hours" keeps `isEnabled` true (it is not the persisted enable
-    // preference), so the snoozed state must arm the re-hide too — otherwise the first
-    // temp-shown nudge would bring the bar back for the rest of the hide window.
-    if notificationWasTemporarilyShown && (!isEnabled || isSnoozed) && !window.state.showingAIConversation {
+    if notificationWasTemporarilyShown && !isEnabled && !window.state.showingAIConversation {
       window.orderOut(nil)
     }
     notificationWasTemporarilyShown = false
@@ -4184,10 +3963,7 @@ class FloatingControlBarManager {
     // presentation surface while this async write is pending.
     let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
     let messageText = bodyText.isEmpty ? notification.title : bodyText
-    let continuityKey = ChatContinuityInvariants.proactiveNotificationContinuityKey(
-      id: notification.id,
-      kind: notification.kind)
-    guard let authorizationSnapshot = notificationAuthorizationSnapshots[notification.id] else { return }
+    let continuityKey = ChatContinuityInvariants.proactiveNotificationContinuityKey(id: notification.id)
     pendingNotificationJournalWrites.insert(key)
     Task { @MainActor [weak self, weak provider] in
       guard let self else { return }
@@ -4196,8 +3972,7 @@ class FloatingControlBarManager {
         return
       }
       let storedMessage = await Self.performOwnerBoundNotificationAdmission(
-        ownerID: ownerID,
-        authorizationSnapshot: authorizationSnapshot
+        ownerID: ownerID
       ) {
         let recorded = await provider.recordJournalExchange(
           surface: surface,
@@ -4357,7 +4132,6 @@ class FloatingControlBarManager {
 
   private func observeAgentCompletionContext(pillID: UUID, runId: String?) {
     guard AuthService.shared.isSignedIn else { return }
-    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
     let stableReference = runId.flatMap { $0.isEmpty ? nil : $0 } ?? pillID.uuidString
     let subject: TaskContextSubject? =
       runId
@@ -4374,14 +4148,8 @@ class FloatingControlBarManager {
         subject: subject
       )
     else { return }
-    Task {
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
-      let matched = await ContextSubjectBindingService.shared.resolve(
-        event,
-        authorizationSnapshot: authorizationSnapshot)
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
-      await TaskContextualResurfacingService.shared.observe(matched)
-    }
+    let matched = TaskContextSubjectMatcher.shared.resolve(event)
+    Task { await TaskContextualResurfacingService.shared.observe(matched) }
   }
 
   private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
@@ -4409,7 +4177,7 @@ class FloatingControlBarManager {
       key.ownerID == ownerID,
       let stored = storedNotificationMessages[key],
       stored.ownerID == ownerID,
-      Date().timeIntervalSince(stored.createdAt) <= Self.reuseInterval(for: stored.context),
+      Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval,
       let provider = historyChatProvider,
       let message = provider.messages.last(where: { $0.clientTurnId == stored.messageClientTurnId })
     else { return nil }
@@ -4425,7 +4193,7 @@ class FloatingControlBarManager {
     let key = OwnerNotificationKey(ownerID: ownerID, notificationID: notificationID)
     guard let stored = storedNotificationMessages[key],
       stored.ownerID == ownerID,
-      Date().timeIntervalSince(stored.createdAt) <= Self.reuseInterval(for: stored.context),
+      Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval,
       let provider = historyChatProvider,
       let notificationMessage = provider.messages.last(where: {
         $0.clientTurnId == stored.messageClientTurnId
@@ -4435,8 +4203,6 @@ class FloatingControlBarManager {
     }
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
-    let cancelledNotifications = pendingNotifications.filter { $0.id == notificationID }
-    Self.recordQueuedInsightOutcomes(cancelledNotifications, reason: .queueCancelled)
     pendingNotifications.removeAll { $0.id == notificationID }
     if window.state.currentNotification != nil {
       window.dismissNotification()
@@ -4488,7 +4254,7 @@ class FloatingControlBarManager {
   private func purgeExpiredNotificationMessages() {
     let now = Date()
     storedNotificationMessages = storedNotificationMessages.filter { _, stored in
-      now.timeIntervalSince(stored.createdAt) <= Self.reuseInterval(for: stored.context)
+      now.timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval
     }
 
     if let mostRecentNotificationKey,
@@ -4596,8 +4362,6 @@ class FloatingControlBarManager {
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
         ?? true
     else { return }
-    let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
-    guard let authorizationSnapshot else { return }
 
     // QueryTracer: `pre_llm` brackets everything between query submission and
     // the ChatProvider call (screenshot capture, usage checks, filler audio).
@@ -4711,13 +4475,9 @@ class FloatingControlBarManager {
         }
       }
 
-    let notificationContextSuffix = await notificationContextSuffixIfNeeded(
-      for: message,
-      authorizationSnapshot: authorizationSnapshot)
+    let notificationContextSuffix = notificationContextSuffixIfNeeded(for: message)
     currentTracer?.end("pre_llm")
     guard
-      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      isActiveQueryGeneration(generation),
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
         ?? true
     else { return }
@@ -4747,31 +4507,24 @@ class FloatingControlBarManager {
       guard case .dispatched(let response) = outcome else { return }
       providerResponse = response
     } else {
-      let outcome = await Self.performOwnerBoundTypedDispatch(
-        authorizationSnapshot: authorizationSnapshot
-      ) {
-        await provider.sendMessage(
-          message,
-          model: selectedFloatingModel,
-          systemPromptSuffix: notificationContextSuffix,
-          systemPromptStyle: .floating,
-          surfaceRef: provider.mainChatSurfaceReference(),
-          imageData: screenshotData,
-          turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice)),
-          clientTurnId: clientTurnId,
-          onAccepted: { [weak barWindow] in
-            barWindow?.state.clearSubmittedAIDraftIfUnchanged(message)
-          },
-          onJournalFinalized: { accepted in
-            journalAccepted = accepted
-          }
-        )
-      }
-      guard case .dispatched(let response) = outcome else { return }
-      providerResponse = response
+      providerResponse = await provider.sendMessage(
+        message,
+        model: selectedFloatingModel,
+        systemPromptSuffix: notificationContextSuffix,
+        systemPromptStyle: .floating,
+        surfaceRef: provider.mainChatSurfaceReference(),
+        imageData: screenshotData,
+        turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice)),
+        clientTurnId: clientTurnId,
+        onAccepted: { [weak barWindow] in
+          barWindow?.state.clearSubmittedAIDraftIfUnchanged(message)
+        },
+        onJournalFinalized: { accepted in
+          journalAccepted = accepted
+        }
+      )
     }
     guard
-      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
         ?? true
     else { return }
@@ -4975,27 +4728,15 @@ class FloatingControlBarManager {
     chatCancellable = nil
   }
 
-  private func notificationContextSuffixIfNeeded(
-    for message: String,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-  ) async -> String? {
+  private func notificationContextSuffixIfNeeded(for message: String) -> String? {
     guard let pendingNotificationContext else { return nil }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return nil }
 
     let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedMessage.isEmpty else { return nil }
 
-    let durableProvenance: String? =
-      if let ref = pendingNotificationContext.context?.provenanceRef {
-        await ContextBucketStore.shared.deliveryProvenance(id: ref)
-      } else {
-        nil
-      }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return nil }
     return notificationContextSuffix(
       message: pendingNotificationContext.message,
-      context: pendingNotificationContext.context,
-      durableProvenance: durableProvenance
+      context: pendingNotificationContext.context
     )
   }
 
@@ -5003,8 +4744,7 @@ class FloatingControlBarManager {
   /// Shared by the tap path and the voice path so both describe a card identically.
   private func notificationContextSuffix(
     message: ChatMessage,
-    context: FloatingBarNotificationContext?,
-    durableProvenance: String? = nil
+    context: FloatingBarNotificationContext?
   ) -> String {
     var provenanceLines: [String] = []
     if let context {
@@ -5031,12 +4771,6 @@ class FloatingControlBarManager {
       if let detail = context.detail, !detail.isEmpty {
         provenanceLines.append("detail: \(detail)")
       }
-      if let provenanceRef = context.provenanceRef, !provenanceRef.isEmpty {
-        provenanceLines.append("provenance_ref: proactive_deliveries/\(provenanceRef)")
-      }
-    }
-    if let durableProvenance, !durableProvenance.isEmpty {
-      provenanceLines.append("resolved_delivery_provenance: \(durableProvenance)")
     }
 
     let provenanceBlock = provenanceLines.isEmpty ? "" : "\n\n" + provenanceLines.joined(separator: "\n")
@@ -5068,12 +4802,6 @@ class FloatingControlBarManager {
     \(body)\(provenance)
     </floating_bar_notification_context>
     """
-  }
-
-  private static func reuseInterval(for context: FloatingBarNotificationContext?) -> TimeInterval {
-    context?.provenanceRef?.isEmpty == false
-      ? durableProvenanceReuseInterval
-      : recentNotificationReuseInterval
   }
 
   func clearPendingNotificationContext() {
@@ -5197,7 +4925,6 @@ extension FloatingControlBarWindow {
   func cancelPendingDismiss() {
     resignKeyAnimationToken += 1
     frameAnimationToken += 1
-    restoreNotchRevealProgressIfWindowStillVisible()
     if !ShortcutSettings.shared.draggableBarEnabled {
       pendingRestoreFrame = nil
     }

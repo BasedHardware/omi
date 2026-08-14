@@ -11,6 +11,7 @@ import pytest
 from models.chat_first import ChatFirstSubject, ProactiveIntent, QuestionCardSpec, QuestionOption
 from models.task_intelligence import TaskWorkflowControl
 import routers.chat_first as chat_first_router
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 
 
 def _client() -> TestClient:
@@ -33,6 +34,7 @@ def _request(*, generation: int = 7, owner_fence: str = 'user-1', receipts=None,
 
 
 def _enable_chat_first(monkeypatch, *, generation: int = 7) -> None:
+    set_canonical_cohort(monkeypatch, 'user-1')
     monkeypatch.setattr(
         chat_first_router.task_control_db,
         'get_task_workflow_control',
