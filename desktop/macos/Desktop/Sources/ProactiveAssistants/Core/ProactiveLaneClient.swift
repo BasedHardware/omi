@@ -127,6 +127,7 @@ actor ProactiveLaneClient {
   private var quotaCooldownUntil: [String: Date] = [:]
   private var loggedQuotaSkip: Set<String> = []
   private var loggedQuotaClamp: Set<String> = []
+  private var cooldownOwner: String?
 
   init(
     session: URLSession = .shared,
@@ -154,6 +155,8 @@ actor ProactiveLaneClient {
     maxCompletionTokens: Int = 1024,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ProactiveLaneResult {
+    let currentOwner = authorizationSnapshot?.ownerID
+    clearCooldownsIfOwnerChanged(currentOwner)
     try checkQuotaCooldown(operation: operation)
     if let authorizationSnapshot {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
@@ -223,6 +226,16 @@ actor ProactiveLaneClient {
     return try Self.parseEnvelope(data)
   }
 
+  private func clearCooldownsIfOwnerChanged(_ owner: String?) {
+    guard cooldownOwner != owner else { return }
+    cooldownOwner = owner
+    guard !quotaCooldownUntil.isEmpty || !loggedQuotaSkip.isEmpty || !loggedQuotaClamp.isEmpty else { return }
+    quotaCooldownUntil.removeAll()
+    loggedQuotaSkip.removeAll()
+    loggedQuotaClamp.removeAll()
+    log("Proactive lane cooldowns cleared: owner changed")
+  }
+
   private func checkQuotaCooldown(operation: String) throws {
     guard let until = quotaCooldownUntil[operation] else { return }
     let current = now()
@@ -243,7 +256,11 @@ actor ProactiveLaneClient {
   private func armQuotaCooldown(operation: String, retryAfterSeconds: Int?) {
     let requested = retryAfterSeconds.flatMap { $0 > 0 ? $0 : nil } ?? Self.defaultQuotaCooldownSeconds
     let delay = min(max(requested, Self.minQuotaCooldownSeconds), Self.maxQuotaCooldownSeconds)
-    quotaCooldownUntil[operation] = now().addingTimeInterval(TimeInterval(delay))
+    let newDeadline = now().addingTimeInterval(TimeInterval(delay))
+    if let existing = quotaCooldownUntil[operation], existing > newDeadline {
+      return
+    }
+    quotaCooldownUntil[operation] = newDeadline
     loggedQuotaSkip.remove(operation)
     if delay != requested, !loggedQuotaClamp.contains(operation) {
       loggedQuotaClamp.insert(operation)

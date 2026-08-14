@@ -275,6 +275,45 @@ final class ProactiveLaneClientTests: XCTestCase {
     try await complete(operation: ModelQoS.Proactivity.reasoningOperation, prompt: "reason", on: client)
   }
 
+  func testLaterShorterRetryWindowDoesNotShortenActiveCooldown() async throws {
+    ProactiveLaneURLStub.reset()
+    let clock = ManualDateClock(Date(timeIntervalSince1970: 1_800_000_000))
+    let client = ProactiveLaneClient(
+      session: makeStubSession(),
+      baseURL: { "https://proactive.test" },
+      authorization: { "Bearer test" },
+      now: { clock.now })
+
+    // First 429 arms a long cooldown (300s).
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 429, body: Data(), headers: ["Retry-After": "300"])
+    do {
+      _ = try await completeExtraction(on: client)
+      XCTFail("expected 429")
+    } catch ProactiveLaneClientError.http(_, _) {}
+
+    // A second overlapping 429 with a much shorter window must not shorten it.
+    ProactiveLaneURLStub.enqueue(
+      statusCode: 429, body: Data(), headers: ["Retry-After": "60"])
+    do {
+      _ = try await completeExtraction(on: client)
+      XCTFail("expected quota cooldown")
+    } catch ProactiveLaneClientError.quotaCooldown(_) {}
+
+    XCTAssertEqual(ProactiveLaneURLStub.requestCount, 2)
+
+    // Advance 70s — past the short window but inside the long one.
+    clock.advance(by: 70)
+    do {
+      _ = try await completeExtraction(on: client)
+      XCTFail("expected quota cooldown — longer deadline must be preserved")
+    } catch ProactiveLaneClientError.quotaCooldown(_) {}
+
+    XCTAssertEqual(
+      ProactiveLaneURLStub.requestCount, 2,
+      "the later shorter Retry-After must not have shortened the active cooldown")
+  }
+
   private func complete(
     operation: String,
     prompt: String,
