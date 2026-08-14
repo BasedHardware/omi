@@ -456,6 +456,52 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
     XCTAssertNil(provenance["status"])
   }
 
+  func testGraduationFailureKeepsDirectorDecisionAndBucketProvenance() async throws {
+    let deliveryID = try await seedAttemptedDelivery()
+    let versionID = try await fetchDelivery(id: deliveryID)["bucketVersionID"] as Int64
+    let provenanceJSON =
+      String(
+        data: try JSONSerialization.data(
+          withJSONObject: [
+            "bucket_entry_refs": ["entry:one"],
+            "bucket_id": "bucket",
+            "bucket_version_id": versionID,
+            "fact_ids": ["fact:one"],
+          ],
+          options: [.sortedKeys]),
+        encoding: .utf8) ?? "{}"
+    let store = ContextBucketStore.shared
+    let advanced = try await store.completeDelivery(
+      id: deliveryID,
+      decisionType: "task_candidate",
+      provenanceJSON: provenanceJSON,
+      message: "commitment",
+      state: "policy_approved")
+    XCTAssertTrue(advanced)
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: store,
+      dwellNanoseconds: 0)
+
+    await engine.recordGraduationFailure(
+      deliveryID: deliveryID,
+      decisionType: "task_candidate",
+      provenanceJSON: provenanceJSON,
+      message: "commitment",
+      reason: .stale)
+
+    let row = try await fetchDelivery(id: deliveryID)
+    XCTAssertEqual(row["decisionType"] as String?, "task_candidate")
+    XCTAssertEqual(row["lifecycleState"] as String?, "failed")
+    let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
+    XCTAssertEqual(provenance["failure"] as? String, "candidate_graduation_failed")
+    XCTAssertEqual(provenance["graduation_reason"] as? String, "stale")
+    XCTAssertEqual(provenance["bucket_id"] as? String, "bucket")
+    XCTAssertEqual((provenance["bucket_version_id"] as? NSNumber)?.int64Value, versionID)
+    XCTAssertEqual(provenance["bucket_entry_refs"] as? [String], ["entry:one"])
+    XCTAssertEqual(provenance["fact_ids"] as? [String], ["fact:one"])
+  }
+
   private func seedAttemptedDelivery() async throws -> String {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
     let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()

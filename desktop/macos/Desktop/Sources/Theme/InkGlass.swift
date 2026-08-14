@@ -359,10 +359,11 @@ package enum InkGlass {
 
 /// The broad ambient shadow under a floating panel.
 ///
-/// Not a drop shadow. The floating quality comes almost entirely from a wide, diffuse, low-opacity
-/// shadow — a tight 1 pt one reads as a sticker. It is one value for every panel size for the same
-/// reason the corner is: two floating objects on the same desktop with different shadows read as two
-/// different materials.
+/// Not a drop shadow. The floating quality comes from a soft, low-opacity lift — a 1 pt
+/// contact shadow reads as a sticker, and a 34 pt halo into a hugged window's 8 pt inset
+/// clips into a thick black band. It is one value for every panel size for the same
+/// reason the corner is: two floating objects on the same desktop with different shadows
+/// read as two different materials.
 package struct InkGlassShadow: Equatable, Sendable {
   package var radius: CGFloat
   package var opacity: Float
@@ -377,11 +378,13 @@ package struct InkGlassShadow: Equatable, Sendable {
   /// How much clear margin the panel needs *inside its window* for this shadow to render.
   ///
   /// A borderless window clips at its own bounds, so a panel drawn edge to edge has nowhere to cast
-  /// into. Callers size their window to the panel plus twice this.
-  package var padding: CGFloat { radius + abs(offsetY) + 12 }
+  /// into. Callers size their window to the panel plus twice this. Extra fudge beyond radius+offset
+  /// is what turned a lift into a clipped black band around the hugged shell.
+  package var padding: CGFloat { radius + abs(offsetY) }
 
-  /// The one shadow.
-  package static let ambient = InkGlassShadow(radius: 34, opacity: 0.24, offsetY: -10)
+  /// The one shadow. A lift, not a halo: radius 34 at 0.24 into a hugged window's 8–16 pt
+  /// inset clips into a thick black band around the glass.
+  package static let ambient = InkGlassShadow(radius: 8, opacity: 0.10, offsetY: -2)
 }
 
 // MARK: - The style

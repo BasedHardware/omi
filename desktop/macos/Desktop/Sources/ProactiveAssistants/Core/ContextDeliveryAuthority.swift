@@ -37,6 +37,17 @@ struct ContextDeliveryAttempt: Equatable, Sendable {
   let reason: ContextDeliveryGateReason
 }
 
+/// A successfully presented director notification for one bucket, used only as
+/// bounded prompt context. This is a signal to the model, not a delivery gate.
+struct ContextBucketRecentDelivery: Equatable, Sendable, Decodable, FetchableRecord {
+  static let promptCap = 3
+  static let summaryCharacterLimit = 120
+
+  let decisionType: String
+  let message: String?
+  let deliveredAt: Date
+}
+
 enum ContextDeliveryLifecycle {
   /// Nonterminal ledger states that may still advance. Terminal
   /// `failed`/`suppressed`/`delivered` rows are immutable.
@@ -269,6 +280,35 @@ extension ContextBucketStore {
         timestampColumn: timestampColumn,
         now: now)
     }
+  }
+
+  /// Newest successfully presented notifications for this bucket. Bounded so
+  /// the director prompt cannot grow without limit. Failed/suppressed rows are
+  /// excluded: the model should see what the user actually received.
+  func recentDeliveredForBucket(
+    bucketID: String,
+    now: Date = Date(),
+    limit: Int = ContextBucketRecentDelivery.promptCap
+  ) async -> [ContextBucketRecentDelivery] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    let cap = max(0, min(limit, ContextBucketRecentDelivery.promptCap))
+    guard cap > 0 else { return [] }
+    return
+      (try? await pool.read { db in
+        try ContextBucketRecentDelivery.fetchAll(
+          db,
+          sql: """
+            SELECT decisionType, message, deliveredAt FROM proactive_deliveries
+            WHERE bucketID = ?
+              AND lifecycleState = 'delivered'
+              AND deliveredAt IS NOT NULL
+              AND expiresAt > ?
+            ORDER BY deliveredAt DESC
+            LIMIT ?
+            """,
+          arguments: [bucketID, now, cap])
+      }) ?? []
   }
 
   func deliveryProvenance(id: String, now: Date = Date()) async -> String? {

@@ -88,7 +88,8 @@
         frameNumber: 0,
         captureTime: input.capturedAt)
       let prompt = ContextProactivityPromptBuilder.directorStablePrompt(snapshot: snapshot)
-      let uncachedPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(tasks: input.tasks, frame: frame)
+      let uncachedPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
+        tasks: input.tasks, frame: frame, recentDeliveries: input.recentDeliveries)
       let cacheKey = "bucket:\(snapshot.bucketID):v\(snapshot.version)"
       let started = DispatchTime.now().uptimeNanoseconds
       let result = try await completion(
@@ -136,6 +137,9 @@
       let window: String
       let capturedAt: Date
       let notifyWorthiness: Double
+      /// Optional. Lets a probe exercise the recent-delivery prompt section, which is
+      /// otherwise only reachable from the live ledger.
+      let recentDeliveries: [ContextBucketRecentDelivery]
 
       init(params: [String: String]) throws {
         bucketID = try Self.requiredString(params, key: "bucket_id", maxLength: 200)
@@ -162,6 +166,39 @@
           throw ContextBucketDirectorProbeError.invalidParams("notify_worthiness")
         }
         notifyWorthiness = parsedWorthiness
+        recentDeliveries = try Self.optionalRecentDeliveryList(
+          params, key: "recent_deliveries",
+          maxCount: ContextBucketRecentDelivery.promptCap)
+      }
+
+      /// Absent means "no recent deliveries", so existing probe callers keep their behaviour.
+      private static func optionalRecentDeliveryList(
+        _ params: [String: String],
+        key: String,
+        maxCount: Int
+      ) throws -> [ContextBucketRecentDelivery] {
+        guard let raw = params[key], !raw.isEmpty else { return [] }
+        guard let data = raw.data(using: .utf8),
+          let values = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+          values.count <= maxCount
+        else {
+          throw ContextBucketDirectorProbeError.invalidParams(key)
+        }
+        return try values.map { value in
+          guard let decisionType = value["decision_type"] as? String,
+            !decisionType.isEmpty, decisionType.count <= 32,
+            let rawDeliveredAt = value["delivered_at"] as? String,
+            let deliveredAt = Self.parseTimestamp(rawDeliveredAt)
+          else {
+            throw ContextBucketDirectorProbeError.invalidParams(key)
+          }
+          let message = value["message"] as? String
+          guard (message?.count ?? 0) <= 2_400 else {
+            throw ContextBucketDirectorProbeError.invalidParams(key)
+          }
+          return ContextBucketRecentDelivery(
+            decisionType: decisionType, message: message, deliveredAt: deliveredAt)
+        }
       }
 
       private static func requiredString(

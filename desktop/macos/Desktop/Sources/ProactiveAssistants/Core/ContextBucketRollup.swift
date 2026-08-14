@@ -165,9 +165,14 @@ enum ContextProactivityPromptBuilder {
   static func directorPrompt(
     snapshot: ContextBucketSnapshot,
     tasks: [ContextDirectorTaskContext],
-    frame: CapturedFrame
+    frame: CapturedFrame,
+    recentDeliveries: [ContextBucketRecentDelivery] = []
   ) -> String {
-    "\(directorStablePrompt(snapshot: snapshot))\n\n\(directorVolatilePrompt(tasks: tasks, frame: frame))"
+    """
+    \(directorStablePrompt(snapshot: snapshot))
+
+    \(directorVolatilePrompt(tasks: tasks, frame: frame, recentDeliveries: recentDeliveries))
+    """
   }
 
   static func directorStablePrompt(snapshot: ContextBucketSnapshot) -> String {
@@ -189,6 +194,8 @@ enum ContextProactivityPromptBuilder {
       update, recommendation, or useful follow-up without an explicit commitment, promise, or
       request is insight or suggest; never infer an owner or due date and never create a task
       candidate from actionability alone.
+      Do not re-deliver a point already delivered for this bucket unless the validated facts
+      add something materially new. Prefer silence over restating.
 
       \(stableBucket)
       """
@@ -196,7 +203,8 @@ enum ContextProactivityPromptBuilder {
 
   static func directorVolatilePrompt(
     tasks: [ContextDirectorTaskContext],
-    frame: CapturedFrame
+    frame: CapturedFrame,
+    recentDeliveries: [ContextBucketRecentDelivery] = []
   ) -> String {
     let actionableCutoff = frame.captureTime.addingTimeInterval(
       ContextDirectorTaskSelection.futureHorizon)
@@ -209,7 +217,7 @@ enum ContextProactivityPromptBuilder {
       return "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))"
     }
     let taskContext = taskLines.joined(separator: "\n")
-    return """
+    var prompt = """
       == OPEN OR OVERDUE TASKS ==
       \(taskContext)
 
@@ -218,6 +226,49 @@ enum ContextProactivityPromptBuilder {
       Window: \(frame.windowTitle ?? "")
       Captured at (UTC): \(utcTimestamp(frame.captureTime))
       """
+    if let recent = recentDeliveriesSection(recentDeliveries, now: frame.captureTime) {
+      prompt += "\n\n\(recent)"
+    }
+    return prompt
+  }
+
+  static func recentDeliveriesSection(
+    _ deliveries: [ContextBucketRecentDelivery],
+    now: Date
+  ) -> String? {
+    let entries = Array(deliveries.prefix(ContextBucketRecentDelivery.promptCap))
+    guard !entries.isEmpty else { return nil }
+    let lines = entries.map { delivery -> String in
+      let decision = String(delivery.decisionType.prefix(32))
+      let age = relativeAge(from: delivery.deliveredAt, now: now)
+      let summary = boundedSummary(delivery.message)
+      if summary.isEmpty {
+        return "- \(decision) (\(age))"
+      }
+      return "- \(decision) (\(age)): \(summary)"
+    }
+    return """
+      == RECENTLY DELIVERED FOR THIS BUCKET ==
+      \(lines.joined(separator: "\n"))
+      """
+  }
+
+  static func relativeAge(from deliveredAt: Date, now: Date) -> String {
+    let seconds = max(0, Int(now.timeIntervalSince(deliveredAt).rounded(.down)))
+    if seconds < 60 { return "\(seconds)s ago" }
+    let minutes = seconds / 60
+    if minutes < 60 { return "\(minutes)m ago" }
+    let hours = minutes / 60
+    if hours < 48 { return "\(hours)h ago" }
+    return "\(hours / 24)d ago"
+  }
+
+  static func boundedSummary(_ message: String?) -> String {
+    let collapsed =
+      (message ?? "")
+      .replacingOccurrences(of: "\n", with: " ")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return String(collapsed.prefix(ContextBucketRecentDelivery.summaryCharacterLimit))
   }
 
   private static func utcTimestamp(_ date: Date) -> String {

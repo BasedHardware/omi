@@ -188,8 +188,6 @@ public class ProactiveAssistantsPlugin: NSObject {
   private let capturePollInterval: TimeInterval = 1.0
   /// Exempts HID idleness while another process plays media (movie night ≠ away).
   private let mediaPlaybackDetector = MediaPlaybackDetector()
-  /// One log line per idle-but-watching episode, not one per poll tick.
-  private var didLogMediaIdleExemption = false
   /// Apps whose content changes slowly. The value is the heartbeat interval in seconds.
   /// Uses bundle ID when available, falling back to localized app name.
   private let appSpecificHeartbeatIntervals: [String: TimeInterval] = [
@@ -785,22 +783,13 @@ public class ProactiveAssistantsPlugin: NSObject {
     // for an hour but is still watching — MediaPlaybackIdlePolicy), and Maximum
     // notification level additionally extends the window to 300s for HID-idle WITHOUT
     // media (reading a static feed). Calmer levels keep the 60s threshold.
-    let hidIdleSeconds = systemIdleSeconds()
-    let idleSeconds = MediaPlaybackIdlePolicy.effectiveIdleSeconds(
-      hidIdleSeconds: hidIdleSeconds,
-      isDisplaySleepPrevented: mediaPlaybackDetector.isDisplaySleepPrevented())
     let idleThreshold = SuggestionPacing.captureIdleThreshold(
       frequencyLevel: NotificationService.currentFrequencyLevel(),
       base: captureTrigger.idleThreshold
     )
-    if hidIdleSeconds >= idleThreshold, idleSeconds < idleThreshold,
-      !didLogMediaIdleExemption
-    {
-      didLogMediaIdleExemption = true
-      log("CaptureGate: HID-idle but media playback active — capture continues")
-    } else if hidIdleSeconds < idleThreshold {
-      didLogMediaIdleExemption = false
-    }
+    let idleSeconds = mediaPlaybackDetector.effectiveIdleSeconds(
+      hidIdleSeconds: systemIdleSeconds(),
+      threshold: idleThreshold)
     if idleSeconds >= idleThreshold {
       logCaptureGate("idle")
       return
