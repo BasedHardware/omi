@@ -30,6 +30,7 @@ import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
+import 'package:omi/services/capture/capture_foreground_keepalive_sync.dart';
 import 'package:omi/services/capture/capture_keepalive_policy.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
@@ -85,8 +86,7 @@ class CaptureController extends ChangeNotifier
   DateTime? _keepAliveLastExecutedAt;
   DateTime? _lastAudioFrameAt;
   DateTime? _captureRecordingStartedAt;
-  bool _captureForegroundHeld = false;
-  int _fgSyncGen = 0;
+  final CaptureForegroundKeepAliveSync _captureForegroundKeepAlive = CaptureForegroundKeepAliveSync();
   Timer? _foregroundLivenessTimer;
   Timer? _inProgressConversationRefreshTimer;
   int _inProgressConversationRefreshAttempts = 0;
@@ -1412,10 +1412,14 @@ class CaptureController extends ChangeNotifier
 
   void updateRecordingState(RecordingState state) {
     final wasLive = isLiveCaptureRecordingState(recordingState);
+    final isLive = isLiveCaptureRecordingState(state);
     recordingState = state;
-    if (isLiveCaptureRecordingState(state) && !wasLive) {
+    if (shouldClearCaptureAudioTimestamp(wasLive: wasLive, isLive: isLive)) {
+      _lastAudioFrameAt = null;
+    }
+    if (isLive && !wasLive) {
       _captureRecordingStartedAt = DateTime.now();
-    } else if (!isLiveCaptureRecordingState(state)) {
+    } else if (!isLive) {
       _captureRecordingStartedAt = null;
     }
     unawaited(_syncCaptureForegroundKeepAlive());
@@ -1424,40 +1428,43 @@ class CaptureController extends ChangeNotifier
 
   void _noteAudioFrame() {
     _lastAudioFrameAt = DateTime.now();
+    if (shouldResyncCaptureForegroundOnAudioFrame(
+      currentlyHeld: _captureForegroundKeepAlive.held,
+      recordingState: recordingState,
+    )) {
+      unawaited(_syncCaptureForegroundKeepAlive());
+    }
   }
 
   Future<void> _syncCaptureForegroundKeepAlive() async {
     if (!(Platform.isIOS || Platform.isAndroid)) return;
-    final gen = ++_fgSyncGen;
-    final hold = shouldHoldCaptureForegroundTask(
-      recordingState: recordingState,
-      lastAudioFrameAt: _lastAudioFrameAt,
-      recordingStartedAt: _captureRecordingStartedAt,
-      now: DateTime.now(),
-    );
-    _foregroundLivenessTimer?.cancel();
-    if (hold && isLiveCaptureRecordingState(recordingState)) {
-      _foregroundLivenessTimer = Timer(captureForegroundAudioStaleAfter, () {
-        unawaited(_syncCaptureForegroundKeepAlive());
-      });
-    }
-    if (hold == _captureForegroundHeld) {
-      return;
-    }
     try {
-      if (hold) {
-        await ForegroundUtil.initializeForegroundService();
-        if (gen != _fgSyncGen) return;
-        await ForegroundUtil.ensureForegroundTask();
-        if (gen != _fgSyncGen) return;
-        _captureForegroundHeld = true;
-      } else {
-        await ForegroundUtil.stopForegroundTask();
-        if (gen != _fgSyncGen) return;
-        await ForegroundUtil.deactivateBluetoothAudioSession();
-        if (gen != _fgSyncGen) return;
-        _captureForegroundHeld = false;
-      }
+      await _captureForegroundKeepAlive.apply(
+        desiredHold: () {
+          final hold = shouldHoldCaptureForegroundTask(
+            recordingState: recordingState,
+            lastAudioFrameAt: _lastAudioFrameAt,
+            recordingStartedAt: _captureRecordingStartedAt,
+            now: DateTime.now(),
+          );
+          _foregroundLivenessTimer?.cancel();
+          // Wearable FGS is frame-driven; re-check after the stale window.
+          // Phone-mic / system-audio hold for the whole session.
+          if (hold && isBluetoothCaptureForegroundOwner(recordingState)) {
+            _foregroundLivenessTimer = Timer(captureForegroundAudioStaleAfter, () {
+              unawaited(_syncCaptureForegroundKeepAlive());
+            });
+          }
+          return hold;
+        },
+        bluetoothSessionOwner: () => isBluetoothCaptureForegroundOwner(recordingState),
+        start: () async {
+          await ForegroundUtil.initializeForegroundService();
+          await ForegroundUtil.ensureForegroundTask();
+        },
+        stop: ForegroundUtil.stopForegroundTask,
+        deactivateBluetoothAudioSession: ForegroundUtil.deactivateBluetoothAudioSession,
+      );
     } catch (e) {
       Logger.debug('Capture foreground keep-alive sync failed: $e');
     }
