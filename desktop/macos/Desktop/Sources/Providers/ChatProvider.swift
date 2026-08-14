@@ -5175,7 +5175,8 @@ class ChatProvider: ObservableObject {
         screenToolApprovalRequired: metricsSnapshot.screenContext.screenToolApprovalRequired,
         screenToolFailureCodes: metricsSnapshot.screenContext.screenToolFailureCodes,
         runtimeRunId: queryResult.runId,
-        runtimeAttemptId: queryResult.attemptId
+        runtimeAttemptId: queryResult.attemptId,
+        modelName: effectiveRequestModel
       )
       let acceptedMessageSnapshot = messages.first(where: { $0.id == aiMessageId })
       _ = await ChatVisibleTurnCompletion.finish(

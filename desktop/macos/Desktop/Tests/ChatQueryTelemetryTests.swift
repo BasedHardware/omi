@@ -212,7 +212,8 @@ final class ChatQueryTelemetryTests: XCTestCase {
       screenToolRequested: true,
       screenToolSucceeded: false,
       screenToolApprovalRequired: false,
-      screenToolFailureCodes: ["permission_denied", "person@example.com"]
+      screenToolFailureCodes: ["permission_denied", "person@example.com"],
+      modelName: "claude-sonnet-4-6"
     )
 
     XCTAssertEqual(metrics.toolNames, ["other", "read", "search_memories", "websearch"])
@@ -222,6 +223,7 @@ final class ChatQueryTelemetryTests: XCTestCase {
       durationMs: 1,
       metrics: metrics
     ).analyticsPayload
+    XCTAssertEqual(payload.properties["model_name"] as? String, "claude-sonnet-4-6")
     let serializedDimensions = [
       payload.properties["tool_names"] as? String,
       payload.properties["screen_tool_failure_codes"] as? String,
@@ -229,6 +231,8 @@ final class ChatQueryTelemetryTests: XCTestCase {
     XCTAssertFalse(serializedDimensions.contains("medical"))
     XCTAssertFalse(serializedDimensions.contains("/Users"))
     XCTAssertFalse(serializedDimensions.contains("@"))
+    XCTAssertEqual(ChatTelemetryDimension.modelName("private prompt person@example.com"), "unknown")
+    XCTAssertEqual(ChatTelemetryDimension.modelName(nil), "unknown")
   }
 
   func testDiagnosticErrorClassesAreBounded() {
