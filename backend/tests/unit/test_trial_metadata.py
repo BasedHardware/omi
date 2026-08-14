@@ -138,7 +138,7 @@ def _get_trial_metadata_fn():
         'logger': MagicMock(),
         'get_plan_display_name': lambda p: 'Free' if p == PlanType.basic else p.value.capitalize(),
         'FREE_CHAT_QUESTIONS_PER_MONTH': 30,
-        '_request_has_all_byok_keys': lambda: False,
+        '_request_has_llm_byok_key': lambda: False,
         'DESKTOP_ACCESS_TIER_FREE': 'desktop_free',
         'DESKTOP_ACCESS_TIER_FULL': 'desktop_full',
         'DESKTOP_ACCESS_TIER_ARCHITECT': 'desktop_architect',

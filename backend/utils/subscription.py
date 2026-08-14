@@ -167,10 +167,6 @@ _TRIAL_PAYWALL_DESKTOP_TOKENS = DESKTOP_PLATFORMS | {"desktop"}
 # so chat-quota polling doesn't fan out to Firebase on every request.
 _TRIAL_PAYWALL_CACHE_TTL_SECONDS = 300
 
-# Providers a fully-enrolled BYOK desktop client always sends headers for.
-# Used by the request-level escape hatch in `_is_trial_expired_cached`.
-_BYOK_REQUIRED_PROVIDERS = ("openai", "anthropic", "gemini", "deepgram")
-
 
 def _request_has_llm_byok_key() -> bool:
     if get_byok_llm_provider() in {'chatgpt', 'grok'}:
@@ -178,23 +174,6 @@ def _request_has_llm_byok_key() -> bool:
     return has_validated_byok_keys() and any(
         get_byok_keys().get(provider) for provider in ('openrouter', 'openai', 'anthropic', 'gemini')
     )
-
-
-def _request_has_all_byok_keys() -> bool:
-    """True if the *current request* carries headers for every enrolled BYOK
-    provider.
-
-    Firestore BYOK state is the source of truth for fingerprint validation,
-    but it can be temporarily stale — heartbeat just expired, activation
-    POST hasn't landed yet, cross-region read replica lag, etc. A user who is
-    literally sending all valid API keys on this request should never be
-    paywalled because of a Firestore sync gap. The actual fingerprint check
-    in `utils.byok._check_byok_validity` runs separately and still rejects
-    forged headers (mismatched SHA-256 against the enrolled fingerprints) —
-    we trust the headers' *presence* here, not their *contents*.
-    """
-    keys = get_byok_keys()
-    return all(p in keys and keys[p] for p in _BYOK_REQUIRED_PROVIDERS)
 
 
 def _is_trial_expired_uncached(uid: str, *, firestore_client: Any | None = None, provision: bool = True) -> bool:
@@ -332,12 +311,12 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
         # BYOK users, has usable Desktop access. In particular, Neo's Free
         # Desktop tier is a floor, not a trial-only or zero-access state.
         # Same request-level escape hatch as `_is_trial_expired_cached`: a request
-        # carrying all 4 BYOK provider headers is treated as BYOK-active even if
-        # Firestore hasn't caught up yet.
+        # carrying an enrolled LLM BYOK provider header is treated as BYOK-active
+        # even if Firestore hasn't caught up yet.
         if (
             not desktop_trial_paywall_eligible(plan, subscription)
             or users_db.is_byok_active(uid)
-            or _request_has_all_byok_keys()
+            or _request_has_llm_byok_key()
         ):
             return TrialMetadata(
                 trial_expired=False,
