@@ -4,7 +4,15 @@ COLLECTION_GROUP -> no ``_parent``. This mirrors firestore.indexes.json so Mongo
 instead of a collection scan; the mapping is pure and tested here without a live Mongo.
 """
 
-from scripts.reconcile_mongo_indexes import firestore_index_to_mongo_keys, load_manifest, planned_indexes
+import pytest
+
+from scripts.reconcile_mongo_indexes import (
+    create_planned_indexes,
+    firestore_index_to_mongo_keys,
+    load_manifest,
+    planned_indexes,
+    reconcile_mongo_indexes,
+)
 
 
 def test_collection_scope_prefixes_parent_and_maps_name_to_id():
@@ -67,3 +75,53 @@ def test_plan_covers_every_manifest_index_plus_parent_baseline():
     # names are unique (idempotent create_index keys)
     names = [(c, n) for c, _, n in plan]
     assert len(names) == len(set(names))
+
+
+class _FakeCollection:
+    def __init__(self, name, calls):
+        self._name = name
+        self._calls = calls
+
+    def create_index(self, keys, name=None, background=None):
+        self._calls.append((self._name, keys, name, background))
+
+
+class _FakeDb:
+    def __init__(self):
+        self.calls = []
+
+    def __getitem__(self, name):
+        return _FakeCollection(name, self.calls)
+
+
+def test_create_planned_indexes_issues_one_background_create_per_plan_item():
+    # The boot-time hook (main.startup_event, STORAGE_BACKEND=mongo) provisions every planned index.
+    # Assert create_index is called once per plan item with the mapped keys/name, background=True
+    # (non-blocking on Mongo), and that the ensured list mirrors the plan (cubic PR 10887 #6).
+    db = _FakeDb()
+    plan = [
+        ("conversations", [("_parent", 1), ("d.created_at", -1)], "conversations__parent_1__d.created_at_-1"),
+        ("people", [("_parent", 1)], "people__parent_1"),
+    ]
+    ensured = create_planned_indexes(db, plan)
+    assert ensured == ["conversations.conversations__parent_1__d.created_at_-1", "people.people__parent_1"]
+    assert db.calls == [
+        ("conversations", [("_parent", 1), ("d.created_at", -1)], "conversations__parent_1__d.created_at_-1", True),
+        ("people", [("_parent", 1)], "people__parent_1", True),
+    ]
+
+
+def test_create_planned_indexes_defaults_to_the_full_manifest_plan():
+    # Called with no explicit plan it must ensure every index planned_indexes() derives from the manifest.
+    db = _FakeDb()
+    ensured = create_planned_indexes(db)
+    assert len(ensured) == len(planned_indexes(load_manifest()))
+    assert len(db.calls) == len(ensured)
+
+
+def test_reconcile_mongo_indexes_requires_mongo_uri(monkeypatch):
+    # The startup entry fails loud when MONGO_URI is unset; the boot hook (main) catches this so a
+    # misconfigured/unavailable Mongo logs instead of blocking startup.
+    monkeypatch.delenv("MONGO_URI", raising=False)
+    with pytest.raises(RuntimeError, match="MONGO_URI"):
+        reconcile_mongo_indexes()

@@ -103,6 +103,7 @@ from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from services.users.account_deletion import reconcile_pending_deletion_wipes
+from scripts.reconcile_mongo_indexes import reconcile_mongo_indexes
 
 # Log LangSmith tracing status at startup
 log_langsmith_status()
@@ -270,6 +271,24 @@ async def startup_event():
         name='startup_stale_processing_reconcile',
     )
     start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
+    # On the on-prem Mongo backend (ADR-0046), the store adapter has no auto-created indexes, so scoped
+    # queries/counts would collection-scan at any real size (cubic PR 10887 #6). Provision the indexes
+    # mirroring firestore.indexes.json at boot — idempotent (createIndex is a no-op once they exist) and
+    # best-effort (a broken/slow Mongo must not block startup). No-op on the Firestore backend.
+    if (os.environ.get("STORAGE_BACKEND") or "firestore").strip().lower() == "mongo":
+        start_background_task(
+            run_blocking(db_executor, _reconcile_mongo_indexes_on_startup),
+            name='startup_mongo_index_reconcile',
+        )
+
+
+def _reconcile_mongo_indexes_on_startup():
+    """Best-effort provisioning of the Mongo secondary indexes on startup (STORAGE_BACKEND=mongo)."""
+    try:
+        ensured = reconcile_mongo_indexes()
+        logger.info(f"Startup Mongo index reconciliation ensured {len(ensured)} indexes")
+    except Exception as e:
+        logger.error(f"Startup Mongo index reconciliation failed: {e}")
 
 
 def _drain_pending_deletion_wipes():

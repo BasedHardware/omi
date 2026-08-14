@@ -29,7 +29,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Any, List, Mapping, Tuple
+from typing import Any, List, Mapping, Optional, Tuple
 
 MANIFEST_PATH = Path(__file__).resolve().parents[2] / "firestore.indexes.json"
 
@@ -98,6 +98,34 @@ def planned_indexes(manifest: Mapping[str, Any]) -> List[Tuple[str, MongoIndexKe
     return plan
 
 
+def create_planned_indexes(db: Any, plan: Optional[List[Tuple[str, MongoIndexKeys, str]]] = None) -> List[str]:
+    """Create every planned index on ``db`` (a pymongo Database). Idempotent — ``create_index`` is a
+    no-op when the index already exists — so this is safe to re-run every deploy/boot. Returns the
+    ``collection.name`` of each index ensured."""
+    plan = plan if plan is not None else planned_indexes(load_manifest())
+    ensured: List[str] = []
+    for collection, keys, name in plan:
+        db[collection].create_index(keys, name=name, background=True)
+        ensured.append(f"{collection}.{name}")
+    return ensured
+
+
+def reconcile_mongo_indexes(db_name: Optional[str] = None) -> List[str]:
+    """Open a short-lived client from ``MONGO_URI`` and ensure every planned index. This is the entry
+    the backend calls at startup (STORAGE_BACKEND=mongo) so a self-hosted Mongo deployment provisions
+    its indexes without a manual step. Raises if ``MONGO_URI`` is unset."""
+    uri = os.getenv("MONGO_URI")
+    if not uri:
+        raise RuntimeError("MONGO_URI must be set")
+    from pymongo import MongoClient  # local import so callers/--dry-run need no pymongo
+
+    client = MongoClient(uri)
+    try:
+        return create_planned_indexes(client[db_name or os.getenv("MONGO_DB", "omi")])
+    finally:
+        client.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create Mongo indexes mirroring firestore.indexes.json")
     parser.add_argument("--dry-run", action="store_true", help="print the plan without creating indexes")
@@ -113,19 +141,8 @@ def main() -> None:
         print("--dry-run: no indexes created")
         return
 
-    uri = os.getenv("MONGO_URI")
-    if not uri:
-        raise SystemExit("MONGO_URI must be set")
-    from pymongo import MongoClient  # local import so --dry-run needs no pymongo
-
-    client = MongoClient(uri)
-    try:
-        db = client[args.db]
-        for collection, keys, name in plan:
-            db[collection].create_index(keys, name=name, background=True)
-            print(f"  created {collection}.{name}")
-    finally:
-        client.close()
+    for ensured in reconcile_mongo_indexes(db_name=args.db):
+        print(f"  ensured {ensured}")
     print("done")
 
 

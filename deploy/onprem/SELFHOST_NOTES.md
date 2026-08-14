@@ -54,6 +54,11 @@ self-hosted stack (ADR-0046)** — Mongo is the default store, no profile needed
   in base/prod; the cloud posture points at a **real** Firestore.
 - Profiles (`auth/chat/objstore/push/inference/firestore`) are orthogonal feature toggles, added
   per-run. `mongo` is no longer a profile — Mongo is the default and always on in `selfhost`.
+- **Mongo indexes are provisioned automatically at backend startup** (`STORAGE_BACKEND=mongo`): the
+  boot hook mirrors `firestore.indexes.json` into Mongo compound indexes (idempotent, best-effort —
+  a slow/unready Mongo logs and does not block boot) so scoped queries/counts hit an index instead of
+  a collection scan. To (re)run it out of band: `docker compose -f compose.<env>.yaml exec backend
+  python -m scripts.reconcile_mongo_indexes` (`--dry-run` prints the plan).
 - Because `compose.prod.cloud.yaml` includes **base only**, none of the self-hosted services are even
   *defined* there — the cloud posture **cannot start one by accident**, even with `--profile`.
 
