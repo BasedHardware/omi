@@ -33,7 +33,9 @@ public final class ContextStore: @unchecked Sendable {
 
     // MARK: - Retention policy
 
-    /// How old screenshots may get. The first of the two retention bounds.
+    /// How old a **screenshot** may get before the picture is dropped and the row keeps its text.
+    /// The first of the two retention bounds. See ``expireFrameImages(olderThanDays:now:)`` for why
+    /// the row survives; nothing in this file deletes a frame row, a transcript or a word of text.
     public static let defaultRetentionDays = 30
 
     /// How much screenshot storage may accumulate, regardless of age — the second bound, and the one
@@ -116,10 +118,76 @@ public final class ContextStore: @unchecked Sendable {
                 withIntermediateDirectories: true)
             ContextPaths.setPermissions(url.deletingLastPathComponent(), mode: 0o700)
             pool = try DatabasePool(path: url.path, configuration: Self.makeConfiguration(readOnly: false))
-            try Self.makeMigrator().migrate(pool)
+            try Self.migrate(pool, at: url)
             ContextPaths.setPermissions(url, mode: 0o600)
             ContextPaths.setPermissions(URL(fileURLWithPath: url.path + "-wal"), mode: 0o600)
             ContextPaths.setPermissions(URL(fileURLWithPath: url.path + "-shm"), mode: 0o600)
+        }
+    }
+
+    /// Serialises migration across every writable store **this process** opens.
+    ///
+    /// The in-process half of the pair. `ContextStore` is opened twice inside the app —
+    /// `EngineStore.open()` for capture, and the upload queue's lazy open — and each builds its own
+    /// `DatabasePool`, i.e. its own SQLite connection. `barrierWriteWithoutTransaction`, which GRDB
+    /// does hold around a migration, is a *pool* barrier and knows nothing about the second pool.
+    private static let migrationLock = NSLock()
+
+    /// Migrates `pool`, with the whole read-then-apply sequence serialised against every other
+    /// process holding this database.
+    ///
+    /// **The bug this exists for.** A real launch could not open its database:
+    /// `index idx_frames_showable already exists`, thrown out of `init`, so the app started with no
+    /// store and drew an empty Activity spine over 2,837 captured frames.
+    ///
+    /// `DatabaseMigrator` is not safe to run concurrently against one file and does not say so.
+    /// `runMigrations` reads the applied-identifier ledger **outside any transaction**, and only
+    /// then runs each migration inside its own `IMMEDIATE` one. Two connections that begin at the
+    /// same moment therefore both compute the same list of unapplied migrations; the winner creates
+    /// the index and records the row, and the loser — holding a conclusion that is now stale — runs
+    /// the same `CREATE INDEX` and throws. Both the connections in one process and two processes on
+    /// the shared path (`~/Library/Application Support/ContextForClaude/context.db`: the installed
+    /// app, a locally built one, a Sparkle update handoff, a second copy launched from the DMG) can
+    /// be the two.
+    ///
+    /// GRDB's own bookkeeping is **not** implicated and was checked rather than assumed:
+    /// `Migration.run` wraps the schema change and its `INSERT INTO grdb_migrations` in one
+    /// `IMMEDIATE` transaction, so a migration is never half-recorded, and the ledger on the machine
+    /// that failed holds all ten identifiers. The failure is a lost race, not a torn write.
+    ///
+    /// **The repair is to wait before reading, not to retry after failing.** ``MigrationGate`` takes
+    /// an exclusive `flock` beside the database, so a second process blocks *before* the migrator
+    /// reads the ledger and re-reads it once the first has committed — which is the ordering that
+    /// makes the conclusion current instead of stale. `busy_timeout` cannot do this: it makes a
+    /// statement wait for a lock, and the statement that needed to wait here had already been chosen
+    /// on out-of-date information.
+    ///
+    /// Two weaker guards sit under it, and neither is the mechanism:
+    ///
+    /// - Every migration is written to survive running against a schema that already carries it
+    ///   (`.ifNotExists`, and a column check for `ALTER TABLE`), so a database whose schema has run
+    ///   ahead of its ledger by any route stays openable.
+    /// - If the gate itself cannot be taken — a read-only volume, a sandbox that refuses the file —
+    ///   a failure is re-tested against the ledger instead of being believed. **A store that opens
+    ///   is the requirement**: when the winner has already done every migration this binary knows
+    ///   about, there is nothing wrong with the database and refusing to open it helps nobody.
+    private static func migrate(_ pool: DatabasePool, at url: URL) throws {
+        migrationLock.lock()
+        defer { migrationLock.unlock() }
+
+        let gate = MigrationGate(besideDatabaseAt: url)
+        defer { gate.release() }
+
+        let migrator = makeMigrator()
+        do {
+            try migrator.migrate(pool)
+        } catch {
+            guard let completed = try? pool.read({ try migrator.hasCompletedMigrations($0) }),
+                completed
+            else { throw error }
+            // Worth a line: with the gate held this should be unreachable, so seeing it means the
+            // gate did not take. Schema state only, never user data.
+            log.info("Migration lost a race; the schema is already current, continuing")
         }
     }
 
@@ -274,53 +342,96 @@ public final class ContextStore: @unchecked Sendable {
         }
     }
 
-    /// Deletes frames (and their JPEGs) older than `days`. Transcripts are never pruned.
+    /// Drops the **picture** of every frame older than `days` and keeps everything readable about
+    /// it: the row, its OCR text, its accessibility text, and every FTS entry built from them.
+    /// Returns how many images went.
     ///
-    /// Screenshots are the only thing here that grows without bound; text costs almost nothing, and
-    /// a transcript the user cannot recall a year later is exactly the thing this app exists for.
-    /// Returns the number of rows removed.
+    /// **This is the whole tiered-retention idea, and it replaces deleting the row.** The pixels are
+    /// what grows without bound — measured on this machine's capture, 27.0 KB per stored image
+    /// against 3.7 KB of database per frame, so images are 88% of what a year costs — while the text
+    /// is what makes the app useful months later. `recall`, `screen` and the search panel all read
+    /// `ocrText` and `axText`; not one of them opens the image. Deleting the row to reclaim the
+    /// picture threw away the only half worth keeping, and did it to reclaim the half that was
+    /// already going anyway.
+    ///
+    /// **An image-less frame is already a shape this codebase handles.** `RewindQueries.frames` and
+    /// the `idx_frames_showable` partial index both filter on `imagePath IS NOT NULL`, and ~8.7% of
+    /// captured rows never had an image at all. So an expired frame becomes exactly what a frame
+    /// captured without a screenshot has always been: searchable, and absent from the timeline.
+    ///
+    /// **`axRootHash` goes with the image, and it has to.** The hash is the frame's pointer into the
+    /// content-addressed `ax_nodes` graph, and ``sweepAXNodes(graceSeconds:limit:now:)`` collects a
+    /// node when no stored frame's tree can still reach it. Rows now live forever, so a root held
+    /// forever would make every node permanently reachable and quietly un-fix the sweep that bounds
+    /// that table — ~370 MB a year at the shape `v10-ax-node-last-seen` measured. The *text* of the
+    /// tree is not in those nodes: `axText` is denormalised onto the frame and survives untouched.
+    /// What is lost with the picture is the structure of the picture, which is the same thing.
+    ///
+    /// **Interruption can only ever leak a file, never dangle a row.** The column is nulled and
+    /// committed *before* the unlink, so a crash in between leaves an image no row names — which is
+    /// reclaimable, and is what ``sweepOrphanedFrameImages(graceSeconds:now:)`` exists for. The
+    /// other order would leave rows pointing at files that are gone, which nothing can repair and
+    /// every reader would meet as a broken frame. Chunked, so an interrupted pass leaves whole
+    /// chunks done rather than one enormous transaction rolled back.
     @discardableResult
-    public func pruneFrames(olderThanDays days: Int) throws -> Int {
-        let cutoff = ContextTime.now - Double(days) * 86_400
+    public func expireFrameImages(olderThanDays days: Int, now: Double = ContextTime.now) throws -> Int {
+        // Refuse up front rather than on the first write. Retention through the MCP reader is a
+        // caller bug, and a silent "0 images" would hide it on every machine with nothing to expire.
+        guard !isReadOnly else { throw ContextStoreError.readOnly }
+        let cutoff = now - Double(days) * 86_400
 
-        let (deleted, imagePaths) = try write { db -> (Int, [String]) in
-            // Collect paths before the delete; afterwards the rows are gone and the JPEGs would leak.
-            let paths = try String.fetchAll(
-                db,
-                sql: "SELECT imagePath FROM frames WHERE capturedAt < ? AND imagePath IS NOT NULL",
-                arguments: [cutoff])
-            try db.execute(sql: "DELETE FROM frames WHERE capturedAt < ?", arguments: [cutoff])
-            return (db.changesCount, paths)
+        var expired = 0
+        var freed: Int64 = 0
+        while true {
+            let ids = try read { db in
+                try Int64.fetchAll(
+                    db,
+                    sql: """
+                        SELECT id FROM frames
+                        WHERE capturedAt < ? AND imagePath IS NOT NULL
+                        ORDER BY capturedAt ASC
+                        LIMIT ?
+                        """,
+                    arguments: [cutoff, Self.deleteChunkSize])
+            }
+            guard !ids.isEmpty else { break }
+            let outcome = try expireImages(ofFrames: ids)
+            expired += outcome.expired
+            freed += outcome.freed
         }
-
-        // Unlink outside the transaction: thousands of file removals must not hold the single writer
-        // connection while capture is running.
-        let fileManager = FileManager.default
-        for path in imagePaths {
-            try? fileManager.removeItem(atPath: path)
-        }
+        guard expired > 0 else { return 0 }
         removeEmptyDayDirectories()
 
-        return deleted
+        // Counts and bytes only: never a path, which is a window title and a date.
+        Self.log.info(
+            """
+            Frame retention: expired \(expired, privacy: .public) \
+            \(expired == 1 ? "image" : "images") past \(days, privacy: .public) days, \
+            \(Self.describe(freed), privacy: .public) reclaimed, every row and its text kept
+            """)
+        return expired
     }
 
-    /// Deletes the oldest frames until the frames directory is at or under `bytes`, whatever their
-    /// age. Returns how many rows went.
+    /// Drops the oldest **pictures** until the frames directory is at or under `bytes`, whatever
+    /// their age. Returns how many images went.
     ///
-    /// The companion bound to `pruneFrames(olderThanDays:)`: that one caps how *old* screenshots may
-    /// get, this one caps how *much* of them there may be, and on any given machine the tighter of
-    /// the two decides. An age rule alone is unbounded in bytes — a Mac that captures three times the
-    /// average simply stores three times as much — and this app is designed to sit at login for
-    /// weeks, which is precisely the machine an age rule fails to protect.
+    /// The companion bound to ``expireFrameImages(olderThanDays:now:)``: that one caps how *old*
+    /// screenshots may get, this one caps how *much* of them there may be, and on any given machine
+    /// the tighter of the two decides. An age rule alone is unbounded in bytes — a Mac that captures
+    /// three times the average simply stores three times as much — and this app is designed to sit
+    /// at login for weeks, which is precisely the machine an age rule fails to protect.
     ///
-    /// Deletion is strictly oldest-first, so what survives is always the most recent stretch of
-    /// screen history rather than an arbitrary subset of it, and it stops the instant the total is
-    /// under the cap: a frame that does not have to go does not go. Transcripts are never considered
-    /// — they are small, and they are the half that cannot be recaptured.
+    /// Strictly oldest-first, so what keeps its picture is always the most recent stretch of screen
+    /// history rather than an arbitrary subset of it, and it stops the instant the total is under
+    /// the cap: a frame that does not have to lose its image does not lose it.
+    ///
+    /// **Frames that have no image are skipped rather than counted.** They free nothing, and the
+    /// row-deleting predecessor of this method appended them to its doomed list anyway — so once
+    /// the age tier began leaving image-less rows behind, the byte pass would have deleted every one
+    /// of them, and all their text, before it freed a single byte. Skipping them is what makes the
+    /// two tiers composable at all.
     @discardableResult
-    public func pruneFrames(toFitBytes bytes: Int64) throws -> Int {
-        // Refuse up front rather than on the first write. Retention through the MCP reader is a
-        // caller bug, and a silent "0 rows" would hide it on every machine that is under the cap.
+    public func expireFrameImages(toFitBytes bytes: Int64) throws -> Int {
         guard !isReadOnly else { throw ContextStoreError.readOnly }
         let cap = max(0, bytes)
 
@@ -329,51 +440,85 @@ public final class ContextStore: @unchecked Sendable {
         guard bytesBefore > cap else { return 0 }
 
         var projected = bytesBefore
-        var doomed: [FrameFile] = []
+        var doomed: [Int64] = []
         for frame in frames {
             if projected <= cap { break }
-            doomed.append(frame)
+            guard frame.path != nil else { continue }
+            doomed.append(frame.id)
             projected -= frame.bytes
         }
         guard !doomed.isEmpty else { return 0 }
 
-        let ids = doomed.map(\.id)
-        let deleted = try write { db -> Int in
-            var count = 0
-            // One transaction across every chunk, so the rows and their FTS trigger updates commit
-            // together — a partially applied sweep would leave search answering with frames whose
-            // screenshots are already gone.
-            for start in stride(from: 0, to: ids.count, by: Self.deleteChunkSize) {
-                let chunk = Array(ids[start..<min(start + Self.deleteChunkSize, ids.count)])
-                try db.execute(
-                    sql: "DELETE FROM frames WHERE id IN (\(databaseQuestionMarks(count: chunk.count)))",
-                    arguments: StatementArguments(chunk))
-                count += db.changesCount
-            }
-            return count
-        }
-
-        // Unlink outside the transaction: thousands of file removals must not hold the single writer
-        // connection while capture is running. Only paths read off the rows just deleted are touched,
-        // so a screenshot written a millisecond ago — whose row is not in this set — is never at risk.
-        let fileManager = FileManager.default
+        var expired = 0
         var freed: Int64 = 0
-        for frame in doomed {
-            guard let path = frame.path else { continue }
-            if (try? fileManager.removeItem(atPath: path)) != nil { freed += frame.bytes }
+        for start in stride(from: 0, to: doomed.count, by: Self.deleteChunkSize) {
+            let chunk = Array(doomed[start..<min(start + Self.deleteChunkSize, doomed.count)])
+            let outcome = try expireImages(ofFrames: chunk)
+            expired += outcome.expired
+            freed += outcome.freed
         }
         removeEmptyDayDirectories()
 
-        // A user who finds a gap in their screen history deserves to see that retention made it, not
-        // guess at a fault. Bytes only: never a path, a window title, or a line of OCR.
-        let summary = """
-            Frame retention: over the \(Self.describe(cap)) cap, removed \(deleted) \
-            \(deleted == 1 ? "frame" : "frames"), \
-            \(Self.describe(bytesBefore)) → \(Self.describe(bytesBefore - freed)) on disk
+        // A user who finds their older screen history has no pictures deserves to see that retention
+        // made it, not guess at a fault. Bytes only: never a path, a window title, or a line of OCR.
+        Self.log.info(
             """
-        Self.log.info("\(summary, privacy: .public)")
+            Frame retention: over the \(Self.describe(cap), privacy: .public) cap, expired \
+            \(expired, privacy: .public) \(expired == 1 ? "image" : "images"), \
+            \(Self.describe(bytesBefore), privacy: .public) → \
+            \(Self.describe(bytesBefore - freed), privacy: .public) on disk
+            """)
+        return expired
+    }
 
-        return deleted
+    /// Nulls the image (and tree root) of the named frames, then unlinks what nothing names.
+    ///
+    /// The ordering is the safety property — see ``expireFrameImages(olderThanDays:now:)``. Two
+    /// further details:
+    ///
+    /// - The unlink happens **outside** the transaction. Thousands of `unlink` calls must not hold
+    ///   the single writer connection while capture is running.
+    /// - Only a path that no *surviving* row still names is unlinked, re-read inside the same
+    ///   transaction that did the nulling. Nothing in capture writes two rows against one file
+    ///   today, but this is a delete: it costs one query per chunk to make that an invariant of the
+    ///   code rather than an assumption about a file it does not own.
+    private func expireImages(ofFrames ids: [Int64]) throws -> (expired: Int, freed: Int64) {
+        guard !ids.isEmpty else { return (0, 0) }
+        let placeholders = databaseQuestionMarks(count: ids.count)
+
+        let (expired, orphaned) = try write { db -> (Int, [String]) in
+            let paths = try String.fetchAll(
+                db,
+                sql: "SELECT imagePath FROM frames WHERE imagePath IS NOT NULL AND id IN (\(placeholders))",
+                arguments: StatementArguments(ids))
+            guard !paths.isEmpty else { return (0, []) }
+
+            try db.execute(
+                sql: "UPDATE frames SET imagePath = NULL, axRootHash = NULL WHERE id IN (\(placeholders))",
+                arguments: StatementArguments(ids))
+            let changed = db.changesCount
+
+            // Committed with the nulling, so the file list and the rows can never disagree.
+            var arguments: [DatabaseValueConvertible] = []
+            arguments.append(contentsOf: paths)
+            let stillNamed = Set(
+                try String.fetchAll(
+                    db,
+                    sql: """
+                        SELECT imagePath FROM frames
+                        WHERE imagePath IN (\(databaseQuestionMarks(count: paths.count)))
+                        """,
+                    arguments: StatementArguments(arguments)))
+            return (changed, paths.filter { !stillNamed.contains($0) })
+        }
+
+        let fileManager = FileManager.default
+        var freed: Int64 = 0
+        for path in orphaned {
+            let bytes = Self.fileBytes(at: path)
+            if (try? fileManager.removeItem(atPath: path)) != nil { freed += bytes }
+        }
+        return (expired, freed)
     }
 
     // MARK: - Sweeps
@@ -595,24 +740,26 @@ public final class ContextStore: @unchecked Sendable {
         }
     }
 
-    /// Applies both retention bounds and returns the total **frame rows** removed.
+    /// Applies both retention bounds and returns the total **images** expired.
     ///
-    /// Age first — one indexed delete that cheaply removes most of what has to go — then the byte cap
-    /// over whatever survived it, and then the two sweeps that collect what those deletes orphaned.
+    /// Age first — one indexed pass that cheaply covers most of what has to go — then the byte cap
+    /// over whatever survived it, and then the two sweeps that collect what those passes orphaned.
     /// The sweeps are inside this call rather than on a schedule of their own because they exist to
-    /// finish this job: an image whose row went and a subtree whose last frame went are both created
-    /// by the lines above, and neither has any other owner.
+    /// finish this job: an image whose row no longer names it and a subtree whose last root was
+    /// cleared are both created by the lines above, and neither has any other owner.
     ///
-    /// The count is frames, and only frames, so the caller's "removed *n* frames" stays true —
-    /// reclaimed files and collected subtrees are the same frames counted again, and each sweep
-    /// reports its own totals to the log.
+    /// **Nothing here deletes a frame row, a transcript, or a word of text.** That is the shape of
+    /// the whole feature: after the horizon a screen moment keeps its OCR, its accessibility text
+    /// and its place in every FTS index, and loses only the picture. The count is images, and only
+    /// images, so a caller's "expired *n* images" stays true — reclaimed files and collected
+    /// subtrees are the same frames counted again, and each sweep reports its own totals to the log.
     @discardableResult
     public func enforceRetention(
         olderThanDays days: Int = ContextStore.defaultRetentionDays,
         toFitBytes bytes: Int64 = ContextStore.defaultFrameBytesCap
     ) throws -> Int {
-        let byAge = try pruneFrames(olderThanDays: days)
-        let byBytes = try pruneFrames(toFitBytes: bytes)
+        let byAge = try expireFrameImages(olderThanDays: days)
+        let byBytes = try expireFrameImages(toFitBytes: bytes)
         try sweepOrphanedFrameImages()
         try sweepAXNodes()
         return byAge + byBytes
@@ -743,15 +890,62 @@ public final class ContextStore: @unchecked Sendable {
         var config = Configuration()
         config.readonly = readOnly
         config.prepareDatabase { db in
+            // **First, before any statement that can meet a lock.** It used to be last, and every
+            // pragma above it therefore ran with SQLite's default busy timeout of zero — including
+            // `journal_mode = WAL`, which takes an exclusive lock. Two connections opening the same
+            // file at once (this process opens two writable stores: capture's and the upload
+            // queue's) meant the second one failed outright with `SQLite error 5: database is
+            // locked - while executing PRAGMA journal_mode = WAL` instead of waiting the moment out.
+            // Setting it first is what makes every later statement on this connection patient.
+            try db.execute(sql: "PRAGMA busy_timeout = 5000")
             if !readOnly {
-                try db.execute(sql: "PRAGMA journal_mode = WAL")
+                try enableWriteAheadLogging(db)
                 try db.execute(sql: "PRAGMA synchronous = NORMAL")
             }
             try db.execute(sql: "PRAGMA foreign_keys = ON")
-            try db.execute(sql: "PRAGMA busy_timeout = 5000")
         }
         return config
     }
+
+    /// Puts the database in WAL, tolerating other connections doing the same thing at the same
+    /// moment.
+    ///
+    /// **Checked before it is set, and retried, because `busy_timeout` does not cover this
+    /// statement.** Switching journal mode needs a lock no other connection holds, and SQLite
+    /// answers `SQLITE_BUSY` for it *without* invoking the busy handler — so the timeout that makes
+    /// every other statement on this connection patient does nothing here. Two writable stores
+    /// opening a brand-new database together therefore had one of them fail outright with
+    /// `SQLite error 5: database is locked - while executing PRAGMA journal_mode = WAL`, which the
+    /// app's own launch produces: `EngineStore.open()` and the upload queue's lazy open.
+    ///
+    /// The contention exists only while the file is still in `delete` mode. WAL is recorded in the
+    /// database header, so once any connection has made the transition every later one reads `wal`
+    /// and asks for nothing — which is why a bounded retry is enough rather than a lock. Re-reading
+    /// after a refusal is what makes it converge: the connection that lost is looking at a database
+    /// the winner has already converted.
+    private static func enableWriteAheadLogging(_ db: Database) throws {
+        for attempt in 0..<Self.walTransitionAttempts {
+            if try String.fetchOne(db, sql: "PRAGMA journal_mode")?.lowercased() == "wal" { return }
+            do {
+                try db.execute(sql: "PRAGMA journal_mode = WAL")
+                return
+            } catch let error as DatabaseError where error.resultCode == .SQLITE_BUSY {
+                // Another connection is mid-transition. Give it the moment it needs, then look
+                // again — the next read almost always finds the mode already changed.
+                if attempt + 1 < Self.walTransitionAttempts { usleep(20_000) }
+            }
+        }
+        // One last read rather than a throw: the loop may have spent its attempts losing races to a
+        // connection that has by now succeeded, and refusing to open a perfectly good WAL database
+        // would turn a transient collision into a failed launch.
+        guard try String.fetchOne(db, sql: "PRAGMA journal_mode")?.lowercased() == "wal" else {
+            throw ContextStoreError.couldNotEnableWAL
+        }
+    }
+
+    /// Tries over ~0.2 s in total. Long enough for a first-open collision between two connections,
+    /// short enough that a genuinely stuck database surfaces as an error rather than a hung launch.
+    private static let walTransitionAttempts = 10
 
     /// The schema. Built fresh per call rather than held in a static so nothing non-Sendable becomes
     /// shared global state.
@@ -956,11 +1150,20 @@ public final class ContextStore: @unchecked Sendable {
         // Every other showable read — `frames`, `frameCount`, `nearestCapture`, `newestFrames` —
         // already had `idx_frames_capturedAt` for its range and now gets a smaller index serving the
         // same order, so none of them regress.
+        //
+        // `.ifNotExists`, and the same on `v9` below, because a migration that cannot be run twice
+        // is a migration that turns any already-applied schema into a database the app refuses to
+        // open. See ``migrate(_:)`` for how that state is reached — a lost race between two writable
+        // stores in this one process — and note that the option is *not* what fixes the race: the
+        // ledger insert would still collide. It is what keeps a database whose schema has run ahead
+        // of its ledger by any route openable, which the recorded failure proves is a state that
+        // occurs. It costs a fresh install nothing: there is no index to find, so the index is made.
         migrator.registerMigration("v8-frame-showable-index") { db in
             try db.create(
                 index: "idx_frames_showable",
                 on: "frames",
                 columns: ["capturedAt"],
+                options: .ifNotExists,
                 condition: Column("imagePath") != nil)
         }
 
@@ -983,6 +1186,7 @@ public final class ContextStore: @unchecked Sendable {
                 index: "idx_frames_bundle_by_app",
                 on: "frames",
                 columns: ["appName", "id"],
+                options: .ifNotExists,
                 condition: Column("bundleId") != nil)
         }
 
@@ -1005,7 +1209,15 @@ public final class ContextStore: @unchecked Sendable {
         // existing backlog — which is the one population this migration exists to make collectable.
         // Unindexed, because the sweep scans the table in `rowid` order by design and an index over
         // a value rewritten on every capture would cost more than the scan it saves.
+        //
+        // Guarded rather than `IF NOT EXISTS`, which SQLite's `ALTER TABLE ADD COLUMN` does not
+        // have. The reason is `v8-frame-showable-index`'s: a migration that throws when its work is
+        // already done makes an already-migrated schema unopenable, and `duplicate column name:
+        // lastSeenAt` is the shape this one would take.
         migrator.registerMigration("v10-ax-node-last-seen") { db in
+            guard try !db.columns(in: "ax_nodes").contains(where: { $0.name == "lastSeenAt" }) else {
+                return
+            }
             try db.alter(table: "ax_nodes") { t in
                 t.add(column: "lastSeenAt", .double).notNull().defaults(to: 0)
             }
@@ -1036,6 +1248,51 @@ public final class ContextStore: @unchecked Sendable {
     }
 }
 
+/// An exclusive, cross-process lock held for the length of one migration.
+///
+/// `flock` rather than a lock row in the database, a `PRAGMA locking_mode`, or `NSDistributedLock`.
+/// The property that matters is that the lock **cannot go stale**: the kernel drops it when the
+/// descriptor closes, including when the holder is killed or crashes mid-migration, so a process
+/// that dies half way through cannot leave every future launch of this app waiting on a lock file
+/// nobody owns. A lock expressed inside the database could not cover the case either, since the
+/// contended resource *is* the database's own write lock.
+///
+/// Its own file, not the database: `flock` on the SQLite file would collide with SQLite's locking,
+/// and the gate has to be held across several transactions rather than inside one.
+///
+/// **Failing to take the gate is not an error.** A read-only volume or a sandbox that refuses the
+/// file leaves the caller exactly where it was before this type existed — racing, and covered by the
+/// two weaker guards ``ContextStore/migrate(_:at:)`` documents. Refusing to open a database because
+/// a lock file could not be made would turn a rare race into a certain failure.
+final class MigrationGate {
+    private var descriptor: Int32 = -1
+
+    /// Blocks until no other process is migrating this database.
+    init(besideDatabaseAt url: URL) {
+        let path = url.path + ".migrate.lock"
+        // 0o600 to match the database itself; this file sits inside the 0700 support directory and
+        // never holds anything but an advisory lock.
+        descriptor = open(path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+        guard descriptor >= 0 else { return }
+        // `flock` restarts on EINTR under Darwin's default `SA_RESTART`, but a signal handler
+        // installed without it can still surface one, and giving up on the lock is worse than
+        // asking again.
+        while flock(descriptor, LOCK_EX) != 0 && errno == EINTR {}
+    }
+
+    /// Idempotent, so the `defer` that calls it is safe however the migration left.
+    func release() {
+        guard descriptor >= 0 else { return }
+        // Closing releases the lock; the explicit unlock keeps that true even if a future change
+        // holds the descriptor open for something else.
+        flock(descriptor, LOCK_UN)
+        close(descriptor)
+        descriptor = -1
+    }
+
+    deinit { release() }
+}
+
 public enum ContextStoreError: Error {
     /// A write was attempted on the `context-for-claude-mcp` reader.
     case readOnly
@@ -1046,4 +1303,8 @@ public enum ContextStoreError: Error {
     case awaitingAppUpgrade
     /// A cloud segment cannot be safely replaced without both backend identity components.
     case missingCloudSegmentIdentity
+    /// The database would not move to WAL and is not already in it. Every reader in this package
+    /// depends on WAL to see a consistent snapshot without blocking capture, so opening anyway
+    /// would trade a clear failure for transcript lines dropped under load.
+    case couldNotEnableWAL
 }
