@@ -24,3 +24,8 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "8000:8080"
+  keycloak:
+    # DEV/seed realm: the seeder (seed_meld_users.py) mints tokens via the omi-test direct-access
+    # client, so the seed posture uses the dev realm variant (cubic review 4909186286 #5).
+    volumes:
+      - ./keycloak/omi-realm.dev.example.json:/opt/keycloak/data/import/omi-realm.json:ro

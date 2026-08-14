@@ -19,6 +19,12 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "8000:8080"
+  keycloak:
+    # DEV realm: adds the omi-test direct-access client + testuser for the OIDC contract test and
+    # manual SSO login (cubic review 4909186286 #5). Mounted per-environment; prod uses the variant
+    # without test principals.
+    volumes:
+      - ./keycloak/omi-realm.dev.example.json:/opt/keycloak/data/import/omi-realm.json:ro
 
   # Firestore emulator — DEV-ONLY, opt-in (ADR-0046). The on-prem default is Mongo (base); this exists
   # only so a dev can exercise the Firestore reference adapter locally without Google:

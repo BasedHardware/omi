@@ -73,9 +73,12 @@ a restart drops any notification a device has not yet fetched). A plain `down` k
 
 Keycloak runs in **production mode** (`start`, not `start-dev`) with a persistent `dev-file` H2 DB on
 `keycloak-data`, so realm state — including the imported `omi-backend-admin` service-account client —
-lives across restarts. `--import-realm` seeds a **fresh** volume from `keycloak/omi-realm.example.json`;
-on an existing volume KC logs "Realm 'omi' already exists. Import skipped" and keeps the persisted
-realm. **To re-import after editing the realm JSON**, remove just that volume:
+lives across restarts. `--import-realm` seeds a **fresh** volume from the per-environment realm JSON —
+`keycloak/omi-realm.example.json` for **prod** (no test principals) or `keycloak/omi-realm.dev.example.json`
+for **dev/seed** (adds the `omi-test` direct-access client + `testuser`); the base compose omits the
+realm mount so exactly one variant is bound per environment (review #5). On an existing volume KC logs
+"Realm 'omi' already exists. Import skipped" and keeps the persisted realm. **To re-import after
+editing the realm JSON**, remove just that volume:
 `docker compose stop keycloak && docker volume rm <project>_keycloak-data && docker compose up -d keycloak`
 (the realm JSON description fields must stay ≤255 chars — the H2 `CLIENT.DESCRIPTION` column limit).
 
@@ -572,11 +575,12 @@ Proves the OIDC adapter validates a real provider's token to the same neutral Pr
 (loopback); `firebase` is skipped unless a firebase emulator is wired (the fake is the reference).
 
 ```bash
-# 1. Keycloak importing the COMMITTED realm — provisions realm 'omi' + client 'omi-test' (direct
-#    access) + user 'testuser/testpass' + the `omi-backend` Audience protocol mapper on omi-app/omi-test.
+# 1. Keycloak importing the DEV realm — provisions realm 'omi' + client 'omi-test' (direct access) +
+#    user 'testuser/testpass' + the `omi-backend` Audience protocol mapper on omi-app/omi-test. Use
+#    the .dev variant: the prod realm (omi-realm.example.json) omits the test client/user (review #5).
 docker run -d --name kc-contract --network host \
   -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
-  -v $(git rev-parse --show-toplevel)/deploy/onprem/keycloak/omi-realm.example.json:/opt/keycloak/data/import/omi-realm.json:ro \
+  -v $(git rev-parse --show-toplevel)/deploy/onprem/keycloak/omi-realm.dev.example.json:/opt/keycloak/data/import/omi-realm.json:ro \
   quay.io/keycloak/keycloak:26.0 start-dev --http-port=8080 --import-realm   # wait: curl 127.0.0.1:8080/realms/omi -> 200
 # 2. Contract suite (mints a token via the password grant, verifies via the adapter's JWKS). The token
 #    carries aud=omi-backend from the realm's Audience mapper; OIDC_AUDIENCE must match (fail-closed).
@@ -722,8 +726,9 @@ HOST_IP=<your-ip> ./gen-dev-certs.sh     # self-signed CA + server cert (SAN=HOS
 docker compose -f compose.prod.yaml --profile auth up -d --build     # keycloak(+kc-proxy https) + api-proxy(https) + backend + deps
 ```
 `keycloak` runs http-only behind `kc-proxy` (TLS on `${KC_HTTPS_PORT}`, `--proxy-headers`); the API runs
-behind `api-proxy` (TLS on `${API_HTTPS_PORT}`). The realm (`keycloak/omi-realm.example.json`) imports
-`omi-app` (public PKCE, redirect `omiauth:/oidc-callback`) + `testuser`. **Issuer/JWKS split-horizon**
+behind `api-proxy` (TLS on `${API_HTTPS_PORT}`). The prod realm (`keycloak/omi-realm.example.json`)
+imports `omi-app` (public PKCE, redirect `omiauth:/oidc-callback`) only — no test principals (review
+#5); `testuser` lives in the dev realm (`omi-realm.dev.example.json`). **Issuer/JWKS split-horizon**
 (proven): the token `iss` = the public `KC_HOSTNAME`, so `OIDC_ISSUER` must equal that; the backend
 fetches keys over the **internal http** backchannel, so it needs no CA.
 
@@ -844,11 +849,12 @@ Dedicated declarative config (per ADR-0043, layered over the common base):
   `STORAGE_BACKEND=mongo` (real on-prem store, no Google) + Qdrant + host embeddings (`bge-m3`).
 
 Prerequisites:
-- Keycloak realm `omi` up: `keycloak/omi-realm.example.json` (auto-imported via `--import-realm`)
-  ships the public direct-access client (`omi-test`) **and** the confidential service-account client
-  (`omi-backend-admin`, realm-management `view-users` role) for `OIDC_ADMIN_*` (resolves the user's
-  display name used in memory attribution). The client's DEV secret is in the realm JSON and in
-  `backend.env.seed(.example)` — they must match; regenerate a strong secret for production.
+- Keycloak realm `omi` up: the seed posture mounts the DEV realm `keycloak/omi-realm.dev.example.json`
+  (auto-imported via `--import-realm`), which ships the public direct-access client (`omi-test`) **and**
+  the confidential service-account client (`omi-backend-admin`, realm-management `view-users` role) for
+  `OIDC_ADMIN_*` (resolves the user's display name used in memory attribution). The prod realm
+  (`omi-realm.example.json`) omits `omi-test`/`testuser` (review #5). The client's DEV secret is in the
+  realm JSON and in `backend.env.seed(.example)` — they must match; regenerate a strong secret for production.
 - Backend reachable at `--api-url`, validating the same issuer's JWKS. Mongo (`STORAGE_BACKEND=mongo`).
 - Operator LLM (chat, e.g. `qwen2.5:14b` via the gateway) + a 1024-dim embeddings model (`bge-m3`).
 - **`OLLAMA_NUM_PARALLEL=1`** is NOT required, but on a single small GPU concurrent chat + embeddings

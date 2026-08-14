@@ -13,6 +13,11 @@ services:
     env_file:
       - ./backend.env.base
       - ./backend.env.prod
+  keycloak:
+    # PROD realm: no direct-access test client/user (cubic review 4909186286 #5). The realm JSON is
+    # mounted per-environment (base intentionally omits it) so test principals never reach prod.
+    volumes:
+      - ./keycloak/omi-realm.example.json:/opt/keycloak/data/import/omi-realm.json:ro
 networks:
   omi:
     internal: true
