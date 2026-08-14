@@ -39,7 +39,12 @@ from ..records import StoredDocument
 from ..sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 from ..ports import Filter
 
-_OP = {"<": "$lt", "<=": "$lte", ">": "$gt", ">=": "$gte", "in": "$in", "==": "$eq", "!=": "$ne"}
+# ``array_contains_any`` maps to ``$in``: on an array-valued field Mongo's $in matches when ANY array
+# element is in the given list (mirrors Firestore array_contains_any). ``not-in`` -> ``$nin``.
+_OP = {
+    "<": "$lt", "<=": "$lte", ">": "$gt", ">=": "$gte", "in": "$in", "==": "$eq", "!=": "$ne",
+    "not-in": "$nin", "array_contains_any": "$in",
+}
 
 
 def _now() -> datetime:
@@ -134,6 +139,17 @@ class _MongoBatch:
                 ReplaceOne({"_id": path}, document, upsert=True),
                 lambda coll: coll.replace_one({"_id": path}, document, upsert=True),
             )
+            # A non-merge set can still carry neutral transforms (SERVER_TIMESTAMP/Increment/ArrayUnion).
+            # Mirror MongoDocumentStore._set: apply them in a follow-up update right after the replace, or
+            # the batch silently drops them (Firestore's batch translates them natively — parity).
+            transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
+            if transforms:
+                transform_ops = _build_update_ops(transforms)
+                self._append(
+                    collection_name,
+                    UpdateOne({"_id": path}, transform_ops),
+                    lambda coll, _o=transform_ops: coll.update_one({"_id": path}, _o),
+                )
 
     def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)

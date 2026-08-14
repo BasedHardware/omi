@@ -30,6 +30,8 @@ _OPS = {
     ">": lambda a, b: a > b,
     ">=": lambda a, b: a >= b,
     "array_contains": lambda a, b: isinstance(a, (list, tuple)) and b in a,
+    "not-in": lambda a, b: a not in b,
+    "array_contains_any": lambda a, b: isinstance(a, (list, tuple)) and any(x in a for x in b),
 }
 
 
@@ -294,7 +296,12 @@ class FakeDocumentStore:
         # regardless of parent (e.g. ``users/{uid}/fair_use_state/current`` matches ``fair_use_state``).
         rows = [(p, d) for p, d in self._docs.items() if p.rsplit("/", 1)[0].rsplit("/", 1)[-1] == group]
         for field, op, value in filters or ():
-            rows = [(p, d) for p, d in rows if field in d and _OPS[op](d[field], value)]
+            if "." in field:
+                # Resolve dotted paths (e.g. ``subject.kind``) like the real adapters and ``query()``,
+                # so collection-group filters on embedded fields are emulated faithfully (not top-level only).
+                rows = [(p, d) for p, d in rows if (nested := _get_path(d, field)) is not None and _OPS[op](nested, value)]
+            else:
+                rows = [(p, d) for p, d in rows if field in d and _OPS[op](d[field], value)]
         reverse = direction == "desc"
         if isinstance(order_by, str):
             rows.sort(key=lambda pd: (pd[1].get(order_by), pd[0]), reverse=reverse)

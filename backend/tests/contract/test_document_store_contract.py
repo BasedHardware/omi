@@ -251,6 +251,27 @@ def test_query_array_contains(store, uid):
     assert store.count(base, filters=[("tags", "array_contains", "persona")]) == 2
 
 
+def test_query_array_contains_any(store, uid):
+    # cubic PR 10887 A3: array_contains_any must work on every backend (Mongo raised KeyError before,
+    # crashing the review-queue conflict purge which uses it live).
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"tags": ["a", "b"]})
+    store.set(f"{base}/p2", {"tags": ["c"]})
+    store.set(f"{base}/p3", {"tags": ["d", "e"]})
+    hits = store.query(base, filters=[("tags", "array_contains_any", ["b", "c"])])
+    assert {d.id for d in hits} == {"p1", "p2"}  # p1 shares b, p2 shares c, p3 shares neither
+
+
+def test_query_not_in(store, uid):
+    # cubic PR 10887 A3: not-in must work on every backend (Mongo raised KeyError before).
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"team": "x"})
+    store.set(f"{base}/p2", {"team": "y"})
+    store.set(f"{base}/p3", {"team": "z"})
+    hits = store.query(base, filters=[("team", "not-in", ["y", "z"])])
+    assert {d.id for d in hits} == {"p1"}
+
+
 def test_query_offset_and_count(store, uid):
     base = f"users/{uid}/people"
     for i in range(5):
@@ -454,6 +475,28 @@ def test_batch_set_update_delete_commit(store, uid):
     assert store.get(f"{base}/p1").to_dict() == {"name": "Ada", "team": "y"}
     assert store.get(f"{base}/p2").to_dict() == {"name": "Bob", "team": "x"}
     assert store.exists(f"{base}/p3") is False
+
+
+def test_batch_non_merge_set_applies_transforms(store, uid):
+    # cubic PR 10887 A4: a non-merge batch set carrying a neutral transform must apply it — Mongo used
+    # to write only the sentinel-filtered replacement and silently drop the transform (Firestore's
+    # batch translates it natively; direct set already applied it).
+    batch = store.batch()
+    batch.set(f"users/{uid}", {"a": 1, "touched_at": SERVER_TIMESTAMP})
+    batch.commit()
+    doc = store.get(f"users/{uid}").to_dict()
+    assert doc["a"] == 1
+    assert isinstance(doc["touched_at"], datetime)  # the transform survived the batch
+
+
+def test_run_transaction_update_missing_raises_not_found(store, uid):
+    # cubic PR 10887 A5: tx.update on a missing doc must surface the neutral NotFound. Firestore raises
+    # it at COMMIT (after the update() call returns), so the adapter maps it in run_transaction.
+    def txn(tx):
+        tx.update(f"users/{uid}/people/ghost", {"a": 1})
+
+    with pytest.raises(NotFound):
+        store.run_transaction(txn)
 
 
 def test_run_transaction_aborts_on_exception(store, uid):

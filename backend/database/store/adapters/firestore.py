@@ -350,12 +350,17 @@ class FirestoreDocumentStore:
             return fn(_FirestoreTransaction(transaction, client))
 
         # run_transactional restarts on an expired-transaction 400; @transactional retries contention.
-        # A tx.create() precondition failure surfaces here at commit — map it to the neutral
-        # AlreadyExists so callers (e.g. create-if-absent restore) can catch a backend-agnostic error.
+        # A tx.create()/tx.update() precondition failure surfaces here at COMMIT, after the write call
+        # returned — map it to the neutral error so callers catch a backend-agnostic type. tx.update on
+        # a missing doc raises NotFound at commit (the per-call except in _FirestoreTransaction.update
+        # cannot see it), so catch it here too (cubic PR 10887 A5), mirroring the Mongo adapter which
+        # raises the neutral NotFound synchronously.
         try:
             return run_transactional(client, _runner, attempts=attempts)
         except (_FirestoreAlreadyExists, _FirestoreConflict) as exc:
             raise AlreadyExists(str(exc)) from exc
+        except _FirestoreNotFound as exc:
+            raise NotFound(str(exc)) from exc
 
     def batch(self) -> _FirestoreBatch:
         return _FirestoreBatch(self._client)

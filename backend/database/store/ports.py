@@ -5,9 +5,11 @@ depends only on this Protocol, never on a concrete backend. Addressing is by log
 (``"users/{uid}/people/{pid}"``) and payloads are plain ``dict``s — no Firestore paths, filters or
 snapshots cross this boundary.
 
-Query filters are neutral ``(field, op, value)`` tuples with ``op`` in {"==", "in", "<", "<=",
-">", ">=", "array_contains"}. ``array_contains`` matches documents whose array-valued ``field``
-contains ``value``. Field transforms use the neutral sentinels in ``database.store.sentinels``.
+Query filters are neutral ``(field, op, value)`` tuples with ``op`` in {"==", "!=", "in", "not-in",
+"<", "<=", ">", ">=", "array_contains", "array_contains_any"}. ``array_contains`` matches documents
+whose array-valued ``field`` contains ``value``; ``array_contains_any`` matches when the array shares
+any element with a ``value`` list; ``not-in`` matches when ``field`` is none of a ``value`` list.
+Field transforms use the neutral sentinels in ``database.store.sentinels``.
 
 ``query`` scopes to one containing collection (a single parent); ``query_group`` scopes to every
 collection sharing a leaf name across all parents (a Firestore collection-group query), returning
@@ -85,6 +87,9 @@ class DocumentStore(Protocol):
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         fields: Optional[Sequence[str]] = None,
+        # start_after is a single-field keyset cursor: {"value": <order-field value>, "id": <document
+        # id>} — ``value`` bounds the ``order_by`` field, ``id`` is the document-id tiebreak. Combining
+        # a multi-field ``order_by`` with ``start_after`` is unsupported (see the module note).
         start_after: Optional[Dict[str, Any]] = None,
     ) -> List[StoredDocument]: ...
     def count(self, collection: str, *, filters: Optional[Iterable[Filter]] = None) -> int: ...
