@@ -550,4 +550,11 @@ enum SuggestionPacing {
   static func dedupMemory(frequencyLevel: Int) -> Int {
     frequencyLevel >= maximumLevel ? 2 : 10
   }
+
+  /// Idle window before screen capture pauses. Watching a feed or a video produces no
+  /// input; at Maximum the user has explicitly asked to be nudged during exactly that,
+  /// so capture stays live for five minutes of stillness instead of one.
+  static func captureIdleThreshold(frequencyLevel: Int, base: TimeInterval) -> TimeInterval {
+    frequencyLevel >= maximumLevel ? max(base, 300) : base
+  }
 }

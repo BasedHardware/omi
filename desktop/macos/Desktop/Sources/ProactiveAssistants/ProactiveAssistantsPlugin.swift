@@ -780,23 +780,28 @@ public class ProactiveAssistantsPlugin: NSObject {
       return
     }
 
-    // Cheap early exits before resolving the active window. Media playback exempts
-    // HID idleness: a movie viewer types nothing for an hour but is still watching,
-    // and skipping every tick blinded the assistants exactly then (see
-    // MediaPlaybackIdlePolicy).
+    // Cheap early exits before resolving the active window. Two exemptions compose:
+    // media playback exempts HID idleness at every level (a movie viewer types nothing
+    // for an hour but is still watching — MediaPlaybackIdlePolicy), and Maximum
+    // notification level additionally extends the window to 300s for HID-idle WITHOUT
+    // media (reading a static feed). Calmer levels keep the 60s threshold.
     let hidIdleSeconds = systemIdleSeconds()
     let idleSeconds = MediaPlaybackIdlePolicy.effectiveIdleSeconds(
       hidIdleSeconds: hidIdleSeconds,
       isDisplaySleepPrevented: mediaPlaybackDetector.isDisplaySleepPrevented())
-    if hidIdleSeconds >= captureTrigger.idleThreshold, idleSeconds < captureTrigger.idleThreshold,
+    let idleThreshold = SuggestionPacing.captureIdleThreshold(
+      frequencyLevel: NotificationService.currentFrequencyLevel(),
+      base: captureTrigger.idleThreshold
+    )
+    if hidIdleSeconds >= idleThreshold, idleSeconds < idleThreshold,
       !didLogMediaIdleExemption
     {
       didLogMediaIdleExemption = true
       log("CaptureGate: HID-idle but media playback active — capture continues")
-    } else if hidIdleSeconds < captureTrigger.idleThreshold {
+    } else if hidIdleSeconds < idleThreshold {
       didLogMediaIdleExemption = false
     }
-    if idleSeconds >= captureTrigger.idleThreshold {
+    if idleSeconds >= idleThreshold {
       logCaptureGate("idle")
       return
     }

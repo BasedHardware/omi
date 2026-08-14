@@ -828,4 +828,13 @@ final class SuggestionPacingTests: XCTestCase {
     XCTAssertEqual(SuggestionPacing.cooldown(base: 10, frequencyLevel: 5), 10)
     XCTAssertEqual(SuggestionPacing.minConfidence(base: 0.6, frequencyLevel: 5), 0.6)
   }
+
+  /// Passive watching produces no input; Maximum keeps capture alive for five minutes of
+  /// stillness while calmer levels keep the long-standing 60s gate.
+  func testMaximumExtendsCaptureIdleWindowOnly() {
+    XCTAssertEqual(SuggestionPacing.captureIdleThreshold(frequencyLevel: 5, base: 60), 300)
+    for level in [0, 1, 2, 3, 4] {
+      XCTAssertEqual(SuggestionPacing.captureIdleThreshold(frequencyLevel: level, base: 60), 60)
+    }
+  }
 }
