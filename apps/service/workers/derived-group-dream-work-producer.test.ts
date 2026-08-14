@@ -24,7 +24,7 @@ import {
   derivedGroupDreamWorkInputManifest,
   parseDerivedGroupDreamInputSnapshot,
 } from "./derived-group-dream-work-adapter";
-import { defineDerivedGroupDreamWorkAdapter } from "./derived-group-dream-work-producer";
+import { defineDerivedGroupDreamConsolidationAdapter, defineDerivedGroupDreamWorkAdapter } from "./derived-group-dream-work-producer";
 
 const digest = (character: string): string => character.repeat(64);
 const ref = (prefix: string, character: string): string => `${prefix}_${digest(character)}`;
@@ -207,6 +207,18 @@ describe("derived group dream work adapter", () => {
     await expect(adapter.produce(context, leasedJob(), strategy)).resolves.toMatchObject({
       kind: "failed",
       error_code: "dependency_unavailable",
+    });
+  });
+
+  test("admits derived_group_dream as a consolidation adapter without activation", async () => {
+    const adapter = defineDerivedGroupDreamConsolidationAdapter({
+      load_input: async () => ({ kind: "found", snapshot: snapshot() }),
+      load_current_parent: async () => ({ kind: "found", parent_commit: null }),
+      load_witness_claims: async () => ({ kind: "found", committed_revisions: [] }),
+    });
+    expect(adapter.work_kind).toBe("derived_group_dream");
+    await expect(adapter.produce(context, leasedJob(), strategy)).resolves.toMatchObject({
+      kind: "produced",
     });
   });
 });

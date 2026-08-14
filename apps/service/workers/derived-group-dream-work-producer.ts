@@ -20,6 +20,10 @@ import type { AuthorizedLedgerWriteContext } from "../auth/authorized-context";
 import { assertAuthorizedLedgerWriteContext } from "../auth/authorized-context";
 import { normalizeDurableMemoryWorkResultJson, type StagedDurableMemoryWorkResult } from "../stores/durable-memory-work-result-repository";
 import {
+  defineConsolidationWorkAdapter,
+  type ConsolidationWorkAdapter,
+} from "./consolidation-work-service";
+import {
   DERIVED_GROUP_DREAM_RESULT_CONTRACT_VERSION,
 } from "./derived-group-dream-contract";
 import {
@@ -215,5 +219,15 @@ export const defineDerivedGroupDreamWorkAdapter = (
         context, job, staged, strategy, parentLoaded.parent_commit, witnessLoaded,
       );
     },
+  });
+};
+
+export const defineDerivedGroupDreamConsolidationAdapter = (
+  dependencies: DerivedGroupDreamWorkAdapterDependencies,
+): ConsolidationWorkAdapter => {
+  const adapter = defineDerivedGroupDreamWorkAdapter(dependencies);
+  return defineConsolidationWorkAdapter("derived_group_dream", {
+    produce: adapter.produce,
+    materialize: adapter.materialize,
   });
 };

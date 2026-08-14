@@ -204,9 +204,10 @@ const PORT_REGISTRY: readonly PortRegistryRow[] = [
     portType: "ConsolidationWorkService",
     composedIn: ["apps/service/workers/consolidation-work-service.ts"],
     reason:
-      "Promotion, identity-cluster, and predicate-batch work must share the durable result, "
-      + "replay, lease, and atomic-success path. Semantic workers inject sealed adapters into "
-      + "this one composition; routes never assemble or invoke the generic runner directly.",
+      "Promotion, identity-cluster, predicate-batch, and derived-group dream work must share "
+      + "the durable result, replay, lease, and atomic-success path. Semantic workers inject "
+      + "sealed adapters into this one composition; routes never assemble or invoke the "
+      + "generic runner directly.",
   },
 ];
 /**

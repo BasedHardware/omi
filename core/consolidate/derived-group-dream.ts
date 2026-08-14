@@ -70,12 +70,12 @@ const MAX_CLAIMS = 10_000;
 const fail = (code: string): never => { throw new TypeError(`derived group dream ${code}`); };
 
 const token = (value: unknown, code: string): string => {
-  if (typeof value !== "string" || !TOKEN.test(value)) fail(code);
+  if (typeof value !== "string" || !TOKEN.test(value)) return fail(code);
   return value;
 };
 
 const digest = (value: unknown, code: string): string => {
-  if (typeof value !== "string" || !DIGEST.test(value)) fail(code);
+  if (typeof value !== "string" || !DIGEST.test(value)) return fail(code);
   return value;
 };
 
@@ -101,7 +101,7 @@ const sortedUniqueTokens = (values: readonly string[], maximum: number, code: st
 };
 
 const claimRevisionId = (value: unknown, code: string): string => {
-  if (typeof value !== "string" || value.length === 0 || value.length > 256) fail(code);
+  if (typeof value !== "string" || value.length === 0 || value.length > 256) return fail(code);
   return value;
 };
 
@@ -189,8 +189,41 @@ export const parseDerivedGroupDreamInput = (value: unknown): Readonly<DerivedGro
   });
 };
 
+export const parseDerivedPeopleClusterBeliefInputs = (
+  value: unknown,
+): readonly DerivedPeopleClusterBeliefInput[] => peopleClusterInputs(value, "invalid_input");
+
+export const planPeopleClusterBeliefs = (
+  inputValue: Readonly<{
+    owner_account_id: string;
+    input_frontier: string;
+    created_at_event_time: number;
+  }>,
+  clustersValue: unknown,
+): readonly AttributionBeliefRevision[] => {
+  const owner = token(inputValue.owner_account_id, "invalid_input");
+  const frontier = token(inputValue.input_frontier, "invalid_input");
+  if (!Number.isSafeInteger(inputValue.created_at_event_time) || inputValue.created_at_event_time < 0) {
+    fail("invalid_input");
+  }
+  const clusters = peopleClusterInputs(clustersValue, "invalid_input");
+  const beliefs = Object.freeze(clusters.map((cluster) => peopleClusterBelief({
+    owner_account_id: owner,
+    input_frontier: frontier,
+    created_at_event_time: inputValue.created_at_event_time,
+  }, cluster)));
+  if (beliefs.some((belief) => belief.hypotheses.some((hypothesis) => hypothesis.kind === "owner"))) {
+    fail("owner_authority_forbidden");
+  }
+  return beliefs;
+};
+
 const peopleClusterBelief = (
-  input: Readonly<DerivedGroupDreamInput>,
+  input: Readonly<{
+    owner_account_id: string;
+    input_frontier: string;
+    created_at_event_time: number;
+  }>,
   cluster: DerivedPeopleClusterBeliefInput,
 ): AttributionBeliefRevision => {
   const entityHypothesis = {
@@ -281,8 +314,11 @@ export const planDerivedGroupDream = (
       created_at_event_time: input.created_at_event_time,
     });
   }));
-  const peopleBeliefs = Object.freeze(input.people_cluster_beliefs.map((cluster) =>
-    peopleClusterBelief(input, cluster)));
+  const peopleBeliefs = planPeopleClusterBeliefs({
+    owner_account_id: input.owner_account_id,
+    input_frontier: input.input_frontier,
+    created_at_event_time: input.created_at_event_time,
+  }, input.people_cluster_beliefs);
   const outcomeWithoutDigest = {
     version: DERIVED_GROUP_DREAM_VERSION,
     owner_account_id: input.owner_account_id,

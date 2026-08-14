@@ -460,6 +460,32 @@ export const runCrossModelAttributionStructuralPass = async (
         }));
         completedCases += 1;
       }
+      const ownerMicrosFor = (caseId: string): number => {
+        const entry = cases.find((item) => item.case_id === caseId) as
+          { hypotheses?: readonly { kind: string; probability_micros: number }[] } | undefined;
+        const hypotheses = entry?.hypotheses;
+        if (!Array.isArray(hypotheses)) {
+          fail("directional_mass_failed", caseDiagnostic(caseId, "directional_mass_failed", false, null, undefined));
+        }
+        const ownerHypothesis = hypotheses.find((item) => item.kind === "owner");
+        if (ownerHypothesis === undefined) {
+          fail("directional_mass_failed", caseDiagnostic(caseId, "directional_mass_failed", false, null, undefined));
+        }
+        return ownerHypothesis.probability_micros;
+      };
+      if (ownerMicrosFor("case-owner-support") <= ownerMicrosFor("case-owner-counter")) {
+        const support = cases.find((item) => item.case_id === "case-owner-support");
+        fail(
+          "directional_mass_failed",
+          caseDiagnostic(
+            "case-owner-support",
+            "directional_mass_failed",
+            support?.tied === true,
+            null,
+            events[0],
+          ),
+        );
+      }
       const usage = totalUsage(events, manifest.budgets.max_completion_tokens_per_call);
       if (usage.input > manifest.budgets.max_input_tokens_per_profile
         || usage.output > manifest.budgets.max_output_tokens_per_profile

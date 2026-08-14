@@ -1,7 +1,7 @@
 # Belief-native derived-group dream contract
 
-Status: production-neutral pure planner plus durable-work preregistration; no
-worker, model default, threshold, or activation (2026-08-13).
+Status: production-neutral planner plus consolidation-service admission; no
+scheduler, model default, threshold, or activation (2026-08-14).
 
 `core/consolidate/derived-group-dream.ts` is the belief-native alternative to
 the rejected SQLite `drivers/sqlite/dream.ts` promotion path.
@@ -21,14 +21,14 @@ the rejected SQLite `drivers/sqlite/dream.ts` promotion path.
 
 `apps/service/workers/derived-group-dream-contract.ts` names the
 `derived_group_dream` work kind and input manifest. PostgreSQL sealed input
-persistence and generic durable-work acceptance admit the kind with an exact
-input snapshot plus manifest. An inert work adapter loads that staged snapshot
-under a leased job and runs the pure planner only. The slot is **not** admitted
-to `CONSOLIDATION_WORK_KINDS`, any lease loop, scheduler, route, model default,
-or success commit.
+persistence, generic durable-work acceptance, atomic success (`0043`), and
+sorted `CONSOLIDATION_WORK_KINDS` admit the kind to the consolidation-work
+service lease set. `defineDerivedGroupDreamConsolidationAdapter` wraps the inert
+planner as a consolidation adapter. There is still **no** polling worker,
+scheduler, route, grant issuer, or model default.
 
 ## Deliberate production gap
 
-No overnight scheduler, model pipeline, promotion adapter, success commit,
-worker activation, or query route is activated. Query recall remains dark until
-honest grouped beliefs exist.
+No overnight scheduler, model pipeline, promotion adapter, worker activation,
+or query product route is activated. Query recall remains dark until a live
+composition actually runs honest grouped beliefs.

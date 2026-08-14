@@ -9,8 +9,9 @@ export const DERIVED_GROUP_DREAM_INPUT_SNAPSHOT_VERSION =
 
 /**
  * Durable-work kind for belief-native derived-group dream. Admitted to sealed
- * PostgreSQL input persistence and generic work acceptance, but not to the live
- * consolidation service, worker lease loop, scheduler, or route activation.
+ * PostgreSQL input persistence, generic work acceptance, and the consolidation
+ * work-service kind set. Scheduler, lease loop, route, and worker activation
+ * remain separately gated.
  */
 export const DERIVED_GROUP_DREAM_DURABLE_WORK_KIND = DERIVED_GROUP_DREAM_WORK_KIND;
 

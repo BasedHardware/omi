@@ -111,6 +111,18 @@ export const composeMemoryRecallKernel = (
   });
 };
 
+export const assertMemoryRecallKernel = (value: unknown): MemoryRecallKernel => {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || isProxy(value)
+    || Object.getPrototypeOf(value) !== Object.prototype) fail("unverified_kernel");
+  const brand = Object.getOwnPropertyDescriptor(value, PORT);
+  const answer = Object.getOwnPropertyDescriptor(value, "answer");
+  if (!brand || !("value" in brand) || brand.value !== true
+    || !answer || !("value" in answer) || typeof answer.value !== "function" || !answer.enumerable) {
+    fail("unverified_kernel");
+  }
+  return value as MemoryRecallKernel;
+};
+
 const memoryRecallKernelQuestionDigest = (questionText: string): string =>
   sha256CanonicalContent({
     contract_version: MEMORY_RECALL_KERNEL_VERSION,

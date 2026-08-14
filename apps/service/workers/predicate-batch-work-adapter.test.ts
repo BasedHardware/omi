@@ -387,7 +387,7 @@ test("the sealed predicate adapter runs through the single consolidation service
     }),
     load_current_parent: async () => ({ kind: "found", parent_commit: null }),
   });
-  const inert = (kind: "promotion" | "identity_cluster") => defineConsolidationWorkAdapter(kind, {
+  const inert = (kind: "promotion" | "identity_cluster" | "derived_group_dream") => defineConsolidationWorkAdapter(kind, {
     produce: async () => ({ kind: "failed", error_code: "dependency_unavailable" }),
     materialize: async () => ({ kind: "failed", error_code: "dependency_unavailable" }),
   });
@@ -395,6 +395,7 @@ test("the sealed predicate adapter runs through the single consolidation service
     predicate_batch: predicateAdapter,
     promotion: inert("promotion"),
     identity_cluster: inert("identity_cluster"),
+    derived_group_dream: inert("derived_group_dream"),
   } satisfies Record<typeof CONSOLIDATION_WORK_KINDS[number], ConsolidationWorkAdapter>;
   const resultRepository = defineDurableMemoryWorkResultRepository({
     load: async () => stored === null ? { kind: "missing" } : { kind: "found", result: stored },

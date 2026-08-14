@@ -5,6 +5,7 @@ import {
   derivedGroupDreamPreservesOriginals,
   derivedGroupDreamProjectionContractDigest,
   planDerivedGroupDream,
+  planPeopleClusterBeliefs,
 } from "./derived-group-dream";
 
 const digest = (character: string): string => character.repeat(64);
@@ -67,6 +68,17 @@ describe("derived group dream", () => {
     expect(outcome.people_cluster_beliefs[0]?.hypotheses.some((item) => item.kind === "unknown")).toBeTrue();
     expect(derivedGroupDreamPreservesOriginals(dreamInput(), outcome)).toBeTrue();
     expect(JSON.stringify(outcome)).not.toContain("subject:owner");
+  });
+
+  test("plans people-cluster beliefs without minting owner identity", () => {
+    const beliefs = planPeopleClusterBeliefs({
+      owner_account_id: "account:alice",
+      input_frontier: digest("f"),
+      created_at_event_time: 1,
+    }, dreamInput().people_cluster_beliefs);
+    expect(beliefs).toHaveLength(1);
+    expect(beliefs[0]?.hypotheses.some((item) => item.kind === "owner")).toBe(false);
+    expect(beliefs[0]?.hypotheses.map((item) => item.kind).sort()).toEqual(["entity", "unknown"]);
   });
 
   test("rejects unknown cluster members and single-member groups", () => {

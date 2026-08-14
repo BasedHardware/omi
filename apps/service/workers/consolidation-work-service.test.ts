@@ -192,7 +192,7 @@ const dependencies = (
 });
 
 describe("production-neutral consolidation work service", () => {
-  test("all three kinds use exactly their durable adapter and atomic-success path", async () => {
+  test("all admitted kinds use exactly their durable adapter and atomic-success path", async () => {
     const calls: ConsolidationWorkKind[] = [];
     const service = defineConsolidationWorkService(dependencies(calls));
     for (const kind of CONSOLIDATION_WORK_KINDS) {

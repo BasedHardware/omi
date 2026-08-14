@@ -147,6 +147,7 @@ export const createPostgresPredicateBatchOneShotRuntime = (
       identity_cluster: unsupportedAdapter("identity_cluster"),
       predicate_batch: predicateAdapter,
       promotion: unsupportedAdapter("promotion"),
+      derived_group_dream: unsupportedAdapter("derived_group_dream"),
     },
     produce_exclusive: async (context, job, strategy, produce) => {
       let resource: Readonly<ModelPipelineResource> | null;

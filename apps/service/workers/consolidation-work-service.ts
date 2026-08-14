@@ -33,7 +33,7 @@ const SERVICE_PORT: unique symbol = Symbol("consolidation-work-service");
 const MAX_PARENT_REMATERIALIZATIONS = 10;
 
 export const CONSOLIDATION_WORK_KINDS = Object.freeze([
-  "identity_cluster", "predicate_batch", "promotion",
+  "derived_group_dream", "identity_cluster", "predicate_batch", "promotion",
 ] as const satisfies readonly DurableMemoryWorkKind[]);
 
 export type ConsolidationWorkKind = typeof CONSOLIDATION_WORK_KINDS[number];

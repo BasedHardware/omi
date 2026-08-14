@@ -425,6 +425,7 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
     }));
     expect(listed.status).toBe(200);
     expect(((rpcBody(listed).result as Record<string, unknown>).tools as unknown[])).toHaveLength(1);
+    expect(JSON.stringify(listed.body)).not.toContain("query_memory");
 
     const called = fixture();
     const calledResponse = await createMcpProtocolHandler(called.ports).handleHttp(post("tools/call", {

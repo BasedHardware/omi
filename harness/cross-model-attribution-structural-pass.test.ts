@@ -79,6 +79,7 @@ type Mode =
   | "later_coordinate_drift"
   | "oversized_output"
   | "tie"
+  | "directional_tie"
   | "inversion"
   | "counter_inversion";
 type ProfileName = "deepseek-flash" | "glm";
@@ -125,6 +126,8 @@ const dependencies = (
       const support = calibration.evidence_groups[0]!.factors[0]!.direction === "support";
       const ownerMicros = mode === "tie"
         ? 500_000
+        : mode === "directional_tie"
+          ? (support ? 500_000 : 400_000)
         : mode === "inversion"
           ? (support ? 300_000 : 700_000)
           : mode === "counter_inversion"
@@ -381,7 +384,7 @@ describe("bounded cross-model attribution structural pass", () => {
     });
   });
 
-  test("accepts a conservative 500000/500000 split as directional-mass pass and retains micros on success", async () => {
+  test("accepts a conservative 500000/500000 support split when owner mass drops on counter", async () => {
     const heldOut = manifest();
     const ownerId = hypothesisIdForCalibrationCandidate(heldOut.cases[0]!.input, { kind: "owner", target_ref: null });
     const unknownId = hypothesisIdForCalibrationCandidate(heldOut.cases[0]!.input, { kind: "unknown", target_ref: null });
@@ -389,7 +392,7 @@ describe("bounded cross-model attribution structural pass", () => {
     const result = await runCrossModelAttributionStructuralPass(
       heldOut,
       target,
-      dependencies({ "deepseek-flash": "tie", glm: "tie" }),
+      dependencies({ "deepseek-flash": "directional_tie", glm: "directional_tie" }),
     );
     expect(result).toMatchObject({
       status: "passed",
@@ -412,9 +415,9 @@ describe("bounded cross-model attribution structural pass", () => {
       });
       expect(artifact.cases[1]).toMatchObject({
         case_id: "case-owner-counter",
-        tied: true,
+        tied: false,
         top_kind: "unknown",
-        top_probability_micros: 500_000,
+        top_probability_micros: 600_000,
       });
       expect(artifact.cases[0].request_digest).toMatch(/^[a-f0-9]{64}$/);
       expect(artifact.cases[0].response_digest).toMatch(/^[a-f0-9]{64}$/);
@@ -426,7 +429,7 @@ describe("bounded cross-model attribution structural pass", () => {
 
   test("still measures both providers when DeepSeek ties and GLM ranks uniquely", async () => {
     const calls = { "deepseek-flash": 0, glm: 0 };
-    const deps = dependencies({ "deepseek-flash": "tie", glm: "valid" });
+    const deps = dependencies({ "deepseek-flash": "directional_tie", glm: "valid" });
     const target = output();
     const result = await runCrossModelAttributionStructuralPass(manifest(), target, {
       ...deps,
@@ -446,7 +449,7 @@ describe("bounded cross-model attribution structural pass", () => {
     expect(calls).toEqual({ "deepseek-flash": 3, glm: 3 });
     expect(JSON.parse(readFileSync(join(target, "deepseek-flash.json"), "utf8")).cases).toMatchObject([
       { case_id: "case-owner-support", tied: true, top_kind: "owner", top_probability_micros: 500_000 },
-      { case_id: "case-owner-counter", tied: true, top_kind: "unknown", top_probability_micros: 500_000 },
+      { case_id: "case-owner-counter", tied: false, top_kind: "unknown", top_probability_micros: 600_000 },
       { case_id: "case-independent-support", tied: true, top_kind: "owner", top_probability_micros: 500_000 },
     ]);
     expect(JSON.parse(readFileSync(join(target, "glm.json"), "utf8")).cases).toMatchObject([
@@ -454,6 +457,30 @@ describe("bounded cross-model attribution structural pass", () => {
       { case_id: "case-owner-counter", tied: false, top_kind: "unknown", top_probability_micros: 700_000 },
       { case_id: "case-independent-support", tied: false, top_kind: "owner", top_probability_micros: 700_000 },
     ]);
+  });
+
+  test("rejects a uniform 500000/500000 split that does not move owner mass on the counter case", async () => {
+    const target = output();
+    await expect(runCrossModelAttributionStructuralPass(
+      manifest(),
+      target,
+      dependencies("tie"),
+    )).rejects.toMatchObject({ code: "directional_mass_failed" });
+    const failure = JSON.parse(readFileSync(join(target, "failure.json"), "utf8"));
+    expect(failure).toMatchObject({
+      version: CROSS_MODEL_ATTRIBUTION_FAILURE_VERSION,
+      execution: "parallel",
+      code: "directional_mass_failed",
+      provider_calls_attempted: 6,
+      completed_cases: [
+        { profile: "deepseek-flash", count: 3 },
+        { profile: "glm", count: 3 },
+      ],
+      profiles: [
+        { profile: "deepseek-flash", status: "failed", code: "directional_mass_failed" },
+        { profile: "glm", status: "failed", code: "directional_mass_failed" },
+      ],
+    });
   });
 
   test("fails closed on support inversion and still attempts GLM", async () => {

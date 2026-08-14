@@ -29,6 +29,17 @@ describe("canonical memory service composition", () => {
     const mcp = await app.request("/mcp", { method: "POST" });
     expect(mcp.status).toBe(202);
     expect(await mcp.text()).toBe("mcp-ok");
+
+    const query = await app.request("/v1/memories/query?question=hello", {
+      headers: { authorization: "Bearer token" },
+    });
+    expect(query.status).toBe(404);
+    expect(await query.text()).toBe('{"error":"not_found"}');
+    const listedWithQ = await app.request("/v1/memories?q=hello", {
+      headers: { authorization: "Bearer token" },
+    });
+    expect(listedWithQ.status).toBe(400);
+    expect(await listedWithQ.text()).toBe('{"error":"bad_request"}');
   });
 
   test("fails closed on invalid clock and malformed loaded bytes", async () => {
