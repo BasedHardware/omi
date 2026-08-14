@@ -269,11 +269,39 @@ def clear_user_data(uid: str):
         "chat_sessions",
         "folders",
         "hourly_usage",
+        # Universal memory authority. The E2E store is session-scoped, so
+        # omitting these collections leaks apply state and canonical rows from
+        # an earlier test into later legacy-compatibility scenarios.
+        "memory_items",
+        "memory_operations",
+        "memory_source_replacements",
+        "memory_outbox",
+        "memory_control",
+        "memory_state",
+        "memory_lineage",
+        "memory_historical_overrides",
+        "memory_evidence",
+        "memory_graph_assertions",
+        "memory_review_queue",
+        "memory_runs",
+        "memory_import_runs",
+        "memory_import_artifacts",
+        "memory_import_candidates",
+        "non_active_memory_routes",
+        "short_term_lifecycle_transitions",
+        "memory_legacy_fallback",
+        "memory_commits",
     ]:
         docs = list(user_ref.collection(coll_name).stream())
         for d in docs:
             d.reference.delete()
     try:
         user_ref.delete()
+    except Exception:
+        pass
+    # The maintenance inventory is deliberately outside the user document so
+    # account cleanup must remove its content-free marker separately.
+    try:
+        db.collection("canonical_memory_maintenance_registry").document(uid).delete()
     except Exception:
         pass

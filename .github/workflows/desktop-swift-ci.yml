@@ -14,7 +14,10 @@ concurrency:
   # Supersede stale revisions of the same PR, but never let a later main push
   # cancel the exact-SHA evidence consumed by desktop release planning.
   group: desktop-swift-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # An abandoned PR's `closed` run may cancel obsolete work. A merged PR's
+  # bookkeeping run must not cancel exact-SHA evidence still finishing for the
+  # merge, so only unmerged closures retain cancellation authority.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action != 'closed' || !github.event.pull_request.merged) }}
 
 jobs:
   changes:
@@ -94,7 +97,11 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}
     runs-on: macos-15
-    timeout-minutes: 60
+    # A cold runner currently needs about 60 minutes for manifest checks,
+    # launcher coverage, the full debug suite, and the independent release-mode
+    # UserNotifications regression. Leave headroom so a successful final link
+    # is not cancelled by the job deadline.
+    timeout-minutes: 90
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -248,8 +255,11 @@ jobs:
 
   desktop-swift:
     # Keep this name stable: desktop release planning requires this exact
-    # check to pass for the source SHA that will be tagged.
-    name: Desktop Swift Build & Tests
+    # check to pass for the source SHA that will be tagged. Closed-event
+    # bookkeeping must use a distinct name because GitHub associates a merged
+    # pull_request.closed run with the target-branch merge SHA; publishing a
+    # newer skipped required check there would block release planning.
+    name: ${{ github.event.action == 'closed' && 'Desktop Swift PR Closure' || 'Desktop Swift Build & Tests' }}
     needs: [changes, desktop-swift-verify]
     if: ${{ always() && needs.changes.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
@@ -267,7 +277,10 @@ jobs:
           fi
 
   desktop-swift-release-compile:
-    name: Desktop Swift Release Compile
+    # A merged pull_request.closed run is associated with the merge SHA. Keep
+    # its bookkeeping check distinct so it cannot supersede the successful
+    # push-run evidence consumed by desktop release planning.
+    name: ${{ github.event.action == 'closed' && 'Desktop Swift PR Closure Release Compile' || 'Desktop Swift Release Compile' }}
     needs: changes
     if: needs.changes.outputs.should_release_compile == 'true'
     runs-on: macos-15

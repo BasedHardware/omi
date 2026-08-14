@@ -59,4 +59,49 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
         previewsEnabled: false, floatingBarEnabled: false, deliverSystemBanner: true))
   }
+
+  func testExplicitBannerDoesNotDuplicateAnAcceptedFloatingBarPresentation() {
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+        previewsEnabled: true,
+        floatingBarEnabled: true,
+        deliverSystemBanner: true,
+        floatingBarAccepted: true))
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+        previewsEnabled: true,
+        floatingBarEnabled: true,
+        deliverSystemBanner: true,
+        floatingBarAccepted: false))
+  }
+
+  func testDirectorMutedPreviewFallsBackToBannerInsteadOfSilentQuotaBurn() {
+    // Context-director presentation must use this policy: muted previews with
+    // the floating bar still enabled keep a visible system-banner surface.
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: false, floatingBarEnabled: true))
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
+        previewsEnabled: false, floatingBarEnabled: true, deliverSystemBanner: false),
+      "muted in-bar preview must keep a banner surface so director delivery is visible")
+  }
+
+  @MainActor
+  func testDirectorOwnerRefusalInvokesDroppedCallbackExactlyOnce() {
+    var droppedCount = 0
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+    let result = service.presentContextDirectorNotification(
+      ownerID: "",
+      title: "Suggestion",
+      message: "Do the next thing",
+      decisionType: "suggestion",
+      context: FloatingBarNotificationContext(
+        sourceTitle: "Context director",
+        assistantId: "context-director"),
+      onDropped: { droppedCount += 1 })
+
+    XCTAssertEqual(result, .rejectedOwnerChange)
+    XCTAssertEqual(droppedCount, 1)
+  }
 }

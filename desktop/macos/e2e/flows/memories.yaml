@@ -92,7 +92,7 @@ steps:
     # The hub resolves which of the two Brain Map surfaces this account gets, and must mount neither
     # until it knows: a one-frame appearance of the legacy graph latches the shared view model and
     # leaves the atlas permanently blank. Watch for the placeholder, not just the end state.
-    do: "Choose Brain Map in the hub's switcher. Verify that while the cohort is still resolving the page shows only a spinner (accessibility identifier brain_map_resolving_cohort), and that exactly one surface then appears: an interactive node graph showing connected entities, or the canonical atlas."
+    do: "Choose Brain Map in the hub's switcher. Verify that while the cohort is still resolving the page shows only a spinner (accessibility identifier brain_map_resolving_capability), and that exactly one surface then appears: an interactive node graph showing connected entities, or the canonical atlas."
     expect:
       text_visible:
         - Brain Map

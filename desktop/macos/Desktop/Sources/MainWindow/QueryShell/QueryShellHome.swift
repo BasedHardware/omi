@@ -44,7 +44,7 @@ struct QueryShellHome: View {
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject private var tasksStore = TasksStore.shared
   var taskChatCoordinator: TaskChatCoordinator? = nil
-  /// The cohort shell keeps the existing modern Home presentation even when the reversible legacy
+  /// The Chat-first shell keeps the existing modern Home presentation even when the reversible legacy
   /// preference is enabled. This is presentation-only; capability sampling and rich-block access
   /// remain owned by `ChatFirstShell`.
   var forceModernPresentation: Bool = false
@@ -213,8 +213,12 @@ struct QueryShellHome: View {
     // name over a different destination and let a flow assert a tray while watching another page, so
     // the bridge refuses it here instead — keyed on the stage mode this surface never publishes.
     // See `DesktopAutomationActionRegistry.registerBuiltins`.
+    // Each handler applies `HomeBridgeIntent.searchTextAfter` first: mode is derived from the
+    // search text, so an action that promises the conversation must clear it or its effect lands
+    // hidden behind the results panel while the bridge reports success.
     .onReceive(NotificationCenter.default.publisher(for: .homeStageOpenChat)) { _ in
       guard !usesLegacyPresentation else { return }
+      searchText = HomeBridgeIntent.openChat.searchTextAfter(searchText)
       claimCaret()
     }
     // `home_close_panel` collapses Home to its resting chat state — the same thing Escape does.
@@ -222,16 +226,18 @@ struct QueryShellHome: View {
     // be the "bridge answered ok and nothing happened" defect this file's actions exist to avoid.
     .onReceive(NotificationCenter.default.publisher(for: .homeStageClose)) { _ in
       guard !usesLegacyPresentation else { return }
-      searchText = ""
+      searchText = HomeBridgeIntent.closePanel.searchTextAfter(searchText)
       claimCaret()
     }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAsk)) { note in
       guard !usesLegacyPresentation, let query = note.userInfo?["query"] as? String else { return }
+      searchText = HomeBridgeIntent.ask.searchTextAfter(searchText)
       chatProvider.draftText = query
       ask()
     }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAttach)) { note in
       guard !usesLegacyPresentation, let path = note.userInfo?["path"] as? String else { return }
+      searchText = HomeBridgeIntent.attach.searchTextAfter(searchText)
       stageAttachments([URL(fileURLWithPath: path)])
     }
     // Escape while searching clears the search and lands back on the conversation; with an empty
@@ -307,8 +313,7 @@ struct QueryShellHome: View {
     case .answer:
       QueryAnswerThread(
         chatProvider: chatProvider,
-        onOpenConversation: openConversation,
-        onOpenMemories: openMemories,
+        onOpenCitation: openCitation,
         onRetry: retry,
         chatFirstRichBlockContext: chatFirstRichBlockContext
       )
@@ -460,6 +465,71 @@ struct QueryShellHome: View {
 
   private func openMemories() {
     navigate(.memories)
+  }
+
+  /// Typed citation routing stays at the shell boundary. The inline renderer knows presentation;
+  /// this root owns navigation and preserves exact entity identity where the destination supports it.
+  private func openCitation(_ reference: ChatCitationReference) {
+    guard reference.canOpen else { return }
+    if let context = chatFirstRichBlockContext {
+      switch reference.kind {
+      case .conversation:
+        let moment = reference.momentTimestampMs.map { TimeInterval($0) / 1_000 }
+        context.navigation.open(focus: .capture(id: reference.sourceID, momentTs: moment))
+      case .memory:
+        context.navigation.open(focus: .memory(id: reference.sourceID))
+      case .task:
+        context.navigation.open(focus: .task(id: reference.sourceID))
+      case .goal:
+        context.navigation.open(focus: .goal(id: reference.sourceID))
+      case .screenshot:
+        guard let id = RewindCitationFocusState.parseScreenshotID(reference.sourceID) else { return }
+        RewindCitationFocusState.shared.request(id)
+        context.navigation.selectMore(.rewind)
+      case .web:
+        if let url = reference.url { NSWorkspace.shared.open(url) }
+      case .unavailable:
+        break
+      }
+      return
+    }
+
+    switch reference.kind {
+    case .conversation:
+      openConversation(reference.sourceID)
+    case .memory:
+      Task { @MainActor in
+        guard await memoriesViewModel.openMemory(id: reference.sourceID) else { return }
+        openMemories()
+      }
+    case .task:
+      // TasksPage has a typed, owner-bound handoff. Resolve the exact task before changing pages;
+      // selecting the Tasks tab alone would silently discard the citation's identity.
+      Task { @MainActor in
+        guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+          let task = try? await APIClient.shared.getActionItem(
+            id: reference.sourceID,
+            expectedOwnerId: authorization.ownerID,
+            authorizationSnapshot: authorization),
+          RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+        else { return }
+        guard !task.isRetired else { return }
+        TaskNavigationRequestStore.shared.request(task: task)
+        selectedIndex = SidebarNavItem.tasks.rawValue
+      }
+    case .goal:
+      // QueryAnswerThread marks this kind unavailable in the legacy shell before rendering. Keep
+      // the routing boundary fail-closed as defense in depth.
+      return
+    case .screenshot:
+      guard let id = RewindCitationFocusState.parseScreenshotID(reference.sourceID) else { return }
+      RewindCitationFocusState.shared.request(id)
+      openRewind()
+    case .web:
+      if let url = reference.url { NSWorkspace.shared.open(url) }
+    case .unavailable:
+      break
+    }
   }
 
   /// Where both of Home's ways into the graph land — the spine's end-of-day card and the header's

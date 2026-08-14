@@ -13,12 +13,8 @@ ISSUE_URL = "https://github.com/BasedHardware/omi/issues/9443"
 VERSIONED_FILENAME = re.compile(r"^(?P<version>v[0-9]+)_.+\.(?:py|swift|ts|rs)$")
 
 GRANDFATHERED_VIOLATIONS = {
-    "backend/scripts/v3_dev_cloud_proof.py",
-    "backend/scripts/v3_dev_cloud_readiness.py",
     "backend/scripts/v3_f5_real_service_evidence_readiness.py",
     "backend/scripts/v3_f6_pre_gcp_aggregate_readiness.py",
-    "backend/scripts/v3_limited_rollout_config.py",
-    "backend/testing/memory/v3_canary_approval.py",
     "backend/testing/memory/v3_f5_evidence.py",
     "backend/testing/memory/v3_f6/__init__.py",
     "backend/testing/memory/v3_f6/_validation.py",

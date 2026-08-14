@@ -327,11 +327,9 @@ async def test_file_assistants_stream_runs_setup_and_sync_callbacks_off_loop():
             stream_callback.end_nowait()
             loop.call_soon_threadsafe(worker_finished.set)
 
-    with patch.object(chat_file, '_assert_direct_file_chat_allowed', lambda: None), patch.object(
-        chat_file.chat_db, 'get_chat_files_desc', lambda *_args, **_kwargs: []
-    ), patch.object(chat_file.FileChatTool, '_ensure_thread_and_assistant', fake_ensure), patch.object(
-        chat_file.FileChatTool, 'ask_stream', blocking_ask
-    ):
+    with patch.object(chat_file.chat_db, 'get_chat_files_desc', lambda *_args, **_kwargs: []), patch.object(
+        chat_file.FileChatTool, '_ensure_thread_and_assistant', fake_ensure
+    ), patch.object(chat_file.FileChatTool, 'ask_stream', blocking_ask):
         task = asyncio.create_task(tool.process_chat_with_file_stream('summarize', ['file1'], callback))
         await asyncio.wait_for(ask_started.wait(), timeout=0.5)
 
@@ -382,10 +380,8 @@ async def test_file_stream_deadline_fires_while_sync_assistants_stream_is_off_lo
         ]
 
     with patch.object(graph, 'FileChatTool', lambda *_args: tool), patch.object(
-        chat_file, '_assert_direct_file_chat_allowed', lambda: None
-    ), patch.object(chat_file.chat_db, 'get_chat_files_desc', lambda *_args, **_kwargs: []), patch.object(
-        chat_file.FileChatTool, '_ensure_thread_and_assistant', fake_ensure
-    ), patch.object(
+        chat_file.chat_db, 'get_chat_files_desc', lambda *_args, **_kwargs: []
+    ), patch.object(chat_file.FileChatTool, '_ensure_thread_and_assistant', fake_ensure), patch.object(
         chat_file.FileChatTool, 'ask_stream', blocking_ask
     ), patch.object(
         graph, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.01

@@ -63,9 +63,9 @@ checks:
     reason: "the single-flight pre-push gate must manage child processes and launch Bash checks on native Windows and POSIX hosts"
   - id: desktop-release-process-guards
     command: ["bash", "scripts/run-release-process-guards.sh"]
-    triggers: [".github/workflows/desktop_qualify_beta.yml", ".github/scripts/check-release-process-guards.py", ".github/scripts/git_bash.py", "scripts/dev-harness/_resolve_python.sh", "scripts/run-release-process-guards.sh", "backend/tests/unit/test_desktop_release_scripts.py", ".github/checks-manifest.yaml"]
+    triggers: ["codemagic.yaml", ".github/workflows/desktop_qualify_beta.yml", ".github/workflows/desktop_promote_beta.yml", ".github/scripts/check-release-process-guards.py", ".github/scripts/git_bash.py", "scripts/dev-harness/_resolve_python.sh", "scripts/run-release-process-guards.sh", "backend/tests/unit/test_desktop_release_scripts.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "SCA-174: qualification must check out the exact release tag inside its isolated source directory; the guard and its focused behavioral test run on every relevant diff"
+    reason: "normal Beta promotion must stay on Codemagic signed-smoke evidence and reject any reintroduced qualification-completion trigger"
   - id: desktop-release-process-guard-tests
     command: ["bash", "scripts/run-release-process-guard-tests.sh"]
     triggers: [".github/scripts/check-release-process-guards.py", ".github/scripts/test_check_release_process_guards.py", ".github/scripts/git_bash.py", "codemagic.yaml", ".github/scripts/fixtures/codemagic_workflow_contract/**", "scripts/run-release-process-guard-tests.sh", ".github/checks-manifest.yaml"]
@@ -97,15 +97,15 @@ checks:
     lanes: ["local", "ci"]
     reason: "the one-action production backend release contract must reject legacy release planes"
   - id: product-file-line-count-ratchet
-    command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{base}"]
-    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/product_file_line_count_ratchet_baseline/**/*.json"]
+    command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
+    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py"]
     lanes: ["local", "ci"]
-    reason: "#9838 freezes oversized product files; #9836's chat_completions.rs collision chain (#9384/#9638/#9692), transcribe.py's undocumented growth, and the FC-5 RealtimeHubController chain show why"
+    reason: "#9838 freezes oversized product files against the target branch without a shared metadata ledger; exact PR-body exceptions preserve reviewability without unrelated merge conflicts"
   - id: product-file-line-count-ratchet-tests
     command: ["python3", ".github/scripts/test_check_product_file_line_count_ratchet.py"]
-    triggers: [".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/test_check_product_file_line_count_ratchet.py", ".github/scripts/product_file_line_count_ratchet_baseline/**/*.json", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/test_check_product_file_line_count_ratchet.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "oversized product-file ratchet must reject growth, reject threshold crossings, and ratchet splits down"
+    reason: "base-derived oversized-file checks must reject growth and stale approvals while ratcheting reductions down automatically"
   - id: desktop-release-manifest-v1
     command: ["python3", ".github/scripts/test_desktop_release_manifest.py"]
     triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/desktop_release_manifest.py", ".github/scripts/test_desktop_release_manifest.py", ".github/scripts/fixtures/desktop_release_manifest/**"]
@@ -118,9 +118,14 @@ checks:
     reason: "the Stable manifest schema must keep admitting exactly one app artifact pair; a beta_zip_url re-entering it is how a beta build becomes describable as Stable"
   - id: desktop-release-doctor-v1
     command: ["python3", ".github/scripts/test_desktop_release_doctor.py"]
-    triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
+    triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/desktop_proactive_delivery_health.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
     lanes: ["local", "ci"]
     reason: "advisory desktop release evidence and drift report"
+  - id: desktop-proactive-delivery-health
+    command: ["python3", ".github/scripts/test_desktop_proactive_delivery_health.py"]
+    triggers: [".github/scripts/desktop_proactive_delivery_health.py", ".github/scripts/test_desktop_proactive_delivery_health.py", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/workflows/desktop_release_doctor.yml", "desktop/macos/docs/release-health-metrics.md", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PT24H Advice Generated users over macOS DAU must alarm on exact zero without treating low samples or broken collection as healthy"
   - id: desktop-beta-admission-firestore-contention
     command: ["bash", "backend/testing/desktop_beta_admission/run.sh"]
     triggers: ["backend/database/desktop_update_channels.py", "backend/testing/desktop_beta_admission/**", "package.json", "package-lock.json", ".github/checks-manifest.yaml"]
@@ -158,6 +163,16 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "all changes must be free of whitespace errors and conflict markers"
+  - id: git-author-identity
+    command: ["python3", ".github/scripts/check_git_author_identity.py", "--base", "{base}", "--head", "{head}"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "PR #11525's commits were minted as Ratchet Test because a leftover repo-local user.email overrode the global identity; GitHub then showed a generic avatar"
+  - id: git-author-identity-tests
+    command: ["python3", ".github/scripts/test_check_git_author_identity.py"]
+    triggers: [".github/scripts/check_git_author_identity.py", ".github/scripts/test_check_git_author_identity.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the author-identity guard must reject a clone-local fixture override and a fixture-authored commit range"
   - id: package-architecture-map-guardrail-tests
     command: ["python3", ".github/scripts/test_check_package_architecture_maps.py"]
     triggers: [".github/scripts/check_package_architecture_maps.py", ".github/scripts/test_check_package_architecture_maps.py", ".github/scripts/package_architecture_baseline.json", ".github/checks-manifest.yaml"]
@@ -445,6 +460,11 @@ checks:
     triggers: [".github/workflows/desktop-swift-ci.yml", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_swift_ci_contract.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
+  - id: desktop-windows-ci-contract
+    command: ["python3", ".github/scripts/test_desktop_windows_ci_contract.py"]
+    triggers: [".github/workflows/desktop-windows-ci.yml", ".github/scripts/test_desktop_windows_ci_contract.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PR #11447: Linux Electron package smoke retries transient postinstall downloads without masking persistent failures"
   - id: resolve-desktop-changelog-sync-fixtures
     command: ["python3", ".github/scripts/test_resolve_desktop_changelog_sync.py"]
     triggers: [".github/scripts/resolve-desktop-changelog-sync.py", ".github/scripts/test_resolve_desktop_changelog_sync.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
@@ -533,6 +553,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "the release lane shared the dev lane's blind spot: a present-but-empty pi-mono-extension satisfied its directory-exists check and still shipped an artifact that failed every chat turn"
+  - id: desktop-release-artifact-helpers
+    command: ["bash", "desktop/macos/tests/test-desktop-release-artifact-helpers.sh"]
+    triggers: ["codemagic.yaml", "desktop/macos/scripts/create-desktop-dmgs.sh", "desktop/macos/scripts/create-omi-beta-variant.sh", "desktop/macos/scripts/notarize-desktop-artifacts.sh", "desktop/macos/tests/test-desktop-release-artifact-helpers.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "stable and Beta packaging must overlap independent work while waiting for every identity and refusing to staple a partial notarization batch"
   - id: desktop-main-actor-xctest-hooks
     command: ["python3", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]
     triggers: ["desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]
@@ -723,11 +749,6 @@ checks:
     platforms: ["macos"]
     reason: "Issue #10749 and Actions run 30316131599 require exact-provenance cleanup of abandoned M1 qualification processes, leases, ports, containers, and run stages without touching production apps"
 
-  - id: desktop-beta-qualification-retry
-    command: ["python3", ".github/scripts/test_desktop_beta_qualification_retry.py"]
-    triggers: [".github/workflows/desktop_retry_beta_qualification.yml", ".github/scripts/desktop_beta_qualification_retry.py", ".github/scripts/test_desktop_beta_qualification_retry.py", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "SCA-49 bounded automatic retry of transient failed/cancelled Beta qualification must stay tag-bound, exact-SHA, bounded, and never re-dispatch in-progress/successful runs"
   - id: guardrail-pulse-tests
     command: ["python3", ".github/scripts/test_guardrail_pulse.py"]
     triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]

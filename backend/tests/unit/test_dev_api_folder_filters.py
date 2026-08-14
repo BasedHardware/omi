@@ -9,7 +9,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from types import ModuleType
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -387,6 +387,7 @@ def _build_memories_test_app():
     from routers.developer import router as developer_router
     import routers.developer as developer_module
     from dependencies import get_developer_memory_default_memory_read_context
+    from utils.memory.default_read_rollout import MemoryReadDecision
     from utils.memory.product_authorization import ProductAuthorizationDecision
 
     auth_context = developer_module.ProductAuthorizationContext(
@@ -397,25 +398,12 @@ def _build_memories_test_app():
             allowed=True,
             context=auth_context,
             db_client=None,
-            read_decision=developer_module.MemoryReadDecision.USE_LEGACY_SAFE,
-            reason='test_legacy_safe',
+            read_decision=MemoryReadDecision.USE_MEMORY,
+            reason='universal_memory',
             observability={'enabled': True},
             status_code=200,
         )
     )
-    developer_module.search_memory_default_developer_memories = MagicMock(
-        return_value=type(
-            'LegacySafeMemoryResult',
-            (),
-            {
-                'read_decision': developer_module.MemoryReadDecision.USE_LEGACY_SAFE,
-                'memories': [],
-                'fallback_reason': 'test_legacy_safe',
-                'should_use_legacy_fallback': True,
-            },
-        )()
-    )
-
     app = FastAPI()
     app.include_router(developer_router)
     app.dependency_overrides[get_developer_memory_default_memory_read_context] = lambda: auth_context
@@ -532,10 +520,10 @@ class TestDevApiMemoriesHttpLayer:
 
     def test_memories_page_tolerates_legacy_malformed_record(self):
         """A single legacy record must not turn an offset page into HTTP 500."""
-        import database.memories as memories_db
+        import routers.developer as developer_module
 
         now = datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
-        memories_db.get_memories.return_value = [
+        page = [
             {
                 'id': 'mem-ok',
                 'content': 'normal memory',
@@ -573,8 +561,17 @@ class TestDevApiMemoriesHttpLayer:
             },
         ]
 
-        _, client = _build_memories_test_app()
-        resp = client.get('/v1/dev/user/memories?limit=3&offset=7')
+        normalized = []
+        for raw in page:
+            try:
+                normalized.append(developer_module.CleanerMemory.model_validate(raw))
+            except ValueError:
+                continue
+        memory_service = MagicMock()
+        memory_service.read.return_value = normalized
+        with patch.object(developer_module, 'MemoryService', return_value=memory_service):
+            _, client = _build_memories_test_app()
+            resp = client.get('/v1/dev/user/memories?limit=3&offset=7')
 
         assert resp.status_code == 200
         body = resp.json()
@@ -597,6 +594,7 @@ class TestDevApiMemoriesHttpLayer:
         assert locked_legacy['content'] == ''
         assert locked_legacy['category'] == 'interesting'
         assert locked_legacy['scoring'] == '123'
+        memory_service.read.assert_called_once_with('uid1', limit=3, offset=7, include_pending_processing=True)
 
     def test_cleaner_memory_coerces_edge_values(self):
         """CleanerMemory validators should be resilient outside the endpoint pre-filter too."""

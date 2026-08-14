@@ -93,7 +93,7 @@ struct LiveCaptureArchiveLocalDataSource: CaptureArchiveLocalDataSource {
   }
 }
 
-/// Read-only cache/network owner for the cohort-only Omi capture archive. It
+/// Read-only cache/network owner for the universal Omi capture archive. It
 /// has no mutation or mixed-source fallback path by design.
 @MainActor
 final class CaptureArchiveRepository: ObservableObject {

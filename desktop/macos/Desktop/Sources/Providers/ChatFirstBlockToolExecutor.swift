@@ -5,6 +5,23 @@ import Foundation
 /// as a distinct, all-or-nothing boundary.
 @MainActor
 enum ChatFirstBlockToolExecutor {
+  nonisolated static func citationSelection(
+    from block: [String: Any]
+  ) -> (kind: ChatCitationReference.Kind, sourceID: String)? {
+    switch block["type"] as? String {
+    case "taskCard":
+      return (kind: .task, sourceID: block["task_id"] as? String ?? "")
+    case "goalLink":
+      return (kind: .goal, sourceID: block["goal_id"] as? String ?? "")
+    case "captureLink", "conversationLink":
+      return (kind: .conversation, sourceID: block["conversation_id"] as? String ?? "")
+    case "memoryLink":
+      return (kind: .memory, sourceID: block["memory_id"] as? String ?? "")
+    default:
+      return nil
+    }
+  }
+
   static func execute(
     _ args: [String: Any],
     surface: AgentSurfaceReference?,
@@ -72,6 +89,10 @@ enum ChatFirstBlockToolExecutor {
         blocksJSON: journalBlocksJSON,
         authorizationSnapshot: authorizationSnapshot
       )
+      await ChatCitationProvenanceRegistry.shared.markSelected(
+        backendBlocks.compactMap { citationSelection(from: $0) }.filter { !$0.sourceID.isEmpty },
+        runID: runID,
+        attemptID: attemptID)
       return #"{"ok":true,"rendered":#(journalBlocks.count)}"#
     } catch {
       guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)

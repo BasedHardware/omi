@@ -339,10 +339,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       }
     }
 
-    // Proactive notifications are now OFF by default for everyone. Run the one-time
-    // migration before any assistant can fire, so existing users are flipped to Off
-    // once (they can re-enable in Settings).
-    NotificationService.migrateToOffByDefaultIfNeeded()
+    // Proactive notifications are back ON by default at Balanced (focus/insight
+    // categories only). Run the one-time migration before any assistant can fire;
+    // turning notifications off again in Settings sticks.
+    NotificationService.migrateToBalancedDefaultIfNeeded()
 
     // Force macOS to use the correct app icon (bypasses icon cache).
     // Apply squircle mask with proper margins because NSApp.applicationIconImage
@@ -556,13 +556,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     migrateAppName()
 
     updateOnboardingLifecyclePolicy(reason: "launch")
+    // `queue: nil` + explicit hop, never `queue: .main`: synchronous main-queue delivery makes
+    // every background `UserDefaults.set` wait on the main thread, which deadlocked the app when
+    // an auth commit held the session fence while posting and the main thread wanted that fence
+    // (frozen sign-in screen, #11374).
     userDefaultsObserver = NotificationCenter.default.addObserver(
       forName: UserDefaults.didChangeNotification,
       object: nil,
-      queue: .main
+      queue: nil
     ) { [weak self] _ in
-      MainActor.assumeIsolated {
-        self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated {
+          self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+        }
       }
     }
 
@@ -914,7 +920,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     let audioRecordingView = makeToggleItemView(
       title: "Audio Recording",
       iconName: "mic.fill",
-      isOn: !paywalled && AssistantSettings.shared.transcriptionEnabled,
+      isOn: !paywalled && AssistantSettings.shared.audioRecordingMode != .off,
       action: #selector(audioRecordingToggled(_:))
     )
     audioRecordingItem.view = audioRecordingView
@@ -1221,7 +1227,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     screenCaptureSwitch?.state =
       (!paywalled && ProactiveAssistantsPlugin.shared.isMonitoring) ? .on : .off
     audioRecordingSwitch?.state =
-      (!paywalled && AssistantSettings.shared.transcriptionEnabled) ? .on : .off
+      (!paywalled && AssistantSettings.shared.audioRecordingMode != .off) ? .on : .off
   }
 
   func menuDidClose(_ menu: NSMenu) {

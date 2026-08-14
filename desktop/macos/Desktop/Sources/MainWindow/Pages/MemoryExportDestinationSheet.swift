@@ -202,7 +202,26 @@ private struct MemoryExportRow: View {
 }
 
 @MainActor
+struct MemoryExportWorkspace {
+  var installedApplicationURL: (ConnectorBrand) -> URL?
+  var defaultApplicationURL: (URL) -> URL?
+  var openWithApplication: ([URL], URL, NSWorkspace.OpenConfiguration, @escaping @Sendable (Error?) -> Void) -> Void
+  var open: (URL) -> Void
+
+  static let live = Self(
+    installedApplicationURL: { $0.installedApplicationURL },
+    defaultApplicationURL: { NSWorkspace.shared.urlForApplication(toOpen: $0) },
+    openWithApplication: { urls, applicationURL, configuration, completion in
+      NSWorkspace.shared.open(urls, withApplicationAt: applicationURL, configuration: configuration) { _, error in
+        completion(error)
+      }
+    },
+    open: { NSWorkspace.shared.open($0) })
+}
+
+@MainActor
 final class MemoryExportDestinationSheetModel: ObservableObject {
+  private let workspace: MemoryExportWorkspace
   @Published var isRunning = false
   @Published var statusMessage: String?
   @Published var errorMessage: String?
@@ -212,6 +231,10 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
   @Published var mcpKey: String?
   @Published var isLoadingMCPKey = false
   @Published var isTestingAgentConnection = false
+
+  init(workspace: MemoryExportWorkspace = .live) {
+    self.workspace = workspace
+  }
 
   func loadConfiguration() async {
     obsidianVaultPath = await MemoryExportService.shared.obsidianVaultPath()
@@ -412,20 +435,19 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     NSWorkspace.shared.activateFileViewerSelecting([fileURL])
   }
 
-  private func openDestination(for destination: MemoryExportDestination, url: URL?) {
+  func openDestination(for destination: MemoryExportDestination, url: URL?) {
     guard let url else { return }
 
-    if let appURL = destination.brand.installedApplicationURL {
+    if let appURL = workspace.installedApplicationURL(destination.brand) {
       let configuration = NSWorkspace.OpenConfiguration()
       configuration.activates = true
 
-      NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) {
-        _, error in
+      workspace.openWithApplication([url], appURL, configuration) { [self] error in
         if let error {
           log(
             "MemoryExportDestinationSheetModel: Failed opening \(destination.title) with installed app: \(error.localizedDescription)"
           )
-          Task { @MainActor in
+          Self.performOnMainActor { [self] in
             self.openInDefaultHandler(url)
           }
         }
@@ -436,24 +458,31 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     openInDefaultHandler(url)
   }
 
-  private func openInDefaultHandler(_ url: URL) {
+  func openInDefaultHandler(_ url: URL) {
     let configuration = NSWorkspace.OpenConfiguration()
     configuration.activates = true
 
-    if let appURL = NSWorkspace.shared.urlForApplication(toOpen: url) {
-      NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: configuration) {
-        _, error in
+    if let appURL = workspace.defaultApplicationURL(url) {
+      workspace.openWithApplication([url], appURL, configuration) { [workspace] error in
         if let error {
           log(
             "MemoryExportDestinationSheetModel: Failed opening \(url.absoluteString): \(error.localizedDescription)"
           )
-          NSWorkspace.shared.open(url)
+          Self.performOnMainActor {
+            workspace.open(url)
+          }
         }
       }
       return
     }
 
-    NSWorkspace.shared.open(url)
+    workspace.open(url)
+  }
+
+  nonisolated static func performOnMainActor(_ operation: @escaping @MainActor @Sendable () -> Void) {
+    Task { @MainActor in
+      operation()
+    }
   }
 }
 

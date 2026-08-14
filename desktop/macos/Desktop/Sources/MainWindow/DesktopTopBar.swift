@@ -89,7 +89,9 @@ struct DesktopTopBar: View {
         .frame(width: laneWidth, height: TopNavigationLayoutMetrics.barHeight)
         .inkGlassPanel(
           cornerRadius: TopNavigationLayoutMetrics.barCornerRadius,
-          shadow: TopNavigationLayoutMetrics.barShadow)
+          shadow: TopNavigationLayoutMetrics.barShadow
+        )
+        .shellWindowDragHandle()
         Spacer(minLength: 0)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)

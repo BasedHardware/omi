@@ -91,14 +91,14 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertTrue(setup.connectedAgentNames.isEmpty)
   }
 
-  func testSetupSnapshotUsesMicrophoneOnlyForNeverSystemAudio() {
+  func testSetupSnapshotReportsAudioRecordingOff() {
     let model = makeModel()
     appState?.hasMicrophonePermission = true
-    let previousMode = AssistantSettings.shared.systemAudioCaptureMode
-    AssistantSettings.shared.systemAudioCaptureMode = .never
-    defer { AssistantSettings.shared.systemAudioCaptureMode = previousMode }
+    let previousMode = AssistantSettings.shared.audioRecordingMode
+    AssistantSettings.shared.audioRecordingMode = .off
+    defer { AssistantSettings.shared.audioRecordingMode = previousMode }
 
-    XCTAssertEqual(model.postOnboardingSetup.listening, .microphoneOnly)
+    XCTAssertEqual(model.postOnboardingSetup.listening, .disabled)
   }
 
   func testSetupSnapshotRejectsStaleOrBrokenScreenCapture() {
@@ -192,11 +192,11 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     model.skip()
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldArmPopup())
 
-    // What the popup's dismiss handler persists.
-    PostOnboardingPromptSuggestions.shouldShowPopup = false
-    PostOnboardingPromptSuggestions.isDismissed = true
+    PostOnboardingPromptSuggestions.consume()
 
     XCTAssertFalse(PostOnboardingPromptSuggestions.shouldArmPopup())
+    XCTAssertFalse(PostOnboardingPromptSuggestions.shouldShowPopup)
+    XCTAssertTrue(PostOnboardingPromptSuggestions.isDismissed)
   }
 
   /// The flag alone must never raise an empty popup — that is the shape the first half of this bug
@@ -210,9 +210,10 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
 
   // MARK: - The orientation cue describes the window the user actually has
 
-  /// The orientation cue must describe the signed-in shell's actual click-away behavior and name the
-  /// persistent way back after AppKit hides it.
-  func testTheMenuBarCueDescribesClickAwayDismissalAndTheWayBack() throws {
+  /// The orientation cue must describe the window the user actually has. It described click-away
+  /// dismissal for as long as the shell hid itself on deactivation; the shell now stays open when you
+  /// switch apps, and a cue promising it disappears is worse than no cue.
+  func testTheMenuBarCueDescribesAWindowThatStaysOpenAndNamesTheWayBack() throws {
     let cues = SBPostOnboardingGuidance.orientationCues(
       openShortcutTokens: ["⌃", "⌘", "O"], talkShortcutTokens: [], setup: SBSetupSnapshot())
     let menubar = try XCTUnwrap(cues.first { $0.id == "menubar" })
@@ -221,9 +222,12 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertFalse(
       title.contains("clos"),
       "there is no close button on this window, and describing one is how the first cue went stale")
+    XCTAssertFalse(
+      title.contains("put me away") || title.contains("click the desktop"),
+      "the shell no longer dismisses itself when another app takes focus")
     XCTAssertTrue(
-      title.contains("click the desktop") && title.contains("another app"),
-      "the cue must explain that app deactivation dismisses the summoned shell")
+      title.contains("stay open"),
+      "the cue must say the window survives switching apps — that is the behaviour change users see")
     XCTAssertTrue(
       title.contains("menu bar"),
       "the always-available way back must be named — the chord cue is conditional, this one is not")

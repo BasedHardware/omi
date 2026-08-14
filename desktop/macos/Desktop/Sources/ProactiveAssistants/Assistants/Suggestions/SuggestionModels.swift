@@ -24,9 +24,12 @@ struct SuggestionGrounding: Sendable {
   var memories: [String] = []
   var openCommitments: [String] = []
   var relatedScreens: [String] = []
+  /// What the user is actually trying to achieve. Without this the assistant can only say
+  /// "you have a task"; with it, it can say why the current screen is not that.
+  var goals: [String] = []
 
   var isEmpty: Bool {
-    memories.isEmpty && openCommitments.isEmpty && relatedScreens.isEmpty
+    memories.isEmpty && openCommitments.isEmpty && relatedScreens.isEmpty && goals.isEmpty
   }
 
   /// Preamble for the grounding block.
@@ -46,6 +49,9 @@ struct SuggestionGrounding: Sendable {
   func promptSections() -> String {
     guard !isEmpty else { return "" }
     var sections: [String] = [Self.untrustedPreamble]
+    if !goals.isEmpty {
+      sections.append("== WHAT THE USER IS TRYING TO ACHIEVE ==\n" + goals.joined(separator: "\n"))
+    }
     if !memories.isEmpty {
       sections.append("== WHAT OMI KNOWS ABOUT THE USER ==\n" + memories.joined(separator: "\n"))
     }
@@ -127,7 +133,6 @@ enum SuggestionGateDecision: Equatable, Sendable {
   case skippedDisabled
   case skippedExcludedApp
   case skippedCooldown
-  case skippedSnoozed
   /// The user has not settled in this context long enough to be working in it.
   case skippedDwell
   /// Today's evaluation budget is spent.
@@ -142,6 +147,23 @@ enum SuggestionGateDecision: Equatable, Sendable {
 /// model, no I/O — so the cost contract ("no context switch, no Gemini call") is provable
 /// in a unit test.
 enum SuggestionGatePolicy {
+  /// How long the user must sit in a context before it is worth an evaluation.
+  ///
+  /// Maximum (level 5) is an explicit "show me everything, fast": open TikTok and the
+  /// nudge should land in seconds, so dwell drops to 10 s there. Every other level keeps
+  /// the deliberate 30 s — passing through a window is not a request for advice.
+  static func requiredDwell(frequencyLevel: Int) -> TimeInterval {
+    frequencyLevel >= 5 ? 10 : 30
+  }
+
+  /// Between-nudge cooldown, from the user's configured base.
+  ///
+  /// Maximum caps it at 30 s — a user who chose "Maximum" wants back-to-back nudges, not
+  /// one per three minutes. Every other level keeps the configured value untouched.
+  static func cooldown(base: TimeInterval, frequencyLevel: Int) -> TimeInterval {
+    frequencyLevel >= 5 ? min(base, 30) : base
+  }
+
   /// Ordered cheapest-first, and every branch is free. Switching apps is not evidence that
   /// the user wants advice — people cmd-tab hundreds of times a day — so dwell and the
   /// daily budget do most of the work here, and the caller adds a grounding check before
@@ -149,7 +171,6 @@ enum SuggestionGatePolicy {
   static func decide(
     isEnabled: Bool,
     isAppExcluded: Bool,
-    isSnoozed: Bool,
     now: Date,
     lastEvaluationAt: Date?,
     cooldown: TimeInterval,
@@ -160,7 +181,6 @@ enum SuggestionGatePolicy {
   ) -> SuggestionGateDecision {
     guard isEnabled else { return .skippedDisabled }
     guard !isAppExcluded else { return .skippedExcludedApp }
-    guard !isSnoozed else { return .skippedSnoozed }
     guard dwell >= requiredDwell else { return .skippedDwell }
     if let lastEvaluationAt, now.timeIntervalSince(lastEvaluationAt) < cooldown {
       return .skippedCooldown
@@ -261,6 +281,195 @@ enum SuggestionSearchTerm {
       .split(separator: " ")
       .map(String.init)
       .joined(separator: " ")
+  }
+}
+
+// MARK: - Delivery Policy
+
+/// Whether a produced suggestion actually reaches the user, and if not, why.
+///
+/// Split out as a pure function for the same reason as `SuggestionGatePolicy`: "the model
+/// returned a suggestion" and "the user saw a card" are different claims, and code that
+/// conflates them will report success for a card that was silently filtered.
+enum SuggestionDeliveryPolicy {
+  static func decide(
+    hasOwner: Bool,
+    confidence: Double,
+    threshold: Double,
+    isDuplicate: Bool,
+    isGroundedCommitment: Bool
+  ) -> SuggestionAssistantTelemetry.DeliveryOutcome {
+    guard hasOwner else { return .rejectedOwner }
+    guard confidence >= threshold else { return .filteredLowConfidence }
+    guard !isDuplicate else { return .filteredDuplicate }
+    guard isGroundedCommitment else { return .filteredUngroundedCommitment }
+    return .delivered
+  }
+}
+
+// MARK: - Due Date Phrasing
+
+/// Turns a due date into the phrase a person would use.
+///
+/// Calendar-day arithmetic in the *local* timezone, deliberately: a task due 23:59 tonight
+/// is "due today" to the user even though it is tomorrow in UTC.
+enum SuggestionDueDescription {
+  static func phrase(for dueAt: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+    let dueDay = calendar.startOfDay(for: dueAt)
+    let today = calendar.startOfDay(for: now)
+    let days = calendar.dateComponents([.day], from: today, to: dueDay).day ?? 0
+
+    switch days {
+    case 0: return "due today"
+    case 1: return "due tomorrow"
+    case ..<0:
+      let late = -days
+      return late == 1 ? "overdue by a day" : "overdue by \(late) days"
+    default:
+      return "due in \(days) days"
+    }
+  }
+}
+
+// MARK: - Dwell Anchor
+
+/// Decides which moment the dwell clock runs from when a context switch arrives.
+///
+/// A context switch fires on app *or* window-title change, and plenty of apps rewrite
+/// their own title while the user sits perfectly still: TikTok and YouTube relabel the tab
+/// on every video, chat apps on every unread count. Anchoring dwell to each of those
+/// restarted the clock every few seconds, so the exact contexts a distraction nudge exists
+/// for were the ones it could never fire in. Dwell therefore tracks the app; the title is
+/// still updated so the evaluated frame describes what is on screen now.
+enum SuggestionDwellAnchor {
+  /// Words too common to prove two titles are the same place.
+  private static let stopwords: Set<String> = [
+    "the", "and", "for", "you", "your", "with", "new", "tab", "untitled", "loading", "www", "com",
+  ]
+
+  private static func tokens(_ title: String?) -> Set<String> {
+    guard let title else { return [] }
+    let lowered = title.lowercased()
+    let stripped = String(lowered.map { $0.isLetter || $0.isNumber ? $0 : " " })
+    return Set(stripped.split(separator: " ").map(String.init).filter { $0.count > 2 })
+      .subtracting(stopwords)
+  }
+
+  /// Whether two window titles describe the same sitting.
+  ///
+  /// Title churn inside one place keeps a recognisable word — TikTok and YouTube leave their
+  /// own name in the tab, a document keeps its filename — so one shared significant word is
+  /// enough to say "still here". Moving from a work page to a feed shares nothing, and must
+  /// start the clock over.
+  static func isSameContext(_ lhs: String?, _ rhs: String?) -> Bool {
+    if lhs == rhs { return true }
+    // A title we cannot read is no evidence either way; do not let it end a sitting.
+    guard let lhs, let rhs else { return true }
+    let left = tokens(lhs)
+    let right = tokens(rhs)
+    // A readable title that carries no identifying word ("New Tab", "Untitled") is a real
+    // transition — the user left the previous page — so it starts a new sitting.
+    if left.isEmpty || right.isEmpty { return false }
+    return !left.isDisjoint(with: right)
+  }
+
+  /// The timestamp the dwell clock should run from after a context switch.
+  ///
+  /// Keying on the app alone was wrong in the other direction: ten minutes on a work page
+  /// followed by one tab change to TikTok would inherit the whole prior dwell and fire
+  /// instantly, which is the opposite of proving the user settled somewhere.
+  static func anchor(
+    current: Date?,
+    currentApp: String?,
+    currentWindowTitle: String?,
+    newApp: String,
+    newWindowTitle: String?,
+    now: Date
+  ) -> Date {
+    guard let current, currentApp == newApp else { return now }
+    return isSameContext(currentWindowTitle, newWindowTitle) ? current : now
+  }
+}
+
+// MARK: - Commitment Grounding
+
+/// Holds a commitment nudge to the commitments it was actually given.
+///
+/// The prompt teaches the shape of a good nudge with worked examples, and a model that has
+/// nothing to nudge about will reproduce one of those examples as though it were the user's
+/// own — with high confidence, because a polished example reads as a confident sentence.
+/// That failure mode is invisible to the confidence bar (the fabricated card scores *above*
+/// grounded ones) and invisible to dedup (it is novel every time), so it has to be caught
+/// by asking the only question that distinguishes it: is the work it names in OPEN
+/// COMMITMENTS at all?
+///
+/// Only `commitment` is checked. The other categories are about what is on screen, which is
+/// evidence the model can see and this guard cannot.
+enum SuggestionCommitmentGuard {
+  /// Share of a commitment's own content words the suggestion must carry, used only as the
+  /// fallback when nothing distinctive is shared.
+  ///
+  /// Coverage alone was the whole rule and it punished long tasks: "Exchange weekly tasks
+  /// with accountability partner and update the shared Google Doc tracker" has ten content
+  /// words, so a perfectly good "you still owe the weekly exchange" cleared two of them and
+  /// was thrown out as ungrounded. Length of the task is not evidence about the nudge.
+  static let requiredCoverage = 0.5
+
+  /// One shared word is a coincidence — "update", "send" and "follow" appear in most
+  /// commitments. Two is a reference.
+  static let minimumSharedTokens = 2
+
+  /// Words that describe *doing* rather than *what* — they appear across most commitments,
+  /// so sharing only these identifies nothing. "Send the update" could be any task; "send
+  /// the Figma comments" could not.
+  private static let genericTaskWords: Set<String> = [
+    "send", "sent", "update", "updates", "follow", "followup", "check", "review", "reply",
+    "respond", "call", "make", "made", "get", "finish", "ship", "add", "fix", "ask", "tell",
+    "write", "read", "post", "share", "start", "record", "task", "tasks", "email", "message",
+  ]
+
+  /// Words that carry no identifying signal, so they cannot vouch for a commitment.
+  /// `SuggestionDeduplication.normalize` already drops tokens of 1-2 characters.
+  private static let stopwords: Set<String> = [
+    "the", "and", "for", "you", "your", "with", "that", "this", "have", "has", "had",
+    "still", "havent", "haven", "not", "yet", "get", "got", "was", "are", "but", "out",
+    "off", "its", "our", "their", "them", "they", "from", "into", "onto", "about", "over",
+    "due", "today", "tomorrow", "now", "then", "when", "what", "who", "how", "why",
+    "moment", "good", "time", "need", "needs", "should", "would", "could", "make", "made",
+  ]
+
+  private static func contentTokens(_ text: String) -> Set<String> {
+    SuggestionDeduplication.normalize(text).subtracting(stopwords)
+  }
+
+  /// Whether `suggestion` may be delivered given the commitments in its grounding.
+  ///
+  /// Non-commitment categories always pass. An empty commitment list fails every
+  /// commitment nudge, which is the point: with nothing to reference, there is nothing a
+  /// commitment nudge could truthfully be about.
+  static func isGrounded(
+    suggestion: String,
+    category: SuggestionCategory,
+    openCommitments: [String]
+  ) -> Bool {
+    guard category == .commitment else { return true }
+
+    let suggestionTokens = contentTokens(suggestion)
+    guard !suggestionTokens.isEmpty else { return false }
+
+    return openCommitments.contains { commitment in
+      let commitmentTokens = contentTokens(commitment)
+      guard !commitmentTokens.isEmpty else { return false }
+      let shared = commitmentTokens.intersection(suggestionTokens)
+      guard shared.count >= minimumSharedTokens else { return false }
+
+      // Naming something only that commitment contains is a reference, however short the
+      // nudge and however long the task. Otherwise fall back to proportional coverage,
+      // which is what stops "send the update" from matching every commitment that happens
+      // to contain both words.
+      if !shared.subtracting(genericTaskWords).isEmpty { return true }
+      return Double(shared.count) / Double(commitmentTokens.count) >= requiredCoverage
+    }
   }
 }
 
