@@ -18,17 +18,18 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from google.cloud import firestore
-from google.cloud.firestore_v1 import FieldFilter, transactional
+from google.cloud.firestore_v1 import FieldFilter, LastUpdateOption, transactional
 from google.cloud.firestore_v1.field_path import FieldPath as _FieldPath
 
 from google.api_core.exceptions import (
     AlreadyExists as _FirestoreAlreadyExists,
     Conflict as _FirestoreConflict,
+    FailedPrecondition as _FirestoreFailedPrecondition,
     NotFound as _FirestoreNotFound,
 )
 
 from ..._client import db as _boundary_db, delete_collection_recursive, run_transactional
-from ..errors import AlreadyExists, NotFound
+from ..errors import AlreadyExists, NotFound, PreconditionFailed
 from ..records import StoredDocument
 from ..sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 from ..ports import Filter
@@ -131,6 +132,11 @@ def _record_from_query(snapshot: Any) -> StoredDocument:
     )
 
 
+def _last_update_option(if_updated_at: Any) -> Any:
+    """Neutral ``if_updated_at`` precondition -> Firestore ``LastUpdateOption`` (or ``None``)."""
+    return LastUpdateOption(if_updated_at) if if_updated_at is not None else None
+
+
 class _FirestoreBatch:
     """Neutral batched-write accumulator over a Firestore WriteBatch (atomic per commit)."""
 
@@ -141,14 +147,21 @@ class _FirestoreBatch:
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
         self._batch.set(self._client.document(path), _translate(data), merge=merge)
 
-    def update(self, path: str, data: Dict[str, Any]) -> None:
-        self._batch.update(self._client.document(path), _translate_update(data))
+    def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
+        self._batch.update(
+            self._client.document(path), _translate_update(data), option=_last_update_option(if_updated_at)
+        )
 
-    def delete(self, path: str) -> None:
-        self._batch.delete(self._client.document(path))
+    def delete(self, path: str, *, if_updated_at: Any = None) -> None:
+        self._batch.delete(self._client.document(path), option=_last_update_option(if_updated_at))
 
     def commit(self) -> None:
-        self._batch.commit()
+        # A LastUpdateOption that no longer holds fails the whole atomic batch here — map it to the
+        # neutral PreconditionFailed so callers branch identically to the Mongo adapter.
+        try:
+            self._batch.commit()
+        except _FirestoreFailedPrecondition as exc:
+            raise PreconditionFailed("batch") from exc
 
 
 class _FirestoreTransaction:
@@ -165,9 +178,11 @@ class _FirestoreTransaction:
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
         self._transaction.set(self._client.document(path), _translate(data), merge=merge)
 
-    def update(self, path: str, data: Dict[str, Any]) -> None:
+    def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
         try:
-            self._transaction.update(self._client.document(path), _translate_update(data))
+            self._transaction.update(
+                self._client.document(path), _translate_update(data), option=_last_update_option(if_updated_at)
+            )
         except _FirestoreNotFound as exc:
             raise NotFound(path) from exc
 
@@ -176,8 +191,8 @@ class _FirestoreTransaction:
         # commit (mapped to the neutral AlreadyExists in run_transaction), not from this call.
         self._transaction.create(self._client.document(path), _translate(data))
 
-    def delete(self, path: str) -> None:
-        self._transaction.delete(self._client.document(path))
+    def delete(self, path: str, *, if_updated_at: Any = None) -> None:
+        self._transaction.delete(self._client.document(path), option=_last_update_option(if_updated_at))
 
 
 class FirestoreDocumentStore:
@@ -200,11 +215,13 @@ class FirestoreDocumentStore:
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
         self._client.document(path).set(_translate(data), merge=merge)
 
-    def update(self, path: str, data: Dict[str, Any]) -> None:
+    def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
         try:
-            self._client.document(path).update(_translate_update(data))
+            self._client.document(path).update(_translate_update(data), option=_last_update_option(if_updated_at))
         except _FirestoreNotFound as exc:
             raise NotFound(path) from exc
+        except _FirestoreFailedPrecondition as exc:
+            raise PreconditionFailed(path) from exc
 
     def create(self, path: str, data: Dict[str, Any]) -> None:
         try:
@@ -212,8 +229,11 @@ class FirestoreDocumentStore:
         except (_FirestoreAlreadyExists, _FirestoreConflict) as exc:
             raise AlreadyExists(path) from exc
 
-    def delete(self, path: str) -> None:
-        self._client.document(path).delete()
+    def delete(self, path: str, *, if_updated_at: Any = None) -> None:
+        try:
+            self._client.document(path).delete(option=_last_update_option(if_updated_at))
+        except _FirestoreFailedPrecondition as exc:
+            raise PreconditionFailed(path) from exc
 
     # --- collection ops ---
     def query(

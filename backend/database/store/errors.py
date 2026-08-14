@@ -31,4 +31,15 @@ class NotFound(StoreError):
     """
 
 
-__all__ = ["StoreError", "AlreadyExists", "NotFound"]
+class PreconditionFailed(StoreError):
+    """A write with an ``if_updated_at`` optimistic-concurrency precondition was refused because the
+    stored document's revision no longer matches (it was updated or deleted since the caller read it).
+
+    Firestore raises ``google.api_core.exceptions.FailedPrecondition`` for a ``LastUpdateOption`` that
+    no longer holds; the Mongo adapter detects a conditional write that matched no document while the
+    document still exists at the path. Both map here so read-modify-write callers (review-queue
+    self-heal, staged-task recovery, chat clear) can catch one neutral error and retry on any backend.
+    """
+
+
+__all__ = ["StoreError", "AlreadyExists", "NotFound", "PreconditionFailed"]

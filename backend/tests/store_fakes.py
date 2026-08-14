@@ -17,7 +17,7 @@ import itertools
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
-from database.store.errors import AlreadyExists, NotFound
+from database.store.errors import AlreadyExists, NotFound, PreconditionFailed
 from database.store.records import StoredDocument
 from database.store.sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 
@@ -84,20 +84,20 @@ class _FakeBatch:
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
         self._ops.append(("set", path, data, merge))
 
-    def update(self, path: str, data: Dict[str, Any]) -> None:
-        self._ops.append(("update", path, data, None))
+    def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
+        self._ops.append(("update", path, data, if_updated_at))
 
-    def delete(self, path: str) -> None:
-        self._ops.append(("delete", path, None, None))
+    def delete(self, path: str, *, if_updated_at: Any = None) -> None:
+        self._ops.append(("delete", path, None, if_updated_at))
 
     def commit(self) -> None:
-        for kind, path, data, merge in self._ops:
+        for kind, path, data, extra in self._ops:
             if kind == "set":
-                self._store.set(path, data, merge=merge)
+                self._store.set(path, data, merge=extra)
             elif kind == "update":
-                self._store.update(path, data)
+                self._store.update(path, data, if_updated_at=extra)
             else:
-                self._store.delete(path)
+                self._store.delete(path, if_updated_at=extra)
         self._ops = []
 
 
@@ -111,14 +111,14 @@ class _FakeTransaction:
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
         self._store.set(path, data, merge=merge)
 
-    def update(self, path: str, data: Dict[str, Any]) -> None:
-        self._store.update(path, data)
+    def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
+        self._store.update(path, data, if_updated_at=if_updated_at)
 
     def create(self, path: str, data: Dict[str, Any]) -> None:
         self._store.create(path, data)
 
-    def delete(self, path: str) -> None:
-        self._store.delete(path)
+    def delete(self, path: str, *, if_updated_at: Any = None) -> None:
+        self._store.delete(path, if_updated_at=if_updated_at)
 
 
 class FakeDocumentStore:
@@ -163,16 +163,23 @@ class FakeDocumentStore:
         self._docs[path] = document
         self._stamp(path)
 
-    def update(self, path: str, data: Dict[str, Any]) -> None:
+    def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
         # ``update`` requires an existing document — it does NOT upsert (that is ``set``). The
         # Firestore reference adapter raises NotFound on a missing doc and the Mongo adapter matches
         # via matched_count==0, so the fake raises here too to stay representative of both backends.
         if path not in self._docs:
             raise NotFound(path)
+        # ``if_updated_at`` optimistic-concurrency precondition: a stale revision raises
+        # PreconditionFailed, mirroring both adapters (LastUpdateOption / _updated_at conditional).
+        if if_updated_at is not None and self._updated.get(path) != if_updated_at:
+            raise PreconditionFailed(path)
         _apply(self._docs[path], copy.deepcopy(data))
         self._stamp(path)
 
-    def delete(self, path: str) -> None:
+    def delete(self, path: str, *, if_updated_at: Any = None) -> None:
+        if if_updated_at is not None and self._updated.get(path) != if_updated_at:
+            # Precondition delete on a changed/missing revision lost the race (parity with the adapters).
+            raise PreconditionFailed(path)
         self._docs.pop(path, None)
         self._updated.pop(path, None)
 
@@ -184,14 +191,14 @@ class FakeDocumentStore:
     def _set(self, path: str, data: Dict[str, Any], *, merge: bool = False, session: Any = None) -> None:
         self.set(path, data, merge=merge)
 
-    def _update(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None:
-        self.update(path, data)
+    def _update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None, session: Any = None) -> None:
+        self.update(path, data, if_updated_at=if_updated_at)
 
     def _create(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None:
         self.create(path, data)
 
-    def _delete(self, path: str, *, session: Any = None) -> None:
-        self.delete(path)
+    def _delete(self, path: str, *, if_updated_at: Any = None, session: Any = None) -> None:
+        self.delete(path, if_updated_at=if_updated_at)
 
     def query(
         self,

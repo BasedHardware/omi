@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from database.store.errors import AlreadyExists, NotFound
+from database.store.errors import AlreadyExists, NotFound, PreconditionFailed
 from database.store.records import StoredDocument
 from database.store.sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 
@@ -122,6 +122,42 @@ def test_update_missing_raises_not_found(store, uid):
     # concurrently-deleted doc "succeeds" on one backend and fails on another.
     with pytest.raises(NotFound):
         store.update(f"users/{uid}", {"a": 1})
+
+
+def test_update_with_matching_precondition_applies(store, uid):
+    # Optimistic-concurrency precondition (neutral LastUpdateOption): passing the current revision
+    # (``updated_at``) lets the write through on every backend.
+    store.set(f"users/{uid}", {"v": 1})
+    rev = store.get(f"users/{uid}").updated_at
+    store.update(f"users/{uid}", {"v": 2}, if_updated_at=rev)
+    assert store.get(f"users/{uid}").to_dict()["v"] == 2
+
+
+def test_update_with_stale_precondition_raises(store, uid):
+    # A revision that moved since the caller read it must refuse the write with PreconditionFailed on
+    # every backend (Firestore FailedPrecondition / Mongo conditional no-match), leaving data untouched.
+    store.set(f"users/{uid}", {"v": 1})
+    stale = store.get(f"users/{uid}").updated_at
+    store.update(f"users/{uid}", {"v": 2})  # bumps the revision past ``stale``
+    with pytest.raises(PreconditionFailed):
+        store.update(f"users/{uid}", {"v": 3}, if_updated_at=stale)
+    assert store.get(f"users/{uid}").to_dict()["v"] == 2  # refused write did not apply
+
+
+def test_delete_with_matching_precondition_applies(store, uid):
+    store.set(f"users/{uid}", {"v": 1})
+    rev = store.get(f"users/{uid}").updated_at
+    store.delete(f"users/{uid}", if_updated_at=rev)
+    assert not store.get(f"users/{uid}").exists
+
+
+def test_delete_with_stale_precondition_raises(store, uid):
+    store.set(f"users/{uid}", {"v": 1})
+    stale = store.get(f"users/{uid}").updated_at
+    store.update(f"users/{uid}", {"v": 2})  # bumps the revision past ``stale``
+    with pytest.raises(PreconditionFailed):
+        store.delete(f"users/{uid}", if_updated_at=stale)
+    assert store.get(f"users/{uid}").exists  # refused delete left the doc in place
 
 
 def test_update_increment_sentinel(store, uid):

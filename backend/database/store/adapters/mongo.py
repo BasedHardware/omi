@@ -34,7 +34,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 from pymongo import ASCENDING, DESCENDING, DeleteOne, MongoClient, ReplaceOne, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
-from ..errors import AlreadyExists, NotFound
+from ..errors import AlreadyExists, NotFound, PreconditionFailed
 from ..records import StoredDocument
 from ..sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 from ..ports import Filter
@@ -97,11 +97,23 @@ def _to_record(doc: Dict[str, Any], path: str) -> StoredDocument:
 
 
 class _MongoBatch:
-    """Neutral batched-write accumulator; on commit, groups ops by collection and bulk-writes."""
+    """Neutral batched-write accumulator; on commit, groups ops by collection and bulk-writes.
+
+    Each queued op carries both a pymongo bulk op (the fast ``bulk_write`` path) and a ``run`` closure
+    that applies the same effect individually. When no op in the batch has an ``if_updated_at``
+    precondition, commit uses ``bulk_write`` unchanged. When any op does, that collection's ops run
+    sequentially in queued order via ``run`` so a precondition op can be checked and raise
+    ``PreconditionFailed`` — bulk_write's aggregate result cannot attribute a no-match to one op.
+    Mongo batches are not atomic (see the WriteBatch port docstring), so this detects the lost race
+    without rolling back; callers (staged-task recovery, chat clear) re-read and retry on the error.
+    """
 
     def __init__(self, store: "MongoDocumentStore"):
         self._store = store
         self._ops: List[tuple] = []
+
+    def _append(self, collection_name: str, op: Any, run: Callable[[Any], None], *, precond: bool = False) -> None:
+        self._ops.append((collection_name, op, run, precond))
 
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
         collection_name, parent, key = _doc_meta(path)
@@ -109,31 +121,63 @@ class _MongoBatch:
             update: Dict[str, Any] = _build_update_ops(data)
             update.setdefault("$set", {})["_updated_at"] = _now()
             update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key})
-            self._ops.append((collection_name, UpdateOne({"_id": path}, update, upsert=True)))
+            self._append(
+                collection_name,
+                UpdateOne({"_id": path}, update, upsert=True),
+                lambda coll: coll.update_one({"_id": path}, update, upsert=True),
+            )
         else:
             plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
             document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": _now(), "d": plain}
-            self._ops.append((collection_name, ReplaceOne({"_id": path}, document, upsert=True)))
+            self._append(
+                collection_name,
+                ReplaceOne({"_id": path}, document, upsert=True),
+                lambda coll: coll.replace_one({"_id": path}, document, upsert=True),
+            )
 
-    def update(self, path: str, data: Dict[str, Any]) -> None:
+    def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
         update = _build_update_ops(data)
         update.setdefault("$set", {})["_updated_at"] = _now()
-        self._ops.append((collection_name, UpdateOne({"_id": path}, update)))
+        query: Dict[str, Any] = {"_id": path}
+        if if_updated_at is not None:
+            query["_updated_at"] = if_updated_at
 
-    def delete(self, path: str) -> None:
+        def run(coll: Any) -> None:
+            result = coll.update_one(query, update)
+            if if_updated_at is not None and result.matched_count == 0:
+                raise PreconditionFailed(path)
+
+        self._append(collection_name, UpdateOne(query, update), run, precond=if_updated_at is not None)
+
+    def delete(self, path: str, *, if_updated_at: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
-        self._ops.append((collection_name, DeleteOne({"_id": path})))
+        query: Dict[str, Any] = {"_id": path}
+        if if_updated_at is not None:
+            query["_updated_at"] = if_updated_at
+
+        def run(coll: Any) -> None:
+            result = coll.delete_one(query)
+            if if_updated_at is not None and result.deleted_count == 0:
+                raise PreconditionFailed(path)
+
+        self._append(collection_name, DeleteOne(query), run, precond=if_updated_at is not None)
 
     def commit(self) -> None:
         by_collection: Dict[str, list] = defaultdict(list)
-        for collection_name, op in self._ops:
-            by_collection[collection_name].append(op)
+        for collection_name, op, run, precond in self._ops:
+            by_collection[collection_name].append((op, run, precond))
         for collection_name, ops in by_collection.items():
-            # Ordered: within one collection, queued writes to the SAME document must apply in order
-            # (a set then update, or set then delete) — ordered=False lets Mongo reorder and lose the
-            # later write or resurrect a deleted doc.
-            self._store._db[collection_name].bulk_write(ops, ordered=True)
+            coll = self._store._db[collection_name]
+            if any(precond for _, _, precond in ops):
+                # Sequential in queued order so precondition ops are individually checkable.
+                for _, run, _ in ops:
+                    run(coll)
+            else:
+                # Ordered: within one collection, queued writes to the SAME document must apply in order
+                # (a set then update, or set then delete) — ordered=False lets Mongo reorder and lose the
+                # later write or resurrect a deleted doc.
+                coll.bulk_write([op for op, _, _ in ops], ordered=True)
         self._ops = []
 
 
@@ -150,14 +194,14 @@ class _MongoTransaction:
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
         self._store._set(path, data, merge=merge, session=self._session)
 
-    def update(self, path: str, data: Dict[str, Any]) -> None:
-        self._store._update(path, data, session=self._session)
+    def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
+        self._store._update(path, data, if_updated_at=if_updated_at, session=self._session)
 
     def create(self, path: str, data: Dict[str, Any]) -> None:
         self._store._create(path, data, session=self._session)
 
-    def delete(self, path: str) -> None:
-        self._store._delete(path, session=self._session)
+    def delete(self, path: str, *, if_updated_at: Any = None) -> None:
+        self._store._delete(path, if_updated_at=if_updated_at, session=self._session)
 
 
 class MongoDocumentStore:
@@ -202,19 +246,40 @@ class MongoDocumentStore:
         if transforms:
             collection.update_one({"_id": path}, _build_update_ops(transforms), session=session)
 
-    def _update(self, path: str, data: Dict[str, Any], *, session: Any = None) -> None:
+    def _update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None, session: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
         update = _build_update_ops(data)
         update.setdefault("$set", {})["_updated_at"] = _now()
         # ``update`` requires an existing document (the Firestore reference adapter raises NotFound
         # otherwise). Mongo's update_one silently no-ops on no match, so translate matched_count==0
         # into the neutral NotFound to preserve parity across backends.
-        result = self._db[collection_name].update_one({"_id": path}, update, session=session)
+        query: Dict[str, Any] = {"_id": path}
+        if if_updated_at is not None:
+            # Optimistic-concurrency precondition (neutral LastUpdateOption): only apply if the stored
+            # revision still matches. A no-match then means either the revision moved (PreconditionFailed)
+            # or the document is gone (NotFound) — distinguish by a bare existence probe, matching
+            # Firestore, which raises FailedPrecondition on a stale revision and NotFound on a missing doc.
+            query["_updated_at"] = if_updated_at
+        result = self._db[collection_name].update_one(query, update, session=session)
         if result.matched_count == 0:
+            if if_updated_at is not None and self._db[collection_name].count_documents(
+                {"_id": path}, limit=1, session=session
+            ):
+                raise PreconditionFailed(path)
             raise NotFound(path)
 
-    def _delete(self, path: str, *, session: Any = None) -> None:
+    def _delete(self, path: str, *, if_updated_at: Any = None, session: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
+        if if_updated_at is not None:
+            # Precondition delete: remove only the revision the caller read. A no-match means the row
+            # changed or is already gone — either way the caller's read-modify-delete lost the race,
+            # so surface PreconditionFailed (parity with a Firestore delete carrying LastUpdateOption).
+            result = self._db[collection_name].delete_one(
+                {"_id": path, "_updated_at": if_updated_at}, session=session
+            )
+            if result.deleted_count == 0:
+                raise PreconditionFailed(path)
+            return
         self._db[collection_name].delete_one({"_id": path}, session=session)
 
     # --- public port surface ---
@@ -228,8 +293,8 @@ class MongoDocumentStore:
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
         self._set(path, data, merge=merge)
 
-    def update(self, path: str, data: Dict[str, Any]) -> None:
-        self._update(path, data)
+    def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
+        self._update(path, data, if_updated_at=if_updated_at)
 
     def create(self, path: str, data: Dict[str, Any]) -> None:
         self._create(path, data)
@@ -248,8 +313,8 @@ class MongoDocumentStore:
                 {"_id": path}, _build_update_ops(transforms), session=session
             )
 
-    def delete(self, path: str) -> None:
-        self._delete(path)
+    def delete(self, path: str, *, if_updated_at: Any = None) -> None:
+        self._delete(path, if_updated_at=if_updated_at)
 
     def query(
         self,
