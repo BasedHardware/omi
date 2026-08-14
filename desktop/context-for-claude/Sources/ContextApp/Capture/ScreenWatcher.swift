@@ -623,6 +623,12 @@ final class ScreenWatcher {
     /// WindowServer. At this cadence that contends with other capture apps (Zoom share, CleanShot,
     /// Loom) and shows up as UI stalls, so one snapshot is reused for `shareableContentTTL`.
     private func shareableContent(forceRefresh: Bool) async -> SCShareableContent? {
+        // Already refused, by this same API, in this same process. Asking again cannot change the
+        // answer — capture rights are settled at connection time — and every ask is a TCC request
+        // macOS answers with the "would like to record this computer's screen and audio" alert. This
+        // is what bounds a whole launch to one refused request: the tick gate stands down from the
+        // next tick on, and this stops the second, forced refresh inside the tick that was refused.
+        guard !Permissions.screenCaptureWasDeclined else { return nil }
         if !forceRefresh,
             let cachedContent,
             let cachedContentAt,
@@ -639,9 +645,25 @@ final class ScreenWatcher {
             cachedContentAt = Date()
             return content
         } catch {
+            Self.noteIfDeclined(error)
             noteError("Shareable content unavailable: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    /// **Tells a TCC refusal apart from the WindowServer having a bad moment.**
+    ///
+    /// Most capture failures are ordinary and recoverable — a window that closed mid-request, a
+    /// display reconfiguration, a fast user switch — and the stall clock already handles those. One
+    /// is not: `userDeclined` is macOS saying this process may not capture, whatever TCC's records
+    /// say about the bundle, and it is the error the system alert is raised alongside. Recording it
+    /// is the difference between one refused request per launch and one every three seconds forever.
+    private static func noteIfDeclined(_ error: Error) {
+        let error = error as NSError
+        guard error.domain == SCStreamErrorDomain,
+            error.code == SCStreamError.Code.userDeclined.rawValue
+        else { return }
+        Permissions.noteScreenCaptureDeclined()
     }
 
     private func activeWindow(pid: pid_t) async -> FrontWindow? {
@@ -740,6 +762,10 @@ final class ScreenWatcher {
             if cachedCapture?.key == request.key, cachedCapture?.filter === request.filter {
                 cachedCapture = nil
             }
+            // Judged before the cancellation check: a refusal is the same refusal whether or not the
+            // watcher was being torn down as it arrived, and the watcher that replaces this one has
+            // to know rather than start the retry loop over.
+            Self.noteIfDeclined(error)
             if !Task.isCancelled {
                 noteError("Capture failed: \(error.localizedDescription)")
             }

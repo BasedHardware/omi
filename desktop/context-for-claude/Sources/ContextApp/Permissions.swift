@@ -404,10 +404,27 @@ enum Permissions {
     }
 
     static func screenBlock() -> ScreenBlock? {
-        guard check(.screen) else {
-            return hasEverCaptured(.screen) ? .grantLost : .notGranted
-        }
-        return screenNeedsRelaunch ? .needsRelaunch : nil
+        screenBlock(
+            granted: check(.screen),
+            hasEverCaptured: hasEverCaptured(.screen),
+            needsRelaunch: screenNeedsRelaunch)
+    }
+
+    /// **The trichotomy itself, as a pure function of the three facts it is made of.**
+    ///
+    /// Separated from the machine because every input is something only this Mac can answer — a TCC
+    /// record, a `UserDefaults` flag, a window-server refusal — while the *rule* is where the wrong
+    /// answer lives. The wrong answer it had was `nil`, returned over a process that could not
+    /// capture at all, and `nil` is not a status: it is a licence for `ScreenWatcher` to ask the
+    /// WindowServer again every three seconds, forever. Each of those asks is a TCC request, and
+    /// macOS answers a request it will not honour by putting *"Context for Claude would like to
+    /// record this computer's screen and audio"* on screen — which is the reported bug, arriving on
+    /// a loop over a switch the user can see is already on.
+    nonisolated static func screenBlock(
+        granted: Bool, hasEverCaptured: Bool, needsRelaunch: Bool
+    ) -> ScreenBlock? {
+        guard granted else { return hasEverCaptured ? .grantLost : .notGranted }
+        return needsRelaunch ? .needsRelaunch : nil
     }
 
     // MARK: - Screen Recording relaunch
@@ -423,13 +440,59 @@ enum Permissions {
             defaults.set(false, forKey: Key.screenPendingRelaunch)
             return false
         }
-        if !screenGrantedAtLaunch {
-            // First time we see the grant inside a process that started without it. Persisted so the
-            // nudge survives a crash before the user gets around to reopening.
+        if screenGrantIsStale(
+            grantedAtLaunch: screenGrantedAtLaunch,
+            captureDeclined: screenCaptureWasDeclined)
+        {
+            // Persisted so the nudge survives a crash before the user gets around to reopening.
             defaults.set(true, forKey: Key.screenPendingRelaunch)
         }
         return defaults.bool(forKey: Key.screenPendingRelaunch)
     }
+
+    /// **Whether a grant TCC vouches for is one this process cannot actually use.**
+    ///
+    /// Two independent proofs, and the second one is the whole of this fix.
+    ///
+    /// `!grantedAtLaunch` is the case this predicate was written for: the grant appeared *after* we
+    /// connected to the window server, so it belongs to the next launch. It is also the only case it
+    /// could ever detect, and it is the wrong half of the problem. A bundle re-signed under a new
+    /// identity — this app's move from an ad-hoc build to a notarized Developer ID one — is granted
+    /// **before** the process starts: `CGPreflightScreenCaptureAccess()` reads `true` at launch, so
+    /// `screenGrantedAtLaunch` is `true`, so nothing ever armed the nudge, so `screenBlock()`
+    /// answered "nothing is in your way" to a process ScreenCaptureKit was refusing outright. The
+    /// state this whole predicate exists to name was unreachable in exactly the situation that
+    /// produces it.
+    ///
+    /// `captureDeclined` closes that: it is ScreenCaptureKit itself answering `userDeclined`, which
+    /// is macOS saying the grant does not apply to *this* process. That is not a thing to retry —
+    /// window-server capture rights are settled when a process connects — and retrying is what put
+    /// the system alert on a three-second loop in front of a user whose switch was already on.
+    nonisolated static func screenGrantIsStale(grantedAtLaunch: Bool, captureDeclined: Bool) -> Bool {
+        !grantedAtLaunch || captureDeclined
+    }
+
+    /// **Records that ScreenCaptureKit refused this process, in so many words.**
+    ///
+    /// Called from the one place that can know — the capture path, on `SCStreamError.userDeclined` —
+    /// and it is the observation that turns an unbounded retry into a single attempt: from the next
+    /// tick on, `screenBlock()` reports `.needsRelaunch`, the watcher stands down instead of asking
+    /// again, and the menu bar offers the relaunch that is the only thing that can actually fix it.
+    ///
+    /// `milestone` rather than `info`, because `info` is evicted from the unified log within minutes
+    /// and this is the line that explains why the screen half went quiet.
+    static func noteScreenCaptureDeclined() {
+        guard !screenCaptureDeclined.isSignalled else { return }
+        screenCaptureDeclined.signal()
+        ContextLog.milestone(
+            "ScreenCaptureKit refused this process while TCC still reports the grant as on — "
+                + "Context for Claude has to be reopened before it can see the screen",
+            "permissions")
+    }
+
+    /// Whether this process has already been refused. Read by `screenNeedsRelaunch`, and by the
+    /// capture path so it never spends a second refused request.
+    static var screenCaptureWasDeclined: Bool { screenCaptureDeclined.isSignalled }
 
     /// **Arranges for this bundle to be reopened once this process is gone, and returns.**
     ///
@@ -827,6 +890,12 @@ enum Permissions {
     /// relaunch would be vouching for a process that no longer exists. `hasEverCaptured` is the
     /// durable half, and it answers a different question.
     private static let captureClock = CaptureClock()
+
+    /// In memory and never persisted, for the same reason `captureClock` is not: window-server
+    /// capture rights are settled when a process connects, so a refusal is a fact about *this*
+    /// process. Carried into the next launch it would condemn a process that may capture perfectly
+    /// well — and the next launch is precisely the one the nudge is asking for.
+    private static let screenCaptureDeclined = Latch()
 
     private static func offMain<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
         await withCheckedContinuation { continuation in
