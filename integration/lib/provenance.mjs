@@ -42,7 +42,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** Bumped when the stamp shape changes in a way a consumer must notice. */
@@ -93,30 +93,20 @@ export const ARTIFACT_SOURCE_ROOTS = Object.freeze({
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /**
- * ── WHERE THE REPOS ARE, AND WHY THIS IS NOT PATH ARITHMETIC ────────────────
+ * ── ONE REPO ROOT ───────────────────────────────────────────────────────────
  *
- * This used to be `join(HERE, "..", "..", "..")` — true of the checkout at
- * `<workspace>/core-foundation`, and false of every linked worktree, which is
- * where the swarm protocol REQUIRES lanes to work (`bin/omi-lane`). From a lane
- * worktree the old expression resolved the workspace to the worktree ROOT, so
- * `<that>/core-foundation` and `<that>/platform` did not exist and every lane
- * hit `spawnSync git ENOENT` — an error naming neither the path nor the cause.
- * No lane could run the `make l1` / `make l2` that §4 makes non-negotiable.
+ * Frontend and backend now live in this repository. `OMI_CORE_ROOT` and
+ * `OMI_PLATFORM_ROOT` remain accepted during the transition, but they name the
+ * same checkout: unset means the git toplevel of this file; one set means that
+ * path for both; both set must be the same path. Differing values are the old
+ * two-checkout pairing, and a pass that measured two trees would be a true
+ * statement about a layout this repo no longer has.
  *
- * Two rules replace the arithmetic:
+ * Stamp *scopes* stay split (`REPO_SOURCE_ROOTS`): a surfaces artifact still
+ * hashes `frontend/`, a platform artifact still hashes `apps/`+`core/`+…. The
+ * path those hashes are taken from is one root.
  *
- *  1. **The core repo is the checkout this file lives in.** A lane working in a
- *     `core-foundation` worktree must measure ITS OWN tree — measuring the
- *     shared checkout instead would be the exact false-green this whole file
- *     exists to prevent, with the harness reporting on a tree nobody edited.
- *  2. **The workspace comes from git, not from `..`.** `--git-common-dir` points
- *     at the checkout that owns the object store no matter how many worktrees
- *     deep you are (`core-foundation` is itself a linked worktree of
- *     `upstream-keep-clean`, so this is already true in the normal case).
- *
- * `OMI_CORE_ROOT` / `OMI_PLATFORM_ROOT` override either side — a platform lane
- * points the core side at the shared checkout, and vice versa. `bin/omi-lane
- * start` prints the exact exports.
+ * The workspace still comes from git (`--git-common-dir`), not from `..`.
  */
 function resolveWorkspaceRoot() {
   const declared = process.env.OMI_WORKSPACE_ROOT;
@@ -134,9 +124,7 @@ function resolveWorkspaceRoot() {
   }
 }
 
-function resolveCoreRoot() {
-  const declared = process.env.OMI_CORE_ROOT;
-  if (declared) return declared;
+function gitToplevel() {
   try {
     return execFileSync("git", ["rev-parse", "--show-toplevel"], {
       cwd: HERE,
@@ -148,81 +136,51 @@ function resolveCoreRoot() {
   }
 }
 
+function differingRootMessage(core, platform) {
+  return (
+    "provenance: OMI_CORE_ROOT and OMI_PLATFORM_ROOT must be the same path " +
+    "now that frontend and backend live in one repo; they differ:\n" +
+    `  OMI_CORE_ROOT=${core}\n` +
+    `  OMI_PLATFORM_ROOT=${platform}\n` +
+    "  Point both at this repository, or unset both to use the git toplevel of this file."
+  );
+}
+
+function resolveMergedRoot() {
+  const core = process.env.OMI_CORE_ROOT;
+  const platform = process.env.OMI_PLATFORM_ROOT;
+  if (core && platform && resolve(core) !== resolve(platform)) {
+    throw new Error(differingRootMessage(core, platform));
+  }
+  return core || platform || gitToplevel();
+}
+
 export const WORKSPACE_ROOT = resolveWorkspaceRoot();
 
-const CANONICAL_CORE = join(WORKSPACE_ROOT, "core-foundation");
-const CANONICAL_PLATFORM = join(WORKSPACE_ROOT, "platform");
+const MERGED_ROOT = resolveMergedRoot();
 
 export const REPO_PATHS = Object.freeze({
-  "core-foundation": resolveCoreRoot(),
-  platform: process.env.OMI_PLATFORM_ROOT ?? CANONICAL_PLATFORM,
+  "core-foundation": MERGED_ROOT,
+  platform: MERGED_ROOT,
 });
 
 /**
- * ── CROSS-TREE MEASUREMENT MUST BE DECLARED, NEVER DEFAULTED ────────────────
- *
- * The rules above resolve the core side from git, so a lane worktree measures
- * itself. Platform has no such signal — the runner does not live there — so with
- * `OMI_PLATFORM_ROOT` unset it falls back to the shared checkout. Both halves
- * then exist, the preflight is satisfied, every command runs, and **L2 goes
- * green while measuring a platform tree containing none of your diff.**
- *
- * That happened within hours of the resolution fix landing. The WRITE lane's
- * receipt read `platform … 57c4fdf64d dirty=False` while its actual platform
- * half was 21 uncommitted files including a re-vendored contract tarball; re-run
- * with the variable set, the same lane reported `dirty=True` and 698 tests
- * instead of 634. Nothing was wrong with any measurement — the conclusion was
- * wrong because two of the measurements were about different artifacts, which is
- * the sentence at the top of this file, happening inside the harness it guards.
- *
- * **This is strictly worse than the failure it replaced.** `spawn bun ENOENT`
- * was loud and unmissable; two lanes hit it and neither could believe it. A
- * green L2 is believable, and it is believed.
- *
- * So the pairing must be stated. Refusing outright would be wrong — a core-only
- * diff legitimately measures against the shared platform, and that is exactly
- * what the fix for the ENOENT bug did. What is banned is doing it *by omission*,
- * where the pairing is a fallback nobody chose and nobody sees.
+ * Kept as the lane preflight entry. Mismatch already throws at module load;
+ * this re-checks so a caller that imported after mutating env cannot skip it.
  */
 export function assertCrossTreePairingIsDeclared() {
-  const coreIsWorktree = REPO_PATHS["core-foundation"] !== CANONICAL_CORE;
-  const platformIsWorktree = REPO_PATHS.platform !== CANONICAL_PLATFORM;
-  if (!coreIsWorktree && !platformIsWorktree) return; // ordinary shared run
-
-  const undeclared = [];
-  if (!process.env.OMI_CORE_ROOT) {
-    undeclared.push({
-      variable: "OMI_CORE_ROOT",
-      resolved: REPO_PATHS["core-foundation"],
-      shared: CANONICAL_CORE,
-    });
+  const core = process.env.OMI_CORE_ROOT;
+  const platform = process.env.OMI_PLATFORM_ROOT;
+  if (core && platform && resolve(core) !== resolve(platform)) {
+    throw new Error(differingRootMessage(core, platform));
   }
-  if (!process.env.OMI_PLATFORM_ROOT) {
-    undeclared.push({
-      variable: "OMI_PLATFORM_ROOT",
-      resolved: REPO_PATHS.platform,
-      shared: CANONICAL_PLATFORM,
-    });
+  if (resolve(REPO_PATHS["core-foundation"]) !== resolve(REPO_PATHS.platform)) {
+    throw new Error(
+      "provenance: resolved core-foundation and platform roots differ inside one process:\n" +
+        `  core-foundation=${REPO_PATHS["core-foundation"]}\n` +
+        `  platform=${REPO_PATHS.platform}`,
+    );
   }
-  if (undeclared.length === 0) return;
-
-  const lines = undeclared.map(
-    ({ variable, resolved, shared }) =>
-      `  ${variable} is unset, so this side resolved to ${resolved}` +
-      (resolved === shared ? "  <- the SHARED checkout, not your lane" : ""),
-  );
-  throw new Error(
-    "provenance: this run measures one lane worktree and one other tree, and the\n" +
-      "pairing was never declared. A pass would be a true statement about a tree\n" +
-      "that may contain none of your diff.\n\n" +
-      `${lines.join("\n")}\n\n` +
-      "  Declare BOTH sides. Point each at your worktree, or at the shared checkout\n" +
-      "  to say plainly that your diff does not touch it:\n\n" +
-      `    export OMI_CORE_ROOT=${REPO_PATHS["core-foundation"]}\n` +
-      `    export OMI_PLATFORM_ROOT=${REPO_PATHS.platform}\n\n` +
-      "  Those values are what this run would have used. Exporting them changes\n" +
-      "  nothing except that you chose them.",
-  );
 }
 
 /**

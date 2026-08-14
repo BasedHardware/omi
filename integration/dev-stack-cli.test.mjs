@@ -34,12 +34,10 @@ afterEach(() => {
 });
 
 function roots() {
-  const core = join(scratch, "core-root");
-  const platform = join(scratch, "platform-root");
-  mkdirSync(join(platform, "apps/service/bin"), { recursive: true });
-  mkdirSync(core, { recursive: true });
-  writeFileSync(join(platform, "apps/service/bin/dev-server.ts"), "// must never execute in occupancy tests\n");
-  return { core, platform };
+  const root = join(scratch, "repo-root");
+  mkdirSync(join(root, "apps/service/bin"), { recursive: true });
+  writeFileSync(join(root, "apps/service/bin/dev-server.ts"), "// must never execute in occupancy tests\n");
+  return { core: root, platform: root };
 }
 
 async function occupy(port) {
@@ -210,7 +208,7 @@ test("RED-PROOF a failed assert leaves the sanitized run log readable", () => {
   writeFileSync(ios, "#!/bin/bash\nexit 1\n");
   chmodSync(macos, 0o755);
   chmodSync(ios, 0o755);
-  writeFileSync(join(rootPair.core, "core/package.json"), "{not-json");
+  writeFileSync(join(rootPair.core, "frontend/package.json"), "{not-json");
 
   const result = run(["--assert", "--run-id", "run-keep-logs"], rootPair);
   assert.notEqual(result.status, 0, `${result.stdout}${result.stderr}`);

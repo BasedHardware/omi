@@ -60,7 +60,7 @@ const CORE_REPO = REPO_PATHS["core-foundation"];
 const PLATFORM_REPO = REPO_PATHS.platform;
 // OMI_CORE_ROOT names the repository root to provenance and the public lane
 // interface. The Swift generator predates that interface and expects the
-// nested `core/` directory. Override it only in child processes that execute
+// nested `frontend/` directory. Override it only in child processes that execute
 // codegen; never rewrite the caller's environment or the provenance root.
 const CORE_CODEGEN_ENV = Object.freeze({ OMI_CORE_ROOT: join(CORE_REPO, "frontend") });
 
@@ -181,7 +181,7 @@ export const LANES = {
       // asserts the two tree hashes really are equal first, or it would pass
       // vacuously the moment the fixtures drifted — the same shape as the
       // mutation that stayed green.
-      { cwd: CORE_REPO, command: "node --test integration/dev-stack-cli.test.mjs integration/lib/artifact-safety.test.mjs integration/lib/evidence-cli.test.mjs integration/lib/evidence-matrix.test.mjs integration/lib/lane-step-env.test.mjs integration/lib/process-owner.test.mjs integration/lib/receipts.test.mjs integration/lib/receipts-concurrency.test.mjs integration/lib/run-report.test.mjs integration/lib/sanitize-log.test.mjs integration/single-service-structure.test.mjs frontend/shells/macos/tests/consumer-evidence-writer.test.mjs frontend/shells/ios/tests/dev-run-ios.test.mjs" },
+      { cwd: CORE_REPO, command: "node --test integration/dev-stack-cli.test.mjs integration/lib/artifact-safety.test.mjs integration/lib/evidence-cli.test.mjs integration/lib/evidence-matrix.test.mjs integration/lib/lane-step-env.test.mjs integration/lib/process-owner.test.mjs integration/lib/provenance-root.test.mjs integration/lib/receipts.test.mjs integration/lib/receipts-concurrency.test.mjs integration/lib/run-report.test.mjs integration/lib/sanitize-log.test.mjs integration/single-service-structure.test.mjs frontend/shells/macos/tests/consumer-evidence-writer.test.mjs frontend/shells/ios/tests/dev-run-ios.test.mjs" },
     ],
   },
   L3: {
