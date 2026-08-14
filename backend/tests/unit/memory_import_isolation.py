@@ -73,6 +73,7 @@ def make_database_client_stub() -> ModuleType:
     client_mod.db = MagicMock()
     client_mod.delete_collection_recursive = MagicMock()
     client_mod.get_firestore_client = lambda: client_mod.db
+    client_mod.get_customer_firestore_client = lambda: client_mod.db
 
     def _document_id_from_seed(seed: str) -> str:
         seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
@@ -681,6 +682,9 @@ def install_mcp_search_memories_stubs(backend_dir: str) -> list[str]:
     drop_stale_module("models.memories", os.path.join(backend_dir, "models", "memories.py"))
     drop_stale_module("models.conversation_enums", os.path.join(backend_dir, "models", "conversation_enums.py"))
     drop_stale_module("models.mcp_api_key", os.path.join(backend_dir, "models", "mcp_api_key.py"))
+    drop_stale_module("utils.mcp_data", os.path.join(backend_dir, "utils", "mcp_data.py"))
+    drop_stale_module("utils.mcp_memories", os.path.join(backend_dir, "utils", "mcp_memories.py"))
+    drop_stale_module("database.screen_activity", os.path.join(backend_dir, "database", "screen_activity.py"))
 
     stub_names = [
         "database._client",
@@ -702,6 +706,7 @@ def install_mcp_search_memories_stubs(backend_dir: str) -> list[str]:
         "database.fair_use",
         "database.auth",
         "database.dev_api_key",
+        "database.screen_activity",
         "firebase_admin",
         "firebase_admin.messaging",
         "firebase_admin.auth",
@@ -795,14 +800,18 @@ def install_memory_product_router_stubs(
 ) -> list[str]:
     sys.modules["fastapi"] = fastapi_stub
     sys.modules["database._client"] = MagicMock()
-    vector_db_stub = types.ModuleType("database.vector_db")
+    memories_stub = AutoMockModule("database.memories")
+    memories_stub.get_memories = MagicMock(return_value=[])
+    sys.modules["database.memories"] = memories_stub
+    vector_db_stub = AutoMockModule("database.vector_db")
     vector_db_stub.query_memory_vector_candidates = MagicMock(return_value=[])
     sys.modules["database.vector_db"] = vector_db_stub
     sys.modules["utils.other.endpoints"] = auth_stub
     database_pkg = sys.modules.get("database")
     if isinstance(database_pkg, ModuleType):
+        setattr(database_pkg, "memories", memories_stub)
         setattr(database_pkg, "vector_db", vector_db_stub)
-    return ["fastapi", "database._client", "database.vector_db", "utils.other.endpoints"]
+    return ["fastapi", "database._client", "database.memories", "database.vector_db", "utils.other.endpoints"]
 
 
 _NON_ACTIVE_ROUTES_FIRESTORE_STUBBED = False

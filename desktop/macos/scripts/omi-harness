@@ -21,7 +21,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 import typing
 
-
 SCHEMA_VERSION = 2
 MIN_COMPATIBLE_FLOW_VERSION = 1
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -29,6 +28,17 @@ DESKTOP_DIR = SCRIPT_DIR.parent
 DEFAULT_PORT = int(os.environ.get("OMI_AUTOMATION_PORT", "47777"))
 DEFAULT_RUN_ROOT = DESKTOP_DIR / ".harness/runs"
 POLL_INTERVAL_SECONDS = 0.02
+NAMED_NON_PRODUCTION_BUNDLE_PREFIX = "com.omi.omi-"
+STABLE_ACCESSIBILITY_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+AUTOMATION_UI_PRESENTATION_ACTION = "set_automation_ui_presentation"
+AUTOMATION_UI_PRESENTATION_MODES = {"quiet", "interactive", "normal"}
+
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+from automation_token_lib import (  # noqa: E402
+    automation_token,
+    automation_token_missing_message,
+)
 
 
 @dataclass
@@ -42,6 +52,8 @@ class HarnessContext:
     log_start: int
     bundle_id: str | None
     process_match: str | None
+    presentation_restore_mode: str | None = None
+    presentation_control_available: bool = False
 
 
 def now_iso() -> str:
@@ -96,21 +108,6 @@ def write_json(path: Path, data: typing.Any) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def automation_token(port: int) -> str | None:
-    token = os.environ.get("OMI_AUTOMATION_TOKEN", "").strip()
-    if token:
-        return token
-    token_file = Path(
-        os.environ.get("OMI_AUTOMATION_TOKEN_FILE")
-        or os.path.join(os.environ.get("TMPDIR", "/tmp"), f"omi-automation-{port}.token")
-    )
-    try:
-        token = token_file.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        return None
-    return token or None
-
-
 def automation_port_from_base_url(base_url: str) -> int:
     return int(base_url.rsplit(":", 1)[1])
 
@@ -125,9 +122,12 @@ def request_json(
     data = None
     headers = {"Accept": "application/json"}
     if authenticate:
-        token = automation_token(automation_port_from_base_url(base_url))
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        port = automation_port_from_base_url(base_url)
+        token = automation_token(port)
+        if not token:
+            # Fail loud instead of omitting Authorization and surfacing a generic 401.
+            return {"ok": False, "error": automation_token_missing_message(port)}
+        headers["Authorization"] = f"Bearer {token}"
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -147,6 +147,113 @@ def request_json(
         return {"ok": False, "error": f"connection_failed: {exc.reason}"}
     except TimeoutError as exc:
         return {"ok": False, "error": f"connection_timeout: {exc}"}
+
+
+class AutomationUIPresentationUnavailable(RuntimeError):
+    """The bundle predates the optional automation UI presentation action."""
+
+
+def automation_ui_presentation_unavailable(response: dict[str, typing.Any]) -> bool:
+    error = str(response.get("error") or "")
+    return response.get("http_status") in {404, 501} or error.startswith("unknown_action:")
+
+
+def automation_ui_presentation_detail(response: dict[str, typing.Any]) -> dict[str, typing.Any]:
+    if automation_ui_presentation_unavailable(response):
+        raise AutomationUIPresentationUnavailable(
+            f"{AUTOMATION_UI_PRESENTATION_ACTION} is unavailable on this bundle"
+        )
+    if not response.get("ok"):
+        raise RuntimeError(response.get("error") or "automation UI presentation action failed")
+    result = response.get("result")
+    detail = result.get("detail") if isinstance(result, dict) else None
+    if not isinstance(detail, dict):
+        raise RuntimeError("automation UI presentation action returned no detail")
+    return detail
+
+
+def automation_ui_presentation(
+    ctx: HarnessContext, mode: str | None = None, activate: bool = False
+) -> dict[str, typing.Any]:
+    payload: dict[str, typing.Any] = {"name": AUTOMATION_UI_PRESENTATION_ACTION}
+    if mode is not None:
+        if mode not in AUTOMATION_UI_PRESENTATION_MODES:
+            raise ValueError(f"unsupported automation UI presentation mode: {mode!r}")
+        payload["params"] = {"mode": mode, "activate": activate}
+    return automation_ui_presentation_detail(
+        request_json(ctx.base_url, "POST", "/action", payload)
+    )
+
+
+def validate_automation_ui_presentation_mode(detail: dict[str, typing.Any], key: str) -> str:
+    mode = detail.get(key)
+    if mode not in AUTOMATION_UI_PRESENTATION_MODES:
+        raise RuntimeError(f"automation UI presentation detail missing valid {key}: {detail!r}")
+    return str(mode)
+
+
+def prepare_automation_ui_presentation(ctx: HarnessContext, warnings: list[str]) -> None:
+    """Take quiet-mode ownership for the run, when the bundle supports it."""
+    try:
+        query_detail = automation_ui_presentation(ctx)
+    except AutomationUIPresentationUnavailable as exc:
+        warnings.append(f"{exc}; continuing without quiet UI presentation")
+        return
+
+    # The query is intentional: it exercises the action's read path before any
+    # harness-owned presentation change. The setter's previous_mode remains the
+    # authoritative restore target in case a user changes the mode between calls.
+    prior_mode = validate_automation_ui_presentation_mode(query_detail, "mode")
+    # Record the queried mode before attempting the setter. If the setter
+    # changes the app and then loses its response, teardown still has a target.
+    ctx.presentation_restore_mode = prior_mode
+    ctx.presentation_control_available = True
+    try:
+        quiet_detail = automation_ui_presentation(ctx, "quiet", activate=False)
+    except AutomationUIPresentationUnavailable as exc:
+        ctx.presentation_control_available = False
+        warnings.append(f"{exc}; continuing without quiet UI presentation")
+        return
+
+    restore_mode = validate_automation_ui_presentation_mode(quiet_detail, "previous_mode")
+    ctx.presentation_restore_mode = restore_mode
+    # Mark ownership before validating the returned current mode so a malformed
+    # response after a successful setter still gets a best-effort restore.
+    ctx.presentation_control_available = True
+    if validate_automation_ui_presentation_mode(quiet_detail, "mode") != "quiet":
+        raise RuntimeError(f"automation UI presentation did not enter quiet mode: {quiet_detail!r}")
+
+
+def restore_automation_ui_presentation(
+    ctx: HarnessContext, errors: list[str]
+) -> None:
+    if not ctx.presentation_control_available or ctx.presentation_restore_mode is None:
+        return
+    restore_mode = ctx.presentation_restore_mode
+    try:
+        detail = automation_ui_presentation(ctx, restore_mode, activate=False)
+        if validate_automation_ui_presentation_mode(detail, "mode") != restore_mode:
+            raise RuntimeError(f"restore returned unexpected detail: {detail!r}")
+    except AutomationUIPresentationUnavailable as exc:
+        errors.append(f"failed to restore automation UI presentation to {restore_mode!r}: {exc}")
+    except Exception as exc:  # noqa: BLE001 - teardown must be reflected in run artifacts.
+        errors.append(f"failed to restore automation UI presentation to {restore_mode!r}: {exc}")
+    finally:
+        ctx.presentation_control_available = False
+
+
+def run_agent_swift_in_interactive_mode(
+    ctx: HarnessContext, args: list[str]
+) -> subprocess.CompletedProcess[str]:
+    if not ctx.presentation_control_available:
+        return run_agent_swift(ctx, args)
+    try:
+        automation_ui_presentation(ctx, "interactive", activate=True)
+        return run_agent_swift(ctx, args)
+    finally:
+        # AX needs real pixels and activation only for the duration of this
+        # command; quiet mode is restored even when agent-swift fails.
+        automation_ui_presentation(ctx, "quiet", activate=False)
 
 
 def log_path_from_health(health: dict[str, typing.Any], explicit_log: str | None = None) -> Path:
@@ -322,7 +429,9 @@ def wait_for_state(
     return False, latest
 
 
-def wait_for_trace(ctx: HarnessContext, expectations: dict[str, typing.Any], timeout: float = 5.0) -> tuple[bool, list[dict[str, typing.Any]]]:
+def wait_for_trace(
+    ctx: HarnessContext, expectations: dict[str, typing.Any], timeout: float = 5.0
+) -> tuple[bool, list[dict[str, typing.Any]]]:
     deadline = time.monotonic() + timeout
     traces: list[dict[str, typing.Any]] = []
     while time.monotonic() < deadline:
@@ -354,7 +463,12 @@ def collect_logs(ctx: HarnessContext) -> dict[str, typing.Any]:
     out = ctx.run_dir / "logs.txt"
     out.write_text(text, encoding="utf-8")
     error_count = len(re.findall(r"\b(error|failed|exception|crash)\b", text, flags=re.IGNORECASE))
-    return {"path": str(out), "available": ctx.log_path.exists(), "bytes": len(text.encode("utf-8")), "error_count": error_count}
+    return {
+        "path": str(out),
+        "available": ctx.log_path.exists(),
+        "bytes": len(text.encode("utf-8")),
+        "error_count": error_count,
+    }
 
 
 def _ancestor_pids() -> set[int]:
@@ -452,7 +566,9 @@ def read_process_sample(pid: int) -> dict[str, typing.Any] | None:
     }
 
 
-def sample_process_power(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None, dict[str, typing.Any]]:
+def sample_process_power(
+    ctx: HarnessContext, spec: dict[str, typing.Any], path: Path
+) -> tuple[bool, str | None, dict[str, typing.Any]]:
     pid, match = resolve_sample_pid(ctx, spec)
     duration_ms = max(250, int(spec.get("duration_ms", 5000)))
     interval_ms = max(100, int(spec.get("interval_ms", 250)))
@@ -507,7 +623,12 @@ def step_prefix(index: int, step: dict[str, typing.Any]) -> str:
 
 def run_agent_swift(ctx: HarnessContext, args: list[str]) -> subprocess.CompletedProcess[str]:
     if not ctx.bundle_id:
-        raise RuntimeError("ax.expect requires --bundle-id")
+        raise RuntimeError("AX steps require --bundle-id")
+    if not ctx.bundle_id.startswith(NAMED_NON_PRODUCTION_BUNDLE_PREFIX):
+        raise RuntimeError(
+            "AX steps require a named non-production bundle id beginning with "
+            f"{NAMED_NON_PRODUCTION_BUNDLE_PREFIX!r}; refusing {ctx.bundle_id!r}"
+        )
     connect = subprocess.run(
         ["agent-swift", "connect", "--bundle-id", ctx.bundle_id],
         check=False,
@@ -518,7 +639,9 @@ def run_agent_swift(ctx: HarnessContext, args: list[str]) -> subprocess.Complete
     )
     if connect.returncode != 0:
         return connect
-    return subprocess.run(["agent-swift", *args], check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=20)
+    return subprocess.run(
+        ["agent-swift", *args], check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=20
+    )
 
 
 def action_payload(spec: dict[str, typing.Any]) -> dict[str, typing.Any]:
@@ -564,29 +687,175 @@ def assert_log(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> 
 def assert_trace(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
     traces = recent_traces(ctx)
     write_json(path, traces)
-    expectations = spec.get("equals") or spec
+    # A responsiveness assertion must apply to the route just exercised, not
+    # a faster matching route left over from an earlier loop iteration.
+    # `latest` is intentionally a harness-only selector, never a trace field.
+    latest = spec.get("latest", False)
+    if not isinstance(latest, bool):
+        return False, "trace.expect latest must be a boolean"
+    expectations = spec.get("equals") or {key: value for key, value in spec.items() if key != "latest"}
     if not isinstance(expectations, dict):
         return False, "trace.expect requires a mapping"
-    if any(expectation_matches({"trace": trace}, expectations) for trace in traces):
+    if latest:
+        # State waits commonly issue a follow-up /state request. Select the
+        # newest trace for the exercised route rather than accidentally
+        # asserting on that bookkeeping request. Select by route identity only
+        # (path + method); status and duration remain assertion predicates so a
+        # failed latest response can never be hidden by an earlier success.
+        selector = {
+            key: value
+            for key, value in expectations.items()
+            if key in {"trace.path", "trace.method"}
+            and not isinstance(value, dict)
+        }
+        matching = [trace for trace in traces if expectation_matches({"trace": trace}, selector)]
+        candidates = matching[-1:] if matching else traces[-1:]
+    else:
+        candidates = traces
+    if any(expectation_matches({"trace": trace}, expectations) for trace in candidates):
         return True, None
-    reasons = [expectation_mismatches({"trace": trace}, expectations) for trace in traces]
+    reasons = [expectation_mismatches({"trace": trace}, expectations) for trace in candidates]
     return False, f"no trace matched: expectations={expectations}, mismatches={reasons}"
+
+
+def ax_snapshot_elements(snapshot: typing.Any) -> list[dict[str, typing.Any]]:
+    """Return AX element dictionaries in the traversal order reported by agent-swift."""
+    elements: list[dict[str, typing.Any]] = []
+
+    def visit(value: typing.Any) -> None:
+        if isinstance(value, dict):
+            if isinstance(value.get("identifier"), str):
+                elements.append(value)
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(snapshot)
+    return elements
+
+
+def ax_accessibility_label(element: dict[str, typing.Any]) -> str | None:
+    """Read the label agent-swift exposes for a VoiceOver-visible element."""
+    for key in ("label", "title", "text", "name"):
+        value = element.get(key)
+        if isinstance(value, str) and value:
+            return value
+    attributes = element.get("attrs")
+    if isinstance(attributes, dict):
+        for key in ("AXLabel", "AXTitle", "AXDescription"):
+            value = attributes.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+
+def ax_elements_by_identifier(snapshot: typing.Any) -> dict[str, dict[str, typing.Any]]:
+    """Index the first element for each stable AX identifier without changing its order."""
+    elements: dict[str, dict[str, typing.Any]] = {}
+    for element in ax_snapshot_elements(snapshot):
+        identifier = element["identifier"]
+        if identifier not in elements:
+            elements[identifier] = element
+    return elements
+
+
+def is_stable_accessibility_identifier(value: typing.Any) -> bool:
+    return isinstance(value, str) and bool(STABLE_ACCESSIBILITY_IDENTIFIER.fullmatch(value))
+
+
+def _string_list(spec: typing.Any, field: str) -> tuple[list[str] | None, str | None]:
+    if isinstance(spec, str):
+        spec = [spec]
+    if not isinstance(spec, list) or not all(is_stable_accessibility_identifier(item) for item in spec):
+        return None, f"ax.expect {field} requires a stable identifier or list of stable identifiers"
+    return spec, None
 
 
 def assert_ax(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
     if ctx.lane != "ui":
         return True, "skipped outside ui lane"
+    # AX snapshots address the app by bundle id and do not need visible pixels,
+    # activation, or the user's cursor. Keep the window parked in quiet mode.
     result = run_agent_swift(ctx, ["snapshot", "-i", "--json"])
     path.write_text(result.stdout, encoding="utf-8")
     if result.returncode != 0:
         return False, "agent-swift snapshot failed"
     text = result.stdout
+    try:
+        snapshot = json.loads(text)
+    except json.JSONDecodeError:
+        return False, "agent-swift snapshot returned invalid JSON"
     visible = spec.get("text_visible", [])
     if isinstance(visible, str):
         visible = [visible]
     missing = [item for item in visible if item not in text]
     if missing:
         return False, f"AX snapshot missing text: {missing}"
+
+    identifiers = ax_elements_by_identifier(snapshot)
+    visible_ids, error = _string_list(spec.get("identifiers_visible", []), "identifiers_visible")
+    if error:
+        return False, error
+    missing_ids = [identifier for identifier in visible_ids or [] if identifier not in identifiers]
+    if missing_ids:
+        return False, f"AX snapshot missing stable identifier(s): {missing_ids}"
+
+    focus_order, error = _string_list(spec.get("focus_order", []), "focus_order")
+    if error:
+        return False, error
+    if focus_order:
+        if len(set(focus_order)) != len(focus_order):
+            return False, "ax.expect focus_order must not repeat an identifier"
+        actual_order = [str(element["identifier"]) for element in ax_snapshot_elements(snapshot)]
+        expected_index = 0
+        for identifier in actual_order:
+            if identifier == focus_order[expected_index]:
+                expected_index += 1
+                if expected_index == len(focus_order):
+                    break
+        if expected_index != len(focus_order):
+            missing_or_reordered = focus_order[expected_index:]
+            return False, (
+                "AX keyboard focus order did not contain the expected stable-id subsequence: "
+                f"missing or reordered {missing_or_reordered}; actual={actual_order}"
+            )
+
+    voiceover_labels = spec.get("voiceover_labels", {})
+    if not isinstance(voiceover_labels, dict) or not all(
+        is_stable_accessibility_identifier(identifier) and isinstance(label, str) and label
+        for identifier, label in voiceover_labels.items()
+    ):
+        return False, "ax.expect voiceover_labels requires a mapping of stable identifiers to non-empty labels"
+    # AX labels can contain user data. Keep terminal/run-summary failures to
+    # stable identifiers; the local artifact remains available for intentional
+    # inspection under the harness's non-production boundary.
+    label_mismatches = [
+        identifier
+        for identifier, expected in voiceover_labels.items()
+        if identifier not in identifiers or ax_accessibility_label(identifiers[identifier]) != expected
+    ]
+    if label_mismatches:
+        return False, f"AX VoiceOver label assertions failed for stable identifier(s): {label_mismatches}"
+    return True, None
+
+
+def activate_ax(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
+    """Activate one AX element through its stable accessibility identifier, never coordinates."""
+    if ctx.lane != "ui":
+        return True, "skipped outside ui lane"
+    identifier = spec.get("identifier")
+    if not is_stable_accessibility_identifier(identifier):
+        return False, "ax.activate requires a stable identifier"
+    action = spec.get("action", "press")
+    if action not in {"click", "press"}:
+        return False, "ax.activate action must be click or press"
+    runner = run_agent_swift_in_interactive_mode if action == "click" else run_agent_swift
+    result = runner(ctx, ["find", "identifier", identifier, action])
+    path.write_text(result.stdout, encoding="utf-8")
+    if result.returncode != 0:
+        return False, f"agent-swift failed to {action} identifier {identifier!r}"
     return True, None
 
 
@@ -687,7 +956,9 @@ def execute_step(ctx: HarnessContext, index: int, step: dict[str, typing.Any]) -
                 options = dict(step["visual.action_sequence"] or {})
                 action_name = str(options.get("action") or "")
                 if not action_name:
-                    result.update(operation="visual.action_sequence", ok=False, error="visual.action_sequence requires action")
+                    result.update(
+                        operation="visual.action_sequence", ok=False, error="visual.action_sequence requires action"
+                    )
                 else:
                     frames = max(1, int(options.get("frames", 8)))
                     interval_ms = max(1, int(options.get("interval_ms", 16)))
@@ -769,6 +1040,16 @@ def execute_step(ctx: HarnessContext, index: int, step: dict[str, typing.Any]) -
             if error:
                 result["error"] = error
 
+        elif "ax.activate" in step:
+            path = ctx.steps_dir / f"{prefix}-ax-activate.json"
+            ok, error = activate_ax(ctx, dict(step["ax.activate"] or {}), path)
+            result.update(operation="ax.activate", ok=ok)
+            result["artifacts"]["ax"] = str(path)
+            if error and ok:
+                result["warnings"].append(error)
+            elif error:
+                result["error"] = error
+
         elif "ax.expect" in step:
             path = ctx.steps_dir / f"{prefix}-ax.json"
             ok, error = assert_ax(ctx, dict(step["ax.expect"] or {}), path)
@@ -845,22 +1126,34 @@ def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing
     ctx = create_context(args, flow_path, run_dir, args.lane)
     started = time.perf_counter()
     setup_errors: list[str] = []
-    initial_state = request_json(ctx.base_url, "GET", "/state")
-    capabilities = request_json(ctx.base_url, "GET", "/capabilities")
-    if initial_state.get("ok") and capabilities.get("ok"):
-        clear_response = request_json(ctx.base_url, "POST", "/traces/clear")
-        if not clear_response.get("ok"):
-            setup_errors.append(f"failed to clear traces: {clear_response.get('error')}")
-    write_json(run_dir / "initial-state.json", initial_state)
-    write_json(run_dir / "capabilities.json", capabilities)
-
+    setup_warnings: list[str] = []
+    initial_state: dict[str, typing.Any] = {}
+    capabilities: dict[str, typing.Any] = {}
     step_results = []
-    if not setup_errors:
-        for index, step in enumerate(flow.get("steps", []), 1):
-            result = execute_step(ctx, index, step)
-            step_results.append(result)
-            if not result["ok"] and step.get("halt_on_failure") is True:
-                break
+    try:
+        try:
+            prepare_automation_ui_presentation(ctx, setup_warnings)
+        except Exception as exc:  # noqa: BLE001 - setup failures become run artifacts.
+            setup_errors.append(f"failed to prepare automation UI presentation: {type(exc).__name__}: {exc}")
+
+        initial_state = request_json(ctx.base_url, "GET", "/state")
+        capabilities = request_json(ctx.base_url, "GET", "/capabilities")
+        if initial_state.get("ok") and capabilities.get("ok"):
+            clear_response = request_json(ctx.base_url, "POST", "/traces/clear")
+            if not clear_response.get("ok"):
+                setup_errors.append(f"failed to clear traces: {clear_response.get('error')}")
+        write_json(run_dir / "initial-state.json", initial_state)
+        write_json(run_dir / "capabilities.json", capabilities)
+
+        if not setup_errors:
+            for index, step in enumerate(flow.get("steps", []), 1):
+                result = execute_step(ctx, index, step)
+                step_results.append(result)
+                if not result["ok"] and step.get("halt_on_failure") is True:
+                    break
+    finally:
+        restore_automation_ui_presentation(ctx, setup_errors)
+
     logs = collect_logs(ctx)
     final_state = request_json(ctx.base_url, "GET", "/state")
     traces = recent_traces(ctx)
@@ -891,6 +1184,7 @@ def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing
         },
         "steps": step_results,
         "setup_errors": setup_errors,
+        "setup_warnings": setup_warnings,
         "logs": logs,
         "ok": bridge_ready and not setup_errors and all(step["ok"] for step in step_results),
         "bridge_ready": bridge_ready,
@@ -921,6 +1215,8 @@ def write_summary(run_dir: Path, metrics: dict[str, typing.Any]) -> None:
     ]
     for error in metrics.get("setup_errors", []):
         lines.append(f"- FAIL setup {error}")
+    for warning in metrics.get("setup_warnings", []):
+        lines.append(f"- warning setup {warning}")
     for step in metrics["steps"]:
         status = "PASS" if step["ok"] else "FAIL"
         lines.append(f"- {status} {step['id']} {step['name']} ({step['duration_ms']} ms)")
@@ -1022,8 +1318,7 @@ def repeat_flow(args: argparse.Namespace) -> int:
                 values.append(float(step.get("duration_ms") or 0))
             if values:
                 print(
-                    f"| {name} | {statistics.median(values):.2f} ms | "
-                    f"{min(values):.2f} ms | {max(values):.2f} ms |"
+                    f"| {name} | {statistics.median(values):.2f} ms | " f"{min(values):.2f} ms | {max(values):.2f} ms |"
                 )
     return exit_code
 
@@ -1068,7 +1363,10 @@ def comparable_steps(left: dict[str, typing.Any], right: dict[str, typing.Any]) 
                     "delta_ms": None,
                     "delta_percent": None,
                     "speedup": None,
-                    "ok": [before_step.get("ok") if before_step else None, after_step.get("ok") if after_step else None],
+                    "ok": [
+                        before_step.get("ok") if before_step else None,
+                        after_step.get("ok") if after_step else None,
+                    ],
                 }
             )
             continue
@@ -1177,6 +1475,7 @@ def add_run_args(parser: argparse.ArgumentParser) -> None:
         default=env_flag("OMI_HARNESS_ALLOW_LEGACY_FLOW_VERSION"),
         help="explicitly allow compatible flows older than the current harness schema",
     )
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)

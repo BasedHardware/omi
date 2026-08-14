@@ -163,6 +163,20 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
       .right)
   }
 
+  /// System Settings renders the Screen Recording list in the upper content
+  /// pane, beneath its toolbar/header. The target must not fall into the lower
+  /// pane merely because AppKit's Y axis starts at the bottom.
+  @MainActor
+  func testPermissionListTargetSitsInUpperContentPane() {
+    let settings = CGRect(x: 600, y: 160, width: 800, height: 640)
+    let target = CloudConnectorGuidanceOverlay.permissionListTargetFrame(in: settings)
+
+    XCTAssertGreaterThan(target.midY, settings.midY)
+    XCTAssertLessThan(settings.maxY - target.maxY, settings.height * 0.25)
+    XCTAssertGreaterThanOrEqual(target.minY, settings.minY + settings.height * 0.5)
+    XCTAssertGreaterThan(target.midX, settings.midX, "target belongs in the content pane")
+  }
+
   /// Target and source geometry must follow a resized/moved System Settings
   /// window instead of drifting to a screen-relative fallback position.
   @MainActor

@@ -1,10 +1,13 @@
 name: Build Desktop Release Candidate
 
 on:
-  # Manual only: automatic push/schedule tagging was cutting a new macOS candidate
-  # tag on nearly every desktop-affecting main merge and every 15 minutes. Plan and
-  # publish a candidate deliberately via workflow_dispatch; qualification/promotion
-  # workflows remain unchanged once a tag exists.
+  # The hourly release train: at most one candidate per hour, coalescing every
+  # merge since the last tag. The planner's --min-tag-interval-seconds throttle
+  # applies only to schedule runs; workflow_dispatch stays immediate for
+  # deliberate/emergency cuts. (The old per-merge push trigger cut a candidate
+  # on nearly every desktop-affecting merge; the train replaces it.)
+  schedule:
+    - cron: "7 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -14,9 +17,14 @@ permissions:
 jobs:
   plan-release:
     runs-on: ubuntu-latest
+    # Allow the full desktop CI gate wait (up to 90m) plus planner overhead.
+    timeout-minutes: 105
     concurrency:
       group: desktop-release-planner-main
       cancel-in-progress: false
+    env:
+      # Override via repo Actions variable DESKTOP_CI_GATE_TIMEOUT_SECONDS if needed.
+      CI_GATE_TIMEOUT_SECONDS: ${{ vars.DESKTOP_CI_GATE_TIMEOUT_SECONDS || '5400' }}
     outputs:
       should_release: ${{ steps.plan.outputs.should_release }}
       reason: ${{ steps.plan.outputs.reason }}
@@ -39,13 +47,48 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
+          # Keep the planner's internal wait below the 105-minute job ceiling,
+          # preserving 15 minutes for checkout/token/planner overhead even when
+          # a repository variable is accidentally configured higher.
+          requested_timeout="${CI_GATE_TIMEOUT_SECONDS}"
+          if ! [[ "${requested_timeout}" =~ ^[0-9]+$ ]]; then
+            echo "Invalid DESKTOP_CI_GATE_TIMEOUT_SECONDS=${requested_timeout}" >&2
+            exit 1
+          fi
+          if (( requested_timeout > 5400 )); then
+            echo "Clamping source-check wait from ${requested_timeout}s to 5400s for the 105m job ceiling"
+            requested_timeout=5400
+          fi
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}" \
-            --source-check-wait-seconds 1200 \
-            --source-check-poll-seconds 30
+            --source-check-wait-seconds "${requested_timeout}" \
+            --source-check-poll-seconds 30 \
+            --min-tag-interval-seconds "${{ github.event_name == 'schedule' && '3300' || '0' }}"
 
       - name: Show release plan
         run: echo "${{ steps.plan.outputs.reason }}"
+
+      # tag-release is skipped whenever should_release!=true. Make that decision
+      # obvious in the Actions UI: fail hard on source-gate blocks/timeouts, and
+      # emit a warning annotation for intentional deferrals so a green run with
+      # only plan-release is never silent.
+      - name: Surface planner non-release decision
+        if: steps.plan.outputs.should_release != 'true'
+        env:
+          PLAN_REASON: ${{ steps.plan.outputs.reason }}
+        run: |
+          set -euo pipefail
+          reason="${PLAN_REASON:-unknown reason}"
+          echo "Planner decided not to release: ${reason}"
+          case "${reason}" in
+            *"source gate blocked"*|*"Could not resolve the newest releasable desktop source SHA"*)
+              echo "::error::Desktop release planner blocked: ${reason}"
+              exit 1
+              ;;
+            *)
+              echo "::warning::Desktop release planner skipped tagging: ${reason}"
+              ;;
+          esac
 
   # Candidate publication is one serialized trusted-M1 transaction: after the
   # immutable final-source binding it runs offline readiness, verifies that
@@ -58,6 +101,8 @@ jobs:
     concurrency:
       group: desktop-auto-release-tag-main
       cancel-in-progress: false
+    env:
+      CI_GATE_TIMEOUT_SECONDS: ${{ vars.DESKTOP_CI_GATE_TIMEOUT_SECONDS || '5400' }}
     steps:
       - name: Generate Omi Bot token
         id: app-token
@@ -87,7 +132,7 @@ jobs:
 
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}" \
-            --source-check-wait-seconds 1200 \
+            --source-check-wait-seconds "${CI_GATE_TIMEOUT_SECONDS}" \
             --source-check-poll-seconds 30
 
       - name: Checkout exact releasable desktop source
@@ -300,10 +345,23 @@ jobs:
 
           PR_STATE=$(gh pr view "$PR_NUMBER" --json state --jq '.state')
           if [ "$PR_STATE" != "MERGED" ]; then
-            # This remains a regular merge. If the bot lacks the protected
-            # branch override, the workflow must fail before it can create a
-            # tag instead of tagging a side branch.
-            gh pr merge "$PR_NUMBER" --merge --admin || gh pr merge "$PR_NUMBER" --merge
+            # main branch policy blocks ordinary merges. Use admin override so
+            # the Omi Bot can sync the changelog without waiting on checks.
+            # Do not fall back to a non-admin merge: a transient --admin failure
+            # (e.g. HTTP 502) would otherwise retry without override and fail
+            # on branch policy (see run 30581710658 / PR #10910).
+            merge_ok=0
+            for attempt in 1 2 3; do
+              if gh pr merge "$PR_NUMBER" --admin --merge; then
+                merge_ok=1
+                break
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                echo "Admin merge attempt ${attempt}/3 failed; retrying in 5s..."
+                sleep 5
+              fi
+            done
+            test "$merge_ok" = "1"
           fi
 
           PR_STATE=$(gh pr view "$PR_NUMBER" --json state --jq '.state')
@@ -340,7 +398,7 @@ jobs:
 
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}" \
-            --source-check-wait-seconds 1200 \
+            --source-check-wait-seconds "${CI_GATE_TIMEOUT_SECONDS}" \
             --source-check-poll-seconds 30
 
       - name: Select final release plan
@@ -413,7 +471,10 @@ jobs:
 
       - name: Run ownership-scoped M1 pre-tag readiness
         if: steps.final-plan.outputs.should_release == 'true'
-        timeout-minutes: 130
+        # Inner sequential stage ceilings in pre-tag-readiness.sh sum to
+        # 1200+3600+1800+3600=10200s. Keep the outer step and watchdog above
+        # that sum with margin so a cold but in-budget run is not killed early.
+        timeout-minutes: 200
         env:
           OMI_READINESS_LANE: ci
         run: |
@@ -421,7 +482,7 @@ jobs:
           python3 desktop/macos/scripts/qualification-watchdog.py \
             --label m1-pre-tag-readiness \
             --heartbeat-seconds 45 \
-            --timeout-seconds 7200 \
+            --timeout-seconds 11400 \
             -- desktop/macos/scripts/pre-tag-readiness.sh \
               --source-repository "$GITHUB_WORKSPACE" \
               --evidence "$RUNNER_TEMP/desktop-pre-tag-readiness.json" \

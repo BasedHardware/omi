@@ -9,11 +9,12 @@ with ``load_module_fresh``, then restores on teardown. See
 backend/docs/test_isolation.md and testing/import_isolation.py.
 """
 
+import logging
 import os
 from pathlib import Path
 from types import ModuleType
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 
@@ -54,6 +55,52 @@ def test_architect_price_ids_map_to_architect_plan(monkeypatch, subscription_mod
     assert get_plan_type_from_price_id("price_unlimited_annual") == PlanType.unlimited
     assert get_plan_type_from_price_id("price_architect_monthly") == PlanType.architect
     assert get_plan_type_from_price_id("price_architect_annual") == PlanType.architect
+
+
+def test_dev_startup_skips_stripe_price_validation(monkeypatch, subscription_module, caplog):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    caplog.set_level(logging.INFO, logger=subscription_module.__name__)
+    definitions = MagicMock()
+    retrieve = MagicMock()
+    fallback = MagicMock()
+    monkeypatch.setattr(subscription_module, 'get_paid_plan_definitions', definitions)
+    monkeypatch.setattr(subscription_module.stripe.Price, 'retrieve', retrieve)
+    monkeypatch.setattr(subscription_module, 'record_fallback', fallback)
+
+    subscription_module.validate_stripe_price_ids()
+
+    definitions.assert_not_called()
+    retrieve.assert_not_called()
+    fallback.assert_called_once_with(
+        component='other',
+        from_mode='stripe_price_validation',
+        to_mode='dev_skip',
+        reason='policy',
+        outcome='degraded',
+        log=subscription_module.logger,
+    )
+    assert 'Skipping Stripe price validation during dev startup.' in caplog.messages
+
+
+def test_prod_startup_validates_stripe_price_ids(monkeypatch, subscription_module):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setattr(
+        subscription_module,
+        'get_paid_plan_definitions',
+        lambda: [
+            {
+                'plan_id': 'operator',
+                'monthly_price_id': 'price_operator_monthly',
+                'annual_price_id': 'price_operator_annual',
+            }
+        ],
+    )
+    retrieve = MagicMock()
+    monkeypatch.setattr(subscription_module.stripe.Price, 'retrieve', retrieve)
+
+    subscription_module.validate_stripe_price_ids()
+
+    assert retrieve.call_args_list == [call('price_operator_monthly'), call('price_operator_annual')]
 
 
 def test_architect_is_treated_as_paid_unlimited_plan(subscription_module):

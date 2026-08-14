@@ -17,7 +17,10 @@ import pytest
 HARNESS_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = HARNESS_ROOT.parents[1]
 RESOLVER = HARNESS_ROOT / "_resolve_python.sh"
+PYTHON_RUNNER = HARNESS_ROOT / "run-python.sh"
 MAKEFILE = REPO_ROOT / "Makefile"
+PRE_PUSH_SINGLEFLIGHT = REPO_ROOT / "scripts/pre-push-singleflight"
+PREFLIGHT_RUNNER = REPO_ROOT / ".github/scripts/preflight_runner.py"
 
 
 def _bash_command() -> str:
@@ -62,6 +65,8 @@ def _as_bash_path(path: Path) -> str:
     result = subprocess.run(
         [_bash_command(), "-c", 'cygpath -u "$1"', "bash", str(path)],
         text=True,
+        encoding="utf-8",
+        errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         timeout=10,
@@ -69,6 +74,24 @@ def _as_bash_path(path: Path) -> str:
     )
     assert result.returncode == 0, result.stderr
     return result.stdout.strip()
+
+
+def _git_init(repo: Path) -> None:
+    """Create a fixture repository without re-opening the caller's repository.
+
+    Git exports GIT_DIR and friends to hooks, so this module runs under them
+    whenever the pre-push gate invokes it. Left in place, `git init <fixture>`
+    re-inits the caller's repository instead — which sets `core.bare=true` on a
+    linked-worktree parent and breaks every later `git rev-parse --show-toplevel`
+    in the same push.
+    """
+    env = os.environ.copy()
+    local_vars = subprocess.run(
+        ["git", "rev-parse", "--local-env-vars"], text=True, stdout=subprocess.PIPE, check=True
+    ).stdout.split()
+    for var in local_vars:
+        env.pop(var, None)
+    subprocess.run(["git", "init", "-q", str(repo)], env=env, check=True)
 
 
 def _make_executable(path: Path) -> None:
@@ -115,6 +138,20 @@ def test_resolver_prefers_repo_venvs_and_only_uses_python3_without_one(
     assert _resolve_python(repo, monkeypatch) == "python3"
 
 
+def test_resolver_finds_windows_virtualenv_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    modern = repo / "backend/.venv/Scripts/python.exe"
+    legacy = repo / "backend/venv/Scripts/python.exe"
+
+    _make_executable(modern)
+    _make_executable(legacy)
+    assert _resolve_python(repo, monkeypatch) == _as_bash_path(modern)
+
+    modern.unlink()
+    assert _resolve_python(repo, monkeypatch) == _as_bash_path(legacy)
+
+
 def test_resolver_honors_explicit_python_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -139,17 +176,177 @@ def test_resolver_honors_explicit_python_override(tmp_path: Path, monkeypatch: p
     assert result.stdout.strip() == "custom-python"
 
 
-def test_make_harness_targets_run_resolved_python_from_checkout_with_spaces(tmp_path: Path) -> None:
-    repo = tmp_path / "omi pr-10017 space"
+def test_resolver_detects_windows_python_without_bash4_case_conversion(tmp_path: Path) -> None:
+    resolver = tmp_path / "_resolve_python.sh"
+    shutil.copy2(RESOLVER, resolver)
+    result = subprocess.run(
+        [_bash_command(), "-c", 'source "$1"; dev_harness_python_uses_windows_paths PYTHON.EXE', "bash", str(resolver)],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.skipif(os.name != "nt", reason="native Windows Python path semantics")
+def test_pythonpath_uses_selected_windows_interpreter_separator(tmp_path: Path) -> None:
+    repo = tmp_path / "omi 路径 pythonpath"
+    module = repo / "scripts/dev-harness/fixture_import.py"
+    module.parent.mkdir(parents=True)
+    module.write_text("VALUE = 'imported'\n", encoding="utf-8")
+    resolver = module.parent / "_resolve_python.sh"
+    shutil.copy2(RESOLVER, resolver)
+
+    env = _shell_env()
+    env["PYTHON"] = _as_bash_path(Path(sys.executable))
+    env.pop("PYTHONPATH", None)
+    result = subprocess.run(
+        [
+            _bash_command(),
+            "-c",
+            (
+                'source "$1"; '
+                'python_bin="$(dev_harness_python)"; '
+                'PYTHONPATH="$(dev_harness_pythonpath "$python_bin" scripts/dev-harness backend)" '
+                '"$python_bin" -c \'import os, fixture_import; '
+                'print(os.environ["PYTHONPATH"]); print(fixture_import.VALUE)\''
+            ),
+            "bash",
+            _as_bash_path(resolver),
+        ],
+        cwd=repo,
+        env=env,
+        text=True,
+        encoding="utf-8",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["scripts/dev-harness;backend", "imported"]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell entrypoint regression")
+def test_make_uses_git_bash_when_bare_bash_resolves_to_wsl(tmp_path: Path) -> None:
+    repo = tmp_path / "omi 路径 powershell"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_init(repo)
     shutil.copy2(MAKEFILE, repo / "Makefile")
 
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
     resolver.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(RESOLVER, resolver)
+    shutil.copy2(PYTHON_RUNNER, resolver.parent / "run-python.sh")
 
-    calls = repo / "python calls.log"
+    calls = tmp_path / "powershell-python-calls.log"
+    target = repo / "scripts/dev-harness/list-memory-scenarios.py"
+    target.write_text(
+        "from pathlib import Path\n"
+        "import os\n"
+        "Path(os.environ['HARNESS_PYTHON_CALLS']).write_text('ran', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+
+    make = Path(_make_command()).resolve()
+    system32 = Path(os.environ["SystemRoot"]) / "System32"
+    env = os.environ.copy()
+    inherited_paths = [
+        entry
+        for entry in env.get("PATH", "").split(os.pathsep)
+        if entry
+        and Path(entry).as_posix().lower().rstrip("/")
+        not in {"c:/program files/git/bin", "c:/program files/git/usr/bin"}
+    ]
+    env["PATH"] = os.pathsep.join((str(make.parent), *inherited_paths))
+    bare_bash = shutil.which("bash", path=env["PATH"])
+    assert bare_bash and Path(bare_bash).samefile(system32 / "bash.exe")
+    env["OS"] = "Windows_NT"
+    env["PYTHON"] = _as_bash_path(Path(sys.executable))
+    env.pop("SHELL", None)
+    env["HARNESS_PYTHON_CALLS"] = str(calls)
+    result = subprocess.run(
+        [str(make), "-C", str(repo), "list-memory-scenarios"],
+        env=env,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert calls.read_text(encoding="utf-8") == "ran"
+    assert "WSL" not in result.stdout + result.stderr
+
+
+@pytest.mark.skipif(os.name != "nt", reason="native Windows hook entrypoint regression")
+def test_pre_push_singleflight_runs_shell_child_with_native_windows_python(tmp_path: Path) -> None:
+    repo = tmp_path / "omi 路径 hook"
+    repo.mkdir()
+    _git_init(repo)
+
+    resolver = repo / "scripts/dev-harness/_resolve_python.sh"
+    resolver.parent.mkdir(parents=True)
+    shutil.copy2(RESOLVER, resolver)
+    wrapper = repo / "scripts/pre-push-singleflight"
+    shutil.copy2(PRE_PUSH_SINGLEFLIGHT, wrapper)
+    runner = repo / ".github/scripts/preflight_runner.py"
+    runner.parent.mkdir(parents=True)
+    shutil.copy2(PREFLIGHT_RUNNER, runner)
+    pre_push = repo / "scripts/pre-push"
+    pre_push.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "printf 'hook-output: 路径🚀\\n'\n"
+        'printf "args: %s | %s\\n" "${1:-}" "${2:-}"\n',
+        encoding="utf-8",
+    )
+    pre_push.chmod(pre_push.stat().st_mode | stat.S_IXUSR)
+
+    state_root = tmp_path / "preflight-state"
+    env = _shell_env()
+    env["PYTHON"] = _as_bash_path(Path(sys.executable))
+    env["OMI_PREFLIGHT_STATE_DIR"] = str(state_root)
+    env.pop("PYTHONPATH", None)
+    result = subprocess.run(
+        [_bash_command(), _as_bash_path(wrapper), "fork", "https://example.invalid/repo.git"],
+        cwd=repo,
+        env=env,
+        input="",
+        text=True,
+        encoding="utf-8",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout
+    assert "hook-output: 路径🚀" in result.stdout
+    assert "args: fork | https://example.invalid/repo.git" in result.stdout
+    log = (state_root / "pre-push" / "preflight.log").read_text(encoding="utf-8")
+    assert "hook-output: 路径🚀" in log
+
+
+def test_make_harness_targets_run_resolved_python_from_checkout_with_unicode_and_spaces(tmp_path: Path) -> None:
+    repo = tmp_path / "omi 路径 pr-10017 space"
+    repo.mkdir()
+    _git_init(repo)
+    shutil.copy2(MAKEFILE, repo / "Makefile")
+
+    resolver = repo / "scripts/dev-harness/_resolve_python.sh"
+    resolver.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(RESOLVER, resolver)
+    shutil.copy2(PYTHON_RUNNER, resolver.parent / "run-python.sh")
+
+    calls = tmp_path / "python calls.log"
     python = repo / "backend/.venv/bin/python"
     python.parent.mkdir(parents=True, exist_ok=True)
     python.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$HARNESS_PYTHON_CALLS"\n', encoding="utf-8")
@@ -161,6 +358,7 @@ def test_make_harness_targets_run_resolved_python_from_checkout_with_spaces(tmp_
     env.pop("PYTHON", None)
     env["HARNESS_PYTHON_CALLS"] = _as_bash_path(calls)
     targets = (
+        ("preflight", []),
         ("list-memory-scenarios", []),
         ("seed-memory-scenario", ["SCENARIO=sample"]),
         ("reset-memory-scenario", ["SCENARIO=sample"]),
@@ -179,6 +377,7 @@ def test_make_harness_targets_run_resolved_python_from_checkout_with_spaces(tmp_
         assert result.returncode == 0, result.stderr
 
     assert calls.read_text(encoding="utf-8").splitlines() == [
+        ".github/scripts/pr_preflight.py --lane local --base origin/main",
         "scripts/dev-harness/list-memory-scenarios.py",
         "scripts/dev-harness/seed-memory-scenario.py sample",
         "scripts/dev-harness/reset-memory-scenario.py sample",
@@ -186,23 +385,19 @@ def test_make_harness_targets_run_resolved_python_from_checkout_with_spaces(tmp_
     ]
 
 
-def test_canonical_maintenance_harness_activates_synthetic_uid_only_in_emulator(monkeypatch) -> None:
+def test_canonical_maintenance_harness_accepts_any_synthetic_uid_only_in_emulator(monkeypatch) -> None:
     module = runpy.run_path(
         str(REPO_ROOT / "scripts/dev-harness/run-canonical-maintenance.py"),
         run_name="run_canonical_maintenance_test",
     )
-    from utils.memory import memory_system
+    from utils.memory import memory_authority
 
-    original_cohort = memory_system._canonical_cohort_uids
-    try:
-        monkeypatch.setenv("FIRESTORE_EMULATOR_HOST", "127.0.0.1:18080")
-        monkeypatch.setenv("ENVIRONMENT", "local-dev-harness")
-        module["_activate_local_canonical_cohort"]("synthetic-alice")
+    monkeypatch.setenv("FIRESTORE_EMULATOR_HOST", "127.0.0.1:18080")
+    monkeypatch.setenv("ENVIRONMENT", "local-dev-harness")
+    module["_configure_local_universal_memory"]("synthetic-alice")
 
-        assert memory_system.resolve_memory_system("synthetic-alice") == memory_system.MemorySystem.CANONICAL
-        assert memory_system.resolve_memory_system("someone-else") == memory_system.MemorySystem.LEGACY
-    finally:
-        memory_system._canonical_cohort_uids = original_cohort
+    assert memory_authority.resolve_memory_system("synthetic-alice") == memory_authority.MemorySystem.CANONICAL
+    assert memory_authority.resolve_memory_system("someone-else") == memory_authority.MemorySystem.CANONICAL
 
 
 def test_canonical_maintenance_harness_replaces_ambient_environment(monkeypatch) -> None:
@@ -279,7 +474,7 @@ def test_canonical_maintenance_harness_fails_on_outbox_delivery_errors(monkeypat
     monkeypatch.setattr(main_globals["config"], "load_config", lambda *_args, **_kwargs: object())
     monkeypatch.setitem(main_globals, "_apply_harness_env", lambda _cfg: None)
     monkeypatch.setitem(main_globals, "_resolve_uid", lambda _cfg, _user: "synthetic-alice")
-    monkeypatch.setitem(main_globals, "_activate_local_canonical_cohort", lambda _uid: None)
+    monkeypatch.setitem(main_globals, "_configure_local_universal_memory", lambda _uid: None)
 
     @dataclass
     class _MaintenanceReport:
@@ -312,12 +507,13 @@ def test_make_harness_does_not_execute_checkout_name_and_resolves_python(tmp_pat
     repo = tmp_path / "omi pr-10017'; touch injected-marker; #"
     marker = repo / "injected-marker"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_init(repo)
     shutil.copy2(MAKEFILE, repo / "Makefile")
 
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
     resolver.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(RESOLVER, resolver)
+    shutil.copy2(PYTHON_RUNNER, resolver.parent / "run-python.sh")
 
     calls = repo / "python calls.log"
     python = repo / "backend/.venv/bin/python"
@@ -347,19 +543,19 @@ def test_make_harness_does_not_execute_checkout_name_and_resolves_python(tmp_pat
 def test_make_harness_does_not_execute_double_quote_in_checkout_name(tmp_path: Path) -> None:
     """A double quote in the checkout root must not break recipe shell quoting.
 
-    Recipes now use $$PYTHON (shell variable expansion) instead of $(PYTHON)
-    (Make text interpolation). Shell variable expansion treats the resolved
-    path as data, so quote characters cannot escape the recipe's quoting.
+    Recipes invoke a relative Bash runner, which resolves the checkout-local
+    interpreter without interpolating the checkout root into recipe text.
     """
     repo = tmp_path / 'omi "; touch double-quote-marker; #'
     marker = repo / "double-quote-marker"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_init(repo)
     shutil.copy2(MAKEFILE, repo / "Makefile")
 
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
     resolver.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(RESOLVER, resolver)
+    shutil.copy2(PYTHON_RUNNER, resolver.parent / "run-python.sh")
 
     calls = repo / "python calls.log"
     python = repo / "backend/.venv/bin/python"

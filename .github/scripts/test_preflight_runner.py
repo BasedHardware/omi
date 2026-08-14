@@ -147,7 +147,7 @@ class SignalChildTests(unittest.TestCase):
         child = FakeChild()
         job = FakeWindowsJob()
 
-        runner.signal_child(child, signal.SIGINT, job)
+        runner.signal_child(child, signal.SIGINT, windows_job=job)
 
         self.assertEqual(job.calls, 1)
         self.assertEqual(child.signals, [])
@@ -156,7 +156,7 @@ class SignalChildTests(unittest.TestCase):
         child = FakeChild(returncode=0)
         job = FakeWindowsJob()
 
-        runner.signal_child(child, signal.SIGINT, job)
+        runner.signal_child(child, signal.SIGINT, windows_job=job)
 
         self.assertEqual(job.calls, 1)
 
@@ -286,25 +286,26 @@ class LaunchContractTests(unittest.TestCase):
         pre_push = PRE_PUSH_PATH.read_text(encoding="utf-8")
         pr_preflight = PR_PREFLIGHT_PATH.read_text(encoding="utf-8")
 
-        self.assertIn(' -- "$BASH_EXECUTABLE" scripts/pre-push "$@"', wrapper)
-        self.assertIn("export PYTHONUTF8=1", wrapper)
-        self.assertIn('export OMI_BASH_EXECUTABLE="$BASH_EXECUTABLE"', wrapper)
-        self.assertIn('export OMI_PYTHON_EXECUTABLE="$PREFLIGHT_PYTHON"', wrapper)
-        self.assertIn('PYTHON_EXECUTABLE="${OMI_PYTHON_EXECUTABLE:-}"', pre_push)
+        self.assertIn("source scripts/dev-harness/_resolve_python.sh", wrapper)
+        self.assertIn('PYTHON_BIN="$(dev_harness_python)"', wrapper)
+        self.assertIn('PREFLIGHT_COMMAND=(scripts/pre-push "$@")', wrapper)
         self.assertIn(
-            'CI_PREDICTION_SELECTION=$("$PYTHON_EXECUTABLE" scripts/pre_push_ci_prediction.py',
+            'exec "$PYTHON_BIN" .github/scripts/preflight_runner.py --name pre-push -- "${PREFLIGHT_COMMAND[@]}"',
+            wrapper,
+        )
+        self.assertIn("source scripts/dev-harness/_resolve_python.sh", pre_push)
+        self.assertIn('PYTHON_BIN="$(dev_harness_python)"', pre_push)
+        self.assertIn(
+            'CI_PREDICTION_SELECTION=$("$PYTHON_BIN" scripts/pre_push_ci_prediction.py',
             pre_push,
         )
         self.assertIn(
-            '"$PYTHON_EXECUTABLE" .github/scripts/check_failure_class_guard_ratchet.py',
+            '"$PYTHON_BIN" .github/scripts/check_failure_class_guard_ratchet.py',
             pre_push,
         )
-        self.assertIn('"$PWD/backend/.venv/Scripts/python.exe"', pre_push)
         self.assertIn('PYRIGHT_PYTHON="$BACKEND_PYTHON" bash scripts/typecheck.sh', pre_push)
-        self.assertIn(
-            'exec "$PYTHON_EXECUTABLE" .github/scripts/pr_preflight.py "$@"',
-            pr_preflight,
-        )
+        self.assertIn("source scripts/dev-harness/_resolve_python.sh", pr_preflight)
+        self.assertIn('exec "$PYTHON_BIN" .github/scripts/pr_preflight.py "$@"', pr_preflight)
 
     @unittest.skipUnless(os.name == "nt", "native Windows interpreter contract")
     def test_pr_preflight_uses_explicit_python_without_python3_on_path(self) -> None:
@@ -314,7 +315,7 @@ class LaunchContractTests(unittest.TestCase):
         self.assertIsNotNone(git)
 
         env = os.environ.copy()
-        env["OMI_PYTHON_EXECUTABLE"] = Path(sys.executable).as_posix()
+        env["PYTHON"] = Path(sys.executable).as_posix()
         env["PATH"] = windows_path_without_python(bash, git)
         python3_probe = subprocess.run(
             [bash, "-c", "command -v python3"],
@@ -351,24 +352,29 @@ class LaunchContractTests(unittest.TestCase):
             github_scripts = root / ".github" / "scripts"
             scripts.mkdir(parents=True)
             github_scripts.mkdir(parents=True)
+            (scripts / "dev-harness").mkdir()
             subprocess.run(
                 [git, "init", "--quiet", str(root)],
                 check=True,
                 capture_output=True,
             )
             shutil.copy2(WRAPPER_PATH, scripts / "pre-push-singleflight")
+            shutil.copy2(
+                REPO_ROOT / "scripts" / "dev-harness" / "_resolve_python.sh",
+                scripts / "dev-harness" / "_resolve_python.sh",
+            )
             shutil.copy2(MODULE_PATH, github_scripts / "preflight_runner.py")
             proof_path = root / "wrapper-proof.txt"
             (scripts / "pre-push").write_text(
                 "#!/usr/bin/env bash\n"
                 "set -euo pipefail\n"
-                'printf "%s\\n" "$OMI_PYTHON_EXECUTABLE" > "$PROOF_PATH"\n'
+                'printf "%s\\n" "$PYTHON" > "$PROOF_PATH"\n'
                 'printf "wrapper-ok\\n"\n',
                 encoding="utf-8",
             )
 
             env = os.environ.copy()
-            env["BACKEND_PYTHON"] = Path(sys.executable).as_posix()
+            env["PYTHON"] = Path(sys.executable).as_posix()
             env["OMI_PREFLIGHT_STATE_DIR"] = (root / "state").as_posix()
             env["PATH"] = windows_path_without_python(bash, git)
             env["PROOF_PATH"] = proof_path.as_posix()

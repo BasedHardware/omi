@@ -24,11 +24,7 @@ class Check:
 
 
 def _resolve_repo_root() -> Path:
-    # The pre-push gate cd's to the repo root before invoking this script, and
-    # git runs hooks at the work-tree top, so fall back to the working directory
-    # when `git rev-parse --show-toplevel` cannot resolve a work tree: a linked
-    # worktree whose git context resolves to a git dir exits 128 here ("this
-    # operation must be run in a work tree") and would otherwise abort the gate.
+    """Return the worktree root even when the linked-worktree Git context is bare."""
     try:
         return Path(run_git(Path.cwd(), "rev-parse", "--show-toplevel"))
     except subprocess.CalledProcessError:
@@ -267,7 +263,6 @@ def main() -> int:
                 check=False,
                 stdout=subprocess.PIPE,
                 text=True,
-                encoding="utf-8",
             ).stdout.strip()
         skip_changelog = (
             "no-changelog-needed" in labels

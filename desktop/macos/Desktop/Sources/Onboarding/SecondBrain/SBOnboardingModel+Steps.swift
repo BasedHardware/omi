@@ -23,10 +23,26 @@ extension SBOnboardingModel {
     return language
   }
 
+  /// Nothing is asked of macOS until the user clicks. The probes this has to do
+  /// first are cross-process, so the click dispatches onto the model's actor
+  /// rather than blocking the button.
   func requestPerm(_ key: String) {
+    // The same task owns the preflight and the request. Leaving the row can
+    // cancel it through `pollTasks`, and the step guards below cover callers
+    // that navigate without going through the normal teardown path.
+    pollTasks[key]?.cancel()
+    let task: Task<Void, Never> = Task { [weak self] in
+      guard let self else { return }
+      await self.performPermissionRequest(key)
+    }
+    pollTasks[key] = task
+  }
+
+  func performPermissionRequest(_ key: String) async {
     // The user may have changed a grant in System Settings while this step was
     // onscreen. Re-check it before opening another pane or asking macOS again.
-    refreshPermCheck(key)
+    await refreshPermCheckOffMain(key)
+    guard !Task.isCancelled, permissionKey(for: step) == key else { return }
     if isGranted(key) {
       setPermOn(key)
       autoAdvanceIfCurrent(key)
@@ -45,12 +61,23 @@ extension SBOnboardingModel {
       sysState = .waiting
       if !appState.hasScreenRecordingPermission {
         ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
+      } else if appState.systemAudioPermissionStatus == .denied {
+        // Screen Recording is already granted and a real tap has already been
+        // refused, so nothing here can raise a prompt again. Open the pane
+        // instead of silently re-running the same failing attempt.
+        appState.openScreenRecordingPreferences()
       }
       pollPermission(key)
     case "screen_recording":
       scrState = .waiting
-      ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
-      pollPermission(key)
+      appState.checkScreenRecordingPermission()
+      if appState.hasScreenRecordingPermission {
+        setPermOn(key)
+        autoAdvanceIfCurrent(key)
+      } else {
+        ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
+        pollPermission(key)
+      }
     case "full_disk_access":
       requestFullDiskAccess()
     case "accessibility":
@@ -58,7 +85,12 @@ extension SBOnboardingModel {
       appState.triggerAccessibilityPermission()
       pollPermission(key)
     case "automation":
-      requestAutomation()
+      let request = beginAutomationRequest()
+      await withTaskCancellationHandler {
+        await request.value
+      } onCancel: {
+        request.cancel()
+      }
     default: break
     }
   }
@@ -76,27 +108,6 @@ extension SBOnboardingModel {
     pollPermission("full_disk_access")
   }
 
-  /// Fire the Automation (Apple Events) TCC prompt by touching System Events,
-  /// then poll for the grant. Mirrors the legacy request_permission=automation path.
-  func requestAutomation() {
-    autoState = .waiting
-    // NSAppleScript is main-thread-only; running it off-main (the old bug) meant
-    // the TCC prompt never fired. Launch System Events, then send a REAL Apple
-    // Event (that send is what surfaces the Automation prompt), then detect
-    // without re-prompting via checkAutomationPermission().
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      NSAppleScript(source: "launch application \"System Events\"")?.executeAndReturnError(nil)
-      try? await Task.sleep(nanoseconds: 1_000_000_000)
-      var err: NSDictionary?
-      NSAppleScript(
-        source: "tell application \"System Events\" to return name of first process whose frontmost is true"
-      )?.executeAndReturnError(&err)
-      self.appState.checkAutomationPermission()
-      self.pollPermission("automation")
-    }
-  }
-
   func pollPermission(_ key: String) {
     // Cancel only this key's prior poll — never a sibling permission's, so the
     // "both" mic+system-audio step can poll two grants at once.
@@ -110,8 +121,9 @@ extension SBOnboardingModel {
     pollTasks[key] = Task { [weak self] in
       for _ in 0..<40 {  // ~20s
         try? await Task.sleep(nanoseconds: 500_000_000)
-        guard let self, !Task.isCancelled else { return }
-        self.refreshPermCheck(key)
+        guard let self, !Task.isCancelled, self.permissionKey(for: self.step) == key else { return }
+        await self.refreshPermCheckOffMain(key)
+        guard !Task.isCancelled, self.permissionKey(for: self.step) == key else { return }
         if self.isGranted(key) {
           self.setPermOn(key)
           // Auto-advance once the grant lands — the user shouldn't have to click
@@ -119,15 +131,17 @@ extension SBOnboardingModel {
           // advance if they're still on this permission's step (a late poll for a
           // step already left must never yank the flow forward).
           try? await Task.sleep(nanoseconds: 600_000_000)
-          guard !Task.isCancelled else { return }
+          guard !Task.isCancelled, self.permissionKey(for: self.step) == key else { return }
           self.autoAdvanceIfCurrent(key)
           return
         }
       }
-      // Timed out without a grant. FDA/Accessibility routinely exceed 20s (open
-      // System Settings → authenticate → toggle), so re-arm the Allow button
-      // instead of stranding the row on "macOS…" forever.
-      guard let self, !Task.isCancelled else { return }
+      // Timed out without a grant. This is a backstop, not the mechanism:
+      // FDA/Accessibility routinely exceed 20s (open System Settings →
+      // authenticate → toggle), and a grant made in that window is picked up by
+      // `recheckActivePermission()` when the user switches back to Omi. Re-arm
+      // the Allow button so the row is never stranded on "macOS…".
+      guard let self, !Task.isCancelled, self.permissionKey(for: self.step) == key else { return }
       self.resetPermToAsk(key)
     }
   }
@@ -153,13 +167,20 @@ extension SBOnboardingModel {
           let granted = await self.appState.primeSystemAudioPermission()
           guard !Task.isCancelled else { return }
           guard granted else {
+            // A refused tap re-arms Allow. That is only an escape when a retry
+            // could plausibly succeed: `primeSystemAudioPermission` recorded
+            // `.denied`, so once the Screen Recording prerequisite only landed
+            // after launch the step now renders the relaunch offer instead of
+            // an Allow button that would fail identically forever
+            // (`SBPermissionRelaunchGate`).
             self.resetPermToAsk("system_audio")
             return
           }
 
+          guard self.step == .systemAudio else { return }
           self.setPermOn("system_audio")
           try? await Task.sleep(nanoseconds: 600_000_000)
-          guard !Task.isCancelled else { return }
+          guard !Task.isCancelled, self.step == .systemAudio else { return }
           self.autoAdvanceIfCurrent("system_audio")
           return
         }
@@ -167,13 +188,15 @@ extension SBOnboardingModel {
         try? await Task.sleep(nanoseconds: 500_000_000)
       }
 
-      guard let self, !Task.isCancelled else { return }
+      guard let self, !Task.isCancelled, self.step == .systemAudio else { return }
       self.resetPermToAsk("system_audio")
     }
   }
 
   /// Re-probe a single permission (each check writes the matching AppState flag).
-  private func refreshPermCheck(_ key: String) {
+  /// Prefer `refreshPermCheckOffMain` anywhere the probe can repeat — the
+  /// Accessibility/FDA/Automation probes are cross-process and expensive.
+  func refreshPermCheck(_ key: String) {
     switch key {
     case "microphone": appState.checkMicrophonePermission()
     case "system_audio":
@@ -188,9 +211,25 @@ extension SBOnboardingModel {
   }
 
   /// When a permission step appears, reflect a grant the user already has so it
-  /// shows ✓ instead of an Allow button they'd tap for nothing.
+  /// shows ✓ instead of an Allow button they'd tap for nothing. Pre-existing
+  /// grants are folded in live rather than from a snapshot, so a reinstall
+  /// cannot leave a "Granted" row above a step that still wants an answer.
   func precheckPerm(_ key: String) {
-    refreshPermCheck(key)
+    pollTasks[key]?.cancel()
+    let task: Task<Void, Never> = Task { [weak self] in
+      guard let self else { return }
+      await self.precheckPermOffMain(key)
+    }
+    pollTasks[key] = task
+  }
+
+  func precheckPermOffMain(_ key: String) async {
+    guard !Task.isCancelled, permissionKey(for: step) == key else { return }
+    await refreshPermCheckOffMain(key)
+    // The probe can outlive the step that started it (Automation's Apple Event
+    // lookup takes a round trip). Writing a permission row for a page the user
+    // already left is how a late answer used to land on the wrong step.
+    guard !Task.isCancelled, permissionKey(for: step) == key else { return }
     if isGranted(key) {
       setPermOn(key)
     } else if key == "system_audio", appState.hasScreenRecordingPermission,
@@ -246,15 +285,8 @@ extension SBOnboardingModel {
       // flips to "on" when FDA is granted from the context step — its poll only
       // drives fdaState, unlike every other connector that writes back its own state.
       contextStates["files"] = "on"
-      // Apple Notes reads through the same FDA grant, so re-probe it here too —
-      // otherwise granting FDA leaves Notes showing a pointless "Connect" button.
-      if contextStates["applenotes"] != "on" {
-        Task { [weak self] in
-          if await AppleNotesReaderService.shared.connectionStatus().isConnected {
-            self?.contextStates["applenotes"] = "on"
-          }
-        }
-      }
+    // Do not read Apple Notes merely because Full Disk Access changed. The
+    // explicit Connect action owns the data read.
     case "accessibility": accState = .on
     case "automation": autoState = .on
     default: break
@@ -351,7 +383,17 @@ extension SBOnboardingModel {
   /// when the user is still ON that step, so a late poll never skips a step they've
   /// already moved past.
   func autoAdvanceIfCurrent(_ key: String) {
+    autoAdvanceIfCurrent(key, needsRelaunch: permissionNeedsRelaunch(key))
+  }
+
+  func autoAdvanceIfCurrent(_ key: String, needsRelaunch: Bool) {
     guard permissionKey(for: step) == key, permState(key) == .on else { return }
+    // A grant this process cannot act on must not move the flow on. Screen
+    // Recording granted while running is on in System Settings and dead here
+    // until relaunch; advancing would hand the user a live screen demo over a
+    // capture path that cannot produce a frame. The step offers the reopen
+    // instead (`SBPermissionRelaunchGate`).
+    guard !needsRelaunch else { return }
     switch step {
     case .mic: answerMic()
     case .systemAudio: answerSystemAudio()
@@ -376,15 +418,48 @@ extension SBOnboardingModel {
     }
   }
 
-  /// Starting at `target`, skip past any permission step whose permission is
-  /// already granted — so the user is never asked for something they've already
-  /// given (matches the legacy onboarding's live permission detection). Refreshes
-  /// each permission's TCC state before deciding, and reflects the grant so the
-  /// row is already ✓ if we ever land on it. Returns the first step to actually ask.
+  /// Starting at `target`, skip past any permission step whose cached permission
+  /// is already granted. The synchronous compatibility path is intentionally
+  /// limited to the state already available on the main actor; callers that
+  /// need a current TCC answer must use `firstUnaskedStepAwaitingCurrentProbes`.
   func firstUnaskedStep(from target: Step) -> Step {
     var step = target
     while let key = permissionKey(for: step) {
-      refreshPermCheck(key)
+      // These probes are local/cheap. The cross-process probes intentionally
+      // stay out of this synchronous compatibility path and are awaited by the
+      // async entry point below.
+      if ["microphone", "system_audio", "screen_recording"].contains(key) {
+        refreshPermCheck(key)
+      }
+      // A pre-granted FDA permission must still visit Files once so this flow
+      // performs the required scan and aggregate-memory formation.
+      if step == .files, isGranted(key), !localFileProfileState.isTerminal {
+        setPermOn(key)
+        break
+      }
+      guard isGranted(key), let next = Step(rawValue: step.rawValue + 1) else { break }
+      setPermOn(key)
+      step = next
+    }
+    return step
+  }
+
+  /// First-unasked scan for entry points that need a current permission answer.
+  /// Every TCC/AX/Apple Events probe is awaited through the off-main refresh
+  /// seam, so this scan never blocks the main actor while deciding where to land.
+  func firstUnaskedStepAwaitingCurrentProbes(
+    from target: Step,
+    refresh: ((String) async -> Void)? = nil
+  ) async -> Step {
+    var step = target
+    while let key = permissionKey(for: step) {
+      if let refresh {
+        await refresh(key)
+      } else {
+        await refreshPermCheckOffMain(key)
+      }
+      guard !Task.isCancelled else { return step }
+
       // A pre-granted FDA permission must still visit Files once so this flow
       // performs the required scan and aggregate-memory formation.
       if step == .files, isGranted(key), !localFileProfileState.isTerminal {
@@ -404,22 +479,27 @@ extension SBOnboardingModel {
 extension SBOnboardingModel {
   /// Open-Omi options (tap to open the window).
   var openShortcutOptions: [(id: String, shortcut: ShortcutSettings.KeyboardShortcut, sub: String)] {
+    // ⌃⌘O first because it is the one chord here that costs the user nothing. Whatever is picked is
+    // registered with `RegisterEventHotKey`, and a Carbon hotkey does not lose to the frontmost app
+    // — it **preempts** it and consumes the key. Measured, not assumed: a probe holding a Carbon ⌘O
+    // fired while another app was frontmost, and that app's own key-down monitor never saw the
+    // event. So picking ⌘O does not fail (the comment this replaced had that backwards, citing a
+    // `GlobalShortcutManager.registerCommandO` that no longer exists) — it takes ⌘O away from every
+    // app on the Mac for as long as Omi runs. ⌃⌘O collides with nothing, and is already the app's
+    // own always-on summon chord (`registerSummonHotkey`). ⌘O stays offered, with its price named.
     [
-      // ⌘O is registered as its own always-on Carbon hotkey (GlobalShortcutManager
-      // .registerCommandO), so it reliably summons Omi globally — the natural,
-      // expected "open" chord. Offer it first. (⌘J was dropped: onboarding testers
-      // read it as arbitrary/random with no mnemonic, unlike ⌘O = "open".)
-      ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "tap to open"),
-      ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, "tap to open"),
+      ("ctrlCmdO", ShortcutSettings.askOmiControlCommandOShortcut, "press to set"),
+      ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "replaces File ▸ Open"),
+      ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, "press to set"),
     ]
   }
 
   /// Push-to-talk options (hold to talk, hands-free).
   var talkShortcutOptions: [(id: String, shortcut: ShortcutSettings.KeyboardShortcut, sub: String)] {
     [
-      ("fn", ShortcutSettings.KeyboardShortcut(modifierOnly: .function), "hold to talk"),
-      ("opt", ShortcutSettings.KeyboardShortcut(modifierOnly: .option), "hold to talk"),
-      ("ctrl", ShortcutSettings.KeyboardShortcut(modifierOnly: .control), "hold to talk"),
+      ("fn", ShortcutSettings.KeyboardShortcut(modifierOnly: .function), "press to set"),
+      ("opt", ShortcutSettings.KeyboardShortcut(modifierOnly: .option), "press to set"),
+      ("ctrl", ShortcutSettings.KeyboardShortcut(modifierOnly: .control), "press to set"),
     ]
   }
 
@@ -429,18 +509,38 @@ extension SBOnboardingModel {
   /// NSMenu key equivalents that AppKit dispatches before local monitors). Both are
   /// restored on leave. This is why the earlier attempt's monitor never fired.
   func armShortcutSummon() {
+    shortcutRegistrationError = nil
     // Preserve a choice when the user returns with Back. A fresh stage still
     // starts empty, while an already-confirmed shortcut stays visible/editable.
     let rememberedSelection: ShortcutSettings.KeyboardShortcut?
+    let isTalk: Bool
     switch step {
-    case .shortcutOpen: rememberedSelection = openShortcutSelection
-    case .shortcutTalk: rememberedSelection = talkShortcutSelection
-    default: rememberedSelection = nil
+    case .shortcutOpen:
+      rememberedSelection = openShortcutSelection
+      isTalk = false
+    case .shortcutTalk:
+      rememberedSelection = talkShortcutSelection
+      isTalk = true
+    default:
+      rememberedSelection = nil
+      isTalk = false
     }
-    shortcutPicked = rememberedSelection != nil
-    shortcutPressed = false
-    shortcutTokens = rememberedSelection?.displayTokens ?? []
-    chosenShortcut = rememberedSelection
+    if let rememberedSelection {
+      shortcutPicked = true
+      shortcutPressed = false
+      shortcutRecording = false
+      shortcutNeedsModifier = false
+      pendingModifierOnlyShortcut = nil
+      shortcutTokens = rememberedSelection.displayTokens
+      chosenShortcut = rememberedSelection
+    } else {
+      // Same reset as `beginShortcutRecording` but with recording left off: the fresh
+      // stage shows the preset rows + a Custom button instead of entering capture mode,
+      // so `handleShortcutEvent` only recognizes the three preset candidates until the
+      // user explicitly taps Custom.
+      beginShortcutRecording(isTalk: isTalk)
+      shortcutRecording = false
+    }
     GlobalShortcutManager.shared.setRegistrationSuspended(true)
     if savedMainMenu == nil { savedMainMenu = NSApp.mainMenu }
     NSApp.mainMenu = nil
@@ -493,6 +593,15 @@ extension SBOnboardingModel {
   }
 
   private func handleShortcutEvent(_ event: NSEvent) -> Bool {
+    if shortcutRecording {
+      // The global monitor is here for the *test* phase, so a chord pressed while another app is
+      // focused still counts as "that works". While the step is still **recording** it is a hazard
+      // instead: the first key the user happens to type anywhere on the Mac — a terminal, a
+      // browser, a message — becomes their Omi chord, and the step then congratulates them on it.
+      // Only what is typed at Omi may set it.
+      guard Self.acceptsRecordingSource(appIsActive: NSApp.isActive) else { return false }
+      return recordShortcut(from: event)
+    }
     guard !shortcutPressed else { return false }
     // If the user already tapped a row, honor that exact pick; otherwise let ANY
     // offered combo select itself on press, so "just press the key" works and the
@@ -521,11 +630,14 @@ extension SBOnboardingModel {
   /// Pick + persist a shortcut. `isTalk` → push-to-talk chord (held, drives the
   /// voice demo); otherwise the Ask-Omi open hotkey (tapped to open the window).
   func pickShortcut(_ shortcut: ShortcutSettings.KeyboardShortcut, isTalk: Bool) {
+    shortcutRegistrationError = nil
     chosenShortcut = shortcut
     chosenShortcutIsPTT = isTalk
     shortcutTokens = shortcut.displayTokens
     shortcutPicked = true
     shortcutPressed = false
+    shortcutRecording = false
+    pendingModifierOnlyShortcut = nil
     if isTalk {
       talkShortcutSelection = shortcut
       ShortcutSettings.shared.pttShortcut = shortcut
@@ -537,11 +649,101 @@ extension SBOnboardingModel {
     }
   }
 
+  func beginShortcutRecording(isTalk: Bool) {
+    shortcutRegistrationError = nil
+    chosenShortcut = nil
+    chosenShortcutIsPTT = isTalk
+    shortcutTokens = []
+    shortcutPicked = false
+    shortcutPressed = false
+    shortcutRecording = true
+    shortcutNeedsModifier = false
+    pendingModifierOnlyShortcut = nil
+  }
+
+  func recordShortcut(from event: NSEvent) -> Bool {
+    let isTalk = step == .shortcutTalk
+    if isTalk, event.type == .flagsChanged {
+      let activeModifiers = ShortcutSettings.KeyboardShortcut.normalizedModifiers(event.modifierFlags)
+      if activeModifiers.isEmpty {
+        guard let shortcut = pendingModifierOnlyShortcut else { return true }
+        pickShortcut(shortcut, isTalk: true)
+        return true
+      }
+      pendingModifierOnlyShortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
+        event,
+        allowModifierOnly: true
+      )
+      return true
+    }
+    let recorded = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
+      event,
+      allowModifierOnly: isTalk
+    )
+    switch Self.decideRecordedChord(recorded) {
+    case .ignore:
+      return event.type == .flagsChanged
+    case .refuseBareKey:
+      // The refusal the copy now names. Saying it is the whole fix: silently dropping the key made
+      // the step look broken to anyone who took "press any key" literally.
+      shortcutNeedsModifier = true
+      return true
+    case .accept(let shortcut):
+      shortcutNeedsModifier = false
+      pendingModifierOnlyShortcut = nil
+      pickShortcut(shortcut, isTalk: isTalk)
+      return true
+    }
+  }
+
+  /// What recording should do with the chord it just saw, as a value.
+  ///
+  /// A value rather than a `guard` inside the monitor so the refusal is something a test can drive
+  /// and assert: the bug here was never *which* chords are refused, it was that the refusal produced
+  /// no observable effect at all.
+  enum RecordedChordDecision: Equatable {
+    case accept(ShortcutSettings.KeyboardShortcut)
+    case refuseBareKey
+    case ignore
+  }
+
+  static func decideRecordedChord(_ recorded: ShortcutSettings.KeyboardShortcut?) -> RecordedChordDecision {
+    guard let recorded else { return .ignore }
+    return acceptsRecordedChord(recorded) ? .accept(recorded) : .refuseBareKey
+  }
+
+  /// Which events may set the chord.
+  ///
+  /// Recording only listens to Omi. Testing (`shortcutPressed`) still listens everywhere, which is
+  /// the whole point of the global monitor.
+  static func acceptsRecordingSource(appIsActive: Bool) -> Bool { appIsActive }
+
+  /// Whether a recorded chord is one this step is allowed to persist.
+  ///
+  /// A key chord with no modifier is not a shortcut, it is a stolen letter: `askOmiShortcut` is
+  /// registered as a **global** hotkey, so persisting a bare `L` makes every `L` typed anywhere on
+  /// the Mac open Omi, and the only way back is Settings. PTT is also observed system-wide, so a bare
+  /// letter would start a voice turn during ordinary typing. The copy invites it ("Press any key"),
+  /// and nothing downstream refuses it. Both offered open chords carry ⌘ and every offered talk chord
+  /// is modifier-only, so this rejects nothing the step actually presents.
+  static func acceptsRecordedChord(_ shortcut: ShortcutSettings.KeyboardShortcut) -> Bool {
+    ShortcutSettings.isSafePushToTalkShortcut(shortcut)
+  }
+
   func answerShortcutOpen() {
-    advance(userAnswer: shortcutPressed ? "Works" : (shortcutPicked ? "Set" : "Skip"), to: .shortcutTalk)
+    guard shortcutPicked, shortcutPressed else { return }
+    guard GlobalShortcutManager.shared.validateAskOmiShortcutForOnboarding() == .registered else {
+      shortcutRegistrationError =
+        "That shortcut is already in use. Choose a different Open Omi shortcut and test it again."
+      shortcutPressed = false
+      return
+    }
+    advance(userAnswer: "Works", to: .shortcutTalk)
   }
   func answerShortcutTalk() {
-    advance(userAnswer: shortcutPressed ? "Works" : (shortcutPicked ? "Set" : "Skip"), to: .screenDemo)
+    guard shortcutPicked, shortcutPressed else { return }
+    UserDefaults.standard.set(true, forKey: Self.shortcutsCompletedKey)
+    advance(userAnswer: "Works", to: .screenDemo)
   }
 }
 
@@ -777,17 +979,8 @@ extension SBOnboardingModel {
     if appState.hasFullDiskAccess { contextStates["files"] = "on" }
     Task { [weak self] in
       guard let self else { return }
-      // Apple Notes rides the same Full Disk Access grant that powers Files, so a
-      // readable NoteStore should show "✓ on" up front — not a "Connect" button
-      // that would only flip to on for nothing (this precheck was missing, which
-      // made the row look fake).
-      if self.contextStates["applenotes"] != "on",
-        await AppleNotesReaderService.shared.connectionStatus().isConnected
-      {
-        self.contextStates["applenotes"] = "on"
-      }
-
-      // Do not probe browser cookies just to decorate a fresh onboarding row.
+      // Do not probe browser cookies or Apple Notes just to decorate a fresh
+      // onboarding row.
       // A functional probe without a completed import used to paint "on" even
       // though post-onboarding Home/Apps had no persisted connector state and
       // no imported data. Only re-check a connector that this account already
@@ -912,7 +1105,7 @@ extension SBOnboardingModel {
         guard let self else { return }
         // Full Disk Access covers Notes when it applies; if not, grant a
         // security-scoped folder bookmark (the real, re-sign-proof connect path).
-        var status = await AppleNotesReaderService.shared.connectionStatus()
+        var status = await AppleNotesReaderService.shared.connectionStatus(userInitiated: true)
         if status.isConnected {
           self.contextStates["applenotes"] = "on"
           return
@@ -934,7 +1127,10 @@ extension SBOnboardingModel {
         }
         do {
           _ = try await AppleNotesReaderService.shared.validateSelectedFolder(path: path)
-          status = await AppleNotesReaderService.shared.connectionStatus(selectedFolderPath: path)
+          status = await AppleNotesReaderService.shared.connectionStatus(
+            selectedFolderPath: path,
+            userInitiated: true
+          )
           self.contextStates["applenotes"] = status.isConnected ? "on" : "needsSignIn"
         } catch {
           self.contextStates["applenotes"] = "needsSignIn"

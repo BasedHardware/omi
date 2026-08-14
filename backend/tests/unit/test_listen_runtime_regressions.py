@@ -3,14 +3,18 @@
 import asyncio
 from collections import deque
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from routers.listen.contracts import ListenRequest
 from routers.listen.runtime import ListenSessionRuntime
 from routers.listen.transcripts import TranscriptProcessor
+from utils.async_tasks import WebSocketTaskSupervisor
 from utils.listen_session_bootstrap import ListenConnectBase
+from utils.onboarding import ONBOARDING_QUESTIONS, OnboardingHandler
 from utils.stt.streaming import STTService
+from starlette.websockets import WebSocketState
 
 
 @pytest.fixture
@@ -21,6 +25,84 @@ def anyio_backend():
 class _Persistence:
     async def call(self, fn, *args, **kwargs):
         return fn(*args, **kwargs)
+
+
+def _deletion_teardown_runtime(request, persistence_call):
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.state = SimpleNamespace(
+        shutdown_event=asyncio.Event(),
+        active=True,
+        stt_terminal_failure=False,
+        close_code=1001,
+        current_conversation_id='conversation-1',
+    )
+    runtime.task_supervisor = SimpleNamespace(end_session=MagicMock(), drain_all=AsyncMock())
+    runtime._finish_live_transcription = MagicMock()
+    runtime.transcripts = SimpleNamespace(
+        flush_translations=AsyncMock(),
+        flush_speaker_assignments=AsyncMock(),
+        clear=MagicMock(),
+    )
+    runtime.receiver = SimpleNamespace(finish=MagicMock(), flush_multi_channel_tail=AsyncMock(), clear=MagicMock())
+    runtime._flush_usage = AsyncMock()
+    runtime.persistence = SimpleNamespace(call=persistence_call)
+    runtime.conversations = SimpleNamespace(process_conversation=AsyncMock())
+    runtime.is_multi_channel = False
+    runtime.pusher_close = None
+    runtime.onboarding_handler = None
+    runtime.parity_capture = SimpleNamespace(persist=MagicMock())
+    runtime.speakers = SimpleNamespace(clear=MagicMock())
+    return runtime
+
+
+def _assert_deletion_teardown_skipped_owner_writes(runtime):
+    runtime.task_supervisor.drain_all.assert_awaited_once_with(timeout=5.0, cancel=True)
+    runtime.transcripts.flush_translations.assert_not_awaited()
+    runtime.transcripts.flush_speaker_assignments.assert_not_awaited()
+    runtime.receiver.flush_multi_channel_tail.assert_not_awaited()
+    runtime._flush_usage.assert_not_awaited()
+    runtime.conversations.process_conversation.assert_not_awaited()
+    runtime.parity_capture.persist.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_deletion_fence_teardown_cancels_tasks_without_owner_persistence():
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.DISCONNECTED),
+        uid='deleted-owner',
+    )
+    request.owner_persistence_blocked.set()
+    persistence_call = AsyncMock()
+    runtime = _deletion_teardown_runtime(request, persistence_call)
+
+    await runtime._teardown()
+
+    persistence_call.assert_not_awaited()
+    _assert_deletion_teardown_skipped_owner_writes(runtime)
+
+
+@pytest.mark.anyio
+async def test_teardown_rechecks_deletion_authority_before_owner_persistence():
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.DISCONNECTED),
+        uid='newly-deleted-owner',
+    )
+    authority_reads = []
+
+    async def persistence_call(function, *args):
+        authority_reads.append((function, args))
+        return True
+
+    runtime = _deletion_teardown_runtime(request, persistence_call)
+
+    await runtime._teardown()
+
+    assert len(authority_reads) == 1
+    assert authority_reads[0][0].__name__ == '_account_deletion_blocks_owner_persistence'
+    assert authority_reads[0][1] == ('newly-deleted-owner',)
+    assert request.owner_persistence_blocked.is_set()
+    _assert_deletion_teardown_skipped_owner_writes(runtime)
 
 
 def _runtime_for_periodic_usage(*, tracking, exhausted):
@@ -110,6 +192,7 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     runtime.request = request
     runtime.use_custom_stt = False
     runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None)
+    runtime.task_supervisor = WebSocketTaskSupervisor(uid=request.uid, label='listen')
 
     async def bootstrap_persistence_call(*_args, **_kwargs):
         return False
@@ -139,10 +222,78 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
     monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
     monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
-    monkeypatch.setattr(runtime_module, 'OnboardingHandler', lambda *_args: SimpleNamespace())
+
+    async def _noop_question():
+        return None
+
+    monkeypatch.setattr(
+        runtime_module, 'OnboardingHandler', lambda *_args: SimpleNamespace(send_current_question=_noop_question)
+    )
 
     assert await runtime._bootstrap() is True
+    await runtime.task_supervisor.drain_all(timeout=1.0, cancel=False)
     assert selected_multi_language_options == [('es', False, None)]
+
+
+@pytest.mark.anyio
+async def test_bootstrap_sends_first_onboarding_question_before_any_audio(monkeypatch):
+    """An onboarding session's question flow is server-driven: the first question
+    must reach the client at connect time, before any segments arrive. Dropping
+    this kickoff leaves the speech-profile page frozen at 0% with no question."""
+    import routers.listen.runtime as runtime_module
+
+    sent_events = []
+
+    async def send_json(event):
+        sent_events.append(event)
+
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED, send_json=send_json),
+        uid='onboarding-user',
+        language='en',
+        onboarding_mode=True,
+    )
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.use_custom_stt = False
+    runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None, active=True)
+    runtime.task_supervisor = WebSocketTaskSupervisor(uid=request.uid, label='listen')
+
+    async def bootstrap_persistence_call(*_args, **_kwargs):
+        return False
+
+    runtime.persistence = SimpleNamespace(call=bootstrap_persistence_call)
+    runtime.is_multi_channel = False
+    runtime.has_speech_profile = False
+    enqueued_segments = []
+    runtime.transcripts = SimpleNamespace(enqueue=enqueued_segments.extend)
+    runtime._build_components = lambda: None
+
+    base = ListenConnectBase(
+        user_exists=True,
+        user_has_credits=True,
+        transcription_prefs={'single_language_mode': False, 'uses_custom_stt': False},
+        fair_use_init_stage=None,
+        fair_use_track_dg_usage=False,
+        fair_use_dg_budget_exhausted=False,
+    )
+    monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+    monkeypatch.setattr(
+        runtime_module, 'get_stt_service_for_language', lambda language, **_kwargs: ('test-stt', 'en', 'test-model')
+    )
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
+    monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
+
+    assert await runtime._bootstrap() is True
+    await runtime.task_supervisor.drain_all(timeout=2.0, cancel=False)
+
+    assert [event['type'] for event in sent_events] == ['onboarding_question']
+    first_question = sent_events[0]
+    assert first_question['question'] == ONBOARDING_QUESTIONS[0]['question']
+    assert first_question['question_index'] == 0
+    assert first_question['total_questions'] == len(ONBOARDING_QUESTIONS)
+    assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
 
 
 @pytest.mark.anyio
@@ -492,3 +643,42 @@ async def test_custom_stt_flush_meters_speech_in_isolated_lane(monkeypatch):
     runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(consume_speech_ms_delta=lambda: 0))
     assert await runtime._flush_usage(final=True) == 0
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
+
+
+def _heartbeat_runtime(send_text):
+    from starlette.websockets import WebSocketState
+
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = SimpleNamespace(
+        websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED, send_text=send_text)
+    )
+    runtime.state = SimpleNamespace(active=True, last_activity_time=None)
+    return runtime
+
+
+@pytest.mark.anyio
+async def test_heartbeat_treats_gone_peer_as_disconnect_not_crash():
+    """A client that vanishes between the state read and the keepalive write ends the
+    session as a disconnect; the heartbeat must not raise out of its supervised task."""
+    from fastapi.websockets import WebSocketDisconnect
+
+    async def send_text(_payload):
+        raise WebSocketDisconnect()
+
+    runtime = _heartbeat_runtime(send_text)
+    await runtime._heartbeat()
+
+    assert runtime.state.active is False
+
+
+@pytest.mark.anyio
+async def test_heartbeat_stops_after_close_message_instead_of_crashing():
+    """The ASGI server refuses a send once the close frame went out — same disconnect."""
+
+    async def send_text(_payload):
+        raise RuntimeError('Cannot call "send" once a close message has been sent.')
+
+    runtime = _heartbeat_runtime(send_text)
+    await runtime._heartbeat()
+
+    assert runtime.state.active is False

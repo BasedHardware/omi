@@ -4,10 +4,13 @@ set -eo pipefail
 
 # Git runs hooks with the working directory at the top of the invoking work
 # tree, so fall back to it when `git rev-parse --show-toplevel` cannot resolve a
-# work tree. In a linked worktree whose git context resolves to a git dir rather
-# than a work tree, show-toplevel exits 128 ("this operation must be run in a
-# work tree") and this gate would otherwise abort, forcing a --no-verify push.
+# work tree. This keeps linked worktrees from aborting into a --no-verify push.
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# shellcheck source=dev-harness/_resolve_python.sh
+source scripts/dev-harness/_resolve_python.sh
+PYTHON_BIN="$(dev_harness_python)"
+BACKEND_PYTHON="$(dev_harness_canonical_python || true)"
 
 PUSH_REMOTE="${1:-origin}"
 BASE_REMOTE="${PRE_PUSH_BASE_REMOTE:-origin}"
@@ -86,35 +89,6 @@ FAST_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-fast-backend-tests.XXX
 RELEASE_GUARD_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-release-guard-tests.XXXXXX")
 trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS" "$RELEASE_GUARD_TESTS"' EXIT
 printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILES_LIST"
-
-PYTHON_EXECUTABLE="${OMI_PYTHON_EXECUTABLE:-}"
-if [[ -z "$PYTHON_EXECUTABLE" || ! -x "$PYTHON_EXECUTABLE" ]]; then
-  for python_candidate in "${BACKEND_PYTHON:-}" "$PWD/backend/.venv/bin/python" "$PWD/backend/.venv/Scripts/python.exe"; do
-    if [[ -n "$python_candidate" && -x "$python_candidate" ]]; then
-      PYTHON_EXECUTABLE="$python_candidate"
-      break
-    fi
-  done
-fi
-if [[ -z "$PYTHON_EXECUTABLE" || ! -x "$PYTHON_EXECUTABLE" ]]; then
-  PYTHON_EXECUTABLE="$(command -v python3 || command -v python || true)"
-fi
-if [[ -z "$PYTHON_EXECUTABLE" || ! -x "$PYTHON_EXECUTABLE" ]]; then
-  echo "FAIL: pre-push requires Python 3, but no executable was found." >&2
-  exit 1
-fi
-export OMI_PYTHON_EXECUTABLE="$PYTHON_EXECUTABLE"
-
-BACKEND_PYTHON="${BACKEND_PYTHON:-}"
-if [[ -z "$BACKEND_PYTHON" ]]; then
-  for backend_python_candidate in "$PWD/backend/.venv/bin/python" "$PWD/backend/.venv/Scripts/python.exe"; do
-    if [[ -x "$backend_python_candidate" ]]; then
-      BACKEND_PYTHON="$backend_python_candidate"
-      break
-    fi
-  done
-fi
-
 declare -a CI_PREDICTION_VERIFIED=()
 declare -a CI_PREDICTION_DEFERRED=()
 declare -a CI_PREDICTION_SKIPPED=()
@@ -164,8 +138,8 @@ require_backend_python() {
   if [[ -n "$BACKEND_PYTHON" && -x "$BACKEND_PYTHON" ]]; then
     return 0
   fi
-  echo "FAIL: a selected backend check requires a usable backend Python." >&2
-  echo "      Set BACKEND_PYTHON or run: make setup" >&2
+  echo "FAIL: a selected backend check requires the canonical backend/.venv interpreter, but it was not found." >&2
+  echo "      Create it with: make setup" >&2
   return 1
 }
 
@@ -195,7 +169,7 @@ changed_matches() {
   return 1
 }
 
-CI_PREDICTION_SELECTION=$("$PYTHON_EXECUTABLE" scripts/pre_push_ci_prediction.py --changed-files "$CHANGED_FILES_LIST" --base "$BASE_REF")
+CI_PREDICTION_SELECTION=$("$PYTHON_BIN" scripts/pre_push_ci_prediction.py --changed-files "$CHANGED_FILES_LIST" --base "$BASE_REF")
 if ci_prediction_selected "app-ci-only"; then
   ci_prediction_note_deferred "full Flutter analyzer/tests and platform compiles"
 fi
@@ -220,7 +194,7 @@ check_pr_preflight() {
     fi
     echo "Skipping shared PR preflight because PRE_PUSH_SKIP_PR_PREFLIGHT=1."
     echo "==> failure-class guard-artifact ratchet (mandatory under preflight hatch)"
-    "$PYTHON_EXECUTABLE" .github/scripts/check_failure_class_guard_ratchet.py \
+    "$PYTHON_BIN" .github/scripts/check_failure_class_guard_ratchet.py \
       --pr-body-file "$OMI_PR_BODY_FILE"
     ci_prediction_note_verified "failure-class guard-artifact ratchet (mandatory under PRE_PUSH_SKIP_PR_PREFLIGHT=1)"
     ci_prediction_note_skipped "shared PR contract and hygiene (PRE_PUSH_SKIP_PR_PREFLIGHT=1)"
@@ -298,8 +272,8 @@ check_optional_formatters() {
   if [ "${#python_files[@]}" -gt 0 ]; then
     if command -v black >/dev/null 2>&1; then
       black_cmd=(black)
-    elif "$PYTHON_EXECUTABLE" -m black --version >/dev/null 2>&1; then
-      black_cmd=("$PYTHON_EXECUTABLE" -m black)
+    elif "$PYTHON_BIN" -m black --version >/dev/null 2>&1; then
+      black_cmd=("$PYTHON_BIN" -m black)
     fi
 
     if [ "${#black_cmd[@]}" -gt 0 ]; then
@@ -312,7 +286,7 @@ check_optional_formatters() {
 
   if [ "${#arb_files[@]}" -gt 0 ]; then
     echo "==> ARB JSON formatting (${#arb_files[@]} file(s))"
-    "$PYTHON_EXECUTABLE" - "${arb_files[@]}" <<'PY'
+    "$PYTHON_BIN" - "${arb_files[@]}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -441,8 +415,15 @@ check_desktop_flow_lint_if_needed() {
     return
   fi
 
+  if ! "$PYTHON_BIN" -c "import yaml" >/dev/null 2>&1; then
+    echo "FAIL: desktop E2E flow metadata checks require Python 3 and PyYAML." >&2
+    echo "      Run make setup to create the locked backend environment." >&2
+    echo "      Deliberate hatch: PRE_PUSH_SKIP_DESKTOP_FLOW_LINT=1 git push" >&2
+    return 1
+  fi
+
   echo "==> desktop E2E flow metadata lint"
-  "$PYTHON_EXECUTABLE" desktop/macos/scripts/desktop-flow-lint.py
+  "$PYTHON_BIN" desktop/macos/scripts/desktop-flow-lint.py
   ci_prediction_note_verified "desktop E2E flow metadata and bridge-action references"
 }
 
@@ -638,7 +619,7 @@ check_runtime_image_source_closure_if_needed() {
     return
   fi
 
-  "$PYTHON_EXECUTABLE" backend/scripts/runtime_image_contracts.py check
+    "$PYTHON_BIN" backend/scripts/runtime_image_contracts.py check
 }
 
 check_openapi_contract_if_needed() {
@@ -775,6 +756,15 @@ check_desktop_launcher_tests_if_needed() {
   (
     cd desktop/macos
     for test_script in tests/test-*.sh; do
+      # These are live named-bundle checks, not hermetic launcher tests. The
+      # pre-push hook neither launches an automation bridge nor knows a QA app
+      # path, so retain them for their Tier-3 E2E flow/direct harness command.
+      case "$test_script" in
+        tests/test-mounted-navigation-latency.sh|tests/test-named-bundle-resources.sh)
+          echo "== $test_script (skipped: requires a mounted named bundle)"
+          continue
+          ;;
+      esac
       echo "== $test_script"
       bash "$test_script"
     done
@@ -803,9 +793,9 @@ check_gauntlet_evidence_if_needed() {
 }
 
 run_step check_pr_preflight
-run_step "$PYTHON_EXECUTABLE" .github/scripts/check-desktop-prod-promotion-policy.py
-run_step "$PYTHON_EXECUTABLE" .github/scripts/check-deployment-concurrency.py --self-test
-run_step "$PYTHON_EXECUTABLE" .github/scripts/check-deployment-concurrency.py
+run_step "$PYTHON_BIN" .github/scripts/check-desktop-prod-promotion-policy.py
+run_step "$PYTHON_BIN" .github/scripts/check-deployment-concurrency.py --self-test
+run_step "$PYTHON_BIN" .github/scripts/check-deployment-concurrency.py
 run_step check_backend_runtime_env_if_needed
 run_step check_backend_typecheck_if_needed
 run_step check_runtime_image_source_closure_if_needed

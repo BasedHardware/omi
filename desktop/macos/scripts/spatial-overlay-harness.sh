@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Focused, self-driving harness for spatial overlay anchoring and Claude guidance.
+# Focused, self-driving harness for spatial overlay anchoring and connector guidance.
 #
 # Usage:
 #   cd desktop/macos && ./scripts/spatial-overlay-harness.sh
@@ -28,7 +28,7 @@ Runs:
   1. Swift dogfood/unit tests:
      SpatialOverlayDogfoodHarnessTests, SpatialOverlay*, BrowserAutomationTargetTests
   2. Optional visual dogfood flow through the local automation bridge:
-     e2e/flows/claude-guidance-overlay.yaml
+     e2e/flows/claude-guidance-overlay.yaml (Claude + Screen Recording)
 
 Options:
   --visual       Also run the app-side visual flow against the automation bridge
@@ -161,26 +161,19 @@ run_swift_focus() {
 }
 
 ensure_bridge_ready() {
-  python3 - "$PORT" <<'PY'
+  python3 - "$PORT" "$SCRIPT_DIR" <<'PY'
 import json
-import os
-from pathlib import Path
 import sys
 import urllib.request
 
 port = sys.argv[1]
-token = os.environ.get("OMI_AUTOMATION_TOKEN", "").strip()
-if not token:
-    token_file = Path(os.environ.get("OMI_AUTOMATION_TOKEN_FILE") or os.path.join(os.environ.get("TMPDIR", "/tmp"), f"omi-automation-{port}.token"))
-    if token_file.exists():
-        try:
-            token = token_file.read_text(encoding="utf-8").strip()
-        except OSError as exc:
-            raise SystemExit(f"automation bridge token unavailable on port {port}: {exc}")
+sys.path.insert(0, sys.argv[2])
+from automation_token_lib import automation_token
+
+token = automation_token(int(port))
 try:
+    # Health is intentionally unauthenticated so callers see launch diagnostics.
     request = urllib.request.Request(f"http://127.0.0.1:{port}/health")
-    if token:
-        request.add_header("Authorization", f"Bearer {token}")
     with urllib.request.urlopen(request, timeout=5) as response:
         payload = json.loads(response.read().decode("utf-8"))
 except Exception as exc:
@@ -188,6 +181,12 @@ except Exception as exc:
 
 if not payload.get("ok"):
     raise SystemExit(f"automation bridge unhealthy on port {port}: {payload}")
+
+if not token:
+    raise SystemExit(
+        f"automation bridge token missing on port {port}; "
+        "app writes NSTemporaryDirectory()/omi-automation-{port}.token"
+    )
 PY
 }
 

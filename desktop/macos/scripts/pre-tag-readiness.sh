@@ -13,6 +13,7 @@ CACHE_COMMAND="$SCRIPT_DIR/qualification-swift-cache.sh"
 LEASE_COMMAND="$SCRIPT_DIR/qualification-lease-command.sh"
 SELF_CLEAN_COMMAND="$SCRIPT_DIR/qualification-runner-self-clean.py"
 WATCHDOG_COMMAND="$SCRIPT_DIR/qualification-watchdog.py"
+PYTHON_BIN="${PYTHON:-python3}"
 
 EVIDENCE=""
 SOURCE_REPOSITORY="$REPO_ROOT"
@@ -101,7 +102,7 @@ START_SEC=$(date +%s)
 
 emit_evidence() {
   local passed="$1" duration_s="$2" err="${3:-}"
-  python3 - "$EVIDENCE" "$passed" "$SOURCE_SHA" "$LANE" "$duration_s" "$STARTED_AT" "$HARNESS_EVIDENCE" "$HYGIENE_EVIDENCE" "$err" <<'PY'
+  "$PYTHON_BIN" - "$EVIDENCE" "$passed" "$SOURCE_SHA" "$LANE" "$duration_s" "$STARTED_AT" "$HARNESS_EVIDENCE" "$HYGIENE_EVIDENCE" "$err" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -141,7 +142,7 @@ PY
 run_watchdog() {
   local label="$1" timeout_seconds="$2"
   shift 2
-  python3 "$WATCHDOG_COMMAND" \
+  "$PYTHON_BIN" "$WATCHDOG_COMMAND" \
     --label "$label" \
     --heartbeat-seconds "${OMI_QUALIFICATION_HEARTBEAT_SECONDS:-45}" \
     --timeout-seconds "$timeout_seconds" \
@@ -150,7 +151,7 @@ run_watchdog() {
 
 json_capability_field() {
   local field="$1" payload="$2" value
-  if value="$(printf '%s' "$payload" | python3 -c '
+  if value="$(printf '%s' "$payload" | "$PYTHON_BIN" -c '
 import json
 import sys
 value = json.load(sys.stdin).get(sys.argv[1])
@@ -250,7 +251,7 @@ git -C "$SOURCE_REPOSITORY" merge-base --is-ancestor "$SOURCE_SHA" origin/main |
 # numeric run stages, and idle exact-SHA cache entries. Any ambiguous residue
 # fails before a fresh cache or qualification lease is acquired.
 run_watchdog runner-self-clean 1200 \
-  python3 "$SELF_CLEAN_COMMAND" \
+  "$PYTHON_BIN" "$SELF_CLEAN_COMMAND" \
     --repo-root "$REPO_ROOT" \
     --cache-root "${OMI_QUALIFICATION_SWIFT_CACHE_ROOT:-$HOME/Library/Caches/OmiDesktop/qualification-swiftpm-v2}" \
     --qualification-lease-root "$LEASE_ROOT" \
@@ -269,7 +270,7 @@ RUN_SCOPE="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-attempt}-${BASHPID:-$$}
 RUN_SCOPE="${RUN_SCOPE//[^A-Za-z0-9]/-}"
 CACHE_LEASE_ID="cache-readiness-${SOURCE_SHA:0:12}-${RUN_SCOPE:0:32}"
 READINESS_LEASE_ID="readiness-${SOURCE_SHA:0:12}-${RUN_SCOPE:0:32}"
-PORT_OFFSET="$(python3 - "$SOURCE_SHA" "$READINESS_LEASE_ID" <<'PY'
+PORT_OFFSET="$("$PYTHON_BIN" - "$SOURCE_SHA" "$READINESS_LEASE_ID" <<'PY'
 import hashlib
 import sys
 print(1000 + (int(hashlib.sha256(":".join(sys.argv[1:]).encode()).hexdigest()[:8], 16) % 2000))
@@ -332,7 +333,7 @@ HARNESS_DIR="$(ls -td "$HARNESS_ROOT"/*-readiness 2>/dev/null | head -1)"
   exit 1
 }
 HARNESS_EVIDENCE="$HARNESS_DIR/manifest.json"
-python3 - "$HARNESS_EVIDENCE" "$SOURCE_SHA" <<'PY'
+"$PYTHON_BIN" - "$HARNESS_EVIDENCE" "$SOURCE_SHA" <<'PY'
 import json
 import sys
 from pathlib import Path

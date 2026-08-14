@@ -4,6 +4,8 @@ import PackageDescription
 let package = Package(
   name: "Omi Computer",
   platforms: [
+    // Candidate v0.12.148 for release planning.
+    // Candidate v0.12.148 for release planning.
     .macOS("14.0")
   ],
   dependencies: [
@@ -96,7 +98,9 @@ let package = Package(
       resources: [
         .process("GoogleService-Info.plist"),
         // Bundles everything under Resources/ (incl. *_logo.png brand marks,
-        // signin_bg.png, and Resources/Fonts/*.ttf — Geist / Geist Mono fonts).
+        // signin_bg.png, Resources/Fonts/*.ttf — Geist / Geist Mono — and
+        // Resources/Fonts/*.otf — Open Runde, the glass display face — and
+        // Resources/Sounds/*.m4a, the generated onboarding cinematic audio).
         // NOTE: SwiftPM caches the resource manifest, so new files added to
         // Resources/ are only picked up when the manifest regenerates — editing
         // this file forces incremental builds to re-scan and include them.

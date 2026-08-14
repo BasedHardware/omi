@@ -6,6 +6,8 @@ import SwiftUI
 @MainActor
 extension AppState {
   func handleBackendSegments(_ segments: [TranscriptionService.BackendSegment]) {
+    var segmentsToPersist = [TranscriptionService.BackendSegment]()
+
     for segment in segments {
       guard !segment.text.isEmpty else { continue }
 
@@ -43,13 +45,37 @@ extension AppState {
         log(
           "Transcript [UPDATE] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
         )
+        segmentsToPersist.append(segment)
+      } else if sttSession.useLocalSTT {
+        switch LocalTranscriptionDuplicatePolicy.decision(for: newSeg, existing: speakerSegments) {
+        case .accept:
+          appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
+
+        case .suppressIncoming:
+          log(
+            "Transcript [DEDUP] Suppressed mic playback duplicate [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]"
+          )
+
+        case .replaceExisting(let existingSegmentId):
+          guard let existingIdx = speakerSegments.firstIndex(where: { $0.segmentId == existingSegmentId }) else {
+            appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
+            continue
+          }
+
+          let oldWords = speakerSegments[existingIdx].text.split(separator: " ").count
+          let newWords = newSeg.text.split(separator: " ").count
+          totalWordCount += newWords - oldWords
+
+          var replacement = newSeg
+          replacement.segmentId = existingSegmentId
+          speakerSegments[existingIdx] = replacement
+          segmentsToPersist.append(segmentWithID(segment, id: existingSegmentId))
+          log(
+            "Transcript [DEDUP] Promoted system-audio copy over mic playback duplicate [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]"
+          )
+        }
       } else {
-        totalWordCount += newSeg.text.split(separator: " ").count
-        speakerSegments.append(newSeg)
-        totalSegmentCount += 1
-        log(
-          "Transcript [ADD] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
-        )
+        appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
       }
     }
 
@@ -67,12 +93,56 @@ extension AppState {
     LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
 
     // Persist segments to DB for crash safety (upsert by backend segment ID)
-    if let sessionId = currentSessionId {
-      let segmentsToPersist = segments
-      Task {
-        await persistBackendSegmentsToStorage(segmentsToPersist, sessionId: sessionId)
-      }
+    if let sessionId = currentSessionId, !segmentsToPersist.isEmpty {
+      enqueueTranscriptPersistence(segmentsToPersist, sessionId: sessionId)
     }
+  }
+
+  private func appendNewTranscriptSegment(
+    _ newSegment: SpeakerSegment,
+    segment: TranscriptionService.BackendSegment,
+    to segmentsToPersist: inout [TranscriptionService.BackendSegment]
+  ) {
+    totalWordCount += newSegment.text.split(separator: " ").count
+    speakerSegments.append(newSegment)
+    totalSegmentCount += 1
+    segmentsToPersist.append(segment)
+    log(
+      "Transcript [ADD] Speaker \(newSegment.speaker) [\(String(format: "%.1f", newSegment.start))s-\(String(format: "%.1f", newSegment.end))s]: \(segment.text.prefix(80))"
+    )
+  }
+
+  private func segmentWithID(
+    _ segment: TranscriptionService.BackendSegment,
+    id: String
+  ) -> TranscriptionService.BackendSegment {
+    TranscriptionService.BackendSegment(
+      id: id,
+      text: segment.text,
+      speaker: segment.speaker,
+      speaker_id: segment.speaker_id,
+      is_user: segment.is_user,
+      person_id: segment.person_id,
+      start: segment.start,
+      end: segment.end,
+      translations: segment.translations
+    )
+  }
+
+  private func enqueueTranscriptPersistence(
+    _ segments: [TranscriptionService.BackendSegment],
+    sessionId: Int64
+  ) {
+    let previous = transcriptPersistenceTail
+    transcriptPersistenceTail = Task { @MainActor [weak self] in
+      await previous?.value
+      guard let self else { return }
+      await self.persistBackendSegmentsToStorage(segments, sessionId: sessionId)
+    }
+  }
+
+  func flushTranscriptPersistence() async {
+    await transcriptPersistenceTail?.value
   }
 
   func persistBackendSegmentsToStorage(
@@ -119,9 +189,15 @@ extension AppState {
       )
     else {
       pendingBackendConversationId = nil
-      if let currentBackendConversationId, currentBackendConversationId != backendId {
-        ignoredRotatedBackendConversationIds.insert(backendId)
-      }
+      // A repeated callback for an already-ignored rollover is harmless. Do
+      // not evict an unrelated guard entry just because that stale callback
+      // arrived again; eviction is reserved for a newly observed rotation.
+      ignoredRotatedBackendConversationIds = DesktopConversationMatchPolicy.rememberingRotatedBackendId(
+        backendId,
+        activeBackendId: currentBackendConversationId,
+        ignoredRotatedBackendIds: ignoredRotatedBackendConversationIds,
+        maxCount: Self.maxIgnoredRotatedBackendConversationIds
+      )
       log("Transcription: Ignoring non-matching backend conversation id \(backendId) for current local session")
       return
     }
@@ -176,6 +252,12 @@ extension AppState {
       return false
     }
     if let recordingSessionId, let lifecycleSequence {
+      if lifecycleSequenceByRecordingSession.count >= Self.maxLifecycleRecordingSessions,
+        lifecycleSequenceByRecordingSession[recordingSessionId] == nil,
+        let evicted = lifecycleSequenceByRecordingSession.keys.first
+      {
+        lifecycleSequenceByRecordingSession.removeValue(forKey: evicted)
+      }
       lifecycleSequenceByRecordingSession[recordingSessionId] = lifecycleSequence
     }
     return true
@@ -252,45 +334,37 @@ extension AppState {
       // Mark DB session as completed so TranscriptionRetryService won't re-upload.
       // Only bind the session captured before rotation; live events may arrive while
       // the next recording is already active.
-      let targetSessionId = finishedSessionId
-      let targetClientConversationId = finishedClientConversationId
-      let targetStartTime = finishedRecordingStartTime
-      let didBindLocalSession: Bool
       let conversationId = event.raw["conversation_id"] as? String ?? memoryId
       guard conversationId == memoryId,
+        let targetIndex = DesktopConversationMatchPolicy.matchingFinishedRecordingIndex(
+          memoryId: memoryId,
+          memory: memory,
+          recordingSessionId: recordingSessionId,
+          pending: pendingFinishedRecordings
+        )
+      else {
+        log("Transcription: Ignoring memory_created \(memoryId); no matching finished local recording")
+        break
+      }
+      let target = pendingFinishedRecordings[targetIndex]
+      guard
         acceptsLifecycleEnvelope(
           event,
           conversationId: conversationId,
           expectedLifecyclePhase: "completed",
-          expectedBackendId: targetClientConversationId
+          expectedBackendId: target.clientConversationId
         )
       else {
         break
       }
-      if !DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
-        memoryId: memoryId,
-        recordingSessionId: recordingSessionId,
-        expectedBackendId: targetClientConversationId
-      ) {
-        log("Transcription: Ignoring stale memory_created \(memoryId) for finished recording")
-        break
-      }
+
       isSavingConversation = false
-      // New desktop sessions carry an exact client-generated recording id, so
-      // they must never fall back to a timestamp guess. Timestamp matching is
-      // retained only for legacy sessions without that identity.
-      let matchesFinishedRecording =
-        targetClientConversationId != nil
-        || DesktopConversationMatchPolicy.memoryEventMatchesFinishedSession(
-          memory, sessionStartedAt: targetStartTime ?? .distantPast)
-      if let sessionId = targetSessionId,
-        memoryId != "?",
-        matchesFinishedRecording
-      {
-        finishedSessionId = nil  // Consume once
-        finishedClientConversationId = nil
-        finishedRecordingStartTime = nil
-        didBindLocalSession = true
+      pendingFinishedRecordings.remove(at: targetIndex)
+      if let recordingSessionId {
+        lifecycleSequenceByRecordingSession.removeValue(forKey: recordingSessionId)
+      }
+
+      if let sessionId = target.sessionId {
         Task {
           do {
             try await TranscriptionStorage.shared.markSessionCompleted(
@@ -302,37 +376,11 @@ extension AppState {
           }
         }
       } else {
-        didBindLocalSession = false
-        if memoryId != "?" {
-          if targetSessionId == nil || targetStartTime == nil {
-            log(
-              "Transcription: Ignoring memory_created \(memoryId); no finished local session is awaiting backend binding"
-            )
-          } else if let sessionId = targetSessionId, let startTime = targetStartTime {
-            if let memoryStartedAt = DesktopConversationMatchPolicy.parseMemoryEventDate(
-              memory?["started_at"] ?? memory?["startedAt"])
-            {
-              let delta = abs(memoryStartedAt.timeIntervalSince(startTime))
-              if delta >= DesktopConversationMatchPolicy.startedAtTolerance {
-                log(
-                  "Transcription: Ignoring memory_created event; started_at delta \(String(format: "%.1f", delta))s exceeds session match tolerance"
-                )
-              }
-            }
-            log(
-              "Transcription: Waiting for API reconciliation before binding memory_created \(memoryId) to local session \(sessionId)"
-            )
-          }
-        }
-      }
-
-      // Track conversation creation — use captured start time for accurate duration after session rotation
-      if didBindLocalSession, let startTime = targetStartTime {
-        let durationSeconds = Int(Date().timeIntervalSince(startTime))
+        log("Transcription: Accepted memory_created \(memoryId) without a durable local session")
         AnalyticsManager.shared.conversationCreated(
           conversationId: memoryId,
-          source: currentConversationSource.rawValue,
-          durationSeconds: durationSeconds
+          source: target.source.rawValue,
+          durationSeconds: max(0, Int(Date().timeIntervalSince(target.startedAt)))
         )
       }
 

@@ -1,12 +1,12 @@
-import { describe, it, expect, vi } from 'vitest'
-import { buildCalendarPrompt, parseCalendarTasks } from './calendarExtract'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { CalendarItem } from '../../../shared/types'
 
+const { omiPost } = vi.hoisted(() => ({ omiPost: vi.fn() }))
 vi.mock('./apiClient', () => ({
-  desktopApi: {
-    post: vi.fn()
-  }
+  omiApi: { post: omiPost }
 }))
+
+import { formatCalendarItems, extractCalendarTasks } from './calendarExtract'
 
 const ev = (over: Partial<CalendarItem>): CalendarItem => ({
   id: 'e1',
@@ -17,33 +17,51 @@ const ev = (over: Partial<CalendarItem>): CalendarItem => ({
   ...over
 })
 
-describe('buildCalendarPrompt', () => {
-  it('lists events with title and ISO start, and asks to skip passive events', () => {
-    const p = buildCalendarPrompt([ev({ location: 'Room 4' })])
-    expect(p).toContain('Q3 review')
-    expect(p).toContain('Room 4')
-    expect(p).toContain('2026-06-10T09:00:00.000Z')
-    expect(p.toLowerCase()).toContain('skip')
+beforeEach(() => {
+  omiPost.mockReset()
+})
+
+describe('formatCalendarItems', () => {
+  it('renders title, location and ISO start per event', () => {
+    expect(formatCalendarItems([ev({ location: 'Room 4' })])).toEqual([
+      'Q3 review @ Room 4 | starts 2026-06-10T09:00:00.000Z | id=e1'
+    ])
   })
 })
 
-describe('parseCalendarTasks', () => {
-  it('keeps well-formed tasks and drops blank descriptions', () => {
-    const json = JSON.stringify({
-      tasks: [
-        { description: 'Prepare slides for Q3 review', dueAt: '2026-06-10T09:00:00Z' },
-        { description: '   ' },
-        { description: 'Buy a gift' }
-      ]
+describe('extractCalendarTasks', () => {
+  it('sends the calendar source to the backend synthesis SSOT and maps returned tasks', async () => {
+    omiPost.mockResolvedValue({
+      data: {
+        memories: [],
+        tasks: [
+          {
+            description: 'Prepare slides for Q3 review',
+            priority: 'high',
+            due_at: '2026-06-10T09:00:00Z'
+          },
+          { description: '   ' },
+          { description: 'Buy a gift', priority: 'low' }
+        ],
+        profile: ''
+      }
     })
-    expect(parseCalendarTasks(json)).toEqual([
+
+    const tasks = await extractCalendarTasks([ev({})])
+
+    expect(omiPost).toHaveBeenCalledWith(
+      '/v1/connectors/synthesize',
+      expect.objectContaining({ source: 'calendar' }),
+      expect.anything()
+    )
+    expect(tasks).toEqual([
       { description: 'Prepare slides for Q3 review', dueAt: '2026-06-10T09:00:00Z' },
       { description: 'Buy a gift', dueAt: undefined }
     ])
   })
 
-  it('tolerates fenced JSON and returns [] on garbage', () => {
-    expect(parseCalendarTasks('```json\n{"tasks":[]}\n```')).toEqual([])
-    expect(parseCalendarTasks('not json')).toEqual([])
+  it('never calls the backend for an empty event list', async () => {
+    expect(await extractCalendarTasks([])).toEqual([])
+    expect(omiPost).not.toHaveBeenCalled()
   })
 })

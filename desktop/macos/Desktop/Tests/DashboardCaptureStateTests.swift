@@ -1,6 +1,60 @@
 import XCTest
 
+@testable import Omi_Computer
+
 final class DashboardCaptureStateTests: XCTestCase {
+  @MainActor
+  func testLiveCapturingIsFalseWhileAwaitingAMeeting() {
+    let appState = AppState()
+    appState.isTranscribing = true
+    appState.isAwaitingMeeting = true
+    XCTAssertFalse(
+      appState.isLiveCapturing,
+      "Only Meetings with no call pauses the mic; Live UI must not treat the armed session as capture.")
+
+    appState.isAwaitingMeeting = false
+    XCTAssertTrue(appState.isLiveCapturing)
+
+    appState.isTranscribing = false
+    XCTAssertFalse(appState.isLiveCapturing)
+  }
+
+  @MainActor
+  func testListeningStatusIsInactiveWhileAwaitingAMeeting() {
+    let appState = AppState()
+    appState.isTranscribing = true
+    appState.isAwaitingMeeting = true
+    XCTAssertEqual(CaptureListeningLogic.listeningStatus(appState: appState), .inactive)
+
+    appState.isAwaitingMeeting = false
+    XCTAssertEqual(CaptureListeningLogic.listeningStatus(appState: appState), .active)
+  }
+
+  @MainActor
+  func testHomeListeningHelpDoesNotClaimOffWhileAwaitingAMeeting() {
+    let help = HomeListeningStatusButton.helpText(
+      status: .inactive, modeTitle: "Only Meetings", isAwaitingMeeting: true)
+    XCTAssertTrue(help.contains("waiting for a call"))
+    XCTAssertTrue(help.contains("Only Meetings"))
+    XCTAssertTrue(help.contains("Click to turn off"))
+    XCTAssertFalse(help.contains("Off"))
+    XCTAssertEqual(
+      HomeListeningStatusButton.helpText(
+        status: .inactive, modeTitle: "Always On", isAwaitingMeeting: false),
+      "Listening: Off, Always On")
+  }
+
+  @MainActor
+  func testListeningModeTitlePreservesOakleyMetaName() {
+    let appState = AppState()
+    appState.isTranscribing = true
+    appState.recordingInputDeviceName = "Oakley Meta Vanguard"
+
+    XCTAssertEqual(
+      CaptureListeningLogic.listeningModeTitle(appState: appState, raw: "always"),
+      "Oakley Meta Vanguard")
+  }
+
   func testDashboardCaptureStatusUsesLiveMonitoringState() throws {
     let source = try dashboardSource()
     let logic = try captureLogicSource()
@@ -49,22 +103,42 @@ final class DashboardCaptureStateTests: XCTestCase {
     )
   }
 
-  func testListeningPillShowsAndTogglesCaptureMode() throws {
+  func testListeningPillReflectsTheUnifiedAudioRecordingMode() throws {
     let source = try dashboardSource()
     let logic = try captureLogicSource()
 
-    XCTAssertTrue(source.contains("@AppStorage(\"systemAudioCaptureMode\")"))
+    XCTAssertTrue(source.contains("@AppStorage(AssistantSettings.audioRecordingModeDefaultsKey)"))
     XCTAssertTrue(source.contains("private var listeningModeTitle: String"))
-    XCTAssertTrue(logic.contains("return appState.isAwaitingMeeting ? \"Meetings only\" : \"In meeting\""))
+    XCTAssertTrue(logic.contains("return appState.isAwaitingMeeting ? \"Only Meetings\" : \"In Meeting\""))
     XCTAssertTrue(source.contains("HomeListeningStatusButton("))
-    XCTAssertTrue(source.contains("modeAction: toggleListeningMode"))
-    XCTAssertTrue(logic.contains("AssistantSettings.shared.systemAudioCaptureMode = nextMode"))
-    XCTAssertTrue(source.contains("Image(systemName: isMeetingsOnly ? \"person.2.fill\" : \"person.fill\")"))
-    XCTAssertTrue(source.contains("private var modeIconColor: Color"))
+    XCTAssertFalse(source.contains("modeAction: toggleListeningMode"))
+    XCTAssertFalse(logic.contains("toggleListeningMode"))
     XCTAssertTrue(source.contains(".frame(height: 34)"))
-    XCTAssertFalse(source.contains("Image(systemName: isMeetingsOnly ? \"person.2.fill\" : \"infinity\")"))
     XCTAssertFalse(source.contains("Circle()\n                    .fill(status.indicator)"))
     XCTAssertFalse(source.contains("OmiColors.purplePrimary"))
+  }
+
+  func testListeningStatusIsSharedAndLiveTranscriptExpandReplacesThePage() throws {
+    let dashboard = try dashboardSource()
+    let logic = try captureLogicSource()
+    let conversations = try source(named: "ConversationsPage.swift")
+    let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let shellURL =
+      testsURL
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/QueryShell/ShellStatusIcons.swift")
+    // omi-test-quality: source-inspection -- static contract: which predicate the Live card and listening dot name is not observable from a running view without a window server
+    let shell = try String(contentsOf: shellURL, encoding: .utf8)
+
+    XCTAssertTrue(logic.contains("return appState.isLiveCapturing ? .active : .inactive"))
+    XCTAssertTrue(dashboard.contains("CaptureListeningLogic.listeningStatus(appState: appState)"))
+    XCTAssertTrue(dashboard.contains("isAwaitingMeeting: appState.isAwaitingMeeting"))
+    XCTAssertTrue(shell.contains("CaptureListeningLogic.listeningStatus(appState: appState)"))
+    XCTAssertTrue(conversations.contains("if appState.isLiveCapturing {"))
+    XCTAssertTrue(conversations.contains("if isLiveTranscriptExpanded && appState.isLiveCapturing"))
+    XCTAssertFalse(
+      conversations.contains(".overlay {\n      if isLiveTranscriptExpanded"),
+      "Expanding the live transcript must replace the Conversations page body, not overlay it.")
   }
 
   func testRedesignedHomeUsesResponsiveStageSizing() throws {
@@ -74,9 +148,10 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains("private static let homeAskBarMinWidth: CGFloat = 560"))
     XCTAssertTrue(source.contains("private static let homeStagePanelMaxWidth: CGFloat = 1280"))
     XCTAssertTrue(source.contains("private func homeStageSideInset(for stageWidth: CGFloat) -> CGFloat"))
-    XCTAssertTrue(source.contains("private func homeAskBarWidth(for stageWidth: CGFloat) -> CGFloat"))
-    XCTAssertTrue(source.contains("(text as NSString).size(withAttributes: attributes).width"))
-    XCTAssertTrue(source.contains("private func homeHubStage(stageWidth: CGFloat, askBarWidth: CGFloat) -> some View"))
+    XCTAssertTrue(source.contains("private func homeHubAskBarWidth(for stageWidth: CGFloat, draft: String) -> CGFloat"))
+    XCTAssertTrue(
+      source.contains("(text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 15)]).width"))
+    XCTAssertTrue(source.contains("private func homeHubStage(stageWidth: CGFloat) -> some View"))
     XCTAssertTrue(source.contains("private var homeHubHeadline: some View"))
     XCTAssertFalse(source.contains(".frame(width: 304)"))
     XCTAssertFalse(source.contains(".frame(maxWidth: Self.homeAskBarMaxWidth)"))
@@ -103,20 +178,26 @@ final class DashboardCaptureStateTests: XCTestCase {
       "An early return drops the hotkey's input focus when chat is already visible")
   }
 
-  func testSecondaryHomePagesReturnHomeOnEscape() throws {
-    let source = try desktopHomeSource()
-
-    // Matched without leading indentation: the escape handler's contract is that
-    // it calls navigateHomeOnEscapeIfNeeded, not how deeply the view hierarchy
-    // that carries it happens to be nested. Pinning the indent made this fail
-    // when the content container was extracted into its own `some View`.
-    XCTAssertTrue(
-      source.range(
-        of: #"\.onExitCommand\s*\{\s*navigateHomeOnEscapeIfNeeded\(\)\s*\}"#,
-        options: .regularExpression) != nil)
-    XCTAssertTrue(source.contains("[.conversations, .memories, .tasks, .rewind].contains(item)"))
-    XCTAssertTrue(source.contains("selectedIndex = SidebarNavItem.dashboard.rawValue"))
-    XCTAssertFalse(source.contains("[.conversations, .chat, .memories, .tasks, .rewind]"))
+  func testSecondaryHomePagesReturnHomeOnEscape() {
+    for item in [SidebarNavItem.conversations, .memories, .tasks, .rewind] {
+      XCTAssertTrue(
+        DesktopHomeEscapeNavigation.shouldNavigateHome(
+          selectedIndex: item.rawValue,
+          usesLegacyHomeDesign: false
+        ))
+    }
+    // `.chat` was removed from `SidebarNavItem` when the standalone chat page was deleted. Escape on
+    // Home itself still must not navigate home, so the case moves to the destination Home now is.
+    XCTAssertFalse(
+      DesktopHomeEscapeNavigation.shouldNavigateHome(
+        selectedIndex: SidebarNavItem.dashboard.rawValue,
+        usesLegacyHomeDesign: false
+      ))
+    XCTAssertFalse(
+      DesktopHomeEscapeNavigation.shouldNavigateHome(
+        selectedIndex: SidebarNavItem.tasks.rawValue,
+        usesLegacyHomeDesign: true
+      ))
   }
 
   func testHomeConnectorButtonsOpenSheetsDirectly() throws {
@@ -160,7 +241,16 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains(".frame(width: popupSize.width, height: popupSize.height)"))
     XCTAssertTrue(
       source.contains(".clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))"))
-    XCTAssertTrue(normalizedSource.contains(".onTapGesture { dismissAppsPopup()"))
+    // omi-test-quality: source-inspection -- static contract: whether Home hands its dim a dismiss
+    // action. `isShowingAppsPopup` is private `@State` on a view that needs five live providers to
+    // mount, so the popup cannot be raised and clicked from the test host. That a click on the dim
+    // then runs this action — anywhere on the host, including the undimmed band beside the paint —
+    // is exercised for real in `ShellModalScrimDismissTests`; this is only the wiring that reaches
+    // it. It reads Home's own file because Home is what must do the wiring.
+    XCTAssertTrue(
+      normalizedSource.contains("ShellModalScrim(onTap: dismissAppsPopup)"),
+      "The dim behind the apps popup must carry Home's dismiss action, or clicking outside the "
+        + "popup stops closing it")
     XCTAssertTrue(
       normalizedSource.contains("OverlayModalEscapeCatcher { dismissAppsPopup()"))
     XCTAssertTrue(
@@ -204,7 +294,14 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(
       source.contains("let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)"))
     XCTAssertTrue(source.contains(".position(x: contentWidth / 2, y: panelTop + panelHeight / 2)"))
-    XCTAssertTrue(normalizedSource.contains(".onTapGesture { dismissHomeConnectSheet()"))
+    // omi-test-quality: source-inspection -- static contract: same wiring as the apps popup above,
+    // for the sheet stacked on top of it, and unreachable for the same reason —
+    // `selectedImportConnector` and its siblings are private `@State`. The click that runs it is
+    // behavioural in `ShellModalScrimDismissTests`.
+    XCTAssertTrue(
+      normalizedSource.contains("ShellModalScrim(onTap: dismissHomeConnectSheet)"),
+      "The dim behind the Home connect sheet must carry its dismiss action, or clicking outside the "
+        + "sheet stops closing it")
     XCTAssertFalse(source.contains("homeConnectSheetHasKeyboardFocus"))
     XCTAssertTrue(source.contains("private func dismissHomeConnectSheet()"))
   }
@@ -304,15 +401,21 @@ final class DashboardCaptureStateTests: XCTestCase {
   func testHomeOverlaysBehaveLikeModals() throws {
     let dashboard = try dashboardSource()
     let apps = try appsSource()
+    // The `dismissableSheet` modifiers are the shared presentation primitive
+    // both Home overlays and the pages mount; they live beside the pages that
+    // use them rather than inside any one of them.
+    let dismissableSheet = try source(named: "DismissableSheet.swift")
+    let escapeKeyHandler = try escapeKeyHandlerSource()
     let normalizedDashboard = normalizedWhitespace(dashboard)
 
     // Esc must dismiss the topmost overlay. Custom ZStack overlays are not
     // NSWindow sheets, so Esc comes from the shared catcher's window-scoped
     // key monitor — onExitCommand never fires (the overlays are never
     // focused) and hidden cancel-shortcut buttons get culled from dispatch.
-    XCTAssertTrue(apps.contains("struct OverlayModalEscapeCatcher: NSViewRepresentable"))
-    XCTAssertTrue(apps.contains("NSEvent.addLocalMonitorForEvents(matching: .keyDown)"))
-    XCTAssertTrue(apps.contains("event.window === window"))
+    XCTAssertTrue(escapeKeyHandler.contains("struct OverlayModalEscapeCatcher: View"))
+    XCTAssertTrue(escapeKeyHandler.contains("struct EscapeKeyHandler: NSViewRepresentable"))
+    XCTAssertTrue(escapeKeyHandler.contains("NSEvent.addLocalMonitorForEvents(matching: .keyDown)"))
+    XCTAssertTrue(escapeKeyHandler.contains("registration.window === window"))
     XCTAssertTrue(
       dashboard.contains("if appsPopupAcceptsInput && !homeConnectSheetIsPresented"),
       "The apps popup owns Esc only while the connect sheet is not presented"
@@ -325,16 +428,17 @@ final class DashboardCaptureStateTests: XCTestCase {
       "Home overlays must not rely on onExitCommand — it requires focus the overlays never receive"
     )
     XCTAssertTrue(
-      apps.contains("OverlayModalEscapeCatcher {\n              log(\"DISMISSABLE_SHEET: Escape pressed"))
+      dismissableSheet.contains(
+        "OverlayModalEscapeCatcher {\n              log(\"DISMISSABLE_SHEET: Escape pressed"))
 
     // While an overlay is up, the content underneath must be hidden from
     // VoiceOver / Full Keyboard Access and the panel marked as modal.
     XCTAssertTrue(dashboard.contains("private var isHomeModalPresented: Bool"))
     XCTAssertTrue(dashboard.contains(".accessibilityHidden(isHomeModalPresented)"))
     XCTAssertTrue(dashboard.contains(".accessibilityAddTraits(.isModal)"))
-    XCTAssertTrue(apps.contains(".accessibilityHidden(isPresented)"))
-    XCTAssertTrue(apps.contains(".accessibilityHidden(item != nil)"))
-    XCTAssertTrue(apps.contains(".accessibilityAddTraits(.isModal)"))
+    XCTAssertTrue(dismissableSheet.contains(".accessibilityHidden(isPresented)"))
+    XCTAssertTrue(dismissableSheet.contains(".accessibilityHidden(item != nil)"))
+    XCTAssertTrue(dismissableSheet.contains(".accessibilityAddTraits(.isModal)"))
 
     // The close control must be a real, labeled button — not a tap gesture.
     XCTAssertTrue(apps.contains("var accessibilityLabel: String = \"Close\""))
@@ -373,6 +477,16 @@ final class DashboardCaptureStateTests: XCTestCase {
     try source(named: "AppsPage.swift")
   }
 
+  private func escapeKeyHandlerSource() throws -> String {
+    let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let handlerURL =
+      testsURL
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/EscapeKeyHandler.swift")
+    // omi-test-quality: source-inspection -- static contract: Esc stays window-scoped, never .onExitCommand
+    return try String(contentsOf: handlerURL, encoding: .utf8)
+  }
+
   private func source(named fileName: String) throws -> String {
     let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
     let sourceURL =
@@ -383,12 +497,28 @@ final class DashboardCaptureStateTests: XCTestCase {
   }
 
   private func methodBody(named name: String, in source: String) throws -> String {
-    let pattern = #"private func \#(name)\([^\)]*\)[^{]*\{([\s\S]*?)\n    \}"#
-    let regex = try NSRegularExpression(pattern: pattern)
-    let range = NSRange(source.startIndex..<source.endIndex, in: source)
-    let match = try XCTUnwrap(regex.firstMatch(in: source, range: range))
-    let bodyRange = try XCTUnwrap(Range(match.range(at: 1), in: source))
-    return String(source[bodyRange])
+    guard let declaration = source.range(of: "private func \(name)(") else {
+      throw NSError(domain: "DashboardCaptureStateTests", code: 1)
+    }
+    guard let openingBrace = source[declaration.upperBound...].firstIndex(of: "{") else {
+      throw NSError(domain: "DashboardCaptureStateTests", code: 2)
+    }
+
+    var depth = 0
+    var cursor = openingBrace
+    while cursor < source.endIndex {
+      switch source[cursor] {
+      case "{": depth += 1
+      case "}":
+        depth -= 1
+        if depth == 0 {
+          return String(source[source.index(after: openingBrace)..<cursor])
+        }
+      default: break
+      }
+      cursor = source.index(after: cursor)
+    }
+    throw NSError(domain: "DashboardCaptureStateTests", code: 3)
   }
 
   private func computedPropertyBody(named name: String, in source: String) throws -> String {

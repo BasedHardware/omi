@@ -31,7 +31,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "build": "bob build",
-    "prepare": "yarn build",
+    "prepare": "npm run build",
     "release": "release-it",
     "example": "yarn --cwd example",
     "bootstrap": "yarn example && yarn install"
@@ -87,7 +87,11 @@
     "tmp": "^0.2.4",
     "proxy-agent": "^6.4.0",
     "pac-proxy-agent": "^7.0.1",
-    "pac-resolver": "^7.0.1"
+    "pac-resolver": "^7.0.1",
+    "brace-expansion": "~2.1.2",
+    "fast-uri": "~3.1.4",
+    "js-yaml": "~4.3.0",
+    "shell-quote": "~1.9.0"
   },
   "engines": {
     "node": ">= 16.0.0"

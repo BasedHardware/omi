@@ -12,15 +12,18 @@ import struct
 import tempfile
 import wave
 from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
+import httpx
 import numpy as np
 import pytest
+import requests
 
 from utils.stt import vad
 from utils.stt.vad import (
     VADAudioDecodeError,
     VADProcessingError,
+    VADEmptyError,
     vad_is_empty,
     _run_file_vad,
     _get_ort_session,
@@ -33,6 +36,13 @@ from utils.stt.vad import (
     linear16_pcm_is_silent,
     _STATE_SHAPE,
 )
+
+
+def test_apply_vad_for_speech_profile_raises_for_zero_segments():
+    with patch.object(vad, 'vad_is_empty', return_value=[]):
+        with pytest.raises(VADEmptyError, match='Audio is empty'):
+            vad.apply_vad_for_speech_profile('/fake/path.wav')
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -237,6 +247,63 @@ class TestVadIsEmptyFallback:
         result = vad_is_empty(wav_path)
         assert result is False
         mock_local.assert_called_once_with(wav_path)
+
+    @patch.dict(
+        os.environ,
+        {
+            'HOSTED_VAD_API_URL': 'http://vad.test/v1/vad',
+            'HOSTED_VAD_CONNECT_TIMEOUT_SECONDS': '1.25',
+            'HOSTED_VAD_READ_TIMEOUT_SECONDS': '12.5',
+        },
+    )
+    @patch('utils.stt.vad.requests.post', side_effect=requests.ConnectTimeout('unreachable'))
+    @patch('utils.stt.vad._run_file_vad', return_value=[])
+    @patch.object(vad, 'redis_db')
+    def test_hosted_connect_timeout_is_bounded_and_falls_back(self, mock_redis, mock_local, mock_post, tmp_wav_dir):
+        wav_path = str(tmp_wav_dir / 'test.wav')
+        _write_wav_file(wav_path, 1.0)
+
+        assert vad_is_empty(wav_path) is True
+
+        assert mock_post.call_args.kwargs['timeout'] == (1.25, 12.5)
+        mock_local.assert_called_once_with(wav_path)
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {'HOSTED_VAD_API_URL': 'http://vad.test/v1/vad'}, clear=False)
+    async def test_async_hosted_timeout_uses_safe_defaults_and_falls_back(self, tmp_wav_dir):
+        wav_path = str(tmp_wav_dir / 'test.wav')
+        _write_wav_file(wav_path, 1.0)
+        os.environ.pop('HOSTED_VAD_CONNECT_TIMEOUT_SECONDS', None)
+        os.environ.pop('HOSTED_VAD_READ_TIMEOUT_SECONDS', None)
+
+        client = MagicMock()
+        client.post = AsyncMock(side_effect=httpx.ConnectTimeout('unreachable'))
+        with (
+            patch.object(vad, 'get_stt_client', return_value=client),
+            patch.object(vad, '_run_file_vad', return_value=[]) as mock_local,
+        ):
+            assert await vad.async_vad_is_empty(wav_path) is True
+
+        timeout = client.post.call_args.kwargs['timeout']
+        assert timeout.connect == 3.0
+        assert timeout.read == 30.0
+        assert timeout.write == 30.0
+        assert timeout.pool == 3.0
+        mock_local.assert_called_once_with(wav_path)
+
+    @pytest.mark.parametrize(
+        'invalid_value',
+        ['0', '-1', 'abc', 'inf', 'Infinity', '1e309', '61', '301', '1000000000'],
+    )
+    def test_invalid_hosted_timeouts_use_safe_defaults(self, invalid_value):
+        with patch.dict(
+            os.environ,
+            {
+                'HOSTED_VAD_CONNECT_TIMEOUT_SECONDS': invalid_value,
+                'HOSTED_VAD_READ_TIMEOUT_SECONDS': invalid_value,
+            },
+        ):
+            assert vad._hosted_vad_timeout_seconds() == (3.0, 30.0)
 
     @patch.dict(os.environ, {'HOSTED_VAD_API_URL': 'http://vad.test/v1/vad'})
     @patch('utils.stt.vad.requests.post')

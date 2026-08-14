@@ -1,4 +1,4 @@
-"""Canonical vs legacy memory delete routing in merge conversation cleanup."""
+"""Universal memory source retraction in merge conversation cleanup."""
 
 from __future__ import annotations
 
@@ -27,8 +27,6 @@ def _install_merge_conversations_stubs() -> list[str]:
     conversations_mod = sys.modules["database.conversations"]
     conversations_mod.delete_conversation = MagicMock()
     conversations_mod.delete_conversation_photos = MagicMock()
-    memories_mod = sys.modules["database.memories"]
-    memories_mod.delete_memories_for_conversation = MagicMock()
     action_items_mod = sys.modules["database.action_items"]
     action_items_mod.delete_action_items_for_conversation = MagicMock()
 
@@ -48,11 +46,11 @@ def _merge_conversations_import_isolation():
     install_database_client_stub()
     touched = _install_merge_conversations_stubs()
     saved.update(snapshot_sys_modules(touched))
-    from utils.conversations.merge_conversations import _delete_conversation_and_related_data
-    from utils.memory.memory_system import MemorySystem
+    from utils.conversations.merge_conversations import (
+        _delete_conversation_and_related_data,
+    )
 
     globals()["_delete_conversation_and_related_data"] = _delete_conversation_and_related_data
-    globals()["MemorySystem"] = MemorySystem
     yield
     restore_sys_modules(saved)
 
@@ -62,36 +60,13 @@ def _reinstall_merge_conversations_stubs():
     _install_merge_conversations_stubs()
 
 
-def test_delete_conversation_related_data_routes_canonical_to_retract():
+def test_delete_conversation_related_data_always_retracts_through_universal_service():
     service = MagicMock()
-    legacy_delete = sys.modules["database.memories"].delete_memories_for_conversation
-    legacy_delete.reset_mock()
 
-    with patch(
-        "utils.conversations.merge_conversations.pin_memory_system",
-        return_value=MemorySystem.CANONICAL,
-    ):
-        with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
-            _delete_conversation_and_related_data("uid-canonical", "conv-1")
+    with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+        _delete_conversation_and_related_data("uid-any", "conv-1")
 
-    service.retract_conversation_memories.assert_called_once_with("uid-canonical", "conv-1")
-    legacy_delete.assert_not_called()
-
-
-def test_delete_conversation_related_data_routes_legacy_to_memories_db():
-    service = MagicMock()
-    legacy_delete = sys.modules["database.memories"].delete_memories_for_conversation
-    legacy_delete.reset_mock()
-
-    with patch(
-        "utils.conversations.merge_conversations.pin_memory_system",
-        return_value=MemorySystem.LEGACY,
-    ):
-        with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
-            _delete_conversation_and_related_data("uid-legacy", "conv-1")
-
-    legacy_delete.assert_called_once_with("uid-legacy", "conv-1")
-    service.retract_conversation_memories.assert_not_called()
+    service.retract_conversation_memories.assert_called_once_with("uid-any", "conv-1")
 
 
 def test_canonical_retraction_failure_stops_source_cleanup():
@@ -99,16 +74,156 @@ def test_canonical_retraction_failure_stops_source_cleanup():
     service.retract_conversation_memories.side_effect = RuntimeError("canonical unavailable")
     delete_conversation = sys.modules["database.conversations"].delete_conversation
     delete_conversation.reset_mock()
-    legacy_delete = sys.modules["database.memories"].delete_memories_for_conversation
-    legacy_delete.reset_mock()
 
-    with patch(
-        "utils.conversations.merge_conversations.pin_memory_system",
-        return_value=MemorySystem.CANONICAL,
-    ):
-        with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
-            with pytest.raises(RuntimeError, match="canonical unavailable"):
-                _delete_conversation_and_related_data("uid-canonical", "conv-1")
+    with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+        with pytest.raises(RuntimeError, match="canonical unavailable"):
+            _delete_conversation_and_related_data("uid-any", "conv-1")
 
-    legacy_delete.assert_not_called()
+    delete_conversation.assert_not_called()
+
+
+def test_source_deletion_fence_stays_clear_when_canonical_retraction_never_commits():
+    service = MagicMock()
+    service.retract_conversation_memories.side_effect = RuntimeError("transaction aborted")
+    committed = False
+
+    def mark_committed():
+        nonlocal committed
+        committed = True
+
+    with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+        with pytest.raises(RuntimeError, match="transaction aborted"):
+            _delete_conversation_and_related_data(
+                "uid-any",
+                "conv-1",
+                on_authoritative_retraction=mark_committed,
+            )
+
+    assert committed is False
+
+
+def test_source_deletion_fence_advances_after_authoritative_commit_even_if_later_step_fails():
+    """Merge advances the fence only when MemoryService reports authoritative commit.
+
+    MemoryService calls the callback immediately after irreversible canonical
+    retraction, before later historical suppression/cleanup work. This test
+    covers the merge wiring once that signal has already been raised.
+    """
+    service = MagicMock()
+    committed = False
+
+    def mark_committed():
+        nonlocal committed
+        committed = True
+
+    def retract_then_fail(_uid, _conversation_id, *, on_authoritative_commit):
+        on_authoritative_commit()
+        raise RuntimeError("best-effort cleanup unavailable")
+
+    service.retract_conversation_memories.side_effect = retract_then_fail
+
+    with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+        with pytest.raises(RuntimeError, match="best-effort cleanup unavailable"):
+            _delete_conversation_and_related_data(
+                "uid-any",
+                "conv-1",
+                on_authoritative_retraction=mark_committed,
+            )
+
+    assert committed is True
+
+
+def test_source_deletion_fence_stays_clear_when_service_fails_before_irreversible_callback():
+    service = MagicMock()
+    committed = False
+
+    def mark_committed():
+        nonlocal committed
+        committed = True
+
+    def retract_without_callback(_uid, _conversation_id, *, on_authoritative_commit):
+        del on_authoritative_commit
+        raise RuntimeError("Canonical memory suppression unavailable")
+
+    service.retract_conversation_memories.side_effect = retract_without_callback
+
+    with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+        with pytest.raises(RuntimeError, match="suppression unavailable"):
+            _delete_conversation_and_related_data(
+                "uid-any",
+                "conv-1",
+                on_authoritative_retraction=mark_committed,
+            )
+
+    assert committed is False
+
+
+def test_merge_failure_tombstones_merged_target_before_restoring_sources():
+    service = MagicMock()
+    delete_conversation = sys.modules["database.conversations"].delete_conversation
+    delete_photos = sys.modules["database.conversations"].delete_conversation_photos
+    delete_conversation.reset_mock()
+    delete_photos.reset_mock()
+
+    from utils.conversations import merge_conversations as merge_mod
+
+    with patch.object(merge_mod, "MemoryService", return_value=service):
+        with patch.object(merge_mod, "delete_conversation_audio_files"):
+            with patch.object(merge_mod, "delete_vector"):
+                with patch.object(merge_mod.lifecycle_service, "complete") as complete:
+                    merge_mod._handle_merge_failure(
+                        "uid-merge",
+                        ["src-1", "src-2"],
+                        merged_conversation_id="merged-1",
+                        failure_phase=merge_mod.MergeFailurePhase.BEFORE_SOURCE_DELETION,
+                    )
+
+    service.retract_conversation_memories.assert_called_once_with("uid-merge", "merged-1")
+    delete_conversation.assert_called_once_with("uid-merge", "merged-1")
+    assert complete.call_count == 2
+
+
+def test_merge_failure_preserves_merged_target_after_source_deletion_started():
+    service = MagicMock()
+    delete_conversation = sys.modules["database.conversations"].delete_conversation
+    delete_conversation.reset_mock()
+
+    from utils.conversations import merge_conversations as merge_mod
+
+    with patch.object(merge_mod, "MemoryService", return_value=service):
+        with patch.object(merge_mod.lifecycle_service, "complete"):
+            merge_mod._handle_merge_failure(
+                "uid-merge",
+                ["src-1", "src-2"],
+                merged_conversation_id="merged-1",
+                failure_phase=merge_mod.MergeFailurePhase.SOURCE_DELETION_STARTED,
+            )
+
+    service.retract_conversation_memories.assert_not_called()
+    delete_conversation.assert_not_called()
+
+
+def test_merge_failure_aborts_target_cleanup_when_canonical_retraction_fails():
+    service = MagicMock()
+    service.retract_conversation_memories.side_effect = RuntimeError("canonical unavailable")
+    delete_conversation = sys.modules["database.conversations"].delete_conversation
+    delete_photos = sys.modules["database.conversations"].delete_conversation_photos
+    delete_conversation.reset_mock()
+    delete_photos.reset_mock()
+
+    from utils.conversations import merge_conversations as merge_mod
+
+    with patch.object(merge_mod, "MemoryService", return_value=service):
+        with patch.object(merge_mod, "delete_conversation_audio_files") as delete_audio:
+            with patch.object(merge_mod, "delete_vector") as delete_vector:
+                merge_mod._handle_merge_failure(
+                    "uid-merge",
+                    ["src-1"],
+                    merged_conversation_id="merged-1",
+                    failure_phase=merge_mod.MergeFailurePhase.BEFORE_SOURCE_DELETION,
+                )
+
+    delete_photos.assert_not_called()
+    delete_audio.assert_not_called()
+    delete_vector.assert_not_called()
     delete_conversation.assert_not_called()

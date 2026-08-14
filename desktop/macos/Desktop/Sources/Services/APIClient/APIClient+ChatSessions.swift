@@ -146,6 +146,19 @@ struct InitialMessageResponse: Codable {
 
 // MARK: - AI User Profile API
 
+/// Response of POST /v1/users/ai-profile/synthesize.
+struct AIUserProfileSynthesisResponse: Codable, Equatable, Sendable {
+  let profileText: String
+  let dataSourcesUsed: [String]
+  let itemCount: Int
+
+  enum CodingKeys: String, CodingKey {
+    case profileText = "profile_text"
+    case dataSourcesUsed = "data_sources_used"
+    case itemCount = "item_count"
+  }
+}
+
 struct AIUserProfileResponse: Codable {
   let profileText: String
   let generatedAt: Date
@@ -178,6 +191,54 @@ extension APIClient {
     )
 
     let _: AIUserProfileResponse = try await patch("v1/users/ai-profile", body: body)
+  }
+
+  /// Return-only two-stage AI user profile synthesis through managed memories.
+  /// The prompts, the model and the consolidation live in the backend; callers send
+  /// their formatted source lines plus past profiles (oldest first) and persist the
+  /// returned text through `syncAIUserProfile`.
+  func synthesizeAIUserProfile(
+    memories: [String],
+    tasks: [String],
+    goals: [String],
+    conversations: [String],
+    messages: [String],
+    pastProfilesOldestFirst: [String],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> AIUserProfileSynthesisResponse {
+    // The request carries one account's memories, messages and past profiles. Without a
+    // pinned owner an auth retry after a mid-flight account switch would replay them under
+    // the new account's token.
+    guard
+      let pinnedAuthorization =
+        authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerId)
+    else {
+      throw AuthError.userChangedDuringRequest
+    }
+    struct SynthesizeRequest: Encodable {
+      let memories: [String]
+      let tasks: [String]
+      let goals: [String]
+      let conversations: [String]
+      let messages: [String]
+      let past_profiles: [String]
+    }
+
+    return try await post(
+      "v1/users/ai-profile/synthesize",
+      body: SynthesizeRequest(
+        memories: memories,
+        tasks: tasks,
+        goals: goals,
+        conversations: conversations,
+        messages: messages,
+        past_profiles: Array(pastProfilesOldestFirst.prefix(5))
+      ),
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: pinnedAuthorization,
+      requestTimeout: Self.managedSynthesisTimeout)
   }
 
   // MARK: - Agent VM

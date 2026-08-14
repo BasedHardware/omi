@@ -12,6 +12,7 @@ import httpx
 
 from database.apps import get_app_by_id_db
 from utils.executors import critical_executor, db_executor, run_blocking
+from utils.other.endpoints import enforce_account_deletion_http_access
 from utils.http_client import safe_request_target, get_auth_client, UnsafeWebhookURLError
 from database.redis_db import enable_app, increase_app_installs_count
 from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
@@ -150,6 +151,18 @@ def oauth_authorize(
     return response
 
 
+def _setup_completed_from_payload(payload: object) -> bool:
+    """Read `is_setup_completed` from a third-party setup_completed_url body.
+
+    Mirrors `routers.apps._setup_completed_from_response`: the body is
+    developer-controlled, so a JSON scalar or array is as likely as the documented
+    object. Anything that is not an object carrying a truthy `is_setup_completed`
+    means setup is not completed. A non-JSON body still raises ValueError out of
+    `res.json()` and is answered with the 503 below.
+    """
+    return isinstance(payload, dict) and bool(payload.get('is_setup_completed', False))
+
+
 @router.post("/v1/oauth/token", response_model=OAuthTokenResponse)
 async def oauth_token(
     firebase_id_token: str = Form(...),
@@ -174,6 +187,8 @@ async def oauth_token(
         raise HTTPException(status_code=401, detail=f"Invalid Firebase ID token: {e}")
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Error verifying Firebase ID token: {e}")
+
+    await run_blocking(db_executor, enforce_account_deletion_http_access, uid)
 
     app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
     if not app_data:
@@ -206,7 +221,7 @@ async def oauth_token(
                     follow_redirects=False,
                 )
                 res.raise_for_status()
-                if not res.json().get('is_setup_completed', False):
+                if not _setup_completed_from_payload(res.json()):
                     raise HTTPException(
                         status_code=400,
                         detail='App setup is not completed. Please complete app setup before authorizing.',

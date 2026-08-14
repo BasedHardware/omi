@@ -1272,7 +1272,11 @@ final class ChatTimelineContinuityTests: XCTestCase {
       chatBubbleSource.contains("OmiMarkdown(text: output, sender: .ai)"),
       "agent completion body must render markdown"
     )
-    XCTAssertTrue(chatBubbleSource.contains("Text(\"Collapse\")"))
+    XCTAssertTrue(chatBubbleSource.contains("StableChatCardHeader("))
+    XCTAssertFalse(
+      chatBubbleSource.contains("private var collapseControl"),
+      "expanded cards must keep the persistent header disclosure instead of adding a second anchor"
+    )
     XCTAssertTrue(
       chatBubbleSource.contains("AgentTimelineOpenFeedback.shouldShowLinkOut("),
       "cards must gate link-out with shared policy"
@@ -1297,98 +1301,42 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
   }
 
-  func testChatSelectionIsLimitedToSettledMessageBodies() throws {
-    // Mechanical guard for the omi-chat-continuity main-thread freeze:
-    // ChatMessagesView used to apply `.textSelection(.enabled)` on the LazyVStack,
-    // wrapping every agent-card header Text in SelectionOverlay and thrashing
-    // GraphHost via setFont → invalidateIntrinsicContentSize. Settled message
-    // bodies may opt in; streaming content and stack chrome must not.
-    let root = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-
-    let messagesSource = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatMessagesView.swift"),
-      encoding: .utf8
-    )
-    let markdownSource = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/OmiMarkdown.swift"),
-      encoding: .utf8
-    )
-    let bubbleSource = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatBubble.swift"),
-      encoding: .utf8
-    )
-
-    XCTAssertFalse(
-      messagesSource.contains(".textSelection(.enabled)"),
-      "chat message stack must not enable selection on chrome Text views"
-    )
-    XCTAssertTrue(
-      markdownSource.contains("if textSelectionEnabled {")
-        && markdownSource.contains(".textSelection(.enabled)")
-        && markdownSource.contains(".textSelection(.disabled)"),
-      "the markdown boundary must make body selection an explicit opt-in"
-    )
-    XCTAssertTrue(
-      bubbleSource.contains("isStreaming: message.isStreaming")
-        && markdownSource.contains("self.textSelectionEnabled = !isStreaming"),
-      "main-chat message bodies must enable native selection only after streaming finishes"
-    )
-    XCTAssertTrue(
-      bubbleSource.contains(".textSelection(.disabled)"),
-      "agent card headers must disable SelectionOverlay on truncated snippets"
-    )
-  }
-
   @MainActor
-  func testSettledMessageBodyEnablesSelectionWhileStreamingBodyDoesNot() {
-    // Behavioral coverage for the production selection branch. The source
-    // inspection tripwire above guards the forbidden patterns; this test
-    // exercises the API the chat surface uses and verifies that settled
-    // messages opt into selection while streaming messages do not.
-    let settled = OmiMarkdown(text: "Completed response", sender: .ai, isStreaming: false)
-    XCTAssertTrue(
-      settled.textSelectionEnabled,
-      "settled message bodies must enable native selection"
-    )
-
-    let streaming = OmiMarkdown(text: "Partial…", sender: .ai, isStreaming: true)
-    XCTAssertFalse(
-      streaming.textSelectionEnabled,
-      "streaming message bodies must not create SelectionOverlay views"
-    )
-  }
-
-  @MainActor
-  func testSelectableMarkdownRendersWithStableLayout() {
-    // Render a settled (selectable) message body in a real hosting view and
-    // verify the SelectionOverlay-backed content produces a finite, stable size
-    // across layout passes — the regression proxy for the prior layout loop.
-    let body = """
-      This is a completed assistant response with **bold**, `code`, and a list:
-
-      - First point
-      - Second point
-
-      It must remain selectable without reintroducing the scroll layout loop.
+  func testCompletedChatTranscriptLayoutConvergesAcrossRepeatedResizes() {
+    let messages = (0..<16).map { index in
       """
+      Completed response \(index) includes **formatted text**, `inline code`, and a list:
+
+      - First point with enough content to wrap when the transcript narrows
+      - Second point with a stable whole-message copy action
+      """
+    }
     let host = NSHostingView(
-      rootView: OmiMarkdown(text: body, sender: .ai, isStreaming: false)
+      rootView: ScrollView {
+        LazyVStack(alignment: .leading, spacing: 8) {
+          ForEach(messages.indices, id: \.self) { index in
+            OmiMarkdown(text: messages[index], sender: .ai)
+          }
+        }
+      }
     )
-    host.frame = NSRect(x: 0, y: 0, width: 480, height: 400)
-    host.layoutSubtreeIfNeeded()
 
-    let size = host.fittingSize
-    XCTAssertTrue(size.width.isFinite, "selectable body width must be finite")
-    XCTAssertTrue(size.height.isFinite, "selectable body height must be finite")
-    XCTAssertGreaterThan(size.height, 0, "selectable body must produce visible content")
+    var sizesByWidth = [CGFloat: CGSize]()
+    for width in [620.0, 1100.0, 760.0, 980.0, 620.0, 1100.0] {
+      host.frame = NSRect(x: 0, y: 0, width: width, height: 720)
+      host.layoutSubtreeIfNeeded()
 
-    // Second pass — size must not diverge (the original SelectionOverlay loop
-    // thrashed setFont → invalidateIntrinsicContentSize on every layout pass).
-    host.layoutSubtreeIfNeeded()
-    let sizeAfterRelayout = host.fittingSize
-    XCTAssertEqual(size, sizeAfterRelayout, "selectable body layout must converge")
+      let size = host.fittingSize
+      XCTAssertTrue(size.width.isFinite, "transcript width must remain finite")
+      XCTAssertTrue(size.height.isFinite, "transcript height must remain finite")
+      XCTAssertGreaterThan(size.height, 0, "completed messages must remain visible")
+
+      if let previous = sizesByWidth[width] {
+        XCTAssertEqual(previous, size, "repeating a transcript width must converge to the same layout")
+      } else {
+        sizesByWidth[width] = size
+      }
+    }
   }
 
   func testCanonicalSurfacesBindSharedProviderMessages() throws {
@@ -1399,26 +1347,8 @@ final class ChatTimelineContinuityTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
 
-    let chatPage = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Pages/ChatPage.swift"),
-      encoding: .utf8)
-    XCTAssertTrue(
-      chatPage.contains("messages: chatProvider.messages,"),
-      "main Chat must bind the shared ChatProvider timeline"
-    )
-    XCTAssertFalse(
-      chatPage.contains("transcriptMessages"),
-      "main Chat must not filter notch/PTT turns out of history"
-    )
-    XCTAssertTrue(
-      chatPage.contains("openAgentChatFromTimeline(agentID: agentID, completion: completion)"),
-      "main Chat must open spawned-agent links from the timeline with open result feedback"
-    )
-    XCTAssertTrue(
-      chatPage.contains("openAgentChatFromTimeline(ref: ref, completion: completion)"),
-      "main Chat must open structured agent refs with open result feedback"
-    )
-
+    // Home is the only main-window chat surface now, so the assertions the
+    // standalone chat page used to carry move onto it rather than retiring.
     let dashboard = try String(
       contentsOf: root.appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift"),
       encoding: .utf8)
@@ -1426,6 +1356,18 @@ final class ChatTimelineContinuityTests: XCTestCase {
       dashboard.components(separatedBy: "messages: chatProvider.messages,").count - 1,
       2,
       "Home chat surfaces must bind the shared ChatProvider timeline"
+    )
+    XCTAssertFalse(
+      dashboard.contains("transcriptMessages"),
+      "Home chat must not filter notch/PTT turns out of history"
+    )
+    XCTAssertTrue(
+      dashboard.contains("openAgentChatFromTimeline(agentID: agentID, completion: completion)"),
+      "Home chat must open spawned-agent links from the timeline with open result feedback"
+    )
+    XCTAssertTrue(
+      dashboard.contains("openAgentChatFromTimeline(ref: ref, completion: completion)"),
+      "Home chat must open structured agent refs with open result feedback"
     )
     XCTAssertFalse(
       dashboard.contains("transcriptMessages"),
@@ -1491,6 +1433,22 @@ final class ChatTimelineContinuityTests: XCTestCase {
       ChatContinuityInvariants.agentPreviewText(prompt: "", output: "  only output  "),
       "only output"
     )
+    XCTAssertEqual(
+      ChatContinuityInvariants.agentCardPreviewText(
+        title: "Delegated: Address the review comments",
+        prompt: "Address the review comments",
+        output: "Done"
+      ),
+      ""
+    )
+    XCTAssertEqual(
+      ChatContinuityInvariants.agentCardPreviewText(
+        title: "Research agent",
+        prompt: "Address the review comments",
+        output: "Done"
+      ),
+      "Address the review comments"
+    )
   }
 
   func testAgentCompletionCardsUsePromptPreviewHelper() throws {
@@ -1507,12 +1465,22 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
 
     XCTAssertTrue(
-      bubble.contains("ChatContinuityInvariants.agentPreviewText(prompt: promptSnippet, output: output)"),
+      bubble.contains("ChatContinuityInvariants.agentCardPreviewText(")
+        && bubble.contains("prompt: promptSnippet")
+        && bubble.contains("output: output"),
       "AgentCompletionCard header must preview promptSnippet, not raw output"
     )
     XCTAssertTrue(
-      bubble.contains("ChatContinuityInvariants.agentPreviewText(prompt: summary.prompt, output: summary.output)"),
+      bubble.contains("prompt: summary.prompt")
+        && bubble.contains("output: summary.output"),
       "BackgroundAgentCard header must preview prompt, not raw output"
+    )
+
+    XCTAssertTrue(
+      bubble.contains("HStack(alignment: .top, spacing: OmiSpacing.xxs)")
+        && bubble.contains(".frame(width: 18, height: 18, alignment: .center)")
+        && bubble.contains(".frame(width: 28, height: 28)"),
+      "agent card headers must keep status, text hierarchy, and trailing controls top-aligned"
     )
     XCTAssertTrue(
       floating.contains("ChatContinuityInvariants.agentPreviewText(")

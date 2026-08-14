@@ -1,9 +1,0 @@
-{
-  "files": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1533
-  },
-  "raise_justifications": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Adds shared-capture silent-mic recovery telemetry so non-Bluetooth CoreAudio rebuild attempts are visible to release-health alongside the existing Bluetooth fallback."
-  },
-  "threshold": 1500
-}

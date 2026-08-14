@@ -7,7 +7,8 @@ import {
   isAudioCaptureSupported,
 } from '@/lib/audioCapture';
 import { createTranscriptionSocket } from '@/lib/transcriptionSocket';
-import { processInProgressConversation, getTranscriptionPreferences } from '@/lib/api';
+import { processInProgressConversation, finalizeConversationById, getTranscriptionPreferences } from '@/lib/api';
+import { applyLiveTranscriptSegment } from '@/lib/transcriptSegments';
 
 /**
  * Hook to manage recording lifecycle.
@@ -47,6 +48,11 @@ export function useRecording() {
 
   // Local ref for preventing state updates after unmount (this one is local since it's component-specific)
   const isMountedRef = useRef<boolean>(true);
+  // Starts as client_conversation_id; upgraded by conversation_session (in_progress only).
+  const conversationIdRef = useRef<string | null>(null);
+  // Prevent noisy "unexpected" warnings when we intentionally stop/disconnect
+  // the transcription socket (normal stop + pagehide cleanup both disconnect synchronously).
+  const intentionalSocketDisconnectRef = useRef<boolean>(false);
 
   // Start recording
   const startRecording = useCallback(async (overrideMode?: AudioMode) => {
@@ -58,6 +64,7 @@ export function useRecording() {
     // Use override mode if provided, otherwise use context audioMode
     const effectiveMode = overrideMode ?? audioMode;
 
+    intentionalSocketDisconnectRef.current = false;
     setState('initializing');
     setSegments([]);
     setDuration(0);
@@ -80,20 +87,19 @@ export function useRecording() {
       }
 
       // Create transcription socket
+      const clientConversationId = crypto.randomUUID();
+      conversationIdRef.current = clientConversationId;
       const socket = createTranscriptionSocket({
         language,
+        clientConversationId,
         onSegment: (segment: TranscriptSegment) => {
           if (!isMountedRef.current) return;
-          setSegments((prev) => {
-            // Update existing segment or add new one
-            const existingIndex = prev.findIndex((s) => s.id === segment.id);
-            if (existingIndex >= 0) {
-              const updated = [...prev];
-              updated[existingIndex] = segment;
-              return updated;
-            }
-            return [...prev, segment];
-          });
+          // Bound the live UI list so ~1h sessions do not freeze Chrome (#5399).
+          // Server audio still holds the full session for finalize-on-stop.
+          setSegments((prev) => applyLiveTranscriptSegment(prev, segment));
+        },
+        onConversationSession: (conversationId) => {
+          conversationIdRef.current = conversationId;
         },
         onError: (err) => {
           console.error('Transcription socket error:', err);
@@ -103,7 +109,14 @@ export function useRecording() {
           // Socket connected
         },
         onDisconnected: () => {
-          // Socket disconnected
+          // Surface disconnects that leave recording "alive" while audio drops
+          // (#5399 / #10941). Token-refresh close events are ignored inside the socket.
+          if (!isMountedRef.current) return;
+          if (intentionalSocketDisconnectRef.current) {
+            intentionalSocketDisconnectRef.current = false;
+            return;
+          }
+          console.warn('Transcription socket disconnected while recording may still be active');
         },
       });
 
@@ -148,6 +161,7 @@ export function useRecording() {
 
       // Cleanup on error
       if (transcriptionSocketRef.current) {
+        intentionalSocketDisconnectRef.current = true;
         transcriptionSocketRef.current.disconnect();
         transcriptionSocketRef.current = null;
       }
@@ -202,6 +216,7 @@ export function useRecording() {
 
     // Disconnect WebSocket
     if (transcriptionSocketRef.current) {
+      intentionalSocketDisconnectRef.current = true;
       transcriptionSocketRef.current.disconnect();
       transcriptionSocketRef.current = null;
     }
@@ -211,8 +226,13 @@ export function useRecording() {
     setSystemLevel(0);
     setState('idle');
 
-    // Process the conversation in the background - don't block the user
-    processInProgressConversation()
+    // Process this web conversation by ID — never the shared Redis pointer (#5388).
+    const conversationId = conversationIdRef.current;
+    conversationIdRef.current = null;
+    const finalize = conversationId
+      ? finalizeConversationById(conversationId)
+      : processInProgressConversation();
+    finalize
       .then(() => {
         // Conversation processed - could show a toast notification here
       })
@@ -260,6 +280,7 @@ export function useRecording() {
           audioCaptureRef.current.stop();
         }
         if (transcriptionSocketRef.current) {
+          intentionalSocketDisconnectRef.current = true;
           transcriptionSocketRef.current.disconnect();
         }
         if (durationIntervalRef.current) {

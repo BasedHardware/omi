@@ -9,7 +9,6 @@ import glob
 import json
 import os
 import platform as _platform_mod
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,7 +17,10 @@ from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Any
 
+from git_bash import bash_executable
+
 VALID_PLATFORMS = {"all", "macos", "linux", "windows"}
+MANIFEST_RELATIVE_PATH = ".github/checks-manifest.yaml"
 
 
 def detect_platform() -> str:
@@ -31,21 +33,6 @@ def detect_platform() -> str:
     if system == "Windows":
         return "windows"
     return system.lower()
-
-
-def bash_executable() -> str:
-    override = os.environ.get("OMI_BASH_EXECUTABLE")
-    if override:
-        return override
-    if os.name == "nt":
-        git = shutil.which("git")
-        if git:
-            git_root = Path(git).resolve().parent.parent
-            for relative_path in (Path("bin/bash.exe"), Path("usr/bin/bash.exe")):
-                candidate = git_root / relative_path
-                if candidate.is_file():
-                    return str(candidate)
-    return shutil.which("bash") or "bash"
 
 
 @dataclass(frozen=True)
@@ -135,6 +122,48 @@ def load_manifest(path: Path) -> Manifest:
     return Manifest(checks=checks, exempt=exempt)
 
 
+def load_manifest_from_text(text: str) -> Manifest:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".yaml", delete=False) as handle:
+        handle.write(text)
+        path = Path(handle.name)
+    try:
+        return load_manifest(path)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def manifest_changed_check_ids(root: Path, base: str, head: str, *, include_worktree: bool = False) -> set[str]:
+    """Return check ids whose manifest entries differ between base and head."""
+    manifest_path = root / MANIFEST_RELATIVE_PATH
+    head_manifest = load_manifest(manifest_path)
+    try:
+        base_text = run_git(root, "show", f"{base}:{MANIFEST_RELATIVE_PATH}")
+    except subprocess.CalledProcessError:
+        return {check.id for check in head_manifest.checks}
+
+    base_manifest = load_manifest_from_text(base_text)
+    head_by_id = {check.id: check for check in head_manifest.checks}
+    base_by_id = {check.id: check for check in base_manifest.checks}
+    changed = {
+        check_id
+        for check_id in set(head_by_id) | set(base_by_id)
+        if head_by_id.get(check_id) != base_by_id.get(check_id)
+    }
+    if include_worktree and head == "HEAD":
+        try:
+            committed_text = run_git(root, "show", f"HEAD:{MANIFEST_RELATIVE_PATH}")
+        except subprocess.CalledProcessError:
+            return changed
+        committed_manifest = load_manifest_from_text(committed_text)
+        committed_by_id = {check.id: check for check in committed_manifest.checks}
+        changed |= {
+            check_id
+            for check_id in set(head_by_id) | set(committed_by_id)
+            if head_by_id.get(check_id) != committed_by_id.get(check_id)
+        }
+    return changed
+
+
 def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
     errors: list[str] = []
     ids = [check.id for check in manifest.checks]
@@ -186,6 +215,7 @@ def run_git(root: Path, *args: str) -> str:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
     )
     return result.stdout.strip()
 
@@ -199,6 +229,7 @@ def changed_files(root: Path, base: str, head: str, include_worktree: bool = Fal
     files = set(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", f"{resolved_base}...{head}").splitlines())
     if include_worktree and head == "HEAD":
         files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", "HEAD").splitlines())
+        files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", "--cached").splitlines())
         files.update(run_git(root, "ls-files", "--others", "--exclude-standard").splitlines())
     return sorted(path for path in files if path)
 
@@ -224,11 +255,24 @@ def _platform_matches(check: Check, platform: str, *, exclusive: bool = False) -
     return not check.platforms or "all" in check.platforms or platform in check.platforms
 
 
-def matching_paths(check: Check, files: list[str]) -> tuple[str, ...]:
+def matching_paths(
+    check: Check,
+    files: list[str],
+    *,
+    manifest_changed_ids: set[str] | None = None,
+) -> tuple[str, ...]:
     """Return changed paths that caused *check* to be selected."""
     if "all" in check.triggers:
         return tuple(files) if files else ("all",)
-    return tuple(path for path in files if any(trigger_matches(pattern, path) for pattern in check.triggers))
+    matched = tuple(path for path in files if any(trigger_matches(pattern, path) for pattern in check.triggers))
+    if manifest_changed_ids is None or not matched:
+        return matched
+    non_manifest = [path for path in matched if path != MANIFEST_RELATIVE_PATH]
+    if non_manifest:
+        return matched
+    if MANIFEST_RELATIVE_PATH in matched and check.id in manifest_changed_ids:
+        return matched
+    return ()
 
 
 def resolve_check_selections(
@@ -239,6 +283,7 @@ def resolve_check_selections(
     include_pr_body_checks: bool = True,
     platform: str = "all",
     exclusive_platform: bool = False,
+    manifest_changed_ids: set[str] | None = None,
 ) -> list[CheckSelection]:
     """Resolve checks with their manifest-owned path and reason evidence."""
     selections: list[CheckSelection] = []
@@ -249,7 +294,7 @@ def resolve_check_selections(
             continue
         if not _platform_matches(check, platform, exclusive=exclusive_platform):
             continue
-        paths = matching_paths(check, files)
+        paths = matching_paths(check, files, manifest_changed_ids=manifest_changed_ids)
         if paths:
             selections.append(CheckSelection(check=check, matched_paths=paths))
     return selections
@@ -263,6 +308,7 @@ def resolve_checks(
     include_pr_body_checks: bool = True,
     platform: str = "all",
     exclusive_platform: bool = False,
+    manifest_changed_ids: set[str] | None = None,
 ) -> list[Check]:
     return [
         selection.check
@@ -273,6 +319,7 @@ def resolve_checks(
             include_pr_body_checks=include_pr_body_checks,
             platform=platform,
             exclusive_platform=exclusive_platform,
+            manifest_changed_ids=manifest_changed_ids,
         )
     ]
 
@@ -321,6 +368,7 @@ def command_for_check(
     *,
     changed_files_path: Path,
     base: str,
+    target_base: str,
     head: str,
     pr_body_file: Path,
     skip_changelog: bool,
@@ -328,22 +376,34 @@ def command_for_check(
     replacements = {
         "{changed_files}": str(changed_files_path),
         "{base}": base,
+        "{target_base}": target_base,
         "{head}": head,
         "{pr_body_file}": str(pr_body_file),
     }
     command: list[str] = []
-    for index, token in enumerate(check.command):
+    for token in check.command:
         if token == "{skip_changelog}":
             if skip_changelog:
                 command.append("--skip")
             continue
-        resolved = replacements.get(token, token)
-        if index == 0:
-            if resolved == "python3":
-                resolved = sys.executable
-            elif resolved == "bash":
-                resolved = bash_executable()
-        command.append(resolved)
+        command.append(replacements.get(token, token))
+    return command
+
+
+def command_for_host(
+    command: list[str],
+    *,
+    platform_name: str | None = None,
+    python_executable: str | None = None,
+) -> list[str]:
+    """Resolve manifest interpreter aliases through the active Windows toolchain."""
+    platform = platform_name or os.name
+    if platform != "nt" or not command:
+        return command
+    if command[0] == "bash":
+        return [bash_executable(platform_name=platform), *command[1:]]
+    if command[0] == "python3":
+        return [python_executable or sys.executable, *command[1:]]
     return command
 
 
@@ -355,6 +415,7 @@ def execute_checks(
     base: str,
     head: str,
     pr_body_file: Path,
+    target_base: str | None = None,
     skip_changelog: bool = False,
 ) -> int:
     failures: list[str] = []
@@ -365,10 +426,12 @@ def execute_checks(
             check,
             changed_files_path=changed_files_path,
             base=base,
+            target_base=target_base or base,
             head=head,
             pr_body_file=pr_body_file,
             skip_changelog=skip_changelog,
         )
+        command = command_for_host(command)
         returncode = subprocess.run(command, cwd=root, check=False).returncode
         status = "PASS" if returncode == 0 else "FAIL"
         print(f"<== {status} {check.id} ({time.monotonic() - started:.2f}s)", flush=True)
@@ -439,6 +502,16 @@ def main() -> int:
             if args.changed_files
             else changed_files(root, args.base, args.head, include_worktree=args.lane == "local")
         )
+        manifest_changed_ids = (
+            manifest_changed_check_ids(
+                root,
+                resolved_base,
+                args.head,
+                include_worktree=args.lane == "local",
+            )
+            if MANIFEST_RELATIVE_PATH in files
+            else None
+        )
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"FAIL: could not resolve manifest checks: {exc}", file=sys.stderr)
         return 2
@@ -460,6 +533,7 @@ def main() -> int:
                 include_pr_body_checks=not args.skip_pr_body_checks,
                 platform=detected_platform,
                 exclusive_platform=args.exclusive_platform,
+                manifest_changed_ids=manifest_changed_ids,
             )
         )
     except ValueError as exc:
@@ -512,6 +586,7 @@ def main() -> int:
             checks,
             changed_files_path=files_path,
             base=resolved_base,
+            target_base=args.base,
             head=args.head,
             pr_body_file=body_path,
             skip_changelog=args.skip_changelog,

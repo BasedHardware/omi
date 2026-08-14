@@ -21,6 +21,8 @@ from typing import Iterable
 from . import config, providers, qualification, safety, memory_scenarios
 
 OWNERSHIP_PREFIX = "omi-dev-harness"
+
+
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -31,7 +33,11 @@ def _repo_root() -> Path:
 
 def _marker(cfg: config.HarnessConfig, service: str) -> str:
     token = os.environ.get("OMI_HARNESS_OWNERSHIP_TOKEN", "").strip()
-    return f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}:{token}" if token else f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}"
+    return (
+        f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}:{token}"
+        if token
+        else f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}"
+    )
 
 
 def _load_json(path: Path, default: dict[str, object]) -> dict[str, object]:
@@ -179,9 +185,36 @@ def _service_health(cfg: config.HarnessConfig, service: str) -> tuple[bool, str]
         return False, detail
     if service == "backend":
         return _http_ok(f"{cfg.backend_url}/docs")
+    if service == "llm-gateway":
+        return _http_ok(f"{cfg.llm_gateway_url}/health")
     if service == "desktop-backend":
         return _http_ok(f"{cfg.desktop_backend_url}/health")
     return False, f"unknown service {service!r}"
+
+
+def _status_health_label(
+    cfg: config.HarnessConfig,
+    service: str,
+    *,
+    alive: bool,
+    port: int,
+) -> str:
+    """Report the same HTTP/auth health checks as startup wait, with a degraded label.
+
+    Port-open alone is not healthy for HTTP services. When the owned process is
+    still alive and the port accepts TCP but the authenticated/HTTP probe fails,
+    surface ``degraded (...)`` so manual QA can tell a wedged service from a
+    clean stop.
+    """
+    ok, detail = _service_health(cfg, service)
+    if ok:
+        return detail
+    port_listening = bool(port) and _port_open("127.0.0.1", port)
+    if alive and port_listening:
+        return f"degraded ({detail})"
+    if port and not port_listening:
+        return "port-closed"
+    return detail
 
 
 def _stop_single_service(cfg: config.HarnessConfig, record: dict[str, object]) -> None:
@@ -310,6 +343,7 @@ def print_config(cfg: config.HarnessConfig) -> None:
     print(f"firebase_auth_emulator: {cfg.auth_host}")
     print(f"redis: {cfg.redis_host}:{cfg.redis_port}")
     print(f"typesense: 127.0.0.1:{cfg.typesense_port}")
+    print(f"llm_gateway: {cfg.llm_gateway_url}")
     print(f"backend: {cfg.backend_url}")
     print(f"desktop_backend: {cfg.desktop_backend_url}")
 
@@ -469,6 +503,13 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def _prepend_pythonpath(env: dict[str, str], *entries: Path) -> None:
+    values = [str(path) for path in entries]
+    if existing := env.get("PYTHONPATH"):
+        values.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(values)
+
+
 def _start_process(
     cfg: config.HarnessConfig,
     service: str,
@@ -493,11 +534,10 @@ def _start_process(
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_file = log_path.open("ab")
     child_env = config.child_env_for(cfg) if env is None else env
-    child_env["PYTHONPATH"] = f"{cfg.repo_root / 'scripts' / 'dev-harness'}:{child_env.get('PYTHONPATH', '')}"
+    python_paths = [cfg.repo_root / "scripts" / "dev-harness"]
     if service == "backend":
-        child_env["PYTHONPATH"] = (
-            f"{cfg.repo_root / 'scripts' / 'dev-harness'}:{cfg.repo_root / 'backend'}:{child_env.get('PYTHONPATH', '')}"
-        )
+        python_paths.append(cfg.repo_root / "backend")
+    _prepend_pythonpath(child_env, *python_paths)
     supervised = [
         sys.executable,
         "-m",
@@ -673,7 +713,24 @@ def _start_infrastructure(cfg: config.HarnessConfig) -> None:
 
 
 def _start_app_services(cfg: config.HarnessConfig) -> None:
-    """Start backend and desktop-backend after infrastructure is settling."""
+    """Start the isolated gateway, backend, and desktop-backend."""
+    _start_process(
+        cfg,
+        "llm-gateway",
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "llm_gateway.main:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(cfg.llm_gateway_port),
+        ],
+        cwd=cfg.repo_root / "backend",
+        log_name="llm-gateway.log",
+        port=cfg.llm_gateway_port,
+    )
     _start_process(
         cfg,
         "backend",
@@ -685,7 +742,16 @@ def _start_app_services(cfg: config.HarnessConfig) -> None:
     _start_process(
         cfg,
         "desktop-backend",
-        [sys.executable, "-m", "uvicorn", "desktop_backend:app", "--host", "127.0.0.1", "--port", str(cfg.desktop_backend_port)],
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "desktop_backend:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(cfg.desktop_backend_port),
+        ],
         cwd=cfg.repo_root / "backend",
         log_name="desktop-backend.log",
         port=cfg.desktop_backend_port,
@@ -709,9 +775,12 @@ def _start_services(cfg: config.HarnessConfig) -> None:
 # 45 s (the old flat deadline shared across *all* services) is not enough.
 _HEALTH_TIMEOUTS: dict[str, float] = {
     "firestore": 45.0,
-    "auth": 45.0,
+    # The combined Firebase process can report Firestore ready before Auth has
+    # finished its cold startup on the qualification runner.
+    "auth": 90.0,
     "typesense": 45.0,
-    "backend": 90.0,
+    "backend": 180.0,
+    "llm-gateway": 60.0,
     "desktop-backend": 60.0,
     "redis": 30.0,
 }
@@ -735,6 +804,7 @@ def _wait_health(
         "auth": (f"http://{cfg.auth_host}/", None),
         "typesense": (f"http://127.0.0.1:{cfg.typesense_port}/collections", typesense_headers),
         "backend": (f"{cfg.backend_url}/docs", None),
+        "llm-gateway": (f"{cfg.llm_gateway_url}/health", None),
         "desktop-backend": (f"{cfg.desktop_backend_url}/health", None),
         "redis": (None, None),  # port-based check
     }
@@ -755,7 +825,8 @@ def _wait_health(
         for service in list(pending):
             if now >= deadlines[service]:
                 url = pending[service][0]
-                failures.setdefault(service, f"not healthy after {deadlines[service] - start:.0f}s at {url}")
+                endpoint = url or f"127.0.0.1:{cfg.redis_port}"
+                failures[service] = f"not healthy after {deadlines[service] - start:.0f}s at {endpoint}"
                 pending.pop(service)
         if not pending:
             break
@@ -773,18 +844,18 @@ def _wait_health(
                 if _port_open("127.0.0.1", cfg.redis_port):
                     print("redis: healthy (port-open)")
                     pending.pop(service)
+                    failures.pop(service, None)
                 continue
             ok, detail = _http_ok(url, headers=headers)
             if ok:
                 print(f"{service}: healthy ({detail})")
                 pending.pop(service)
+                failures.pop(service, None)
             else:
                 failures[service] = detail
         if pending:
             time.sleep(0.75)
-    for service, (url, _) in pending.items():
-        failures.setdefault(service, f"not healthy at {url}")
-    return [f"{service}: {failures.get(service, 'unknown failure')}" for service in pending] if failures else []
+    return [f"{service}: {detail}" for service, detail in failures.items()]
 
 
 def cmd_up(args: argparse.Namespace) -> int:
@@ -895,11 +966,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     for record in records:
         pid = int(record.get("pid", -1))
         alive = safety.process_exists(pid)
-        health = "not checked"
         service = str(record.get("service"))
         port = int(record.get("port", 0) or 0)
-        if port:
-            health = "port-open" if _port_open("127.0.0.1", port) else "port-closed"
+        health = _status_health_label(cfg, service, alive=alive, port=port)
         print(f"  - {service}: pid={pid} alive={alive} {health} log={record.get('log')}")
     return 0
 
@@ -917,16 +986,9 @@ def cmd_summary(args: argparse.Namespace) -> int:
 
 
 def _signal_owned_process_group(pid: int, service: str) -> None:
-    # Use SIGTERM (not SIGINT) so Python services receive a clean
-    # shutdown signal instead of KeyboardInterrupt.  SIGINT triggers
-    # Python's default signal handler which cancels background tasks and
-    # raises KeyboardInterrupt — this caused qualification failures when
-    # dev-down sent SIGINT to a healthy backend whose parent subshell had
-    # already exited due to an unrelated desktop-launch failure.
-    # See FC-qualification-sigint-cascade.
     try:
-        os.killpg(pid, signal.SIGTERM)
-        print(f"{service}: sent SIGTERM to process group {pid}")
+        os.killpg(pid, signal.SIGINT)
+        print(f"{service}: sent SIGINT to process group {pid}")
     except ProcessLookupError:
         return
     except PermissionError as exc:

@@ -47,7 +47,7 @@ require_text 'Application Support/$BUNDLE_NAME' "$PROFILE_PREP"
 require_text 'defaults write "$BUNDLE_ID" hasCompletedOnboarding -bool true' "$PROFILE_PREP"
 require_text 'defaults write "$BUNDLE_ID" devLazyPermissionsEnabled -bool true' "$PROFILE_PREP"
 require_text 'defaults write "$BUNDLE_ID" screenAnalysisEnabled -bool false' "$PROFILE_PREP"
-require_text 'defaults write "$BUNDLE_ID" transcriptionEnabled -bool false' "$PROFILE_PREP"
+require_text 'defaults write "$BUNDLE_ID" audioRecordingMode -string off' "$PROFILE_PREP"
 require_text '"$SCRIPT_DIR/prepare-qualification-profile.sh" "$BUNDLE"' "$QUALIFIER"
 require_text 'OMI_SKIP_SETTINGS_SEED=1'
 require_text 'make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice'
@@ -77,7 +77,11 @@ require_order "$QUALIFIER" \
   './scripts/desktop-core-harness.sh --tier 2' \
   'if ! run_qualification_cleanup; then' \
   'if [[ "$GITHUB_ACTIONS_ARTIFACT" -eq 1 ]]'
-require_text 'terminate_qualification_desktop "$BUNDLE"'
+require_text 'automation bridge healthy on port $port (authenticated; token=$token_file)'
+require_text 'automation_token_lib'
+require_text 'OMI_AUTOMATION_TOKEN_FILE' "$RUN_SH"
+require_text 'OMI_AUTOMATION_TOKEN_FILE="$OMI_AUTOMATION_TOKEN_FILE"'
+require_text 'omi_automation_token_file'
 require_text '--json tagName,isDraft,isPrerelease,publishedAt,assets,body'
 require_text '"$SCRIPT_DIR/qualification-swift-cache.sh" prepare'
 require_text 'QUALIFICATION_CACHE_LEASE_ID'

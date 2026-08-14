@@ -1,368 +1,263 @@
-"""Tests for scheduled canonical Short-term maintenance orchestration."""
-
-from __future__ import annotations
-
 import asyncio
-import os
 from datetime import datetime, timezone
-from typing import Any, cast
 from unittest.mock import MagicMock
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+import pytest
 
-from models.memory_recurrence import CanonicalRecurrenceSignal
-from models.product_memory import MemoryItem
 from utils.memory import canonical_short_term_maintenance_cron as cron
-from utils.memory.canonical_consolidation import ConsolidationReport
-from utils.memory.canonical_required_processing import RequiredMemoryProcessingReport
-from utils.memory.short_term_promotion import (
-    CanonicalShortTermMaintenanceReport as MaintenanceReport,
-)
 
 NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
-CANONICAL_A = "uid-canonical-a"
-CANONICAL_B = "uid-canonical-b"
 
 
-def _enable_for(monkeypatch, *uids: str) -> None:
+class _Reference:
+    def __init__(self, path):
+        self.path = path
+
+
+class _Snapshot:
+    def __init__(self, path):
+        self.reference = _Reference(path)
+
+    def to_dict(self):
+        uid = self.reference.path.split("/")[-1]
+        return {"uid": uid, "schema_version": 1}
+
+
+class _Query:
+    def __init__(self, snapshots, *, page_limit=None):
+        self.snapshots = sorted(snapshots, key=lambda snapshot: snapshot.to_dict()["uid"])
+        self.page_limit = page_limit
+
+    def where(self, _field, _op, value):
+        return _Query([snapshot for snapshot in self.snapshots if snapshot.to_dict()["uid"] > value])
+
+    def order_by(self, _field):
+        return self
+
+    def limit(self, _limit):
+        return _Query(self.snapshots, page_limit=_limit)
+
+    def stream(self):
+        return iter(self.snapshots[: self.page_limit] if self.page_limit is not None else self.snapshots)
+
+
+class _Db:
+    def __init__(self, snapshots=None):
+        self.snapshots = snapshots or []
+        self.cursor = None
+
+    def collection(self, _collection_id):
+        return _Query(self.snapshots)
+
+    def document(self, _path):
+        outer = self
+
+        class _CursorRef:
+            def get(self):
+                payload = outer.cursor
+                return type("Snapshot", (), {"exists": payload is not None, "to_dict": lambda _self: payload})()
+
+            def set(self, payload, **_kwargs):
+                outer.cursor = dict(payload)
+
+            def create(self, payload):
+                if outer.cursor is not None:
+                    raise RuntimeError("exists")
+                outer.cursor = dict(payload)
+
+        return _CursorRef()
+
+
+def _enable(monkeypatch):
     monkeypatch.setenv(cron.MEMORY_CANONICAL_MAINTENANCE_ENABLED_ENV, "true")
-    monkeypatch.setattr(cron, "list_canonical_cohort_uids", lambda: list(uids))
 
 
-def test_disabled_cohort_runner_returns_empty_summary_without_running_maintenance(
-    monkeypatch,
-):
+def test_disabled_global_switch_does_not_resolve_inventory(monkeypatch):
     monkeypatch.setenv(cron.MEMORY_CANONICAL_MAINTENANCE_ENABLED_ENV, "false")
-    list_uids = MagicMock(return_value=[CANONICAL_A])
-    run_maintenance = MagicMock()
-    monkeypatch.setattr(cron, "list_canonical_cohort_uids", list_uids)
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", run_maintenance)
-
-    summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=object(),
-        now=NOW,
-        run_id="cron-disabled",
-    )
-
-    assert summary == cron.CanonicalShortTermMaintenanceCronSummary(run_id="cron-disabled")
-    list_uids.assert_not_called()
-    run_maintenance.assert_not_called()
+    inventory = MagicMock()
+    summary = cron.run_universal_short_term_maintenance(uid_inventory=inventory, now=NOW)
+    assert summary.user_count == 0
+    inventory.assert_not_called()
 
 
-def test_cohort_summary_uses_consolidation_routes_and_promotions(monkeypatch):
-    _enable_for(monkeypatch, CANONICAL_A, CANONICAL_B)
-    client = object()
-    recurrence_sink = MagicMock()
-    calls: list[tuple[str, dict[str, Any]]] = []
-    reports = {
-        CANONICAL_A: MaintenanceReport(
-            uid=CANONICAL_A,
-            consolidation=ConsolidationReport(
-                uid=CANONICAL_A,
-                trigger_reason="first_pending",
-                batched_memory_ids=["mem-a1", "mem-a2"],
-                promoted_memory_ids=["mem-a1"],
-                archived_memory_ids=["mem-a2"],
-            ),
-        ),
-        CANONICAL_B: MaintenanceReport(
-            uid=CANONICAL_B,
-            consolidation=ConsolidationReport(
-                uid=CANONICAL_B,
-                trigger_reason="first_pending",
-                batched_memory_ids=["mem-b1"],
-                promoted_memory_ids=["mem-b1"],
-            ),
-        ),
-    }
-
-    def run_maintenance(uid: str, **kwargs: Any) -> MaintenanceReport:
-        calls.append((uid, kwargs))
-        return reports[uid]
-
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", run_maintenance)
-
-    summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=client,
-        now=NOW,
-        run_id="cron-routes",
-        recurrence_signal_persister=recurrence_sink,
-    )
-
-    assert summary.user_count == 2
-    assert summary.routed_total == 3
-    assert summary.promoted_total == 2
-    assert summary.skipped_users == 0
-    assert summary.errors == []
-    assert [uid for uid, _kwargs in calls] == [CANONICAL_A, CANONICAL_B]
-    for _uid, kwargs in calls:
-        assert kwargs["db_client"] is client
-        assert kwargs["now"] == NOW
-        assert kwargs["run_id"] == "cron-routes"
-        assert kwargs["recurrence_signal_sink"] is recurrence_sink
-        assert callable(kwargs["required_processor"])
-        assert set(kwargs) == {
-            "db_client",
-            "now",
-            "run_id",
-            "recurrence_signal_sink",
-            "required_processor",
-        }
+def test_missing_inventory_fails_closed_with_operational_dependency(monkeypatch):
+    _enable(monkeypatch)
+    summary = cron.run_universal_short_term_maintenance(db_client=object(), now=NOW)
+    assert summary.inventory_source == "unavailable"
+    assert summary.inventory_complete is False
+    assert summary.errors == ["canonical_uid_inventory_unavailable"]
 
 
-def test_consolidation_skipped_reason_is_logged_and_counted(monkeypatch, caplog):
-    consolidation = MaintenanceReport(
-        uid=CANONICAL_A,
-        consolidation=ConsolidationReport(
-            uid=CANONICAL_A,
-            skipped_reason="consolidation_not_due",
-        ),
-    )
-
-    _enable_for(monkeypatch, CANONICAL_A)
-    monkeypatch.setattr(
-        cron,
-        "run_canonical_short_term_maintenance",
-        lambda *_args, **_kwargs: consolidation,
-    )
-    caplog.set_level("INFO", logger=cron.__name__)
-
-    summary = cron.run_canonical_short_term_maintenance_for_cohort(now=NOW, run_id="cron-skipped")
-
-    assert summary.routed_total == 0
-    assert summary.promoted_total == 0
-    assert summary.skipped_users == 1
-    assert "skipped_reason=consolidation_not_due" in caplog.text
+def test_bounded_registry_inventory_is_deterministic_and_capped():
+    snapshots = [
+        _Snapshot("canonical_memory_maintenance_registry/uid-b"),
+        _Snapshot("canonical_memory_maintenance_registry/uid-a"),
+    ]
+    assert cron.bounded_canonical_memory_uid_inventory(_Db(snapshots), limit=1) == ("uid-a",)
 
 
-def test_one_user_failure_does_not_block_remaining_cohort(monkeypatch):
-    _enable_for(monkeypatch, CANONICAL_A, CANONICAL_B)
-    invoked: list[str] = []
-
-    def run_maintenance(uid: str, **_kwargs: Any) -> MaintenanceReport:
-        invoked.append(uid)
-        if uid == CANONICAL_A:
-            raise RuntimeError("broken user state")
-        return MaintenanceReport(
-            uid=uid,
-            consolidation=ConsolidationReport(
-                uid=uid,
-                batched_memory_ids=["mem-b"],
-                promoted_memory_ids=["mem-b"],
-            ),
-        )
-
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", run_maintenance)
-
-    summary = cron.run_canonical_short_term_maintenance_for_cohort(now=NOW, run_id="cron-isolated")
-
-    assert invoked == [CANONICAL_A, CANONICAL_B]
-    assert summary.user_count == 2
-    assert summary.routed_total == 1
-    assert summary.promoted_total == 1
-    assert summary.skipped_users == 0
-    assert summary.errors == [f"uid={CANONICAL_A}: RuntimeError"]
+def test_registry_cursor_progresses_and_wraps_without_starvation():
+    snapshots = [
+        _Snapshot("canonical_memory_maintenance_registry/uid-a"),
+        _Snapshot("canonical_memory_maintenance_registry/uid-b"),
+    ]
+    db = _Db(snapshots)
+    assert cron.bounded_canonical_memory_uid_inventory(db, limit=1) == ("uid-a",)
 
 
-def test_malformed_memory_error_does_not_log_raw_payload(monkeypatch, caplog):
-    _enable_for(monkeypatch, CANONICAL_A)
-    private_text = "private-diagnosis-sentinel"
+def test_registry_cursor_read_failure_fails_closed():
+    class BrokenDb:
+        def document(self, _path):
+            class BrokenRef:
+                def get(self):
+                    raise RuntimeError('transport unavailable')
 
-    def run_maintenance(_uid: str, **_kwargs: Any) -> MaintenanceReport:
-        MemoryItem.model_validate(
-            {
-                "memory_id": "malformed",
-                "uid": CANONICAL_A,
-                "content": private_text,
+            return BrokenRef()
+
+        def collection(self, _name):
+            raise AssertionError('cursor failure should stop before registry query')
+
+    with pytest.raises(cron.CanonicalMaintenanceInventoryUnavailable, match='cursor unavailable'):
+        cron.bounded_canonical_memory_uid_inventory(BrokenDb(), limit=1)
+
+
+def test_seed_existing_apply_control_accounts_is_bounded_and_resumable():
+    class ApplySnapshot:
+        def __init__(self, uid):
+            self.reference = _Reference(f'users/{uid}/memory_state/apply_control')
+
+        def to_dict(self):
+            return {'uid': self.reference.path.split('/')[1]}
+
+    class SeedQuery:
+        def __init__(self, snapshots):
+            self.snapshots = snapshots
+            self.page_limit = None
+
+        def order_by(self, _field):
+            return self
+
+        def where(self, _field, _operator, value):
+            self.snapshots = [item for item in self.snapshots if item.to_dict().get('uid', '') > value]
+            return self
+
+        def start_after(self, snapshot):
+            path = getattr(getattr(snapshot, 'reference', None), 'path', '')
+            self.snapshots = [item for item in self.snapshots if item.reference.path > path]
+            return self
+
+        def limit(self, limit):
+            self.page_limit = limit
+            return self
+
+        def stream(self):
+            return iter(self.snapshots[: self.page_limit])
+
+    class SeedRef:
+        def __init__(self, path, state):
+            self.path = path
+            self.state = state
+
+        def get(self):
+            payload = self.state.get(self.path)
+            return type(
+                'Snapshot',
+                (),
+                {
+                    'exists': payload is not None,
+                    'reference': _Reference(self.path),
+                    'to_dict': lambda _self: payload,
+                },
+            )()
+
+        def set(self, payload, **_kwargs):
+            self.state[self.path] = payload
+
+    class SeedDb:
+        def __init__(self):
+            self.state = {
+                'users/uid-a/memory_state/apply_control': {'uid': 'uid-a'},
+                'users/uid-b/memory_state/apply_control': {'uid': 'uid-b'},
             }
-        )
-        raise AssertionError("validation should fail")
+            self.snapshots = [ApplySnapshot('uid-a'), ApplySnapshot('uid-b')]
 
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", run_maintenance)
-    caplog.set_level("WARNING", logger=cron.__name__)
+        def collection_group(self, _name):
+            return SeedQuery(self.snapshots)
 
-    summary = cron.run_canonical_short_term_maintenance_for_cohort(now=NOW, run_id="cron-malformed")
+        def collection(self, name):
+            snapshots = [
+                type(
+                    'RegistrySnapshot',
+                    (),
+                    {
+                        'to_dict': lambda _self, payload=payload: payload,
+                    },
+                )()
+                for path, payload in self.state.items()
+                if path.startswith(f'{name}/')
+            ]
+            return SeedQuery(snapshots)
 
-    assert len(summary.errors) == 1
-    assert "ValidationError" in summary.errors[0]
-    assert "input_value" not in summary.errors[0]
-    assert private_text not in summary.errors[0]
-    assert private_text not in caplog.text
+        def document(self, path):
+            return SeedRef(path, self.state)
+
+    db = SeedDb()
+    cron._seed_registry_from_existing_memory_states(db, limit=1)
+
+    assert db.state['canonical_memory_maintenance_registry/uid-a'] == {'uid': 'uid-a', 'schema_version': 1}
+    assert db.state[cron.CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH] == {
+        'schema_version': 1,
+        'last_path': 'users/uid-a/memory_state/apply_control',
+    }
+    assert cron.bounded_canonical_memory_uid_inventory(db, limit=1) == ("uid-a",)
+    assert cron.bounded_canonical_memory_uid_inventory(db, limit=1) == ("uid-b",)
 
 
-def test_nonempty_outbox_errors_fail_cron_even_when_failure_counters_are_zero(
-    monkeypatch,
-):
-    _enable_for(monkeypatch, CANONICAL_A)
-    report = MaintenanceReport(
-        uid=CANONICAL_A,
-        outbox={
-            "delivered_count": 0,
-            "retryable_failure_count": 0,
-            "dead_letter_count": 0,
-            "ack_failed_count": 0,
-            "errors": [{"stage": "lease", "code": "lease_query_failed"}],
-        },
-    )
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", lambda *_args, **_kwargs: report)
+def test_injected_inventory_runs_arbitrary_uids(monkeypatch):
+    _enable(monkeypatch)
+    calls = []
 
-    summary = cron.run_canonical_short_term_maintenance_for_cohort(
+    def maintenance(uid, **_kwargs):
+        calls.append(uid)
+        return cron.CanonicalShortTermMaintenanceReport(uid=uid)
+
+    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", maintenance)
+    summary = cron.run_universal_short_term_maintenance(
         db_client=object(),
         now=NOW,
-        run_id="cron-outbox-error",
+        uid_inventory=lambda _db, _limit: ["uid-z", "uid-a", "uid-z"],
     )
+    assert calls == ["uid-a", "uid-z"]
+    assert summary.user_count == 2
+    assert summary.inventory_source == "injected"
+    assert summary.inventory_complete is True
 
-    assert summary.outbox_retryable_failures_total == 0
-    assert summary.outbox_dead_letters_total == 0
-    assert summary.outbox_ack_failures_total == 0
-    assert summary.errors == [f"uid={CANONICAL_A}: outbox_delivery_failed:retryable=0:dead_letter=0:ack=0:errors=1"]
 
-
-def test_blocked_consolidation_is_a_cohort_error_that_fails_the_job_contract(
-    monkeypatch,
-):
-    _enable_for(monkeypatch, CANONICAL_A)
-    report = MaintenanceReport(
-        uid=CANONICAL_A,
-        consolidation=ConsolidationReport(
-            uid=CANONICAL_A,
-            watermark_blocked=True,
-            retryable_memory_ids=["mem-retry"],
-            quarantined_memory_ids=["mem-quarantined"],
-            errors=["output_invalid:partition_mismatch"],
-        ),
-    )
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", lambda *_args, **_kwargs: report)
-
-    summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=object(),
+def test_inventory_candidates_come_from_the_injected_universal_inventory(monkeypatch):
+    _enable(monkeypatch)
+    summary = cron.run_universal_short_term_maintenance(
+        db_client=_Db([_Snapshot("users/uid-any/memory_items/m1")]),
         now=NOW,
-        run_id="cron-consolidation-error",
+        uid_inventory=lambda _db, _limit: ["uid-any"],
     )
-
-    assert summary.errors == [f"uid={CANONICAL_A}: consolidation_failed:blocked=1:retryable=1:quarantined=1:errors=1"]
-
-
-def test_required_processing_failures_are_cohort_errors_that_fail_the_job_contract(
-    monkeypatch,
-):
-    _enable_for(monkeypatch, CANONICAL_A)
-    report = MaintenanceReport(
-        uid=CANONICAL_A,
-        required_processing=RequiredMemoryProcessingReport(
-            uid=CANONICAL_A,
-            failed_memory_ids=["mem-retry", "mem-quarantined"],
-            retryable_memory_ids=["mem-retry"],
-            quarantined_memory_ids=["mem-quarantined"],
-        ),
-    )
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", lambda *_args, **_kwargs: report)
-
-    summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=object(),
-        now=NOW,
-        run_id="cron-required-processing-error",
-    )
-
-    assert summary.errors == [f"uid={CANONICAL_A}: required_processing_failed:failed=2:retryable=1:quarantined=1"]
+    assert summary.user_count == 1
 
 
-def test_recurrence_consumer_failure_is_degraded_and_does_not_abort_user(monkeypatch):
-    _enable_for(monkeypatch, CANONICAL_A)
-    client = object()
-    signal = cast(CanonicalRecurrenceSignal, object())
-    recurrence_sink = MagicMock()
-    consumer = MagicMock(side_effect=RuntimeError("candidate store unavailable"))
-    fallback = MagicMock()
-    maintenance_kwargs: dict[str, Any] = {}
+def test_async_entrypoint_forwards_inventory_seam(monkeypatch):
+    expected = cron.CanonicalShortTermMaintenanceCronSummary(run_id="cron", user_count=1)
+    calls = []
 
-    def run_maintenance(uid: str, **kwargs: Any) -> MaintenanceReport:
-        maintenance_kwargs.update(kwargs)
-        return MaintenanceReport(
-            uid=uid,
-            consolidation=ConsolidationReport(
-                uid=uid,
-                batched_memory_ids=["mem-a"],
-                recurrence_signals=[signal],
-            ),
-        )
-
-    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", run_maintenance)
-    monkeypatch.setattr(cron, "record_fallback", fallback)
-
-    summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=client,
-        now=NOW,
-        run_id="cron-recurrence",
-        recurrence_signal_persister=recurrence_sink,
-        recurrence_signal_consumer=consumer,
-    )
-
-    assert maintenance_kwargs["recurrence_signal_sink"] is recurrence_sink
-    consumer.assert_called_once_with(
-        CANONICAL_A,
-        [signal],
-        firestore_client=client,
-    )
-    fallback.assert_called_once_with(
-        component="other",
-        from_mode="recurrence_maintenance",
-        to_mode="recurrence_inbox_retry",
-        reason="other",
-        outcome="degraded",
-    )
-    assert summary.routed_total == 1
-    assert summary.promoted_total == 0
-    assert summary.skipped_users == 0
-    assert summary.recurrence_candidates_total == 0
-    assert summary.errors == [f"uid={CANONICAL_A}: recurrence_consumer:RuntimeError"]
-
-
-def test_async_entrypoint_offloads_sync_cohort_runner_to_db_executor(monkeypatch):
-    client = object()
-    executor = object()
-    recurrence_sink = MagicMock()
-    recurrence_consumer = MagicMock()
-    expected = cron.CanonicalShortTermMaintenanceCronSummary(
-        run_id="cron-async",
-        user_count=1,
-        routed_total=2,
-        promoted_total=1,
-    )
-    calls: list[tuple[Any, Any, tuple[Any, ...], dict[str, Any]]] = []
-
-    async def run_blocking(executor_arg: Any, function: Any, *args: Any, **kwargs: Any):
-        calls.append((executor_arg, function, args, kwargs))
+    async def run_blocking(_executor, _function, *args, **kwargs):
+        calls.append((args, kwargs))
         return expected
 
-    monkeypatch.setattr(cron, "db_executor", executor)
     monkeypatch.setattr(cron, "run_blocking", run_blocking)
-
+    inventory = lambda _db, _limit: ["uid-a"]
     result = asyncio.run(
         cron.run_canonical_short_term_maintenance_cron(
-            db_client=client,
-            now=NOW,
-            run_id="cron-async",
-            recurrence_signal_persister=recurrence_sink,
-            recurrence_signal_consumer=recurrence_consumer,
+            db_client=object(), now=NOW, run_id="cron", uid_inventory=inventory, inventory_limit=3
         )
     )
-
     assert result is expected
-    assert calls == [
-        (
-            executor,
-            cron.run_canonical_short_term_maintenance_for_cohort,
-            (),
-            {
-                "db_client": client,
-                "now": NOW,
-                "run_id": "cron-async",
-                "recurrence_signal_persister": recurrence_sink,
-                "recurrence_signal_consumer": recurrence_consumer,
-            },
-        )
-    ]
+    assert calls[0][1]["uid_inventory"] is inventory
+    assert calls[0][1]["inventory_limit"] == 3

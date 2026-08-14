@@ -1,5 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime
+from collections.abc import Mapping
 from typing import Dict, List, Literal, Optional
+import uuid
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -212,6 +214,25 @@ class Conversation(BaseModel):
     client_platform: Optional[str] = None
 
     def __init__(self, **data):
+        raw_segments = data.get('transcript_segments')
+        conversation_id = data.get('id')
+        if isinstance(raw_segments, list) and conversation_id:
+            normalized_segments = []
+            for index, raw_segment in enumerate(raw_segments):
+                if isinstance(raw_segment, Mapping):
+                    segment = dict(raw_segment)
+                    if not segment.get('id'):
+                        segment['id'] = str(
+                            uuid.uuid5(
+                                uuid.NAMESPACE_URL,
+                                f'omi/conversations/{conversation_id}/transcript-segments/{index}',
+                            )
+                        )
+                    normalized_segments.append(segment)
+                else:
+                    normalized_segments.append(raw_segment)
+            data['transcript_segments'] = normalized_segments
+
         super().__init__(**data)
         # Update plugins_results based on apps_results
         self.plugins_results = [PluginResult(plugin_id=app.app_id, content=app.content) for app in self.apps_results]
@@ -274,6 +295,10 @@ class CreateConversation(BaseModel):
 
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
+    # Capture provenance carried through the normal processing write. Keeping
+    # this on the create model prevents ID-less uploads from assigning role
+    # only after process_conversation has already persisted the row.
+    external_data: Optional[Dict] = None
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(

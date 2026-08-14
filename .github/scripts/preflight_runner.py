@@ -17,7 +17,15 @@ from pathlib import Path
 
 POLL_SECONDS = 0.2
 STATUS_INTERVAL_SECONDS = 5.0
+MAX_PR_BODY_FINGERPRINT_BYTES = 1024 * 1024
 FORWARDED_SIGNAL_NAMES = ("SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK")
+FINGERPRINT_ENV_NAMES = (
+    "GITHUB_HEAD_REF",
+    "OMI_PR_BODY_FILE",
+    "PATH",
+    "PYTHON",
+    "PYTHONPATH",
+)
 IS_WINDOWS = os.name == "nt"
 HAS_PROCESS_GROUPS = os.name != "nt" and hasattr(os, "killpg")
 WINDOWS_STILL_ACTIVE = 259
@@ -176,6 +184,7 @@ def run_windows_child_bootstrap(command: list[str]) -> int:
 def signal_child(
     child: subprocess.Popen[str],
     signum: int,
+    *,
     windows_job: WindowsJob | None = None,
 ) -> None:
     """Forward to the POSIX child group or terminate the Windows process tree."""
@@ -187,7 +196,7 @@ def signal_child(
             killpg(child.pid, signum)
         else:
             child.send_signal(signum)
-    except OSError:
+    except (OSError, ValueError):
         pass
 
 
@@ -301,6 +310,24 @@ def fingerprint(root: Path, command: list[str], stdin_data: str) -> str:
     for value in (str(root.resolve()), head, "\0".join(command), stdin_data):
         digest.update(value.encode("utf-8"))
         digest.update(b"\0")
+    relevant_names = set(FINGERPRINT_ENV_NAMES)
+    relevant_names.update(name for name in os.environ if name.startswith("PRE_PUSH_"))
+    for name in sorted(relevant_names):
+        digest.update(name.encode("utf-8"))
+        digest.update(b"=")
+        digest.update(os.getenv(name, "").encode("utf-8"))
+        digest.update(b"\0")
+    body_path = os.getenv("OMI_PR_BODY_FILE", "").strip()
+    if body_path:
+        try:
+            with Path(body_path).open("rb") as body_file:
+                body = body_file.read(MAX_PR_BODY_FINGERPRINT_BYTES + 1)
+            digest.update(body[:MAX_PR_BODY_FINGERPRINT_BYTES])
+            if len(body) > MAX_PR_BODY_FINGERPRINT_BYTES:
+                digest.update(b"<truncated-pr-body>")
+        except OSError:
+            digest.update(b"<unreadable-pr-body>")
+        digest.update(b"\0")
     return digest.hexdigest()
 
 
@@ -395,7 +422,9 @@ def run_owned(
     started = time.monotonic()
     started_wall = time.time()
     phase = "starting"
+    last_phase = phase
     child: subprocess.Popen[str] | None = None
+    received_signal: int | None = None
     windows_job: WindowsJob | None = None
 
     def write_status() -> None:
@@ -405,6 +434,8 @@ def run_owned(
                 "pid": os.getpid(),
                 "fingerprint": wanted_fingerprint,
                 "phase": phase,
+                "last_phase": last_phase,
+                "received_signal": received_signal,
                 "elapsed_seconds": round(time.monotonic() - started, 1),
                 "log": str(log_path),
                 "started_at_epoch": started_wall,
@@ -412,11 +443,20 @@ def run_owned(
         )
 
     def forward_signal(signum: int, _frame: object) -> None:
+        nonlocal received_signal
+        received_signal = signum
+        print(
+            f"FAIL: preflight runner received signal {signal.Signals(signum).name} "
+            f"during phase={phase}; forwarding it to the child.",
+            file=sys.stderr,
+            flush=True,
+        )
+        write_status()
         if child is None:
             return
         if windows_job is None and child.poll() is not None:
             return
-        signal_child(child, signum, windows_job)
+        signal_child(child, signum, windows_job=windows_job)
 
     previous_handlers = {signum: signal.signal(signum, forward_signal) for signum in forwardable_signals()}
     exit_code = 1
@@ -454,10 +494,24 @@ def run_owned(
                 log.flush()
                 if line.startswith("==> "):
                     phase = line[4:].strip()
+                    last_phase = phase
                     write_status()
         exit_code = child.wait()
         phase = "passed" if exit_code == 0 else "failed"
         write_status()
+        if exit_code != 0:
+            if exit_code < 0:
+                child_failure = f"child terminated by {signal.Signals(-exit_code).name}"
+            else:
+                child_failure = f"child exited with status {exit_code}"
+            signal_note = (
+                f"; runner received {signal.Signals(received_signal).name}" if received_signal is not None else ""
+            )
+            print(
+                f"FAIL: preflight {child_failure} during phase={last_phase}{signal_note}; inspect {log_path}",
+                file=sys.stderr,
+                flush=True,
+            )
         atomic_json(
             result_path,
             {
@@ -466,12 +520,14 @@ def run_owned(
                 "elapsed_seconds": round(time.monotonic() - started, 1),
                 "finished_at_epoch": time.time(),
                 "log": str(log_path),
+                "last_phase": last_phase,
+                "received_signal": received_signal,
             },
         )
         return exit_code
     finally:
         if child is not None and child.poll() is None:
-            signal_child(child, signal.SIGTERM, windows_job)
+            signal_child(child, signal.SIGTERM, windows_job=windows_job)
             try:
                 child.wait(timeout=10)
             except subprocess.TimeoutExpired:

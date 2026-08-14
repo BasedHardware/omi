@@ -17,6 +17,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from git_bash import bash_executable, bash_path
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DESKTOP = REPO_ROOT / "desktop/macos/Desktop"
 CONFIG_PATH = DESKTOP / ".swiftlint.yml"
@@ -199,10 +201,11 @@ class SwiftLintConfigTests(unittest.TestCase):
 
     def test_runner_exposes_only_the_pinned_artifact_digest_without_bootstrapping(self):
         result = subprocess.run(
-            ["bash", str(WRAPPER_PATH), "digest"],
+            [bash_executable(), str(WRAPPER_PATH), "digest"],
             check=True,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         self.assertEqual(
             result.stdout.strip(),
@@ -211,9 +214,10 @@ class SwiftLintConfigTests(unittest.TestCase):
 
     def test_runner_rejects_unknown_subcommands_without_bootstrapping(self):
         result = subprocess.run(
-            ["bash", str(WRAPPER_PATH), "not-a-command"],
+            [bash_executable(), str(WRAPPER_PATH), "not-a-command"],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("usage:", result.stderr)
@@ -225,7 +229,12 @@ class SwiftLintConfigTests(unittest.TestCase):
             marker = root / "fake-executed"
             cache_binary = root / "0.65.0-d6cb0aa7a2f5" / "swiftlint"
             cache_binary.parent.mkdir()
-            cache_binary.write_text(f"#!/bin/sh\ntouch {marker}\necho 0.65.0\n", encoding="utf-8")
+            bash = bash_executable()
+            cache_binary.write_text(
+                f'#!/bin/sh\ntouch "{bash_path(marker, bash)}"\necho 0.65.0\n',
+                encoding="utf-8",
+                newline="\n",
+            )
             cache_binary.chmod(0o755)
 
             # The wrapper should reject the fake binary, then fail at the deliberately
@@ -233,17 +242,34 @@ class SwiftLintConfigTests(unittest.TestCase):
             blocked_curl = root / "bin"
             blocked_curl.mkdir()
             curl = blocked_curl / "curl"
-            curl.write_text("#!/bin/sh\nexit 97\n", encoding="utf-8")
+            curl.write_text("#!/bin/sh\nexit 97\n", encoding="utf-8", newline="\n")
             curl.chmod(0o755)
+            shasum = blocked_curl / "shasum"
+            shasum.write_text(
+                "#!/bin/sh\n"
+                "for path do :; done\n"
+                "printf '%064d  %s\\n' 0 \"$path\"\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+            shasum.chmod(0o755)
             env = os.environ | {
-                "SWIFTLINT_CACHE_DIR": str(root),
-                "PATH": f"{blocked_curl}{os.pathsep}{os.environ['PATH']}",
+                "SWIFTLINT_CACHE_DIR": bash_path(root, bash),
+                "OMI_TEST_FAKE_BIN": bash_path(blocked_curl, bash),
             }
             result = subprocess.run(
-                ["bash", str(WRAPPER_PATH), "version"],
+                [
+                    bash,
+                    "-c",
+                    'export PATH="$OMI_TEST_FAKE_BIN:$PATH"\nexec "$BASH" "$@"',
+                    "bash",
+                    str(WRAPPER_PATH),
+                    "version",
+                ],
                 env=env,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
+                errors="replace",
             )
 
             self.assertNotEqual(result.returncode, 0)

@@ -496,7 +496,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
     files_scanned = 0
 
     for fpath in collect_py_files(dirs):
-        with open(fpath) as f:
+        with open(fpath, encoding="utf-8") as f:
             source = f.read()
         try:
             tree = ast.parse(source, filename=fpath)

@@ -27,6 +27,10 @@ enum DefaultsKey: String {
   case authTokenExpiry = "auth_tokenExpiry"
   case authTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
   case authIsImpersonating = "auth_isImpersonating"
+  /// Durable local cleanup journal written only after the backend accepts an
+  /// account deletion. It survives a crash between HTTP acceptance and the
+  /// owner transition, and is cleared only after local teardown completes.
+  case acceptedAccountDeletionOwnerId = "accepted_account_deletion_owner_id"
   /// Non-prod gauntlet owner swap: synthetic kernel owner that must NOT replace
   /// `auth_userId` (that mismatch triggers AuthService.clearTokens()).
   case automationOwnerOverride = "automation_owner_override"
@@ -34,7 +38,10 @@ enum DefaultsKey: String {
   /// `auth_userId` with a synthetic owner.
   case automationOwnerABackup = "automation_swap_owner_a_backup"
   case chatBridgeMode = "chatBridgeMode"
+  case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
   case multiChatEnabled = "multiChatEnabled"
+  /// Opt-in: proactive notifications are also spoken out loud on delivery.
+  case speakNotificationsAloud = "speakNotificationsAloud"
   case aiChatWorkingDirectory = "aiChatWorkingDirectory"
   case hasCompletedOnboarding = "hasCompletedOnboarding"
   case onboardingStep = "onboardingStep"
@@ -44,6 +51,9 @@ enum DefaultsKey: String {
   case onboardingRole = "onboardingRole"
   case onboardingJustCompleted = "onboardingJustCompleted"
   case hasCompletedFileIndexing = "hasCompletedFileIndexing"
+  case screenAnalysisEnabled = "screenAnalysisEnabled"
+  case screenAnalysisAutoStartFixedV2 = "screenAnalysisAutoStartFixed_v2"
+  case screenAnalysisAutoStartFixedV3 = "screenAnalysisAutoStartFixed_v3"
   case homeOmiDeviceAccountHistory = "home-omi-device-account-history"
   case pairedDeviceId = "pairedDeviceId"
   case pairedDeviceName = "pairedDeviceName"
@@ -52,8 +62,25 @@ enum DefaultsKey: String {
   /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
   case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
+  /// One-shot marker: the PTT-only microphone choice has been folded into the shared
+  /// `preferredMicrophoneDeviceUID`, so it is never carried over twice.
+  case shortcutPTTMicrophoneMergedIntoPreferred = "shortcut_pttMicrophoneMergedIntoPreferred"
+  case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
+  case floatingBarCachedPlan = "floatingBar_cachedPlan"
+  case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case rewindDisableContentCache = "rewindDisableContentCache"
+  // Task-order migration keys are typed so TasksPage and its tests share the
+  // migration contract instead of repeating raw UserDefaults literals.
+  case tasksCategoryOrder = "TasksCategoryOrder"
+  case tasksSortOrderMigrated = "TasksSortOrderMigrated"
+  /// Whether the Suggestions section on the Tasks page is expanded. Shared by the
+  /// view (@AppStorage) and the view model's keyboard-navigation/select-all scope.
+  case tasksSuggestionsSectionExpanded = "tasksSuggestionsSectionExpanded"
+  case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
+  case gmailSelectedCookiePath = "gmailSelectedCookiePath"
+  case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
+  case disableSystemAudioCapture = "disableSystemAudioCapture"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
@@ -67,6 +94,45 @@ struct ScopedDefaultsKey {
 
   static func trialNudge(_ kind: String, ownerHash: String) -> Self {
     Self(rawValue: "trial_nudge.v1.\(kind).\(ownerHash)")
+  }
+
+  static func tasksFullSyncCompleted(ownerID: String) -> Self {
+    Self(rawValue: "tasksFullSyncCompleted_v9_\(ownerID)")
+  }
+
+  static func restoreLegacyConversationItemsCompleted(ownerID: String) -> Self {
+    Self(rawValue: "restoreLegacyConversationItemsCompleted_v1_\(ownerID)")
+  }
+
+  /// Owner-scoped key for the legacy task-order migration completion marker.
+  static func tasksSortOrderMigrated(ownerID: String) -> Self {
+    Self(rawValue: "TasksSortOrderMigrated.owner.\(ownerID)")
+  }
+
+  static func pendingCanonicalReceiptInvalidation(
+    ownerID: String,
+    keyPrefix: String = "suggested.canonicalReceipt.pendingInvalidation."
+  ) -> Self {
+    Self(rawValue: "\(keyPrefix)\(ownerID)")
+  }
+
+  static func pendingCanonicalReceiptInvalidationTimestamps(
+    ownerID: String,
+    keyPrefix: String = "suggested.canonicalReceipt.pendingInvalidation."
+  ) -> Self {
+    Self(rawValue: "\(keyPrefix)\(ownerID).timestamps")
+  }
+
+  static func importConnectorAvailabilityText(connectorID: String) -> Self {
+    Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
+  }
+
+  static func importConnectorSourceCount(connectorID: String) -> Self {
+    Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
+  }
+
+  static func taskInterruptionLedger(ownerID: String) -> Self {
+    Self(rawValue: "proactiveTaskInterruptionLedger.v1.\(ownerID)")
   }
 }
 
@@ -83,6 +149,10 @@ extension UserDefaults {
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
   func data(forKey key: ScopedDefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: ScopedDefaultsKey) -> Bool { bool(forKey: key.rawValue) }
+  func stringArray(forKey key: ScopedDefaultsKey) -> [String]? { stringArray(forKey: key.rawValue) }
+  func dictionary(forKey key: ScopedDefaultsKey) -> [String: Any]? {
+    dictionary(forKey: key.rawValue)
+  }
   func object(forKey key: ScopedDefaultsKey) -> Any? { object(forKey: key.rawValue) }
   func object(forKey key: DefaultsKey) -> Any? { object(forKey: key.rawValue) }
 

@@ -2,20 +2,13 @@
 
 set -euo pipefail
 
-# Fall back to the working directory when `git rev-parse --show-toplevel` cannot
-# resolve a work tree: in a linked worktree whose git context resolves to a git
-# dir (show-toplevel exits 128, "this operation must be run in a work tree"),
-# this would otherwise abort. The pre-push gate cd's to the repo root before
-# invoking this script, and hooks run at the work-tree top, so pwd is the root.
+# The pre-push gate cd's to the repo root before invoking this script, and hooks
+# run at the work-tree top, so pwd is a safe fallback when the linked-worktree
+# Git context resolves to a git dir and show-toplevel exits 128.
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT"
 
-PYTHON_EXECUTABLE="${OMI_PYTHON_EXECUTABLE:-}"
-if [[ -z "$PYTHON_EXECUTABLE" || ! -x "$PYTHON_EXECUTABLE" ]]; then
-  PYTHON_EXECUTABLE="$(command -v python3 || command -v python || true)"
-fi
-if [[ -z "$PYTHON_EXECUTABLE" || ! -x "$PYTHON_EXECUTABLE" ]]; then
-  echo "FAIL: PR preflight requires Python 3, but no executable was found." >&2
-  exit 1
-fi
-exec "$PYTHON_EXECUTABLE" .github/scripts/pr_preflight.py "$@"
+# shellcheck source=dev-harness/_resolve_python.sh
+source scripts/dev-harness/_resolve_python.sh
+PYTHON_BIN="$(dev_harness_python)"
+exec "$PYTHON_BIN" .github/scripts/pr_preflight.py "$@"

@@ -1,0 +1,9 @@
+{
+  "version": "0.12.146",
+  "date": "2026-07-30",
+  "changes": [
+    "Make pre-push and preflight contracts portable on Windows (MSYS/UTF-8 paths, Git Bash routing)",
+    "Fixed Windows meeting prompts that could claim capture started when audio or transcription was unavailable.",
+    "Fixed desktop qualification harness auth so local automation flows can reach the running app again"
+  ]
+}

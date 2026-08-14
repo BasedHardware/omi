@@ -174,17 +174,17 @@ class AuthService {
     firebaseAuthAvailability.auth()
   }
 
-  // Firebase Web API key — fetched from backend via APIKeyService, set as env var.
-  // No hardcoded fallback — if the key isn't available, auth operations will fail
-  // with a clear error instead of silently using a potentially wrong key.
   private var firebaseApiKey: String {
-    if let envKey = getenv("FIREBASE_API_KEY"), let key = String(validatingCString: envKey), !key.isEmpty {
-      return key
-    }
+    let environmentKey = getenv("FIREBASE_API_KEY").map { String(validatingCString: $0) } ?? nil
+    let key = AppBuild.firebaseAPIKey(
+      bundleIdentifier: AppBuild.bundleIdentifier,
+      environmentKey: environmentKey,
+      bundledKey: FirebaseApp.app()?.options.apiKey
+    )
+    if !key.isEmpty { return key }
     log("AuthService: FIREBASE_API_KEY not set — auth operations will fail")
     return ""
   }
-
   /// Resolve the Firebase Web API key or fail loudly (BL-019).
   ///
   /// The key is provisioned asynchronously (APIKeyService fetches it from the
@@ -308,6 +308,15 @@ class AuthService {
   func configure() async {
     guard !isConfigured else { return }
     isConfigured = true
+    if UserDefaults.standard.string(forKey: .acceptedAccountDeletionOwnerId) != nil {
+      do {
+        try await signOut(acceptedAccountDeletion: true)
+      } catch {
+        logError("AUTH: Accepted account-deletion cleanup could not complete", error: error)
+        AuthState.shared.transition(to: .recoveryRequired)
+        return
+      }
+    }
     let attempt = beginSessionAttempt()
     await restoreAuthState(attempt: attempt)
     // The listener enriches a configured SDK session, but a REST-backed
@@ -2465,9 +2474,16 @@ class AuthService {
 
   // MARK: - Sign Out
 
-  func signOut() async throws {
+  func signOut(acceptedAccountDeletion: Bool = false) async throws {
     let sessionAttempt = beginSessionAttempt()
-    let signingOutUserID = UserDefaults.standard.string(forKey: .authUserId)
+    let persistedDeletionOwner = UserDefaults.standard.string(forKey: .acceptedAccountDeletionOwnerId)
+    let signingOutUserID = UserDefaults.standard.string(forKey: .authUserId) ?? persistedDeletionOwner
+    if acceptedAccountDeletion {
+      guard let signingOutUserID, !signingOutUserID.isEmpty else {
+        throw RewindError.storageError("Accepted account deletion has no cleanup owner")
+      }
+      UserDefaults.standard.set(signingOutUserID, forKey: .acceptedAccountDeletionOwnerId)
+    }
     guard
       try await commitSignedOutSession(
         attempt: sessionAttempt,
@@ -2478,6 +2494,18 @@ class AuthService {
           } else {
             log("AuthService: Firebase SDK unavailable; signing out the REST-backed session")
           }
+        },
+        prepareLocalStorageTransition: { previousOwner, _ in
+          // Drain owner-bound VM work before unlinking its database. Merely
+          // cancelling here is insufficient: gzip/upload continuations can
+          // otherwise keep an open handle and publish after local deletion.
+          await AgentVMService.shared.cancelForOwnerTransition()
+          await AgentSyncService.shared.stop(flushPendingChanges: false)
+          await RewindIndexer.shared.suspendForOwnerTransition()
+          try await RewindStorage.shared.resetForOwnerTransition()
+          try await RewindDatabase.shared.applyAcceptedAccountDeletionLocalDataPolicy(
+            ownerID: signingOutUserID ?? previousOwner,
+            accepted: acceptedAccountDeletion)
         })
     else {
       log("AuthService: stale sign-out completion ignored")
@@ -2522,8 +2550,11 @@ class AuthService {
     // screenAnalysisEnabled: Don't removeObject here — SettingsSyncManager overwrites
     // it from the server within ~200ms of sign-in. Instead, onboarding force-starts
     // monitoring regardless of this setting.
-    // transcriptionEnabled: removeObject works since nothing writes it back.
-    UserDefaults.standard.removeObject(forKey: "transcriptionEnabled")
+    UserDefaults.standard.removeObject(forKey: AssistantSettings.audioRecordingModeDefaultsKey)
+
+    if acceptedAccountDeletion {
+      UserDefaults.standard.removeObject(forKey: .acceptedAccountDeletionOwnerId)
+    }
 
     NSLog("OMI AUTH: Signed out and cleared saved state + onboarding")
   }

@@ -806,9 +806,12 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                 final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                 if (connectivityProvider.isConnected) {
                   var memProvider = Provider.of<ConversationProvider>(context, listen: false);
-                  var idx = -1;
-                  var date = DateTime(data.$2.createdAt.year, data.$2.createdAt.month, data.$2.createdAt.day);
-                  idx = memProvider.groupedConversations[date]?.indexWhere((element) => element.id == data.$2.id) ?? -1;
+                  // Groups are keyed by the local day of `startedAt ?? createdAt`; deriving the
+                  // key from the message's raw UTC `createdAt` missed the group for anyone off
+                  // UTC and the tap silently did nothing (#10980).
+                  final located = memProvider.getConversationDateAndIndexById(data.$2.id);
+                  var idx = located?.$2 ?? -1;
+                  var date = located?.$1 ?? conversationLocalDayKey(data.$2.createdAt);
 
                   if (idx != -1) {
                     context.read<ConversationDetailProvider>().updateConversation(data.$2.id, date);

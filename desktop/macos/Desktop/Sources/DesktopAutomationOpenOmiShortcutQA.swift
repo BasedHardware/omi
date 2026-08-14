@@ -6,6 +6,20 @@ extension DesktopAutomationActionRegistry {
   func registerOpenOmiShortcutActionsForQA() {
     #if DEBUG
       register(
+        name: "proactive_assistant_proxy_routes",
+        summary: "Resolve the Gemini and embedding proxy routes through their production clients. DEBUG non-prod only."
+      ) { _ in
+        guard AppBuild.isNonProduction else {
+          return ["error": "proactive_assistant_proxy_routes is disabled on production bundles"]
+        }
+        return [
+          "gemini_proxy_base_url": GeminiClient.proxyBaseURL,
+          "embedding_proxy_base_url": EmbeddingService.proxyBaseURL,
+          "proactivity_base_url": ProactiveLaneClient.backendBaseURL,
+        ]
+      }
+
+      register(
         name: "set_open_omi_shortcut",
         summary: "Select an Open Omi shortcut preset through the production settings mutation. DEBUG non-prod only.",
         params: ["preset"]

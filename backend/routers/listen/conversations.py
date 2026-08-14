@@ -24,10 +24,20 @@ from utils.transcribe_decisions import (
     decide_recording_session_reconnect_action,
     recording_session_id_for_lifecycle_event,
     select_recording_session_id,
+    should_attach_to_existing_in_progress,
 )
 from utils.transcribe_store import calendar_db, conversations_db, redis_db
 
 logger = logging.getLogger(__name__)
+
+# Orphan threshold for stale in_progress recovery (#9809). Any live session
+# refreshes finished_at continuously and its lifecycle loop processes an idle
+# conversation within the ~2-minute conversation timeout, so an hour of silence
+# proves no session owns the row — including one on another device.
+STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS = 3600
+# Per-session recovery bound: spreads a large backlog across sessions instead of
+# fanning dozens of LLM finalizations out of one reconnect.
+STALE_IN_PROGRESS_RECOVERY_BATCH = 10
 
 
 class LiveConversationController:
@@ -220,6 +230,7 @@ class LiveConversationController:
             call_id=request.call_id if self.host.is_multi_channel else None,
             client_device_id=context.client_device_id,
             client_platform=context.platform,
+            external_data={'conversation_role': request.conversation_role},
         )
         await self.host.persistence.call(
             lifecycle_service.create_in_progress_conversation,
@@ -251,6 +262,16 @@ class LiveConversationController:
             return None
         existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
         if not existing:
+            await self.create_new_in_progress_conversation()
+            return None
+        existing_source = existing.get('source')
+        if hasattr(existing_source, 'value'):
+            existing_source = existing_source.value
+        # Cross-source sockets (pendant + web meeting) must not share one conversation (#5388).
+        if not should_attach_to_existing_in_progress(
+            existing_source=existing_source if isinstance(existing_source, str) else None,
+            request_source=self.host.request.source,
+        ):
             await self.create_new_in_progress_conversation()
             return None
         finished_at = datetime.fromisoformat(existing['finished_at'].isoformat())
@@ -291,6 +312,34 @@ class LiveConversationController:
         )
         for conversation in processing or []:
             await self.schedule_finalization(conversation['id'])
+        await self.recover_stale_in_progress()
+
+    async def recover_stale_in_progress(self) -> None:
+        """Route orphaned `in_progress` conversations through normal finalization (#9809).
+
+        Conversations from sessions that died without processing sit invisible in
+        `in_progress` forever; the manual /finalize workaround proves their content
+        is intact. `process_conversation` already makes the right call per row —
+        content goes through the durable finalization seam, empty rows are
+        deleted — so recovery is exactly the path a live timeout takes. Bounded
+        and oldest-first so one session never stampedes the pipeline.
+        """
+        stale = await self.host.persistence.call(
+            conversations_db.get_stale_in_progress_conversations,
+            self.host.request.uid,
+            older_than_seconds=STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS,
+            limit=STALE_IN_PROGRESS_RECOVERY_BATCH,
+        )
+        for conversation in stale or []:
+            if conversation['id'] == self.host.state.current_conversation_id:
+                continue
+            logger.info(
+                'recovering stale in_progress conversation uid=%s conversation=%s finished_at=%s',
+                self.host.request.uid,
+                conversation['id'],
+                conversation.get('finished_at'),
+            )
+            await self.process_conversation(conversation['id'])
 
     async def lifecycle_loop(self) -> None:
         while self.host.state.active:

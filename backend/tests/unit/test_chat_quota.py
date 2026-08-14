@@ -419,3 +419,29 @@ class TestEnforceChatQuota:
             },
         ):
             sub_mod.enforce_chat_quota("uid123")
+
+    def test_enforcement_exempts_release_probe_past_free_cap(self, monkeypatch):
+        """The deploy gate's probe UID is never 402'd by its own metered turns.
+
+        Regression: the desktop-backend deploy probe signs in as the fixed
+        non-human UID `omi-release-probe` on the Free plan, so after 30 probe
+        turns every `Auto Deploy Desktop Backend to Development` run failed at
+        `initial_turn: HTTP 402`.
+        """
+        sub_mod = _reload_subscription_module()
+
+        with patch.object(
+            sub_mod,
+            "get_chat_quota_snapshot",
+            return_value={
+                'allowed': False,
+                'plan': PlanType.basic,
+                'unit': 'questions',
+                'used': 30,
+                'limit': 30,
+                'reset_at': _RESET_AT,
+            },
+        ) as snapshot:
+            sub_mod.enforce_chat_quota(sub_mod.RELEASE_PROBE_UID, platform="desktop")
+
+        snapshot.assert_not_called()

@@ -7,7 +7,6 @@ from contextlib import redirect_stderr
 import io
 import json
 import os
-import shutil
 import signal
 import subprocess
 import sys
@@ -20,7 +19,7 @@ from unittest.mock import Mock, patch
 
 import preflight_runner
 from pr_metadata import TransientPRMetadataError, load_from_api, load_from_event_file
-from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, select_checks
+from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, run_git, select_checks
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
@@ -164,6 +163,21 @@ class MetadataTests(unittest.TestCase):
 
 
 class SelectionTests(unittest.TestCase):
+    def test_run_git_decodes_unicode_checkout_path_as_utf8(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "路径 checkout"
+            root.mkdir()
+            env = os.environ.copy()
+            for key in tuple(env):
+                if key.startswith("GIT_"):
+                    del env[key]
+            subprocess.run(["git", "init", "-q", str(root)], check=True, env=env)
+
+            with patch.dict(os.environ, env, clear=True):
+                resolved = run_git(root, "rev-parse", "--show-toplevel")
+
+        self.assertEqual(Path(resolved).resolve(), root.resolve())
+
     def test_changed_files_disables_rename_detection_to_preserve_both_move_paths(self) -> None:
         root = Path("/repo")
         source = "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift"
@@ -247,11 +261,8 @@ class SelectionTests(unittest.TestCase):
                 self.assertEqual(sorted(stale_diff), ["pr_file.txt", "unrelated_file.txt"])
 
     def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
-        make = shutil.which("make")
-        if make is None:
-            self.skipTest("requires make")
         result = subprocess.run(
-            [make, "-n", "preflight"],
+            ["make", "-n", "preflight"],
             cwd=REPO_ROOT,
             check=False,
             stdout=subprocess.PIPE,
@@ -259,10 +270,10 @@ class SelectionTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn(
-            "python3 .github/scripts/pr_preflight.py --lane local --base origin/main",
-            result.stdout,
-        )
+        self.assertIn("scripts/dev-harness/run-python.sh", result.stdout)
+        self.assertIn(".github/scripts/pr_preflight.py --lane local --base origin/main", result.stdout)
+        if os.name == "nt":
+            self.assertIn("Git/mingw64/libexec/git-core/../../../bin/bash.exe", result.stdout.replace("\\", "/"))
 
     def test_9402_equivalent_diff_selects_invariants_changelog_and_e2e(self) -> None:
         checks = select_checks(
@@ -292,7 +303,6 @@ class SelectionTests(unittest.TestCase):
                 "deferred-work-markers",
                 "lifecycle-headers",
                 "version-prefixed-filenames",
-                "pr-scope",
             },
         )
 
@@ -327,8 +337,6 @@ class SelectionTests(unittest.TestCase):
                 [
                     sys.executable,
                     "desktop/macos/scripts/check-e2e-flow-coverage.py",
-                    "--formatter-binary",
-                    "none",
                     "--strict",
                     "desktop/macos/Desktop/Sources/Providers/UncoveredRoutingSurface.swift",
                 ],
@@ -344,6 +352,57 @@ class SelectionTests(unittest.TestCase):
             self.assertIn("INV-AGENT-*", invariant.stdout)
             self.assertEqual(coverage.returncode, 1, coverage.stdout)
             self.assertIn("UNCOVERED", coverage.stdout)
+
+    def test_flow_coverage_discovers_unicode_checkout_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "路径 checkout"
+            source = root / "desktop/macos/Desktop/Sources/Fixture.swift"
+            source.parent.mkdir(parents=True)
+            source.write_text("struct Fixture {}\n", encoding="utf-8")
+            env = os.environ.copy()
+            for key in tuple(env):
+                if key.startswith("GIT_"):
+                    del env[key]
+            subprocess.run(["git", "init", "-q", str(root)], check=True, env=env)
+            subprocess.run(["git", "-C", str(root), "add", "."], check=True, env=env)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(root),
+                    "-c",
+                    "user.name=Omi Test",
+                    "-c",
+                    "user.email=omi-test@example.com",
+                    "commit",
+                    "-qm",
+                    "fixture",
+                ],
+                check=True,
+                env=env,
+            )
+            source.write_text("struct Fixture { let value = 1 }\n", encoding="utf-8")
+
+            coverage = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "desktop/macos/scripts/check-e2e-flow-coverage.py"),
+                    "--formatter-binary",
+                    "none",
+                    "--base",
+                    "HEAD",
+                    "--strict",
+                ],
+                cwd=root,
+                env=env,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+
+        self.assertEqual(coverage.returncode, 1, coverage.stdout)
+        self.assertIn("UNCOVERED", coverage.stdout)
 
     def test_suggest_flag_prints_paste_ready_pr_metadata(self) -> None:
         result = subprocess.run(
@@ -499,8 +558,12 @@ class SingleFlightTests(unittest.TestCase):
         self,
         state_root: Path,
         command: list[str],
+        *,
+        extra_env: dict[str, str] | None = None,
     ) -> subprocess.Popen[str]:
         env = {**os.environ, "OMI_PREFLIGHT_STATE_DIR": str(state_root)}
+        if extra_env:
+            env.update(extra_env)
         return subprocess.Popen(
             [sys.executable, str(RUNNER), "--name", "test", "--", *command],
             cwd=REPO_ROOT,
@@ -517,6 +580,66 @@ class SingleFlightTests(unittest.TestCase):
         while not lock.exists() and time.monotonic() < deadline:
             time.sleep(0.02)
         self.assertTrue(lock.exists(), "runner did not acquire its lock")
+
+    def test_runner_starts_from_unicode_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "路径 checkout"
+            root.mkdir()
+            state_root = root / "state"
+            env = os.environ.copy()
+            env["OMI_PREFLIGHT_STATE_DIR"] = str(state_root)
+            for key in tuple(env):
+                if key.startswith("GIT_"):
+                    del env[key]
+            subprocess.run(["git", "init", "-q", str(root)], check=True, env=env)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(RUNNER),
+                    "--name",
+                    "unicode-checkout",
+                    "--",
+                    sys.executable,
+                    "-c",
+                    "print('\\u8def\\u5f84\\U0001f680')",
+                ],
+                cwd=root,
+                env=env,
+                input="",
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+            )
+            log = (state_root / "unicode-checkout" / "preflight.log").read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("路径🚀", result.stdout)
+        self.assertEqual(log, "路径🚀\n")
+
+    @unittest.skipUnless(os.name == "nt", "Windows-only")
+    def test_process_liveness_check_does_not_send_windows_ctrl_c(self) -> None:
+        with patch.object(os, "kill", side_effect=AssertionError("must not signal")):
+            self.assertTrue(preflight_runner.process_exists(os.getpid()))
+            self.assertFalse(preflight_runner.process_exists(0x7FFFFFFF))
+
+    @unittest.skipUnless(os.name == "nt", "Windows-only")
+    def test_process_that_exits_with_still_active_status_is_not_alive(self) -> None:
+        child = subprocess.Popen([sys.executable, "-c", "raise SystemExit(259)"])
+        self.assertEqual(child.wait(), 259)
+        self.assertFalse(preflight_runner.process_exists(child.pid))
+
+    def test_pr_body_content_participates_in_singleflight_fingerprint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            body = Path(tmp) / "body.md"
+            body.write_text("first", encoding="utf-8")
+            with patch.dict(os.environ, {"OMI_PR_BODY_FILE": str(body)}):
+                first = preflight_runner.fingerprint(REPO_ROOT, ["check"], "")
+                body.write_text("second", encoding="utf-8")
+                second = preflight_runner.fingerprint(REPO_ROOT, ["check"], "")
+        self.assertNotEqual(first, second)
 
     def test_identical_processes_join_and_execute_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -574,6 +697,45 @@ class SingleFlightTests(unittest.TestCase):
                 first.stdout.close()
             self.assertEqual(first.wait(), 0)
 
+    def test_failure_reports_exit_status_and_last_phase(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            temp = Path(tmp)
+            command = [sys.executable, "-c", "print('==> deliberate-failure', flush=True); raise SystemExit(17)"]
+            process = self.run_runner(temp, command)
+            assert process.stdin is not None
+            process.stdin.close()
+            output = process.stdout.read() if process.stdout else ""
+            self.assertEqual(process.wait(), 17, output)
+            if process.stdout:
+                process.stdout.close()
+            self.assertIn("child exited with status 17", output)
+            self.assertIn("phase=deliberate-failure", output)
+            result = json.loads((temp / "test" / "result.json").read_text())
+            self.assertEqual(result["exit_code"], 17)
+            self.assertEqual(result["last_phase"], "deliberate-failure")
+            self.assertIsNone(result["received_signal"])
+
+    def test_different_pre_push_environment_is_not_joined(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            temp = Path(tmp)
+            command = [sys.executable, "-c", "import time; print('==> slow', flush=True); time.sleep(.5)"]
+            first = self.run_runner(temp, command, extra_env={"PRE_PUSH_SKIP_ACTIONLINT": "1"})
+            assert first.stdin is not None
+            first.stdin.close()
+            self.wait_for_lock(temp)
+            second = self.run_runner(temp, command, extra_env={"PRE_PUSH_SKIP_ACTIONLINT": "0"})
+            assert second.stdin is not None
+            second.stdin.close()
+            second_output = second.stdout.read() if second.stdout else ""
+            self.assertEqual(second.wait(), 75, second_output)
+            self.assertIn("already running different input", second_output)
+            if second.stdout:
+                second.stdout.close()
+            if first.stdout:
+                first.stdout.read()
+                first.stdout.close()
+            self.assertEqual(first.wait(), 0)
+
 
 class SignalPortabilityTests(unittest.TestCase):
     """The single-flight wrapper must start on hosts without POSIX signal APIs.
@@ -622,6 +784,20 @@ class SignalPortabilityTests(unittest.TestCase):
             if had_killpg:
                 os.killpg = original
         child.send_signal.assert_called_once_with(signal.SIGTERM)
+
+    def test_windows_job_terminates_child_process_tree(self) -> None:
+        child = Mock(pid=4321)
+        windows_job = Mock()
+        windows_job.terminate.return_value = True
+        preflight_runner.signal_child(child, signal.SIGINT, windows_job=windows_job)
+        windows_job.terminate.assert_called_once_with()
+        child.send_signal.assert_not_called()
+
+    def test_windows_unsupported_signal_does_not_abort_runner(self) -> None:
+        child = Mock(pid=4321)
+        child.send_signal.side_effect = ValueError("unsupported")
+        with patch.object(os, "killpg", None, create=True):
+            preflight_runner.signal_child(child, signal.SIGINT)
 
     def test_forwarding_swallows_dead_child(self) -> None:
         child = Mock(pid=4321)

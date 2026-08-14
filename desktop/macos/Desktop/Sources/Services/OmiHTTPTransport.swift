@@ -85,6 +85,13 @@ struct OmiHTTPTransport {
       "X-Desktop-Request-ID": UUID().uuidString,
     ]
 
+    let accountGeneration = await MainActor.run {
+      AccountCutoverControlManager.shared.control.accountGeneration
+    }
+    if accountGeneration > 0 {
+      headers["X-Account-Generation"] = String(accountGeneration)
+    }
+
     if requireAuth {
       if let testHeader = testAuthHeader {
         headers["Authorization"] = testHeader
@@ -300,6 +307,7 @@ enum APIError: LocalizedError {
   case unsupportedTierScopedBulkMutation(String)
   case syncRateLimited(retryAfterSeconds: Int?)
   case syncUploadRejected(reason: String)
+  case accountCutoverOfflineQueueBlocked
 
   var detail: String? {
     switch self {
@@ -332,6 +340,8 @@ enum APIError: LocalizedError {
       return "Sync rate limited"
     case .syncUploadRejected(let reason):
       return reason
+    case .accountCutoverOfflineQueueBlocked:
+      return "Account cutover offline upload gate closed"
     }
   }
 }
