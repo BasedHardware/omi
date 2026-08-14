@@ -410,7 +410,13 @@ final class TopNavigationBarLayoutTests: XCTestCase {
   }
 
   func testNavigationLaneMatchesFullChatWidthAndPageInsets() {
-    XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 1_400), 900)
+    // The 900 pt readable cap lives on the window, not inside the lane. At any
+    // given window width the glass fills it minus one page margin per side —
+    // including a hypothetical 1400 pt host that bypassed the window max.
+    XCTAssertEqual(
+      TopNavigationLayoutMetrics.contentLaneWidth(for: DesktopWindowLayoutPolicy.maximumContentWidth),
+      ChatComposerLayout.contentLaneMaxWidth)
+    XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 1_400), 1_368)
     XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 800), 768)
     XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 40), 8)
   }
