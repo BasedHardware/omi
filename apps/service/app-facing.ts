@@ -24,6 +24,10 @@ import {
   createInMemoryCurrentSessionPort,
   type CurrentSessionPort,
 } from "./auth/current-session";
+import {
+  QA_MEMORY_READ_CURSOR_BINDINGS,
+  qaMemoryReadProduceRenders,
+} from "../qa/memory-read-bindings";
 import { prepareMemoryRead, type CoherentQaLoad } from "./composition/memory-read";
 import { createListenConversationFinalizer } from "./listen/conversation-finalizer";
 import {
@@ -622,6 +626,8 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       },
     });
     return prepareMemoryRead({
+      cursorBindings: QA_MEMORY_READ_CURSOR_BINDINGS,
+      produceRenders: qaMemoryReadProduceRenders,
       loadCoherent: loader as unknown as () => CoherentQaLoad,
       // A thunk, not a value: the read core crosses the authorization boundary
       // twice per page, and passing a captured request meant a grant revoked

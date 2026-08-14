@@ -55,6 +55,10 @@ import {
   type DevPrincipal,
 } from "../../apps/service/auth/dev-token";
 import {
+  QA_MEMORY_READ_CURSOR_BINDINGS,
+  qaMemoryReadProduceRenders,
+} from "../../apps/qa/memory-read-bindings";
+import {
   prepareMemoryRead,
   readMemoryPage,
   type CoherentQaLoad,
@@ -268,6 +272,8 @@ export const createQaBackend = (options: QaBackendOptions = {}): QaBackend => {
       },
     });
     return prepareMemoryRead({
+      cursorBindings: QA_MEMORY_READ_CURSOR_BINDINGS,
+      produceRenders: qaMemoryReadProduceRenders,
       loadCoherent: loader as unknown as () => CoherentQaLoad,
       // A thunk, not a value: the read core crosses the authorization boundary
       // twice per page, so a grant revoked between the two loads must be seen.

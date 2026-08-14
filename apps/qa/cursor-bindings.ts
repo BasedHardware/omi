@@ -8,8 +8,8 @@ import { sha256CanonicalContent } from "../../core/retrieve/content-digest";
 import type { ApplicationReadSnapshotAttestation } from "../../core/retrieve/application-read";
 import {
   InvalidMcpCursorError,
-  MAX_MCP_CURSOR_ENCODED_BYTES,
   asOpaqueVisibleKeyset,
+  isSyntacticallyRedeemableCursor,
   issueMcpCursor,
   verifyMcpCursor,
   type McpCursorBindings,
@@ -130,11 +130,7 @@ export interface QaCursorAdapter {
  * performed here too, in the same error currency as every other failure, and the
  * caller applies it before the core ever sees the bytes.
  */
-export const isSyntacticallyRedeemableCursor = (cursor: unknown): cursor is string =>
-  typeof cursor === "string"
-  && cursor.length > 0
-  && Buffer.byteLength(cursor, "utf8") <= MAX_MCP_CURSOR_ENCODED_BYTES
-  && /^[\x21-\x7e]{1,4096}$/.test(cursor);
+export { isSyntacticallyRedeemableCursor } from "../mcp/cursor";
 
 export const createQaCursorAdapter = (options: QaCursorAdapterOptions): QaCursorAdapter => {
   const policy = options.policy ?? QA_CURSOR_POLICY;

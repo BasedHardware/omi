@@ -41,7 +41,11 @@ import {
 import type { RenderNode } from "../../../core/retrieve/render";
 import { buildDeterministicAnchors } from "../../../core/retrieve/tree";
 import type { GraphSnapshot } from "../../../core/retrieve";
-import { InvalidMcpCursorError, type McpCursorSigningKeyset } from "../../mcp/cursor";
+import {
+  InvalidMcpCursorError,
+  isSyntacticallyRedeemableCursor,
+  type McpCursorSigningKeyset,
+} from "../../mcp/cursor";
 // The canonical, transport-neutral granularity module. BE-FLOW landed it in
 // core/ while this lane had a local copy; there must be exactly one selector or
 // the two doors drift, which is the entire point of the ruling. The local copy
@@ -51,12 +55,6 @@ import {
   selectNodesForGranularity,
   type ReadItemGranularity,
 } from "../../../core/retrieve/granularity";
-import {
-  createQaCursorAdapter,
-  isSyntacticallyRedeemableCursor,
-  QA_CURSOR_POLICY,
-} from "../../qa/cursor-bindings";
-import { produceQaRenders } from "../../qa/renders";
 import { createReaderScopedOpaqueCodecs } from "../codecs/opaque-refs";
 
 /**
@@ -131,6 +129,30 @@ export type MemoryReadPortCall =
   | "visible" | "item" | "citation" | "trace"
   | "verify" | "issue" | "sink";
 
+/**
+ * The cursor collaborators the loopback/QA read path needs, supplied by the
+ * caller so this module carries no `apps/qa/` import.
+ */
+export interface MemoryReadCursorPolicy {
+  readonly policy_version: string;
+  readonly ttl_seconds: number;
+  readonly max_limit: number;
+}
+
+export interface MemoryReadCursorAdapter {
+  /** Returns the continuation's stable visible key, or throws InvalidMcpCursorError. */
+  readonly verifyCursor: ApplicationReadPorts["verifyCursor"];
+  readonly issueCursor: ApplicationReadPorts["issueCursor"];
+}
+
+export interface MemoryReadCursorBindings {
+  readonly createCursorAdapter: (options: Readonly<{
+    signing_keyset: McpCursorSigningKeyset;
+    policy: MemoryReadCursorPolicy;
+  }>) => MemoryReadCursorAdapter;
+  readonly policy: MemoryReadCursorPolicy;
+}
+
 export interface MemoryReadCompositionConfig {
   /** Zero-argument coherent loader; called fresh for every internal revalidation. */
   readonly loadCoherent: () => CoherentQaLoad;
@@ -155,8 +177,25 @@ export interface MemoryReadCompositionConfig {
   /** HMAC root for the reader-scoped opaque handles. QA-supplied; never a production secret. */
   readonly codecRootSecret: Uint8Array;
   readonly cursorSigningKeyset: McpCursorSigningKeyset;
-  /** Defaults to the shared QA cursor policy's TTL. Bound into every cursor. */
+  /** Defaults to the supplied cursor policy's TTL. Bound into every cursor. */
   readonly cursorTtlSeconds?: number;
+  /**
+   * Cursor and render collaborators are INJECTED rather than imported.
+   *
+   * This function is only reached by the loopback/QA doors, but it lives in the
+   * same module as the production export `readDirectAuthorizedMemoryPage`, and
+   * a module-scope `import` of `apps/qa/` linked the QA cursor bindings and the
+   * QA deterministic synthesizer (a model fake) into the production process and
+   * into any image built from this source. The dual-runtime qualification
+   * contract requires the production import graph to exclude every QA store and
+   * model fake, so the edge is now supplied by the caller that actually wants
+   * QA behaviour. Nothing moved, so this stays THE one construction site.
+   */
+  readonly cursorBindings: MemoryReadCursorBindings;
+  /** Produces the render set for the projected tree before the read begins. */
+  readonly produceRenders: (
+    projected: ApplicationGrantProjectedTreeInputSnapshot,
+  ) => Promise<readonly RenderNode[]>;
   /**
    * The authoritative read timestamp for this snapshot. Passed in, never read
    * from a clock, so the two internal revalidation loads agree and the flow
@@ -439,11 +478,11 @@ export const prepareMemoryRead = async (
     reader_projection_digest: prepareEvidence.principal_digest,
   });
 
-  const cursorAdapter = createQaCursorAdapter({
+  const cursorAdapter = config.cursorBindings.createCursorAdapter({
     signing_keyset: config.cursorSigningKeyset,
     policy: {
-      ...QA_CURSOR_POLICY,
-      ttl_seconds: config.cursorTtlSeconds ?? QA_CURSOR_POLICY.ttl_seconds,
+      ...config.cursorBindings.policy,
+      ttl_seconds: config.cursorTtlSeconds ?? config.cursorBindings.policy.ttl_seconds,
     },
   });
 
@@ -476,7 +515,7 @@ export const prepareMemoryRead = async (
   // selection happens here, through the SHARED selector. Rendering a pruned
   // tree would change a surviving rollup's render hash, so the granularities
   // would disagree about the bytes of an item they both contain.
-  const allRenders = await produceQaRenders(preRenderProjection);
+  const allRenders = await config.produceRenders(preRenderProjection);
   const selectedNodeIds = new Set(
     selectNodesForGranularity(buildDeterministicAnchors(preRenderProjection).nodes, granularity)
       .map((structuralNode) => structuralNode.node_id),

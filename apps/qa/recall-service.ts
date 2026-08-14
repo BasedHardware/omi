@@ -22,6 +22,10 @@ import {
 } from "../../core/retrieve/granularity";
 import type { McpCursorSigningKeyset } from "../mcp/cursor";
 import {
+  QA_MEMORY_READ_CURSOR_BINDINGS,
+  qaMemoryReadProduceRenders,
+} from "./memory-read-bindings";
+import {
   prepareMemoryRead,
   readMemoryPage,
   type CoherentQaLoad,
@@ -171,6 +175,8 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
 
   const prepare = async (forGranularity: ReadItemGranularity): Promise<PreparedMemoryRead> =>
     prepareMemoryRead({
+      cursorBindings: QA_MEMORY_READ_CURSOR_BINDINGS,
+      produceRenders: qaMemoryReadProduceRenders,
       loadCoherent,
       // Live authorization: this is the fence. A revocation landing between the
       // page build and its revalidation is seen here and denies the read before

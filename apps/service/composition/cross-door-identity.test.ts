@@ -13,6 +13,10 @@ import type { ApplicationMemoryReadAuthorizationRequest } from "../../../core/re
 import { createSqliteQaRecallLoader } from "../../../drivers/sqlite/application-recall-read";
 import { createQaRecallReader } from "../../qa/recall-service";
 import { seedQaSnapshot } from "../../qa/seed";
+import {
+  QA_MEMORY_READ_CURSOR_BINDINGS,
+  qaMemoryReadProduceRenders,
+} from "../../qa/memory-read-bindings";
 import { prepareMemoryRead, readMemoryPage, type CoherentQaLoad } from "./memory-read";
 
 /**
@@ -120,6 +124,8 @@ const readViaRestDoor = async (db: Database): Promise<string> => {
     limits: { max_items: 256, max_bytes: 4_000_000 },
   });
   const prepared = await prepareMemoryRead({
+    cursorBindings: QA_MEMORY_READ_CURSOR_BINDINGS,
+    produceRenders: qaMemoryReadProduceRenders,
     loadCoherent: loader as unknown as () => CoherentQaLoad,
     resolveAuthorization: () => AUTHORIZATION,
     codecRootSecret: CODEC_ROOT_SECRET,
@@ -196,6 +202,8 @@ describe("one memory, one public identity, whichever door", () => {
       limits: { max_items: 256, max_bytes: 4_000_000 },
     });
     const prepared = await prepareMemoryRead({
+    cursorBindings: QA_MEMORY_READ_CURSOR_BINDINGS,
+    produceRenders: qaMemoryReadProduceRenders,
       loadCoherent: loader as unknown as () => CoherentQaLoad,
       resolveAuthorization: () => AUTHORIZATION,
       codecRootSecret: CODEC_ROOT_SECRET,

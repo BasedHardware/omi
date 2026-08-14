@@ -16,6 +16,21 @@ const MAX_PAYLOAD_BYTES = 3_072;
 const MAX_CURSOR_TTL_SECONDS = 86_400;
 export const MAX_MCP_CURSOR_ENCODED_BYTES = 4_096;
 
+/**
+ * Transport-level syntactic pre-check for a redeemable cursor.
+ *
+ * This lived in `apps/qa/cursor-bindings.ts`, which put a QA module on the
+ * production read path: `readDirectAuthorizedMemoryPage` calls `readMemoryPage`,
+ * which runs this check. It carries no QA semantics — it only bounds the
+ * encoded size and the printable-ASCII grammar — so it belongs with the rest of
+ * the MCP cursor contract.
+ */
+export const isSyntacticallyRedeemableCursor = (cursor: unknown): cursor is string =>
+  typeof cursor === "string"
+  && cursor.length > 0
+  && Buffer.byteLength(cursor, "utf8") <= MAX_MCP_CURSOR_ENCODED_BYTES
+  && /^[\x21-\x7e]{1,4096}$/.test(cursor);
+
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
 const KEY_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;
