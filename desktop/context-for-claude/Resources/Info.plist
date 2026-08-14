@@ -55,12 +55,18 @@
 	     Sparkle auto-update.
 
 	     This app updates itself with Sparkle, the same mechanism `desktop/macos` uses, and shares
-	     none of that app's identity: its generic platform feed is scoped by app id, its own EdDSA key pair, its own bundle. Sparkle
-	     draws the update sheet from *this* bundle — `CFBundleName`, `CFBundleIconFile`,
-	     `CFBundleShortVersionString` — and the release notes from the feed below, so a user is never
-	     shown Omi's name, Omi's icon, or Omi's changelog. Nothing here may ever be pointed at
-	     an Omi Desktop `api.omi.me/v2/desktop/appcast.xml`: that feed's enclosures are Omi Computer bundles, and
-	     Sparkle would replace this app with one. The `micro-apps/context-for-claude` identity path is load-bearing.
+	     none of that app's identity: its own feed, its own EdDSA key pair, its own bundle. Updates
+	     come from GitHub and no backend brokers them — the feed below is the `appcast.xml` asset on
+	     this app's fixed `context-for-claude-appcast` release tag, and that feed's enclosures are this
+	     app's own `context-for-claude-v*` release assets. Sparkle draws the update sheet from *this*
+	     bundle — `CFBundleName`, `CFBundleIconFile`, `CFBundleShortVersionString` — and the release
+	     notes from the feed, so a user is never shown Omi's name, Omi's icon, or Omi's changelog.
+
+	     Nothing here may ever be pointed at `releases/latest/download/appcast.xml`: `latest` is the
+	     newest release of the *whole* monorepo, which publishes Omi Desktop tags several times a day,
+	     so it resolves to an Omi Computer release and Sparkle would replace this app with one. The
+	     `context-for-claude-appcast` tag in the path is load-bearing, and `UpdatePolicy` refuses to
+	     start Sparkle at all for any other URL.
 
 	     `SUPublicEDKey` ships as a placeholder on purpose. The private half lives only in the
 	     releasing maintainer's login keychain and is never committed, so this repository cannot
@@ -70,7 +76,7 @@
 	     Generating the pair and filling this in is the first step of `docs/releasing.md`.
 	     ========================================================================================== -->
 	<key>SUFeedURL</key>
-	<string>https://api.omi.me/v2/micro-apps/context-for-claude/appcast.xml</string>
+	<string>https://github.com/BasedHardware/omi/releases/download/context-for-claude-appcast/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>REPLACE_WITH_SUPublicEDKey_FROM_generate_keys</string>
 	<key>SUEnableAutomaticChecks</key>

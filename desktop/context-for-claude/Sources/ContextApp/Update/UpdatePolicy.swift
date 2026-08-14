@@ -32,10 +32,16 @@ enum UpdatePolicy {
   /// side-by-side build get a different identifier and are refused by that alone.
   static let shippingBundleIdentifier = "com.omi.context-for-claude"
 
-  /// The backend's generic micro-app Sparkle feed, scoped to this app by the path app id. The
-  /// identity-scoped route is not the Omi Desktop feed and cannot fall back to another product.
-  static let platformFeedURL =
-    "https://api.omi.me/v2/micro-apps/context-for-claude/appcast.xml"
+  /// The one appcast this app reads: the `appcast.xml` asset on this app's own fixed
+  /// `context-for-claude-appcast` GitHub release tag. No backend is involved in updates at all —
+  /// the enclosures inside that feed are this app's own `context-for-claude-v*` release assets.
+  ///
+  /// A *mutable tag with a replaced asset* rather than a file committed next to this source, because
+  /// an appcast can only be written after the archive it signs exists: its `edSignature` is of the
+  /// packaged ZIP. Committing one would therefore mean a push to `main` on every release, which this
+  /// repository forbids. Replacing an asset on a fixed tag needs no git write.
+  static let releaseFeedURL =
+    "https://github.com/BasedHardware/omi/releases/download/context-for-claude-appcast/appcast.xml"
 
   /// Background downloading is safe once Sparkle has verified the feed and archive. Replacing the
   /// running bundle is not: it must remain behind an explicit user approval and relaunch.
@@ -83,10 +89,10 @@ enum UpdatePolicy {
     /// cannot verify a signature without it, and an updater that cannot verify a signature is a
     /// remote code execution channel with a progress bar.
     case updateKeyNotConfigured = "update-key-not-configured"
-    /// `SUFeedURL` is missing, is not `https`, or is not the generic platform feed scoped to this
-    /// app. Plain `http`, raw per-app appcasts, and unscoped Omi Desktop feeds are refused outright
-    /// rather than warned about: the EdDSA signature authenticates an artifact, not the product
-    /// identity it replaces.
+    /// `SUFeedURL` is missing, is not `https`, or is not this app's own product-scoped release
+    /// asset. Plain `http`, another product's tag, and the repository-wide `releases/latest` feed
+    /// are refused outright rather than warned about: the EdDSA signature authenticates an artifact,
+    /// not the product identity it replaces.
     case feedNotConfigured = "feed-not-configured"
     /// Signed by a certificate with no Team ID — a self-signed local identity. See the type's
     /// documentation; this is the TCC-preservation rule, expressed as code.
@@ -135,20 +141,35 @@ enum UpdatePolicy {
     return .allowed
   }
 
-  /// The only feed this app may fetch: the generic platform feed, with this app's identity path.
+  /// The only feed this app may fetch: its own release asset, at its exact URL.
   ///
-  /// Sparkle does not know that Omi Desktop and Context for Claude are different products. An
-  /// unscoped Omi feed could therefore deliver a validly signed Omi Computer bundle and replace
-  /// this app under Context for Claude's name and icon. The exact host/path identity contract keeps
-  /// that product boundary testable and fail-closed.
+  /// Sparkle does not know that Omi Desktop and Context for Claude are different products, and both
+  /// publish releases out of this one repository. A feed that is not this app's could therefore
+  /// deliver a validly signed Omi Computer bundle and replace this app under Context for Claude's
+  /// name and icon — so `github.com` as a host is worth nothing on its own here. The
+  /// `context-for-claude-appcast` tag in the path is the product identity, and pinning the *whole*
+  /// path is what refuses `releases/latest/download/appcast.xml`: `latest` is the newest release of
+  /// the entire monorepo, which publishes Omi Desktop tags several times a day, and it currently
+  /// resolves to one. `desktop/windows/docs/release-pipeline.md` rejects that same endpoint for the
+  /// same reason.
+  ///
+  /// **Defense in depth, not the only defense.** The real backstop against a wrong-product install
+  /// is key separation: this app ships its own `SUPublicEDKey`, Omi Desktop uses a different pair,
+  /// so an Omi enclosure would fail EdDSA verification here whichever feed named it. What this guard
+  /// buys is that a mistargeted feed fails closed and *legibly* — a named refusal in Settings rather
+  /// than a signature error — which is also why the residual risk of getting this wrong is "updates
+  /// silently stop happening", and why the tests over this function are the ones that matter.
+  ///
+  /// Pinning binds the configured URL, not the bytes' origin: the release-download path answers 302
+  /// to `objects.githubusercontent.com`, and Sparkle follows that redirect.
   static func isUsableFeedURL(_ feedURL: String?) -> Bool {
     guard let feedURL, !feedURL.isEmpty, let components = URLComponents(string: feedURL),
       components.scheme?.lowercased() == "https",
-      components.host?.lowercased() == "api.omi.me",
+      components.host?.lowercased() == "github.com",
       components.port == nil,
       components.user == nil,
       components.password == nil,
-      components.path == "/v2/micro-apps/context-for-claude/appcast.xml",
+      components.path == "/BasedHardware/omi/releases/download/context-for-claude-appcast/appcast.xml",
       components.query == nil,
       components.fragment == nil
     else { return false }

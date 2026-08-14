@@ -39,8 +39,9 @@ enum NetworkEgress {
         case speechModelDownload = "speech-model-download"
         /// `https://<an excluded host>/favicon.ico`, drawn beside each website exclusion.
         case faviconFetch = "favicon-fetch"
-        /// Sparkle asking the appcast whether a newer build exists, and downloading it if so. Not an
-        /// Omi endpoint and not the user's data — but "off this Mac" is the test, not "to Omi", and
+        /// Sparkle asking `github.com` for this app's own appcast asset, and downloading the release
+        /// enclosure it names if a newer build exists. Not an Omi endpoint (updates involve no
+        /// backend at all) and not the user's data — but "off this Mac" is the test, not "to Omi", and
         /// a scheduled request every six hours discloses that this app is installed here and which
         /// build is running. See `Update/UpdateEgress.Step` for the three places it is enforced.
         case updateCheck = "update-check"

@@ -14,7 +14,7 @@ final class UpdatePolicyTests: XCTestCase {
 
   /// A well-formed stand-in for what `generate_keys` prints: 32 bytes, base64.
   private static let realShapedKey = Data(repeating: 0x2A, count: 32).base64EncodedString()
-  private static let shippingFeed = UpdatePolicy.platformFeedURL
+  private static let shippingFeed = UpdatePolicy.releaseFeedURL
 
   private func decide(
     bundleIdentifier: String? = UpdatePolicy.shippingBundleIdentifier,
@@ -126,39 +126,78 @@ final class UpdatePolicyTests: XCTestCase {
 
   // MARK: - The feed
 
-  func testTheContextFeedUsesTheGenericPlatformEndpointWithItsAppID() {
+  /// The contract, spelled out as a literal rather than read back off `UpdatePolicy`, so that moving
+  /// the constant cannot quietly move the assertion with it.
+  ///
+  /// Every part of this URL is load-bearing, and none of it is a preference:
+  /// - `https` + `github.com` — updates come from GitHub releases and no backend brokers them; the
+  ///   route this app used to read (`api.omi.me/v2/micro-apps/…`) has been deleted.
+  /// - `context-for-claude-appcast` — a *fixed* tag whose `appcast.xml` asset is replaced on each
+  ///   release. Fixed because it must be knowable at build time; an asset rather than a file
+  ///   committed beside this source because an appcast signs an archive that does not exist until the
+  ///   release is packaged, so committing one would mean pushing to `main` on every release.
+  func testTheContextFeedIsThisAppsOwnGitHubReleaseAsset() {
     XCTAssertEqual(
-      UpdatePolicy.platformFeedURL,
-      "https://api.omi.me/v2/micro-apps/context-for-claude/appcast.xml")
-    XCTAssertTrue(UpdatePolicy.isUsableFeedURL(UpdatePolicy.platformFeedURL))
-    XCTAssertFalse(UpdatePolicy.isUsableFeedURL("https://api.omi.me/v2/desktop/appcast.xml"))
-    XCTAssertFalse(
-      UpdatePolicy.isUsableFeedURL(
-        "https://api.omi.me/v2/micro-apps/omi-desktop/appcast.xml"))
-    XCTAssertFalse(
-      UpdatePolicy.isUsableFeedURL(
-        "https://raw.githubusercontent.com/BasedHardware/omi/main/desktop/context-for-claude/appcast.xml"))
+      UpdatePolicy.releaseFeedURL,
+      "https://github.com/BasedHardware/omi/releases/download/context-for-claude-appcast/appcast.xml"
+    )
+    XCTAssertTrue(UpdatePolicy.isUsableFeedURL(UpdatePolicy.releaseFeedURL))
+  }
+
+  /// Plausible-but-wrong feeds, which is the only kind that gets shipped. Each of these is a URL
+  /// somebody could reasonably write down, and each points this app at something that is not this
+  /// app — so `isUsableFeedURL` pins the whole URL rather than a host or a prefix.
+  func testAPlausibleButWrongFeedIsRefused() {
+    let wrong = [
+      // The backend route this app used to read. It no longer exists, and no feed may return to a
+      // backend: updates have no backend involvement at all.
+      "https://api.omi.me/v2/micro-apps/context-for-claude/appcast.xml",
+      "https://api.omi.me/v2/desktop/appcast.xml",
+      // Another product's tag, in this same repository.
+      "https://github.com/BasedHardware/omi/releases/download/omi-desktop-appcast/appcast.xml",
+      // A committed appcast on `main` — the design this feed deliberately is not.
+      "https://raw.githubusercontent.com/BasedHardware/omi/main/desktop/context-for-claude/appcast.xml",
+      // Right tag, wrong repository: a fork could otherwise serve this app its updates.
+      "https://github.com/someone-else/omi/releases/download/context-for-claude-appcast/appcast.xml",
+      // Right shape, no TLS.
+      "http://github.com/BasedHardware/omi/releases/download/context-for-claude-appcast/appcast.xml",
+      // A host that merely starts with the pinned one.
+      "https://github.com.example.invalid/BasedHardware/omi/releases/download/context-for-claude-appcast/appcast.xml",
+      // Userinfo, port, query and fragment: each is a way to reach somewhere else, or to make one
+      // pinned URL serve two answers.
+      "https://someone@github.com/BasedHardware/omi/releases/download/context-for-claude-appcast/appcast.xml",
+      "https://github.com:8443/BasedHardware/omi/releases/download/context-for-claude-appcast/appcast.xml",
+      "https://github.com/BasedHardware/omi/releases/download/context-for-claude-appcast/appcast.xml?channel=beta",
+      "https://github.com/BasedHardware/omi/releases/download/context-for-claude-appcast/appcast.xml#beta",
+    ]
+    for feed in wrong {
+      XCTAssertFalse(UpdatePolicy.isUsableFeedURL(feed), "\(feed) must not be usable as a feed")
+      XCTAssertEqual(
+        decide(feedURL: feed), .refused(.feedNotConfigured),
+        "\(feed) must not be accepted as an update feed")
+    }
   }
 
   /// **The other catastrophic misconfiguration, and the reason it is refused in code.**
   ///
-  /// Sparkle has no idea these are two products. Pointed at Omi's appcast it would fetch Omi's
-  /// enclosure, and if the key ever matched it would replace Context for Claude with Omi Computer,
-  /// under this app's name and this app's icon, on every machine at once. It is not a likely typo.
-  /// It is a typo whose blast radius makes review the wrong place to catch it.
-  func testOmisOwnUnscopedAppcastIsRefusedAsAFeedForThisApp() {
-    XCTAssertFalse(UpdatePolicy.isUsableFeedURL("https://api.omi.me/v2/desktop/appcast.xml"))
-    XCTAssertFalse(
-      UpdatePolicy.isUsableFeedURL("https://api.omi.me/v2/desktop/appcast.xml?identity=beta"))
-    XCTAssertEqual(
-      decide(feedURL: "https://api.omi.me/v2/desktop/appcast.xml"),
-      .refused(.feedNotConfigured))
+  /// `releases/latest` is the newest release of the *whole repository*, not of this app, and this
+  /// monorepo publishes several releases a day — at the time of writing `latest` resolves to an Omi
+  /// Desktop macOS tag. Sparkle has no idea these are two products: pointed there it would fetch
+  /// Omi's enclosure, and if the key ever matched it would replace Context for Claude with Omi
+  /// Computer, under this app's name and this app's icon, on every machine at once. The Windows
+  /// client refuses the same endpoint for the same reason
+  /// (`desktop/windows/docs/release-pipeline.md`). It is not a likely typo; it is a typo whose blast
+  /// radius makes review the wrong place to catch it.
+  func testTheRepositoryWideLatestReleaseFeedIsRefusedAsAFeedForThisApp() {
+    let latest = "https://github.com/BasedHardware/omi/releases/latest/download/appcast.xml"
+    XCTAssertFalse(UpdatePolicy.isUsableFeedURL(latest))
+    XCTAssertEqual(decide(feedURL: latest), .refused(.feedNotConfigured))
   }
 
   func testTheFeedMustBePresentAndHTTPS() {
     for feed in [
       nil, "", "not a url at all", "http://example.com/appcast.xml",
-      "http://api.omi.me/v2/micro-apps/context-for-claude/appcast.xml",
+      "http://github.com/BasedHardware/omi/releases/download/context-for-claude-appcast/appcast.xml",
     ] {
       XCTAssertEqual(
         decide(feedURL: feed), .refused(.feedNotConfigured),
@@ -336,8 +375,8 @@ final class UpdatePolicyTests: XCTestCase {
       "the policy's shipping identifier and the plist's must be the same string")
     XCTAssertTrue(
       UpdatePolicy.isUsableFeedURL(values["SUFeedURL"] as? String),
-      "SUFeedURL must be the HTTPS identity-scoped Context feed")
-    XCTAssertEqual(values["SUFeedURL"] as? String, UpdatePolicy.platformFeedURL)
+      "SUFeedURL must be the HTTPS product-scoped Context release feed")
+    XCTAssertEqual(values["SUFeedURL"] as? String, UpdatePolicy.releaseFeedURL)
     XCTAssertEqual(values["SUEnableAutomaticChecks"] as? Bool, true)
     XCTAssertEqual(values["SUAutomaticallyUpdate"] as? Bool, true)
 
