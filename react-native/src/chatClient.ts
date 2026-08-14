@@ -50,6 +50,7 @@ export async function sendChatMessage(
   backend: OmiBackend,
   text: string,
   now: number = Date.now(),
+  onGenerationStarted?: (generationId: string) => void,
 ): Promise<{human: ChatMessage; assistant: ChatMessage | null}> {
   messageSequence += 1;
   const id = `desktop-${now}-${messageSequence}`;
@@ -80,13 +81,54 @@ export async function sendChatMessage(
   if (typeof admission.generation?.id !== 'string') {
     throw new Error('Chat admission is malformed');
   }
-  const terminal = parseTerminal(
-    await backend.generationEvents(admission.generation.id, null),
-  );
+  onGenerationStarted?.(admission.generation.id);
+  let terminal: TerminalFrame;
+  try {
+    terminal = parseTerminal(
+      await backend.generationEvents(admission.generation.id, null),
+    );
+  } catch (error) {
+    if (!isReplayExpired(error)) {
+      throw error;
+    }
+    const history = await loadChatHistory(backend);
+    const canonicalHuman = history.find(
+      message => message.id === admission.message.id,
+    );
+    const assistant = history
+      .filter(
+        message =>
+          message.sender === 'ai' &&
+          message.createdAt >= admission.message.createdAt,
+      )
+      .sort((left, right) => left.createdAt - right.createdAt)[0];
+    if (canonicalHuman === undefined || assistant === undefined) {
+      throw new Error(
+        'Generation replay expired before canonical history reconciled',
+      );
+    }
+    return {human: canonicalHuman, assistant};
+  }
   if (terminal.kind === 'failed') {
     throw new Error(`Generation failed (${terminal.error.code})`);
   }
   return {human: admission.message, assistant: terminal.message};
+}
+
+export async function cancelChatGeneration(
+  backend: OmiBackend,
+  generationId: string,
+): Promise<void> {
+  await backend.cancelGenerationEvents(generationId);
+}
+
+function isReplayExpired(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    error.code === 'OMI_HTTP_REPLAY_EXPIRED'
+  );
 }
 
 export function parseTerminal(raw: string): TerminalFrame {

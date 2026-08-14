@@ -6,14 +6,18 @@ static NSString *const OmiContractVersion = @"1.0.0";
 @property(nonatomic, strong) NSMutableData *data;
 @property(nonatomic, strong) NSURLSession *session;
 @property(nonatomic, strong) NSURLSessionDataTask *task;
+@property(nonatomic, strong) NSMutableURLRequest *request;
 @property(nonatomic, copy) RCTPromiseResolveBlock resolve;
 @property(nonatomic, copy) RCTPromiseRejectBlock reject;
 @property(nonatomic, copy) dispatch_block_t cleanup;
 @property(nonatomic) BOOL settled;
+@property(nonatomic) NSUInteger reconnects;
+@property(nonatomic, copy) NSString *lastEventId;
 - (instancetype)initWithResolve:(RCTPromiseResolveBlock)resolve
                           reject:(RCTPromiseRejectBlock)reject
                          cleanup:(dispatch_block_t)cleanup;
 - (void)cancel;
+- (void)start;
 @end
 
 @implementation OmiGenerationDelegate
@@ -47,6 +51,11 @@ static NSString *const OmiContractVersion = @"1.0.0";
   [self finishWithValue:nil code:@"OMI_HTTP_CANCELLED" message:@"Native generation request was cancelled"];
 }
 
+- (void)start {
+  self.task = [self.session dataTaskWithRequest:self.request];
+  [self.task resume];
+}
+
 - (void)URLSession:(NSURLSession *)session
               task:(NSURLSessionTask *)task
 willPerformHTTPRedirection:(NSHTTPURLResponse *)response
@@ -59,8 +68,14 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
           dataTask:(NSURLSessionDataTask *)dataTask
 didReceiveResponse:(NSURLResponse *)response
  completionHandler:(void (^)(NSURLSessionResponseDisposition disposition))completionHandler {
-  if (![response isKindOfClass:NSHTTPURLResponse.class] ||
-      ((NSHTTPURLResponse *)response).statusCode != 200) {
+  NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class]
+      ? ((NSHTTPURLResponse *)response).statusCode : 0;
+  if (status == 410) {
+    completionHandler(NSURLSessionResponseCancel);
+    [self finishWithValue:nil code:@"OMI_HTTP_REPLAY_EXPIRED" message:@"Generation replay expired"];
+    return;
+  }
+  if (status != 200) {
     completionHandler(NSURLSessionResponseCancel);
     [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:@"Native generation transport failed"];
     return;
@@ -77,13 +92,19 @@ didReceiveResponse:(NSURLResponse *)response
   NSArray<NSString *> *blocks = [text componentsSeparatedByString:@"\n\n"];
   for (NSUInteger index = 0; index + 1 < blocks.count; index += 1) {
     NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    NSString *eventId = nil;
     for (NSString *line in [blocks[index] componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet]) {
+      if ([line hasPrefix:@"id:"]) {
+        NSString *candidate = [line substringFromIndex:3];
+        eventId = [candidate hasPrefix:@" "] ? [candidate substringFromIndex:1] : candidate;
+      }
       if ([line hasPrefix:@"data:"]) {
         NSString *part = [line substringFromIndex:5];
         [parts addObject:[part hasPrefix:@" "] ? [part substringFromIndex:1] : part];
       }
     }
     if (parts.count == 0) continue;
+    if (eventId.length > 0) self.lastEventId = eventId;
     NSData *jsonData = [[parts componentsJoinedByString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];
     NSDictionary *frame = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:nil];
     NSString *kind = [frame[@"kind"] isKindOfClass:NSString.class] ? frame[@"kind"] : nil;
@@ -109,6 +130,15 @@ didReceiveResponse:(NSURLResponse *)response
 didCompleteWithError:(NSError *)error {
   @synchronized(self) {
     if (self.settled) return;
+  }
+  if (self.reconnects < 5) {
+    self.reconnects += 1;
+    [self.data setLength:0];
+    if (self.lastEventId.length > 0) {
+      [self.request setValue:self.lastEventId forHTTPHeaderField:@"last-event-id"];
+    }
+    [self start];
+    return;
   }
   [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:@"Generation ended without a terminal frame"];
 }
@@ -271,23 +301,42 @@ RCT_REMAP_METHOD(generationEvents,
   NSOperationQueue *queue = [[NSOperationQueue alloc] init];
   queue.maxConcurrentOperationCount = 1;
   delegate.session = [NSURLSession sessionWithConfiguration:configuration delegate:delegate delegateQueue:queue];
-  delegate.task = [delegate.session dataTaskWithRequest:request];
+  delegate.request = request;
   @synchronized(self.generations) {
     self.generations[generationId] = delegate;
   }
-  [delegate.task resume];
+  [delegate start];
 }
 
 RCT_REMAP_METHOD(cancelGenerationEvents,
                  cancelGenerationEventsWithId:(NSString *)generationId
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
-  OmiGenerationDelegate *delegate;
-  @synchronized(self.generations) {
-    delegate = self.generations[generationId];
+  NSString *encoded = [generationId stringByAddingPercentEncodingWithAllowedCharacters:
+      [NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"]];
+  if (generationId.length == 0 || generationId.length > 256 || encoded.length == 0 ||
+      self.baseURL == nil || self.token.length == 0 || self.clientId.length == 0) {
+    reject(@"OMI_HTTP_INVALID_REQUEST", @"Native generation cancellation is unavailable", nil);
+    return;
   }
-  [delegate cancel];
-  resolve(nil);
+  NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"/v1/chat-generations/%@", encoded]
+                     relativeToURL:self.baseURL].absoluteURL;
+  NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+  request.HTTPMethod = @"DELETE";
+  [request setValue:[NSString stringWithFormat:@"Bearer %@", self.token] forHTTPHeaderField:@"authorization"];
+  [request setValue:OmiContractVersion forHTTPHeaderField:@"x-omi-contract-version"];
+  [request setValue:self.clientId forHTTPHeaderField:@"x-omi-client-id"];
+  NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request
+                                              completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+    NSInteger status = [response isKindOfClass:NSHTTPURLResponse.class]
+        ? ((NSHTTPURLResponse *)response).statusCode : 0;
+    if (error != nil || (status != 202 && status != 204)) {
+      reject(@"OMI_HTTP_TRANSPORT", @"Generation cancellation was not accepted", nil);
+      return;
+    }
+    resolve(nil);
+  }];
+  [task resume];
 }
 
 - (void)URLSession:(NSURLSession *)session
