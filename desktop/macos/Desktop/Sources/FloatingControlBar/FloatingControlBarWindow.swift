@@ -1132,7 +1132,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         horizontalOutset: horizontalOutset
       )
     }
-    return true
+    // Surface-filling content (expanded response, notification card) owns the visible
+    // surface only, never the whole window: the frame keeps transparent glow outsets
+    // around the surface, and those margins must keep passing clicks through to other
+    // apps beneath — otherwise they are an invisible dead zone that also stops the
+    // click-away from reaching (and activating) whatever the user clicked on.
+    return FloatingControlBarGeometry.notchSurfaceContentContainsLocal(
+      localPoint: point,
+      windowSize: frame.size,
+      bottomOutset: Self.notchGlowOutsetBottom,
+      horizontalOutset: Self.notchGlowOutsetX
+    )
   }
 
   private func observeNotchAgentPills() {

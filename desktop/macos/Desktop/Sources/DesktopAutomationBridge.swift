@@ -3,6 +3,7 @@ import CryptoKit
 import Foundation
 import Network
 import OmiSupport
+import OmiTheme
 import VoiceTurnDomain
 
 enum DesktopAutomationLaunchOptions {
@@ -1703,11 +1704,20 @@ final class DesktopAutomationActionRegistry {
         ? "none"
         : containing.map { window in
           var extras = ""
+          let local = NSPoint(
+            x: cocoaPoint.x - window.frame.minX, y: cocoaPoint.y - window.frame.minY)
           if let bar = window as? FloatingControlBarWindow {
-            let local = NSPoint(
-              x: cocoaPoint.x - window.frame.minX, y: cocoaPoint.y - window.frame.minY)
             extras =
               " acceptsHit=\(bar.automationAcceptsMouseHit(inContentPoint: local)) ignores=\(window.ignoresMouseEvents)"
+          } else {
+            // Shell click-through verdict (ShellClickThrough.swift): whether this point owns the
+            // pointer, per the same policy the ignoresMouseEvents sync runs.
+            let accepts = ShellClickThroughPolicy.acceptsMouseHit(
+              localPoint: local,
+              windowSize: window.frame.size,
+              isResizable: window.styleMask.contains(.resizable),
+              contentContains: { InkGlassHitRegions.shared.containsPoint($0, in: window) })
+            extras = " shellAccepts=\(accepts) ignores=\(window.ignoresMouseEvents)"
           }
           return
             "\(String(describing: type(of: window)))(\"\(window.title)\" level=\(window.level.rawValue) key=\(window.isKeyWindow) idx=\(window.orderedIndex)\(extras))"
