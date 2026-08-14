@@ -76,6 +76,24 @@ def _as_bash_path(path: Path) -> str:
     return result.stdout.strip()
 
 
+def _git_init(repo: Path) -> None:
+    """Create a fixture repository without re-opening the caller's repository.
+
+    Git exports GIT_DIR and friends to hooks, so this module runs under them
+    whenever the pre-push gate invokes it. Left in place, `git init <fixture>`
+    re-inits the caller's repository instead — which sets `core.bare=true` on a
+    linked-worktree parent and breaks every later `git rev-parse --show-toplevel`
+    in the same push.
+    """
+    env = os.environ.copy()
+    local_vars = subprocess.run(
+        ["git", "rev-parse", "--local-env-vars"], text=True, stdout=subprocess.PIPE, check=True
+    ).stdout.split()
+    for var in local_vars:
+        env.pop(var, None)
+    subprocess.run(["git", "init", "-q", str(repo)], env=env, check=True)
+
+
 def _make_executable(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
@@ -217,7 +235,7 @@ def test_pythonpath_uses_selected_windows_interpreter_separator(tmp_path: Path) 
 def test_make_uses_git_bash_when_bare_bash_resolves_to_wsl(tmp_path: Path) -> None:
     repo = tmp_path / "omi 路径 powershell"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_init(repo)
     shutil.copy2(MAKEFILE, repo / "Makefile")
 
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
@@ -272,7 +290,7 @@ def test_make_uses_git_bash_when_bare_bash_resolves_to_wsl(tmp_path: Path) -> No
 def test_pre_push_singleflight_runs_shell_child_with_native_windows_python(tmp_path: Path) -> None:
     repo = tmp_path / "omi 路径 hook"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_init(repo)
 
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
     resolver.parent.mkdir(parents=True)
@@ -320,7 +338,7 @@ def test_pre_push_singleflight_runs_shell_child_with_native_windows_python(tmp_p
 def test_make_harness_targets_run_resolved_python_from_checkout_with_unicode_and_spaces(tmp_path: Path) -> None:
     repo = tmp_path / "omi 路径 pr-10017 space"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_init(repo)
     shutil.copy2(MAKEFILE, repo / "Makefile")
 
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
@@ -367,26 +385,19 @@ def test_make_harness_targets_run_resolved_python_from_checkout_with_unicode_and
     ]
 
 
-def test_canonical_maintenance_harness_activates_synthetic_uid_only_in_emulator(monkeypatch) -> None:
+def test_canonical_maintenance_harness_accepts_any_synthetic_uid_only_in_emulator(monkeypatch) -> None:
     module = runpy.run_path(
         str(REPO_ROOT / "scripts/dev-harness/run-canonical-maintenance.py"),
         run_name="run_canonical_maintenance_test",
     )
-    from config import canonical_memory_cohort
-    from utils.memory import memory_system
+    from utils.memory import memory_authority
 
-    original_cohort = canonical_memory_cohort.CANONICAL_MEMORY_USERS
-    original_memory_system_cohort = memory_system.CANONICAL_MEMORY_USERS
-    try:
-        monkeypatch.setenv("FIRESTORE_EMULATOR_HOST", "127.0.0.1:18080")
-        monkeypatch.setenv("ENVIRONMENT", "local-dev-harness")
-        module["_activate_local_canonical_cohort"]("synthetic-alice")
+    monkeypatch.setenv("FIRESTORE_EMULATOR_HOST", "127.0.0.1:18080")
+    monkeypatch.setenv("ENVIRONMENT", "local-dev-harness")
+    module["_configure_local_universal_memory"]("synthetic-alice")
 
-        assert memory_system.resolve_memory_system("synthetic-alice") == memory_system.MemorySystem.CANONICAL
-        assert memory_system.resolve_memory_system("someone-else") == memory_system.MemorySystem.LEGACY
-    finally:
-        canonical_memory_cohort.CANONICAL_MEMORY_USERS = original_cohort
-        memory_system.CANONICAL_MEMORY_USERS = original_memory_system_cohort
+    assert memory_authority.resolve_memory_system("synthetic-alice") == memory_authority.MemorySystem.CANONICAL
+    assert memory_authority.resolve_memory_system("someone-else") == memory_authority.MemorySystem.CANONICAL
 
 
 def test_canonical_maintenance_harness_replaces_ambient_environment(monkeypatch) -> None:
@@ -463,7 +474,7 @@ def test_canonical_maintenance_harness_fails_on_outbox_delivery_errors(monkeypat
     monkeypatch.setattr(main_globals["config"], "load_config", lambda *_args, **_kwargs: object())
     monkeypatch.setitem(main_globals, "_apply_harness_env", lambda _cfg: None)
     monkeypatch.setitem(main_globals, "_resolve_uid", lambda _cfg, _user: "synthetic-alice")
-    monkeypatch.setitem(main_globals, "_activate_local_canonical_cohort", lambda _uid: None)
+    monkeypatch.setitem(main_globals, "_configure_local_universal_memory", lambda _uid: None)
 
     @dataclass
     class _MaintenanceReport:
@@ -496,7 +507,7 @@ def test_make_harness_does_not_execute_checkout_name_and_resolves_python(tmp_pat
     repo = tmp_path / "omi pr-10017'; touch injected-marker; #"
     marker = repo / "injected-marker"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_init(repo)
     shutil.copy2(MAKEFILE, repo / "Makefile")
 
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
@@ -538,7 +549,7 @@ def test_make_harness_does_not_execute_double_quote_in_checkout_name(tmp_path: P
     repo = tmp_path / 'omi "; touch double-quote-marker; #'
     marker = repo / "double-quote-marker"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_init(repo)
     shutil.copy2(MAKEFILE, repo / "Makefile")
 
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"

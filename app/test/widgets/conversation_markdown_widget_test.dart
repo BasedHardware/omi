@@ -10,9 +10,7 @@ void main() {
       MaterialApp(
         theme: ThemeData.dark(),
         home: Scaffold(
-          body: CustomScrollView(
-            slivers: [ConversationMarkdownSliver(content: content)],
-          ),
+          body: CustomScrollView(slivers: [ConversationMarkdownSliver(content: content)]),
         ),
       ),
     );
@@ -44,9 +42,7 @@ final answer = 42;
       MaterialApp(
         theme: ThemeData.dark(),
         home: const Scaffold(
-          body: CustomScrollView(
-            slivers: [ConversationMarkdownSliver(content: content)],
-          ),
+          body: CustomScrollView(slivers: [ConversationMarkdownSliver(content: content)]),
         ),
       ),
     );

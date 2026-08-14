@@ -422,6 +422,15 @@ extension APIClient {
     )
     return response.conversation
   }
+
+  /// Read the durable finalization projection for a specific conversation.
+  /// A completed job means the backend fanout (including proactive intent
+  /// publication) has finished; callers can safely wake Chat afterward.
+  func getConversationFinalizationStatus(
+    id conversationId: String
+  ) async throws -> ConversationFinalizationStatusResponse {
+    try await get("v1/conversations/\(conversationId)/finalization")
+  }
 }
 
 // MARK: - Create Conversation From Segments (on-device transcription upload)
@@ -452,6 +461,10 @@ extension APIClient {
     let language: String
     // swift-format-ignore
     let client_conversation_id: String?
+    // swift-format-ignore
+    let conversation_role: String
+    // swift-format-ignore
+    let conversation_finalization_reason: String?
   }
 
   struct CreateConversationFromSegmentsResponse: Decodable {
@@ -493,9 +506,11 @@ extension APIClient {
   private static let canonicalLifecycleExposedHeader = "X-Omi-Memory-Canonical-Lifecycle-Exposed"
   private static let deviceScopeSupportedHeader = "X-Omi-Memory-Device-Scope-Supported"
   private static let defaultDeleteSupportedHeader = "X-Omi-Memory-Default-Delete-Supported"
+  private static let nextCursorHeader = "X-Omi-Memory-Next-Cursor"
 
   struct MemoryListPage {
     let memories: [ServerMemory]
+    let nextCursor: String?
     let canonicalLifecycleExposed: Bool
     let deviceScopeSupported: Bool?
     let defaultMemoryDeleteSupported: Bool
@@ -505,6 +520,7 @@ extension APIClient {
   func getMemories(
     limit: Int = 100,
     offset: Int = 0,
+    cursor: String? = nil,
     category: String? = nil,
     tags: [String]? = nil,
     includeDismissed: Bool = false,
@@ -512,29 +528,24 @@ extension APIClient {
     deviceScope: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> [ServerMemory] {
-    var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
-    if let category = category {
-      endpoint += "&category=\(category)"
-    }
-    if let tags = tags, !tags.isEmpty {
-      endpoint += "&tags=\(tags.joined(separator: ","))"
-    }
-    if includeDismissed {
-      endpoint += "&include_dismissed=true"
-    }
-    if includeArchive {
-      endpoint += "&include_archive=true"
-    }
-    if let deviceScope = deviceScope {
-      endpoint += "&device_scope=\(deviceScope)"
-    }
-    return try await get(endpoint, authorizationSnapshot: authorizationSnapshot)
+    let page = try await getMemoriesPage(
+      limit: limit,
+      offset: offset,
+      cursor: cursor,
+      category: category,
+      tags: tags,
+      includeDismissed: includeDismissed,
+      includeArchive: includeArchive,
+      deviceScope: deviceScope,
+      authorizationSnapshot: authorizationSnapshot)
+    return page.memories
   }
 
   /// Fetches memories plus server-authoritative capability headers.
   func getMemoriesPage(
     limit: Int = 100,
     offset: Int = 0,
+    cursor: String? = nil,
     category: String? = nil,
     tags: [String]? = nil,
     includeDismissed: Bool = false,
@@ -542,7 +553,15 @@ extension APIClient {
     deviceScope: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> MemoryListPage {
-    var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
+    var endpoint = "v3/memories?limit=\(limit)"
+    if let cursor, !cursor.isEmpty {
+      var allowed = CharacterSet.urlQueryAllowed
+      allowed.remove(charactersIn: ":/?#[]@!$&'()*+,;=")
+      let encoded = cursor.addingPercentEncoding(withAllowedCharacters: allowed) ?? cursor
+      endpoint += "&cursor=\(encoded)"
+    } else {
+      endpoint += "&offset=\(offset)"
+    }
     if let category = category {
       endpoint += "&category=\(category)"
     }
@@ -590,8 +609,10 @@ extension APIClient {
     let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
     let defaultMemoryDeleteSupported =
       httpResponse.value(forHTTPHeaderField: Self.defaultDeleteSupportedHeader) == "true"
+    let nextCursor = httpResponse.value(forHTTPHeaderField: Self.nextCursorHeader)
     return MemoryListPage(
       memories: memories,
+      nextCursor: nextCursor?.isEmpty == false ? nextCursor : nil,
       canonicalLifecycleExposed: canonicalLifecycleExposed,
       deviceScopeSupported: deviceScopeSupported,
       defaultMemoryDeleteSupported: defaultMemoryDeleteSupported

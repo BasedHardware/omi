@@ -54,6 +54,20 @@ struct ChatTurnFailureNotice: Equatable, Sendable {
     return ChatTurnFailureNotice(text: classified.userMessage, retryable: classified.retryable)
   }
 
+  /// Recycled-worker user copy hides the provider status. Prefer the technical
+  /// message so a 402 still reaches the billing rule.
+  static func classificationText(for error: Error) -> String {
+    guard let bridgeError = error as? BridgeError,
+      case .agentRuntimeFailure(let failure) = bridgeError
+    else {
+      return error.localizedDescription
+    }
+    return [failure.technicalMessage, failure.userMessage]
+      .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+      .joined(separator: "\n")
+  }
+
   /// The marker for copy the caller already owns in user-facing form — the
   /// watchdog timeout, the provider-auth prompt, a retained card's summary.
   /// Deliberately not re-classified: those sentences were written for the
@@ -110,7 +124,7 @@ struct ChatTurnFailureNotice: Equatable, Sendable {
       return stating(card.userFacingSummary, retryable: card.primaryRecovery == .retry)
     }
     return forFailure(
-      errorDescription: error.localizedDescription,
+      errorDescription: classificationText(for: error),
       presentsUserError: ChatQueryFailureDisposition.classify(
         error,
         watchdogFired: watchdogFired,

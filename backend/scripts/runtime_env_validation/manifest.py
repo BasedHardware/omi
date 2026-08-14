@@ -180,7 +180,7 @@ def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[Validatio
 
 
 def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Require memory-maintenance-job to exist and stay aligned with MEMORY_MODE rollout.
+    """Require memory-maintenance-job to track the global memory safety mode.
 
     Prod may keep MEMORY_MODE=off with cron disabled. Enabling MEMORY_MODE=read on any
     request-path surface without enabling the dedicated maintenance job fails validation
@@ -190,8 +190,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     - canonical maintenance env/secrets on notifications-job (its workflow
       removes only those retired live bindings);
     - request-path / other-job hosts keeping MEMORY_CANONICAL_MAINTENANCE_ENABLED=true
-      (ST→LT cron must run only on memory-maintenance-job);
-    - empty MEMORY_ENABLED_USERS on a read-mode surface while the job has a non-empty allowlist.
+      (ST→LT cron must run only on memory-maintenance-job).
     """
     errors: list[ValidationError] = []
     scope = f'{env}/cloud_run/jobs/memory-maintenance-job'
@@ -239,7 +238,6 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                 )
     for required_env in (
         'MEMORY_MODE',
-        'MEMORY_ENABLED_USERS',
         'MEMORY_V3_GET_ENABLED',
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
@@ -261,7 +259,6 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
 
     job_mode = (_manifest_literal_env_value(job_env, 'MEMORY_MODE') or '').strip().lower()
     job_cron = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED') or '').strip().lower()
-    job_users = (_manifest_literal_env_value(job_env, 'MEMORY_ENABLED_USERS') or '').strip()
 
     if job_cron == 'true':
         for required_env in sorted(_MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV):
@@ -379,24 +376,12 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                 '(ST→LT maintenance is hosted by memory-maintenance-job, not notifications-job)',
             )
         )
-    if not job_users:
-        errors.append(ValidationError(scope, 'MEMORY_ENABLED_USERS must be non-empty when MEMORY_MODE is not off'))
-
-    for surface_scope, surface_env, surface_mode in read_surfaces:
+    for surface_scope, _surface_env, surface_mode in read_surfaces:
         if surface_mode != job_mode:
             errors.append(
                 ValidationError(
                     scope,
                     f'{surface_scope} MEMORY_MODE={surface_mode!r} must match memory-maintenance-job MEMORY_MODE={job_mode!r}',
-                )
-            )
-        surface_users = (_manifest_literal_env_value(surface_env, 'MEMORY_ENABLED_USERS') or '').strip()
-        if surface_users != job_users:
-            errors.append(
-                ValidationError(
-                    scope,
-                    f'{surface_scope} MEMORY_ENABLED_USERS must match memory-maintenance-job allowlist '
-                    '(empty surface allowlist is not allowed while the job has a non-empty cohort)',
                 )
             )
     return errors

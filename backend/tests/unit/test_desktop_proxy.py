@@ -140,7 +140,7 @@ async def test_gemini_proxy_rejects_paywalled_desktop_user(monkeypatch):
         return function(*args)
 
     monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_proxy, "is_trial_paywalled", lambda uid, platform: True)
+    monkeypatch.setattr(desktop_proxy, "is_desktop_trial_paywalled", lambda uid, platform: True)
 
     with pytest.raises(HTTPException) as error:
         await desktop_proxy._authorized_desktop_user("user")

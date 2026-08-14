@@ -264,6 +264,24 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
     )
   }
 
+  @MainActor
+  func testNavigationRequestClearsOnRuntimeOwnerChange() async {
+    let navigation = TaskNavigationRequestStore()
+    navigation.request(
+      task: TaskActionItem(
+        id: "task-owner-a",
+        description: "Owner A task",
+        completed: false,
+        createdAt: Date(timeIntervalSince1970: 0)
+      ))
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+    await Task.yield()
+
+    XCTAssertNil(navigation.peek())
+    XCTAssertNil(navigation.pendingTask)
+  }
+
   func testExactNavigationTargetsAreHydratedBeforeDashboardAcceptsTheRoute() async {
     let api = FakeDashboardIntelligenceClient()
     api.exactCandidate = candidate(id: "candidate-101")

@@ -74,6 +74,7 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('routers/omni_relay.py', 'OPENAI_API_KEY'),
 }
 INVENTORIED_DIRECT_EXCEPTION_FILES = {
+    'routers/desktop_proactivity.py',
     'utils/other/chat_file.py',
     'routers/omni_relay.py',
 }
@@ -187,6 +188,7 @@ def test_direct_exception_files_follow_their_declared_gateway_policy():
     assert all(len(policies) == 1 for policies in policies_by_file.values())
     policy_by_file = {rel_path: next(iter(policies)) for rel_path, policies in policies_by_file.items()}
     assert policy_by_file['utils/other/chat_file.py'] == 'acknowledged'
+    assert policy_by_file['routers/desktop_proactivity.py'] == 'acknowledged'
     assert policy_by_file['routers/omni_relay.py'] == 'blocked'
 
     for rel_path, policy in policy_by_file.items():

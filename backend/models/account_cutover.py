@@ -1,6 +1,6 @@
 """Whole-account cohort cutover contracts.
 
-Server-authoritative cutover state is distinct from canonical-memory cohort
+Server-authoritative whole-account cutover state is distinct from universal memory
 membership and task-intelligence workflow mode. Those remain domain fences;
 this model owns the account-wide legacy → migrating → new transition plus the
 accepted lossy rollback that can strand new-backend writes.

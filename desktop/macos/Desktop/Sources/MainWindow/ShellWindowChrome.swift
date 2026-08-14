@@ -259,6 +259,7 @@ extension View {
 final class ShellWindowAttachmentView: NSView {
   private weak var attachedWindow: NSWindow?
   private var updateObserver: NSObjectProtocol?
+  private var mouseInterceptionSync: ShellMouseInterceptionSync?
 
   override func viewWillMove(toWindow newWindow: NSWindow?) {
     super.viewWillMove(toWindow: newWindow)
@@ -271,6 +272,9 @@ final class ShellWindowAttachmentView: NSView {
     guard let window else { return }
     attachedWindow = window
     reassertIfNeeded(force: true)
+    // The transparent shell must pass clicks on its dead margins through to whatever is behind
+    // the window — see `ShellClickThrough.swift`.
+    mouseInterceptionSync = ShellMouseInterceptionSync(window: window)
     updateObserver = NotificationCenter.default.addObserver(
       forName: NSWindow.didUpdateNotification,
       object: window,
@@ -294,6 +298,8 @@ final class ShellWindowAttachmentView: NSView {
       NotificationCenter.default.removeObserver(updateObserver)
       self.updateObserver = nil
     }
+    mouseInterceptionSync?.detach()
+    mouseInterceptionSync = nil
     attachedWindow = nil
   }
 }

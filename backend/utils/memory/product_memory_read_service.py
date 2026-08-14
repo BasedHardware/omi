@@ -6,7 +6,7 @@ Neutral ``product_memory_read_service`` is the source of truth. Legacy ``product
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional, cast
+from typing import Any, Dict, Iterable, Iterator, List, Optional, cast
 
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -17,7 +17,7 @@ from database.firestore_index_registry import (
 )
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
-from utils.memory.memory_read_api import query_archive_product_memory_items, query_default_product_memory_items
+from utils.memory.memory_read_api import query_archive_product_memory_items
 
 DEFAULT_PRODUCT_MEMORY_READ_LIMIT = 100
 MAX_PRODUCT_MEMORY_READ_LIMIT = 500
@@ -35,31 +35,25 @@ def fetch_default_product_memory_search(
     limit: int = DEFAULT_PRODUCT_MEMORY_READ_LIMIT,
     offset: int = 0,
 ) -> Dict[str, Any]:
-    """Fetch authoritative memory `memory_items` and return default-visible product search results.
+    """Return the universal default-memory product view.
 
-    This is the concrete T19/T21 read-service seam for product callers: it reads
-    `users/{uid}/memory_items`, coerces documents to `MemoryItem`, delegates
-    default visibility to `query_default_product_memory_items(...)`, then paginates
-    the filtered/matched results. Archive remains unavailable here by design; use
-    the explicit archive query seam for archive-capable product surfaces.
+    The lazy import avoids a module cycle: ``MemoryService`` uses this module's
+    authoritative canonical-item iterator internally, while this released
+    product seam delegates the final mixed-origin view back to the universal
+    repository.
     """
-
     bounded_limit = _validate_limit(limit)
     bounded_offset = _validate_offset(offset)
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
-    results = query_default_product_memory_items(query, items, policy=policy, now=now)
-    total_count = len(results)
-    paged_items = results[bounded_offset : bounded_offset + bounded_limit]
-    return {
-        'uid': uid,
-        'query': query,
-        'items': paged_items,
-        'total_count': total_count,
-        'returned_count': len(paged_items),
-        'limit': bounded_limit,
-        'offset': bounded_offset,
-        'archive_default_visible': False,
-    }
+    from utils.memory.memory_service import MemoryService
+
+    return MemoryService(db_client=db_client).default_product_search(
+        uid,
+        query,
+        policy=policy,
+        now=now,
+        limit=bounded_limit,
+        offset=bounded_offset,
+    )
 
 
 def fetch_archive_product_memory_search(
@@ -99,19 +93,25 @@ def fetch_archive_product_memory_search(
     }
 
 
-def fetch_authoritative_product_memory_items(uid: str, *, db_client: Any) -> List[MemoryItem]:
-    """Load and coerce all authoritative memory product memory item docs for one user."""
-
+def iter_authoritative_product_memory_items(uid: str, *, db_client: Any) -> Iterator[MemoryItem]:
+    """Stream validated authoritative memory items for one user."""
     collection_path = MemoryCollections(uid=uid).memory_items
-    items: List[MemoryItem] = []
     for snapshot in db_client.collection(collection_path).stream():
         raw_payload: object = snapshot.to_dict()
         payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
         item = MemoryItem.model_validate(payload)
         if item.uid != uid:
-            raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
-        items.append(item)
-    return sorted(items, key=_memory_item_sort_key)
+            raise ValueError(f"memory item uid mismatch: expected {uid}, got {item.uid}")
+        yield item
+
+
+def fetch_authoritative_product_memory_items(uid: str, *, db_client: Any) -> List[MemoryItem]:
+    """Load and coerce all authoritative memory product memory item docs for one user."""
+
+    return sorted(
+        iter_authoritative_product_memory_items(uid, db_client=db_client),
+        key=_memory_item_sort_key,
+    )
 
 
 def fetch_authoritative_product_memory_items_for_source(

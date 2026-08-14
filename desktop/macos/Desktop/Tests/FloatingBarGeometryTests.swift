@@ -515,6 +515,42 @@ final class FloatingBarGeometryTests: XCTestCase {
         showingAIConversation: false, showingAIResponse: false, hasNotification: true))
   }
 
+  /// Regression: while an expanded response panel or a notification card was showing, the
+  /// whole window frame accepted clicks — including the transparent glow outsets around the
+  /// visible surface. Clicks on other apps landing in that ring were silently swallowed and
+  /// the clicked app never activated (the "dead zone" report). Surface-filling content owns
+  /// exactly the surface: frame minus the horizontal and bottom glow outsets.
+  func testSurfaceFillingContentDoesNotOwnTheTransparentGlowRing() {
+    // Response-panel shaped window: 382×527 surface + 24pt glow on each side and below.
+    let windowSize = NSSize(width: 430, height: 551)
+
+    XCTAssertTrue(
+      FloatingControlBarGeometry.notchSurfaceContentContainsLocal(
+        localPoint: NSPoint(x: 215, y: 300),
+        windowSize: windowSize, bottomOutset: 24, horizontalOutset: 24),
+      "the visible surface stays interactive")
+    XCTAssertTrue(
+      FloatingControlBarGeometry.notchSurfaceContentContainsLocal(
+        localPoint: NSPoint(x: 24, y: 24),
+        windowSize: windowSize, bottomOutset: 24, horizontalOutset: 24),
+      "the surface's bottom-left corner is still content (resize grip corner)")
+    XCTAssertFalse(
+      FloatingControlBarGeometry.notchSurfaceContentContainsLocal(
+        localPoint: NSPoint(x: 12, y: 300),
+        windowSize: windowSize, bottomOutset: 24, horizontalOutset: 24),
+      "left glow ring passes clicks through")
+    XCTAssertFalse(
+      FloatingControlBarGeometry.notchSurfaceContentContainsLocal(
+        localPoint: NSPoint(x: 424, y: 300),
+        windowSize: windowSize, bottomOutset: 24, horizontalOutset: 24),
+      "right glow ring passes clicks through")
+    XCTAssertFalse(
+      FloatingControlBarGeometry.notchSurfaceContentContainsLocal(
+        localPoint: NSPoint(x: 215, y: 10),
+        windowSize: windowSize, bottomOutset: 24, horizontalOutset: 24),
+      "glow margin below the surface passes clicks through")
+  }
+
   func testNotchChromeActivationIgnoresHorizontalGlowOutsets() {
     let windowFrame = NSRect(x: 500, y: 800, width: 360, height: 58)
 

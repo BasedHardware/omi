@@ -606,41 +606,31 @@ def test_account_deletion_fence_appearing_during_upsert_is_repaired_before_ack()
     assert db.docs[_event_path("delete-race-vector")]["side_effect_action"] == "vector_delete"
 
 
-def test_projection_sync_converges_compatibility_row_across_create_update_and_delete():
-    create = _event("compat-create")
+def test_projection_sync_converges_keyword_graph_and_review_side_effects():
+    create = _event("projection-create")
     db = _db(create, items={"mem-1": _item()})
     paths = MemoryCollections(uid=UID)
-    projection_path = f"{paths.v3_compatibility_projection_items}/mem-1"
     graph_assertion_path = f"{paths.memory_graph_assertions}/mem-1"
     db.docs[graph_assertion_path] = {"memory_id": "mem-1"}
-    db.docs[paths.v3_compatibility_projection_state] = {
-        "uid": UID,
-        "schema_version": 1,
-        "source": "memory_items_projection",
-        "ready": True,
-        "account_generation": 7,
-        "projection_generation": 7,
-        "freshness_fence_generation": 7,
-        "tombstone_fence_generation": 7,
-        "vector_cleanup_fence_generation": 7,
-        "source_commit_id": "head-enrollment",
-        "projection_commit_id": "commit-head-enrollment",
-        "source_evidence_fence": "head-head-enrollment",
-        "projection_evidence_fence": "head-head-enrollment",
-        "projection_version": "v3_memorydb_compatibility",
-        "source_version": "memory_state_head:7",
-        "write_convergence_complete": True,
-        "delete_convergence_complete": True,
-        "tombstone_convergence_complete": True,
-        "empty_projection": False,
-    }
     side_effects = _canonical_outbox_side_effects(db_client=db)
 
     with (
-        patch("utils.memory.short_term_promotion.sync_atom_keyword_index_for_item", return_value=True),
-        patch("utils.memory.short_term_promotion.delete_atom_keyword_doc", return_value=True),
-        patch("utils.memory.short_term_promotion.kg_db.prune_memory_citations_from_kg", return_value=0),
-        patch("utils.memory.short_term_promotion.purge_stale_review_conflicts_for_memories", return_value=[]),
+        patch(
+            "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
+            return_value=True,
+        ) as keyword_upsert,
+        patch(
+            "utils.memory.short_term_promotion.delete_atom_keyword_doc",
+            return_value=True,
+        ) as keyword_delete,
+        patch(
+            "utils.memory.short_term_promotion.kg_db.prune_memory_citations_from_kg",
+            return_value=0,
+        ) as citation_prune,
+        patch(
+            "utils.memory.short_term_promotion.purge_stale_review_conflicts_for_memories",
+            return_value=[],
+        ) as review_purge,
     ):
         created = run_canonical_memory_outbox_worker_tick(
             db_client=db,
@@ -650,7 +640,7 @@ def test_projection_sync_converges_compatibility_row_across_create_update_and_de
             now=NOW,
         )
         assert created["delivered_count"] == 1
-        assert db.docs[projection_path]["memorydb"]["content"] == "PRIVATE MEMORY TEXT from authoritative storage"
+        assert keyword_upsert.call_count == 1
 
         db.docs[_item_path("mem-1")] = _item(
             content="UPDATED PRIVATE MEMORY TEXT",
@@ -660,11 +650,11 @@ def test_projection_sync_converges_compatibility_row_across_create_update_and_de
             ledger_sequence=2,
         )
         update = _event(
-            "compat-update",
+            "projection-update",
             item_revision=5,
             content_hash="content-hash-5",
         )
-        db.docs[_event_path("compat-update")] = update
+        db.docs[_event_path("projection-update")] = update
         updated = run_canonical_memory_outbox_worker_tick(
             db_client=db,
             uid=UID,
@@ -673,7 +663,7 @@ def test_projection_sync_converges_compatibility_row_across_create_update_and_de
             now=NOW,
         )
         assert updated["delivered_count"] == 1
-        assert db.docs[projection_path]["memorydb"]["content"] == "UPDATED PRIVATE MEMORY TEXT"
+        assert keyword_upsert.call_count == 2
 
         db.docs[_item_path("mem-1")] = _item(
             tier=MemoryTier.archive,
@@ -684,12 +674,12 @@ def test_projection_sync_converges_compatibility_row_across_create_update_and_de
             ledger_sequence=3,
         )
         delete = _event(
-            "compat-delete",
+            "projection-delete",
             action="delete",
             item_revision=6,
             content_hash="content-hash-6",
         )
-        db.docs[_event_path("compat-delete")] = delete
+        db.docs[_event_path("projection-delete")] = delete
         deleted = run_canonical_memory_outbox_worker_tick(
             db_client=db,
             uid=UID,
@@ -699,8 +689,15 @@ def test_projection_sync_converges_compatibility_row_across_create_update_and_de
         )
 
     assert deleted["delivered_count"] == 1
-    assert projection_path not in db.docs
     assert graph_assertion_path not in db.docs
+    keyword_delete.assert_called_once_with(UID, "mem-1", db_client=db)
+    citation_prune.assert_called_once_with(UID, ["mem-1"], db_client=db)
+    review_purge.assert_called_once_with(
+        UID,
+        ["mem-1"],
+        reason="memory_outbox_projection_deleted",
+        db_client=db,
+    )
 
 
 def test_vector_sync_upserts_live_item_and_deletes_nonprojectable_or_missing_items():

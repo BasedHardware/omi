@@ -42,6 +42,26 @@ struct ConversationMutationResponse: Decodable {
   let conversation: ServerConversation
 }
 
+/// Durable Cloud Tasks finalization projection returned by
+/// GET /v1/conversations/{id}/finalization.
+struct ConversationFinalizationStatusResponse: Decodable, Equatable {
+  let jobID: String
+  let status: String
+  let terminal: Bool
+  let retryable: Bool
+  let attemptCount: Int
+  let taskRetryCount: Int
+
+  enum CodingKeys: String, CodingKey {
+    case jobID = "job_id"
+    case status
+    case terminal
+    case retryable
+    case attemptCount = "attempt_count"
+    case taskRetryCount = "task_retry_count"
+  }
+}
+
 enum TranscriptPresenceState: Equatable {
   case omittedFromResponse
   case lockedOrRedacted

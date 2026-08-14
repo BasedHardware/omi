@@ -204,6 +204,7 @@ def _configure_compute_cleanup(monkeypatch, client):
 def _stub_new_external_cleanup_boundaries(monkeypatch):
     monkeypatch.setattr(account_deletion, 'delete_agent_vm_for_account', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_account_credentials', MagicMock())
+    monkeypatch.setattr(account_deletion, '_delete_memory_maintenance_registry', MagicMock())
 
 
 def test_agent_vm_account_cleanup_deletes_mid_migration_candidate_and_reused_state_disk(monkeypatch):
@@ -1164,6 +1165,11 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
         lambda uid: calls.append(('firestore', uid)) or {'status': 'ok'},
     )
     monkeypatch.setattr(
+        account_deletion,
+        '_delete_memory_maintenance_registry',
+        lambda uid: calls.append(('memory_registry', uid)),
+    )
+    monkeypatch.setattr(
         account_deletion.users_db, 'mark_user_deletion_wipe_completed', lambda uid: calls.append(('wipe_done', uid))
     )
 
@@ -1177,6 +1183,7 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
         ('twilio', 'uid1'),
         ('purge', 'uid1'),
         ('firestore', 'uid1'),
+        ('memory_registry', 'uid1'),
         ('wipe_done', 'uid1'),
     ]
 
@@ -1321,7 +1328,9 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
         'get_conversation_ids',
         lambda uid: calls.append(('get_conversations', uid)) or next(conversation_calls),
     )
-    monkeypatch.setattr(account_deletion, 'get_memory_ids', lambda uid: calls.append(('get_memories', uid)) or ['m1'])
+    monkeypatch.setattr(
+        account_deletion, '_historical_memory_ids', lambda uid: calls.append(('get_memories', uid)) or ['m1']
+    )
     monkeypatch.setattr(
         account_deletion, 'get_action_item_ids', lambda uid: calls.append(('get_actions', uid)) or ['a1']
     )
@@ -1389,7 +1398,7 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
     monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(side_effect=Exception('read down')))
     monkeypatch.setattr(account_deletion, 'delete_conversation_vectors_batch', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_transcript_chunk_vectors_batch', MagicMock())
-    monkeypatch.setattr(account_deletion, 'get_memory_ids', MagicMock(return_value=['m1']))
+    monkeypatch.setattr(account_deletion, '_historical_memory_ids', MagicMock(return_value=['m1']))
     monkeypatch.setattr(
         account_deletion, 'delete_memory_vectors_batch', MagicMock(side_effect=Exception('pinecone down'))
     )
@@ -1427,7 +1436,7 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
 def test_purge_derived_user_data_fails_required_vectors_when_index_missing(monkeypatch):
     monkeypatch.setattr(account_deletion.vector_db, 'index', None)
     monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(return_value=['c1']))
-    monkeypatch.setattr(account_deletion, 'get_memory_ids', MagicMock(return_value=['m1']))
+    monkeypatch.setattr(account_deletion, '_historical_memory_ids', MagicMock(return_value=['m1']))
     monkeypatch.setattr(account_deletion, 'get_action_item_ids', MagicMock(return_value=['a1']))
     monkeypatch.setattr(account_deletion, 'get_screen_activity_ids', MagicMock(return_value=['s1']))
     monkeypatch.setattr(account_deletion, 'delete_conversation_vectors_batch', MagicMock())

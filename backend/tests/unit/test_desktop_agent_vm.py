@@ -741,7 +741,7 @@ async def test_agent_vm_rejects_paywalled_desktop_user(monkeypatch):
         return function(*args)
 
     monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_agent_vm, "is_trial_paywalled", lambda uid, platform: True)
+    monkeypatch.setattr(desktop_agent_vm, "is_desktop_trial_paywalled", lambda uid, platform: True)
 
     with pytest.raises(HTTPException) as error:
         await desktop_agent_vm._authorized_desktop_user("user")
