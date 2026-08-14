@@ -13,10 +13,17 @@ trap cleanup EXIT
 
 REPO="$TMPDIR/repo"
 STUBS="$TMPDIR/stubs"
-mkdir -p "$REPO/web/frontend/src" "$REPO/app/lib" "$REPO/.github/workflows" "$STUBS"
+mkdir -p "$REPO/web/frontend/src" "$REPO/app/lib" "$REPO/.github/workflows" "$REPO/.github/scripts" "$STUBS"
 git -C "$REPO" init -q
 git -C "$REPO" config user.email test@example.com
 git -C "$REPO" config user.name test
+# The hook gates the fixture repo's commit identity; the author check is not
+# what this lane covers, so stub it to always pass.
+cat >"$REPO/.github/scripts/check_git_author_identity.py" <<'PY'
+#!/usr/bin/env python3
+import sys
+sys.exit(0)
+PY
 printf 'jobs:\n  flutter:\n    steps:\n      - uses: subosito/flutter-action@v2\n        with:\n          flutter-version: 9.9.9\n' >"$REPO/.github/workflows/repo-checks.yml"
 printf '{\n  "devDependencies": {\n    "eslint-plugin-prettier": "^4.2.1",\n    "prettier": "^2.8.8"\n  }\n}\n' >"$REPO/web/frontend/package.json"
 cat >"$REPO/web/frontend/package-lock.json" <<LOCK
