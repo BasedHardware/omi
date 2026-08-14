@@ -122,6 +122,20 @@ environments:
           HOSTED_TRANSLATION_API_URL:
             category: service_discovery
             value: http://nllb.omiapi.com
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_SECURITY_POSTURE:
+            value: auto
+            category: rollout
+          OMI_SECURITY_SCREEN_TIMEOUT_SECONDS:
+            value: '8'
+            category: rollout
+          OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS:
+            value: '15'
+            category: rollout
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
           RAPID_API_HOST:
             config_map:
               name: dev-omi-backend-config
@@ -369,6 +383,25 @@ environments:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
               category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_SECURITY_POSTURE:
+              value: auto
+              category: rollout
+            OMI_SECURITY_SCREEN_TIMEOUT_SECONDS:
+              value: '8'
+              category: rollout
+            OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS:
+              value: '15'
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+              provisional: true
+              category: service_auth
             PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA:
               env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
               provisional: true
@@ -1154,9 +1187,24 @@ environments:
               name: prod-omi-backend-config
               key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
           SERVICE_ACCOUNT_JSON:
-            secret:
-              name: prod-omi-backend-secrets
-              key: SERVICE_ACCOUNT_JSON
+             secret:
+               name: prod-omi-backend-secrets
+               key: SERVICE_ACCOUNT_JSON
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_SECURITY_POSTURE:
+            value: auto
+            category: rollout
+          OMI_SECURITY_SCREEN_TIMEOUT_SECONDS:
+            value: '8'
+            category: rollout
+          OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS:
+            value: '15'
+            category: rollout
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'off'
+            category: rollout
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
@@ -1388,6 +1436,41 @@ environments:
               value: price_1TuIa81F8wnoWYvw0iX0j5M8
             STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
               value: price_1TuIap1F8wnoWYvwHWq0EvNU
+            STT_PRERECORDED_MODEL:
+              value: parakeet,modulate-velma-2
+              category: stt_policy
+            HOSTED_PARAKEET_API_URL:
+              value: http://parakeet.omi.me
+              category: service_discovery
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              # Never make a reserved ILB IP independently valid runtime
+              # configuration. The deployment gate derives the live address.
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_SECURITY_POSTURE:
+              value: auto
+              category: rollout
+            OMI_SECURITY_SCREEN_TIMEOUT_SECONDS:
+              value: '8'
+              category: rollout
+            OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS:
+              value: '15'
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+              value: 'off'
+              category: rollout
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+              provisional: true
+              category: service_auth
+            PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA:
+              env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
+              provisional: true
+              category: service_auth
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout

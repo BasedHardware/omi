@@ -120,10 +120,13 @@ _SYS_MODULE_NAMES = [
     "utils.llm.conversation_processing",
     "utils.retrieval",
     "utils.retrieval.tools",
+    "utils.retrieval.tool_result_boundaries",
     "utils.retrieval.tools.action_item_tools",
     "utils.retrieval.agentic",
     "utils.conversations",
     "utils.conversations.render",
+    "utils.memory",
+    "utils.memory.chat_memory_adapter",
     "langchain_core",
     "langchain_core.tools",
     "langchain_core.runnables",
@@ -305,13 +308,54 @@ sys.modules["models"].__path__ = [str(BACKEND_DIR / "models")]
 _load_module_from_file("models.conversation", BACKEND_DIR / "models" / "conversation.py")
 _load_module_from_file("models.app", BACKEND_DIR / "models" / "app.py")
 
-# Load action_item_tools
-action_item_tools = _load_module_from_file(
-    "utils.retrieval.tools.action_item_tools",
-    BACKEND_DIR / "utils" / "retrieval" / "tools" / "action_item_tools.py",
-)
-create_action_item_tool = action_item_tools.create_action_item_tool
-update_action_item_tool = action_item_tools.update_action_item_tool
+
+@pytest.fixture(scope='module', autouse=True)
+def _load_action_item_runtime():
+    global action_item_tools, create_action_item_tool, update_action_item_tool, _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
+
+    _stub_package("utils.memory")
+    memory_adapter_stub = types.ModuleType("utils.memory.chat_memory_adapter")
+    memory_adapter_stub.CHAT_MEMORY_BOUNDARY_NOTICE = 'memory boundary'
+    memory_adapter_stub.CHAT_MEMORY_POLICY_MARKER = 'memory policy'
+    sys.modules["utils.memory.chat_memory_adapter"] = memory_adapter_stub
+
+    sys.modules.pop("utils.retrieval.tool_result_boundaries", None)
+    sys.modules.pop("utils.retrieval.tools.action_item_tools", None)
+
+    _load_module_from_file(
+        "utils.retrieval.tool_result_boundaries",
+        BACKEND_DIR / "utils" / "retrieval" / "tool_result_boundaries.py",
+    )
+
+    # Load action_item_tools
+    action_item_tools = _load_module_from_file(
+        "utils.retrieval.tools.action_item_tools",
+        BACKEND_DIR / "utils" / "retrieval" / "tools" / "action_item_tools.py",
+    )
+    create_action_item_tool = action_item_tools.create_action_item_tool
+    update_action_item_tool = action_item_tools.update_action_item_tool
+
+    yield
+
+    # Restore sys.modules now that the modules under test are imported and bound to
+    # their stubbed dependencies. Tests below patch those module objects directly.
+    restore_sys_modules(_SYS_MODULES_SNAPSHOT)
+    del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
+
+
+def test_missing_action_item_preserves_trusted_recovery_control():
+    from utils.retrieval.tool_result_boundaries import TrustedToolResult
+
+    with patch.object(action_item_tools.action_items_db, 'get_action_item', return_value=None):
+        result = update_action_item_tool(
+            action_item_id='missing-item',
+            config={'configurable': {'user_id': 'test-user-123'}},
+        )
+
+    assert isinstance(result, TrustedToolResult)
+    assert result.trusted_control == 'Please use get_action_items_tool first to get the correct ID.'
+    assert result.untrusted_content == "Error: Action item with ID 'missing-item' not found."
+
 
 # discard_parser only needs pydantic and langchain_core, so load the real module.
 _load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm" / "discard_parser.py")
@@ -320,11 +364,6 @@ conversation_processing = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
 )
-
-# Restore sys.modules now that the modules under test are imported and bound to
-# their stubbed dependencies. Tests below patch those module objects directly.
-restore_sys_modules(_SYS_MODULES_SNAPSHOT)
-del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
 def _make_config(uid="test-user-123"):

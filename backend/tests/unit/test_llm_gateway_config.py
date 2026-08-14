@@ -6,6 +6,7 @@ import pytest
 import yaml
 
 from llm_gateway.gateway.config_loader import ConfigValidationError, load_gateway_config
+from llm_gateway.gateway.resolver import resolve_lane
 from llm_gateway.gateway.schemas import Capabilities, StructuredOutputMode, Surface
 from utils.llm.model_config import get_all_configured_features, get_model, get_provider
 
@@ -26,6 +27,15 @@ def test_loads_default_gateway_config():
     assert config.feature_bundles['chat_extraction.requires_context'].lane_id == LANE_ID
     assert config.route_artifacts[ACTIVE_ROUTE].primary.model == 'gpt-5.6-luna'
     assert config.route_artifacts[ACTIVE_ROUTE].provider_options['reasoning_effort'] == 'low'
+
+
+def test_security_screen_feature_resolves_to_registered_gateway_lane():
+    config = load_gateway_config(prod_mode=True)
+
+    lane = config.lanes['omi:auto:security-screen']
+    assert lane.active_route == 'route.security_screen.model_config.001'
+    assert config.route_artifacts[lane.active_route].primary.model == 'gpt-5-nano'
+    assert resolve_lane(config, 'omi:auto:security-screen') == lane
 
 
 def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
