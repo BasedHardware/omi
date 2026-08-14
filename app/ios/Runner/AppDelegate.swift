@@ -251,6 +251,22 @@ final class QuickActionsIconPatcher: NSObject {
     // Register Phone Calls plugin
     OmiPhoneCallsPlugin.register(with: registry.registrar(forPlugin: "OmiPhoneCallsPlugin")!)
 
+    // applicationWillEnterForeground never fires under the UIScene lifecycle (measured
+    // 0/4 on iPhone 17 Pro / iOS 27.0 across two background->kill cycles) — Apple's
+    // scene-based apps get sceneWillEnterForeground instead. The app-level notification
+    // fires reliably (4/4) and works whether or not multi-scene support is enabled, so
+    // reconnectStalePeripherals() is anchored to that rather than to a scene delegate.
+    // See #11568.
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleWillEnterForeground),
+      name: UIApplication.willEnterForegroundNotification,
+      object: nil
+    )
+  }
+
+  @objc private func handleWillEnterForeground() {
+    OmiBleManager.shared.reconnectStalePeripherals()
   }
 
   override func application(
@@ -357,11 +373,6 @@ final class QuickActionsIconPatcher: NSObject {
       }
 
       completionHandler(exportedMappings.isEmpty ? .noData : .newData)
-  }
-
-  override func applicationWillEnterForeground(_ application: UIApplication) {
-    super.applicationWillEnterForeground(application)
-    OmiBleManager.shared.reconnectStalePeripherals()
   }
 
   override func applicationWillTerminate(_ application: UIApplication) {
