@@ -116,6 +116,7 @@ async function asLane(tag, request) {
   const { stdout } = await execFileAsync(process.execPath, [driverPath], {
     env: {
       ...process.env,
+      OMI_CORE_ROOT: lanes[tag],
       OMI_PLATFORM_ROOT: lanes[tag],
       OMI_RECEIPTS_MODULE: RECEIPTS_MODULE,
       OMI_DRIVER_REQUEST: requestPath,
