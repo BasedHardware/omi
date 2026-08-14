@@ -320,3 +320,73 @@ def test_handle_llm_error_batches_sends_over_500_tokens(
     assert batch_sizes == [500, 100]
     assert all(size <= 500 for size in batch_sizes)
     mock_release.assert_not_called()
+
+
+# cubic PR 10887 B6: a wholesale send_each failure on ONE >500 batch must not abort the remaining
+# batches (the shared FCM send path is now used by every sender, so an outage on one chunk cannot drop
+# all later chunks). A surviving batch's delivery keeps BYOK's dedupe lock.
+@patch('utils.llm.byok_errors.release_byok_llm_error_notification_lock')
+@patch('utils.notifications.messaging.send_each')
+@patch('utils.notifications.notification_db.get_all_tokens')
+@patch('utils.llm.byok_errors.try_acquire_byok_llm_error_notification_lock', return_value=True)
+@patch('utils.llm.byok_errors.get_byok_uid', return_value='user-1')
+@patch('utils.llm.byok_errors.get_byok_key', return_value='sk-user')
+def test_handle_llm_error_continues_after_a_failed_batch(
+    mock_get_key,
+    mock_get_uid,
+    mock_lock,
+    mock_get_tokens,
+    mock_send_each,
+    mock_release,
+):
+    from utils.llm.byok_errors import handle_llm_error
+
+    mock_get_tokens.return_value = [f'token-{i}' for i in range(600)]
+    calls = {'n': 0}
+
+    def _send(batch):
+        calls['n'] += 1
+        if calls['n'] == 1:
+            raise RuntimeError('transient FCM outage')  # the first 500-message batch fails wholesale
+        return SimpleNamespace(responses=[SimpleNamespace(success=True, exception=None) for _ in batch])
+
+    mock_send_each.side_effect = _send
+    handle_llm_error(_HTTPError('insufficient_quota', 429), 'openai', feature='memories', model='gpt-test')
+
+    assert mock_send_each.call_count == 2  # the second batch is attempted despite the first failing
+    mock_release.assert_not_called()  # 100 tokens delivered -> success_count>0 -> dedupe lock kept
+
+
+# cubic PR 10887 B5: an invalid-token cleanup failure AFTER a confirmed delivery must not zero the
+# success count (which would release the 24h dedupe lock and re-alert on the next error).
+@patch('utils.notifications.notification_db.remove_bulk_tokens')
+@patch('utils.llm.byok_errors.release_byok_llm_error_notification_lock')
+@patch('utils.notifications.messaging.send_each')
+@patch('utils.notifications.notification_db.get_all_tokens')
+@patch('utils.llm.byok_errors.try_acquire_byok_llm_error_notification_lock', return_value=True)
+@patch('utils.llm.byok_errors.get_byok_uid', return_value='user-1')
+@patch('utils.llm.byok_errors.get_byok_key', return_value='sk-user')
+def test_cleanup_failure_after_delivery_keeps_dedupe_lock(
+    mock_get_key,
+    mock_get_uid,
+    mock_lock,
+    mock_get_tokens,
+    mock_send_each,
+    mock_release,
+    mock_remove,
+):
+    from utils.llm.byok_errors import handle_llm_error
+
+    mock_get_tokens.return_value = ['token-live', 'token-dead']
+    mock_send_each.side_effect = lambda batch: SimpleNamespace(
+        responses=[
+            SimpleNamespace(success=True, exception=None),
+            SimpleNamespace(success=False, exception=SimpleNamespace(code='UNREGISTERED')),
+        ]
+    )
+    mock_remove.side_effect = RuntimeError('cleanup db down')
+
+    handle_llm_error(_HTTPError('insufficient_quota', 429), 'openai', feature='memories', model='gpt-test')
+
+    mock_remove.assert_called_once()  # cleanup of the dead token was attempted
+    mock_release.assert_not_called()  # 1 token delivered -> lock kept despite the cleanup failure

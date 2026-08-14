@@ -162,7 +162,15 @@ def _send_messages(messages: List[messaging.Message]) -> Any:
     responses: List[Any] = []
     for start in range(0, len(messages), _FCM_SEND_EACH_LIMIT):
         batch = messages[start : start + _FCM_SEND_EACH_LIMIT]
-        responses.extend(cast(Any, messaging.send_each(batch)).responses)
+        try:
+            responses.extend(cast(Any, messaging.send_each(batch)).responses)
+        except Exception as e:
+            # A whole-batch send_each failure must NOT abort the remaining batches (parity with
+            # send_bulk_notification's per-batch isolation). Emit a failure response per message so the
+            # index->token alignment in _collect_send_results holds; a non-permanent error is logged,
+            # not treated as an invalid token.
+            logger.error(f'FCM send_each batch failed ({len(batch)} messages): {e}')
+            responses.extend(SimpleNamespace(success=False, exception=e) for _ in batch)
     return SimpleNamespace(responses=responses)
 
 
@@ -226,18 +234,23 @@ def _send_to_user(
 
     try:
         response = _send_messages(messages)
-        success_count, invalid_tokens = _collect_send_results(response, tokens)
-
-        # Remove invalid tokens in bulk
-        if invalid_tokens:
-            notification_db.remove_bulk_tokens(invalid_tokens)
-
-        logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
-        return success_count
-
     except Exception as e:
         logger.error(f'FCM batch send error: {e}')
         return 0
+
+    success_count, invalid_tokens = _collect_send_results(response, tokens)
+
+    # Invalid-token cleanup must NOT change the delivered count: a remove_bulk_tokens failure after a
+    # confirmed delivery would otherwise zero success_count and release BYOK's 24h dedupe lock (which
+    # gates on the count), re-alerting on the next error. Isolate it.
+    if invalid_tokens:
+        try:
+            notification_db.remove_bulk_tokens(invalid_tokens)
+        except Exception as e:
+            logger.error(f'Invalid-token cleanup failed (delivery unaffected): {e}')
+
+    logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
+    return success_count
 
 
 async def _send_to_user_async(
