@@ -470,6 +470,68 @@ class AnalyticsManager {
 
   void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
 
+  void recordingUploadStarted({
+    required String attemptId,
+    required int fileCount,
+    required int totalBytes,
+    required bool claimsLiveCapture,
+    String? recordingId,
+  }) => track(
+    'Recording Upload Started',
+    properties: {
+      'upload_attempt_id': attemptId,
+      if (recordingId != null) 'recording_id': recordingId,
+      'file_count': fileCount,
+      'total_bytes': totalBytes,
+      'claims_live_capture': claimsLiveCapture,
+      'upload_source': 'offline_audio_queue',
+    },
+  );
+
+  void recordingUploadCompleted({
+    required String attemptId,
+    required int fileCount,
+    required int totalBytes,
+    required bool claimsLiveCapture,
+    required double durationSeconds,
+    required String result,
+    String? recordingId,
+  }) => track(
+    'Recording Upload Completed',
+    properties: {
+      'upload_attempt_id': attemptId,
+      if (recordingId != null) 'recording_id': recordingId,
+      'file_count': fileCount,
+      'total_bytes': totalBytes,
+      'claims_live_capture': claimsLiveCapture,
+      'upload_source': 'offline_audio_queue',
+      'duration_seconds': durationSeconds,
+      'result': result,
+    },
+  );
+
+  void recordingUploadFailed({
+    required String attemptId,
+    required int fileCount,
+    required int totalBytes,
+    required bool claimsLiveCapture,
+    required double durationSeconds,
+    required String failureClass,
+    String? recordingId,
+  }) => track(
+    'Recording Upload Failed',
+    properties: {
+      'upload_attempt_id': attemptId,
+      if (recordingId != null) 'recording_id': recordingId,
+      'file_count': fileCount,
+      'total_bytes': totalBytes,
+      'claims_live_capture': claimsLiveCapture,
+      'upload_source': 'offline_audio_queue',
+      'duration_seconds': durationSeconds,
+      'failure_class': failureClass,
+    },
+  );
+
   // Transcribe Later (batch / offline capture)
   void transcribeLaterToggled({required bool enabled}) =>
       track('Transcribe Later Toggled', properties: {'enabled': enabled});
