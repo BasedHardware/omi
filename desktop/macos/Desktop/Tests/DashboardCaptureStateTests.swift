@@ -31,6 +31,20 @@ final class DashboardCaptureStateTests: XCTestCase {
   }
 
   @MainActor
+  func testHomeListeningHelpDoesNotClaimOffWhileAwaitingAMeeting() {
+    let help = HomeListeningStatusButton.helpText(
+      status: .inactive, modeTitle: "Only Meetings", isAwaitingMeeting: true)
+    XCTAssertTrue(help.contains("waiting for a call"))
+    XCTAssertTrue(help.contains("Only Meetings"))
+    XCTAssertTrue(help.contains("Click to turn off"))
+    XCTAssertFalse(help.contains("Off"))
+    XCTAssertEqual(
+      HomeListeningStatusButton.helpText(
+        status: .inactive, modeTitle: "Always On", isAwaitingMeeting: false),
+      "Listening: Off, Always On")
+  }
+
+  @MainActor
   func testListeningModeTitlePreservesOakleyMetaName() {
     let appState = AppState()
     appState.isTranscribing = true
@@ -118,6 +132,7 @@ final class DashboardCaptureStateTests: XCTestCase {
 
     XCTAssertTrue(logic.contains("return appState.isLiveCapturing ? .active : .inactive"))
     XCTAssertTrue(dashboard.contains("CaptureListeningLogic.listeningStatus(appState: appState)"))
+    XCTAssertTrue(dashboard.contains("isAwaitingMeeting: appState.isAwaitingMeeting"))
     XCTAssertTrue(shell.contains("CaptureListeningLogic.listeningStatus(appState: appState)"))
     XCTAssertTrue(conversations.contains("if appState.isLiveCapturing {"))
     XCTAssertTrue(conversations.contains("if isLiveTranscriptExpanded && appState.isLiveCapturing"))
