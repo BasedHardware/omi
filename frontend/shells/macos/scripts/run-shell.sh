@@ -160,6 +160,14 @@ if [[ -n "${OMI_ACCEPTANCE_EXIT:-}" || -n "${OMI_CONSUMER_EVIDENCE_EXIT:-}" || -
   rm -f "$timeout_marker"
   if [[ -n "${OMI_CONSUMER_EVIDENCE_EXIT:-}" && ! -s "${OMI_CONSUMER_EVIDENCE_PATH:-}" ]]; then
     echo "ERROR: native consumer evidence result is missing or empty" >&2
+    if [[ -f "$log" ]]; then
+      echo "---- native shell abort ----" >&2
+      if grep -E 'CONSUMER-EVIDENCE:|WEBVIEW-CONSOLE:|WEBVIEW-NAV:' "$log" >&2; then
+        :
+      else
+        tail -n 40 "$log" >&2 || true
+      fi
+    fi
     exit 1
   fi
   exit "$child_status"

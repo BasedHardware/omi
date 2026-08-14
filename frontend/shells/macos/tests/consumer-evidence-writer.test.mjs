@@ -27,6 +27,13 @@ test("macOS evidence driver authors through the rendered composer and waits for 
   assert.match(driver, /pageDidFinish\(_ navigation: WKNavigation\?\)/);
   assert.match(driver, /routeDriveState\.acceptFinished\(navigation\)/);
   assert.match(driver, /routeDriveState\.begin\(navigation\)/);
+  assert.match(driver, /CONSUMER-EVIDENCE: begin/);
+  assert.match(driver, /CONSUMER-EVIDENCE: accepted/);
+  assert.match(driver, /CONSUMER-EVIDENCE: abort-at/);
+  assert.match(driver, /startListenDisabled/);
+  const runShell = readFileSync(join(root, "scripts/run-shell.sh"), "utf8");
+  assert.match(runShell, /native shell abort/);
+  assert.match(runShell, /CONSUMER-EVIDENCE:/);
   const finishBody = driver.match(/func pageDidFinish[\s\S]*?\n  \}/u)?.[0] ?? "";
   assert.doesNotMatch(finishBody, /\.begin\(|listenStartRequested = false|chatAdmissionBaseline = nil|chatSubmitted = false/);
   const consumer = readFileSync(source, "utf8");
