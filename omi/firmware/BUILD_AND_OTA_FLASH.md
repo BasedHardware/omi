@@ -132,7 +132,8 @@ From the West workspace directory (`v2.9.0`):
 nrfutil toolchain-manager launch --ncs-version v2.9.0 --shell
 
 # In the SDK environment:
-west build -b omi/nrf5340/cpuapp ../omi --sysbuild -- -DBOARD_ROOT=/path/to/omi/firmware
+export MCUBOOT_SIGNING_KEY_FILE=/secure/path/mcuboot-signing-key.pem
+west build -b omi/nrf5340/cpuapp ../omi --sysbuild -- -DBOARD_ROOT=/path/to/omi/firmware -DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE="$MCUBOOT_SIGNING_KEY_FILE"
 ```
 
 ### 3. Build Process Overview
