@@ -442,13 +442,13 @@ actor RewindIndexer {
       {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
-            id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle,
+            id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle,
             ownerSnapshot: snapshot.ownerSnapshot)
           await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
             id: id,
             ocrText: ocrText,
-            appName: frame.appName,
-            windowTitle: frame.windowTitle,
+            appName: appName,
+            windowTitle: windowTitle,
             expectedOwnerID: captureOwnerID)
         }
       }
