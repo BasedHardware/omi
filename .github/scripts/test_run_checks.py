@@ -23,6 +23,7 @@ from run_checks import (
     VALID_PLATFORMS,
     Check,
     Manifest,
+    command_for_check,
     command_for_host,
     detect_platform,
     execute_checks,
@@ -575,6 +576,34 @@ esac
         self.assertNotIn("product-invariants", selected)
         self.assertNotIn("failure-class-protocol", selected)
         self.assertIn("diff-hygiene", selected)
+
+    def test_line_count_ratchet_receives_pr_body_metadata(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        check = next(check for check in manifest.checks if check.id == "product-file-line-count-ratchet")
+
+        self.assertFalse(check.requires_pr_body)
+        self.assertIn("{pr_body_file}", check.command)
+        self.assertIn("{target_base}", check.command)
+        self.assertIn("{head}", check.command)
+        selected = resolve_checks(
+            manifest,
+            ["backend/routers/example.py"],
+            "ci",
+            include_pr_body_checks=False,
+        )
+        self.assertIn(check, selected)
+
+        command = command_for_check(
+            check,
+            changed_files_path=Path("changed.txt"),
+            base="merge-base",
+            target_base="origin/main",
+            head="candidate-head",
+            pr_body_file=Path("body.txt"),
+            skip_changelog=False,
+        )
+        self.assertEqual(command[command.index("--base") + 1], "origin/main")
+        self.assertEqual(command[command.index("--head") + 1], "candidate-head")
 
     def test_backend_datetime_sort_sentinel_ratchet_runs_for_backend_sources(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)

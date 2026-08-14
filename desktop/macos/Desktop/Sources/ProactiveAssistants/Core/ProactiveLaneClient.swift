@@ -17,35 +17,127 @@ struct ProactiveLaneResult: Equatable, Sendable {
 
 enum ProactiveLaneClientError: LocalizedError {
   case invalidResponse
-  case http(Int)
+  case http(status: Int, retryAfterSeconds: Int?)
+  case quotaCooldown(retryAfterSeconds: Int)
   case ownerChanged
 
   var errorDescription: String? {
     switch self {
     case .invalidResponse:
       return "proactive_invalid_response"
-    case .http(let statusCode):
+    case .http(let statusCode, _):
       return "proactive_http_error status=\(statusCode)"
+    case .quotaCooldown(_):
+      return "proactive_quota_cooldown status=429"
     case .ownerChanged:
       return "proactive_owner_changed"
     }
   }
 }
 
+/// Bounded failure class recorded on a director delivery when the lane call
+/// or decision decode fails. Prompt and response bodies never enter this JSON.
+struct ProactiveLaneFailureClassification: Equatable, Sendable {
+  let failure: String
+  let status: Int?
+  let errorType: String?
+
+  var provenanceJSON: String {
+    var object: [String: Any] = ["failure": failure]
+    if let status {
+      object["status"] = status
+    }
+    if let errorType {
+      object["error_type"] = errorType
+    }
+    guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "{\"failure\":\"network\"}"
+    }
+    return json
+  }
+
+  var logDescription: String {
+    switch failure {
+    case "http_error":
+      return "http_error status=\(status ?? 0)"
+    case "quota_cooldown":
+      return "quota_cooldown status=\(status ?? 0)"
+    case "network":
+      return "network error_type=\(errorType ?? "unknown")"
+    default:
+      return failure
+    }
+  }
+
+  static func classify(_ error: Error) -> ProactiveLaneFailureClassification {
+    if let laneError = error as? ProactiveLaneClientError {
+      switch laneError {
+      case .http(let status, _):
+        return ProactiveLaneFailureClassification(failure: "http_error", status: status, errorType: nil)
+      case .quotaCooldown(_):
+        return ProactiveLaneFailureClassification(failure: "quota_cooldown", status: 429, errorType: nil)
+      case .invalidResponse:
+        return ProactiveLaneFailureClassification(failure: "invalid_response", status: nil, errorType: nil)
+      case .ownerChanged:
+        return ProactiveLaneFailureClassification(failure: "owner_changed", status: nil, errorType: nil)
+      }
+    }
+    if error is DecodingError {
+      return ProactiveLaneFailureClassification(failure: "decode", status: nil, errorType: nil)
+    }
+    return ProactiveLaneFailureClassification(
+      failure: "network", status: nil, errorType: boundedNetworkErrorType(error))
+  }
+
+  static func boundedNetworkErrorType(_ error: Error) -> String {
+    if let urlError = error as? URLError {
+      switch urlError.code {
+      case .timedOut: return "timed_out"
+      case .notConnectedToInternet: return "not_connected"
+      case .networkConnectionLost: return "connection_lost"
+      case .cannotFindHost: return "cannot_find_host"
+      case .cannotConnectToHost: return "cannot_connect"
+      case .dnsLookupFailed: return "dns_lookup_failed"
+      case .secureConnectionFailed: return "secure_connection_failed"
+      default: return "url_error"
+      }
+    }
+    let typeName = String(describing: type(of: error))
+    let collapsed = typeName.map { character -> Character in
+      character.isLetter || character.isNumber ? character : "_"
+    }
+    let trimmed = String(collapsed).split(separator: "_").joined(separator: "_")
+    let bounded = String(trimmed.prefix(40))
+    return bounded.isEmpty ? "unknown" : bounded
+  }
+}
+
 actor ProactiveLaneClient {
   static let shared = ProactiveLaneClient()
   static var backendBaseURL: String { DesktopBackendEnvironment.rustBackendURL() }
+  static let defaultQuotaCooldownSeconds = 10 * 60
+  static let minQuotaCooldownSeconds = 60
+  static let maxQuotaCooldownSeconds = 60 * 60
   private let session: URLSession
   private let baseURL: () -> String
   private let authorization: () async throws -> String
+  private let now: @Sendable () -> Date
+  private var quotaCooldownUntil: [String: Date] = [:]
+  private var loggedQuotaSkip: Set<String> = []
+  private var loggedQuotaClamp: Set<String> = []
+  private var cooldownOwner: String?
 
   init(
     session: URLSession = .shared,
     baseURL: @escaping () -> String = { ProactiveLaneClient.backendBaseURL },
-    authorization: (() async throws -> String)? = nil
+    authorization: (() async throws -> String)? = nil,
+    now: @escaping @Sendable () -> Date = { Date() }
   ) {
     self.session = session
     self.baseURL = baseURL
+    self.now = now
     self.authorization =
       authorization ?? {
         let authService = await MainActor.run { AuthService.shared }
@@ -63,6 +155,9 @@ actor ProactiveLaneClient {
     maxCompletionTokens: Int = 1024,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ProactiveLaneResult {
+    let currentOwner = authorizationSnapshot?.ownerID
+    clearCooldownsIfOwnerChanged(currentOwner)
+    try checkQuotaCooldown(operation: operation)
     if let authorizationSnapshot {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw ProactiveLaneClientError.ownerChanged
@@ -118,12 +213,74 @@ actor ProactiveLaneClient {
       }
     }
     guard let http = response as? HTTPURLResponse else { throw ProactiveLaneClientError.invalidResponse }
-    guard (200..<300).contains(http.statusCode) else { throw ProactiveLaneClientError.http(http.statusCode) }
+    guard (200..<300).contains(http.statusCode) else {
+      let retryAfter: Int?
+      if http.statusCode == 429 {
+        retryAfter = Self.parseRetryAfterSeconds(from: http)
+        armQuotaCooldown(operation: operation, retryAfterSeconds: retryAfter)
+      } else {
+        retryAfter = nil
+      }
+      throw ProactiveLaneClientError.http(status: http.statusCode, retryAfterSeconds: retryAfter)
+    }
     return try Self.parseEnvelope(data)
   }
 
+  private func clearCooldownsIfOwnerChanged(_ owner: String?) {
+    guard cooldownOwner != owner else { return }
+    cooldownOwner = owner
+    guard !quotaCooldownUntil.isEmpty || !loggedQuotaSkip.isEmpty || !loggedQuotaClamp.isEmpty else { return }
+    quotaCooldownUntil.removeAll()
+    loggedQuotaSkip.removeAll()
+    loggedQuotaClamp.removeAll()
+    log("Proactive lane cooldowns cleared: owner changed")
+  }
+
+  private func checkQuotaCooldown(operation: String) throws {
+    guard let until = quotaCooldownUntil[operation] else { return }
+    let current = now()
+    if current >= until {
+      quotaCooldownUntil[operation] = nil
+      loggedQuotaSkip.remove(operation)
+      loggedQuotaClamp.remove(operation)
+      return
+    }
+    if !loggedQuotaSkip.contains(operation) {
+      loggedQuotaSkip.insert(operation)
+      log("Proactive lane skipped: quota_cooldown operation=\(operation)")
+    }
+    let remaining = max(1, Int(ceil(until.timeIntervalSince(current))))
+    throw ProactiveLaneClientError.quotaCooldown(retryAfterSeconds: remaining)
+  }
+
+  private func armQuotaCooldown(operation: String, retryAfterSeconds: Int?) {
+    let requested = retryAfterSeconds.flatMap { $0 > 0 ? $0 : nil } ?? Self.defaultQuotaCooldownSeconds
+    let delay = min(max(requested, Self.minQuotaCooldownSeconds), Self.maxQuotaCooldownSeconds)
+    let newDeadline = now().addingTimeInterval(TimeInterval(delay))
+    if let existing = quotaCooldownUntil[operation], existing > newDeadline {
+      return
+    }
+    quotaCooldownUntil[operation] = newDeadline
+    loggedQuotaSkip.remove(operation)
+    if delay != requested, !loggedQuotaClamp.contains(operation) {
+      loggedQuotaClamp.insert(operation)
+      log("Proactive lane quota cooldown clamped: operation=\(operation) duration=\(delay)")
+    }
+  }
+
+  static func parseRetryAfterSeconds(from response: HTTPURLResponse) -> Int? {
+    guard let raw = response.value(forHTTPHeaderField: "Retry-After") else { return nil }
+    return Int(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+  }
+
   static func parseEnvelope(_ data: Data) throws -> ProactiveLaneResult {
-    guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+    let object: Any
+    do {
+      object = try JSONSerialization.jsonObject(with: data)
+    } catch {
+      throw ProactiveLaneClientError.invalidResponse
+    }
+    guard let root = object as? [String: Any],
       let operation = root["operation"] as? String,
       let lane = root["lane"] as? String,
       let providerModel = root["provider_model"] as? String,

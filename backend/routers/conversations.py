@@ -117,10 +117,20 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
 
     def _run_enrichment():
         try:
+            from utils.task_intelligence.proactive_engine import persist_desktop_meeting_arrival_best_effort
+
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
-                process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
+                enriched = process_conversation(
+                    uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False
+                )
+            # Deferred desktop meetings must publish their exact Chat receipt
+            # at the same terminal transition as ordinary finalization. The
+            # initial lazy row deliberately skipped this adapter, so doing it
+            # here closes the gap without waking Chat for processing rows.
+            if enriched is not None:
+                persist_desktop_meeting_arrival_best_effort(uid, enriched)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")

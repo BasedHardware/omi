@@ -40,6 +40,8 @@ enum DefaultsKey: String {
   case chatBridgeMode = "chatBridgeMode"
   case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
   case multiChatEnabled = "multiChatEnabled"
+  /// Opt-in: proactive notifications are also spoken out loud on delivery.
+  case speakNotificationsAloud = "speakNotificationsAloud"
   case aiChatWorkingDirectory = "aiChatWorkingDirectory"
   case hasCompletedOnboarding = "hasCompletedOnboarding"
   case onboardingStep = "onboardingStep"
@@ -60,6 +62,9 @@ enum DefaultsKey: String {
   /// Test hook: forces TTS playback start to report failure (non-prod gauntlets).
   case forceTTSPlaybackStartFalse = "forceTTSPlaybackStartFalse"
   case shortcutPTTInputDeviceUID = "shortcut_pttInputDeviceUID"
+  /// One-shot marker: the PTT-only microphone choice has been folded into the shared
+  /// `preferredMicrophoneDeviceUID`, so it is never carried over twice.
+  case shortcutPTTMicrophoneMergedIntoPreferred = "shortcut_pttMicrophoneMergedIntoPreferred"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
@@ -75,6 +80,7 @@ enum DefaultsKey: String {
   case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
   case gmailSelectedCookiePath = "gmailSelectedCookiePath"
   case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
+  case disableSystemAudioCapture = "disableSystemAudioCapture"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
@@ -123,6 +129,10 @@ struct ScopedDefaultsKey {
 
   static func importConnectorSourceCount(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
+  }
+
+  static func taskInterruptionLedger(ownerID: String) -> Self {
+    Self(rawValue: "proactiveTaskInterruptionLedger.v1.\(ownerID)")
   }
 }
 

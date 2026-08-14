@@ -1179,6 +1179,12 @@ export interface ConversationFinalizationStatusResponse {
   terminal: boolean;
 }
 
+export interface ConversationLinkSpec {
+  conversation_id: string;
+  summary: string;
+  type: "conversationLink";
+}
+
 export interface ConversationMutationResponse {
   conversation: Conversation;
   status: string;
@@ -1296,6 +1302,8 @@ export interface CreateConversationFromTranscriptRequest {
   client_device_id?: string | null;
   client_platform?: string | null;
   client_session_id?: string | null;
+  conversation_finalization_reason?: "user_stop" | "finish_and_continue" | "meeting_started" | "meeting_ended" | "max_duration_rotation" | "crash_recovery" | "retry" | null;
+  conversation_role?: "ambient" | "meeting";
   finished_at?: string | null;
   geolocation?: GeolocationInput | null;
   language?: string | null;
@@ -2216,6 +2224,25 @@ export interface KnowledgeGraphResponse {
   truncated?: boolean;
 }
 
+export interface LegacyMaterializePromptsResponse {
+  intents?: Array<LegacyProactiveIntent>;
+}
+
+export interface LegacyProactiveIntent {
+  account_generation: number;
+  blocks: Array<QuestionCardSpec | TaskCardSpec | GoalLinkSpec | CaptureLinkSpec | MemoryLinkSpec>;
+  cold_start_sequence_terminal_receipt_id?: string | null;
+  cold_start_sequence_terminal_state?: "completed" | "abandoned" | null;
+  continuity_key: string;
+  created_at: string;
+  delivered_at?: string | null;
+  delivery_state?: "ready" | "pending_kernel_receipt" | "delivered";
+  intent_id: string;
+  materialization_receipt_id?: string | null;
+  source: "daily_opener" | "capture_arrival" | "deferral_reraise" | "agent_judgment" | "cold_start_rich" | "cold_start_sparse";
+  subject?: ChatFirstSubject | null;
+}
+
 export interface LinkCalendarEventRequest {
   event_id: string;
 }
@@ -2817,7 +2844,7 @@ export interface PrivateCloudSyncResponse {
 
 export interface ProactiveIntent {
   account_generation: number;
-  blocks: Array<QuestionCardSpec | TaskCardSpec | GoalLinkSpec | CaptureLinkSpec | MemoryLinkSpec>;
+  blocks: Array<QuestionCardSpec | TaskCardSpec | GoalLinkSpec | CaptureLinkSpec | ConversationLinkSpec | MemoryLinkSpec>;
   cold_start_sequence_terminal_receipt_id?: string | null;
   cold_start_sequence_terminal_state?: "completed" | "abandoned" | null;
   continuity_key: string;
@@ -4234,6 +4261,7 @@ export interface OmiApiSchemas {
   "ConversationAudioUrlInfo": ConversationAudioUrlInfo;
   "ConversationCreateResponse": ConversationCreateResponse;
   "ConversationFinalizationStatusResponse": ConversationFinalizationStatusResponse;
+  "ConversationLinkSpec": ConversationLinkSpec;
   "ConversationMutationResponse": ConversationMutationResponse;
   "ConversationPhoto": ConversationPhoto;
   "ConversationRecordingResponse": ConversationRecordingResponse;
@@ -4373,6 +4401,8 @@ export interface OmiApiSchemas {
   "InterventionRecord": InterventionRecord;
   "InterventionSurface": InterventionSurface;
   "KnowledgeGraphResponse": KnowledgeGraphResponse;
+  "LegacyMaterializePromptsResponse": LegacyMaterializePromptsResponse;
+  "LegacyProactiveIntent": LegacyProactiveIntent;
   "LinkCalendarEventRequest": LinkCalendarEventRequest;
   "LlmTotalCostResponse": LlmTotalCostResponse;
   "LlmUsageFeatureResponse": LlmUsageFeatureResponse;
@@ -5558,7 +5588,7 @@ export interface OmiApiPaths {
     post: {
       operationId: "materialize_prompts_v1_chat_materialize_prompts_post";
       responses: {
-        "200": MaterializePromptsResponse;
+        "200": LegacyMaterializePromptsResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -8290,6 +8320,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v2/chat/materialize-prompts": {
+    post: {
+      operationId: "materialize_prompts_v2_chat_materialize_prompts_post";
+      responses: {
+        "200": MaterializePromptsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v2/files": {
     post: {
       operationId: "upload_file_chat_v2_files_post";
@@ -10494,7 +10534,7 @@ export async function record_chat_deferral_v1_chat_deferrals_post(header: { auth
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function materialize_prompts_v1_chat_materialize_prompts_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MaterializePromptsRequest, init?: OmiApiClientInit): Promise<MaterializePromptsResponse> {
+export async function materialize_prompts_v1_chat_materialize_prompts_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MaterializePromptsRequest, init?: OmiApiClientInit): Promise<LegacyMaterializePromptsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/chat/materialize-prompts`;
   const _search = "";
@@ -15840,6 +15880,27 @@ export async function search_apps_v2_apps_search_get(query: { q?: string | null,
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function materialize_prompts_v2_chat_materialize_prompts_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MaterializePromptsRequest, init?: OmiApiClientInit): Promise<MaterializePromptsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/chat/materialize-prompts`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function upload_file_chat_v2_files_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<FileChat>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/files`;
@@ -16565,4 +16626,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 400 client methods generated.
+// Total: 401 client methods generated.

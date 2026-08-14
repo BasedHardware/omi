@@ -1921,7 +1921,9 @@ async function main(): Promise<void> {
             await startAcpProcess();
             await initializeAcp();
           } else if (adapterId === "pi-mono") {
-            await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+            if (!(await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN))) {
+              throw new Error(adapterActivationError("pi-mono"));
+            }
           } else if (adapterId === "hermes") {
             if (!(await ensureHermesAdapter())) {
               throw new Error(adapterActivationError("hermes"));

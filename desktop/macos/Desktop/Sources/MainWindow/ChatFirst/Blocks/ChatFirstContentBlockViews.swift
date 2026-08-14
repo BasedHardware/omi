@@ -101,6 +101,7 @@ struct TaskCardView: View {
   @State private var isToggling = false
   @State private var showCompletionAcknowledgement = false
   @State private var hydrationFinished = false
+  @State private var retainedCompletedTask: TaskActionItem?
 
   init(taskID: String, tasksStore: TasksStore, navigation: ChatFirstShellNavigation) {
     self.taskID = taskID
@@ -108,8 +109,23 @@ struct TaskCardView: View {
     self.navigation = navigation
   }
 
+  private var liveTask: TaskActionItem? {
+    tasksStore.tasks.first { $0.id == taskID && !$0.isRetired }
+  }
+
+  private var isExplicitlyRetired: Bool {
+    (tasksStore.tasks + tasksStore.deletedTasks).contains { $0.id == taskID && $0.isRetired }
+  }
+
   private var task: TaskActionItem? {
-    tasksStore.tasks.first { $0.id == taskID && $0.deleted != true }
+    ChatFirstTaskCardPresentation.displayTask(
+      liveTask: liveTask,
+      retainedCompletedTask: retainedCompletedTask?.id == taskID ? retainedCompletedTask : nil
+    )
+  }
+
+  private var hydrationKey: String {
+    "\(taskID):\(liveTask == nil)"
   }
 
   var body: some View {
@@ -117,6 +133,7 @@ struct TaskCardView: View {
       if let task {
         card(task)
           .onAppear {
+            retainCompletedTaskIfNeeded(liveTask)
             AnalyticsManager.shared.chatFirst(
               .richBlock(kind: .taskCard, outcome: .rendered, action: .none)
             )
@@ -133,12 +150,27 @@ struct TaskCardView: View {
       }
     }
     .accessibilityIdentifier("chat-first-task-\(taskID)")
-    .task(id: taskID) {
-      guard task == nil else {
+    .onChange(of: liveTask) { _, updatedTask in
+      retainCompletedTaskIfNeeded(updatedTask)
+    }
+    .onChange(of: isExplicitlyRetired) { _, retired in
+      if retired {
+        retainedCompletedTask = nil
+      }
+    }
+    .task(id: hydrationKey) {
+      guard liveTask == nil else {
         hydrationFinished = true
         return
       }
-      _ = await tasksStore.resolveCanonicalTask(id: taskID)
+      if retainedCompletedTask == nil {
+        hydrationFinished = false
+      }
+      let resolvedTask = await tasksStore.resolveCanonicalTask(id: taskID)
+      retainCompletedTaskIfNeeded(resolvedTask)
+      if resolvedTask == nil {
+        retainedCompletedTask = nil
+      }
       hydrationFinished = true
     }
   }
@@ -150,15 +182,9 @@ struct TaskCardView: View {
         Label("Task", systemImage: "checklist")
           .scaledFont(size: OmiType.caption, weight: .semibold)
           .foregroundStyle(Ink.secondary)
-        Spacer(minLength: 0)
-        if task.completed {
-          Text("Completed")
-            .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundStyle(Ink.listeningGreen)
-        }
       }
 
-      HStack(alignment: .top, spacing: OmiSpacing.md) {
+      HStack(alignment: .center, spacing: OmiSpacing.md) {
         Button {
           toggle(task)
         } label: {
@@ -224,6 +250,11 @@ struct TaskCardView: View {
     )
   }
 
+  private func retainCompletedTaskIfNeeded(_ task: TaskActionItem?) {
+    guard let task else { return }
+    retainedCompletedTask = task.completed && !task.isRetired ? task : nil
+  }
+
   private func toggle(_ task: TaskActionItem) {
     guard !isToggling else { return }
     let intendedCompletion = !task.completed
@@ -271,6 +302,22 @@ struct TaskCardView: View {
         }
       }
     }
+  }
+}
+
+enum ChatFirstTaskCardPresentation {
+  static func displayTask(
+    liveTask: TaskActionItem?,
+    retainedCompletedTask: TaskActionItem?
+  ) -> TaskActionItem? {
+    if let liveTask {
+      return liveTask.isRetired ? nil : liveTask
+    }
+    guard let retainedCompletedTask,
+      retainedCompletedTask.completed,
+      !retainedCompletedTask.isRetired
+    else { return nil }
+    return retainedCompletedTask
   }
 }
 
@@ -398,6 +445,86 @@ struct CaptureLinkView: View {
         )
       }
     }
+  }
+}
+
+struct ConversationLinkView: View {
+  let conversationID: String
+  let summary: String
+  let navigation: ChatFirstShellNavigation
+
+  @State private var isOpening = false
+  @State private var isUnavailable = false
+
+  var body: some View {
+    Group {
+      if isUnavailable {
+        ChatFirstUnavailableBlockView(entityName: "Conversation")
+      } else {
+        ChatFirstLinkBlockView(
+          eyebrow: "Meeting notes ready",
+          systemImage: "text.document",
+          summary: summary,
+          actionTitle: "Open conversation",
+          isOpening: isOpening,
+          accessibilityID: "chat-first-conversation-\(conversationID)-open"
+        ) {
+          openConversation()
+        }
+      }
+    }
+    .onAppear {
+      AnalyticsManager.shared.chatFirst(
+        .richBlock(kind: .conversationLink, outcome: .rendered, action: .none)
+      )
+    }
+  }
+
+  private func openConversation() {
+    guard !isOpening else { return }
+    isOpening = true
+    let resolutionGeneration = navigation.beginConversationLinkResolution()
+    Task { @MainActor in
+      defer { isOpening = false }
+      do {
+        let conversation = try await APIClient.shared.getConversation(id: conversationID)
+        guard
+          let conversation = ChatFirstConversationLinkPolicy.validatedConversation(
+            conversation,
+            requestedID: conversationID
+          )
+        else {
+          throw URLError(.cannotParseResponse)
+        }
+        guard
+          navigation.completeConversationLinkResolution(
+            conversation: conversation,
+            generation: resolutionGeneration)
+        else { return }
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .conversationLink, outcome: .acted, action: .open)
+        )
+      } catch {
+        isUnavailable = true
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .conversationLink, outcome: .stalePlaceholder, action: .open)
+        )
+      }
+    }
+  }
+}
+
+/// The detail fetch is authoritative for a conversation link. Keep a small
+/// pure policy around the ID check so malformed or mismatched responses take
+/// the same unavailable path as a failed request instead of opening a nearby
+/// paginated row.
+enum ChatFirstConversationLinkPolicy {
+  static func validatedConversation(
+    _ conversation: ServerConversation?,
+    requestedID: String
+  ) -> ServerConversation? {
+    guard let conversation, conversation.id == requestedID else { return nil }
+    return conversation
   }
 }
 
