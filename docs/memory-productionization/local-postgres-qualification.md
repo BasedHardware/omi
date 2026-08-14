@@ -45,6 +45,18 @@ transaction adapter, and runs the same client corpus in pinned Bun 1.3.14 and No
 `teardown` removes only the owned container, stops the managed profile only when this
 workflow started it, and preserves the labelled volume. A later setup reuses that data.
 
+To boot the production Firebase/PostgreSQL memory process against that same
+local database (never the SQLite QA server):
+
+```sh
+bun run prod-local
+```
+
+The script refuses if the managed PostgreSQL runtime is absent or not accepting
+connections. It does not mint Firebase identity, MCP credentials, or production
+codec/synthesizer key material; the script header lists what works locally and
+what David has not granted. See `scripts/prod-local.ts`.
+
 For the normal hermetic one-shot gate, run:
 
 ```sh

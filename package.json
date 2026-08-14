@@ -17,6 +17,7 @@
     "test:postgres:status": "bun run scripts/postgres-test.ts status",
     "test:postgres:teardown": "bun run scripts/postgres-test.ts teardown",
     "test:postgres:destroy": "bun run scripts/postgres-test.ts destroy --yes",
+    "prod-local": "bun run scripts/prod-local.ts",
     "lint:imports": "bun run scripts/lint-import-graph.ts",
     "lint:closure": "bun run scripts/lint-import-closure.ts",
     "qa:contracts": "bun run scripts/qa-contracts.ts",
