@@ -26,7 +26,7 @@
  *     thirteen, and this file says so rather than silently narrowing scope.
  *
  * WHAT THIS FILE DOES, since it cannot render React: it derives the exact
- * DATA a render would need — grouping (today/tomorrow/later), sort order
+ * DATA a render would need — grouping (overdue/today/tomorrow/later/noDeadline), sort order
  * within a group, and the five rendered per-task values — using functions
  * whose bodies are PINNED against `TasksProduction.tsx`'s own source text
  * below (`assertSourceStillMatches`), so a change to the real algorithm that
@@ -94,7 +94,8 @@ function assertSourceStillMatches() {
   const source = readFileSync(PRODUCTION_SOURCE_PATH, "utf8");
   const mustContain = [
     // groupFor's exact day-boundary logic
-    'if (task.dueAt === null) return "later";',
+    'if (task.dueAt === null) return "noDeadline";',
+    "if (task.dueAt < now) return \"overdue\";",
     "const tomorrow = calendarDay(now + 86_400_000);",
     // the sort comparator's exact precondition ordering
     "if (left.dueAt === null && right.dueAt !== null) return 1;",
@@ -119,7 +120,8 @@ function utcCalendarDay(timestamp) {
 
 /** Mirrors `groupFor` (`TasksProduction.tsx`), pinned above. */
 function groupFor(task, now, calendarDay) {
-  if (task.dueAt === null) return "later";
+  if (task.dueAt === null) return "noDeadline";
+  if (task.dueAt < now) return "overdue";
   const current = calendarDay(now);
   const due = calendarDay(task.dueAt);
   if (due === current) return "today";
@@ -159,10 +161,10 @@ function renderedFields(task) {
 
 /** The full "surface bytes" this harness claims: grouped, ordered, per-task rendered fields. */
 function surfaceBytes(tasks, now) {
-  const groups = { today: [], tomorrow: [], later: [] };
+  const groups = { overdue: [], today: [], tomorrow: [], later: [], noDeadline: [] };
   for (const task of tasks) groups[groupFor(task, now, utcCalendarDay)].push(task);
   const result = {};
-  for (const group of ["today", "tomorrow", "later"]) {
+  for (const group of ["overdue", "today", "tomorrow", "later", "noDeadline"]) {
     result[group] = sortWithinGroup(groups[group]).map(renderedFields);
   }
   return result;
@@ -384,7 +386,7 @@ describe("the production tasks surface derives identical presentation off either
 
     // The claim, over EACH group, so a mismatch names its group rather than
     // dumping an undifferentiated diff.
-    for (const group of ["today", "tomorrow", "later"]) {
+    for (const group of ["overdue", "today", "tomorrow", "later", "noDeadline"]) {
       assert.deepEqual(
         platformBytes[group].map((row) => ({ ...row, hasId: undefined })),
         legacyBytes[group].map((row) => ({ ...row, hasId: undefined })),
@@ -397,9 +399,9 @@ describe("the production tasks surface derives identical presentation off either
       assert.equal(platformBytes[group].length, legacyBytes[group].length, `group "${group}" has different counts`);
     }
 
-    // And the claim actually exercised all three groups and every seeded row,
+    // And the claim actually exercised every group and every seeded row,
     // so an empty comparison cannot read as agreement.
-    const totalRows = ["today", "tomorrow", "later"].reduce((sum, g) => sum + platformBytes[g].length, 0);
+    const totalRows = ["overdue", "today", "tomorrow", "later", "noDeadline"].reduce((sum, g) => sum + platformBytes[g].length, 0);
     assert.equal(totalRows, SEED_COUNT);
   });
 });
