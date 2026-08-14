@@ -539,16 +539,19 @@ enum SuggestionPacing {
     frequencyLevel >= maximumLevel ? 600 : 40
   }
 
-  /// Confidence bar. Maximum trades a little precision for cadence; other levels keep
-  /// the user's configured bar untouched.
+  /// Confidence bar. Maximum trades precision for cadence — the level's contract is a
+  /// steady stream, and a 70% nudge beats silence there; other levels keep the user's
+  /// configured bar untouched.
   static func minConfidence(base: Double, frequencyLevel: Int) -> Double {
-    frequencyLevel >= maximumLevel ? min(base, 0.75) : base
+    frequencyLevel >= maximumLevel ? min(base, 0.65) : base
   }
 
-  /// How many recent suggestions the dedup window remembers. At Maximum only the last
-  /// two are held, so a small set of open tasks rotates instead of starving the cadence.
+  /// How many recent suggestions the dedup window remembers. Maximum keeps none: the
+  /// user asked to be nagged about the same commitment for as long as they stay on the
+  /// feed, so repeat-suppression would defeat the level's entire point. Calm levels keep
+  /// the 10-deep window that stops nagging.
   static func dedupMemory(frequencyLevel: Int) -> Int {
-    frequencyLevel >= maximumLevel ? 2 : 10
+    frequencyLevel >= maximumLevel ? 0 : 10
   }
 
   /// Whether an eligible evaluation leaves the context armed. Calm levels evaluate once

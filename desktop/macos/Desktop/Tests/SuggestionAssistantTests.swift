@@ -810,8 +810,8 @@ final class SuggestionPacingTests: XCTestCase {
     XCTAssertEqual(SuggestionPacing.settleInterval(frequencyLevel: 5), 2)
     XCTAssertEqual(SuggestionPacing.cooldown(base: 180, frequencyLevel: 5), 20)
     XCTAssertEqual(SuggestionPacing.dailyEvaluationBudget(frequencyLevel: 5), 600)
-    XCTAssertEqual(SuggestionPacing.minConfidence(base: 0.85, frequencyLevel: 5), 0.75)
-    XCTAssertEqual(SuggestionPacing.dedupMemory(frequencyLevel: 5), 2)
+    XCTAssertEqual(SuggestionPacing.minConfidence(base: 0.85, frequencyLevel: 5), 0.65)
+    XCTAssertEqual(SuggestionPacing.dedupMemory(frequencyLevel: 5), 0)
 
     for level in [0, 1, 2, 3, 4] {
       XCTAssertEqual(SuggestionPacing.requiredDwell(frequencyLevel: level), 30)
