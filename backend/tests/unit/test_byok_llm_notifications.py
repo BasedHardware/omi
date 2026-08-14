@@ -289,9 +289,11 @@ def test_handle_llm_error_keeps_lock_when_a_send_succeeds(
     mock_release.assert_not_called()
 
 
+# BYOK now delegates delivery to utils.notifications.send_user_notification, so the >500 batching
+# (Firebase's send_each cap) is exercised at the notifications FCM send point, not inside byok_errors.
 @patch('utils.llm.byok_errors.release_byok_llm_error_notification_lock')
-@patch('utils.llm.byok_errors.messaging.send_each')
-@patch('utils.llm.byok_errors.notification_db.get_all_tokens')
+@patch('utils.notifications.messaging.send_each')
+@patch('utils.notifications.notification_db.get_all_tokens')
 @patch('utils.llm.byok_errors.try_acquire_byok_llm_error_notification_lock', return_value=True)
 @patch('utils.llm.byok_errors.get_byok_uid', return_value='user-1')
 @patch('utils.llm.byok_errors.get_byok_key', return_value='sk-user')

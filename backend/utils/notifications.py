@@ -4,6 +4,7 @@ import json
 import math
 import uuid
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from firebase_admin import messaging
 import database.notifications as notification_db
@@ -149,9 +150,20 @@ def _build_message(
     )
 
 
+_FCM_SEND_EACH_LIMIT = 500  # Firebase rejects send_each() with more than 500 messages
+
+
 def _send_messages(messages: List[messaging.Message]) -> Any:
-    """Send one FCM batch through the synchronous Firebase Admin SDK."""
-    return cast(Any, messaging.send_each(messages))  # type: ignore[reportUnknownMemberType]
+    """Send FCM messages through the synchronous Firebase Admin SDK, batching at Firebase's 500-per-
+    send_each cap. Returns a response whose ``.responses`` concatenates every batch's results, in
+    token order, so ``_collect_send_results`` sees each one (universal for all senders, not just BYOK)."""
+    if len(messages) <= _FCM_SEND_EACH_LIMIT:
+        return cast(Any, messaging.send_each(messages))  # type: ignore[reportUnknownMemberType]
+    responses: List[Any] = []
+    for start in range(0, len(messages), _FCM_SEND_EACH_LIMIT):
+        batch = messages[start : start + _FCM_SEND_EACH_LIMIT]
+        responses.extend(cast(Any, messaging.send_each(batch)).responses)
+    return SimpleNamespace(responses=responses)
 
 
 def _collect_send_results(response: Any, tokens: List[str]) -> Tuple[int, List[str]]:
