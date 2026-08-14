@@ -20,6 +20,20 @@ def test_normalize_keeps_requested_scopes_and_drops_unknown_ones():
     assert normalize_mcp_scopes(["memories.write", "memories.read"]) == ["memories.read", "memories.write"]
 
 
+def test_normalize_fails_closed_for_present_but_malformed_scope_lists():
+    """A recorded list is authoritative: empty or unknown-only lists must not
+    widen to full access. Only genuinely absent scope state is legacy."""
+    assert normalize_mcp_scopes([]) == []
+    assert normalize_mcp_scopes(["not.a.scope"]) == []
+    assert normalize_mcp_scopes([1, 2, 3]) == []
+
+
+def test_normalize_legacy_full_access_only_for_absent_scope_state():
+    """A key without a recorded scopes field keeps full access."""
+    assert normalize_mcp_scopes(None) == sorted(MCP_FULL_ACCESS_SCOPES)
+    assert normalize_mcp_scopes("memories.read") == sorted(MCP_FULL_ACCESS_SCOPES)
+
+
 def test_unmigrated_key_without_recorded_scopes_still_authorizes_with_full_access(monkeypatch):
     """Legacy principal: a key issued before per-key scopes keeps working."""
     db = _DB()
