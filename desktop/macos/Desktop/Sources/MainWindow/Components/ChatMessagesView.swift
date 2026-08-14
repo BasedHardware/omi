@@ -142,7 +142,9 @@ enum ChatTranscriptLayout {
   static let regularRowSpacing: CGFloat = OmiSpacing.lg
   static let consecutiveUserRowSpacing: CGFloat = OmiSpacing.sm
   /// A reply and the question that caused it are one exchange, not two events.
-  static let replySpacing: CGFloat = OmiSpacing.sm
+  /// `md` rather than `sm`: the user bubble's own bottom padding already hugs
+  /// the text, so `sm` left the next assistant line sitting on the bubble.
+  static let replySpacing: CGFloat = OmiSpacing.md
 
   /// The gap *before* `current`, given the row above it.
   ///
