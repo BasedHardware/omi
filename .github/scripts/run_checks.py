@@ -194,6 +194,13 @@ def changed_files(root: Path, base: str, head: str, include_worktree: bool = Fal
 def trigger_matches(pattern: str, path: str) -> bool:
     if pattern == "all":
         return True
+    # A bare literal (no separator, no wildcard) is a root file, and only a
+    # root file: PurePath.match anchors from the right, so a bare
+    # "package.json" trigger silently selected every package.json in the
+    # tree — which put backend Firestore checks on core/packages/* pushes.
+    # A check that wants every such file spells it "**/<name>".
+    if "/" not in pattern and not any(ch in pattern for ch in "*?["):
+        return path == pattern
     if pattern.endswith("/**") and path.startswith(pattern[:-3].rstrip("/") + "/"):
         return True
     if fnmatch.fnmatchcase(path, pattern) or PurePath(path).match(pattern):
