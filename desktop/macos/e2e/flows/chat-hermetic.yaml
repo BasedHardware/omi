@@ -20,11 +20,11 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AuthorizedToolExecution.swift
   - desktop/macos/Desktop/Sources/Chat/ChatOmiMark.swift
   - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
-   - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
-   - desktop/macos/Desktop/Sources/Chat/ChatStreamingRevealAutomation.swift
-   - desktop/macos/Desktop/Sources/Chat/ChatTurnLifecycle.swift
-   - desktop/macos/Desktop/Sources/Chat/SmoothStreamReveal.swift
-   - desktop/macos/Desktop/Sources/Chat/MessageMetadata.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatStreamingRevealAutomation.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatTurnLifecycle.swift
+  - desktop/macos/Desktop/Sources/Chat/SmoothStreamReveal.swift
+  - desktop/macos/Desktop/Sources/Chat/MessageMetadata.swift
   - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubbleSupport.swift
@@ -42,8 +42,8 @@ covers:
   - desktop/macos/Desktop/Sources/BrowserExtensionSetup.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift
-   - desktop/macos/Desktop/Sources/MainWindow/Components/StreamingAssistantText.swift
-   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdownChatTypography.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/StreamingAssistantText.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdownChatTypography.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+MemoryCreation.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift
