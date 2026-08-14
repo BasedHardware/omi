@@ -24,7 +24,13 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
 
 from models.structured_extraction import StructuredExtraction
-from utils.byok import get_byok_key, get_byok_llm_provider, get_byok_oauth_credential, get_byok_uid
+from utils.byok import (
+    get_byok_key,
+    get_byok_llm_provider,
+    get_byok_oauth_credential,
+    get_byok_uid,
+    set_byok_oauth_credential,
+)
 from utils.llm.byok_errors import handle_llm_error
 from utils.observability.fallback import record_fallback
 from utils.llm.oauth import LLMOAuthError, get_credential as get_llm_oauth_credential
@@ -610,6 +616,11 @@ def get_llm(
                 raise RuntimeError('LLM OAuth credential refresh failed; reconnect the provider in Settings') from error
             if oauth_credential is None:
                 raise RuntimeError('LLM OAuth credential is unavailable; reconnect the provider in Settings')
+            # Publish the fetched credential back to the request context so
+            # error classification (get_llm_error_source) recognizes a mid-call
+            # 401/403 as a BYOK failure and fires the reconnection nudge, and so
+            # later get_llm() calls in the same request reuse it.
+            set_byok_oauth_credential(oauth_credential)
     if oauth_credential:
         provider = oauth_credential['provider']
         model = 'gpt-5.4-mini' if provider == 'chatgpt' else 'grok-4.3'

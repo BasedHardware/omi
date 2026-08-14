@@ -120,6 +120,7 @@ _install_module(
     get_byok_llm_provider=MagicMock(return_value=None),
     get_byok_oauth_credential=MagicMock(return_value=None),
     get_byok_uid=MagicMock(return_value=None),
+    set_byok_oauth_credential=MagicMock(),
 )
 
 _HEAVY_MOCKS = {

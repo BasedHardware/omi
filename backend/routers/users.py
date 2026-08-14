@@ -22,6 +22,7 @@ from database import (
     llm_usage as llm_usage_db,
     users as users_db,
 )
+from database import llm_oauth as llm_oauth_db
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export
 from services.users.account_deletion import background_wipe_user_data, start_account_deletion
@@ -80,6 +81,7 @@ from models.users import (
     TrialMetadata,
     LocationContextConsentResponse,
     LocationContextConsentUpdate,
+    PlanLimits,
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
@@ -124,7 +126,13 @@ from utils.other.storage import (
     delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
-from utils.byok import get_byok_key, has_byok_keys, invalidate_byok_state_cache, peppered_fingerprint
+from utils.byok import (
+    get_byok_key,
+    get_byok_llm_provider,
+    has_byok_keys,
+    invalidate_byok_state_cache,
+    peppered_fingerprint,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1171,6 +1179,29 @@ def get_user_subscription_endpoint(
     # Synthetic paid-tier quota for BYOK / marketplace-reviewer overrides so
     # these users aren't surprised by a disabled phone-call feature.
     unlimited_phone_quota = PhoneCallQuota(has_access=True, is_paid=True)
+
+    # OAuth providers (ChatGPT/Grok) are selected via the X-BYOK-LLM-Provider header
+    # and carry no X-BYOK-Deepgram key. A stored server-side OAuth credential on this
+    # account means the same unlimited BYOK plan applies — the desktop requests it
+    # without ever sending a fingerprintable raw key.
+    oauth_provider = get_byok_llm_provider()
+    if (
+        users_db.is_byok_active(uid)
+        and oauth_provider in {'chatgpt', 'grok'}
+        and llm_oauth_db.get_credential(uid, oauth_provider) is not None
+    ):
+        return UserSubscriptionResponse(
+            subscription=_byok_unlimited_subscription(),
+            transcription_seconds_used=0,
+            transcription_seconds_limit=0,
+            words_transcribed_used=0,
+            words_transcribed_limit=0,
+            insights_gained_used=0,
+            insights_gained_limit=0,
+            available_plans=[],
+            show_subscription_ui=False,
+            phone_call_quota=unlimited_phone_quota,
+        )
 
     if users_db.is_byok_active(uid) and get_byok_key('deepgram'):
         return UserSubscriptionResponse(
