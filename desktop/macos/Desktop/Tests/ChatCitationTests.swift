@@ -291,6 +291,16 @@ final class ChatCitationTests: XCTestCase {
 
   @MainActor
   func testRewindCitationFocusIsOneShotAndPreservesExactScreenshotID() {
+    // `request` refuses every id while the Rewind capture fence is suspended, and that fence is
+    // process-global: it outlives whichever suite suspended it. That is why this has failed on CI
+    // since it landed while passing locally — the id never arrived, and the failure was reported
+    // against this contract rather than against the suite that left the fence down. Start from a
+    // known-clean fence so the assertions below are about the one-shot handoff and nothing else.
+    RewindCaptureOwnerGeneration.endTransition()
+    XCTAssertNotNil(
+      RewindCaptureOwnerSnapshot.capture(),
+      "no Rewind owner for the citation focus to attach to")
+
     RewindCitationFocusState.shared.request(42)
     XCTAssertEqual(RewindCitationFocusState.shared.consume(), 42)
     XCTAssertNil(RewindCitationFocusState.shared.consume())
