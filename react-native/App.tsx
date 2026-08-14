@@ -13,6 +13,8 @@ import {
   Easing,
   FlatList,
   KeyboardAvoidingView,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   type PressableProps,
@@ -168,6 +170,28 @@ function OmiMark() {
       <View style={[styles.markBar, styles.markBarMedium]} />
       <View style={[styles.markBar, styles.markBarTall]} />
       <View style={[styles.markBar, styles.markBarShort]} />
+    </View>
+  );
+}
+
+function OmiAvatar() {
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={styles.chatAvatar}>
+      {[
+        styles.chatAvatarDotTop,
+        styles.chatAvatarDotTopRight,
+        styles.chatAvatarDotRight,
+        styles.chatAvatarDotBottomRight,
+        styles.chatAvatarDotBottom,
+        styles.chatAvatarDotBottomLeft,
+        styles.chatAvatarDotLeft,
+        styles.chatAvatarDotTopLeft,
+      ].map((position, index) => (
+        <View key={index} style={[styles.chatAvatarDot, position]} />
+      ))}
     </View>
   );
 }
@@ -382,10 +406,7 @@ function ConversationsPage({
     );
   }, [conversations, query, starredOnly]);
   useEffect(() => {
-    if (
-      selectedId !== null &&
-      !filtered.some(item => item.id === selectedId)
-    ) {
+    if (selectedId !== null && !filtered.some(item => item.id === selectedId)) {
       setSelectedId(null);
     }
   }, [filtered, selectedId]);
@@ -925,6 +946,153 @@ function OutcomeStatus({
   );
 }
 
+function formatChatTime(createdAt: number): string {
+  const milliseconds =
+    createdAt > 100_000_000_000 ? createdAt : createdAt * 1000;
+  return new Date(milliseconds).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+const ChatMessageRow = memo(function ChatMessageRow({
+  animate,
+  compact,
+  message,
+  reduceMotion,
+}: {
+  animate: boolean;
+  compact: boolean;
+  message: ChatMessage;
+  reduceMotion: boolean;
+}) {
+  const opacity = useRef(new Animated.Value(animate ? 0 : 1)).current;
+  const translateY = useRef(
+    new Animated.Value(animate && !reduceMotion ? 10 : 0),
+  ).current;
+  useEffect(() => {
+    if (!animate) {
+      return;
+    }
+    Animated.parallel([
+      Animated.timing(opacity, {
+        duration: reduceMotion ? 1 : 200,
+        easing: Easing.out(Easing.cubic),
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        duration: reduceMotion ? 1 : 200,
+        easing: Easing.out(Easing.cubic),
+        toValue: 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [animate, opacity, reduceMotion, translateY]);
+  const human = message.sender === 'human';
+  return (
+    <Animated.View
+      accessibilityLabel={
+        message.generationOutcome === 'failed' ? 'Failed response' : undefined
+      }
+      style={[
+        styles.chatMessageRow,
+        human ? styles.chatMessageRowHuman : styles.chatMessageRowAi,
+        {opacity, transform: [{translateY}]},
+      ]}>
+      {!human && <OmiAvatar />}
+      <View
+        style={[
+          styles.chatMessageColumn,
+          compact
+            ? styles.chatMessageColumnCompact
+            : styles.chatMessageColumnDesktop,
+          human && styles.chatMessageColumnHuman,
+        ]}>
+        <View
+          style={[
+            styles.chatBubble,
+            human ? styles.chatBubbleHuman : styles.chatBubbleAi,
+            message.generationOutcome === 'cancelled' &&
+              styles.cancelledMessage,
+          ]}>
+          {message.generationOutcome === 'failed' ? (
+            <Text style={styles.failedLabel}>
+              {message.generationRetryable === true
+                ? 'Response failed. Try again.'
+                : 'Response failed.'}
+            </Text>
+          ) : (
+            <Text style={styles.message}>{message.text}</Text>
+          )}
+        </View>
+        {message.generationOutcome === 'cancelled' && (
+          <Text style={styles.cancelledLabel}>Response stopped</Text>
+        )}
+        <Text
+          style={[styles.chatTimestamp, human && styles.chatTimestampHuman]}>
+          {formatChatTime(message.createdAt)}
+        </Text>
+      </View>
+    </Animated.View>
+  );
+});
+
+function ChatThinking({reduceMotion}: {reduceMotion: boolean}) {
+  const dots = useRef([
+    new Animated.Value(1),
+    new Animated.Value(1),
+    new Animated.Value(1),
+  ]).current;
+  useEffect(() => {
+    if (reduceMotion) {
+      return;
+    }
+    const animation = Animated.loop(
+      Animated.stagger(
+        150,
+        dots.map(dot =>
+          Animated.sequence([
+            Animated.timing(dot, {
+              duration: 300,
+              toValue: 0.3,
+              useNativeDriver: true,
+            }),
+            Animated.timing(dot, {
+              duration: 300,
+              toValue: 1,
+              useNativeDriver: true,
+            }),
+          ]),
+        ),
+      ),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [dots, reduceMotion]);
+  return (
+    <View style={[styles.chatMessageRow, styles.chatMessageRowAi]}>
+      <OmiAvatar />
+      <View
+        accessibilityLabel="Thinking"
+        style={[styles.chatBubble, styles.chatBubbleAi]}>
+        {reduceMotion ? (
+          <Text style={styles.thinkingText}>Thinking…</Text>
+        ) : (
+          <View style={styles.thinkingDots}>
+            {dots.map((opacity, index) => (
+              <Animated.View
+                key={index}
+                style={[styles.thinkingDot, {opacity}]}
+              />
+            ))}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
 function App(): React.JSX.Element {
   const {width} = useWindowDimensions();
   const compact = width < 1024;
@@ -940,6 +1108,10 @@ function App(): React.JSX.Element {
   const [railExpanded, setRailExpanded] = useState(false);
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const stableChatMessageIds = useRef(new Set<string>()).current;
+  const animatedChatMessageIds = useRef(new Set<string>()).current;
+  const chatScrollRef = useRef<ScrollView>(null);
+  const shouldFollowChat = useRef(false);
   const [olderChatCursor, setOlderChatCursor] = useState<string | null>(null);
   const [hasOlderChat, setHasOlderChat] = useState(false);
   const [loadingOlderChat, setLoadingOlderChat] = useState(false);
@@ -972,6 +1144,9 @@ function App(): React.JSX.Element {
     loadNewestChatHistory(backend)
       .then(page => {
         if (active) {
+          page.messages.forEach(message =>
+            stableChatMessageIds.add(message.id),
+          );
           setMessages(page.messages);
           setOlderChatCursor(page.olderCursor);
           setHasOlderChat(page.hasOlder);
@@ -985,7 +1160,13 @@ function App(): React.JSX.Element {
     return () => {
       active = false;
     };
-  }, []);
+  }, [stableChatMessageIds]);
+
+  useEffect(() => {
+    if (route === 'Chat' && shouldFollowChat.current) {
+      chatScrollRef.current?.scrollToEnd({animated: !reduceMotion});
+    }
+  }, [chatBusy, messages, reduceMotion, route]);
 
   const refreshReads = useCallback(async (initial: boolean) => {
     const backend = omiBackend;
@@ -1266,9 +1447,9 @@ function App(): React.JSX.Element {
           <NavItem
             active={route === item.label}
             compact={compact}
-            expanded={railExpanded}
             icon={item.icon}
             key={item.label}
+            expanded={railExpanded}
             label={item.label}
             onPress={() => setRoute(item.label as Route)}
           />
@@ -1285,6 +1466,7 @@ function App(): React.JSX.Element {
     }
     setChatBusy(true);
     setChatError(null);
+    shouldFollowChat.current = true;
     const localMessage = createLocalChatMessage(text);
     setMessages(current => [...current, localMessage]);
     setDraft('');
@@ -1345,6 +1527,7 @@ function App(): React.JSX.Element {
     setChatError(null);
     try {
       const page = await loadOlderChatHistory(backend, cursor);
+      page.messages.forEach(message => stableChatMessageIds.add(message.id));
       setMessages(current => mergeOlderChatHistory(current, page.messages));
       setOlderChatCursor(page.olderCursor);
       setHasOlderChat(page.hasOlder);
@@ -1356,6 +1539,9 @@ function App(): React.JSX.Element {
       ) {
         try {
           const page = await loadNewestChatHistory(backend);
+          page.messages.forEach(message =>
+            stableChatMessageIds.add(message.id),
+          );
           setMessages(current =>
             reconcileCanonicalChatHistory(
               current.filter(message => message.localOnly === true),
@@ -1384,6 +1570,14 @@ function App(): React.JSX.Element {
     } catch {
       setChatError('Could not stop the response.');
     }
+  };
+
+  const shouldAnimateChatMessage = (id: string) => {
+    if (stableChatMessageIds.has(id) || animatedChatMessageIds.has(id)) {
+      return false;
+    }
+    animatedChatMessageIds.add(id);
+    return true;
   };
 
   const composer = (
@@ -1437,6 +1631,11 @@ function App(): React.JSX.Element {
             onPress={activeGenerationId === null ? send : stopGeneration}
             style={({pressed}) => [
               styles.sendButton,
+              draft.trim() !== '' &&
+                !chatBusy &&
+                omiBackend !== undefined &&
+                omiBackend !== null &&
+                styles.sendButtonEnabled,
               activeGenerationId !== null && styles.stopButton,
               pressed && styles.pressed,
             ]}>
@@ -1645,8 +1844,22 @@ function App(): React.JSX.Element {
                     <ScrollView
                       accessibilityLabel="Chat scroll region"
                       contentContainerStyle={styles.chatScrollContent}
+                      onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+                        const {contentOffset, contentSize, layoutMeasurement} =
+                          event.nativeEvent;
+                        shouldFollowChat.current =
+                          contentOffset.y + layoutMeasurement.height >=
+                          contentSize.height - 40;
+                      }}
+                      ref={chatScrollRef}
+                      scrollEventThrottle={16}
                       style={styles.chatScroll}>
-                      <View style={styles.home}>
+                      <View
+                        style={
+                          messages.length === 0 && !chatBusy
+                            ? styles.home
+                            : styles.chatHistory
+                        }>
                         <FocusPressable
                           accessibilityLabel="Back to Home"
                           accessibilityRole="button"
@@ -1662,17 +1875,40 @@ function App(): React.JSX.Element {
                           />
                           <Text style={styles.backButtonText}>Home</Text>
                         </FocusPressable>
-                        <OmiMark />
-                        <Text style={styles.greeting}>I’m ready.</Text>
-                        <View style={styles.currents}>
-                          <Text style={styles.sectionLabel}>CURRENTS</Text>
-                          {messages.length === 0 &&
-                          !chatBusy &&
-                          chatError === null ? (
-                            <Text style={styles.empty}>
-                              Nothing’s waiting on you.
-                            </Text>
-                          ) : (
+                        {messages.length === 0 && !chatBusy ? (
+                          <>
+                            <OmiMark />
+                            <Text style={styles.greeting}>I’m ready.</Text>
+                            <View style={styles.currents}>
+                              <Text style={styles.sectionLabel}>CURRENTS</Text>
+                              {chatError === null ? (
+                                <Text style={styles.empty}>
+                                  Nothing’s waiting on you.
+                                </Text>
+                              ) : (
+                                <Text style={styles.error}>{chatError}</Text>
+                              )}
+                            </View>
+                            <View style={styles.prompts}>
+                              {quickPrompts.map(prompt => (
+                                <FocusPressable
+                                  accessibilityRole="button"
+                                  key={prompt}
+                                  onPress={() => setDraft(prompt)}
+                                  style={({pressed}) => [
+                                    styles.promptChip,
+                                    pressed && styles.pressed,
+                                  ]}>
+                                  <Text style={styles.promptText}>
+                                    {prompt}
+                                  </Text>
+                                </FocusPressable>
+                              ))}
+                            </View>
+                          </>
+                        ) : (
+                          <View style={styles.currents}>
+                            <Text style={styles.sectionLabel}>CURRENTS</Text>
                             <View style={styles.transcript}>
                               {hasOlderChat && olderChatCursor !== null && (
                                 <FocusPressable
@@ -1692,64 +1928,23 @@ function App(): React.JSX.Element {
                                 </FocusPressable>
                               )}
                               {messages.map(message => (
-                                <View
-                                  accessibilityLabel={
-                                    message.generationOutcome === 'failed'
-                                      ? 'Failed response'
-                                      : undefined
-                                  }
-                                  key={message.id}>
-                                  {message.generationOutcome !== 'failed' && (
-                                    <Text
-                                      style={[
-                                        styles.message,
-                                        message.sender === 'human' &&
-                                          styles.humanMessage,
-                                        message.generationOutcome ===
-                                          'cancelled' &&
-                                          styles.cancelledMessage,
-                                      ]}>
-                                      {message.text}
-                                    </Text>
-                                  )}
-                                  {message.generationOutcome ===
-                                    'cancelled' && (
-                                    <Text style={styles.cancelledLabel}>
-                                      Response stopped
-                                    </Text>
-                                  )}
-                                  {message.generationOutcome === 'failed' && (
-                                    <Text style={styles.failedLabel}>
-                                      {message.generationRetryable === true
-                                        ? 'Response failed. Try again.'
-                                        : 'Response failed.'}
-                                    </Text>
-                                  )}
-                                </View>
+                                <ChatMessageRow
+                                  animate={shouldAnimateChatMessage(message.id)}
+                                  compact={compact}
+                                  key={message.id}
+                                  message={message}
+                                  reduceMotion={reduceMotion}
+                                />
                               ))}
                               {chatBusy && (
-                                <Text style={styles.empty}>Thinking…</Text>
+                                <ChatThinking reduceMotion={reduceMotion} />
                               )}
                               {chatError !== null && (
                                 <Text style={styles.error}>{chatError}</Text>
                               )}
                             </View>
-                          )}
-                        </View>
-                        <View style={styles.prompts}>
-                          {quickPrompts.map(prompt => (
-                            <FocusPressable
-                              accessibilityRole="button"
-                              key={prompt}
-                              onPress={() => setDraft(prompt)}
-                              style={({pressed}) => [
-                                styles.promptChip,
-                                pressed && styles.pressed,
-                              ]}>
-                              <Text style={styles.promptText}>{prompt}</Text>
-                            </FocusPressable>
-                          ))}
-                        </View>
+                          </View>
+                        )}
                       </View>
                     </ScrollView>
                   ) : route === 'Conversations' ? (
@@ -1959,6 +2154,15 @@ const styles = StyleSheet.create({
   },
   chatScroll: {flex: 1},
   chatScrollContent: {flexGrow: 1},
+  chatHistory: {
+    alignSelf: 'center',
+    flex: 1,
+    maxWidth: 760,
+    minHeight: 500,
+    paddingBottom: 40,
+    paddingTop: 72,
+    width: '100%',
+  },
   home: {
     alignSelf: 'center',
     flex: 1,
@@ -2024,7 +2228,7 @@ const styles = StyleSheet.create({
   },
   promptText: {color: '#e5e5e5', fontSize: 13, fontWeight: '500'},
   empty: {color: '#666666', fontSize: 12, textAlign: 'center'},
-  transcript: {gap: 10},
+  transcript: {gap: 24},
   loadOlderButton: {
     alignItems: 'center',
     alignSelf: 'center',
@@ -2037,10 +2241,59 @@ const styles = StyleSheet.create({
   },
   loadOlderText: {color: '#b0b0b0', fontSize: 13, fontWeight: '600'},
   message: {color: '#e5e5e5', fontSize: 14, lineHeight: 20},
-  humanMessage: {color: '#ffffff', fontWeight: '600'},
+  chatMessageRow: {flexDirection: 'row', width: '100%'},
+  chatMessageRowHuman: {justifyContent: 'flex-end'},
+  chatMessageRowAi: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'flex-start',
+  },
+  chatMessageColumn: {minWidth: 0},
+  chatMessageColumnCompact: {maxWidth: '85%'},
+  chatMessageColumnDesktop: {maxWidth: '75%'},
+  chatMessageColumnHuman: {alignItems: 'flex-end'},
+  chatBubble: {borderRadius: 16, paddingHorizontal: 18, paddingVertical: 11},
+  chatBubbleHuman: {backgroundColor: '#2c2c33'},
+  chatBubbleAi: {
+    backgroundColor: '#202020',
+    borderColor: '#343434',
+    borderWidth: 1,
+  },
+  chatAvatar: {
+    alignItems: 'center',
+    height: 40,
+    justifyContent: 'center',
+    position: 'relative',
+    width: 40,
+  },
+  chatAvatarDot: {
+    backgroundColor: '#ffffff',
+    borderRadius: 3,
+    height: 5,
+    position: 'absolute',
+    width: 5,
+  },
+  chatAvatarDotTop: {left: 17.5, top: 3.5},
+  chatAvatarDotTopRight: {left: 27.5, top: 7.5},
+  chatAvatarDotRight: {left: 31.5, top: 17.5},
+  chatAvatarDotBottomRight: {left: 27.5, top: 27.5},
+  chatAvatarDotBottom: {left: 17.5, top: 31.5},
+  chatAvatarDotBottomLeft: {left: 7.5, top: 27.5},
+  chatAvatarDotLeft: {left: 3.5, top: 17.5},
+  chatAvatarDotTopLeft: {left: 7.5, top: 7.5},
+  chatTimestamp: {color: '#666666', fontSize: 10, marginTop: 4},
+  chatTimestampHuman: {textAlign: 'right'},
   cancelledMessage: {borderColor: '#666666', opacity: 0.72},
   cancelledLabel: {color: '#888888', fontSize: 11, marginTop: 4},
   failedLabel: {color: '#d8a0a0', fontSize: 12, marginTop: 4},
+  thinkingText: {color: '#888888', fontSize: 12},
+  thinkingDots: {flexDirection: 'row', gap: 5, paddingVertical: 4},
+  thinkingDot: {
+    backgroundColor: '#888888',
+    borderRadius: 3,
+    height: 6,
+    width: 6,
+  },
   error: {color: '#d8a0a0', fontSize: 12, textAlign: 'center'},
   memoryPage: {flex: 1, paddingHorizontal: 28, paddingTop: 24},
   memorySearchBox: {
@@ -2360,7 +2613,8 @@ const styles = StyleSheet.create({
     opacity: 0.35,
     width: 44,
   },
-  stopButton: {opacity: 1},
+  sendButtonEnabled: {backgroundColor: '#ffffff', opacity: 1},
+  stopButton: {backgroundColor: '#ffffff', opacity: 1},
   pressed: {opacity: 0.72, transform: [{scale: 0.98}]},
 });
 

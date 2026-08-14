@@ -13,6 +13,7 @@ let mockReduceMotion = false;
 let mockReduceMotionListener: ((enabled: boolean) => void) | undefined;
 let mockDesktopSearchListener: (() => void) | undefined;
 const mockSearchFocus = jest.fn();
+const mockChatScrollToEnd = jest.fn();
 type MockRequest = {body?: string; id: string; method: string; path: string};
 type MockResponse = {body: string | null; id: string; status: number};
 const mockBackend = {
@@ -62,6 +63,17 @@ jest.mock('react-native', () => {
   const parallel = jest.fn((animations: Array<{start: () => void}>) => ({
     start: () => animations.forEach(animation => animation.start()),
   }));
+  const sequence = jest.fn((animations: Array<{start: () => void}>) => ({
+    start: () => animations.forEach(animation => animation.start()),
+  }));
+  const stagger = jest.fn(
+    (_delay: number, animations: Array<{start: () => void}>) =>
+      parallel(animations),
+  );
+  const loop = jest.fn((animation: {start: () => void}) => ({
+    start: animation.start,
+    stop: jest.fn(),
+  }));
   const FlatList = ({
     data,
     ListEmptyComponent,
@@ -97,8 +109,11 @@ jest.mock('react-native', () => {
     },
     ActivityIndicator: component('ActivityIndicator'),
     Animated: {
+      loop,
       parallel,
+      sequence,
       spring,
+      stagger,
       timing,
       Value: MockAnimatedValue,
       View: component('AnimatedView'),
@@ -125,7 +140,17 @@ jest.mock('react-native', () => {
     Platform: {OS: 'macos'},
     Pressable: component('Pressable'),
     SafeAreaView: component('SafeAreaView'),
-    ScrollView: component('ScrollView'),
+    ScrollView: ReactRuntime.forwardRef(
+      (
+        {children, ...props}: {children?: React.ReactNode},
+        ref: React.Ref<unknown>,
+      ) => {
+        ReactRuntime.useImperativeHandle(ref, () => ({
+          scrollToEnd: mockChatScrollToEnd,
+        }));
+        return ReactRuntime.createElement('ScrollView', props, children);
+      },
+    ),
     StyleSheet: {create: <T,>(styles: T) => styles},
     Text,
     TextInput,
@@ -1389,6 +1414,176 @@ test('fills and preserves the ask pill draft from a quick prompt', async () => {
   ).toBe('What should I remember?');
 });
 
+test('renders saved Chat history as a wide transcript without the resting hub', async () => {
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/chat-messages?limit=50') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          messages: [
+            chatMessage('saved-human', 'Saved human', 'human', null),
+            chatMessage('saved-ai', 'Saved answer', 'ai', 'completed'),
+          ],
+          page: {olderCursor: null, hasOlder: false},
+        }),
+      };
+    }
+    return mockBackendResponse(request);
+  });
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+  const rendered = JSON.stringify(renderer.toJSON());
+  expect(rendered).toContain('Saved human');
+  expect(rendered).toContain('Saved answer');
+  expect(rendered).not.toContain('I’m ready.');
+  expect(rendered).not.toContain('What did I talk about today?');
+  expect(
+    renderer.root.findAll(
+      node =>
+        String(node.type) === 'View' && node.props.style?.maxWidth === 760,
+    ),
+  ).not.toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        String(node.type) === 'View' &&
+        Array.isArray(node.props.style) &&
+        node.props.style.some(
+          (style: {backgroundColor?: string}) =>
+            style?.backgroundColor === '#2c2c33',
+        ),
+    ),
+  ).not.toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        String(node.type) === 'View' &&
+        Array.isArray(node.props.style) &&
+        node.props.style.some(
+          (style: {maxWidth?: string}) => style?.maxWidth === '75%',
+        ),
+    ),
+  ).not.toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        String(node.type) === 'View' &&
+        node.props.style?.height === 40 &&
+        node.props.style?.width === 40,
+    ),
+  ).not.toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        String(node.type) === 'View' &&
+        Array.isArray(node.props.style) &&
+        node.props.style[0]?.height === 5 &&
+        node.props.style[0]?.width === 5,
+    ),
+  ).toHaveLength(8);
+  const stableRows = renderer.root.findAll(
+    node =>
+      String(node.type) === 'AnimatedView' &&
+      Array.isArray(node.props.style) &&
+      node.props.style[0]?.width === '100%',
+  );
+  expect(stableRows).toHaveLength(2);
+  expect(
+    stableRows.every(row => {
+      const motion = row.props.style.find(
+        (style: {opacity?: unknown; transform?: unknown}) =>
+          style?.opacity !== undefined && style?.transform !== undefined,
+      );
+      return (
+        motion.opacity.value === 1 && motion.transform[0].translateY.value === 0
+      );
+    }),
+  ).toBe(true);
+});
+
+test('makes the send circle visually enabled only for a sendable draft', async () => {
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+  const send = () =>
+    renderer.root.find(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityLabel === 'Send message',
+    );
+  expect(JSON.stringify(send().props.style({pressed: false}))).not.toContain(
+    '"backgroundColor":"#ffffff","opacity":1',
+  );
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Ask Omi')
+      .props.onChangeText('Sendable');
+  });
+  expect(JSON.stringify(send().props.style({pressed: false}))).toContain(
+    '"backgroundColor":"#ffffff","opacity":1',
+  );
+});
+
+test('uses opacity-only entrance motion for a new message when motion is reduced', async () => {
+  mockReduceMotion = true;
+  mockBackend.request.mockImplementation(async request => {
+    if (request.method === 'POST') {
+      const body = JSON.parse(request.body ?? '');
+      return {
+        id: request.id,
+        status: 201,
+        body: JSON.stringify({
+          message: chatMessage(body.id, body.text, 'human', null),
+          generation: {id: 'reduced-generation'},
+        }),
+      };
+    }
+    return mockBackendResponse(request);
+  });
+  mockBackend.generationEvents.mockImplementation(() => new Promise(() => {}));
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Ask Omi')
+      .props.onChangeText('Reduced motion message');
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send message')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  const newRow = renderer.root.find(
+    node =>
+      String(node.type) === 'AnimatedView' &&
+      Array.isArray(node.props.style) &&
+      node.props.style[0]?.width === '100%',
+  );
+  const motion = newRow.props.style.find(
+    (style: {opacity?: unknown; transform?: unknown}) =>
+      style?.opacity !== undefined && style?.transform !== undefined,
+  );
+  expect(motion.opacity.value).toBe(0);
+  expect(motion.transform[0].translateY.value).toBe(0);
+  expect(Animated.timing).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({duration: 1, toValue: 1}),
+  );
+});
+
 test('offers durable stop while a rewritten-backend generation is active', async () => {
   let finishGeneration!: (value: MockResponse) => void;
   mockBackend.generationEvents.mockImplementation(
@@ -1541,6 +1736,19 @@ test('renders a local echo immediately and replaces it in place canonically', as
         String(node.type) === 'Text' && node.props.children === 'Local echo',
     ),
   ).toHaveLength(1);
+  expect(mockChatScrollToEnd).toHaveBeenCalledWith({animated: true});
+  mockChatScrollToEnd.mockClear();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Chat scroll region')
+      .props.onScroll({
+        nativeEvent: {
+          contentOffset: {y: 0},
+          contentSize: {height: 1200},
+          layoutMeasurement: {height: 500},
+        },
+      });
+  });
 
   await ReactTestRenderer.act(async () => {
     finishGeneration({
@@ -1551,6 +1759,7 @@ test('renders a local echo immediately and replaces it in place canonically', as
     await Promise.resolve();
     await Promise.resolve();
   });
+  expect(mockChatScrollToEnd).not.toHaveBeenCalled();
   const text = renderer.root
     .findAll(node => String(node.type) === 'Text')
     .map(node => node.props.children);
@@ -1658,9 +1867,17 @@ test('retains and visibly distinguishes a cancelled assistant response', async (
       String(node.type) === 'Text' &&
       node.props.children === 'Retained partial',
   );
-  expect(partial.props.style).toEqual(
-    expect.arrayContaining([expect.objectContaining({opacity: 0.72})]),
-  );
+  expect(partial).toBeDefined();
+  expect(
+    renderer.root.findAll(
+      node =>
+        String(node.type) === 'View' &&
+        Array.isArray(node.props.style) &&
+        node.props.style.some(
+          (style: {opacity?: number}) => style?.opacity === 0.72,
+        ),
+    ),
+  ).not.toHaveLength(0);
   expect(JSON.stringify(renderer.toJSON())).toContain('Response stopped');
 });
 
