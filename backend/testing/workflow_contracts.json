@@ -20,6 +20,11 @@
           "reason": "Existing app-key grant lookup tuple; covered by memory authorization tests until the response contract is migrated."
         },
         {
+          "path": "backend/utils/memory/memory_service.py",
+          "function": "read_scan_page",
+          "reason": "Retired offset-scan kept as a fail-loud stub; migrate to dual keyset streams when touched."
+        },
+        {
           "path": "backend/utils/memory_ingestion/pipeline.py",
           "function": "_redact_input",
           "reason": "Existing pipeline stage contract; covered by memory ingestion contract tests until migrated."
