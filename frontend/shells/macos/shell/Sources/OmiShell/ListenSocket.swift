@@ -31,13 +31,27 @@ struct ListenSocketPreparedRequest {
 }
 
 enum ListenPreflightPolicy {
-  static func canOpen(permission: AVAuthorizationStatus, inputAvailable: Bool) -> Bool {
-    permission == .authorized && inputAvailable
+  static func canOpen(
+    permission: AVAuthorizationStatus, inputAvailable: Bool, evidenceAudioEnabled: Bool = false
+  ) -> Bool {
+    // Consumer evidence injects deterministic PCM over the authenticated
+    // socket. Real microphone TCC is not the capture path, so it must not
+    // block the journey that already opted into synthetic audio.
+    if evidenceAudioEnabled { return true }
+    return permission == .authorized && inputAvailable
   }
 
   static func payload(
-    permission: AVAuthorizationStatus, inputAvailable: Bool
+    permission: AVAuthorizationStatus, inputAvailable: Bool, evidenceAudioEnabled: Bool = false
   ) -> [String: Any] {
+    if evidenceAudioEnabled {
+      return [
+        "permission": "granted",
+        "deviceState": "available",
+        "deviceLabel": "Evidence audio",
+        "recovery": NSNull(),
+      ]
+    }
     let permissionState: String
     let recovery: String?
     switch permission {
@@ -179,13 +193,16 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
   private func listenPreflightPayload() -> [String: Any] {
     let hasInput = AVCaptureDevice.default(for: .audio) != nil
     return ListenPreflightPolicy.payload(
-      permission: AVCaptureDevice.authorizationStatus(for: .audio), inputAvailable: hasInput)
+      permission: AVCaptureDevice.authorizationStatus(for: .audio),
+      inputAvailable: hasInput,
+      evidenceAudioEnabled: evidenceAudioEnabled)
   }
 
   private func listenPreflightCanOpen() -> Bool {
     ListenPreflightPolicy.canOpen(
       permission: AVCaptureDevice.authorizationStatus(for: .audio),
-      inputAvailable: AVCaptureDevice.default(for: .audio) != nil)
+      inputAvailable: AVCaptureDevice.default(for: .audio) != nil,
+      evidenceAudioEnabled: evidenceAudioEnabled)
   }
   private lazy var session: URLSession = {
     let configuration = URLSessionConfiguration.ephemeral

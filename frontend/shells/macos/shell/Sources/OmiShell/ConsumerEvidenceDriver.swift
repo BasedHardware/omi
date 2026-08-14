@@ -12,6 +12,7 @@ final class ConsumerEvidenceDriver {
   private var pollTimer: Timer?
   private var routeDriveState = ConsumerEvidenceRouteDriveState()
   private(set) var failed = false
+  private var failFinished = false
 
   init(collector: ConsumerEvidenceCollector, baseURL: URL) {
     self.collector = collector
@@ -30,15 +31,30 @@ final class ConsumerEvidenceDriver {
     schedulePoll()
   }
 
+  func pageDidFail(_ navigation: WKNavigation?, error: Error) {
+    let route = currentRouteName()
+    fail("navigation failed on \(route): \(error.localizedDescription)")
+  }
+
+  func contentProcessDidTerminate() {
+    fail("WKWebView content process terminated on \(currentRouteName())")
+  }
+
   func teardown() {
     pollTimer?.invalidate()
     pollTimer = nil
     collector.teardown()
   }
 
+  private func currentRouteName() -> String {
+    guard routeIndex < ConsumerEvidenceRoute.allCases.count else { return "complete" }
+    return ConsumerEvidenceRoute.allCases[routeIndex].rawValue
+  }
+
   private func loadCurrentRoute() {
     guard let controller, routeIndex < ConsumerEvidenceRoute.allCases.count else { return }
     let route = ConsumerEvidenceRoute.allCases[routeIndex]
+    FileHandle.standardError.write(Data("CONSUMER-EVIDENCE: begin \(route.rawValue)\n".utf8))
     guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
       fail("cannot construct evidence route URL")
       return
@@ -128,6 +144,8 @@ final class ConsumerEvidenceDriver {
         do {
           let observation = try RenderedConsumerObservation.decodeRenderedJSON(data)
           try self.collector.accept(observation, expected: expected)
+          FileHandle.standardError.write(
+            Data("CONSUMER-EVIDENCE: accepted \(expected.rawValue)\n".utf8))
           self.routeIndex += 1
           if self.routeIndex == ConsumerEvidenceRoute.allCases.count {
             try self.collector.finish()
@@ -149,13 +167,57 @@ final class ConsumerEvidenceDriver {
   private func fail(_ reason: String) {
     guard !failed else { return }
     failed = true
+    pollTimer?.invalidate()
+    pollTimer = nil
     routeDriveState.failCurrentRoute()
-    teardown()
+    let route = currentRouteName()
     FileHandle.standardError.write(Data("CONSUMER-EVIDENCE: FAIL \(reason)\n".utf8))
-    if ProcessInfo.processInfo.environment["OMI_CONSUMER_EVIDENCE_EXIT"] == "1" {
-      Darwin.exit(1)
+    let finish: () -> Void = { [weak self] in
+      guard let self, !self.failFinished else { return }
+      self.failFinished = true
+      self.teardown()
+      FileHandle.standardError.synchronizeFile()
+      if ProcessInfo.processInfo.environment["OMI_CONSUMER_EVIDENCE_EXIT"] == "1" {
+        Darwin.exit(1)
+      }
     }
+    guard let controller else {
+      finish()
+      return
+    }
+    controller.webView.evaluateJavaScript(Self.abortSnapshotScript) { value, error in
+      MainActor.assumeIsolated {
+        let snapshot = value as? String ?? "unavailable"
+        let jsError = error.map { $0.localizedDescription } ?? "none"
+        FileHandle.standardError.write(
+          Data("CONSUMER-EVIDENCE: abort-at \(route) snapshot=\(snapshot) jsError=\(jsError)\n".utf8)
+        )
+        finish()
+      }
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { finish() }
   }
+
+  /// Bounded DOM snapshot for a named abort. Dataset flags only — never inner
+  /// text, tokens, or a JavaScript-provided success boolean.
+  private static let abortSnapshotScript = #"""
+    (() => {
+      const e = document.querySelector("main[data-production-shell='true']");
+      if (!e) return JSON.stringify({productionShell:false});
+      const button = e.querySelector("[data-consumer-action='start-listen']");
+      return JSON.stringify({
+        productionShell: true,
+        route: e.dataset.route || null,
+        surfaceState: e.dataset.surfaceState || null,
+        qaFixture: e.dataset.qaFixture || null,
+        captureKind: e.dataset.captureKind || null,
+        semantic: e.dataset.consumerSemantic || null,
+        transcriptPresent: e.dataset.consumerTranscript !== undefined,
+        startListenPresent: Boolean(button),
+        startListenDisabled: button ? Boolean(button.disabled) : null
+      });
+    })()
+    """#
 
   /// Reads only the bounded semantic attributes on the currently rendered
   /// production root. It never accepts launch intent, arbitrary DOM text, a

@@ -210,6 +210,10 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
   private var tornDown = false
   var onCommittedURL: ((URL) -> Void)?
   var onFinishedNavigation: ((WKNavigation?) -> Void)?
+  var onFailedNavigation: ((WKNavigation?, Error) -> Void)?
+  var onContentProcessTerminated: (() -> Void)?
+  private let captureWebViewConsole: Bool
+  private static let consoleHandlerName = "omiConsole"
 
   init(
     handlers: NativeHandlers, frame: NSRect, loadURL: URL,
@@ -222,6 +226,8 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
     self.listen = listen
     self.chatStream = chatStream
     self.chatAttachmentStaging = chatAttachmentStaging
+    self.captureWebViewConsole =
+      ProcessInfo.processInfo.environment["OMI_CONSUMER_EVIDENCE_PATH"]?.isEmpty == false
     let config = WKWebViewConfiguration()
     if ephemeral {
       // Fixture/semantic automation must not read or mutate the signed-in
@@ -257,6 +263,35 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
       config.userContentController.addScriptMessageHandler(
         chatAttachmentStaging, contentWorld: .page,
         name: ChatAttachmentStagingHandler.channel)
+    }
+    if captureWebViewConsole {
+      config.userContentController.add(self, name: Self.consoleHandlerName)
+      config.userContentController.addUserScript(
+        WKUserScript(
+          source: """
+            (() => {
+              const send = (level, parts) => {
+                try {
+                  const message = Array.from(parts, (part) => {
+                    if (typeof part === 'string') return part;
+                    try { return JSON.stringify(part); } catch { return String(part); }
+                  }).join(' ').slice(0, 512);
+                  window.webkit.messageHandlers.omiConsole.postMessage({level: String(level), message});
+                } catch (e) {}
+              };
+              for (const level of ['error', 'warn', 'info']) {
+                const original = console[level];
+                console[level] = function() {
+                  send(level, arguments);
+                  return original.apply(console, arguments);
+                };
+              }
+              window.addEventListener('error', (event) => send('error', [event.message]));
+              window.addEventListener('unhandledrejection', (event) => send('error', [String(event.reason)]));
+            })();
+            """,
+          injectionTime: .atDocumentStart,
+          forMainFrameOnly: false))
     }
     webView.navigationDelegate = self
     if #available(macOS 13.3, *) { webView.isInspectable = true }
@@ -294,6 +329,9 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
       forName: BridgeHttpHandler.channel, contentWorld: .page)
     content.removeScriptMessageHandler(
       forName: ChatAttachmentStagingHandler.channel, contentWorld: .page)
+    if captureWebViewConsole {
+      content.removeScriptMessageHandler(forName: Self.consoleHandlerName)
+    }
     webView.navigationDelegate = nil
   }
 
@@ -304,6 +342,13 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
   func userContentController(
     _ controller: WKUserContentController, didReceive message: WKScriptMessage
   ) {
+    if message.name == Self.consoleHandlerName {
+      let body = message.body as? [String: Any]
+      let level = body?["level"] as? String ?? "log"
+      let text = String((body?["message"] as? String ?? "").prefix(512))
+      FileHandle.standardError.write(Data("WEBVIEW-CONSOLE: \(level) \(text)\n".utf8))
+      return
+    }
     guard let dict = message.body as? [String: Any],
       let raw = try? JSONSerialization.data(withJSONObject: dict)
     else { return }
@@ -326,6 +371,12 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
   }
 
   func webView(_ webView: WKWebView, didFailProvisionalNavigation nav: WKNavigation!, withError e: Error) {
+    FileHandle.standardError.write(
+      Data("WEBVIEW-NAV: provisional-fail \(e.localizedDescription)\n".utf8))
+    if onFailedNavigation != nil {
+      onFailedNavigation?(nav, e)
+      return
+    }
     let html = """
       <body style="font:14px -apple-system;padding:40px;color:#888">
       <h3>Surface not reachable</h3><p>\(redactedURL(loadURL))</p>
@@ -333,6 +384,11 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
       <p>Rebuild with <code>scripts/build-shell.sh</code> (bundles surfaces dist), then relaunch.</p></body>
       """
     webView.loadHTMLString(html, baseURL: nil)
+  }
+
+  func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError e: Error) {
+    FileHandle.standardError.write(Data("WEBVIEW-NAV: fail \(e.localizedDescription)\n".utf8))
+    onFailedNavigation?(navigation, e)
   }
 
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
@@ -353,9 +409,11 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
   }
 
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+    FileHandle.standardError.write(Data("WEBVIEW-NAV: content-process-terminated\n".utf8))
     listen?.cancelAll()
     chatStream?.cancelAll()
     chatAttachmentStaging?.cancelAll()
+    onContentProcessTerminated?()
   }
 }
 
@@ -565,6 +623,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onFinishedNavigation = { [weak driver] navigation in
           driver?.pageDidFinish(navigation)
         }
+        controller.onFailedNavigation = { [weak driver] navigation, error in
+          driver?.pageDidFail(navigation, error: error)
+        }
+        controller.onContentProcessTerminated = { [weak driver] in
+          driver?.contentProcessDidTerminate()
+        }
       } catch {
         FileHandle.standardError.write(
           Data("CONSUMER-EVIDENCE: FAIL \(error)\n".utf8))
@@ -727,7 +791,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     loopback?.stop()
   }
 
-  func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
+  func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool {
+    // Evidence owns its own exit. A last-window-closed terminate would abort
+    // the journey without naming the step.
+    if env["OMI_CONSUMER_EVIDENCE_PATH"]?.isEmpty == false { return false }
+    return true
+  }
 
   /// Standard menu bar: proves Cmd-C/V/A, Cmd-R reload, and services reach the webview.
   private func installMenu() {
