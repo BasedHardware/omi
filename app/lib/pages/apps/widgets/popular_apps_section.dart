@@ -194,7 +194,12 @@ class PopularAppsSection extends StatelessWidget {
                       child: Center(
                         child: Text(
                           app.enabled ? context.l10n.open : 'Enable',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
+                          // Black on the white "Enable" fill, white on the grey "Open" one.
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: app.enabled ? Colors.white : Colors.black,
+                          ),
                         ),
                       ),
                     ),

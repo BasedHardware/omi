@@ -143,7 +143,8 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          // The button surface is now white, so a white spinner would be invisible.
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
                         ),
                       )
                     : Text(context.l10n.send),

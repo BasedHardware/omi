@@ -877,6 +877,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                 }
                                               },
                                               color: Colors.white,
+                                              // AnimatedLoadingButton defaults both to white; on a
+                                              // white surface the label and spinner vanish.
+                                              textStyle: const TextStyle(fontSize: 16, color: Colors.black),
+                                              loaderColor: Colors.black,
                                             )
                                           : AnimatedLoadingButton(
                                               width: 75,
@@ -909,6 +913,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                 }
                                               },
                                               color: Colors.white,
+                                              // AnimatedLoadingButton defaults both to white; on a
+                                              // white surface the label and spinner vanish.
+                                              textStyle: const TextStyle(fontSize: 16, color: Colors.black),
+                                              loaderColor: Colors.black,
                                             )),
                             ],
                           ),
@@ -1875,7 +1883,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                       width: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        // The button surface is now white, so a white spinner would be invisible.
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
                       ),
                     )
                   : Text(
