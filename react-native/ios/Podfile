@@ -42,6 +42,9 @@ target 'RnRuntime' do
     # fmt 11's compile-time format checks are incompatible with the
     # Xcode Beta C++20 consteval implementation used by this host.
     installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |build_configuration|
+        build_configuration.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+      end
       next unless target.name == 'fmt'
 
       target.build_configurations.each do |build_configuration|
