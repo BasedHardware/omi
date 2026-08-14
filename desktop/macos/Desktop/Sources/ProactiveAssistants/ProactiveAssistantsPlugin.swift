@@ -904,7 +904,10 @@ public class ProactiveAssistantsPlugin: NSObject {
       idleSeconds: idleSeconds,
       now: now,
       forceHeartbeatCapture: SuggestionPacing.forcesHeartbeatCapture(
-        frequencyLevel: NotificationService.currentFrequencyLevel())
+        frequencyLevel: NotificationService.currentFrequencyLevel()),
+      idleThresholdOverride: SuggestionPacing.captureIdleThreshold(
+        frequencyLevel: NotificationService.currentFrequencyLevel(),
+        base: captureTrigger.idleThreshold)
     ) {
     case .skip:
       return

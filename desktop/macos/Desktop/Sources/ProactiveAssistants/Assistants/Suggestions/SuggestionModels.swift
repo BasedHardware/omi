@@ -561,6 +561,22 @@ enum SuggestionPacing {
     frequencyLevel >= maximumLevel
   }
 
+  /// The cooldown baseline for a gate check. At Maximum, arriving in a NEW context
+  /// (anchor newer than the last evaluation) waives the remaining cooldown — "open
+  /// TikTok, nudge in seconds" must hold even if a nudge fired somewhere else moments
+  /// ago. Staying in the same context keeps the anchor older than the last evaluation,
+  /// so repeats remain paced by the cooldown, and the daily budget still bounds spend.
+  static func effectiveLastEvaluation(
+    lastEvaluationAt: Date?,
+    anchor: Date?,
+    frequencyLevel: Int
+  ) -> Date? {
+    guard frequencyLevel >= maximumLevel, let last = lastEvaluationAt, let anchor else {
+      return lastEvaluationAt
+    }
+    return anchor > last ? nil : last
+  }
+
   /// Whether same-context heartbeats force a full capture (no preview-similarity skip,
   /// no backoff growth). Maximum's cadence needs a real frame every base heartbeat even
   /// on a mostly-static page; calm levels keep the cost-saving preview path.

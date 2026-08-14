@@ -371,9 +371,12 @@ struct ProactiveCaptureTrigger {
     windowTitle: String?,
     idleSeconds: TimeInterval,
     now: Date,
-    forceHeartbeatCapture: Bool = false
+    forceHeartbeatCapture: Bool = false,
+    idleThresholdOverride: TimeInterval? = nil
   ) -> Decision {
-    if idleSeconds >= idleThreshold {
+    // The override exists for Maximum notification level, whose 300s window would
+    // otherwise be defeated by this trigger's own 60s check.
+    if idleSeconds >= (idleThresholdOverride ?? idleThreshold) {
       // User is idle: keep last context but do not capture.
       return .skip
     }

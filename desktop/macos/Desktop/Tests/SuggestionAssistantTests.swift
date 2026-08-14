@@ -846,6 +846,50 @@ final class SuggestionPacingTests: XCTestCase {
     }
   }
 
+  /// Fresh context at Maximum waives leftover cooldown; same-context repeats stay paced,
+  /// and calm levels never waive.
+  func testMaximumWaivesCooldownOnlyForFreshContext() {
+    let last = Date(timeIntervalSince1970: 1_000_000)
+    let freshAnchor = last.addingTimeInterval(5)
+    let staleAnchor = last.addingTimeInterval(-40)
+    XCTAssertNil(
+      SuggestionPacing.effectiveLastEvaluation(
+        lastEvaluationAt: last, anchor: freshAnchor, frequencyLevel: 5))
+    XCTAssertEqual(
+      SuggestionPacing.effectiveLastEvaluation(
+        lastEvaluationAt: last, anchor: staleAnchor, frequencyLevel: 5), last)
+    XCTAssertEqual(
+      SuggestionPacing.effectiveLastEvaluation(
+        lastEvaluationAt: last, anchor: freshAnchor, frequencyLevel: 3), last)
+  }
+
+  /// The trigger's own idle check must honor the level-aware window: at Maximum with
+  /// 120s of stillness a heartbeat capture is still reachable; calm levels skip at 60s.
+  func testMaximumIdleOverrideReachesHeartbeatCaptureAtTwoMinutesStill() {
+    var trigger = ProactiveCaptureTrigger(idleThreshold: 60, heartbeatInterval: 9)
+    let t0 = Date(timeIntervalSince1970: 1_000_000)
+    // Prime the context (first sight of the app is a capture).
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "TikTok", windowTitle: "For You", idleSeconds: 0, now: t0,
+        forceHeartbeatCapture: true,
+        idleThresholdOverride: SuggestionPacing.captureIdleThreshold(frequencyLevel: 5, base: 60)),
+      .capture)
+    // Two minutes of stillness later: Maximum still captures on heartbeat…
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "TikTok", windowTitle: "For You", idleSeconds: 120, now: t0.addingTimeInterval(10),
+        forceHeartbeatCapture: true,
+        idleThresholdOverride: SuggestionPacing.captureIdleThreshold(frequencyLevel: 5, base: 60)),
+      .capture)
+    // …while a calm level's unchanged 60s threshold skips.
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "TikTok", windowTitle: "For You", idleSeconds: 120, now: t0.addingTimeInterval(20),
+        idleThresholdOverride: SuggestionPacing.captureIdleThreshold(frequencyLevel: 3, base: 60)),
+      .skip)
+  }
+
   /// Passive watching produces no input; Maximum keeps capture alive for five minutes of
   /// stillness while calmer levels keep the long-standing 60s gate.
   func testMaximumExtendsCaptureIdleWindowOnly() {

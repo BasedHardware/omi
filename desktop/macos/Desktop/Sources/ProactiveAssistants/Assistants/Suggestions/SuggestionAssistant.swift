@@ -144,7 +144,10 @@ actor SuggestionAssistant: ProactiveAssistant {
       isEnabled: enabled,
       isAppExcluded: excluded,
       now: now,
-      lastEvaluationAt: lastEvaluationAt,
+      lastEvaluationAt: SuggestionPacing.effectiveLastEvaluation(
+        lastEvaluationAt: lastEvaluationAt,
+        anchor: pendingContextSwitchAt,
+        frequencyLevel: level),
       cooldown: cooldown,
       dwell: dwell,
       requiredDwell: SuggestionPacing.requiredDwell(frequencyLevel: level),
