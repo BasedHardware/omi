@@ -77,14 +77,16 @@ enum RewindWindow {
         let model = RewindModel(store: store)
         Self.model = model
 
-        let window = NSWindow(
+        let window = RewindWindowFrame(
             contentRect: centredFrame(on: screen),
             // Titled and resizable: unlike onboarding, this is a document-ish window the user keeps
             // open, moves, and resizes. The title bar is transparent and the title hidden so the
             // spec's centred mode title is the only thing that reads as one.
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-            backing: .buffered,
-            defer: false)
+            // **Escape closes it**, and the route is an init parameter so there is no such thing as a
+            // timeline built without one — see `RewindWindowFrame`. `dismiss()` rather than `close()`,
+            // so the loaded day survives for the next open exactly as the X leaves it.
+            onEscape: { dismiss() })
         window.isMovableByWindowBackground = true
         window.minSize = minimumSize
         window.isReleasedWhenClosed = false
@@ -233,4 +235,69 @@ enum RewindWindow {
             width: size.width,
             height: size.height)
     }
+}
+
+// MARK: - Window
+
+/// The timeline's window, so that **Escape closes it**.
+///
+/// The reported dead end, and this window is the one in the screenshot: *"Every window that gets
+/// launched by a hotkey should also be dismissed by the same hotkey, right now I have no way to exit
+/// this without clicking X."* It is `.titled` and `.closable`, so the X works and so does ⌘W — and
+/// Escape, which is the first key anyone reaches for on a surface filling their display, did nothing at
+/// all. The panel this window opens *from* has taken Escape since it shipped (`SearchPanel`), so a user
+/// is taught the key on one surface and then finds it dead on the next one.
+///
+/// **In `sendEvent`, matching `SearchPanel` and `TutorialOverlayWindow`.** The content is an
+/// `NSHostingView`: SwiftUI's own key handling sits between this window and every control in it, and a
+/// `cancelOperation:` that only runs if nothing in that tree claims Escape first is a promise this file
+/// cannot keep. A window only receives key events while it is key, which bounds the whole of this to the
+/// window the user is actually looking at.
+///
+/// **The date pill's popover is the one thing this could have taken a key from, and it does not need a
+/// case.** `NSPopover` puts its content in a child window; while that window is key, Escape is dispatched
+/// there and the popover closes on it, so this override is never reached. If it declines key status the
+/// timeline closes instead — and takes the popover with it, because `orderOut` carries child windows —
+/// which is the same thing ⌘W has always done and leaves nothing stranded either way.
+///
+/// Module-internal rather than file-private only so `TimelineEscapeTests` can press Escape on a real
+/// one, for the reason `TutorialOverlayWindow` is: the one way out of a window is exactly the rule that
+/// has to be executed rather than read, since reading it is what let its absence ship.
+final class RewindWindowFrame: NSWindow {
+
+    /// What Escape runs. Handed in by whoever builds the window rather than reached for from here — the
+    /// window has no business knowing which type owns it.
+    ///
+    /// **An init parameter rather than `TutorialOverlayWindow`'s settable optional**, which is the whole
+    /// of the difference between this and that card: an optional leaves "a timeline with no way out" a
+    /// constructible state, and a `present()` that quietly stopped assigning it would put the reported
+    /// dead end straight back with every test still green. There is no such window to build now.
+    private let onEscape: () -> Void
+
+    init(contentRect: NSRect, styleMask: NSWindow.StyleMask, onEscape: @escaping () -> Void) {
+        self.onEscape = onEscape
+        super.init(contentRect: contentRect, styleMask: styleMask, backing: .buffered, defer: false)
+    }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, event.keyCode == Self.escapeKeyCode, !aFieldEditorIsActive {
+            MainActor.assumeIsolated { onEscape() }
+            return
+        }
+        super.sendEvent(event)
+    }
+
+    /// Whether text is being edited right now.
+    ///
+    /// Escape means *abandon this edit* before it means *close this window* — that ordering is macOS's,
+    /// not ours, and a window that swallowed the key ahead of a field editor would take the only way
+    /// out of a half-typed value. Nothing in the timeline is editable today; the guard is here because
+    /// `sendEvent` intercepts before the responder chain runs, so the first editable control added to
+    /// this window would otherwise lose Escape silently.
+    private var aFieldEditorIsActive: Bool {
+        (firstResponder as? NSTextView)?.isFieldEditor == true
+    }
+
+    /// Named rather than `53` at the point of use, like every other reading of this key in the package.
+    private static let escapeKeyCode: UInt16 = 53
 }

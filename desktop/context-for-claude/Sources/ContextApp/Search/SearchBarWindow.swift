@@ -379,13 +379,38 @@ final class SearchBarWindow {
 
     static var isVisible: Bool { current?.isVisible ?? false }
 
-    static func toggle(prefill: String = "") {
-        if isVisible {
-            dismiss()
-        } else {
-            present(prefill: prefill)
-        }
+    /// **What the panel really is right now**, for the chord that toggles it.
+    ///
+    /// Read off `NSWindow` on every ask rather than kept as a flag: `current` survives a close
+    /// (`isReleasedWhenClosed = false` everywhere in this app), so "we have a window" and "there is a
+    /// panel on screen" are different facts and only the second one is the question. `isKeyWindow`
+    /// rather than `NSApp.isActive` for the reason `HotkeyToggle.Presence` gives at length — this panel
+    /// holds the keyboard while the app is not the active application, by design.
+    static var presence: HotkeyToggle.Presence {
+        guard let window = current, window.isVisible else { return .closed }
+        return HotkeyToggle.Presence(isOnScreen: true, hasKeyboardFocus: window.isKeyWindow)
     }
+
+    /// **The chord that opens this panel is the chord that closes it.**
+    ///
+    /// - Parameter presence: how to find out what the panel is doing. `nil` means the real read above,
+    ///   resolved in the body rather than as a default argument because default arguments are evaluated
+    ///   outside the main actor and `presence` is isolated to it (the same reason
+    ///   `LiveShortcutBindings.init` resolves its registry inside). A caller overrides it only to assert
+    ///   the three transitions, none of which a headless process can produce — a test cannot make a
+    ///   window key.
+    static func hotkeyToggle(
+        presence: (() -> HotkeyToggle.Presence)? = nil
+    ) -> HotkeyToggle {
+        HotkeyToggle(
+            presence: presence ?? { Self.presence },
+            show: { present() },
+            dismiss: { dismiss() })
+    }
+
+    /// What a global shortcut runs. Both of this app's chords land here, because both open this window.
+    @discardableResult
+    static func toggle() -> HotkeyPress { hotkeyToggle().press() }
 
     /// Closes the bar and tells everyone who was watching it that it is gone.
     ///

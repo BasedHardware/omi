@@ -268,30 +268,12 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             // because nothing about onboarding may depend on audio succeeding.
             Sound.prepare()
 
-            // **Both chords reach the Activity panel, and that is the product decision rather than a
-            // duplicated case.** Both Command keys together is this app's advertised way in, and
-            // what a way in has to land on is the surface the app opens on — Activity. It used to
-            // land on the timeline, from when the timeline *was* the app's one real window; leaving
-            // it there would have made the gesture the product teaches the one gesture that does not
-            // take you to the app. Double-tap Command-Shift is the same surface as a toggle.
-            //
             // Both are rebindable, and both simply do not fire while Accessibility is ungranted — a
             // global monitor cannot see keys without it, and pretending to be armed would be worse.
-            // The timeline is reached from a moment inside Activity, and from the menu bar's own row.
+            // What each one does is `shortcutFired`; the toggle it acts on is built here, once, so
+            // the mapping below never has to know how to find a window.
             GlobalShortcuts.shared.start { action in
-                switch action {
-                case .openSearch:
-                    // `toggle`, because the surface is a Spotlight panel again: a chord that puts a
-                    // floating overlay on screen is the chord that takes it away, and a second press
-                    // that re-focused a panel already in front of the user would be a keystroke with
-                    // nothing to show for it.
-                    SearchBarWindow.toggle()
-                case .openActivity:
-                    // This is also what the tutorial's chord beat rides on: it observes the shortcut
-                    // rather than opening anything itself, so the window the user learns to summon is
-                    // opened here, by their own keypress, exactly as it will be forever after.
-                    Self.openActivities()
-                }
+                Self.shortcutFired(action, on: SearchBarWindow.hotkeyToggle())
             }
 
             // …and "both rebindable" is only true because of this line. Settings' two recorders talk
@@ -305,6 +287,43 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             // What a launch puts on screen is the same question the Dock icon asks, so it is asked
             // in the same place — see `surfaceSomethingForTheUser`.
             Self.surfaceSomethingForTheUser()
+        }
+    }
+
+    /// **What a global shortcut does**, as a function of the chord and the window it toggles.
+    ///
+    /// **Both chords reach the Activity panel, and that is the product decision rather than a duplicated
+    /// case.** Both Command keys together is this app's advertised way in, and what a way in has to land
+    /// on is the surface the app opens on — Activity. It used to land on the timeline, from when the
+    /// timeline *was* the app's one real window; leaving it there would have made the gesture the
+    /// product teaches the one gesture that does not take you to the app.
+    ///
+    /// **Both toggle, and that is the reported fix rather than a tidy-up.** `openActivity` called
+    /// `present`, on the reasoning that a launch and a Dock click must never close anything — true, and
+    /// not a fact about a *keystroke*: *"Every window that gets launched by a hotkey should also be
+    /// dismissed by the same hotkey, right now I have no way to exit this without clicking X."* So the
+    /// distinction moved to where it belongs. This is the keyboard, and it toggles; `openActivities()`
+    /// is what launch, the Dock icon and the menu row still call, and it still only ever opens. A window
+    /// behind another application comes forward rather than closing (`HotkeyToggle`), so a second press
+    /// is never a keystroke with nothing to show for it.
+    ///
+    /// The tutorial's chord beat rides on this: it observes the shortcut rather than opening anything
+    /// itself, so the window the user learns to summon is opened here, by their own keypress, exactly as
+    /// it will be forever after.
+    ///
+    /// Named and `static` rather than left inline in `start(onTrigger:)`, because that is where the
+    /// defect could hide: a mapping written into a closure inside `applicationDidFinishLaunching` is one
+    /// nothing can ask what it does with a *second* press. The window arrives as a parameter for the
+    /// same reason — pressing the real one from a test process would put a floating panel on screen.
+    ///
+    /// One case for both, and adding a third action still fails to compile here, which is the property
+    /// worth keeping: a new shortcut must not silently inherit this window.
+    @MainActor
+    @discardableResult
+    static func shortcutFired(_ action: GlobalShortcuts.Action, on window: HotkeyToggle) -> HotkeyPress {
+        switch action {
+        case .openActivity, .openSearch:
+            return window.press()
         }
     }
 
@@ -406,10 +425,13 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
 
     /// **The Activity panel**, opened the one way it is ever opened.
     ///
-    /// What "show me the app" means: launch, the Dock icon, the ⌘ + ⌘ chord and the menu bar's row all
-    /// arrive here. `present` and never `toggle`, unlike the search chord: none of these four is a
-    /// keystroke a user repeats, and a Dock click that closed the panel would be a gesture that does
-    /// the opposite of what it says.
+    /// What "show me the app" means: launch, the Dock icon and the menu bar's row all arrive here.
+    /// `present` and never `toggle`: none of these three is a keystroke a user repeats, and a Dock
+    /// click that closed the panel would be a gesture that does the opposite of what it says.
+    ///
+    /// **The ⌘ + ⌘ chord used to arrive here and deliberately no longer does.** A keystroke *is*
+    /// repeated, and one that could only ever open left the panel with no way off the keyboard — see
+    /// the shortcut handler above. The chord toggles; these three do not.
     ///
     /// No store guard, unlike `openTimeline` below. The surface asks for the capture database on
     /// every read and waits for it to open, so there is nothing to decline over — and a launch that
