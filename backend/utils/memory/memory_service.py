@@ -3,7 +3,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, Iterable, Iterator, List, NoReturn, Optional, Tuple, cast
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -593,7 +593,7 @@ class HistoricalMemoryAdapter:
         limit: int = 100,
         scan_offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
-    ) -> Tuple[List[Optional[HistoricalMemoryRecord]], int, bool]:
+    ) -> NoReturn:
         """Retired offset scan — cursor paging must use dual keyset streams.
 
         Kept only so accidental callers fail loudly instead of silently
