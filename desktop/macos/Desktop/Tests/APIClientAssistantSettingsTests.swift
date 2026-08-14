@@ -5,10 +5,19 @@ import XCTest
 final class APIClientAssistantSettingsTests: XCTestCase {
 
   @MainActor
-  func testShippedTaskPromptFitsBackendSyncContract() {
-    XCTAssertLessThanOrEqual(
-      TaskAssistantSettings.defaultAnalysisPrompt.count,
+  func testShippedTaskPromptExceedsBackendBoundAndIsOmittedFromSync() {
+    // The shipped default task prompt has been over the backend's 10k-code-point
+    // bound since at least June 2026, so it is deliberately omitted from sync
+    // (partial PATCH semantics) rather than truncated or sent to be 422-rejected.
+    // Raising the bound needs the backend limit deployed first: issue #11481.
+    XCTAssertGreaterThan(
+      TaskAssistantSettings.defaultAnalysisPrompt.unicodeScalars.count,
       TaskAssistantSettings.maximumSyncedAnalysisPromptLength)
+    XCTAssertNil(
+      SettingsSyncManager.promptForSync(
+        TaskAssistantSettings.defaultAnalysisPrompt,
+        assistantName: "task",
+        maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength))
   }
 
   @MainActor
@@ -39,20 +48,18 @@ final class APIClientAssistantSettingsTests: XCTestCase {
 
   @MainActor
   func testEachAssistantPromptUsesItsBackendBound() {
-    let legacyMaximum = 10_000
-    let prompt = String(repeating: "x", count: legacyMaximum + 1)
+    // All three assistants share the backend's 10k bound today; task has no raised
+    // bound until the backend limit ships first (issue #11481).
+    let backendMaximum = 10_000
+    XCTAssertEqual(TaskAssistantSettings.maximumSyncedAnalysisPromptLength, backendMaximum)
+    let prompt = String(repeating: "x", count: backendMaximum + 1)
 
-    XCTAssertNotNil(
-      SettingsSyncManager.promptForSync(
-        prompt,
-        assistantName: "task",
-        maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength))
-    XCTAssertNil(
-      SettingsSyncManager.promptForSync(
-        prompt, assistantName: "insight", maximumLength: legacyMaximum))
-    XCTAssertNil(
-      SettingsSyncManager.promptForSync(
-        prompt, assistantName: "memory", maximumLength: legacyMaximum))
+    for assistant in ["task", "insight", "memory"] {
+      XCTAssertNil(
+        SettingsSyncManager.promptForSync(
+          prompt, assistantName: assistant, maximumLength: backendMaximum),
+        "an oversized \(assistant) prompt must be omitted, not truncated or sent")
+    }
   }
 
   @MainActor

@@ -46,14 +46,16 @@ cleanup_domains+=("$source_domain" "$quiet_target" "$eager_target" "$missing_tar
 
 defaults write "$source_domain" screenAnalysisEnabled -bool true
 defaults write "$source_domain" transcriptionEnabled -bool true
+defaults write "$source_domain" systemAudioCaptureMode -string onlyDuringMeetings
 defaults write "$source_domain" shortcut_askOmiEnabled -bool true
 # Set the hidden kill switch in the source to verify it is NOT copied to targets.
 defaults write "$source_domain" disableSystemAudioCapture -bool true
 
 "$MACOS_DIR/scripts/omi-settings-seed.sh" "$quiet_target" "$source_domain" >"$prefs_home/omi-settings-seed-quiet.out"
 assert_defaults "$quiet_target" screenAnalysisEnabled 1
-assert_defaults "$quiet_target" transcriptionEnabled 0
-assert_defaults "$quiet_target" systemAudioCaptureMode never
+assert_defaults "$quiet_target" audioRecordingMode off
+assert_unset "$quiet_target" transcriptionEnabled
+assert_unset "$quiet_target" systemAudioCaptureMode
 assert_defaults "$quiet_target" devLazyPermissionsEnabled 1
 assert_unset "$quiet_target" screenAnalysisAutoStartFixed_v2
 assert_unset "$quiet_target" screenAnalysisAutoStartFixed_v3
@@ -63,16 +65,17 @@ assert_unset "$quiet_target" hasCompletedFileIndexing
 
 OMI_DEV_EAGER_PERMISSIONS=1 "$MACOS_DIR/scripts/omi-settings-seed.sh" "$eager_target" "$source_domain" >"$prefs_home/omi-settings-seed-eager.out"
 assert_defaults "$eager_target" screenAnalysisEnabled 1
-assert_defaults "$eager_target" transcriptionEnabled 1
+assert_defaults "$eager_target" audioRecordingMode onlyMeetings
 assert_defaults "$eager_target" devLazyPermissionsEnabled 0
 assert_unset "$eager_target" disableSystemAudioCapture
-assert_defaults "$eager_target" systemAudioCaptureMode always
+assert_unset "$eager_target" transcriptionEnabled
+assert_unset "$eager_target" systemAudioCaptureMode
 assert_unset "$eager_target" screenAnalysisAutoStartFixed_v2
 assert_unset "$eager_target" screenAnalysisAutoStartFixed_v3
 
 "$MACOS_DIR/scripts/omi-settings-seed.sh" "$missing_target" "com.omi.missing-source-$$" >"$prefs_home/omi-settings-seed-missing.out"
 assert_defaults "$missing_target" screenAnalysisEnabled 1
-assert_defaults "$missing_target" transcriptionEnabled 0
+assert_defaults "$missing_target" audioRecordingMode off
 assert_defaults "$missing_target" devLazyPermissionsEnabled 1
 
 # Verify eager mode fully undoes quiet defaults when re-seeding the same target.
@@ -86,9 +89,10 @@ cleanup_domains+=("$bare_source")
 defaults write "$bare_source" shortcut_askOmiEnabled -bool true
 OMI_DEV_EAGER_PERMISSIONS=1 "$MACOS_DIR/scripts/omi-settings-seed.sh" "$quiet_then_eager_target" "$bare_source" >/dev/null
 assert_defaults "$quiet_then_eager_target" screenAnalysisEnabled 1
-assert_defaults "$quiet_then_eager_target" transcriptionEnabled 1
+assert_defaults "$quiet_then_eager_target" audioRecordingMode onlyMeetings
 assert_defaults "$quiet_then_eager_target" devLazyPermissionsEnabled 0
-assert_defaults "$quiet_then_eager_target" systemAudioCaptureMode always
+assert_unset "$quiet_then_eager_target" transcriptionEnabled
+assert_unset "$quiet_then_eager_target" systemAudioCaptureMode
 assert_unset "$quiet_then_eager_target" disableSystemAudioCapture
 assert_unset "$quiet_then_eager_target" screenAnalysisAutoStartFixed_v2
 assert_unset "$quiet_then_eager_target" screenAnalysisAutoStartFixed_v3

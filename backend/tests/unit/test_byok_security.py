@@ -334,7 +334,7 @@ class TestChatQuotaBYOKBypass:
         from utils.subscription import enforce_chat_quota
 
         enforce_chat_quota('byok-user-uid')
-        mock_users_db.is_byok_active.assert_called_once_with('byok-user-uid')
+        mock_users_db.is_byok_active.assert_called_once_with('byok-user-uid', firestore_client=None)
 
     @patch('utils.byok.get_byok_key', return_value=None)
     @patch('utils.subscription.users_db')

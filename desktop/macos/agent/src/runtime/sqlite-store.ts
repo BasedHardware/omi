@@ -80,6 +80,7 @@ const CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION = 29;
 const CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_MIGRATION_VERSION = 30;
 const LOCAL_ONLY_JOURNAL_DELIVERY_MIGRATION_VERSION = 31;
 const CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_OWNER_SCOPE_MIGRATION_VERSION = 32;
+const CONVERSATION_TURN_REVISION_TURN_ID_INDEX_MIGRATION_VERSION = 33;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -548,6 +549,9 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_OWNER_SCOPE_MIGRATION_VERSION)) {
       runChatFirstColdStartSequenceReceiptsOwnerScopeMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(CONVERSATION_TURN_REVISION_TURN_ID_INDEX_MIGRATION_VERSION)) {
+      runConversationTurnRevisionTurnIdIndexMigration(this.db, this.nowMs());
     }
   }
 
@@ -3387,6 +3391,35 @@ function runChatFirstColdStartSequenceReceiptsOwnerScopeMigration(
     `);
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_OWNER_SCOPE_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+/// The context snapshot every chat turn waits on joins `conversation_turns` to
+/// `conversation_turn_revisions` on `turn_id` to recover each turn's durable
+/// insertion ordinal. That table is keyed `(conversation_id, turn_seq)`, so
+/// without an index carrying `turn_id` the join can only seek on
+/// `conversation_id` and then walks every revision row of the conversation for
+/// every turn in it - quadratic in conversation length. On an account with
+/// thousands of turns the snapshot query measured 27.65s against the 15s
+/// `get_context_snapshot` contract budget, so every chat turn timed out before
+/// the model was ever queried and the runtime's reply was discarded as late.
+///
+/// The index makes that join an equality seek: the same query measured 0.03s.
+/// It is deliberately additive - the query, its results and their order are
+/// untouched, so the chronology contract documented at the query stays intact.
+function runConversationTurnRevisionTurnIdIndexMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS conversation_turn_revisions_turn_id_idx
+        ON conversation_turn_revisions(conversation_id, turn_id);
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CONVERSATION_TURN_REVISION_TURN_ID_INDEX_MIGRATION_VERSION,
       appliedAtMs,
     );
   });

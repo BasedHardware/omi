@@ -117,6 +117,58 @@ describe("kernel conversation journal", () => {
     fixture.store.close();
   });
 
+  it("materializes a meeting receipt with the exact conversation identity", () => {
+    const fixture = newSurface("main_chat", "chat", "meeting-arrival");
+    const result = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-meeting",
+      continuityKey: "capture:conversation-1",
+      source: "capture_arrival",
+      blocks: [{
+        type: "conversationLink",
+        conversation_id: "conversation-1",
+        summary: "Weekly planning",
+      }],
+      nowMs: 100,
+    });
+
+    expect(result.turn?.contentBlocks).toEqual([{
+      type: "conversationLink",
+      id: expect.any(String),
+      conversationId: "conversation-1",
+      summary: "Weekly planning",
+    }]);
+    expect(result.turn?.conversationId).toBe(fixture.conversationId);
+    expect(result).toMatchObject({
+      accepted: true,
+      duplicate: false,
+      receipt: { intentId: "intent-meeting" },
+    });
+    const duplicate = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-meeting",
+      continuityKey: "capture:conversation-1",
+      source: "capture_arrival",
+      blocks: [{
+        type: "conversationLink",
+        conversation_id: "conversation-1",
+        summary: "Weekly planning",
+      }],
+      nowMs: 101,
+    });
+    expect(duplicate).toMatchObject({
+      accepted: true,
+      duplicate: true,
+      turn: { conversationId: fixture.conversationId },
+      receipt: { intentId: "intent-meeting" },
+    });
+    fixture.store.close();
+  });
+
   it("commits an ordered materialization batch once, stops after its question, and preserves a block-only outbox payload", () => {
     const fixture = newSurface("main_chat", "chat", "chat-first-batch");
     const batch = materializeChatFirstIntents(fixture.store, [

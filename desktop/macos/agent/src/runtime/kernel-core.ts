@@ -8,7 +8,7 @@ import type {
 import type { ContextSnapshotProjection, OutboundMessage, OutboundMessageDraft } from "../protocol.js";
 import { AdapterRegistry } from "./adapter-registry.js";
 import { generateAgentId } from "./sqlite-store.js";
-import { AdapterRuntimeError, failureFromError, type RuntimeFailure } from "./failures.js";
+import { AdapterRuntimeError, attachWorkerRecycle, failureFromError, type RuntimeFailure } from "./failures.js";
 import {
   clearOwnerSurfaceState,
   importLegacyMainChatSessions,
@@ -1255,18 +1255,12 @@ export class KernelCore {
             retryable: Boolean(workerRecovery),
           },
         );
-        const failure = baseFailure && workerRecovery ? {
-          ...baseFailure,
-          userMessage: "The local agent reset its session after an error. Send your message again.",
-          retryable: true,
-          recoveryAction: "worker_recycled" as const,
-          recoveryOutcome: !workerRecovery.stopSucceeded
-            ? "stop_failed" as const
-            : workerRecovery.bindingInvalidationSucceeded
-              ? "recovered" as const
-              : "binding_stale_failed" as const,
-          retryDisposition: "next_send" as const,
-        } : baseFailure;
+        const failure = baseFailure && workerRecovery
+          ? attachWorkerRecycle(baseFailure, {
+            stopSucceeded: workerRecovery.stopSucceeded,
+            bindingInvalidationSucceeded: workerRecovery.bindingInvalidationSucceeded,
+          })
+          : baseFailure;
         this.finishAttemptAndRun({
           sessionId: accepted.session.sessionId,
           runId: accepted.run.runId,

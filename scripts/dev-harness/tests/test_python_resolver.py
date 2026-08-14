@@ -76,6 +76,24 @@ def _as_bash_path(path: Path) -> str:
     return result.stdout.strip()
 
 
+def _git_init(repo: Path) -> None:
+    """Create a fixture repository without re-opening the caller's repository.
+
+    Git exports GIT_DIR and friends to hooks, so this module runs under them
+    whenever the pre-push gate invokes it. Left in place, `git init <fixture>`
+    re-inits the caller's repository instead — which sets `core.bare=true` on a
+    linked-worktree parent and breaks every later `git rev-parse --show-toplevel`
+    in the same push.
+    """
+    env = os.environ.copy()
+    local_vars = subprocess.run(
+        ["git", "rev-parse", "--local-env-vars"], text=True, stdout=subprocess.PIPE, check=True
+    ).stdout.split()
+    for var in local_vars:
+        env.pop(var, None)
+    subprocess.run(["git", "init", "-q", str(repo)], env=env, check=True)
+
+
 def _make_executable(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
@@ -217,7 +235,7 @@ def test_pythonpath_uses_selected_windows_interpreter_separator(tmp_path: Path) 
 def test_make_uses_git_bash_when_bare_bash_resolves_to_wsl(tmp_path: Path) -> None:
     repo = tmp_path / "omi 路径 powershell"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_init(repo)
     shutil.copy2(MAKEFILE, repo / "Makefile")
 
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
@@ -272,7 +290,7 @@ def test_make_uses_git_bash_when_bare_bash_resolves_to_wsl(tmp_path: Path) -> No
 def test_pre_push_singleflight_runs_shell_child_with_native_windows_python(tmp_path: Path) -> None:
     repo = tmp_path / "omi 路径 hook"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_init(repo)
 
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
     resolver.parent.mkdir(parents=True)
@@ -320,7 +338,7 @@ def test_pre_push_singleflight_runs_shell_child_with_native_windows_python(tmp_p
 def test_make_harness_targets_run_resolved_python_from_checkout_with_unicode_and_spaces(tmp_path: Path) -> None:
     repo = tmp_path / "omi 路径 pr-10017 space"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_init(repo)
     shutil.copy2(MAKEFILE, repo / "Makefile")
 
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
@@ -489,7 +507,7 @@ def test_make_harness_does_not_execute_checkout_name_and_resolves_python(tmp_pat
     repo = tmp_path / "omi pr-10017'; touch injected-marker; #"
     marker = repo / "injected-marker"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_init(repo)
     shutil.copy2(MAKEFILE, repo / "Makefile")
 
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
@@ -531,7 +549,7 @@ def test_make_harness_does_not_execute_double_quote_in_checkout_name(tmp_path: P
     repo = tmp_path / 'omi "; touch double-quote-marker; #'
     marker = repo / "double-quote-marker"
     repo.mkdir()
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git_init(repo)
     shutil.copy2(MAKEFILE, repo / "Makefile")
 
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"

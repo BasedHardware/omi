@@ -1,0 +1,90 @@
+# Production telemetry contract inventory (#9587).
+#
+# Source of truth for which scrape targets Omi expects in prod, how they are
+# wired, which coverage alert (if any) pages when they disappear, and the
+# documented no-data / routing semantics.
+#
+# Enforced by: backend/tests/unit/test_monitoring_telemetry_contract.py
+# Complements #9138 / PR #11093 (managed GKE control-plane exclusions).
+# Does NOT claim live Instatus delivery verification — that remains Phase 2.
+
+version: 1
+environment: prod
+
+routing:
+  default_receiver: "Omi - Services Alerting (Telegram)"
+  instatus_label: instatus_component
+  allowed_instatus_components:
+    - api
+    - live-transcription
+    - speech-processing
+    - plugins
+    - ai-chat
+    - observability
+  # Policy-based Instatus routes are not encoded in repo JSON; Phase 2.
+
+no_data_semantics:
+  # Documented classes — individual rules are asserted by existing contract tests
+  # (test_monitoring_alert_rule_contract / test_journey_observability) plus the
+  # telemetry contract below for scrape-health linkage.
+  stackdriver_error_counters: OK
+  traffic_gated_journey: NoData
+  live_transcription_journey: OK
+  scrape_health: Alerting
+
+managed_gke_exclusions:
+  # Owned by #9138 / PR #11093 — do not page TargetDown for these.
+  - kubeProxy
+  - kubeScheduler
+  - kubeControllerManager
+
+scrape_jobs:
+  - name: backend-listen-metrics
+    mechanism: additionalScrapeConfigs
+    auth: metrics-scrape-token
+    coverage_alert: omi-journey-scrape-missing
+    coverage_status: enforced
+
+  - name: pusher-metrics
+    mechanism: additionalScrapeConfigs
+    auth: metrics-scrape-token
+    coverage_alert: omi-journey-scrape-missing
+    coverage_status: enforced
+
+  - name: llm-gateway-metrics
+    mechanism: additionalScrapeConfigs
+    auth: metrics-scrape-token
+    coverage_alert: null
+    coverage_status: declared
+
+  - name: dg_engine_metrics
+    mechanism: additionalScrapeConfigs
+    auth: null
+    coverage_alert: null
+    coverage_status: declared
+
+  - name: prometheus-stackdriver-metrics
+    mechanism: additionalScrapeConfigs
+    auth: null
+    coverage_alert: null
+    coverage_status: declared
+
+  - name: gpu-metrics
+    mechanism: additionalScrapeConfigs
+    auth: null
+    namespace: gke-managed-system
+    coverage_alert: null
+    coverage_status: declared
+
+  - name: kube-state-metrics
+    mechanism: kube-prometheus-stack
+    auth: null
+    coverage_alert: null
+    coverage_status: declared
+
+  - name: parakeet
+    mechanism: serviceMonitor
+    chart: backend/charts/parakeet
+    auth: null
+    coverage_alert: null
+    coverage_status: declared
