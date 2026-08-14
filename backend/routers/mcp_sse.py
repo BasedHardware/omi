@@ -117,7 +117,6 @@ MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-kno
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
 MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
-MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
 
 
 def _enforce_mcp_cutover_access(uid: str) -> None:
@@ -230,7 +229,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         return MCPAuthContext(
             uid=user_data["user_id"],
             auth_type="legacy_mcp_key",
-            scopes=list(user_data.get("scopes") or MCP_LEGACY_API_KEY_SCOPES),
+            scopes=list(user_data.get("scopes") or []),
             app_id=user_data.get("app_id"),
             key_id=user_data.get("key_id"),
             memory_context=_mcp_memory_context_from_api_key_user_data(user_data),

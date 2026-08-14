@@ -23,10 +23,12 @@ def normalize_mcp_scopes(scopes: Optional[list[Any]]) -> list[str]:
     A recorded list of known scopes is authoritative: the key authorizes exactly
     those tools and nothing else. Absent or unreadable scope state predates the
     per-key scope contract, so it resolves to full access — an already-issued key
-    must keep working without being regenerated.
+    must keep working without being regenerated. A *present* but empty or
+    unknown-only list is not legacy state: it fails closed to no scopes rather
+    than widening to full access.
     """
     if not isinstance(scopes, list):
         return sorted(MCP_FULL_ACCESS_SCOPES)
     allowed = set(MCP_FULL_ACCESS_SCOPES)
     resolved = sorted({scope for scope in scopes if isinstance(scope, str) and scope in allowed})
-    return resolved or sorted(MCP_FULL_ACCESS_SCOPES)
+    return resolved or []
