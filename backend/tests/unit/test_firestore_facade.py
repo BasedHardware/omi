@@ -157,9 +157,11 @@ def test_group_query_supports_order_by_and_start_after():
     c.document("users/u1/events/e1").set({"ts": 1})
     c.document("users/u2/events/e2").set({"ts": 2})
     q = c.collection_group("events").order_by("ts")
-    ids = {s.id for s in q.stream()}
-    assert ids == {"e1", "e2"}  # cross-parent sweep with order_by + start_after wired (no crash)
-    assert list(q.start_after("users/u1/events/e1").stream())  # start_after accepted
+    # Assert the ORDERED list (a set compare would pass even if order_by did nothing).
+    assert [s.id for s in q.stream()] == ["e1", "e2"]
+    # start_after must actually advance past the cursor — assert the exact post-cursor page, not truthiness
+    # (cubic PR 10887 A10: the old set/truthiness asserts passed even if start_after were ignored).
+    assert [s.id for s in q.start_after("users/u1/events/e1").stream()] == ["e2"]
 
 
 def test_write_option_precondition_enforced_on_batch_delete():
@@ -209,3 +211,35 @@ def test_last_update_option_precondition_enforced_on_reference_update():
     current = ref.get().update_time
     ref.update({"status": "healed"}, option=LastUpdateOption(current))
     assert ref.get().to_dict()["status"] == "healed"
+
+
+def test_document_get_with_projection_field_paths_does_not_crash():
+    # Regression (cubic PR 10887 A1): DocumentReference.get(field_paths) takes the projection as the
+    # FIRST positional arg. Upstream calls `.get(['subscription'])` etc.; the facade used to bind that
+    # list to `transaction` and dereference `_read` on it, crashing every projection read on Mongo.
+    c = _client()
+    ref = c.document("users/u1")
+    ref.set({"subscription": {"plan": "pro"}, "language": "it", "secret": "x"})
+    snap = ref.get(["subscription", "language"])  # positional projection — must not raise
+    assert snap.exists is True
+    data = snap.to_dict()
+    assert data.get("subscription") == {"plan": "pro"}
+    assert data.get("language") == "it"
+    assert "secret" not in data  # projection applied through the store's fields=
+    # transaction reads still bind by keyword and keep working
+    assert c.document("users/none").get(["subscription"]).exists is False
+
+
+def test_collection_field_then_name_cursor_paginates_without_notimplemented():
+    # Regression (cubic PR 10887 A2): a (field, __name__) order_by + start_after cursor (historical /
+    # canonical memory scans) must map onto the store's {value, id} keyset instead of raising
+    # NotImplementedError, so page 2+ works on the Mongo-backed facade.
+    c = _client()
+    for doc_id, ts in [("a", 1), ("b", 2), ("c", 3)]:
+        c.document(f"users/u1/items/{doc_id}").set({"ts": ts})
+    q = c.collection("users/u1/items").order_by("ts", "ASCENDING").order_by("__name__", "ASCENDING")
+    page1 = [s.id for s in q.limit(2).stream()]
+    assert page1 == ["a", "b"]  # real ordering, not a set
+    cursor = {"ts": 2, "__name__": c.document("users/u1/items/b")}
+    page2 = [s.id for s in q.start_after(cursor).stream()]
+    assert page2 == ["c"]  # cursor advanced past b — no NotImplementedError, no first-page repeat

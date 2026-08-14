@@ -238,13 +238,24 @@ class _DocRef:
         # descend into them on Mongo instead of silently leaving orphaned descendant data.
         return [_CollRef(self._client, f"{self.path}/{name}") for name in self._client._store.list_subcollections(self.path)]
 
-    def get(self, transaction: Optional["_FacadeTransaction"] = None, *, timeout: Any = None, **_: Any) -> _Snapshot:
-        # ``timeout``/other Firestore read kwargs (retry, ...) are network-RPC concerns; a Mongo point
-        # read through the store port is local, so they are accepted and ignored.
+    def get(
+        self,
+        field_paths: Any = None,
+        transaction: Optional["_FacadeTransaction"] = None,
+        *,
+        timeout: Any = None,
+        **_: Any,
+    ) -> _Snapshot:
+        # Firestore's DocumentReference.get(field_paths=None, transaction=None, ...) takes field_paths
+        # as the FIRST positional arg (a projection). Upstream calls ``.get(['subscription'])`` etc.;
+        # binding that list to ``transaction`` crashed on the Mongo-backed facade. Route the projection
+        # through the store's ``fields=`` instead. ``timeout``/other read RPC kwargs are network
+        # concerns; a store-port point read is local, so they are accepted and ignored.
         del timeout
+        fields = list(field_paths) if field_paths else None
         if transaction is not None:
-            return _Snapshot(self, transaction._read(self.path))
-        return _Snapshot(self, self._client._store.get(self.path))
+            return _Snapshot(self, transaction._read(self.path, fields=fields))
+        return _Snapshot(self, self._client._store.get(self.path, fields=fields))
 
     def set(self, data: Dict[str, Any], merge: bool = False) -> None:
         self._client._store.set(self.path, _neutral_data(data), merge=merge)
@@ -330,12 +341,23 @@ class _Query:
         """Translate a Firestore ``start_after`` cursor into the store's ``{value, id}`` keyset.
 
         The store supports a single order field plus a document-id tiebreak. A snapshot cursor yields
-        its order-field value + id; a ``{'__name__': ref}`` cursor is a document-name keyset. A
-        multi-field ``order_by`` cannot be represented by this shape (ports.py notes the same gap), so
-        reject it rather than page incorrectly."""
+        its order-field value + id; a ``{'__name__': ref}`` cursor is a document-name keyset. The only
+        multi-field form the domain uses is ``(field, __name__)`` (historical/canonical memory scans),
+        which maps cleanly onto the ``{value, id}`` keyset; any other multi-field order_by cannot be
+        represented, so reject those rather than page incorrectly."""
         cur = self._start_after
         if cur is None:
             return None
+        if len(self._order_by) == 2 and self._order_by[1][0] == "__name__":
+            # (field, __name__) composite -> {value: field's cursor value, id: document id}
+            order_field = self._order_by[0][0]
+            if hasattr(cur, "to_dict"):  # DocumentSnapshot
+                data = cur.to_dict() or {}
+                return {"value": data.get(order_field), "id": getattr(cur, "id", None)}
+            if isinstance(cur, dict):
+                ref = cur.get("__name__")
+                doc_id = getattr(ref, "id", None) or (str(ref).rsplit("/", 1)[-1] if ref is not None else "")
+                return {"value": cur.get(order_field), "id": doc_id}
         if len(self._order_by) > 1:
             raise NotImplementedError("start_after with a multi-field order_by is not representable by the store cursor")
         order_field = self._order_by[0][0] if self._order_by else None
@@ -357,6 +379,11 @@ class _Query:
         direction = "asc"
         if self._order_by:
             if len(self._order_by) == 1:
+                order, direction = self._order_by[0]
+            elif len(self._order_by) == 2 and self._order_by[1][0] == "__name__":
+                # (field, __name__): order by the real field only; the store appends the document-id
+                # tiebreak itself (matching Firestore's __name__ secondary sort). Passing __name__ as a
+                # data field would make the Mongo adapter sort on a non-existent ``d.__name__``.
                 order, direction = self._order_by[0]
             else:
                 order = self._order_by  # multi-field: (field, dir) pairs
@@ -466,8 +493,8 @@ class _FacadeTransaction:
         self._id = None
 
     # --- read/write within the transaction (upstream calls these with a _DocRef) ---
-    def _read(self, path: str) -> StoredDocument:
-        return self._client._store._get(path, session=self._session)
+    def _read(self, path: str, *, fields: Any = None) -> StoredDocument:
+        return self._client._store._get(path, fields=fields, session=self._session)
 
     def get(self, ref: _DocRef, **_: Any) -> _Snapshot:
         return _Snapshot(ref, self._read(ref.path))
