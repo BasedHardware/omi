@@ -1,0 +1,34 @@
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityModel.swift
+  s_830a75a8050e25::t_460530ae3154b0 256-269
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityComposer.swift
+  s_830a75a8050e25::t_1655b37bf176fb 58-61,65-67,73-74
+  s_830a75a8050e25::t_b184ec16b6127a 177-196,200-201,206,208-211
+  s_830a75a8050e25::t_322e49e32d185c 86
+desktop/context-for-claude/Sources/ContextCore/UploadQueue.swift
+  s_830a75a8050e25::t_f7f9b8348fcc64 371-372,388-401,412-413,416,419-422
+desktop/context-for-claude/Sources/ContextApp/Backend/ConversationUploader.swift
+  s_830a75a8050e25::t_8848043e9fcd22 17-29
+  s_830a75a8050e25::t_dfcabc7b03bf9c 595-596
+desktop/context-for-claude/Tests/ContextAppTests/ActivityCompositionTests.swift
+  s_830a75a8050e25::t_3c3d1c1d2a5f4f 100-101,106-107,111
+  s_830a75a8050e25::t_a629b7b9aa96c9 1271-1296
+  s_830a75a8050e25::t_c7fbd85f08daa1 670-737,1297
+desktop/context-for-claude/Tests/ContextCoreTests/UploadQueueTests.swift
+  s_830a75a8050e25::t_aa5f9502487df0 168-215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c9b3cba7ffa83da563bc40ed85fdbe8f2b894f4e",
+  "prompts": {},
+  "sessions": {
+    "s_830a75a8050e25": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c76762c9-b116-4248-8786-3ab36dd6ee16",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
