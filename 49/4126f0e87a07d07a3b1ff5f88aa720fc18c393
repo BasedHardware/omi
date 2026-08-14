@@ -1,0 +1,19 @@
+.github/failure-classes/FC-platform-grant-record-as-live-capability.json
+  s_d58145f2e376ea::t_c00673a3832c81 1-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "494126f0e87a07d07a3b1ff5f88aa720fc18c393",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
