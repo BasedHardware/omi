@@ -125,6 +125,7 @@ jest.mock('react-native', () => {
       out: jest.fn(value => value),
     },
     FlatList,
+    Image: component('Image'),
     KeyboardAvoidingView: component('KeyboardAvoidingView'),
     NativeEventEmitter: jest.fn(() => ({
       addListener: (_event: string, listener: () => void) => {
@@ -1528,6 +1529,91 @@ test('fills and preserves the ask pill draft from a quick prompt', async () => {
   ).toBe('What should I remember?');
 });
 
+test('matches the compact resting stage, prompt grid, and composer geometry', async () => {
+  mockViewportWidth = 390;
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+
+  const resting = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Chat resting stage',
+  );
+  const mark = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Omi',
+  );
+  const promptText = renderer.root.find(
+    node =>
+      String(node.type) === 'Text' &&
+      node.props.children === 'What should I remember?',
+  );
+  const promptStyle = promptText.parent?.parent!.props.style({
+    pressed: false,
+  });
+  const input = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Ask Omi',
+  );
+
+  expect(resting).toBeDefined();
+  expect(mark.props.style).toEqual(
+    expect.objectContaining({height: 40, width: 40}),
+  );
+  expect(
+    mark.find(node => String(node.type) === 'Image').props.source.uri,
+  ).toMatch(/^data:image\/png;base64,/);
+  expect(JSON.stringify(promptStyle)).toContain('"flexBasis":"48%"');
+  expect(input.props.style).toEqual(expect.objectContaining({maxHeight: 200}));
+  expect(Animated.timing).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({duration: 250, toValue: 1}),
+  );
+  expect(
+    renderer.root.findAll(
+      node =>
+        String(node.type) === 'View' &&
+        Array.isArray(node.props.style) &&
+        node.props.style.some(
+          (style: {paddingHorizontal?: number}) =>
+            style?.paddingHorizontal === 16,
+        ),
+    ),
+  ).not.toHaveLength(0);
+
+  await ReactTestRenderer.act(async () => input.props.onFocus());
+  expect(
+    renderer.root.find(
+      node =>
+        String(node.type) === 'View' &&
+        Array.isArray(node.props.style) &&
+        node.props.style.some(
+          (style: {borderColor?: string}) => style?.borderColor === '#626262',
+        ),
+    ),
+  ).toBeDefined();
+});
+
+test('uses opacity-only resting-stage motion when reduced motion is enabled', async () => {
+  mockViewportWidth = 390;
+  mockReduceMotion = true;
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+  const resting = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Chat resting stage',
+  );
+
+  expect(Animated.timing).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({duration: 1, toValue: 1}),
+  );
+  expect(resting.props.style[1].transform[0].translateY.value).toBe(0);
+});
+
 test('renders saved Chat history as a wide transcript without the resting hub', async () => {
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/chat-messages?limit=50') {
@@ -1600,6 +1686,27 @@ test('renders saved Chat history as a wide transcript without the resting hub', 
         node.props.style[0]?.width === 5,
     ),
   ).toHaveLength(8);
+  expect(
+    renderer.root.findAll(
+      node =>
+        String(node.type) === 'View' &&
+        Array.isArray(node.props.style) &&
+        node.props.style.some(
+          (style: {paddingHorizontal?: number; paddingVertical?: number}) =>
+            style?.paddingHorizontal === 20 && style?.paddingVertical === 12,
+        ),
+    ),
+  ).not.toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node =>
+        String(node.type) === 'Text' &&
+        Array.isArray(node.props.style) &&
+        node.props.style.some(
+          (style: {fontSize?: number}) => style?.fontSize === 12,
+        ),
+    ),
+  ).not.toHaveLength(0);
   const stableRows = renderer.root.findAll(
     node =>
       String(node.type) === 'AnimatedView' &&

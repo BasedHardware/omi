@@ -12,6 +12,7 @@ import {
   Animated,
   Easing,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -89,6 +90,9 @@ const quickPrompts = [
   'What should I remember?',
   'Summarize my recent conversations',
 ];
+const omiLogo = {
+  uri: 'data:image/png;base64,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',
+};
 type Route = 'Home' | 'Chat' | 'Conversations' | 'Memories' | 'Tasks';
 const OmiGlassPanel =
   Platform.OS === 'macos'
@@ -171,11 +175,7 @@ function NavItem({
 function OmiMark() {
   return (
     <View accessibilityLabel="Omi" style={styles.mark}>
-      <View style={[styles.markBar, styles.markBarShort]} />
-      <View style={[styles.markBar, styles.markBarTall]} />
-      <View style={[styles.markBar, styles.markBarMedium]} />
-      <View style={[styles.markBar, styles.markBarTall]} />
-      <View style={[styles.markBar, styles.markBarShort]} />
+      <Image resizeMode="contain" source={omiLogo} style={styles.markImage} />
     </View>
   );
 }
@@ -1107,6 +1107,8 @@ function App(): React.JSX.Element {
   const composerMaxWidth = width >= 1280 ? 820 : width >= 768 ? 720 : 640;
   const stageOpacity = useRef(new Animated.Value(0)).current;
   const stageTranslateY = useRef(new Animated.Value(8)).current;
+  const restingOpacity = useRef(new Animated.Value(0)).current;
+  const restingTranslateY = useRef(new Animated.Value(8)).current;
   const mobileNavOpacity = useRef(new Animated.Value(0)).current;
   const mobileNavTranslateY = useRef(new Animated.Value(100)).current;
   const activePillTranslateY = useRef(new Animated.Value(0)).current;
@@ -1135,6 +1137,7 @@ function App(): React.JSX.Element {
   const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [composerFocused, setComposerFocused] = useState(false);
   const [projectionFilter, setProjectionFilter] =
     useState<ProjectionFilter>('all');
   const searchRef = useRef<TextInput>(null);
@@ -1346,6 +1349,33 @@ function App(): React.JSX.Element {
       }),
     ]).start();
   }, [reduceMotion, route, stageOpacity, stageTranslateY]);
+
+  useEffect(() => {
+    if (route !== 'Chat' || messages.length !== 0 || chatBusy) {
+      return;
+    }
+    restingOpacity.setValue(0);
+    restingTranslateY.setValue(reduceMotion ? 0 : 8);
+    Animated.parallel([
+      Animated.timing(restingOpacity, {
+        duration: reduceMotion ? 1 : 250,
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+      Animated.timing(restingTranslateY, {
+        duration: reduceMotion ? 1 : 250,
+        toValue: 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [
+    chatBusy,
+    messages.length,
+    reduceMotion,
+    restingOpacity,
+    restingTranslateY,
+    route,
+  ]);
 
   useEffect(() => {
     if (!compact) {
@@ -1634,12 +1664,19 @@ function App(): React.JSX.Element {
   };
 
   const composer = (
-    <View style={styles.composerWrap}>
-      <View style={[styles.composer, {maxWidth: composerMaxWidth}]}>
+    <View style={[styles.composerWrap, compact && styles.composerWrapCompact]}>
+      <View
+        style={[
+          styles.composer,
+          composerFocused && styles.composerFocused,
+          {maxWidth: composerMaxWidth},
+        ]}>
         <TextInput
           accessibilityLabel="Ask Omi"
           multiline
+          onBlur={() => setComposerFocused(false)}
           onChangeText={setDraft}
+          onFocus={() => setComposerFocused(true)}
           placeholder="Ask anything..."
           placeholderTextColor="#888888"
           style={styles.composerInput}
@@ -1762,7 +1799,7 @@ function App(): React.JSX.Element {
                     transform: [{translateY: stageTranslateY}],
                   },
                 ]}>
-                <View style={styles.stage}>
+                <View style={[styles.stage, compact && styles.stageCompact]}>
                   {route === 'Home' ? (
                     <View style={styles.searchHome}>
                       <ProjectionList
@@ -1931,7 +1968,16 @@ function App(): React.JSX.Element {
                       style={styles.chatScroll}>
                       <View
                         style={
-                          messages.length === 0 && !chatBusy
+                          compact
+                            ? [
+                                messages.length === 0 && !chatBusy
+                                  ? styles.home
+                                  : styles.chatHistory,
+                                messages.length === 0 && !chatBusy
+                                  ? styles.homeCompact
+                                  : styles.chatHistoryCompact,
+                              ]
+                            : messages.length === 0 && !chatBusy
                             ? styles.home
                             : styles.chatHistory
                         }>
@@ -1951,7 +1997,15 @@ function App(): React.JSX.Element {
                           <Text style={styles.backButtonText}>Home</Text>
                         </FocusPressable>
                         {messages.length === 0 && !chatBusy ? (
-                          <>
+                          <Animated.View
+                            accessibilityLabel="Chat resting stage"
+                            style={[
+                              styles.restingStage,
+                              {
+                                opacity: restingOpacity,
+                                transform: [{translateY: restingTranslateY}],
+                              },
+                            ]}>
                             <OmiMark />
                             <Text style={styles.greeting}>I’m ready.</Text>
                             <View style={styles.currents}>
@@ -1964,7 +2018,11 @@ function App(): React.JSX.Element {
                                 <Text style={styles.error}>{chatError}</Text>
                               )}
                             </View>
-                            <View style={styles.prompts}>
+                            <View
+                              style={[
+                                styles.prompts,
+                                compact && styles.promptsCompact,
+                              ]}>
                               {quickPrompts.map(prompt => (
                                 <FocusPressable
                                   accessibilityRole="button"
@@ -1972,6 +2030,7 @@ function App(): React.JSX.Element {
                                   onPress={() => setDraft(prompt)}
                                   style={({pressed}) => [
                                     styles.promptChip,
+                                    compact && styles.promptChipCompact,
                                     pressed && styles.pressed,
                                   ]}>
                                   <Text style={styles.promptText}>
@@ -1980,7 +2039,7 @@ function App(): React.JSX.Element {
                                 </FocusPressable>
                               ))}
                             </View>
-                          </>
+                          </Animated.View>
                         ) : (
                           <View style={styles.currents}>
                             <Text style={styles.sectionLabel}>CURRENTS</Text>
@@ -2195,6 +2254,7 @@ const styles = StyleSheet.create({
   paneCompact: {borderRadius: 0, borderWidth: 0},
   stageMotion: {flex: 1},
   stage: {flexGrow: 1, paddingBottom: 20, paddingHorizontal: 20},
+  stageCompact: {paddingHorizontal: 16},
   searchHome: {
     alignSelf: 'center',
     flex: 1,
@@ -2283,6 +2343,7 @@ const styles = StyleSheet.create({
     paddingTop: 72,
     width: '100%',
   },
+  chatHistoryCompact: {paddingTop: 64},
   home: {
     alignSelf: 'center',
     flex: 1,
@@ -2292,6 +2353,8 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
     width: '100%',
   },
+  homeCompact: {paddingVertical: 32},
+  restingStage: {alignItems: 'center', width: '100%'},
   backButton: {
     alignItems: 'center',
     alignSelf: 'flex-start',
@@ -2306,14 +2369,11 @@ const styles = StyleSheet.create({
   mark: {
     alignItems: 'center',
     alignSelf: 'center',
-    flexDirection: 'row',
-    gap: 3,
-    height: 34,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
   },
-  markBar: {backgroundColor: '#ffffff', borderRadius: 4, width: 5},
-  markBarShort: {height: 11},
-  markBarMedium: {height: 20},
-  markBarTall: {height: 30},
+  markImage: {borderRadius: 20, height: 40, width: 40},
   greeting: {
     color: '#ffffff',
     fontSize: 25,
@@ -2336,6 +2396,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 28,
   },
+  promptsCompact: {alignSelf: 'stretch'},
   promptChip: {
     alignItems: 'center',
     backgroundColor: '#252525',
@@ -2346,7 +2407,13 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 14,
   },
-  promptText: {color: '#e5e5e5', fontSize: 13, fontWeight: '500'},
+  promptChipCompact: {flexBasis: '48%', flexGrow: 1, paddingHorizontal: 12},
+  promptText: {
+    color: '#e5e5e5',
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
   empty: {color: '#666666', fontSize: 12, textAlign: 'center'},
   transcript: {gap: 24},
   loadOlderButton: {
@@ -2372,7 +2439,7 @@ const styles = StyleSheet.create({
   chatMessageColumnCompact: {maxWidth: '85%'},
   chatMessageColumnDesktop: {maxWidth: '75%'},
   chatMessageColumnHuman: {alignItems: 'flex-end'},
-  chatBubble: {borderRadius: 16, paddingHorizontal: 18, paddingVertical: 11},
+  chatBubble: {borderRadius: 16, paddingHorizontal: 20, paddingVertical: 12},
   chatBubbleHuman: {backgroundColor: '#2c2c33'},
   chatBubbleAi: {
     backgroundColor: '#202020',
@@ -2401,7 +2468,7 @@ const styles = StyleSheet.create({
   chatAvatarDotBottomLeft: {left: 7.5, top: 27.5},
   chatAvatarDotLeft: {left: 3.5, top: 17.5},
   chatAvatarDotTopLeft: {left: 7.5, top: 7.5},
-  chatTimestamp: {color: '#666666', fontSize: 10, marginTop: 4},
+  chatTimestamp: {color: '#666666', fontSize: 12, marginTop: 4},
   chatTimestampHuman: {textAlign: 'right'},
   cancelledMessage: {borderColor: '#666666', opacity: 0.72},
   cancelledLabel: {color: '#888888', fontSize: 11, marginTop: 4},
@@ -2696,6 +2763,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   composerWrap: {paddingBottom: 16, paddingHorizontal: 20, paddingTop: 12},
+  composerWrapCompact: {paddingHorizontal: 16},
   composer: {
     alignSelf: 'center',
     backgroundColor: '#252525',
@@ -2707,10 +2775,11 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     width: '100%',
   },
+  composerFocused: {borderColor: '#626262'},
   composerInput: {
     color: '#ffffff',
     fontSize: 16,
-    maxHeight: 140,
+    maxHeight: 200,
     minHeight: 44,
     paddingHorizontal: 10,
     paddingVertical: 10,
