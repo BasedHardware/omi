@@ -141,15 +141,16 @@ class TestUploadProfileWavDecodeGuard:
         mock_vad.assert_not_called()
         mock_upload.assert_not_called()
 
-    def test_empty_vad_returns_400_not_500(self):
+    def test_empty_vad_returns_400_not_500(self, tmp_path):
         fake_file = _fake_upload_file(b'silence')
 
-        with patch.object(mod, "os") as mock_os, patch("builtins.open", MagicMock()), patch.object(
-            mod, "AudioSegment"
-        ) as mock_aseg, patch.object(vad_mod, "vad_is_empty", return_value=[]) as mock_vad, patch.object(
+        with patch.object(mod, "temp_upload_path", _temp_upload_path_in(tmp_path)), patch(
+            "builtins.open", MagicMock()
+        ), patch.object(mod, "AudioSegment") as mock_aseg, patch.object(
+            vad_mod, "vad_is_empty", return_value=[]
+        ) as mock_vad, patch.object(
             mod, "upload_profile_audio"
         ) as mock_upload:
-            mock_os.makedirs.return_value = None
             mock_aseg.from_wav.return_value = MagicMock(frame_rate=16000, duration_seconds=5)
 
             with pytest.raises(HTTPException) as exc_info:
@@ -157,7 +158,9 @@ class TestUploadProfileWavDecodeGuard:
 
         assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "Audio is empty"
-        mock_vad.assert_called_once_with("_temp/test-uid/speech_profile.wav", return_segments=True)
+        assert mock_vad.call_args.kwargs == {"return_segments": True}
+        assert mock_vad.call_args.args[0].endswith("speech_profile.wav")
+        assert "_temp/test-uid" in mock_vad.call_args.args[0]
         mock_upload.assert_not_called()
 
     def test_batch_skips_empty_vad_without_uploading(self):
