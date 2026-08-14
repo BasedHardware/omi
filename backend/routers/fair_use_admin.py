@@ -12,7 +12,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from models.shared import StatusResponse
 
 import database.fair_use as fair_use_db
-from database._client import db
 from utils.other.endpoints import get_current_user_uid, rate_limit_dependency
 from utils.fair_use import (
     get_rolling_speech_ms,
@@ -194,16 +193,10 @@ def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_v
 @router.get('/v1/admin/fair-use/case/{case_ref}', tags=['admin'], response_model=FairUseCaseLookupResponse)
 def lookup_case(case_ref: str, admin_id: str = Depends(_verify_admin_key)):
     """Look up a fair-use event by case reference (for support team)."""
-    # Search across all users' events for this case_ref
-    query = db.collection_group('fair_use_events').where('case_ref', '==', case_ref).limit(1)
-    for doc in query.stream():
-        data = doc.to_dict()
-        path_parts = doc.reference.path.split('/')
-        if len(path_parts) >= 2:
-            data['uid'] = path_parts[1]
-        data['event_id'] = doc.id
-        return data
-    raise HTTPException(status_code=404, detail=f'Case {case_ref} not found')
+    data = fair_use_db.lookup_fair_use_event_by_case_ref(case_ref)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f'Case {case_ref} not found')
+    return data
 
 
 SUPPORT_EMAIL = 'team@basedhardware.com'
@@ -226,30 +219,27 @@ def get_public_case_status(case_ref: str):
     Returns only non-sensitive info: stage, message, timestamps, support email.
     No usage data or user identity exposed.
     """
-    query = db.collection_group('fair_use_events').where('case_ref', '==', case_ref).limit(1)
-    for doc in query.stream():
-        data = doc.to_dict()
-        # Extract uid to get current enforcement stage
-        path_parts = doc.reference.path.split('/')
-        uid = path_parts[1] if len(path_parts) >= 2 else None
+    data = fair_use_db.lookup_fair_use_event_by_case_ref(case_ref)
+    if data is None:
+        raise HTTPException(status_code=404, detail='Case not found')
 
-        stage = 'none'
-        if uid:
-            state = fair_use_db.get_fair_use_state(uid)
-            stage = state.get('stage', 'none')
+    uid = data.get('uid')
+    stage = 'none'
+    if uid:
+        state = fair_use_db.get_fair_use_state(uid)
+        stage = state.get('stage', 'none')
 
-        created_at = data.get('created_at')
-        updated_at = data.get('resolved_at') or created_at
+    created_at = data.get('created_at')
+    updated_at = data.get('resolved_at') or created_at
 
-        return {
-            'case_ref': case_ref,
-            'stage': stage,
-            'message': _user_facing_message(stage, case_ref),
-            'created_at': str(created_at) if created_at else None,
-            'updated_at': str(updated_at) if updated_at else None,
-            'support_email': SUPPORT_EMAIL,
-        }
-    raise HTTPException(status_code=404, detail='Case not found')
+    return {
+        'case_ref': case_ref,
+        'stage': stage,
+        'message': _user_facing_message(stage, case_ref),
+        'created_at': str(created_at) if created_at else None,
+        'updated_at': str(updated_at) if updated_at else None,
+        'support_email': SUPPORT_EMAIL,
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -1,10 +1,10 @@
-"""Behavioral tests for ``database.fair_use`` over the neutral storage port (WP2).
+"""Behavioral tests for ``database.fair_use`` over the neutral storage port (WP2, ADR-0044).
 
-Before the storage-port migration this module talked to the raw Firestore client, so no unit test
-exercised its real read/write logic (the fair-use suites stub the whole ``database.fair_use``
-module). These tests drive the *real* functions through a ``FakeDocumentStore`` injected at the
-``_store`` seam, asserting on returned values and stored state — including the two cross-parent
-``query_group`` (collection-group) paths that the port gained for this migration.
+The fair-use suites stub the whole ``database.fair_use`` module, so no unit test exercised its real
+read/write logic. ``database.fair_use`` threads the raw ``db`` client (upstream idiom); these tests
+inject the neutral ``db_client`` facade over a ``FakeDocumentStore`` (``install_fake_db_client``) so the
+*real* functions run against ``fake._docs``, asserting on returned values and stored state — including
+the two cross-parent collection-group (``query_group``) paths the facade routes through the port.
 """
 
 from datetime import datetime, timedelta, timezone

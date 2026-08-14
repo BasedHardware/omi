@@ -202,17 +202,17 @@ def _store_tokens(uid: str, token_resp: Dict, handle: Optional[str] = None, x_us
 
 
 def _register_user(uid: str) -> None:
+    # Route the write through the neutral store-port boundary (cubic 10887 D3) instead of the raw db
+    # facade; keep the non-fatal wrapper so a registry hiccup never breaks the connect flow.
     try:
-        db.collection(_REGISTRY_COLLECTION).document(uid).set(
-            {'uid': uid, 'updated_at': datetime.now(timezone.utc)}, merge=True
-        )
+        x_sync_registry.register_sync_user(uid)
     except Exception as e:
         logger.warning(f'x_connector: failed to register user {uid} for sync: {e}')
 
 
 def _unregister_user(uid: str) -> None:
     try:
-        db.collection(_REGISTRY_COLLECTION).document(uid).delete()
+        x_sync_registry.unregister_sync_user(uid)
     except Exception as e:
         logger.warning(f'x_connector: failed to unregister user {uid}: {e}')
 
