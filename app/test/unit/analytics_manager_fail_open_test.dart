@@ -119,6 +119,9 @@ void main() {
       'total_bytes': 4096,
       'claims_live_capture': true,
       'upload_source': 'offline_audio_queue',
+      'app_platform': 'unknown',
+      'app_version': '2.3.4',
+      'app_build': '567',
     });
     expect(adapter.events.last.properties, {
       ...adapter.events.first.properties,
@@ -178,6 +181,9 @@ void main() {
       'is_first_auth': true,
       'auth_provider': 'google',
       'acquisition_source': 'mobile_oauth',
+      'app_platform': 'unknown',
+      'app_version': '2.3.4',
+      'app_build': '567',
     });
   });
 
@@ -257,6 +263,9 @@ void main() {
       'new_plan': 'plus',
       'billing_interval': 'year',
       'change_source': 'mobile_checkout',
+      'app_platform': 'unknown',
+      'app_version': '2.3.4',
+      'app_build': '567',
     });
   });
 }
