@@ -1,0 +1,52 @@
+desktop/context-for-claude/Sources/ContextApp/Backend/OmiActivityFeed.swift
+  s_830a75a8050e25::t_d7cf088406ed56 308-316,318-319,321-325,327,337-338
+  s_830a75a8050e25::t_9fb4f271867e6f 361
+  s_830a75a8050e25::t_ec41f0c8594053 110-113
+  s_830a75a8050e25::t_21486d33f20887 471,474,480-484
+  s_830a75a8050e25::t_3a510b44897d5f 351-354
+  s_830a75a8050e25::t_3d1fd60ca86af4 220,222,224,229,235-239,248-282
+  s_830a75a8050e25::t_cee1029df99f72 283,485,510-583,589,592-599,603-609,611-690
+  s_830a75a8050e25::t_8dc506bba498dc 151-166
+  s_830a75a8050e25::t_da64b683cb34f6 47-76
+  s_830a75a8050e25::t_f7e1ade02b8a80 348
+  s_830a75a8050e25::t_057941b39d4a12 584-588,590-591
+  s_830a75a8050e25::t_ae276befd173ed 193-219,284,402-404,406,410,486,600-602,610
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityStore.swift
+  s_830a75a8050e25::t_252db637a6e323 761-764,766-769
+  s_830a75a8050e25::t_c06920cdbf8a01 780,788
+  s_830a75a8050e25::t_a72f6c7ade21b4 185-189,193
+  s_830a75a8050e25::t_42ca1e9f948df1 765
+  s_830a75a8050e25::t_1cb9ff218e6b0a 506-510
+  s_830a75a8050e25::t_9b0e48b9682d6a 497-500
+  s_830a75a8050e25::t_aef6eb3ea95431 10,15-25
+  s_830a75a8050e25::t_ab60eb4a0bfbb0 415-419,421-422,436-449,456,458-463
+  s_830a75a8050e25::t_be411321a4046e 376-380
+  s_830a75a8050e25::t_adabf4d199576c 486-496,501-505,511-514,517-531
+  s_830a75a8050e25::t_2b490658300994 190-192,532,781-786,789
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityAccount.swift
+  s_830a75a8050e25::t_5d709eb1518928 179-186
+desktop/context-for-claude/Tests/ContextAppTests/ActivityCompositionTests.swift
+  s_830a75a8050e25::t_0916382c154f20 1384
+  s_830a75a8050e25::t_f1a53a8e53671a 1345-1368,1370-1383,1385-1393,1397,1402,1406,1411,1415
+  s_830a75a8050e25::t_9eb31350a9ee2c 853-930,1423
+  s_830a75a8050e25::t_a146ad02adab21 1369
+  s_830a75a8050e25::t_bd28261841acb6 1394-1396,1398-1401,1403-1405,1407-1410,1412-1414,1416-1422,1469-1513
+desktop/context-for-claude/Tests/ContextAppTests/OmiActivityFeedTests.swift
+  s_830a75a8050e25::t_20e79752856b84 982-1208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "14fb2fafe01db8e1da93958574bd7fc71f7164a3",
+  "prompts": {},
+  "sessions": {
+    "s_830a75a8050e25": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c76762c9-b116-4248-8786-3ab36dd6ee16",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
