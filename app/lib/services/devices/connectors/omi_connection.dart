@@ -188,12 +188,13 @@ class OmiDeviceConnection extends DeviceConnection {
 
         for (int i = 0; i < totalEntries; i++) {
           int baseIndex = i * 4;
-          var result = ((storageValue[baseIndex] |
-                      (storageValue[baseIndex + 1] << 8) |
-                      (storageValue[baseIndex + 2] << 16) |
-                      (storageValue[baseIndex + 3] << 24)) &
-                  0xFFFFFFFF)
-              .toSigned(32);
+          var result =
+              ((storageValue[baseIndex] |
+                          (storageValue[baseIndex + 1] << 8) |
+                          (storageValue[baseIndex + 2] << 16) |
+                          (storageValue[baseIndex + 3] << 24)) &
+                      0xFFFFFFFF)
+                  .toSigned(32);
           storageLengths.add(result);
         }
       }
@@ -228,12 +229,7 @@ class OmiDeviceConnection extends DeviceConnection {
         return null;
       }
 
-      final status = StorageStatus(
-        totalUsedBytes: totalBytes,
-        fileCount: fileCount,
-        freeBytes: 0,
-        statusFlags: 0,
-      );
+      final status = StorageStatus(totalUsedBytes: totalBytes, fileCount: fileCount, freeBytes: 0, statusFlags: 0);
       Logger.debug('OmiDeviceConnection: $status');
       return status;
     } catch (e) {
@@ -405,16 +401,17 @@ class OmiDeviceConnection extends DeviceConnection {
         completer.complete(info);
       });
 
-      await transport.writeCharacteristic(
-        storageDataStreamServiceUuid,
-        storageDataStreamCharacteristicUuid,
-        [RingProtocol.cmdInfo],
-      );
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [
+        RingProtocol.cmdInfo,
+      ]);
 
-      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-        Logger.debug('OmiDeviceConnection: getRingInfo timeout');
-        return null;
-      });
+      return await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          Logger.debug('OmiDeviceConnection: getRingInfo timeout');
+          return null;
+        },
+      );
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error getting ring info: $e');
       return null;
@@ -464,10 +461,13 @@ class OmiDeviceConnection extends DeviceConnection {
       );
       Logger.debug('OmiDeviceConnection: CMD_RING_ADVANCE seq=$newReadSeq');
 
-      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-        Logger.debug('OmiDeviceConnection: advanceRing timeout');
-        return false;
-      });
+      return await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          Logger.debug('OmiDeviceConnection: advanceRing timeout');
+          return false;
+        },
+      );
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error advancing ring: $e');
       return false;
@@ -494,17 +494,18 @@ class OmiDeviceConnection extends DeviceConnection {
         completer.complete(status == 0);
       });
 
-      await transport.writeCharacteristic(
-        storageDataStreamServiceUuid,
-        storageDataStreamCharacteristicUuid,
-        [RingProtocol.cmdClear],
-      );
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [
+        RingProtocol.cmdClear,
+      ]);
       Logger.debug('OmiDeviceConnection: CMD_RING_CLEAR');
 
-      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-        Logger.debug('OmiDeviceConnection: clearRing timeout');
-        return false;
-      });
+      return await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          Logger.debug('OmiDeviceConnection: clearRing timeout');
+          return false;
+        },
+      );
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error clearing ring: $e');
       return false;
@@ -778,18 +779,20 @@ class OmiDeviceConnection extends DeviceConnection {
 
             for (int i = 0; i < 6; i++) {
               int baseIndex = i * 8;
-              var result = ((value[baseIndex] |
-                          (value[baseIndex + 1] << 8) |
-                          (value[baseIndex + 2] << 16) |
-                          (value[baseIndex + 3] << 24)) &
-                      0xFFFFFFFF)
-                  .toSigned(32);
-              var temp = ((value[baseIndex + 4] |
-                          (value[baseIndex + 5] << 8) |
-                          (value[baseIndex + 6] << 16) |
-                          (value[baseIndex + 7] << 24)) &
-                      0xFFFFFFFF)
-                  .toSigned(32);
+              var result =
+                  ((value[baseIndex] |
+                              (value[baseIndex + 1] << 8) |
+                              (value[baseIndex + 2] << 16) |
+                              (value[baseIndex + 3] << 24)) &
+                          0xFFFFFFFF)
+                      .toSigned(32);
+              var temp =
+                  ((value[baseIndex + 4] |
+                              (value[baseIndex + 5] << 8) |
+                              (value[baseIndex + 6] << 16) |
+                              (value[baseIndex + 7] << 24)) &
+                          0xFFFFFFFF)
+                      .toSigned(32);
               double axisValue = result + (temp / 1000000);
               accelerometerData.add(axisValue);
             }
@@ -883,10 +886,7 @@ class OmiDeviceConnection extends DeviceConnection {
 
   Future<bool> readChargingStatus() async {
     try {
-      final value = await transport.readCharacteristic(
-        settingsServiceUuid,
-        settingsChargingStatusCharacteristicUuid,
-      );
+      final value = await transport.readCharacteristic(settingsServiceUuid, settingsChargingStatusCharacteristicUuid);
       return value.isNotEmpty && value[0] == 1;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error reading charging status: $e');
@@ -898,10 +898,7 @@ class OmiDeviceConnection extends DeviceConnection {
     required void Function(bool isCharging) onChargingStatusChange,
   }) async {
     try {
-      final stream = transport.getCharacteristicStream(
-        settingsServiceUuid,
-        settingsChargingStatusCharacteristicUuid,
-      );
+      final stream = transport.getCharacteristicStream(settingsServiceUuid, settingsChargingStatusCharacteristicUuid);
       return stream.listen((value) {
         if (value.isNotEmpty) {
           onChargingStatusChange(value[0] == 1);
