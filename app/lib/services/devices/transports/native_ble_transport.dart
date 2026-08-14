@@ -93,6 +93,11 @@ class NativeBleTransport extends DeviceTransport {
   Future<void> disconnect() async {
     if (_state == DeviceTransportState.disconnected && _streamControllers.isEmpty) return;
 
+    // A liveness watch pending from a prior connection must not fire into a
+    // subsequent one and force a spurious CCCD re-subscribe.
+    _audioLivenessTimer?.cancel();
+    _audioSilenceResubscribes = 0;
+
     _updateState(DeviceTransportState.disconnecting);
 
     // Unsubscribe all active streams

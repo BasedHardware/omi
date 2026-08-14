@@ -503,7 +503,25 @@ final class OmiBleManager: NSObject {
 
     private static func batteryHistoryKey(_ uuid: String) -> String { "\(batteryHistoryKeyPrefix)\(uuid)" }
 
+    /// The in-memory throttle baseline is lost on process restart; restore it
+    /// from the newest persisted history entry so the first battery
+    /// notification after a relaunch cannot bypass the throttle.
+    private func rehydrateBatteryBaseline(uuid: String) {
+        guard let history = UserDefaults.standard.array(forKey: OmiBleManager.batteryHistoryKey(uuid)) as? [[String: Any]],
+              let last = history.last,
+              let ts = last["ts"] as? Int64,
+              let level = last["level"] as? Int
+        else { return }
+        lastPersistedBatteryLevel[uuid] = level
+        lastPersistedBatteryAtMs[uuid] = ts
+    }
+
     private func shouldPersistBatteryReading(uuid: String, level: Int, nowMs: Int64) -> Bool {
+        // Rehydrate the throttle baseline after a process restart so the first
+        // notification is checked against the last persisted sample.
+        if lastPersistedBatteryLevel[uuid] == nil || lastPersistedBatteryAtMs[uuid] == nil {
+            rehydrateBatteryBaseline(uuid: uuid)
+        }
         guard let previousLevel = lastPersistedBatteryLevel[uuid],
               let lastPersistedAtMs = lastPersistedBatteryAtMs[uuid]
         else {
