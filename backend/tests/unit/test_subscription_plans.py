@@ -29,9 +29,12 @@ def subscription_module():
     """Load a fresh ``utils.subscription`` against stubbed circular-import deps."""
     announcements_stub = ModuleType("database.announcements")
     announcements_stub.compare_versions = lambda a, b: 0
+    client_stub = ModuleType("database._client")
+    client_stub.get_customer_firestore_client = MagicMock()
 
     fakes = {
         "database.announcements": announcements_stub,
+        "database._client": client_stub,
         "database.users": ModuleType("database.users"),
         "database.user_usage": ModuleType("database.user_usage"),
     }
