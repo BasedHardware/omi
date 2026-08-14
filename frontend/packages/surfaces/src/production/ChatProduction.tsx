@@ -624,6 +624,9 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                   candidate.delivery.kind === "canonical" &&
                   candidate.delivery.clientMessageId === failedDelivery.clientMessageId
                 );
+                // Capture once: `message.agentRun` is optional, and TS does not
+                // keep the JSX guard inside the events `.map` closure.
+                const agentRun = message.agentRun;
                 return (
                   <li
                     key={messageKey(message)}
@@ -646,15 +649,15 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                         <p>{t(locale, "chat.liveUpdatesUnavailableHint")}</p>
                       </div>
                     )}
-                    {message.role === "assistant" && message.agentRun && message.agentRun.events.length > 0 && (
-                      <details className="chat-agent-run" data-agent-run-state={message.agentRun.state}>
+                    {message.role === "assistant" && agentRun && agentRun.events.length > 0 && (
+                      <details className="chat-agent-run" data-agent-run-state={agentRun.state}>
                         <summary>
                           <span>{t(locale, "chat.agentRunDetails")}</span>
                           <span className="chat-agent-capability">{agentCapabilityLabel(message, locale)}</span>
-                          <span className="chat-agent-state">{agentRunStateLabel(message.agentRun.state, locale)}</span>
+                          <span className="chat-agent-state">{agentRunStateLabel(agentRun.state, locale)}</span>
                         </summary>
                         <ol aria-label={t(locale, "chat.agentRunLabel")}>
-                          {message.agentRun.events.map((event) => (
+                          {agentRun.events.map((event) => (
                             <li key={`${event.sequence}:${event.kind}`} data-agent-event={event.kind}>
                               <p>{event.safeSummary}</p>
                               {event.kind === "context_receipt" && (
@@ -666,7 +669,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                               {(event.kind === "tool_request" || event.kind === "tool_result" || event.kind === "tool_error") && (
                                 <p className="chat-agent-detail">{t(locale, "chat.agentTool", { name: event.details.toolName })}</p>
                               )}
-                              {event.kind === "approval_requested" && approvalIsPending(message.agentRun.events, event) && (
+                              {event.kind === "approval_requested" && approvalIsPending(agentRun.events, event) && (
                                 <div className="chat-agent-approval" data-approval-pending="true">
                                   <p className="chat-agent-detail">{event.details.reason}</p>
                                   <button type="button" data-approval-action="approved" onClick={() => resolveApproval("approved")}>
