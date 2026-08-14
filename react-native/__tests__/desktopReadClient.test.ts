@@ -185,6 +185,17 @@ test('separates a machine slug from visible memory text', () => {
   });
 });
 
+test('separates a namespaced entity id from visible memory text', () => {
+  expect(
+    parseMemoryText(
+      'entity:qa:000008 qa_memory (observed 2026-07-30T12:00:00.000Z).',
+    ),
+  ).toEqual({
+    body: 'qa_memory (observed 2026-07-30T12:00:00.000Z).',
+    provenanceLabel: 'entity:qa:000008',
+  });
+});
+
 test.each([
   ['conversations', loadConversations, JSON.stringify({items: []})],
   [

@@ -576,11 +576,6 @@ function MemoriesPage({
               : `${item.provenance.label} · ${item.provenance.synthesisVersion}`
           }`}
         </Text>
-        {item.citations.map(citation => (
-          <Text key={citation} style={styles.memoryCitation}>
-            {citation}
-          </Text>
-        ))}
       </View>
     ),
     [],

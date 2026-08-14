@@ -321,7 +321,9 @@ export function parseMemoryText(text: string): {
   body: string;
   provenanceLabel: string | null;
 } {
-  const match = text.match(/^([a-z0-9]+(?:-[a-z0-9]+){2,}):\s+(.+)$/s);
+  const match =
+    text.match(/^((?:[a-z0-9_-]+:){2,}[a-z0-9_-]+)\s+(.+)$/is) ??
+    text.match(/^([a-z0-9]+(?:-[a-z0-9]+){2,}):\s+(.+)$/is);
   return match === null
     ? {body: text, provenanceLabel: null}
     : {body: match[2], provenanceLabel: match[1]};
