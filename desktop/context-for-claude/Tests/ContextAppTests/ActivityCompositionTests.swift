@@ -1510,4 +1510,3 @@ private actor PagingAccount: ActivityAccountReading {
             answered: answered)
     }
 }
-
