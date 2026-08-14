@@ -59,7 +59,7 @@ overlay:
           value: gateway
           category: rollout
         MEMORY_MODE:
-          value: 'off'
+          value: 'write'
         MEMORY_V3_GET_ENABLED:
           value: 'false'
         # Canonical graph and /v3/memories first-page cursors fail closed without this HMAC.
@@ -196,7 +196,7 @@ overlay:
             value: gateway
             category: rollout
           MEMORY_MODE:
-            value: 'off'
+            value: 'write'
           MEMORY_V3_GET_ENABLED:
             value: 'false'
           # `/v1/knowledge-graph` and signed memory cursors fail closed until this binding is present.
@@ -277,7 +277,7 @@ overlay:
             value: gateway
             category: rollout
           MEMORY_MODE:
-            value: 'off'
+            value: 'write'
           MEMORY_V3_GET_ENABLED:
             value: 'false'
       backend-sync-backfill:
@@ -332,7 +332,7 @@ overlay:
             value: gateway
             category: rollout
           MEMORY_MODE:
-            value: 'off'
+            value: 'write'
           MEMORY_V3_GET_ENABLED:
             value: 'false'
       backend-integration:
@@ -369,7 +369,7 @@ overlay:
             value: gateway
             category: rollout
           MEMORY_MODE:
-            value: 'off'
+            value: 'write'
           MEMORY_V3_GET_ENABLED:
             value: 'false'
     jobs:
@@ -386,7 +386,7 @@ overlay:
             value: gateway
             category: rollout
           MEMORY_MODE:
-            value: 'off'
+            value: 'write'
           MEMORY_V3_GET_ENABLED:
             value: 'false'
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:

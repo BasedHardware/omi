@@ -137,6 +137,7 @@ environment_shared:
             key: TWILIO_ACCOUNT_SID
         MEMORY_MODE:
           category: memory_rollout
+          value: 'write'
         MEMORY_TYPESENSE_COLLECTION:
           value: canonical_memory_atoms
           category: memory_rollout
@@ -202,6 +203,7 @@ environment_shared:
             category: reliability
           MEMORY_MODE:
             category: memory_rollout
+            value: 'write'
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
             category: rollout
@@ -296,6 +298,7 @@ environment_shared:
             category: rollout
           MEMORY_MODE:
             category: memory_rollout
+            value: 'write'
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -385,6 +388,7 @@ environment_shared:
             category: rollout
           MEMORY_MODE:
             category: memory_rollout
+            value: 'write'
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
             value: '555'
@@ -482,6 +486,7 @@ environment_shared:
             category: rollout
           MEMORY_MODE:
             category: memory_rollout
+            value: 'write'
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
             value: '555'
@@ -565,6 +570,7 @@ environment_shared:
             category: memory_rollout
           MEMORY_MODE:
             category: memory_rollout
+            value: 'write'
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout

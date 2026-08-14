@@ -54,7 +54,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
-        {"name": "MEMORY_MODE", "value": "off"},
+        {"name": "MEMORY_MODE", "value": "write"},
         {"name": "MEMORY_V3_GET_ENABLED", "value": "false"},
         {"name": "MEMORY_V3_CURSOR_SECRET_VERSION", "value": "dev-v1"},
         {"name": "MEMORY_CANONICAL_MAINTENANCE_ENABLED", "value": "false"},
@@ -1944,6 +1944,15 @@ def test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron(tmp_
     errors = validator.validate_runtime_env(env='prod', manifest_path=path)
     messages = [error.message for error in errors]
     assert any('requires memory-maintenance-job' in message for message in messages)
+
+
+def test_memory_maintenance_job_contract_allows_write_without_job_cron():
+    validator = load_validator()
+    errors = validator._validate_memory_maintenance_job_contract(
+        'prod',
+        validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['prod'],
+    )
+    assert errors == []
 
 
 def test_memory_maintenance_job_contract_rejects_missing_job(tmp_path):

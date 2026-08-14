@@ -182,9 +182,9 @@ def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[Validatio
 def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
     """Require memory-maintenance-job to track the global memory safety mode.
 
-    Prod may keep MEMORY_MODE=off with cron disabled. Enabling MEMORY_MODE=read on any
-    request-path surface without enabling the dedicated maintenance job fails validation
-    so Gate 3 cannot forget ST→LT hosting.
+    ``off`` pauses product writes. ``write`` is default-on intake for every UID
+    (no allowlist, ST→LT cron not required). ``read`` still requires the
+    dedicated maintenance job so Gate 3 cannot forget ST→LT hosting.
 
     Also rejects:
     - canonical maintenance env/secrets on notifications-job (its workflow
@@ -353,17 +353,45 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                 )
             )
         for surface_scope, _surface_env, surface_mode in read_surfaces:
+            if surface_mode == 'write':
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'{surface_scope} MEMORY_MODE=write requires memory-maintenance-job MEMORY_MODE=write',
+                    )
+                )
+            else:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'{surface_scope} MEMORY_MODE={surface_mode!r} requires memory-maintenance-job '
+                        'MEMORY_MODE=read and MEMORY_CANONICAL_MAINTENANCE_ENABLED=true '
+                        '(ST→LT is not hosted by notifications-job)',
+                    )
+                )
+        return errors
+
+    if job_mode == 'write':
+        # Default-on intake. ST→LT cron stays off until an explicit read cutover.
+        if job_cron == 'true':
             errors.append(
                 ValidationError(
                     scope,
-                    f'{surface_scope} MEMORY_MODE={surface_mode!r} requires memory-maintenance-job '
-                    'MEMORY_MODE=read and MEMORY_CANONICAL_MAINTENANCE_ENABLED=true '
-                    '(ST→LT is not hosted by notifications-job)',
+                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false while MEMORY_MODE is write',
                 )
             )
+        for surface_scope, _surface_env, surface_mode in read_surfaces:
+            if surface_mode != 'write':
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'{surface_scope} MEMORY_MODE={surface_mode!r} must match '
+                        'memory-maintenance-job MEMORY_MODE=write',
+                    )
+                )
         return errors
 
-    # Canonical request-path is on somewhere — maintenance job must be fully enabled.
+    # MEMORY_MODE=read — maintenance job must be fully enabled.
     if job_mode != 'read':
         errors.append(
             ValidationError(scope, f'MEMORY_MODE must be read when enabling canonical memory (got {job_mode!r})')
@@ -372,7 +400,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         errors.append(
             ValidationError(
                 scope,
-                'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be true when MEMORY_MODE is not off '
+                'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be true when MEMORY_MODE is read '
                 '(ST→LT maintenance is hosted by memory-maintenance-job, not notifications-job)',
             )
         )

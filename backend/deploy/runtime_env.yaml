@@ -132,7 +132,7 @@ environments:
               key: TWILIO_ACCOUNT_SID
           MEMORY_MODE:
             category: memory_rollout
-            value: 'off'
+            value: write
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -429,7 +429,7 @@ environments:
               category: rollout
             MEMORY_MODE:
               category: memory_rollout
-              value: 'off'
+              value: write
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -571,7 +571,7 @@ environments:
               category: rollout
             MEMORY_MODE:
               category: memory_rollout
-              value: 'off'
+              value: write
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -710,7 +710,7 @@ environments:
               category: rollout
             MEMORY_MODE:
               category: memory_rollout
-              value: 'off'
+              value: write
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -815,7 +815,7 @@ environments:
               category: reliability
             MEMORY_MODE:
               category: memory_rollout
-              value: 'off'
+              value: write
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
@@ -955,7 +955,7 @@ environments:
               value: memories-backend-dev
             MEMORY_MODE:
               category: memory_rollout
-              value: 'off'
+              value: write
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -1109,7 +1109,7 @@ environments:
               key: TWILIO_ACCOUNT_SID
           MEMORY_MODE:
             category: memory_rollout
-            value: 'off'
+            value: write
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -1335,7 +1335,7 @@ environments:
               category: rollout
             MEMORY_MODE:
               category: memory_rollout
-              value: 'off'
+              value: write
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -1494,7 +1494,7 @@ environments:
               category: rollout
             MEMORY_MODE:
               category: memory_rollout
-              value: 'off'
+              value: write
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -1634,7 +1634,7 @@ environments:
               category: rollout
             MEMORY_MODE:
               category: memory_rollout
-              value: 'off'
+              value: write
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -1740,7 +1740,7 @@ environments:
               category: reliability
             MEMORY_MODE:
               category: memory_rollout
-              value: 'off'
+              value: write
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
@@ -1862,7 +1862,7 @@ environments:
               value: memories-backend
             MEMORY_MODE:
               category: memory_rollout
-              value: 'off'
+              value: write
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
