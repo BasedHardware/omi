@@ -336,6 +336,12 @@ public struct CapabilityReport: Codable, Sendable, Equatable {
     public var granted: Bool
     public var detail: String
 
+    /// The word a report carries when the capability is in. Here rather than in the app because
+    /// ``CaptureState`` writes it too, when it reconciles a report against a stream that is live —
+    /// and a status the app spells one way and the heartbeat another is two claims a reader has to
+    /// work out are the same one.
+    public static let grantedDetail = "Granted"
+
     public init(name: String, granted: Bool, detail: String) {
         self.name = name
         self.granted = granted

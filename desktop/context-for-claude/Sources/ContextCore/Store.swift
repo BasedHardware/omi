@@ -20,6 +20,17 @@ public final class ContextStore: @unchecked Sendable {
     /// True for the `context-for-claude-mcp` reader. Every mutating helper refuses when this is set.
     public let isReadOnly: Bool
 
+    /// Where *this* store's screenshots live: beside its own database, never at a globally derived
+    /// path.
+    ///
+    /// The same reasoning as `ContextPaths.queryStampURL(besideDatabaseAt:)`. Retention deletes
+    /// files that the rows in this database name, so the directory it sweeps has to be the one those
+    /// rows were written into — a sweep that reads the installed app's directory while holding some
+    /// other database is pointed at files it has no rows for, which is the one thing a delete may
+    /// never be. In the app the two are the same location; in a test, or in any second store, they
+    /// are not.
+    public let framesRoot: URL
+
     // MARK: - Retention policy
 
     /// How old screenshots may get. The first of the two retention bounds.
@@ -43,9 +54,30 @@ public final class ContextStore: @unchecked Sendable {
     /// already failed at being ambient.
     public static let defaultFrameBytesCap: Int64 = 4 * 1024 * 1024 * 1024
 
+    /// How long something unreferenced is left alone before it is treated as garbage.
+    ///
+    /// Both sweeps below delete only what is **unreferenced *and* stale**, and this is the stale
+    /// half. It exists because capture writes the thing before the row that names it — the image
+    /// before the `frames` insert, the accessibility subtrees before the frame that points at them
+    /// — so at every instant there is a window in which a perfectly live file or node has nothing
+    /// pointing at it yet. That window is milliseconds wide: both writes are handed to one serial
+    /// queue back to back, and the holding pen that can delay them is drained before a store exists
+    /// for retention to be called on at all. An hour of headroom costs an hour of deferred
+    /// reclamation and buys the one error neither sweep may ever make.
+    public static let unreferencedGraceSeconds: Double = 3_600
+
     /// Ids per `DELETE ... IN (...)`. SQLite caps how many parameters one statement may bind, and a
     /// month of capture is tens of thousands of rows.
     private static let deleteChunkSize = 500
+
+    /// Rows per batch while scanning `ax_nodes` for garbage, so the scan's memory is bounded by the
+    /// batch rather than by the size of the table.
+    private static let axNodeScanBatch = 5_000
+
+    /// Nodes one sweep may delete. The sweep runs hourly beside live capture, so a machine carrying
+    /// a large backlog — every install that predates the sweep carries one — reclaims it over a few
+    /// passes instead of holding the single writer through one enormous transaction.
+    public static let axNodeSweepLimit = 50_000
 
     /// `ContextCore` cannot reach `ContextLog` — it links into `context-for-claude-mcp`, which owns
     /// no app code — so retention logs straight to the unified log under the same subsystem and
@@ -63,6 +95,8 @@ public final class ContextStore: @unchecked Sendable {
     public init(url: URL = ContextPaths.databaseURL, readOnly: Bool = false) throws {
         self.databaseURL = url
         self.isReadOnly = readOnly
+        self.framesRoot = url.deletingLastPathComponent()
+            .appendingPathComponent("Frames", isDirectory: true)
 
         if readOnly {
             guard FileManager.default.fileExists(atPath: url.path) else {
@@ -204,19 +238,37 @@ public final class ContextStore: @unchecked Sendable {
     /// a colliding hash means identical contents, so losing the race is the correct outcome and
     /// checking first would only add a round trip. Returns how many rows were genuinely new, which is
     /// the number worth logging — it is the dedup rate, measured rather than assumed.
+    ///
+    /// `seenAt` is what makes these rows collectable. See ``sweepAXNodes(graceSeconds:limit:now:)``.
     @discardableResult
-    public func insertAXNodes(_ records: [AXNodeRecord], firstSeenFrameId: Int64?) throws -> Int {
+    public func insertAXNodes(
+        _ records: [AXNodeRecord],
+        firstSeenFrameId: Int64?,
+        seenAt: Double = ContextTime.now
+    ) throws -> Int {
         guard !records.isEmpty else { return 0 }
         return try write { db in
             var inserted = 0
             for record in records {
                 try db.execute(
                     sql: """
-                    INSERT OR IGNORE INTO ax_nodes (hash, payload, firstSeenFrameId)
-                    VALUES (?, ?, ?)
+                    INSERT OR IGNORE INTO ax_nodes (hash, payload, firstSeenFrameId, lastSeenAt)
+                    VALUES (?, ?, ?, ?)
                     """,
-                    arguments: [record.hash, record.payload, firstSeenFrameId])
-                inserted += db.changesCount
+                    arguments: [record.hash, record.payload, firstSeenFrameId, seenAt])
+                if db.changesCount > 0 {
+                    inserted += 1
+                    continue
+                }
+                // The dedup path — and the one the sweep leans on. A subtree that recurs is *in use
+                // again*, and the row already holding it is the row the frame now being captured
+                // will reference. Nothing re-inserts it, so without this touch a node whose every
+                // frame has aged out could be collected in the gap between the tree that revived it
+                // and the frame row that names it. The `lastSeenAt <` clause keeps a re-seen node
+                // from dirtying a page for a timestamp it already carries.
+                try db.execute(
+                    sql: "UPDATE ax_nodes SET lastSeenAt = ? WHERE hash = ? AND lastSeenAt < ?",
+                    arguments: [seenAt, record.hash, seenAt])
             }
             return inserted
         }
@@ -247,7 +299,7 @@ public final class ContextStore: @unchecked Sendable {
         for path in imagePaths {
             try? fileManager.removeItem(atPath: path)
         }
-        Self.removeEmptyDayDirectories()
+        removeEmptyDayDirectories()
 
         return deleted
     }
@@ -310,7 +362,7 @@ public final class ContextStore: @unchecked Sendable {
             guard let path = frame.path else { continue }
             if (try? fileManager.removeItem(atPath: path)) != nil { freed += frame.bytes }
         }
-        Self.removeEmptyDayDirectories()
+        removeEmptyDayDirectories()
 
         // A user who finds a gap in their screen history deserves to see that retention made it, not
         // guess at a fault. Bytes only: never a path, a window title, or a line of OCR.
@@ -324,10 +376,236 @@ public final class ContextStore: @unchecked Sendable {
         return deleted
     }
 
-    /// Applies both retention bounds and returns the total rows removed.
+    // MARK: - Sweeps
+    //
+    // Retention deletes rows; these two collect what a row delete leaves behind. Both obey one rule
+    // — **delete only what is unreferenced *and* stale** — because capture writes every artefact
+    // before the row that names it, so "nothing points at this" is momentarily true of live data.
+    // See ``unreferencedGraceSeconds``.
+
+    /// Deletes screen images on disk that no `frames` row names. Returns how many files went.
+    ///
+    /// Both prune paths commit their row deletes and then unlink the files, which is deliberate — a
+    /// thousand `unlink` calls must not hold the single writer while capture is running — and it
+    /// means a crash, a full disk or a revoked permission in between leaves an image nothing can
+    /// ever name again. Nothing reclaimed those, and ``framesBytesOnDisk()`` counts rows, so they
+    /// were invisible to the byte cap as well: pure loss, growing with every interrupted sweep.
+    ///
+    /// **The inverse error is the dangerous one, so the file has to be stale on its own clock.**
+    /// `ScreenWatcher` writes the image and only then hands the frame over to be inserted, so a file
+    /// written moments ago legitimately has no row yet — and a directory listing that treated it as
+    /// unreferenced would delete a screenshot out from under live capture. Three things stop that:
+    ///
+    /// - **The listing is taken before the rows.** A file that appears after the listing is not a
+    ///   candidate at all, and one that appears before it has until the row read to be claimed.
+    /// - **Modification time is capture time.** These files are written once, atomically, and never
+    ///   touched again, so `mtime` dates the image itself rather than the sweep's view of it — which
+    ///   makes the grace window a real bound on the write-then-insert gap and not an approximation
+    ///   of one. It also means an image orphaned by an interrupted prune, whose `mtime` is as old as
+    ///   the frame it belonged to, is reclaimed by the very next sweep rather than waiting out a
+    ///   grace period it already served.
+    /// - **Only the shapes capture writes.** Anything that is not a `.heic`, `.jpg` or `.jpeg` under
+    ///   this store's own frames root is left exactly where it is — including the partial file
+    ///   `Data.write(_:.atomic)` stages beside its destination, and any image a row names somewhere
+    ///   else entirely, which never appears in the listing at all.
+    @discardableResult
+    public func sweepOrphanedFrameImages(
+        graceSeconds: Double = ContextStore.unreferencedGraceSeconds,
+        now: Double = ContextTime.now
+    ) throws -> Int {
+        guard !isReadOnly else { throw ContextStoreError.readOnly }
+
+        // Order matters: see the doc comment. The listing is the older half of the two reads.
+        let files = imageFilesOnDisk()
+        guard !files.isEmpty else { return 0 }
+        let referenced = try referencedImagePaths()
+
+        let cutoff = now - graceSeconds
+        let doomed = files.filter { file in
+            file.modifiedAt < cutoff && !referenced.contains(file.url.path)
+                && !referenced.contains(file.url.resolvingSymlinksInPath().path)
+        }
+        guard !doomed.isEmpty else { return 0 }
+
+        let fileManager = FileManager.default
+        var removed = 0
+        var freed: Int64 = 0
+        for file in doomed {
+            guard (try? fileManager.removeItem(at: file.url)) != nil else { continue }
+            removed += 1
+            freed += file.bytes
+        }
+        removeEmptyDayDirectories()
+
+        if removed > 0 {
+            // Counts and bytes only: never a path, which is a window title and a date.
+            Self.log.info(
+                """
+                Frame retention: reclaimed \(removed, privacy: .public) orphaned \
+                \(removed == 1 ? "image" : "images"), \(Self.describe(freed), privacy: .public)
+                """)
+        }
+        return removed
+    }
+
+    /// Deletes accessibility subtrees that no stored frame's tree can reach. Returns rows removed.
+    ///
+    /// `ax_nodes` is a **cache subordinate to `frames`**, and this is the sentence that makes that
+    /// true rather than aspirational: a node lives exactly as long as some frame still needs it. It
+    /// had no such bound before — nothing ever deleted from the table — so it grew forever while the
+    /// frames whose trees it held were pruned at thirty days, measured at ~370 MB a year on this
+    /// machine's capture shape.
+    ///
+    /// **Reachability, not a join.** A node's children are encoded inside its own opaque payload
+    /// (``AccessibilityTree/childHashes(inPayload:)``), so there is no edge table and no `DELETE …
+    /// WHERE NOT IN (SELECT …)` that could express this. The mark walks out from every
+    /// `frames.axRootHash` and the sweep takes what the walk never reached. A subtree shared by a
+    /// hundred frames is reached through any one of them, which is the whole point of storing it
+    /// once.
+    ///
+    /// **Two independent reasons a node survives**, because the mark is a snapshot and capture is
+    /// still running underneath it:
+    ///
+    /// - it is reachable from a frame that existed when the mark ran; or
+    /// - the store was offered it inside the grace window — which every node of a tree being
+    ///   captured right now was, including one that already existed and was therefore silently
+    ///   *re-used* rather than re-inserted. That second case is the subtle one: a subtree whose last
+    ///   frame aged out weeks ago can recur at any moment, and the recurrence writes no new row.
+    ///
+    /// The staleness test is re-evaluated **inside the delete itself**, not merely when the
+    /// candidates were chosen. That is what closes the window: a node re-seen after the scan but
+    /// before the delete no longer matches the statement, so it survives; a node re-seen after the
+    /// delete finds its row gone and re-inserts it. Both writes are transactions on the one writer
+    /// this database has, so there is no third ordering.
+    ///
+    /// Interruption is safe by construction: deleting garbage is idempotent, and whatever a crash
+    /// leaves behind is simply collected by the next pass.
+    @discardableResult
+    public func sweepAXNodes(
+        graceSeconds: Double = ContextStore.unreferencedGraceSeconds,
+        limit: Int = ContextStore.axNodeSweepLimit,
+        now: Double = ContextTime.now
+    ) throws -> Int {
+        guard !isReadOnly else { throw ContextStoreError.readOnly }
+        let cutoff = now - graceSeconds
+
+        // The mark runs on a reader connection: it visits every live tree, and holding the writer
+        // for that would stall capture for as long as it takes.
+        let reachable = try reachableAXNodeHashes()
+        let doomed = try collectableAXNodeHashes(reachable: reachable, cutoff: cutoff, limit: limit)
+        guard !doomed.isEmpty else { return 0 }
+
+        let removed = try deleteAXNodes(doomed, stalerThan: cutoff)
+
+        if removed > 0 {
+            Self.log.info(
+                """
+                Accessibility retention: removed \(removed, privacy: .public) unreachable \
+                \(removed == 1 ? "subtree" : "subtrees"), \
+                \(reachable.count, privacy: .public) still in use
+                """)
+        }
+        return removed
+    }
+
+    /// Deletes the named nodes, **re-testing staleness inside the statement**. Returns rows removed.
+    ///
+    /// The predicate is repeated here rather than trusted from the scan because that is the whole
+    /// defence against the one interleaving that could orphan a live tree: a subtree re-used by a
+    /// capture between the scan and this delete has had its `lastSeenAt` moved forward by
+    /// ``insertAXNodes(_:firstSeenFrameId:seenAt:)``, and a row that no longer matches is a row this
+    /// statement does not touch. Both are transactions on the single writer, so the two orderings
+    /// are the only ones: refresh first and the node survives, delete first and the refresh's
+    /// `INSERT OR IGNORE` puts it back.
+    func deleteAXNodes(_ hashes: [Data], stalerThan cutoff: Double) throws -> Int {
+        guard !hashes.isEmpty else { return 0 }
+        return try write { db -> Int in
+            var count = 0
+            for start in stride(from: 0, to: hashes.count, by: Self.deleteChunkSize) {
+                let chunk = Array(hashes[start..<min(start + Self.deleteChunkSize, hashes.count)])
+                var arguments: [DatabaseValueConvertible] = [cutoff]
+                arguments.append(contentsOf: chunk)
+                try db.execute(
+                    sql: """
+                    DELETE FROM ax_nodes
+                    WHERE lastSeenAt < ? AND hash IN (\(databaseQuestionMarks(count: chunk.count)))
+                    """,
+                    arguments: StatementArguments(arguments))
+                count += db.changesCount
+            }
+            return count
+        }
+    }
+
+    /// Every node address some stored frame's tree still needs, found by walking out from the roots.
+    ///
+    /// Internal rather than private, with ``collectableAXNodeHashes(reachable:cutoff:limit:)`` and
+    /// ``deleteAXNodes(_:stalerThan:)``, because the ordering *between* the three is the property
+    /// under test: the sweep is a read followed by a write, and the only interleaving that can lose
+    /// data happens between them. A test that could only call the whole sweep could never place a
+    /// capture in that gap.
+    func reachableAXNodeHashes() throws -> Set<Data> {
+        try read { db in
+            var reachable = Set<Data>()
+            var frontier = try Data.fetchAll(
+                db,
+                sql: "SELECT DISTINCT axRootHash FROM frames WHERE axRootHash IS NOT NULL")
+            while let hash = frontier.popLast() {
+                // A shared subtree is reached once. Without this the walk is exponential in the
+                // sharing that made the table affordable in the first place.
+                guard reachable.insert(hash).inserted else { continue }
+                let statement = try db.cachedStatement(
+                    sql: "SELECT payload FROM ax_nodes WHERE hash = ?")
+                // A root whose rows never landed — an interrupted write, or a database restored
+                // without them — simply has no children to follow. It is not an error and it is not
+                // this sweep's business to repair.
+                guard let payload = try Data.fetchOne(statement, arguments: [hash]) else { continue }
+                frontier.append(contentsOf: AccessibilityTree.childHashes(inPayload: payload))
+            }
+            return reachable
+        }
+    }
+
+    /// Up to `limit` node addresses that are both unreachable and stale, scanned in `rowid` order so
+    /// the scan's memory is the batch rather than the table.
+    func collectableAXNodeHashes(
+        reachable: Set<Data>, cutoff: Double, limit: Int
+    ) throws -> [Data] {
+        try read { db in
+            var doomed: [Data] = []
+            var cursor: Int64 = 0
+            while doomed.count < limit {
+                let rows = try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT rowid AS rid, hash FROM ax_nodes
+                    WHERE rid > ? AND lastSeenAt < ?
+                    ORDER BY rid LIMIT ?
+                    """,
+                    arguments: [cursor, cutoff, Self.axNodeScanBatch])
+                guard !rows.isEmpty else { break }
+                for row in rows {
+                    cursor = row["rid"]
+                    let hash: Data = row["hash"]
+                    if !reachable.contains(hash) { doomed.append(hash) }
+                }
+                if rows.count < Self.axNodeScanBatch { break }
+            }
+            return Array(doomed.prefix(limit))
+        }
+    }
+
+    /// Applies both retention bounds and returns the total **frame rows** removed.
     ///
     /// Age first — one indexed delete that cheaply removes most of what has to go — then the byte cap
-    /// over whatever survived it.
+    /// over whatever survived it, and then the two sweeps that collect what those deletes orphaned.
+    /// The sweeps are inside this call rather than on a schedule of their own because they exist to
+    /// finish this job: an image whose row went and a subtree whose last frame went are both created
+    /// by the lines above, and neither has any other owner.
+    ///
+    /// The count is frames, and only frames, so the caller's "removed *n* frames" stays true —
+    /// reclaimed files and collected subtrees are the same frames counted again, and each sweep
+    /// reports its own totals to the log.
     @discardableResult
     public func enforceRetention(
         olderThanDays days: Int = ContextStore.defaultRetentionDays,
@@ -335,6 +613,8 @@ public final class ContextStore: @unchecked Sendable {
     ) throws -> Int {
         let byAge = try pruneFrames(olderThanDays: days)
         let byBytes = try pruneFrames(toFitBytes: bytes)
+        try sweepOrphanedFrameImages()
+        try sweepAXNodes()
         return byAge + byBytes
     }
 
@@ -343,9 +623,10 @@ public final class ContextStore: @unchecked Sendable {
     /// Counted from the rows rather than by walking `Frames/`, because the rows are the only safe
     /// authority. `ScreenWatcher` writes a JPEG before it inserts the row that names it, so a file
     /// with no row may be a screenshot one millisecond old; anything that treated the directory as
-    /// truth would eventually delete a frame out from under a live capture. The cost of that choice
-    /// is that a JPEG orphaned by a crash between the delete and the unlink goes uncounted, which
-    /// understates usage by a few files rather than risking the loss of a real one.
+    /// truth would eventually delete a frame out from under a live capture. An image orphaned by a
+    /// crash between the delete and the unlink is therefore uncounted here — and is reclaimed by
+    /// ``sweepOrphanedFrameImages(graceSeconds:now:)`` rather than left to make this number a lie
+    /// forever.
     public func framesBytesOnDisk() throws -> Int64 {
         try frameFiles().reduce(Int64(0)) { $0 + $1.bytes }
     }
@@ -373,6 +654,63 @@ public final class ContextStore: @unchecked Sendable {
             let path: String? = row["imagePath"]
             return FrameFile(id: id, path: path, bytes: path.map { Self.fileBytes(at: $0) } ?? 0)
         }
+    }
+
+    /// One image on disk, as the orphan sweep has to see it: where it is, how big, and when it was
+    /// written.
+    private struct ImageFile {
+        let url: URL
+        let bytes: Int64
+        /// Capture time. These files are written once and never modified, so `mtime` dates the
+        /// screenshot rather than anything that has since looked at it.
+        let modifiedAt: Double
+    }
+
+    /// The extensions capture has ever written. Anything else in `Frames/` was not put there by this
+    /// app and is not this sweep's to remove.
+    private static let imageExtensions: Set<String> = ["heic", "jpg", "jpeg"]
+
+    /// Every image under `Frames/`, day directories included. Failures are absences: an unreadable
+    /// directory yields nothing to delete, which is the safe direction.
+    private func imageFilesOnDisk() -> [ImageFile] {
+        let fileManager = FileManager.default
+        let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
+        guard let walker = fileManager.enumerator(
+            at: framesRoot,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles, .skipsPackageDescendants])
+        else { return [] }
+
+        var files: [ImageFile] = []
+        for case let url as URL in walker {
+            guard Self.imageExtensions.contains(url.pathExtension.lowercased()),
+                let values = try? url.resourceValues(forKeys: Set(keys)),
+                values.isRegularFile == true,
+                let modified = values.contentModificationDate
+            else { continue }
+            files.append(
+                ImageFile(
+                    url: url,
+                    bytes: Int64(values.fileSize ?? 0),
+                    modifiedAt: modified.timeIntervalSince1970))
+        }
+        return files
+    }
+
+    /// Every path the `frames` table currently names, in both the form it was stored in and the form
+    /// a directory walk produces. A superset is the safe shape here: an extra entry keeps a file, a
+    /// missing one deletes it.
+    private func referencedImagePaths() throws -> Set<String> {
+        let paths = try read { db in
+            try String.fetchAll(
+                db, sql: "SELECT imagePath FROM frames WHERE imagePath IS NOT NULL")
+        }
+        var referenced = Set<String>(minimumCapacity: paths.count * 2)
+        for path in paths {
+            referenced.insert(path)
+            referenced.insert(URL(fileURLWithPath: path).resolvingSymlinksInPath().path)
+        }
+        return referenced
     }
 
     /// Zero for anything that cannot be measured. A path that no longer resolves frees nothing when
@@ -595,14 +933,92 @@ public final class ContextStore: @unchecked Sendable {
             }
         }
 
+        // The index behind every read that asks about *showable* frames.
+        //
+        // `idx_frames_capturedAt` covers time and nothing else, so every query that also says
+        // `imagePath IS NOT NULL` had to check that column on the row — which, for a question about
+        // the whole corpus rather than a range of it, means visiting every row in the table.
+        // Measured against a synthetic year of capture (547,500 frames, 2.5 GiB, the shape the
+        // default `.off` storage strategy actually produces):
+        //
+        // - `RewindQueries.coverage` planned `SCAN frames` and took 581 ms — on the main actor,
+        //   every time the timeline window opens.
+        // - The search panel's `total` for an empty or unindexable query planned `SCAN f` at 575 ms
+        //   — once per keystroke that produces no FTS expression.
+        //
+        // A *partial* index rather than a two-column one: the predicate is always the same
+        // `IS NOT NULL`, so the condition belongs in the index instead of in a second column that
+        // every entry would repeat. It also costs nothing for the ~8.7% of rows that have no image —
+        // they are simply not in it. Both reads now plan against this index (34.7 ms and 12.0 ms),
+        // and `coverage` drops to a pair of O(1) seeks once it stops asking for MIN and MAX in one
+        // statement, which is why that query was split alongside this migration.
+        //
+        // Every other showable read — `frames`, `frameCount`, `nearestCapture`, `newestFrames` —
+        // already had `idx_frames_capturedAt` for its range and now gets a smaller index serving the
+        // same order, so none of them regress.
+        migrator.registerMigration("v8-frame-showable-index") { db in
+            try db.create(
+                index: "idx_frames_showable",
+                on: "frames",
+                columns: ["capturedAt"],
+                condition: Column("imagePath") != nil)
+        }
+
+        // The index behind `RewindQueries.bundleIdsByApp`, which is how every app icon on the
+        // timeline resolves.
+        //
+        // That query asks for the newest sighting of a bundle id per app name. `idx_frames_app` is
+        // `(appName, capturedAt)` and carries no `bundleId`, so SQLite had to read the *row* behind
+        // every index entry to test the predicate: `SCAN frames USING INDEX idx_frames_app` plus
+        // half a million row lookups, measured at 779 ms across the synthetic year — and it runs on
+        // the main actor in `RewindModel.loadInitial`, so that is the window sitting still.
+        //
+        // `(appName, id)` restricted to rows that actually recorded an identifier answers the whole
+        // question out of the index: the group key, the `MAX(id)` within each group, and the
+        // `IS NOT NULL` test are all in it, and the rows that predate `v7-frame-bundle-id` — every
+        // one of which is permanently NULL and can never be the answer — are not in it at all. Same
+        // plan shape, no row lookups: 148 ms.
+        migrator.registerMigration("v9-frame-bundle-by-app-index") { db in
+            try db.create(
+                index: "idx_frames_bundle_by_app",
+                on: "frames",
+                columns: ["appName", "id"],
+                condition: Column("bundleId") != nil)
+        }
+
+        // When each accessibility subtree was last offered to the store, which is what makes the
+        // table collectable.
+        //
+        // `ax_nodes` had no bound at all: nothing in this package ever deleted from it, so a table
+        // holding the trees *of frames* outlived every frame it described and grew for the life of
+        // the install — ~370 MB a year at this machine's measured shape (3.40 nodes per frame, 104 B
+        // of payload plus 46 B of index). Reachability from `frames.axRootHash` is what bounds it,
+        // but reachability alone is not safe to act on: capture stores a tree's rows *before* the
+        // frame that references them, and a subtree that already exists is re-used silently rather
+        // than re-inserted, so there are instants in which a live node is reachable from nothing.
+        // This column is the second, independent reason to keep a row, and
+        // ``sweepAXNodes(graceSeconds:limit:now:)`` requires both.
+        //
+        // `NOT NULL DEFAULT 0` rather than nullable: every row captured before today was last seen
+        // at some unrecorded moment in the past, and 0 says exactly that while keeping the sweep's
+        // predicate a plain comparison. A nullable column would make `lastSeenAt < ?` skip the whole
+        // existing backlog — which is the one population this migration exists to make collectable.
+        // Unindexed, because the sweep scans the table in `rowid` order by design and an index over
+        // a value rewritten on every capture would cost more than the scan it saves.
+        migrator.registerMigration("v10-ax-node-last-seen") { db in
+            try db.alter(table: "ax_nodes") { t in
+                t.add(column: "lastSeenAt", .double).notNull().defaults(to: 0)
+            }
+        }
+
         return migrator
     }
 
     /// Sweeps day directories left behind by a prune. Only removes a directory that is genuinely
     /// empty, so a stray file never takes surviving screenshots down with it.
-    private static func removeEmptyDayDirectories() {
+    private func removeEmptyDayDirectories() {
         let fileManager = FileManager.default
-        let root = ContextPaths.framesDirectory
+        let root = framesRoot
         guard let days = try? fileManager.contentsOfDirectory(
             at: root,
             includingPropertiesForKeys: [.isDirectoryKey],

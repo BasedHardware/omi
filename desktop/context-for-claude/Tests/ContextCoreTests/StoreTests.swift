@@ -42,6 +42,7 @@ final class StoreTests: XCTestCase {
         for expected in [
             "idx_sessions_startedAt", "idx_segments_startedAt", "idx_segments_sessionId",
             "idx_frames_capturedAt", "idx_frames_app",
+            "idx_frames_showable", "idx_frames_bundle_by_app",
         ] {
             XCTAssertTrue(indexes.contains(expected), "missing index \(expected)")
         }
@@ -54,6 +55,74 @@ final class StoreTests: XCTestCase {
                 triggers.count, 3,
                 "\(content) needs the ai/ad/au FTS sync triggers, found \(triggers.map(\.name))")
         }
+    }
+
+    /// **An index nothing plans against is a write cost with no reader**, so the two partial indexes
+    /// are pinned by the plans that justify them rather than by their existence alone.
+    ///
+    /// Both were added because the reads below planned a full table scan without them — measured at
+    /// 581 ms (`coverage`), 575 ms (the search panel's total for a query the FTS index cannot
+    /// represent) and 779 ms (`bundleIdsByApp`) against a synthetic year of capture, all three on
+    /// reads the app makes on the main actor. This is a static tripwire on the *planner*, not a
+    /// timing assertion: it fails if a migration is dropped, if a predicate drifts out of the
+    /// partial index's condition, or if a query is reworded so that the index no longer applies —
+    /// which are the three ways the cost silently comes back.
+    func testShowableAndBundleReadsPlanAgainstTheirPartialIndexes() throws {
+        func plan(_ sql: String) throws -> String {
+            try fixture.store.read { db in
+                try Row.fetchAll(db, sql: "EXPLAIN QUERY PLAN " + sql)
+                    .map { ($0["detail"] as String?) ?? "" }
+                    .joined(separator: " | ")
+            }
+        }
+
+        for (label, sql) in [
+            ("coverage oldest", "SELECT MIN(capturedAt) FROM frames WHERE imagePath IS NOT NULL"),
+            ("coverage newest", "SELECT MAX(capturedAt) FROM frames WHERE imagePath IS NOT NULL"),
+            ("search total", "SELECT COUNT(*) FROM frames f WHERE f.imagePath IS NOT NULL"),
+            (
+                "day window",
+                """
+                SELECT COUNT(*) FROM frames
+                WHERE capturedAt >= 0 AND capturedAt <= 1 AND imagePath IS NOT NULL
+                """
+            ),
+        ] {
+            let detail = try plan(sql)
+            XCTAssertTrue(
+                detail.contains("idx_frames_showable"),
+                "\(label) no longer uses idx_frames_showable: \(detail)")
+        }
+
+        let bundles = try plan(
+            """
+            SELECT appName, bundleId FROM frames
+            WHERE bundleId IS NOT NULL AND TRIM(bundleId) <> ''
+              AND appName IS NOT NULL AND TRIM(appName) <> ''
+              AND id IN (SELECT MAX(id) FROM frames
+                         WHERE bundleId IS NOT NULL AND TRIM(bundleId) <> ''
+                         GROUP BY appName)
+            """)
+        XCTAssertTrue(
+            bundles.contains("idx_frames_bundle_by_app"),
+            "bundleIdsByApp no longer uses idx_frames_bundle_by_app: \(bundles)")
+    }
+
+    /// The partial indexes must not change *which* rows a showable read returns — only how it finds
+    /// them. A condition written the other way round (`imagePath IS NULL`) would still be a legal
+    /// index and would still be planned against, and every one of these reads would quietly invert.
+    func testPartialIndexesDoNotChangeWhichRowsAShowableReadReturns() throws {
+        try fixture.addFrame(at: Fixture.base, app: "Cursor", imagePath: "/tmp/a.heic")
+        try fixture.addFrame(at: Fixture.base + 10, app: "Cursor", imagePath: nil)
+        try fixture.addFrame(at: Fixture.base + 20, app: "Cursor", imagePath: "/tmp/b.heic")
+
+        XCTAssertEqual(
+            try RewindQueries.coverage(fixture.store),
+            Fixture.base...(Fixture.base + 20))
+        XCTAssertEqual(
+            try RewindQueries.frameCount(
+                fixture.store, since: Fixture.base - 1, until: Fixture.base + 100),
+            2)
     }
 
     func testConfidenceMigrationAddsTheColumnWithoutDisturbingExistingRows() throws {
@@ -95,8 +164,9 @@ final class StoreTests: XCTestCase {
         // migration re-runs on every launch and fails on the second one.
         XCTAssertEqual(
             applied,
-            ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity",
-             "v6-accessibility-tree", "v7-frame-bundle-id"])
+            ["v1", "v10-ax-node-last-seen", "v3-segment-confidence", "v4-segment-speaker",
+             "v5-cloud-segment-identity", "v6-accessibility-tree", "v7-frame-bundle-id",
+             "v8-frame-showable-index", "v9-frame-bundle-by-app-index"])
 
         // The ledger is shared with `UploadQueue`, which registers `v2-uploads` outside this
         // migrator and skips itself when its identifier is already recorded. Proving the two live
@@ -108,7 +178,9 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(
             coexisting,
             ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity",
-             "v6-accessibility-tree", "v7-frame-bundle-id", UploadQueue.migrationIdentifier])
+             "v6-accessibility-tree", "v7-frame-bundle-id", "v8-frame-showable-index",
+             "v9-frame-bundle-by-app-index", "v10-ax-node-last-seen",
+             UploadQueue.migrationIdentifier])
         XCTAssertTrue(try tableExists("uploads", in: upgraded), "the uploads migration was skipped")
 
         let segments: [Segment] = try upgraded.read { try Segment.fetchAll($0) }
@@ -198,8 +270,9 @@ final class StoreTests: XCTestCase {
         // never appear.
         XCTAssertEqual(
             applied,
-            ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity",
-             "v6-accessibility-tree", "v7-frame-bundle-id"])
+            ["v1", "v10-ax-node-last-seen", "v3-segment-confidence", "v4-segment-speaker",
+             "v5-cloud-segment-identity", "v6-accessibility-tree", "v7-frame-bundle-id",
+             "v8-frame-showable-index", "v9-frame-bundle-by-app-index"])
 
         // The ledger is shared with `UploadQueue`, which registers `v2-uploads` outside this
         // migrator. Proving they still coexist is the only way to know `v4-` did not claim a slot
@@ -211,7 +284,9 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(
             coexisting,
             ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity",
-             "v6-accessibility-tree", "v7-frame-bundle-id", UploadQueue.migrationIdentifier])
+             "v6-accessibility-tree", "v7-frame-bundle-id", "v8-frame-showable-index",
+             "v9-frame-bundle-by-app-index", "v10-ax-node-last-seen",
+             UploadQueue.migrationIdentifier])
         XCTAssertTrue(try tableExists("uploads", in: upgraded), "the uploads migration was skipped")
 
         let segments: [Segment] = try upgraded.read { try Segment.fetchAll($0) }
@@ -572,6 +647,64 @@ final class StoreTests: XCTestCase {
         }
         XCTAssertEqual(try frameMatches("vorpal"), 0)
         XCTAssertEqual(try frameMatches("slithy"), 0)
+    }
+
+    /// **The one delete that does not come from a `DELETE` statement.**
+    ///
+    /// `segments.sessionId` is `ON DELETE CASCADE`, so a session going takes its lines with it —
+    /// and the `ad` trigger that keeps `segments_fts` honest has to fire for those too. It does,
+    /// because SQLite runs delete triggers for foreign-key actions, but that is a property of the
+    /// engine rather than of anything written here: an index left holding rows whose content is gone
+    /// answers searches with text nobody can open, and nothing else in this suite would notice.
+    ///
+    /// `integrity-check` is FTS5's own audit of an external-content index against its content table,
+    /// and it is also the answer to "what if it drifts anyway": the same table accepts a `rebuild`
+    /// command that rereads the content table from scratch.
+    func testCascadingSessionDeleteLeavesNoOrphanInTheSearchIndex() throws {
+        let sessionId = try fixture.store.openSession(at: Fixture.base, appHint: nil)
+        try fixture.addSegment(session: sessionId, at: Fixture.base, source: .mic, "borogoves outgrabe")
+        try fixture.addFrame(at: Fixture.base, app: "Cursor", window: "Jabberwock", ocr: "beamish boy")
+        XCTAssertEqual(try segmentMatches("borogoves"), 1)
+
+        try fixture.store.write { db in
+            try db.execute(sql: "DELETE FROM sessions WHERE id = ?", arguments: [sessionId])
+        }
+
+        let remaining = try fixture.store.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM segments") ?? -1
+        }
+        XCTAssertEqual(remaining, 0, "the cascade did not reach segments")
+        XCTAssertEqual(
+            try segmentMatches("borogoves"), 0,
+            "a cascaded delete left an orphaned row in segments_fts")
+
+        // All three external-content indexes, audited against the tables they mirror.
+        for index in ["segments_fts", "frames_fts", "frames_ax_fts"] {
+            XCTAssertNoThrow(
+                try fixture.store.write { db in
+                    try db.execute(sql: "INSERT INTO \(index)(\(index)) VALUES('integrity-check')")
+                },
+                "\(index) has drifted from its content table")
+        }
+    }
+
+    /// Whatever state an index reached, rereading the content table has to be able to restore it.
+    /// Without that, the only remedy for a drifted index is deleting the user's history.
+    func testRebuildingASearchIndexRestoresItFromTheContentTable() throws {
+        try fixture.addFrame(at: Fixture.base, app: "Cursor", window: "Jabberwock", ocr: "beamish boy")
+        XCTAssertEqual(try frameMatches("beamish"), 1)
+
+        try fixture.store.write { db in
+            // The shape drift takes: the index is emptied while the rows it describes stay.
+            try db.execute(sql: "INSERT INTO frames_fts(frames_fts) VALUES('delete-all')")
+        }
+        XCTAssertEqual(try frameMatches("beamish"), 0, "the index was not actually disturbed")
+
+        try fixture.store.write { db in
+            try db.execute(sql: "INSERT INTO frames_fts(frames_fts) VALUES('rebuild')")
+        }
+
+        XCTAssertEqual(try frameMatches("beamish"), 1, "rebuild did not restore the index")
     }
 
     // MARK: - Read-only mode

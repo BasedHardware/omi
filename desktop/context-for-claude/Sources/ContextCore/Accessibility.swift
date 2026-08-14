@@ -259,17 +259,54 @@ public enum AccessibilityTree {
     private static func payload(of node: AXNode, childHashes: [Data]) -> Data {
         var out = Data()
         func field(_ value: String?) {
-            out.append(0x1F)
+            out.append(fieldSeparator)
             if let value { out.append(contentsOf: Array(value.utf8)) }
         }
         field(node.role)
         field(node.subrole)
         field(node.text)
         for hash in childHashes {
-            out.append(0x1E)
+            out.append(childSeparator)
             out.append(hash)
         }
         return out
+    }
+
+    /// A content address is a SHA-256 digest.
+    static let hashLength = 32
+    /// Precedes each of the three scalar fields, so a payload always opens with three of them.
+    private static let fieldSeparator: UInt8 = 0x1F
+    /// Precedes each child address, and the child list is always the payload's suffix.
+    private static let childSeparator: UInt8 = 0x1E
+
+    /// The addresses of `payload`'s children, read back out of the bytes the hash was taken over.
+    ///
+    /// The edges of this graph live *inside* the blob — there is no child table to join against —
+    /// so anything that needs to know which subtrees are still in use has to reverse the encoding.
+    /// That makes this the inverse of ``payload(of:childHashes:)`` and, because its only caller is
+    /// a delete, it must be wrong in exactly one direction.
+    ///
+    /// **Read from the end, never from the front.** The encoding is not self-delimiting: a node's
+    /// own text is whatever an application handed over, and nothing stops it containing a 0x1E. A
+    /// forward scan would take that byte for the start of the child list and stop reporting real
+    /// children — and an unreported child is a live subtree a sweep is then free to delete. Every
+    /// child is a fixed 33-byte suffix element, so walking backwards reaches all of them before it
+    /// can reach the text, and the worst a hostile string can do is contribute a *phantom* address
+    /// that names no row. Over-reporting keeps a node that could have gone; under-reporting deletes
+    /// one that could not.
+    public static func childHashes(inPayload payload: Data) -> [Data] {
+        let bytes = [UInt8](payload)
+        // Three field separators open every payload, so nothing at or below this offset is a child.
+        let floor = 3
+        var end = bytes.count
+        var hashes: [Data] = []
+        while end - floor >= hashLength + 1 {
+            let start = end - hashLength - 1
+            guard bytes[start] == childSeparator else { break }
+            hashes.append(Data(bytes[(start + 1)..<end]))
+            end = start
+        }
+        return hashes.reversed()
     }
 
     // MARK: - Reading

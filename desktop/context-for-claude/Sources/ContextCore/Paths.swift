@@ -197,8 +197,41 @@ public struct CaptureState: Codable, Sendable, Equatable {
         self.streams = streams
         self.capturing = CaptureHealth(of: streams) == .capturing
         self.pausedReason = pausedReason
-        self.capabilities = capabilities
+        self.capabilities = Self.reconciled(capabilities, against: streams)
         self.updatedAt = updatedAt
+    }
+
+    /// **A permission may not be published as missing over a stream that is live.**
+    ///
+    /// The same rule as `capturing`, one field across, and it lives here for the same reason: this
+    /// is the only place both halves are in front of each other, so it is the only place the
+    /// contradiction can be refused. Measured on a running install, this file carried
+    /// `{"name":"screen","state":"live","lastOutputAt":…}` and
+    /// `{"name":"screen","granted":false,"detail":"Action required"}` in the same write, over a
+    /// database taking screen frames minutes earlier — and the MCP `status` tool read the second of
+    /// those and told Claude a whole class of local context was missing.
+    ///
+    /// A live stream is *observed capture*: the window server answered this process. Nothing
+    /// arrived at by asking TCC outranks that, so where the two disagree the observation wins and
+    /// the report is republished as granted rather than both being written down.
+    ///
+    /// Matched by name, and the names line up because both halves speak one vocabulary —
+    /// `microphone`, `systemAudio`, `screen`. It is deliberately per stream rather than per file: a
+    /// live microphone says nothing whatever about the separate consent for the system-audio tap,
+    /// and vouching across the two would hide a genuinely denied permission, which is this same
+    /// mistake pointing the other way. A capability with no stream of its own (`accessibility`
+    /// enriches the screen stream's text rather than being a stream) is left exactly as the writer
+    /// reported it: there is nothing observed to outrank it.
+    private static func reconciled(
+        _ capabilities: [CapabilityReport], against streams: [StreamReport]
+    ) -> [CapabilityReport] {
+        capabilities.map { capability in
+            guard !capability.granted,
+                streams.first(where: { $0.name == capability.name })?.state.isLive == true
+            else { return capability }
+            return CapabilityReport(
+                name: capability.name, granted: true, detail: CapabilityReport.grantedDetail)
+        }
     }
 
     /// A state with no per-stream detail: the terminal beat the app writes on its way out, and what

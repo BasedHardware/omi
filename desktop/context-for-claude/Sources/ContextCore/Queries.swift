@@ -351,9 +351,21 @@ public enum Queries {
     // MARK: - Activity
 
     /// The shape of a stretch of time: consecutive frames of one app collapsed into single blocks.
+    ///
+    /// **Read as a cursor, not as an array.** `since` and `until` come from the caller and no layer
+    /// bounds the rows between them — the MCP tool takes whatever date the model asks for, and the
+    /// default storage strategy prunes nothing — so "every frame in the range" is a real answer of
+    /// unbounded size. Measured against a synthetic year of capture, `Row.fetchAll` here returned
+    /// 547,500 rows carrying 779 MiB of OCR text, all of it held at once to produce a collapse a few
+    /// thousand blocks long. The fold consumes each row and lets it go, so what is held is the
+    /// blocks, which is the thing the caller actually asked for.
+    ///
+    /// The read still walks the range over `idx_frames_capturedAt`, so the *rows* are still read;
+    /// what stops is holding them.
     public static func activity(_ store: ContextStore, since: Double, until: Double) throws -> [ActivityBlock] {
-        let frames: [FrameRow] = try store.read { db in
-            try Row.fetchAll(
+        try store.read { db in
+            var accumulator = BlockAccumulator()
+            let cursor = try Row.fetchCursor(
                 db,
                 sql: """
                     SELECT capturedAt, appName, windowTitle, ocrText
@@ -362,10 +374,12 @@ public enum Queries {
                       AND appName IS NOT NULL AND TRIM(appName) <> ''
                     ORDER BY capturedAt ASC, id ASC
                     """,
-                arguments: [since, until]
-            ).map(FrameRow.init)
+                arguments: [since, until])
+            while let row = try cursor.next() {
+                accumulator.append(FrameRow(row))
+            }
+            return accumulator.finish()
         }
-        return blocks(from: frames)
     }
 
     // MARK: - Status
@@ -1362,41 +1376,86 @@ public enum Queries {
         }
     }
 
-    private static func blocks(from frames: [FrameRow]) -> [ActivityBlock] {
-        var result: [ActivityBlock] = []
-        var run: [FrameRow] = []
+    /// The run-length collapse, folded one frame at a time.
+    ///
+    /// **Nothing about a stretch needs the frames it was made of once they have been seen**, which is
+    /// what lets this hold a fixed amount of state per open run instead of the run itself: the block
+    /// wants the first frame's app and time, the last frame's time, the longest window title, and —
+    /// only when no frame in the whole stretch had a title — the first legible screen text. Each of
+    /// those is a value that can be updated in place as frames arrive.
+    ///
+    /// That is the difference between this and holding the array: a year of capture is 547,500 rows
+    /// carrying ~780 MiB of OCR, and the collapse it produces is a few thousand blocks. `Queries`
+    /// used to materialise the former to compute the latter, on a query whose range the caller
+    /// chooses and no layer bounds.
+    ///
+    /// Frames must arrive in ascending time order, which is what the query's `ORDER BY` guarantees.
+    private struct BlockAccumulator {
+        private var result: [ActivityBlock] = []
 
-        func close() {
-            defer { run = [] }
-            guard let first = run.first, let last = run.last else { return }
-            guard last.at - first.at >= activityMinimumSeconds else { return }
+        private var app = ""
+        private var startedAt: Double = 0
+        private var previousAt: Double = 0
+        /// The longest collapsed title seen in the open run. Ties keep the earliest, matching what
+        /// `max(by:)` over the run's titles returned.
+        private var title: String?
+        /// The first legible screen text of the open run, already truncated — the sample is cut to
+        /// `activitySampleLimit` whatever else happens, so nothing longer is worth carrying.
+        private var firstText: String?
+        private var isOpen = false
 
-            // The longest title is the most descriptive one the app showed during the stretch.
-            let title = run
-                .compactMap { collapsedNonEmpty($0.window) }
-                .max(by: { $0.count < $1.count })
-            let sample = title.map { truncate($0, to: activitySampleLimit) }
-                ?? run.compactMap { collapsedNonEmpty($0.ocr) }.first.map { truncate($0, to: activitySampleLimit) }
+        mutating func append(_ frame: FrameRow) {
+            if isOpen, app != frame.app || frame.at - previousAt > activityGapSeconds {
+                close()
+            }
+            if !isOpen {
+                app = frame.app
+                startedAt = frame.at
+                isOpen = true
+            }
+            previousAt = frame.at
 
+            // Collapsing a title allocates a new string, and a title no longer than the one already
+            // held can never beat it — collapsing only ever shortens. So the raw length is a sound
+            // filter, and it is a *skip* for almost every frame of a real stretch, where a window
+            // keeps one title for as long as it is open. Worth 1.4 s of a 8.5 s year even on a
+            // synthetic corpus that changes the title on every single frame.
+            if let raw = frame.window, raw.count > (title?.count ?? 0),
+                let candidate = collapsedNonEmpty(raw), candidate.count > (title?.count ?? 0)
+            {
+                title = candidate
+            }
+            if firstText == nil, let text = collapsedNonEmpty(frame.ocr) {
+                firstText = truncate(text, to: activitySampleLimit)
+            }
+        }
+
+        mutating func finish() -> [ActivityBlock] {
+            close()
+            return result
+        }
+
+        private mutating func close() {
+            defer {
+                title = nil
+                firstText = nil
+                isOpen = false
+            }
+            guard isOpen, previousAt - startedAt >= activityMinimumSeconds else { return }
+
+            // The longest title is the most descriptive one the app showed during the stretch, and
+            // the screen text is only ever the fallback for a stretch that showed no title at all.
+            let sample = title.map { truncate($0, to: activitySampleLimit) } ?? firstText
             result.append(
                 ActivityBlock(
-                    app: first.app,
+                    app: app,
                     window: title,
-                    startedAt: first.at,
-                    endedAt: last.at,
+                    startedAt: startedAt,
+                    endedAt: previousAt,
                     sampleText: sample
                 )
             )
         }
-
-        for frame in frames {
-            if let previous = run.last, previous.app != frame.app || frame.at - previous.at > activityGapSeconds {
-                close()
-            }
-            run.append(frame)
-        }
-        close()
-        return result
     }
 
     // MARK: - Totals

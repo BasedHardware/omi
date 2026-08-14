@@ -88,6 +88,12 @@ CREATE TABLE frames (
   capturedAt DOUBLE NOT NULL, appName TEXT, windowTitle TEXT, ocrText TEXT, imagePath TEXT);
 CREATE INDEX idx_frames_capturedAt ON frames(capturedAt);
 CREATE INDEX idx_frames_app ON frames(appName, capturedAt);
+-- Partial, and the predicates are the point. `imagePath IS NOT NULL` is the "showable" set every
+-- timeline read is about (8.7% of captured rows never had a picture); `bundleId IS NOT NULL` skips
+-- every row written before v7 added the column. Measured on a year of capture: coverage 581ms -> 0ms,
+-- the app->bundle map 779ms -> 148ms, both of which ran on the main actor when the timeline opened.
+CREATE INDEX idx_frames_showable ON frames(capturedAt) WHERE imagePath IS NOT NULL;
+CREATE INDEX idx_frames_bundle_by_app ON frames(appName, id) WHERE bundleId IS NOT NULL;
 ```
 
 Plus FTS5 external-content tables `segments_fts(text)` and `frames_fts(ocrText, windowTitle, appName)`
@@ -456,7 +462,10 @@ Owns `MicCapture`, `SystemAudioCapture`, optional Silicon `Transcriber`s, `Liste
 local STT failure must not tear down devices or the cloud pump. Screen interval from
 `HostArchitecture.screenCaptureInterval` (3 s / 9 s). Applies `SessionPolicy` to decide session
 boundaries, sets `appHint` from the frontmost app when opening one, and writes `CaptureState` to
-the heartbeat file every 30 s and on every state change. **Each source fails independently** — a
+the heartbeat file every 30 s and on every state change. `capabilities` is **grouped for the menu
+bar and per-TCC-record on the wire**: the published `CaptureState` carries `Permissions.report()`,
+never the grouped rows, because a group verdict written under a stream's name is read downstream as
+that stream's grant. **Each source fails independently** — a
 dead mic must not stop screen capture; record the reason in `pausedReason` and keep the rest alive.
 Prunes frames older than 30 days on launch.
 

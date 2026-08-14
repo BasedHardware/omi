@@ -119,7 +119,12 @@ final class RewindQueriesTests: XCTestCase {
         XCTAssertNil(try RewindQueries.coverage(store))
     }
 
+    /// Image-less rows at **both** ends, because the two bounds are asked for separately: SQLite can
+    /// only answer a bare `MIN` or a bare `MAX` by seeking to one end of the index, so `coverage`
+    /// runs two statements, and a predicate dropped from either one widens the date picker onto a day
+    /// the window cannot open.
     func testCoverageSpansOldestToNewestShowableFrame() throws {
+        try insert(at: 1, image: nil)
         try insert(at: 100)
         try insert(at: 900)
         try insert(at: 5_000, image: nil)
@@ -128,6 +133,60 @@ final class RewindQueriesTests: XCTestCase {
 
         XCTAssertEqual(coverage?.lowerBound, Self.base + 100)
         XCTAssertEqual(coverage?.upperBound, Self.base + 900)
+    }
+
+    // MARK: - Seeking the next day that has something on it
+
+    /// **The seek steps over the empty days**, which is the whole reason it exists.
+    ///
+    /// Coverage says the record runs from here to there; it does not say which days inside that span
+    /// hold anything, and on the real database eight consecutive days hold nothing at all. A "previous
+    /// day" control built on the calendar rather than on this would walk those eight one at a time.
+    func testNearestCaptureSkipsTheDaysThatHoldNothing() throws {
+        let day: Double = 86_400
+        try insert(at: 0)
+        try insert(at: 3_600)
+        // Three empty days, then the next capture.
+        try insert(at: 4 * day)
+
+        // Forward from the end of the first day lands on the fourth, not on the second or third.
+        let forward = try XCTUnwrap(
+            RewindQueries.nearestCapture(store, from: Self.base + day, direction: .forward))
+        XCTAssertEqual(forward, Self.base + 4 * day)
+
+        // …and backward from the start of the fourth day lands on the *last* capture of the first,
+        // which is where somebody travelling backwards through time arrives.
+        let backward = try XCTUnwrap(
+            RewindQueries.nearestCapture(store, from: Self.base + 4 * day, direction: .backward))
+        XCTAssertEqual(backward, Self.base + 3_600)
+    }
+
+    /// The ends of the record are nil, which is what dims the two day controls.
+    func testNearestCaptureIsNilBeyondTheEndsOfTheRecord() throws {
+        try insert(at: 0)
+
+        XCTAssertNil(try RewindQueries.nearestCapture(store, from: Self.base, direction: .forward))
+        XCTAssertNil(try RewindQueries.nearestCapture(store, from: Self.base, direction: .backward))
+    }
+
+    /// **Strictly** past the instant asked about, and only rows that have a picture.
+    ///
+    /// Both halves are how the seek would silently stop working. An inclusive comparison answers
+    /// "the previous day" with the day the caller is already standing on, so the control would look
+    /// enabled and do nothing; an image-less row answers with a day that opens to an empty stage,
+    /// which is the failure the control is meant to skip.
+    func testNearestCapturePassesOverTheInstantItselfAndOverImagelessRows() throws {
+        try insert(at: 0)
+        try insert(at: 60, image: nil)
+        try insert(at: 120)
+
+        let next = try XCTUnwrap(
+            RewindQueries.nearestCapture(store, from: Self.base, direction: .forward))
+        XCTAssertEqual(next, Self.base + 120, "the seek stopped on itself or on an image-less row")
+
+        let previous = try XCTUnwrap(
+            RewindQueries.nearestCapture(store, from: Self.base + 120, direction: .backward))
+        XCTAssertEqual(previous, Self.base)
     }
 
     // MARK: - Bundle ids

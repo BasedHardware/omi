@@ -76,6 +76,57 @@ final class AccessibilityTests: XCTestCase {
             "a whitespace-only label is the same absence as a missing one")
     }
 
+    // MARK: - Reading the graph back
+
+    /// The edges of this graph live inside the payload, so retention cannot ask SQL which subtrees
+    /// are still in use — it has to reverse the encoding. Every child has to come back, in order,
+    /// from a payload that was never designed to be parsed.
+    func testEveryChildAddressCanBeReadBackOutOfAPayload() {
+        let tree = try! capture(
+            FakeElement(role: "AXWindow", title: "Mail", children: [
+                FakeElement(role: "AXToolbar", title: "Send"),
+                FakeElement(role: "AXStaticText", value: "Inbox"),
+                FakeElement(role: "AXRow", title: "Draft", children: [
+                    FakeElement(role: "AXStaticText", value: "To:")
+                ]),
+            ]))
+        let records = AccessibilityTree.records(of: tree)
+        let payloads = Dictionary(uniqueKeysWithValues: records.map { ($0.hash, $0.payload) })
+
+        let root = try! XCTUnwrap(payloads[AccessibilityTree.rootHash(of: tree)])
+        XCTAssertEqual(
+            AccessibilityTree.childHashes(inPayload: root),
+            tree.children.map(AccessibilityTree.rootHash(of:)),
+            "the window's children did not come back in the order they were written")
+
+        // A leaf claims nothing, or reachability would walk into the text it stores.
+        let leaf = try! XCTUnwrap(payloads[AccessibilityTree.rootHash(of: tree.children[1])])
+        XCTAssertEqual(AccessibilityTree.childHashes(inPayload: leaf), [])
+    }
+
+    /// **The one direction this decoder may not fail in.**
+    ///
+    /// The encoding is not self-delimiting: a node's text is whatever an application handed over,
+    /// and nothing stops it containing the 0x1E that separates child addresses. A decoder that
+    /// scanned forward would stop at that byte and report fewer children than the node has — and a
+    /// child nobody reports is a live subtree the sweep is then free to delete. Reading from the end
+    /// cannot make that mistake, because the children are always the payload's suffix.
+    func testTextThatLooksLikeAChildSeparatorCannotHideARealChild() {
+        // 0x1E followed by 32 bytes: a whole counterfeit child address, sitting in the text.
+        let counterfeit = "label\u{1E}" + String(repeating: "x", count: 32) + "\u{1F}tail"
+        let child = AXNode(role: "AXStaticText", subrole: nil, text: "Inbox", children: [])
+        let tree = AXNode(
+            role: "AXWindow", subrole: nil, text: counterfeit, children: [child])
+        let records = AccessibilityTree.records(of: tree)
+        let root = records.first { $0.hash == AccessibilityTree.rootHash(of: tree) }
+
+        let children = AccessibilityTree.childHashes(inPayload: try! XCTUnwrap(root).payload)
+
+        XCTAssertEqual(
+            children, [AccessibilityTree.rootHash(of: child)],
+            "the counterfeit separator in the node's own text was read as part of the child list")
+    }
+
     // MARK: - Bounds
     //
     // A runaway tree must never stall capture. Every ceiling below is proved to hold on a tree

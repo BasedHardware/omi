@@ -471,6 +471,42 @@ final class QueriesTests: XCTestCase {
         XCTAssertEqual(try Queries.activity(scratch.store, since: base + 700, until: base + 900), [])
     }
 
+    /// The two facts about a block's sample text that survive the frames it was made of.
+    ///
+    /// `activity` folds the range one row at a time rather than holding it — a year of capture is
+    /// 547,500 rows carrying ~780 MiB of OCR, and the collapse is a few thousand blocks — so
+    /// everything the sample depends on has to be decidable as frames arrive. These are the two
+    /// orderings that make that non-obvious: screen text is the fallback for a stretch that showed
+    /// **no** title at all, and it stays the fallback even when the untitled frame comes first.
+    func testActivitySamplesScreenTextOnlyWhenTheStretchShowedNoTitle() throws {
+        let scratch = try makeEmptyFixture()
+        let base = Fixture.base
+
+        // A stretch with no window title anywhere: the sample is the first legible screen text.
+        for offset in stride(from: 0.0, through: 40.0, by: 5.0) {
+            try scratch.addFrame(
+                at: base + offset, app: "Terminal", window: nil,
+                ocr: offset == 0 ? "   " : "swift build --package-path desktop")
+        }
+        // A stretch whose first frame has no title and whose later frames do: the title wins.
+        for offset in stride(from: 400.0, through: 440.0, by: 5.0) {
+            try scratch.addFrame(
+                at: base + offset, app: "Cursor",
+                window: offset == 400 ? nil : "Queries.swift — omi",
+                ocr: "private static func activity")
+        }
+
+        let blocks = try Queries.activity(scratch.store, since: base - 60, until: base + 900)
+
+        XCTAssertEqual(blocks.map(\.app), ["Terminal", "Cursor"])
+        XCTAssertNil(blocks.first?.window)
+        XCTAssertEqual(blocks.first?.sampleText, "swift build --package-path desktop")
+        XCTAssertEqual(blocks.last?.window, "Queries.swift — omi")
+        XCTAssertEqual(
+            blocks.last?.sampleText, "Queries.swift — omi",
+            "a stretch that showed a title must never fall back to screen text")
+    }
+
     // MARK: - Status
 
     func testStatusReportsCountsAndCoverage() throws {

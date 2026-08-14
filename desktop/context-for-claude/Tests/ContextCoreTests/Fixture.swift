@@ -90,7 +90,8 @@ final class Fixture {
         app: String?,
         window: String? = nil,
         ocr: String? = nil,
-        imagePath: String? = nil
+        imagePath: String? = nil,
+        axRootHash: Data? = nil
     ) throws -> Int64 {
         try store.insertFrame(
             Frame(
@@ -98,7 +99,8 @@ final class Fixture {
                 appName: app,
                 windowTitle: window,
                 ocrText: ocr,
-                imagePath: imagePath))
+                imagePath: imagePath,
+                axRootHash: axRootHash))
     }
 
     /// A stand-in for a captured screenshot. Only its existence matters — pruning unlinks by path.
