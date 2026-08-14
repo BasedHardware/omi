@@ -349,10 +349,14 @@ class MongoDocumentStore:
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
         if start_after is not None:
             cursor_id = f"{collection}/{start_after['id']}"
-            if not specs:
-                # No explicit order: keyset purely by document name (_id), ascending — mirrors the
-                # Firestore adapter's __name__-only cursor (cubic PR 10887 A6; specs[0] used to IndexError).
-                keyset = {"_id": {"$gt": cursor_id}}
+            # ``__name__`` is Firestore's document-name token; in Mongo the document name lives in ``_id``
+            # (the full logical path), NOT a payload field. A no-order cursor OR a sole ``__name__`` order
+            # keys purely by _id (cubic PR 10887 #5/#11 — a d.__name__ predicate matched nothing, so page
+            # 2+ was empty for staged_tasks / review_queue legacy scans).
+            if not specs or (len(specs) == 1 and specs[0][0] == "__name__"):
+                keyset_dir = specs[0][1] if specs else "asc"
+                op = "$gt" if keyset_dir == "asc" else "$lt"
+                keyset = {"_id": {op: cursor_id}}
             else:
                 # Keyset is single-field. Full-path _id tiebreak mirrors Firestore __name__, so ties on
                 # the order_by field neither skip nor duplicate a row.
@@ -369,10 +373,12 @@ class MongoDocumentStore:
         projection = {"d." + field: 1 for field in fields} if fields is not None else None
         cursor = self._db[_collection_name(collection)].find(mongo_filter, projection, session=None)
         if specs:
-            # Always tiebreak by _id (mirrors Firestore's implicit __name__ ordering) so tie order is
-            # stable across pages — the keyset cursor depends on that consistency for single-field.
-            sort_spec = [("d." + f, ASCENDING if d == "asc" else DESCENDING) for f, d in specs]
-            sort_spec.append(("_id", ASCENDING if specs[-1][1] == "asc" else DESCENDING))
+            # Map ``__name__`` order to _id (the document name); other fields sort by their payload key.
+            # Append an _id tiebreak only when _id is not already an order key (mirrors Firestore's
+            # implicit __name__ ordering) so tie order is stable across pages.
+            sort_spec = [("_id" if f == "__name__" else "d." + f, ASCENDING if d == "asc" else DESCENDING) for f, d in specs]
+            if not any(f == "__name__" for f, _ in specs):
+                sort_spec.append(("_id", ASCENDING if specs[-1][1] == "asc" else DESCENDING))
             cursor = cursor.sort(sort_spec)
         elif start_after is not None:
             # No order field but a keyset cursor: order by _id so the document-name pagination is stable.
@@ -387,7 +393,11 @@ class MongoDocumentStore:
     def _filter(collection: str, filters: Optional[Iterable[Filter]]) -> Dict[str, Any]:
         mongo_filter: Dict[str, Any] = {"_parent": collection}
         for field, op, value in filters or ():
-            if op == "array_contains":
+            if field == "__name__":
+                # Document-name filter: compare the full-path _id, not a payload field (cubic PR 10887 #3
+                # — a d.__name__ predicate matched nothing, undercounting e.g. monthly chat usage).
+                mongo_filter.setdefault("_id", {})[_OP[op]] = f"{collection}/{value}"
+            elif op == "array_contains":
                 # Mongo matches an array field against a scalar by membership: {field: value}
                 # selects docs whose array field contains value (mirrors Firestore array_contains).
                 mongo_filter["d." + field] = value
@@ -419,7 +429,10 @@ class MongoDocumentStore:
         # with NO ``_parent`` scope — docs from every parent live there already (see the path model).
         mongo_filter: Dict[str, Any] = {}
         for field, op, value in filters or ():
-            if op == "array_contains":
+            if field == "__name__":
+                # In a collection group _id already IS the full document path (Firestore __name__).
+                mongo_filter.setdefault("_id", {})[_OP[op]] = value
+            elif op == "array_contains":
                 mongo_filter["d." + field] = value
             else:
                 clause = mongo_filter.setdefault("d." + field, {})
@@ -427,6 +440,9 @@ class MongoDocumentStore:
                 if op in ("!=", "not-in"):
                     clause["$exists"] = True  # exclude missing-field docs, matching Firestore != / not-in
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
+        # A __name__ order on a collection group is the implicit document-name (_id) keyset — strip it so
+        # it doesn't count as an "explicit order" that conflicts with start_after (cubic PR 10887 #2).
+        specs = [(f, d) for f, d in specs if f != "__name__"]
         if start_after is not None:
             if specs:
                 # The document-name keyset supplies a single position; it cannot combine with an explicit

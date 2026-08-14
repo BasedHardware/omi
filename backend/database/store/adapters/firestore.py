@@ -250,6 +250,10 @@ class FirestoreDocumentStore:
     ) -> List[StoredDocument]:
         query: Any = self._client.collection(collection)
         for field, op, value in filters or ():
+            if field == "__name__":
+                # Firestore's document-name filter compares against a DocumentReference, not the bare id
+                # (cubic PR 10887 #3). The neutral value is the document id relative to this collection.
+                value = self._client.collection(collection).document(value)
             query = query.where(filter=FieldFilter(field, op, value))
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
         for _field, _dir in specs:
@@ -301,6 +305,10 @@ class FirestoreDocumentStore:
         for field, op, value in filters or ():
             query = query.where(filter=FieldFilter(field, op, value))
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
+        # A __name__ order on a collection group is the implicit document-name keyset (Firestore's
+        # default order), so drop it — it's redundant and would otherwise be rejected below when combined
+        # with start_after (cubic PR 10887 #2).
+        specs = [(f, d) for f, d in specs if f != "__name__"]
         for _field, _dir in specs:
             query = query.order_by(_field, direction=_DIRECTION[_dir])
         if start_after is not None:

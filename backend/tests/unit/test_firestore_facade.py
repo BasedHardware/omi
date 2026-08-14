@@ -243,3 +243,16 @@ def test_collection_field_then_name_cursor_paginates_without_notimplemented():
     cursor = {"ts": 2, "__name__": c.document("users/u1/items/b")}
     page2 = [s.id for s in q.start_after(cursor).stream()]
     assert page2 == ["c"]  # cursor advanced past b — no NotImplementedError, no first-page repeat
+
+
+def test_group_query_name_order_with_cursor_does_not_raise():
+    # cubic PR 10887 #2: canonical maintenance does collection_group(...).order_by("__name__").start_after(
+    # cursor). The facade must treat the __name__ order as the implicit document-name keyset (no-op), not
+    # forward it and raise on Mongo — otherwise the cron stalls at page 1.
+    c = _client()
+    c.document("users/u1/state/s1").set({"k": 1})
+    c.document("users/u2/state/s2").set({"k": 2})
+    q = c.collection_group("state").order_by("__name__")
+    assert {s.id for s in q.stream()} == {"s1", "s2"}
+    page = list(q.start_after("users/u1/state/s1").stream())  # resume — must page, not raise
+    assert [s.id for s in page] == ["s2"]

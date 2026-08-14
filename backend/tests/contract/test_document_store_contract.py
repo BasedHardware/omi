@@ -259,6 +259,36 @@ def test_query_group_order_by_with_start_after_is_unsupported(store, uid):
         store.query_group("gadgets", order_by="rank", start_after=f"users/{uid}/gadgets/g1")
 
 
+def test_query_name_filter_matches_document_ids(store, uid):
+    # cubic PR 10887 #3: a __name__ range filter must match document IDs. Mongo mapped __name__ to a
+    # payload field (d.__name__) that matched nothing -> monthly chat usage undercounted.
+    base = f"users/{uid}/events"
+    for doc_id in ("e1", "e2", "e3"):
+        store.set(f"{base}/{doc_id}", {"n": doc_id})
+    assert {d.id for d in store.query(base, filters=[("__name__", ">=", "e2")])} == {"e2", "e3"}
+
+
+def test_query_sole_name_order_paginates(store, uid):
+    # cubic PR 10887 #5/#11: order_by __name__ + cursor pages by document name. On Mongo the keyset hit
+    # d.__name__ (never exists) so page 2 was empty (staged_tasks / review_queue legacy scans).
+    base = f"users/{uid}/events"
+    for doc_id in ("a", "b", "c", "d"):
+        store.set(f"{base}/{doc_id}", {"n": doc_id})
+    assert [d.id for d in store.query(base, order_by="__name__", limit=2)] == ["a", "b"]
+    page2 = [d.id for d in store.query(base, order_by="__name__", start_after={"value": "b", "id": "b"})]
+    assert page2 == ["c", "d"]
+
+
+def test_query_group_name_order_with_cursor_paginates(store, uid):
+    # cubic PR 10887 #2: a __name__ order on a collection group is the implicit doc-name keyset — it must
+    # page, not raise (canonical maintenance cron was stuck at page 1 on Mongo).
+    for n in ("g1", "g2", "g3"):
+        store.set(f"users/{uid}/gizmos/{n}", {"kind": "gz"})
+    mine = sorted(f"users/{uid}/gizmos/{n}" for n in ("g1", "g2", "g3"))
+    page = store.query_group("gizmos", filters=[("kind", "==", "gz")], order_by="__name__", start_after=mine[0])
+    assert [d.path for d in page] == mine[1:]
+
+
 def test_query_array_contains(store, uid):
     base = f"users/{uid}/people"
     store.set(f"{base}/p1", {"name": "p1", "tags": ["persona", "audio"]})

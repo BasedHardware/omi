@@ -618,6 +618,12 @@ class _GroupQuery:
         return self._clone(filters=self._filters + [(field_path, op, value)])
 
     def order_by(self, field_path: str, direction: Any = "ASCENDING") -> "_GroupQuery":
+        if field_path == "__name__":
+            # A collection-group query already resumes by its document-name (_id) keyset; forwarding an
+            # explicit __name__ order is redundant and, combined with start_after, the store rejects it
+            # (cubic PR 10887 #2 — canonical maintenance cron stalled at page 1 on Mongo). Treat the
+            # ascending document-name order as the implicit keyset ordering: no-op.
+            return self
         d = "desc" if direction == _DESCENDING or str(direction).lower().startswith("desc") else "asc"
         return self._clone(order_by=field_path, direction=d)
 
