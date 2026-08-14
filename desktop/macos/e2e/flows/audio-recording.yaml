@@ -76,8 +76,8 @@ steps:
       interactive_count: { min: 1 }
 
   - id: S4B
-    name: Verify silent microphone failure alert
-    do: "If the active microphone returns no audio until Omi exhausts capture recovery, verify recording stops and 'Microphone Isn't Capturing Audio' appears with an OK action while the window remains responsive. Repeat with the main shell hidden: Omi should reveal its main window and present the same non-blocking alert instead of losing it or attaching it to the floating bar."
+    name: Verify silent microphone recovery outcome
+    do: "If the active microphone returns no audio until Omi exhausts capture recovery, verify recording stops and Omi remains usable without a repeated hardware alert. If microphone permission is not granted, verify 'Omi Needs Microphone Access' is presented with an OK action while the window remains responsive; repeat with the main shell hidden and confirm Omi reveals its main window before presenting that permission alert."
     expect:
       interactive_count: { min: 1 }
 

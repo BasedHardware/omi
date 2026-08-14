@@ -18,13 +18,20 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
     let message: String
   }
 
-  typealias SheetPresenter = (NSAlert, NSWindow, @escaping () -> Void) -> Void
+  typealias BeginSheetModal = (NSAlert, NSWindow, @escaping () -> Void) -> Void
+  struct AppKitAlertOperations {
+    let beginSheetModal: BeginSheetModal
+
+    static let live = AppKitAlertOperations { alert, window, completion in
+      alert.beginSheetModal(for: window) { _ in completion() }
+    }
+  }
   /// Whether `window` can host a sheet right now. Defaults to "has no sheet
   /// attached" — AppKit raises if a second sheet is attached to one window.
   typealias SheetHostChecker = (NSWindow) -> Bool
 
   private let shellWindowProvider: () -> NSWindow?
-  private let sheetPresenter: SheetPresenter
+  private let appKitOperations: AppKitAlertOperations
   private let revealMainWindow: () -> Void
   private let canHostSheet: SheetHostChecker
   private var pendingAlerts: [AlertRequest] = []
@@ -37,9 +44,7 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
       AppKitSheetAlertPresenter.presentableShellWindow(
         ShellSummon.shellWindow(), isActive: NSApp.isActive)
     },
-    sheetPresenter: @escaping SheetPresenter = { alert, window, completion in
-      alert.beginSheetModal(for: window) { _ in completion() }
-    },
+    appKitOperations: AppKitAlertOperations = .live,
     revealMainWindow: @escaping () -> Void = {
       if let appDelegate = AppDelegate.summonWindowTarget() {
         appDelegate.openMainAppWindow()
@@ -51,7 +56,7 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
     canHostSheet: @escaping SheetHostChecker = { $0.attachedSheet == nil }
   ) {
     self.shellWindowProvider = shellWindowProvider
-    self.sheetPresenter = sheetPresenter
+    self.appKitOperations = appKitOperations
     self.revealMainWindow = revealMainWindow
     self.canHostSheet = canHostSheet
     NotificationCenter.default.addObserver(
@@ -103,7 +108,7 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
     alert.informativeText = request.message
     alert.alertStyle = .warning
     alert.addButton(withTitle: "OK")
-    sheetPresenter(alert, window) { [weak self] in
+    appKitOperations.beginSheetModal(alert, window) { [weak self] in
       Task { @MainActor in
         self?.isPresentingAlert = false
         self?.activeAlert = nil

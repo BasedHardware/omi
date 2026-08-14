@@ -20,14 +20,14 @@ final class AppStateAlertPresentationTests: XCTestCase {
       ])
   }
 
-  func testSheetPresenterRevealsTheMainWindowThenPresentsTheAlert() {
+  func testAppKitPresenterUsesTheNonBlockingSheetOperationAfterRevealingTheMainWindow() {
     let windowSource = WindowSource()
     let recorder = SheetPresentationRecorder()
     let window = NSWindow()
     var revealCount = 0
     let presenter = AppKitSheetAlertPresenter(
       shellWindowProvider: { windowSource.window },
-      sheetPresenter: recorder.present,
+      appKitOperations: .init(beginSheetModal: recorder.present),
       revealMainWindow: {
         revealCount += 1
         windowSource.window = window
@@ -41,13 +41,13 @@ final class AppStateAlertPresentationTests: XCTestCase {
       [.init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window)])
   }
 
-  func testSheetPresenterRetainsAlertUntilTheMainWindowBecomesAvailable() {
+  func testAppKitPresenterRetainsAlertUntilTheMainWindowBecomesAvailable() {
     let windowSource = WindowSource()
     let recorder = SheetPresentationRecorder()
     var revealCount = 0
     let presenter = AppKitSheetAlertPresenter(
       shellWindowProvider: { windowSource.window },
-      sheetPresenter: recorder.present,
+      appKitOperations: .init(beginSheetModal: recorder.present),
       revealMainWindow: { revealCount += 1 })
 
     presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
@@ -64,13 +64,13 @@ final class AppStateAlertPresentationTests: XCTestCase {
       [.init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window)])
   }
 
-  func testSheetPresenterCoalescesMatchingPendingAlerts() {
+  func testAppKitPresenterCoalescesMatchingPendingAlerts() {
     let windowSource = WindowSource()
     let recorder = SheetPresentationRecorder()
     var revealCount = 0
     let presenter = AppKitSheetAlertPresenter(
       shellWindowProvider: { windowSource.window },
-      sheetPresenter: recorder.present,
+      appKitOperations: .init(beginSheetModal: recorder.present),
       revealMainWindow: { revealCount += 1 })
 
     presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
@@ -87,12 +87,12 @@ final class AppStateAlertPresentationTests: XCTestCase {
       [.init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window)])
   }
 
-  func testSheetPresenterCoalescesMatchingActiveAlerts() {
+  func testAppKitPresenterCoalescesMatchingActiveAlerts() {
     let window = NSWindow()
     let recorder = SheetPresentationRecorder()
     let presenter = AppKitSheetAlertPresenter(
       shellWindowProvider: { window },
-      sheetPresenter: recorder.present,
+      appKitOperations: .init(beginSheetModal: recorder.present),
       revealMainWindow: {})
 
     presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
@@ -109,14 +109,14 @@ final class AppStateAlertPresentationTests: XCTestCase {
     XCTAssertNil(AppKitSheetAlertPresenter.presentableShellWindow(nil, isActive: true))
   }
 
-  func testSheetPresenterDefersWhileTheShellAlreadyOwnsASheet() async {
+  func testAppKitPresenterDefersWhileTheShellAlreadyOwnsASheet() async {
     let windowSource = WindowSource()
     let recorder = SheetPresentationRecorder()
     let window = NSWindow()
     var hostCanAccept = false
     let presenter = AppKitSheetAlertPresenter(
       shellWindowProvider: { windowSource.window },
-      sheetPresenter: recorder.present,
+      appKitOperations: .init(beginSheetModal: recorder.present),
       revealMainWindow: { windowSource.window = window },
       canHostSheet: { _ in hostCanAccept })
 
@@ -140,13 +140,13 @@ final class AppStateAlertPresentationTests: XCTestCase {
       ])
   }
 
-  func testSheetPresenterDefersWhileTheShellOwnsASheetThenRevealsWhenNoneRemains() {
+  func testAppKitPresenterDefersWhileTheShellOwnsASheetThenRevealsWhenNoneRemains() {
     let windowSource = WindowSource()
     let recorder = SheetPresentationRecorder()
     var revealCount = 0
     let presenter = AppKitSheetAlertPresenter(
       shellWindowProvider: { windowSource.window },
-      sheetPresenter: recorder.present,
+      appKitOperations: .init(beginSheetModal: recorder.present),
       revealMainWindow: { revealCount += 1 },
       canHostSheet: { $0.attachedSheet == nil })
 
