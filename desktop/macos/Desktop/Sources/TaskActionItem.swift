@@ -22,7 +22,7 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   /// Classification category: personal, work, feature, bug, code, research, communication, finance, health, other
   let category: String?
   /// Soft-delete: true if this task has been deleted by AI dedup
-  let deleted: Bool?
+  var deleted: Bool?
   /// Who deleted: "user", "ai_dedup"
   let deletedBy: String?
   /// When the task was soft-deleted
@@ -84,6 +84,24 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   /// projection here so every local cache and surface applies the same rule.
   var isRetired: Bool {
     deleted == true || taskStatus == "cancelled" || taskStatus == "superseded"
+  }
+
+  /// This row as the retired lane already knows it to be.
+  ///
+  /// `isRetired` re-derives retirement from fields the server may not send:
+  /// the doc comment above says list responses can omit legacy `deleted` and
+  /// project retirement through canonical lifecycle status, and that status
+  /// vocabulary is open — anything outside `cancelled`/`superseded` reads as
+  /// live. A row fetched from the deleted lane is retired because of *where it
+  /// came from*, so the lane states it rather than asking the projection to
+  /// guess. Without this, a retired row round-trips into the local cache with
+  /// `deleted = false` and comes back as a live task on any machine whose
+  /// cache was built from that lane.
+  func retired() -> TaskActionItem {
+    guard !isRetired else { return self }
+    var copy = self
+    copy.deleted = true
+    return copy
   }
 
   /// Custom Equatable: compares only display-relevant fields.

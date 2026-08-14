@@ -1,9 +1,0 @@
-{
-  "files": {
-    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": 2266
-  },
-  "raise_justifications": {
-    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": "Replacement failure fallback must preserve reducer-owned hold state until physical release so captured audio has one transition authority. Provider-ready admissions (reconnect and barge-in replacement) converge on one bindProviderReadyHubRoute helper so no admission path can overwrite a manager-owned .hubWarmWait capture claim (FC-split-mutation-authority)."
-  },
-  "threshold": 1500
-}

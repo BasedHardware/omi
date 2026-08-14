@@ -197,10 +197,9 @@ struct SettingsContentView: View {
   @AppStorage(DefaultsKey.chatScreenshotSharingEnabled.rawValue)
   var chatScreenshotSharingEnabled: Bool = true
 
-  // Transcription state
-  @State var isTranscribing: Bool
-  @State var isTogglingTranscription: Bool = false
-  @State var transcriptionError: String?
+  // The sole ambient-audio preference. Runtime activity remains on AppState.
+  @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) var audioRecordingModeRaw =
+    AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
 
   // Log export state
 
@@ -277,8 +276,10 @@ struct SettingsContentView: View {
   // so this glides freely while only the hour component is persisted.
   @State var dailySummaryTime: Date = SettingsControlMetrics.dailySummaryDate(
     forHour: 22, referenceDate: Date())
-  @State var notificationsEnabled: Bool = true
-  @State var notificationFrequency: Int = 3
+  @State var notificationsEnabled: Bool = NotificationService.areNotificationsEnabled()
+  // Start from the synchronous persisted mirror so reopening Settings never flashes
+  // Balanced while the authoritative backend value is still hydrating.
+  @State var notificationFrequency: Int = NotificationService.currentFrequencyLevel()
 
   // Privacy settings (from backend)
   @State var recordingPermissionEnabled: Bool = false
@@ -356,12 +357,12 @@ struct SettingsContentView: View {
   @State var transcriptionAutoDetect: Bool = true
   @State var transcriptionLanguage: String = "en"
   @State var vadGateEnabled: Bool = false
-  @State var systemAudioCaptureMode: AssistantSettings.SystemAudioCaptureMode = .always
 
   // Multi-chat mode setting
   @AppStorage("multiChatEnabled") var multiChatEnabled = false
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
   @AppStorage("useLegacyHomeDesign") var useLegacyHomeDesign = false
+  @AppStorage("speakNotificationsAloud") var speakNotificationsAloud = false
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"
@@ -501,7 +502,7 @@ struct SettingsContentView: View {
       case .stats: return "chart.bar"
       case .focusAssistant: return "eye.fill"
       case .taskAssistant: return "checklist"
-      case .insightAssistant: return "lightbulb.fill"
+      case .insightAssistant: return ProactiveNotificationBadge.insightSystemImage
       case .memoryAssistant: return "brain.head.profile"
       case .analysisThrottle: return "clock.arrow.2.circlepath"
       case .goals: return "target"
@@ -567,7 +568,6 @@ struct SettingsContentView: View {
     let settings = AssistantSettings.shared
     _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
     _screenCaptureHealth = State(initialValue: ProactiveAssistantsPlugin.shared.screenCaptureHealth)
-    _isTranscribing = State(initialValue: appState.isTranscribing)
     _glowOverlayEnabled = State(initialValue: settings.glowOverlayEnabled)
     _analysisDelay = State(initialValue: settings.analysisDelay)
     _liveSuggestionsEnabled = State(initialValue: SuggestionAssistantSettings.shared.isEnabled)
@@ -597,18 +597,14 @@ struct SettingsContentView: View {
     _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
     _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
     _transcriptionAutoDetect = State(initialValue: settings.transcriptionAutoDetect)
-    _systemAudioCaptureMode = State(initialValue: settings.systemAudioCaptureMode)
   }
 
-  /// Computed status text for notifications
+  /// Computed status text for notifications — OS permission/banner mirror only.
+  /// Product proactive enablement is owned by Notifications & Privacy.
   var notificationStatusText: String {
-    if !appState.hasNotificationPermission {
-      return "Notifications are disabled"
-    } else if appState.isNotificationBannerDisabled {
-      return "Enabled but banners are off"
-    } else {
-      return "Proactive alerts enabled"
-    }
+    SettingsControlMetrics.generalNotificationPermissionStatusText(
+      hasPermission: appState.hasNotificationPermission,
+      bannersDisabled: appState.isNotificationBannerDisabled)
   }
 
   /// Divider header used when two legacy sections are stacked on one merged
@@ -673,8 +669,6 @@ struct SettingsContentView: View {
       }
       loadBackendSettings()
       loadSubscriptionInfo()
-      // Sync transcription state with appState
-      isTranscribing = appState.isTranscribing
       // Sync floating bar state with persisted preference (not transient visibility)
       showAskOmiBar = FloatingControlBarManager.shared.isEnabled
       playwrightExtensionToken =
@@ -690,9 +684,6 @@ struct SettingsContentView: View {
         isMonitoring = state
       }
       screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
-    }
-    .onChange(of: appState.isTranscribing) { _, newValue in
-      isTranscribing = newValue
     }
     .onChange(of: selectedSection) { _, newValue in
       if AppBuild.isProductionBundle && newValue == .aiChat {
@@ -722,7 +713,7 @@ struct SettingsContentView: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       // Refresh notification permission when app becomes active (user may have changed it in System Settings)
-      appState.checkNotificationPermission()
+      appState.refreshNotificationPermissionAfterSystemSettings()
     }
     .sheet(item: $activeBillingWebFlow) { flow in
       BillingWebFlowSheet(flow: flow) { outcome in

@@ -65,6 +65,7 @@ actor TranscriptionStorage {
     timezone: String = "UTC",
     inputDeviceName: String? = nil,
     clientConversationId: String? = nil,
+    conversationRole: TranscriptionConversationRole = .ambient,
     finalizationStrategy: TranscriptionFinalizationStrategy = .cloudReconcile
   ) async throws -> Int64 {
     let db = try await ensureInitialized()
@@ -77,6 +78,7 @@ actor TranscriptionStorage {
       inputDeviceName: inputDeviceName,
       status: .recording,
       clientConversationId: clientConversationId,
+      conversationRole: conversationRole,
       finalizationStrategy: finalizationStrategy
     )
 
@@ -1081,7 +1083,7 @@ actor TranscriptionStorage {
     }
   }
 
-  /// Source-scoped cache read for the cohort-only Omi capture archive.
+  /// Source-scoped cache read for the universal Omi capture archive.
   /// Filtering happens before ordering and limiting so a cached page cannot
   /// be filled by another source and then client-filtered.
   func getLocalOmiCaptureConversations(

@@ -607,42 +607,6 @@ extension SettingsContentView {
     AssistantSettings.shared.screenAnalysisEnabled = enabled
   }
 
-  func toggleTranscription(enabled: Bool) {
-    // Check microphone permission
-    if enabled && !appState.hasMicrophonePermission {
-      transcriptionError = "Microphone permission required"
-      isTranscribing = false
-      return
-    }
-
-    transcriptionError = nil
-    isTogglingTranscription = true
-
-    // Track setting change
-    AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
-
-    if enabled {
-      appState.startTranscription()
-      isTogglingTranscription = false
-      isTranscribing = true
-    } else {
-      appState.stopTranscription()
-      isTogglingTranscription = false
-      isTranscribing = false
-    }
-
-    // Persist the setting
-    AssistantSettings.shared.transcriptionEnabled = enabled
-  }
-
-  func setSystemAudioCaptureMode(_ mode: AssistantSettings.SystemAudioCaptureMode) {
-    AnalyticsManager.shared.settingToggled(
-      setting: "system_audio_capture_mode_\(mode.rawValue)", enabled: mode != .never)
-    // Persisting posts .systemAudioCaptureModeDidChange; AppState re-applies the gate live for
-    // any in-progress recording.
-    AssistantSettings.shared.systemAudioCaptureMode = mode
-  }
-
   func startGlowPreview() {
     isPreviewRunning = true
 
@@ -767,9 +731,11 @@ extension SettingsContentView {
     vocabularyList = AssistantSettings.shared.transcriptionVocabulary
     let transcriptionVocabularyRevisionAtLoadStart =
       AssistantSettings.shared.transcriptionVocabularyRevision
+    let notificationSettingsRevisionAtLoadStart = UserDefaults.standard.integer(
+      forKey: NotificationService.settingsSyncRevisionDefaultsKey)
+    let notificationSettingsPendingAtLoadStart =
+      NotificationService.hasPendingNotificationSettingsSync()
     vadGateEnabled = AssistantSettings.shared.vadGateEnabled
-    systemAudioCaptureMode = AssistantSettings.shared.systemAudioCaptureMode
-
     Task {
       do {
         // Load all settings in parallel
@@ -798,12 +764,36 @@ extension SettingsContentView {
           dailySummaryHour = dailySummary.hour
           dailySummaryTime = SettingsControlMetrics.dailySummaryDate(
             forHour: dailySummary.hour, referenceDate: Date())
-          notificationsEnabled = notifications.enabled
-          notificationFrequency = notifications.frequency
-          // Mirror to UserDefaults so NotificationService can gate/throttle without a backend roundtrip.
-          UserDefaults.standard.set(
-            notifications.enabled, forKey: NotificationService.masterEnabledDefaultsKey)
-          UserDefaults.standard.set(notifications.frequency, forKey: NotificationService.frequencyDefaultsKey)
+          let notificationSettingsRevisionNow = UserDefaults.standard.integer(
+            forKey: NotificationService.settingsSyncRevisionDefaultsKey)
+          let notificationSettingsPendingNow =
+            NotificationService.hasPendingNotificationSettingsSync()
+          if NotificationService.shouldPreserveLocalNotificationSettings(
+            revisionAtLoadStart: notificationSettingsRevisionAtLoadStart,
+            currentRevision: notificationSettingsRevisionNow,
+            pendingAtLoadStart: notificationSettingsPendingAtLoadStart,
+            pendingNow: notificationSettingsPendingNow)
+          {
+            // A newer local change may have raced this GET, or the app may have
+            // quit before its previous PATCH completed. Preserve the local
+            // mirror and retry the complete pair instead of hydrating stale
+            // server values over the user's choice.
+            notificationsEnabled = NotificationService.areNotificationsEnabled()
+            notificationFrequency = NotificationService.currentFrequencyLevel()
+            if notificationSettingsPendingNow {
+              let retryEnabled = notificationsEnabled
+              let retryFrequency = notificationFrequency
+              updateNotificationSettings(enabled: retryEnabled, frequency: retryFrequency)
+            }
+          } else {
+            notificationsEnabled = notifications.enabled
+            notificationFrequency = notifications.frequency
+            // Mirror to UserDefaults so NotificationService can gate/throttle without a backend roundtrip.
+            UserDefaults.standard.set(
+              notifications.enabled, forKey: NotificationService.masterEnabledDefaultsKey)
+            UserDefaults.standard.set(
+              notifications.frequency, forKey: NotificationService.frequencyDefaultsKey)
+          }
           userLanguage = language.language
           recordingPermissionEnabled = recording.enabled
           privateCloudSyncEnabled = cloudSync.enabled
@@ -946,7 +936,8 @@ extension SettingsContentView {
 
     FloatingBarUsageLimiter.shared.applyPlan(
       plan: subscription.subscription.plan,
-      status: subscription.subscription.status
+      status: subscription.subscription.status,
+      desktopGrandfatherUntil: subscription.desktopGrandfatherUntil
     )
 
     if subscription.subscription.plan != .basic,

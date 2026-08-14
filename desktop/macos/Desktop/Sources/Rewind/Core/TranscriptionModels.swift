@@ -17,9 +17,18 @@ enum TranscriptionFinalizationStrategy: String, Codable, CaseIterable {
   case cloudReconcile = "cloud_reconcile"
 }
 
+/// The logical kind of conversation captured by one local recording session.
+/// This is persisted at session creation so later retries do not have to infer
+/// meeting provenance from whichever finalization event happened to win.
+enum TranscriptionConversationRole: String, Codable, CaseIterable {
+  case ambient
+  case meeting
+}
+
 enum TranscriptionFinalizationReason: String, Codable, CaseIterable {
   case userStop = "user_stop"
   case finishAndContinue = "finish_and_continue"
+  case meetingStarted = "meeting_started"
   case meetingEnded = "meeting_ended"
   case maxDurationRotation = "max_duration_rotation"
   case crashRecovery = "crash_recovery"
@@ -64,6 +73,9 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
   var updatedAt: Date
   var serverUpdatedAt: Date?
   var cacheCompleteness: ConversationCacheCompleteness
+  /// Role is captured when the session starts. Older rows decode as ambient
+  /// through the migration default and therefore remain backward compatible.
+  var conversationRole: TranscriptionConversationRole
   var finalizationStrategy: TranscriptionFinalizationStrategy?
   var finalizationReason: TranscriptionFinalizationReason?
   var finalizationStartedAt: Date?
@@ -112,6 +124,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     updatedAt: Date = Date(),
     serverUpdatedAt: Date? = nil,
     cacheCompleteness: ConversationCacheCompleteness = .list,
+    conversationRole: TranscriptionConversationRole = .ambient,
     finalizationStrategy: TranscriptionFinalizationStrategy? = nil,
     finalizationReason: TranscriptionFinalizationReason? = nil,
     finalizationStartedAt: Date? = nil,
@@ -152,6 +165,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     self.updatedAt = updatedAt
     self.serverUpdatedAt = serverUpdatedAt
     self.cacheCompleteness = cacheCompleteness
+    self.conversationRole = conversationRole
     self.finalizationStrategy = finalizationStrategy
     self.finalizationReason = finalizationReason
     self.finalizationStartedAt = finalizationStartedAt
@@ -392,6 +406,7 @@ extension TranscriptionSessionRecord {
       updatedAt: Date(),
       serverUpdatedAt: conversation.updatedAt,
       cacheCompleteness: conversation.transcriptSegmentsIncluded ? .detail : .list,
+      conversationRole: .ambient,
       finalizationStrategy: nil,
       finalizationReason: nil,
       finalizationStartedAt: nil,

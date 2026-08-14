@@ -42,4 +42,4 @@ Name `INV-MEM-2` in the PR body if you touch the path globs above.
 
 - [memory-tiers.md](./memory-tiers.md) — INV-MEM-1 default access policy
 - [memory-canonical-fail-closed.md](./memory-canonical-fail-closed.md) — INV-MEM-3
-  enrolled read routing
+  universal fail-closed routing

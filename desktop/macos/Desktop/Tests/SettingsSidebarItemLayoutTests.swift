@@ -74,12 +74,30 @@ final class SettingsSidebarItemLayoutTests: XCTestCase {
     )
   }
 
+  func testPermissionsRowWithMissingNoticeStaysOnOneLine() {
+    let plain = itemHeight(section: .permissions, isSelected: false, showsMissingPermissionNotice: false)
+    let noticed = itemHeight(section: .permissions, isSelected: true, showsMissingPermissionNotice: true)
+    XCTAssertEqual(
+      noticed, plain, accuracy: 0.5,
+      "the missing-grant mark beside the label must sit in the row, not wrap it")
+    XCTAssertLessThan(noticed, 60)
+  }
+
   private func itemHeight(isSelected: Bool) -> CGFloat {
+    itemHeight(section: .notifications, isSelected: isSelected, showsMissingPermissionNotice: false)
+  }
+
+  private func itemHeight(
+    section: SettingsContentView.SettingsSection,
+    isSelected: Bool,
+    showsMissingPermissionNotice: Bool
+  ) -> CGFloat {
     let host = NSHostingView(
       rootView: SettingsSidebarItem(
-        section: .notifications,
+        section: section,
         isSelected: isSelected,
         iconWidth: 20,
+        showsMissingPermissionNotice: showsMissingPermissionNotice,
         onTap: {}
       )
       .frame(width: SettingsSidebarMetrics.itemAvailableWidth)

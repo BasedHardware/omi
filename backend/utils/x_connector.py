@@ -30,14 +30,12 @@ import httpx
 from database import redis_db
 from database import users as users_db
 from database import x_posts as x_posts_db
-from database import memories as memories_db
 from database._client import db
-from database.vector_db import upsert_memory_vectors_batch, upsert_x_post_vectors_batch
+from database.vector_db import upsert_x_post_vectors_batch
 from models.memories import MemoryDB
 from utils.llm.memories import extract_memories_from_text
-from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import MemorySystem
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
@@ -372,25 +370,15 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
                 # (and cleanly removable on disconnect / re-import).
                 mdb.app_id = INTEGRATION_KEY
                 memory_dbs.append(mdb)
-            # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
-            if resolve_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
-                memory_service = MemoryService(db_client=db)
-                for mdb in memory_dbs:
-                    memory_service.write(uid, mdb.model_dump())
-            else:
-                memories_db.save_memories(uid, [memory_write_payload(m, MemoryApiExposure.LEGACY) for m in memory_dbs])
-                upsert_memory_vectors_batch(
-                    uid,
-                    [
-                        {
-                            'memory_id': m.id,
-                            'content': m.content,
-                            'category': m.category.value,
-                            'subject_entity_id': m.subject_entity_id,
-                        }
-                        for m in memory_dbs
-                    ],
-                )
+            MemoryService(db_client=db).create_external_memory_batch(
+                uid,
+                memory_dbs,
+                memory_system=MemorySystem.CANONICAL,
+                consumer='x_connector',
+                operation='x_memory_extract',
+                upsert_vectors=False,
+                require_canonical_promotion=True,
+            )
             capture_memory_write(
                 principal_id=uid,
                 source="twitter_x_connector",

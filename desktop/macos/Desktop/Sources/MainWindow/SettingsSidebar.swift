@@ -23,14 +23,9 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["monitor", "screenshot", "capture", "audio", "recording", "microphone", "speech"],
       section: .general, icon: "gearshape", settingId: "general.screencapture"),
     SettingsSearchItem(
-      name: "System Audio", subtitle: "When to record audio from other apps",
-      keywords: [
-        "system audio", "meeting", "zoom", "google meet", "teams", "call", "capture", "recording",
-        "speaker",
-      ], section: .general, icon: "speaker.wave.2", settingId: "general.systemaudio"),
-    SettingsSearchItem(
-      name: "Notifications", subtitle: "Proactive alerts and status",
-      keywords: ["alerts", "notify"], section: .general, icon: "gearshape",
+      name: "Notifications", subtitle: "macOS permission and banner status",
+      keywords: ["alerts", "notify", "banners", "system settings", "permission"], section: .general,
+      icon: "gearshape",
       settingId: "general.notifications"),
     SettingsSearchItem(
       name: "Ask omi", subtitle: "Show or hide the floating chat bar",
@@ -59,8 +54,11 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["screen capture", "screenshot", "monitor", "recording", "rewind"],
       section: .general, icon: "rectangle.dashed.badge.record", settingId: "general.screencapture"),
     SettingsSearchItem(
-      name: "Audio Recording", subtitle: "Toggle audio recording and transcription",
-      keywords: ["audio", "microphone", "recording", "transcription", "mic"], section: .general,
+      name: "Audio Recording", subtitle: "Off, Always On, or Only Meetings",
+      keywords: [
+        "audio", "microphone", "recording", "transcription", "mic", "meeting", "zoom", "google meet",
+        "teams", "call", "system audio",
+      ], section: .general,
       icon: "mic.fill", settingId: "general.audiorecording"),
     SettingsSearchItem(
       name: "Storage", subtitle: "View frame count and disk usage",
@@ -133,7 +131,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["daily", "summary", "digest", "end of day"], section: .notifications, icon: "bell",
       settingId: "notifications.dailysummary"),
     SettingsSearchItem(
-      name: "Summary Time", subtitle: "When to send your daily summary",
+      name: "Summary Time", subtitle: "When to send your daily summary (hour only)",
       keywords: ["time", "schedule", "when", "hour"], section: .notifications, icon: "bell",
       settingId: "notifications.summarytime"),
 
@@ -369,20 +367,20 @@ enum SettingsSidebarRoutes {
   /// content too). The absorbed cases stay routable for deep links/automation
   /// and highlight their merged item via `sidebarItem`.
   ///
-  /// `Permissions` sits last, under the settings proper: it is the thing you come here for when
-  /// something is wrong, not a preference you scan.
+  /// Capture and account first, then the things you tune, with Permissions beside
+  /// Notifications because both are access. Shortcuts / Advanced / About stay at the foot.
   static let visibleSections: [SettingsContentView.SettingsSection] = [
     .general,
     .account,
     .transcription,
+    .rewind,
     .floatingBar,
     .aiClone,
     .notifications,
-    .rewind,
+    .permissions,
     .shortcuts,
     .advanced,
     .about,
-    .permissions,
   ]
 }
 
@@ -391,6 +389,7 @@ struct SettingsSidebar: View {
   @Binding var selectedSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
   let onBack: () -> Void
+  @ObservedObject var appState: AppState
 
   @State private var isBackHovered = false
   @State private var searchQuery = ""
@@ -444,6 +443,7 @@ struct SettingsSidebar: View {
                 section: section,
                 isSelected: selectedSection.sidebarItem == section,
                 iconWidth: iconWidth,
+                showsMissingPermissionNotice: section == .permissions && appState.hasMissingPermissions,
                 onTap: {
                   OmiMotion.withGated(.easeInOut(duration: 0.15)) {
                     selectedSection = section
@@ -568,6 +568,7 @@ struct SettingsSidebarItem: View {
   let section: SettingsContentView.SettingsSection
   let isSelected: Bool
   let iconWidth: CGFloat
+  var showsMissingPermissionNotice: Bool = false
   let onTap: () -> Void
 
   @State private var isHovered = false
@@ -587,9 +588,7 @@ struct SettingsSidebarItem: View {
     case .shortcuts: return "keyboard"
     case .advanced: return "chart.bar"
     case .about: return "info.circle"
-    // The same glyph this page already answers to everywhere else in the app (`SidebarNavItem`,
-    // `ChatFirstMorePage`), so a row and the page it opens are one object.
-    case .permissions: return "exclamationmark.triangle"
+    case .permissions: return PermissionNavSymbol.outline
     }
   }
 
@@ -615,6 +614,13 @@ struct SettingsSidebarItem: View {
               .truncationMode(.tail)
               .layoutPriority(1)
 
+            if showsMissingPermissionNotice {
+              Image(systemName: PermissionNavSymbol.missingNotice)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+                .foregroundColor(SettingsInk.notice)
+                .accessibilityHidden(true)
+            }
+
             Spacer(minLength: 0)
           }
           .padding(.horizontal, SettingsGlassMetrics.rowHorizontalPadding)
@@ -637,7 +643,12 @@ struct SettingsSidebarItem: View {
           isHovered = hovering
         }
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
-        .accessibilityLabel(Text(section.displayTitle))
+        .accessibilityLabel(
+          Text(
+            showsMissingPermissionNotice
+              ? "\(section.displayTitle), permissions required"
+              : section.displayTitle)
+        )
       }
     }
   }
@@ -770,7 +781,8 @@ struct SettingHighlightModifier: ViewModifier {
     SettingsSidebar(
       selectedSection: .constant(.advanced),
       highlightedSettingId: .constant(nil),
-      onBack: {}
+      onBack: {},
+      appState: AppState()
     )
     .preferredColorScheme(.light)
   }

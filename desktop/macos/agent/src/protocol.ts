@@ -812,6 +812,9 @@ export interface RuntimeFailurePayload {
   adapterId?: string;
   provider?: string;
   retryable?: boolean;
+  recoveryAction?: "worker_recycled";
+  recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
+  retryDisposition?: "next_send";
 }
 
 export interface ToolActivityMessage extends QueryScopedOutbound {
