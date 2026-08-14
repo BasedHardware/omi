@@ -20,6 +20,7 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 
@@ -711,14 +712,21 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     if (_isFindingDevice) return;
     setState(() => _isFindingDevice = true);
 
-    final found = await provider.findDevice();
-    if (!mounted) return;
+    var found = false;
+    try {
+      found = await provider.findDevice();
+    } catch (e) {
+      Logger.debug('DeviceSettings: Find-device request failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isFindingDevice = false);
+      }
+    }
 
-    setState(() => _isFindingDevice = false);
-    if (!found) {
+    if (mounted && !found) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(context.l10n.deviceNotConnected)));
+        ..showSnackBar(SnackBar(content: Text(context.l10n.anErrorOccurredTryAgain)));
     }
   }
 

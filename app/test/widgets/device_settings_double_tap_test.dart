@@ -122,6 +122,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(provider.findCalls, 1);
-    expect(find.text('Device Not Connected'), findsOneWidget);
+    expect(find.text('An error occurred. Please try again.'), findsOneWidget);
+  });
+
+  testWidgets('Find clears its loading state when the provider throws', (tester) async {
+    final findCompleter = Completer<bool>();
+    final provider = _StubDeviceProvider(
+      device: BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -40),
+      findCompleter: findCompleter,
+    );
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_app(provider));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('find_device_button')));
+    await tester.pump();
+
+    findCompleter.completeError(StateError('find failed'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('An error occurred. Please try again.'), findsOneWidget);
   });
 }

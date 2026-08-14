@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,6 +13,7 @@ class _RecordingTransport extends DeviceTransport {
   int writeAttempts = 0;
   int? failOnAttempt;
   bool connected = true;
+  Completer<void>? writeBlocker;
 
   @override
   String get deviceId => 'omi-1';
@@ -36,6 +39,7 @@ class _RecordingTransport extends DeviceTransport {
   @override
   Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data) async {
     writeAttempts++;
+    await writeBlocker?.future;
     if (writeAttempts == failOnAttempt) throw StateError('write failed');
     writes.add((serviceUuid, characteristicUuid, List<int>.from(data)));
   }
@@ -97,6 +101,43 @@ void main() {
 
       async.elapse(const Duration(seconds: 2));
       expect(transport.writeAttempts, 2);
+    });
+  });
+
+  test('find-device pattern reports failure without writing when disconnected', () {
+    fakeAsync((async) {
+      final transport = _RecordingTransport()..connected = false;
+      bool? result;
+
+      _connection(transport).playFindDevicePattern().then((value) => result = value);
+      async.flushMicrotasks();
+
+      expect(result, isFalse);
+      expect(transport.writeAttempts, 0);
+      expect(transport.writes, isEmpty);
+    });
+  });
+
+  test('find-device pattern times out a stalled haptic write', () {
+    fakeAsync((async) {
+      final blocker = Completer<void>();
+      final transport = _RecordingTransport()..writeBlocker = blocker;
+      bool? result;
+
+      _connection(transport).playFindDevicePattern().then((value) => result = value);
+      async.flushMicrotasks();
+      expect(transport.writeAttempts, 1);
+
+      async.elapse(const Duration(seconds: 5));
+      async.flushMicrotasks();
+
+      expect(result, isFalse);
+      expect(transport.writeAttempts, 1);
+      expect(transport.writes, isEmpty);
+
+      blocker.complete();
+      async.flushMicrotasks();
+      expect(transport.writeAttempts, 1);
     });
   });
 }
