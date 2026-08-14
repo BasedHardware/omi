@@ -246,7 +246,12 @@ else
   # The simulator shares the host network stack, so 127.0.0.1 reaches the host.
   # Live local production talks to the platform Memories door. Legacy stays
   # reachable with `--generation legacy`.
-  surface_query="route=${route}&platform=mobile&generation=${generation}"
+  surface_query="route=${route}&platform=mobile"
+  if [[ "$generation" == "legacy" ]]; then
+    surface_query="${surface_query}&generation=legacy"
+  else
+    surface_query="${surface_query}&generation=platform"
+  fi
   defines+=(
     --dart-define=SURFACE_QUERY="$surface_query"
     --dart-define=OMI_API_BASE_URL="$api_base"

@@ -10,7 +10,7 @@ The manifest must be an exact `omi.polish.matrix-coordinate/v1` object with
 `width=regular`, an applicable lifecycle state, and full `core`/`platform` SHAs.
 The producer independently resolves both worktrees before a live capture.
 
-macOS launches `shells/macos/scripts/dev-run-macos.sh --fixture` with an
+macOS launches `shells/macos/scripts/dev-capture-macos.sh --fixture` with an
 allowlisted environment and an `OMI_PROBE_JS` expression. The result is read
 from the real headless WKWebView's `PROBE_JS` line; an absent/malformed marker,
 wrong state, or unallowlisted computed style fails closed. iOS runs the

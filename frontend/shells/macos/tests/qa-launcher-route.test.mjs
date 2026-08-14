@@ -17,6 +17,7 @@ import test from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const launcher = resolve(root, "scripts/dev-run-macos.sh");
+const captureLauncher = resolve(root, "scripts/dev-capture-macos.sh");
 const urlPolicy = resolve(root, "scripts/qa-url-policy.mjs");
 const validator = resolve(root, "../tools/validate-consumer-evidence.mjs");
 
@@ -32,6 +33,7 @@ function fixture() {
   mkdirSync(dist, { recursive: true });
   mkdirSync(join(scratch, "core/shells/tools"), { recursive: true });
   copyFileSync(launcher, join(scripts, "dev-run-macos.sh"));
+  copyFileSync(captureLauncher, join(scripts, "dev-capture-macos.sh"));
   copyFileSync(urlPolicy, join(scripts, "qa-url-policy.mjs"));
   copyFileSync(validator, join(scratch, "core/shells/tools/validate-consumer-evidence.mjs"));
   writeFileSync(join(dist, "index.html"), "<!doctype html>");
@@ -60,6 +62,7 @@ if [[ "\$*" == *'-X POST'* ]]; then printf 'issued-token'; else printf '204'; fi
   writeFileSync(join(bin, "security"), "#!/bin/bash\nexit 1\n");
   for (const executable of [
     join(scripts, "dev-run-macos.sh"),
+    join(scripts, "dev-capture-macos.sh"),
     join(scripts, "run-shell.sh"),
     join(bin, "curl"),
     join(bin, "security"),
@@ -86,6 +89,7 @@ if [[ "\$*" == *'-X POST'* ]]; then printf 'issued-token'; else printf '204'; fi
   return {
     scratch,
     launcher: join(scripts, "dev-run-macos.sh"),
+    captureLauncher: join(scripts, "dev-capture-macos.sh"),
     actions,
     environment,
     readActions: () => existsSync(actions) ? readFileSync(actions, "utf8") : "",
@@ -98,8 +102,7 @@ test("macOS QA launcher freezes origin, URLs, and the seven evidence routes befo
   const source = readFileSync(launcher, "utf8");
   assert.match(source, /OMI_SURFACE_PORT:-5290/);
   assert.match(source, /home\|memories\|conversations\|tasks\|folders\|chat\|settings\|listen/);
-  assert.doesNotMatch(source, /qa=(memories|tasks|chat)|rig=dev|4841/);
-  assert.match(source, /--fixture/);
+  assert.doesNotMatch(source, /qa=|rig=dev|--fixture|4841/);
 
   const run = fixture();
   try {
@@ -107,6 +110,13 @@ test("macOS QA launcher freezes origin, URLs, and the seven evidence routes befo
       encoding: "utf8", env: run.environment,
     });
     assert.equal(invalidRoute.status, 2);
+    assert.equal(run.readActions(), "");
+
+    const fixtureOnLive = spawnSync(run.launcher, ["--fixture", "memories"], {
+      encoding: "utf8", env: run.environment,
+    });
+    assert.equal(fixtureOnLive.status, 2);
+    assert.match(`${fixtureOnLive.stdout}${fixtureOnLive.stderr}`, /unknown argument '--fixture'/);
     assert.equal(run.readActions(), "");
 
     const wrongOrigin = spawnSync(run.launcher, ["--route", "chat"], {
@@ -228,7 +238,7 @@ test("macOS native fixture capture is offline, query-bound, and probe-waited", (
   const run = fixture();
   try {
     const output = join(run.scratch, "fixture.png");
-    const result = spawnSync(run.launcher, [
+    const result = spawnSync(run.captureLauncher, [
       "--fixture", "memories-platform", "--state", "ready", "--theme", "dark",
       "--accessibility", "rtl", "--run-id", "fixture-mac-001", "--capture-out", output,
       "--viewport-width", "960", "--viewport-height", "671",
