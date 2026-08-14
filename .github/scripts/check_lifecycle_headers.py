@@ -99,7 +99,10 @@ def load_baseline(path: Path) -> tuple[set[str], list[str]]:
 
 
 def iter_designated_files(root: Path):
-    for path in root.joinpath("backend").rglob("*"):
+    backend = root.joinpath("backend")
+    if not backend.is_dir():
+        return
+    for path in backend.rglob("*"):
         if path.is_file() and not any(part in SKIP_DIRECTORY_NAMES for part in path.relative_to(root).parts):
             relative_path = path.relative_to(root).as_posix()
             if is_designated_path(relative_path):
