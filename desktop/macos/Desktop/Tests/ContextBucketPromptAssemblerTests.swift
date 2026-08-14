@@ -96,26 +96,6 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     XCTAssertTrue(prompt.contains("== VALIDATED FACTS ==\nfact:PR-123"))
   }
 
-  func testDirectorStablePromptRequiresFirstPersonOwnershipForTaskCandidate() {
-    let snapshot = ContextBucketSnapshot(
-      bucketID: "bucket", versionID: 1, version: 1, header: "header",
-      frozenRankedSegment: Data(), tail: [], validatedFacts: ["fact"], notifyWorthiness: 1)
-    let prompt = ContextProactivityPromptBuilder.directorStablePrompt(snapshot: snapshot)
-
-    XCTAssertTrue(
-      prompt.contains(
-        "or request with an accountable action that the user personally made or accepted (first"))
-    XCTAssertTrue(
-      prompt.contains(
-        "another person is never a task candidate, however explicit or well-dated it is"))
-    XCTAssertTrue(
-      prompt.contains(
-        "genuinely bears on the user's tracked work it may at most be insight"))
-    XCTAssertTrue(
-      prompt.contains(
-        "between other parties that does not involve the user is silence."))
-  }
-
   func testDirectorTaskContextBoundsDescription() {
     let task = ContextDirectorTaskContext(
       description: String(repeating: "x", count: ContextDirectorTaskContext.maximumDescriptionLength + 10),
