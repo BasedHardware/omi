@@ -91,6 +91,19 @@ _OP_MAP = {
 }
 
 
+def _name_filter_value(value: Any) -> Any:
+    """Normalize a ``__name__`` filter bound to the bare document id the store expects.
+
+    Firestore's ``.where('__name__', op, ref)`` passes a ``DocumentReference`` (here a ``_DocRef``),
+    while the store's ``__name__`` filter compares the document id relative to the queried collection
+    (the Mongo adapter builds ``f"{collection}/{value}"``). Forwarding the ``_DocRef`` object verbatim
+    stringified to its object ``repr`` and matched nothing — e.g. ``user_usage``'s monthly ``__name__``
+    range (`llm_usage_ref.document(...)` bounds) returned zero rows on Mongo, undercounting chat usage
+    (cubic PR 10887 #8; the contract test only exercised a bare-string bound, so the seam hid it). A
+    plain string id passes through unchanged."""
+    return value.id if isinstance(value, _DocRef) else value
+
+
 def _to_neutral(value: Any) -> Any:
     """Translate google Firestore sentinels/transforms in a payload into neutral store sentinels."""
     if _fs is not None:
@@ -321,6 +334,8 @@ class _Query:
         op = _OP_MAP.get(op_string)
         if op is None:
             raise NotImplementedError(f"unsupported query operator: {op_string!r}")
+        if field_path == "__name__":
+            value = _name_filter_value(value)
         return self._clone(filters=self._filters + [(field_path, op, value)])
 
     def order_by(self, field_path: str, direction: Any = "ASCENDING") -> "_Query":
@@ -627,6 +642,8 @@ class _GroupQuery:
         op = _OP_MAP.get(op_string)
         if op is None:
             raise NotImplementedError(f"unsupported query operator: {op_string!r}")
+        if field_path == "__name__":
+            value = _name_filter_value(value)
         return self._clone(filters=self._filters + [(field_path, op, value)])
 
     def order_by(self, field_path: str, direction: Any = "ASCENDING") -> "_GroupQuery":

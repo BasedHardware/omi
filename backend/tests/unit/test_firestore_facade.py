@@ -336,3 +336,34 @@ def test_get_all_in_transaction_reads_through_session():
     snaps = list(c.get_all([c.document("users/u1/goals/x")], transaction=tx))
     assert tx.reads == ["users/u1/goals/x"]  # routed through the session, not get_many
     assert snaps[0].to_dict() == {"v": 9}
+
+
+def test_name_range_filter_with_docref_bounds_matches_documents():
+    # cubic PR 10887 #8: user_usage.get_current_month_usage does
+    #   llm_usage_ref.where('__name__', '>=', llm_usage_ref.document('YYYY-MM-01'))
+    #                .where('__name__', '<',  <next month>)
+    # i.e. the __name__ bounds are DocumentReferences (_DocRef), not bare strings. The facade must
+    # normalize a _DocRef bound to its document id before the store; forwarding the object verbatim
+    # stringified to its repr and matched nothing on Mongo -> monthly chat usage undercounted to zero.
+    # The contract test only exercised a string bound, so the seam hid this. Verified live on Mongo.
+    c = _client()
+    usage = c.collection("users/u1/usage")
+    for month in ("2026-06-01", "2026-07-01", "2026-08-01"):
+        usage.document(month).set({"questions": 1})
+    q = (
+        usage.where("__name__", ">=", usage.document("2026-07-01"))
+        .where("__name__", "<", usage.document("2026-09-01"))
+    )
+    assert sorted(s.id for s in q.stream()) == ["2026-07-01", "2026-08-01"]
+    # count() shares the filter path and must agree (usage aggregates via count too).
+    assert q.count().get()[0][0].value == 2
+
+
+def test_name_filter_string_bound_still_matches():
+    # The bare-string __name__ bound (contract-test shape) must keep working after DocRef normalization.
+    c = _client()
+    items = c.collection("users/u1/items")
+    for k in ("a", "b", "c"):
+        items.document(k).set({"v": 1})
+    q = items.where("__name__", ">=", "b")
+    assert sorted(s.id for s in q.stream()) == ["b", "c"]

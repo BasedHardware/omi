@@ -276,7 +276,13 @@ class FakeDocumentStore:
     def _matching_rows(self, collection: str, filters: Optional[Iterable]) -> List[tuple]:
         rows = [(p, d) for p, d in self._docs.items() if p.rsplit("/", 1)[0] == collection]
         for field, op, value in filters or ():
-            if "." in field:
+            if field == "__name__":
+                # Document-name filter: compare the full-path id, mirroring the real adapters
+                # (mongo.py builds ``f"{collection}/{value}"``). A caller that forwarded a ref object
+                # instead of the bare id would stringify to its repr and match nothing (cubic PR 10887 #8).
+                target = f"{collection}/{value}"
+                rows = [(p, d) for p, d in rows if _OPS[op](p, target)]
+            elif "." in field:
                 # Nested (dotted) field path, e.g. ``subject.kind`` — resolve like the real
                 # adapters so domain queries filtering on embedded fields are emulated.
                 rows = [
