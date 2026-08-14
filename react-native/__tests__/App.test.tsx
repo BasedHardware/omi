@@ -9,6 +9,7 @@ import {Animated} from 'react-native';
 const mockReact = React;
 
 let mockViewportWidth = 1200;
+let mockPlatformOS = 'ios';
 let mockReduceMotion = false;
 let mockReduceMotionListener: ((enabled: boolean) => void) | undefined;
 let mockDesktopSearchListener: (() => void) | undefined;
@@ -137,8 +138,13 @@ jest.mock('react-native', () => {
         removeListeners: jest.fn(),
       },
     },
-    Platform: {OS: 'macos'},
+    Platform: {
+      get OS() {
+        return mockPlatformOS;
+      },
+    },
     Pressable: component('Pressable'),
+    requireNativeComponent: (name: string) => component(name),
     SafeAreaView: component('SafeAreaView'),
     ScrollView: ReactRuntime.forwardRef(
       (
@@ -326,6 +332,7 @@ function mockBackendResponse(request: MockRequest): MockResponse {
 beforeEach(() => {
   jest.clearAllMocks();
   mockViewportWidth = 1200;
+  mockPlatformOS = 'ios';
   mockReduceMotion = false;
   mockReduceMotionListener = undefined;
   mockDesktopSearchListener = undefined;
@@ -535,6 +542,7 @@ test('does not borrow Home active navigation semantics for Chat', async () => {
 });
 
 test('routes the native macOS search command to Home and focuses search', async () => {
+  mockPlatformOS = 'macos';
   const renderer = await renderApp();
   await ReactTestRenderer.act(async () => {
     renderer.root
@@ -1173,6 +1181,112 @@ test('uses a full pane with bottom navigation on mobile', async () => {
   expect(Animated.timing).toHaveBeenCalledWith(
     expect.anything(),
     expect.objectContaining({duration: 200, toValue: 1}),
+  );
+});
+
+test('uses transparent separated macOS desktop chrome', async () => {
+  mockPlatformOS = 'macos';
+  const renderer = await renderApp();
+  const navigation = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Desktop navigation',
+  );
+  const shell = renderer.root.find(
+    node =>
+      Array.isArray(node.props.style) &&
+      node.props.style.some(
+        (style: {paddingTop?: number}) => style?.paddingTop === 32,
+      ),
+  );
+  const panel = renderer.root.find(
+    node => String(node.type) === 'KeyboardAvoidingView',
+  );
+  const panelInset = renderer.root.find(
+    node =>
+      Array.isArray(node.props.style) &&
+      node.props.style.some(
+        (style: {paddingTop?: number}) => style?.paddingTop === 14,
+      ),
+  );
+
+  expect(navigation.props.style).toEqual(
+    expect.objectContaining({
+      backgroundColor: 'transparent',
+      height: 52,
+      borderRadius: 22,
+    }),
+  );
+  expect(
+    renderer.root.findAll(
+      node =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityRole === 'tab',
+    ),
+  ).toHaveLength(4);
+  expect(shell.props.style).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({backgroundColor: 'transparent'}),
+    ]),
+  );
+  expect(panel.props.style).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        backgroundColor: 'transparent',
+        borderRadius: 22,
+      }),
+    ]),
+  );
+  expect(panelInset).toBeDefined();
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Desktop material panel',
+    ),
+  ).toBeDefined();
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Desktop navigation material',
+    ),
+  ).toBeDefined();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Floating pane depth',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Expand sidebar',
+    ),
+  ).toHaveLength(0);
+
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Tasks navigation')
+      .props.onPress();
+  });
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Tasks stage'),
+  ).toBeDefined();
+});
+
+test('keeps non-macOS mobile navigation and pane composition unchanged', async () => {
+  mockPlatformOS = 'ios';
+  mockViewportWidth = 390;
+  const renderer = await renderApp();
+
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Desktop navigation',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Desktop material panel',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.find(node => node.props.accessibilityRole === 'tablist').props
+      .style,
+  ).toEqual(
+    expect.arrayContaining([expect.objectContaining({borderTopWidth: 1})]),
   );
 });
 

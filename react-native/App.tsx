@@ -18,6 +18,7 @@ import {
   Platform,
   Pressable,
   type PressableProps,
+  requireNativeComponent,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -25,6 +26,7 @@ import {
   TextInput,
   useWindowDimensions,
   View,
+  type ViewProps,
 } from 'react-native';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import Brain from 'lucide-react-native/icons/brain';
@@ -88,6 +90,10 @@ const quickPrompts = [
   'Summarize my recent conversations',
 ];
 type Route = 'Home' | 'Chat' | 'Conversations' | 'Memories' | 'Tasks';
+const OmiGlassPanel =
+  Platform.OS === 'macos'
+    ? requireNativeComponent<ViewProps>('OmiGlassPanel')
+    : View;
 type ProjectionFilter = 'all' | DesktopReadProjection['kind'];
 type ReadsPhase =
   | 'initial-loading'
@@ -1095,6 +1101,7 @@ function ChatThinking({reduceMotion}: {reduceMotion: boolean}) {
 
 function App(): React.JSX.Element {
   const {width} = useWindowDimensions();
+  const macDesktop = Platform.OS === 'macos';
   const compact = width < 1024;
   const floatingPane = width >= 640;
   const composerMaxWidth = width >= 1280 ? 820 : width >= 768 ? 720 : 640;
@@ -1458,6 +1465,52 @@ function App(): React.JSX.Element {
     </Animated.View>
   );
 
+  const macDesktopNav = (
+    <View style={styles.macTopNavFrame}>
+      <OmiGlassPanel
+        accessibilityLabel="Desktop navigation material"
+        pointerEvents="none"
+        style={styles.macGlassPanel}
+      />
+      <View
+        accessibilityLabel="Desktop navigation"
+        accessibilityRole="tablist"
+        style={styles.macTopNav}>
+        {navigation.map(item => {
+          const Icon = item.icon;
+          const active = route === item.label;
+          return (
+            <FocusPressable
+              accessibilityLabel={`${item.label} navigation`}
+              accessibilityRole="tab"
+              accessibilityState={{selected: active}}
+              key={item.label}
+              onPress={() => setRoute(item.label as Route)}
+              style={({pressed}) => [
+                styles.macTopNavItem,
+                active && styles.macTopNavItemActive,
+                pressed && styles.pressed,
+              ]}>
+              <Icon
+                accessible={false}
+                color={active ? '#141414' : '#505050'}
+                size={18}
+                strokeWidth={2}
+              />
+              <Text
+                style={[
+                  styles.macTopNavText,
+                  active && styles.macTopNavTextActive,
+                ]}>
+                {item.label}
+              </Text>
+            </FocusPressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+
   const send = async () => {
     const text = draft.trim();
     const backend = omiBackend;
@@ -1656,18 +1709,27 @@ function App(): React.JSX.Element {
   );
 
   return (
-    <SafeAreaView style={styles.outer}>
-      <View style={[styles.shell, !compact && styles.shellWide]}>
-        {!compact && nav}
+    <SafeAreaView style={[styles.outer, macDesktop && styles.macOuter]}>
+      <View
+        style={[
+          styles.shell,
+          !compact && !macDesktop && styles.shellWide,
+          macDesktop && styles.macShell,
+        ]}>
+        {macDesktop ? macDesktopNav : !compact ? nav : null}
         <View
-          style={[styles.paneInset, !floatingPane && styles.paneInsetCompact]}>
+          style={[
+            styles.paneInset,
+            !floatingPane && styles.paneInsetCompact,
+            macDesktop && styles.macPaneInset,
+          ]}>
           <View
             accessibilityLabel="Floating pane"
             style={[
               styles.paneFrame,
               !floatingPane && styles.paneFrameCompact,
             ]}>
-            {floatingPane && (
+            {floatingPane && !macDesktop && (
               <View
                 accessibilityLabel="Floating pane depth"
                 pointerEvents="none"
@@ -1679,7 +1741,18 @@ function App(): React.JSX.Element {
             )}
             <KeyboardAvoidingView
               behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              style={[styles.pane, !floatingPane && styles.paneCompact]}>
+              style={[
+                styles.pane,
+                !floatingPane && styles.paneCompact,
+                macDesktop && styles.macPane,
+              ]}>
+              {macDesktop && (
+                <OmiGlassPanel
+                  accessibilityLabel="Desktop material panel"
+                  pointerEvents="none"
+                  style={styles.macGlassPanel}
+                />
+              )}
               <Animated.View
                 accessibilityLabel={`${route} stage`}
                 style={[
@@ -1844,7 +1917,9 @@ function App(): React.JSX.Element {
                     <ScrollView
                       accessibilityLabel="Chat scroll region"
                       contentContainerStyle={styles.chatScrollContent}
-                      onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+                      onScroll={(
+                        event: NativeSyntheticEvent<NativeScrollEvent>,
+                      ) => {
                         const {contentOffset, contentSize, layoutMeasurement} =
                           event.nativeEvent;
                         shouldFollowChat.current =
@@ -1969,7 +2044,7 @@ function App(): React.JSX.Element {
             </KeyboardAvoidingView>
           </View>
         </View>
-        {compact && nav}
+        {compact && !macDesktop && nav}
       </View>
     </SafeAreaView>
   );
@@ -1977,8 +2052,39 @@ function App(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   outer: {backgroundColor: '#141414', flex: 1},
+  macOuter: {backgroundColor: 'transparent'},
   shell: {backgroundColor: '#141414', flex: 1},
   shellWide: {flexDirection: 'row'},
+  macShell: {
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    paddingTop: 32,
+  },
+  macTopNavFrame: {
+    alignSelf: 'center',
+    borderRadius: 22,
+    height: 52,
+  },
+  macTopNav: {
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderRadius: 22,
+    flexDirection: 'row',
+    gap: 2,
+    height: 52,
+    padding: 4,
+  },
+  macTopNavItem: {
+    alignItems: 'center',
+    borderRadius: 22,
+    flexDirection: 'row',
+    gap: 7,
+    height: 44,
+    paddingHorizontal: 14,
+  },
+  macTopNavItemActive: {backgroundColor: '#ffffff'},
+  macTopNavText: {color: '#505050', fontSize: 13, fontWeight: '600'},
+  macTopNavTextActive: {color: '#141414'},
   navigation: {backgroundColor: '#141414'},
   rail: {paddingHorizontal: 8, paddingVertical: 24},
   railHeader: {alignItems: 'flex-start', gap: 8},
@@ -2040,6 +2146,12 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   paneInset: {flex: 1, padding: 12},
+  macPaneInset: {
+    alignSelf: 'stretch',
+    paddingBottom: 18,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+  },
   paneInsetCompact: {padding: 0},
   paneFrame: {
     flex: 1,
@@ -2071,6 +2183,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flex: 1,
     overflow: 'hidden',
+  },
+  macPane: {backgroundColor: 'transparent', borderRadius: 22},
+  macGlassPanel: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   paneCompact: {borderRadius: 0, borderWidth: 0},
   stageMotion: {flex: 1},

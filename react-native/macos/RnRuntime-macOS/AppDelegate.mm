@@ -15,7 +15,59 @@
   self.dependencyProvider = [RCTAppDependencyProvider new];
 
   [super applicationDidFinishLaunching:notification];
+  [self dressOmiWindow];
+  __weak AppDelegate *weakSelf = self;
+  self.omiWindowUpdateObserver =
+      [NSNotificationCenter.defaultCenter addObserverForName:NSWindowDidUpdateNotification
+                                                       object:self.window
+                                                        queue:NSOperationQueue.mainQueue
+                                                   usingBlock:^(__unused NSNotification *note) {
+    [weakSelf dressOmiWindow];
+  }];
   [self installDesktopSearchCommand];
+}
+
+- (void)applicationWillTerminate:(NSNotification *)notification
+{
+  if (self.omiWindowUpdateObserver != nil) {
+    [NSNotificationCenter.defaultCenter removeObserver:self.omiWindowUpdateObserver];
+    self.omiWindowUpdateObserver = nil;
+  }
+  [super applicationWillTerminate:notification];
+}
+
+- (void)dressOmiWindow
+{
+  NSWindow *window = self.window;
+  if (window == nil) {
+    return;
+  }
+
+  window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+  window.opaque = NO;
+  window.backgroundColor = NSColor.clearColor;
+  window.hasShadow = NO;
+  window.styleMask |= NSWindowStyleMaskFullSizeContentView | NSWindowStyleMaskClosable |
+      NSWindowStyleMaskMiniaturizable;
+  window.titlebarAppearsTransparent = YES;
+  window.titleVisibility = NSWindowTitleHidden;
+  window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+  window.movableByWindowBackground = NO;
+  window.level = NSNormalWindowLevel;
+  window.hidesOnDeactivate = NO;
+  window.contentMinSize = NSMakeSize(800.0, 680.0);
+  if (!self.omiWindowGeometryApplied) {
+    [window setContentSize:NSMakeSize(960.0, 700.0)];
+    [window center];
+    self.omiWindowGeometryApplied = YES;
+  }
+  NSWindowCollectionBehavior behavior = window.collectionBehavior;
+  behavior |= NSWindowCollectionBehaviorMoveToActiveSpace | NSWindowCollectionBehaviorFullScreenAuxiliary;
+  behavior &= ~NSWindowCollectionBehaviorFullScreenPrimary;
+  window.collectionBehavior = behavior;
+  [window standardWindowButton:NSWindowCloseButton].hidden = YES;
+  [window standardWindowButton:NSWindowMiniaturizeButton].hidden = YES;
+  [window standardWindowButton:NSWindowZoomButton].hidden = YES;
 }
 
 - (void)installDesktopSearchCommand
