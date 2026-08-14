@@ -25,7 +25,7 @@ const OUT_REL = {
   envVar: "OMI_MACOS_SHELL_DIR",
 };
 
-// The macOS shell is in-repo at core/shells/macos since the PR-6 promotion.
+// The macOS shell is in-repo at frontend/shells/macos since the PR-6 promotion.
 // Before that it resolved to a sibling tracker checkout that does not exist in
 // a worktree, so this gate SKIPped everywhere and drift went uncaught.
 const SHELL_DIR = process.env[OUT_REL.envVar] ?? path.join(ROOT, "shells/macos");

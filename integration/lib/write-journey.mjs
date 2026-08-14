@@ -803,7 +803,7 @@ if (process.argv[1] && process.argv[1].endsWith("write-journey.mjs")) {
   // the CLI path so the verdict tests can import this module in L1, where no
   // dist is guaranteed to exist.
   const adapters = await import(
-    new URL("../../core/packages/adapters-platform/dist/index.js", import.meta.url).href
+    new URL("../../frontend/packages/adapters-platform/dist/index.js", import.meta.url).href
   );
 
   const platformRepo = flag("--platform-repo", REPO_PATHS.platform);
@@ -843,8 +843,8 @@ if (process.argv[1] && process.argv[1].endsWith("write-journey.mjs")) {
     const outboxModule = await import(new URL("./write-journey-outbox.mjs", import.meta.url).href);
     let outbox = null;
     try {
-      const sync = await import(new URL("../../core/packages/sync/dist/index.js", import.meta.url).href);
-      const fakes = await import(new URL("../../core/packages/testkit/dist/fakes.js", import.meta.url).href);
+      const sync = await import(new URL("../../frontend/packages/sync/dist/index.js", import.meta.url).href);
+      const fakes = await import(new URL("../../frontend/packages/testkit/dist/fakes.js", import.meta.url).href);
       const facts = await outboxModule.runOutboxDrain({
         doorUrl: flag("--door"),
         token: flag("--token"),

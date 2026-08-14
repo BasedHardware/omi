@@ -31,11 +31,11 @@ the coordinator to verify.
 With Flutter 3.44.5 and a booted iPhone 17 Pro simulator:
 
 ```sh
-SURFACES_DIST=/absolute/path/to/core/packages/surfaces/dist \
+SURFACES_DIST=/absolute/path/to/frontend/packages/surfaces/dist \
 FLUTTER_BIN=/Users/dazheng/.local/share/mise/installs/flutter/3.44.5/bin/flutter \
 NODE_BIN=/Users/dazheng/.local/share/mise/installs/node/22.23.2/bin/node \
-node core/shells/ios/tools/capture-native-semantic-evidence.mjs \
-  --manifest core/shells/ios/fixtures/native-semantic-chat-ready.json \
+node frontend/shells/ios/tools/capture-native-semantic-evidence.mjs \
+  --manifest frontend/shells/ios/fixtures/native-semantic-chat-ready.json \
   --source-root /absolute/path/to/pinned-core-source \
   --platform-root /absolute/path/to/omi-platform \
   --output-dir /absolute/path/to/core/.build/native-ios-semantic/chat-ready
@@ -48,8 +48,8 @@ prepared `matrix-ax.json` or `matrix-keyboard.json` has passed the marker checks
 run the same wrapper in replay mode into a fresh output path:
 
 ```sh
-node core/shells/ios/tools/capture-native-semantic-evidence.mjs \
-  --manifest core/shells/ios/fixtures/<matrix-coordinate>.json \
+node frontend/shells/ios/tools/capture-native-semantic-evidence.mjs \
+  --manifest frontend/shells/ios/fixtures/<matrix-coordinate>.json \
   --replay-input core/.build/native-ios-semantic/<run>/matrix-ax.json \
   --replay-output core/.build/native-ios-semantic/<run>/gate/matrix-ax.json
 ```

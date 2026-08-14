@@ -8,7 +8,7 @@
  * reads "out of the INSTALLED tarball... a stronger consumption than a path
  * this script could check", `check-wire-conformance.mjs`'s own comment). But
  * separation only stays honest if the tarball's promise — "these bytes are
- * what `core/contracts/ratified/` actually contains" — keeps being true. If
+ * what `frontend/contracts/ratified/` actually contains" — keeps being true. If
  * core changes a source file and the tarball is never re-vendored, both sides
  * stay green while testing two different artifacts: core's suite tests its
  * live source, platform's suite tests a stale snapshot, and nothing anywhere
@@ -52,7 +52,7 @@ assertCrossTreePairingIsDeclared();
 const CORE_REPO = REPO_PATHS["core-foundation"];
 const PLATFORM_REPO = REPO_PATHS.platform;
 
-const RATIFIED_SOURCE_ROOT = join(CORE_REPO, "core", "contracts", "ratified");
+const RATIFIED_SOURCE_ROOT = join(CORE_REPO, "frontend", "contracts", "ratified");
 const INSTALLED_PACKAGE_ROOT = join(PLATFORM_REPO, "node_modules", "@omi-core", "ratified-contracts");
 const INSTALLED_PROVENANCE_PATH = join(INSTALLED_PACKAGE_ROOT, "PROVENANCE.json");
 
@@ -78,7 +78,7 @@ describe("the installed tarball's provenance matches core's live source, file fo
   });
 
   test("every file the tarball claims as its source is byte-identical to core's tree today", () => {
-    // red-proof: edit any one byte of core/contracts/ratified/src/write/ops.ts
+    // red-proof: edit any one byte of frontend/contracts/ratified/src/write/ops.ts
     // (or any other listed input) without re-vendoring the tarball. This test
     // must name that exact file and fail. Applied against write/ops.ts and
     // write-ops-conformance.json; both observed red; both reverted.
@@ -89,7 +89,7 @@ describe("the installed tarball's provenance matches core's live source, file fo
     for (const input of provenance.inputs) {
       // PROVENANCE.json paths are recorded relative to the ratified package
       // root (e.g. "src/write/ops.ts", "fixtures/write-ops-conformance.json"),
-      // which IS `core/contracts/ratified/` in the source tree — the package's
+      // which IS `frontend/contracts/ratified/` in the source tree — the package's
       // own root, not a tarball-internal "package/" prefix.
       const sourcePath = join(RATIFIED_SOURCE_ROOT, input.path);
       if (!existsSync(sourcePath)) {

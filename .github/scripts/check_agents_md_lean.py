@@ -34,7 +34,7 @@ BUDGETS: dict[str, tuple[int, int]] = {
     # room came from tightening rules 3/4/6/11/12/13 and the exemplar paragraph
     # rather than from a budget increase. Bytes stay at 7_400 — the file is denser
     # now (7_148 -> 7_389), so the byte budget is the binding one and must not move.
-    "core/AGENTS.md": (103, 7_400),
+    "frontend/AGENTS.md": (103, 7_400),
     # main grew this with Codemagic release-pipeline detail after the budget was
     # first set from a stale base; recalibrated to current main + headroom.
     "desktop/macos/AGENTS.md": (560, 47_000),

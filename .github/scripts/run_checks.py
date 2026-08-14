@@ -197,7 +197,7 @@ def trigger_matches(pattern: str, path: str) -> bool:
     # A bare literal (no separator, no wildcard) is a root file, and only a
     # root file: PurePath.match anchors from the right, so a bare
     # "package.json" trigger silently selected every package.json in the
-    # tree — which put backend Firestore checks on core/packages/* pushes.
+    # tree — which put backend Firestore checks on frontend/packages/* pushes.
     # A check that wants every such file spells it "**/<name>".
     if "/" not in pattern and not any(ch in pattern for ch in "*?["):
         return path == pattern

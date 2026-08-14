@@ -17,9 +17,9 @@ GATEWAY_PORT=8788
 GATEWAY_TOKEN="local-test-gateway-token"
 GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
 MACOS_ORIGIN="http://127.0.0.1:5290"
-SURFACES="$CORE_REPO/core/packages/surfaces"
-MACOS_LAUNCHER="$CORE_REPO/core/shells/macos/scripts/dev-run-macos.sh"
-IOS_LAUNCHER="$CORE_REPO/core/shells/ios/scripts/dev-run-ios.sh"
+SURFACES="$CORE_REPO/frontend/packages/surfaces"
+MACOS_LAUNCHER="$CORE_REPO/frontend/shells/macos/scripts/dev-run-macos.sh"
+IOS_LAUNCHER="$CORE_REPO/frontend/shells/ios/scripts/dev-run-ios.sh"
 OWNER_TOOL="$HERE/lib/process-owner.mjs"
 LOG_SANITIZER="$HERE/lib/sanitize-log.mjs"
 ARTIFACT_GUARD="$HERE/lib/artifact-safety.mjs"
@@ -316,7 +316,7 @@ for tool in corepack xcrun; do need "$tool"; done
 printf 'macOS origin %s; iOS origin omi-ui://local\n' "$MACOS_ORIGIN"
 
 CORE_BUILD_RAW="$LOG_DIR/core-build.raw.log"
-( cd "$CORE_REPO/core" \
+( cd "$CORE_REPO/frontend" \
   && corepack pnpm install --config.confirmModulesPurge=false --silent \
   && node "$HERE/check-surfaces-dependency-dist.mjs" --prepare-build \
   && corepack pnpm -r build ) > "$CORE_BUILD_RAW" 2>&1

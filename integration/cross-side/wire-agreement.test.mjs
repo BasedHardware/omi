@@ -40,7 +40,7 @@ import { after, before, describe, test } from "node:test";
 // symlinks satisfy its dependencies. It is still the exact module the
 // surfaces import - not a copy.
 const { fetchSynthesizedMemoryPage, PLATFORM_MEMORY_RECALL_PATH } = await import(
-  new URL("../../core/packages/adapters-platform/dist/index.js", import.meta.url).href
+  new URL("../../frontend/packages/adapters-platform/dist/index.js", import.meta.url).href
 );
 
 // NOT `new URL("../../../platform/", import.meta.url)`. That arithmetic is true

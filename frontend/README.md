@@ -1,6 +1,6 @@
-# core/ — the shared product core
+# frontend/ — the shared product core
 
-This directory is the new world. Everything under `core/` is post-migration code: the
+This directory is the new world. Everything under `frontend/` is post-migration code: the
 shared TypeScript product core (domain logic, sync layer, view models, shared surfaces),
 the contracts that define every seam, and the codegen that turns contract drift into
 build failures. The old client trees (`app/`, `desktop/`, `web/`) are being strangled by
@@ -11,10 +11,10 @@ this directory's shape; ADR-002/004/005/006/007/008 govern its architecture).
 
 ## The three isolation rules (CI-enforced, no exceptions)
 
-1. **`core/` never imports old code.** Not a helper, not a type, not "temporarily". If
-   `core/` needs something the old tree has, the knowledge is re-expressed here (usually
+1. **`frontend/` never imports old code.** Not a helper, not a type, not "temporarily". If
+   `frontend/` needs something the old tree has, the knowledge is re-expressed here (usually)
    in `packages/adapters-legacy/`) with the old code as reference only.
-2. **Old code touches `core/` only through published entry points** (bridge bindings and
+2. **Old code touches `frontend/` only through published entry points** (bridge bindings and
    package public APIs). Every such call site in the old tree carries a `core-seam:`
    marker comment, so per-surface cutover progress is a single grep.
 3. **All old-backend knowledge lives in `packages/adapters-legacy/`.** Domain and sync
@@ -39,7 +39,7 @@ this directory's shape; ADR-002/004/005/006/007/008 govern its architecture).
   `docs/client-failure-classes.md` of the tracker), conformance corpora.
 - `shells/` — new per-platform hosting code (loopback server, webview mounting, bridge
   bindings). The thin patches inside the old apps that *mount* these are the only new
-  code allowed to live outside `core/`, and they carry `core-seam:` markers.
+  code allowed to live outside `frontend/`, and they carry `core-seam:` markers.
 
 ## The dual-migration rule
 

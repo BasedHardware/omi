@@ -11,7 +11,7 @@ every honest page with `isTrustedSynthesizedPageData` before writing the body.
 
 ## Start
 
-From `core/`:
+From `frontend/`:
 
 ```bash
 pnpm install
@@ -76,7 +76,7 @@ request produces byte-identical response bodies every time.
 
 ## Supervisor note
 
-Barrels are generated. Add this package to `core/scripts/gen-barrels.mjs`
+Barrels are generated. Add this package to `frontend/scripts/gen-barrels.mjs`
 (`packages/dev-recall-stub/src/index.ts`) and run `node scripts/gen-barrels.mjs`
 before treating `./dist/index.js` as the public entry. Until then, the package
 `main` / `exports` point at `create_dev_recall_stub_server.js` directly.

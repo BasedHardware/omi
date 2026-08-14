@@ -54,7 +54,7 @@ export const PROVENANCE_SCHEMA_VERSION = 1;
  * to include build output and then no two runs ever agree.
  */
 export const REPO_SOURCE_ROOTS = Object.freeze({
-  "core-foundation": Object.freeze(["core", "integration"]),
+  "core-foundation": Object.freeze(["frontend", "integration"]),
   platform: Object.freeze([
     "apps",
     "core",
@@ -78,16 +78,16 @@ export const REPO_SOURCE_ROOTS = Object.freeze({
  * had not moved. That is the failure mode of every over-broad staleness check:
  * it is technically conservative, it is wrong often enough to be ignored, and an
  * ignored check is worse than no check. The surfaces bundle and the macOS app
- * are built from `core/` only; the launcher is not an input to either.
+ * are built from `frontend/` only; the launcher is not an input to either.
  *
  * A stamp carries its own `roots`, so the comparator recomputes the working-tree
  * hash using THE ARTIFACT'S scope (`worktreeStampMatching`) rather than assuming
  * both sides agreed about it.
  */
 export const ARTIFACT_SOURCE_ROOTS = Object.freeze({
-  "surfaces-dist": Object.freeze(["core"]),
-  "macos-app": Object.freeze(["core"]),
-  "ios-bundle": Object.freeze(["core"]),
+  "surfaces-dist": Object.freeze(["frontend"]),
+  "macos-app": Object.freeze(["frontend"]),
+  "ios-bundle": Object.freeze(["frontend"]),
 });
 
 const HERE = dirname(fileURLToPath(import.meta.url));

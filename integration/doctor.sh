@@ -31,7 +31,7 @@ paths="$(node "$HERE/lib/provenance.mjs" --paths 2>/dev/null || true)"
 read -r CORE_REPO PLATFORM_REPO WORKSPACE <<<"$(printf '%s' "$paths" | node -e '
   let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);console.log(`${j["core-foundation"]} ${j.platform} ${j.workspace}`)}catch{console.log("")}})')"
 [[ -n "${CORE_REPO:-}" && -n "${PLATFORM_REPO:-}" ]] || { echo "BROKEN: repo paths could not be resolved" >&2; exit 1; }
-SURFACES_DIST="$CORE_REPO/core/packages/surfaces/dist"
+SURFACES_DIST="$CORE_REPO/frontend/packages/surfaces/dist"
 
 JSON=0
 [[ "${1:-}" == "--json" ]] && JSON=1
@@ -112,11 +112,11 @@ else check broken "backend:entrypoint" "missing" "wrong branch in $PLATFORM_REPO
 # the failure this probe is for. Checking the root was a false BROKEN on a
 # perfectly healthy tree; a diagnostic that cries wolf gets ignored, and then it
 # is worse than nothing.
-if [[ -x "$CORE_REPO/core/packages/surfaces/node_modules/.bin/tsc" ]]; then
+if [[ -x "$CORE_REPO/frontend/packages/surfaces/node_modules/.bin/tsc" ]]; then
   check ok "deps:core" "workspace members installed (surfaces can resolve tsc)"
 else
   check broken "deps:core" "core/node_modules is missing or incomplete — the build will die with 'tsc: command not found'" \
-    "cd $CORE_REPO/core && corepack pnpm install --config.confirmModulesPurge=false"
+    "cd $CORE_REPO/frontend && corepack pnpm install --config.confirmModulesPurge=false"
 fi
 if [[ -d "$PLATFORM_REPO/node_modules" ]]; then check ok "deps:platform" "node_modules present"
 else check broken "deps:platform" "missing" "cd $PLATFORM_REPO && bun install"; fi
@@ -132,25 +132,25 @@ stamp_report="$(node "$HERE/lib/provenance.mjs" >/dev/null 2>&1 && node -e '
   console.log(JSON.stringify({agree: v.agree, reason: v.reason}));
 ' --input-type=module 2>/dev/null || echo '')"
 if [[ -z "$stamp_report" ]]; then
-  check warn "dist:surfaces" "could not evaluate the build stamp" "cd $CORE_REPO/core && corepack pnpm --filter @omi-core/surfaces build"
+  check warn "dist:surfaces" "could not evaluate the build stamp" "cd $CORE_REPO/frontend && corepack pnpm --filter @omi-core/surfaces build"
 elif [[ "$stamp_report" == *'"agree":true'* ]]; then
   check ok "dist:surfaces" "built from the current working tree"
 else
   reason="$(printf '%s' "$stamp_report" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).reason)}catch{console.log("unknown")}})')"
   check broken "dist:surfaces" "STALE — $reason" \
-    "cd $CORE_REPO/core && corepack pnpm --filter @omi-core/surfaces build"
+    "cd $CORE_REPO/frontend && corepack pnpm --filter @omi-core/surfaces build"
 fi
 
-if [[ -f "$CORE_REPO/core/packages/adapters-platform/dist/index.js" ]]; then
-  src_newest="$(find "$CORE_REPO/core/packages/adapters-platform/src" -type f -newer "$CORE_REPO/core/packages/adapters-platform/dist/index.js" 2>/dev/null | head -1)"
+if [[ -f "$CORE_REPO/frontend/packages/adapters-platform/dist/index.js" ]]; then
+  src_newest="$(find "$CORE_REPO/frontend/packages/adapters-platform/src" -type f -newer "$CORE_REPO/frontend/packages/adapters-platform/dist/index.js" 2>/dev/null | head -1)"
   if [[ -n "$src_newest" ]]; then
     check broken "dist:adapters-platform" "source is newer than dist (e.g. ${src_newest#"$CORE_REPO/"})" \
-      "cd $CORE_REPO/core && corepack pnpm -r build"
+      "cd $CORE_REPO/frontend && corepack pnpm -r build"
   else
     check ok "dist:adapters-platform" "newer than its sources"
   fi
 else
-  check broken "dist:adapters-platform" "not built" "cd $CORE_REPO/core && corepack pnpm -r build"
+  check broken "dist:adapters-platform" "not built" "cd $CORE_REPO/frontend && corepack pnpm -r build"
 fi
 
 # ── ports ───────────────────────────────────────────────────────────────────

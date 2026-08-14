@@ -13,7 +13,7 @@ test("codegen receives a scoped core-directory root without changing the declare
 
   const childEnv = laneStepEnvironment({
     callerEnv,
-    stepEnv: { OMI_CORE_ROOT: "/declared/core-repository/core" },
+    stepEnv: { OMI_CORE_ROOT: "/declared/core-repository/frontend" },
   });
 
   assert.deepEqual(callerEnv, {
@@ -21,7 +21,7 @@ test("codegen receives a scoped core-directory root without changing the declare
     OMI_PLATFORM_ROOT: "/declared/platform-repository",
     UNRELATED: "retained",
   });
-  assert.equal(childEnv.OMI_CORE_ROOT, "/declared/core-repository/core");
+  assert.equal(childEnv.OMI_CORE_ROOT, "/declared/core-repository/frontend");
   assert.equal(childEnv.OMI_PLATFORM_ROOT, callerEnv.OMI_PLATFORM_ROOT);
   assert.equal(childEnv.UNRELATED, "retained");
   assert.notEqual(childEnv, callerEnv);

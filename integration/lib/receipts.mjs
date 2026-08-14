@@ -23,7 +23,7 @@
 // `verifyArtifact` rather than re-deriving tree hashing.
 //
 // REGISTRY-DRIVEN, LIKE THE WIRE-CONFORMANCE SEAM REGISTRY
-// (core/scripts/check-wire-conformance.mjs). Adding a lane is a new row in
+// (frontend/scripts/check-wire-conformance.mjs). Adding a lane is a new row in
 // LANE_REGISTRY, not a new branch of logic: which repos its tree hash must
 // cover, and which independent arbiter evidence a passing receipt must carry.
 // L0/L1 are static/unit — no external system to disagree with, so no
@@ -150,7 +150,7 @@ export const LANE_REGISTRY = Object.freeze({
     budgetMs: 5000,
     repos: Object.freeze(["core-foundation"]),
     requiredArbiters: Object.freeze([]),
-    description: "`pnpm verify` in core-foundation/core.",
+    description: "`pnpm verify` in frontend/.",
   }),
   L2: Object.freeze({
     id: "L2",

@@ -357,7 +357,7 @@ function copyPropertyDescriptor(source) {
 //
 // These tests close ONE of the three links that make the write seam real:
 //   module  <-> schema-of-record   (here)
-//   schema  <-> corpus             (core/scripts/check-wire-conformance.mjs)
+//   schema  <-> corpus             (frontend/scripts/check-wire-conformance.mjs)
 //   corpus  <-> both sides         (testkit + platform contract-tests)
 // Without the first link the schema-of-record file is a second source of
 // truth that can drift from the code it claims to describe, and a corpus

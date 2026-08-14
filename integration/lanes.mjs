@@ -62,7 +62,7 @@ const PLATFORM_REPO = REPO_PATHS.platform;
 // interface. The Swift generator predates that interface and expects the
 // nested `core/` directory. Override it only in child processes that execute
 // codegen; never rewrite the caller's environment or the provenance root.
-const CORE_CODEGEN_ENV = Object.freeze({ OMI_CORE_ROOT: join(CORE_REPO, "core") });
+const CORE_CODEGEN_ENV = Object.freeze({ OMI_CORE_ROOT: join(CORE_REPO, "frontend") });
 
 /** Loaded at the bottom; null when the receipt system is unavailable. */
 let receiptsModule = null;
@@ -91,8 +91,8 @@ export const LANES = {
     steps: [
       { cwd: PLATFORM_REPO, command: "bun run lint:imports" },
       { cwd: PLATFORM_REPO, command: "bun test contract-tests/ratified-contracts.test.ts contract-tests/qa-contracts.test.ts" },
-      { cwd: join(CORE_REPO, "core"), command: "node scripts/check-wire-conformance.mjs" },
-      { cwd: join(CORE_REPO, "core"), command: "pnpm codegen:check", env: CORE_CODEGEN_ENV },
+      { cwd: join(CORE_REPO, "frontend"), command: "node scripts/check-wire-conformance.mjs" },
+      { cwd: join(CORE_REPO, "frontend"), command: "pnpm codegen:check", env: CORE_CODEGEN_ENV },
     ],
   },
   L1: {
@@ -101,7 +101,7 @@ export const LANES = {
     reason: "pnpm verify is the Definition of Done for core/: build + unit tests + eight static checks",
     // `pnpm verify` ends with all three codegen drift checks, including the
     // legacy Swift generator that consumes OMI_CORE_ROOT as a core directory.
-    steps: [{ cwd: join(CORE_REPO, "core"), command: "pnpm verify", env: CORE_CODEGEN_ENV }],
+    steps: [{ cwd: join(CORE_REPO, "frontend"), command: "pnpm verify", env: CORE_CODEGEN_ENV }],
   },
   L2: {
     name: "hermetic integration",
@@ -111,20 +111,20 @@ export const LANES = {
      * L2 SPANS TWO REPOS AND THREE COMMANDS, and it now has ONE entry point.
      *
      * The preflight is not ceremony. `integration/cross-side/wire-agreement.test.mjs`
-     * imports the BUILT `core/packages/adapters-platform/dist/index.js`. A stale
+     * imports the BUILT `frontend/packages/adapters-platform/dist/index.js`. A stale
      * dist means that test exercises YESTERDAY'S CLIENT and passes — a green
      * result about code that is no longer in the tree. That is the same
      * "measured artifact is not the edited artifact" failure this whole program
      * exists to eliminate, sitting inside the lane meant to catch it.
      */
     preflight: () => {
-      const distIndex = join(CORE_REPO, "core", "packages", "adapters-platform", "dist", "index.js");
+      const distIndex = join(CORE_REPO, "frontend", "packages", "adapters-platform", "dist", "index.js");
       if (!existsSync(distIndex)) {
-        return { ok: false, reason: "adapters-platform is not built — the cross-side test would import nothing", action: `cd ${join(CORE_REPO, "core")} && pnpm -r build` };
+        return { ok: false, reason: "adapters-platform is not built — the cross-side test would import nothing", action: `cd ${join(CORE_REPO, "frontend")} && pnpm -r build` };
       }
-      const stamp = verifyArtifact(readStampFile(join(CORE_REPO, "core", "packages", "surfaces", "dist", "omi-build-stamp.json")));
+      const stamp = verifyArtifact(readStampFile(join(CORE_REPO, "frontend", "packages", "surfaces", "dist", "omi-build-stamp.json")));
       if (!stamp.agree) {
-        return { ok: false, reason: `surfaces dist is stale — ${stamp.reason}`, action: `cd ${join(CORE_REPO, "core")} && pnpm -r build` };
+        return { ok: false, reason: `surfaces dist is stale — ${stamp.reason}`, action: `cd ${join(CORE_REPO, "frontend")} && pnpm -r build` };
       }
       return { ok: true };
     },
@@ -181,7 +181,7 @@ export const LANES = {
       // asserts the two tree hashes really are equal first, or it would pass
       // vacuously the moment the fixtures drifted — the same shape as the
       // mutation that stayed green.
-      { cwd: CORE_REPO, command: "node --test integration/dev-stack-cli.test.mjs integration/lib/artifact-safety.test.mjs integration/lib/evidence-cli.test.mjs integration/lib/evidence-matrix.test.mjs integration/lib/lane-step-env.test.mjs integration/lib/process-owner.test.mjs integration/lib/receipts.test.mjs integration/lib/receipts-concurrency.test.mjs integration/lib/run-report.test.mjs integration/lib/sanitize-log.test.mjs integration/single-service-structure.test.mjs core/shells/macos/tests/consumer-evidence-writer.test.mjs core/shells/ios/tests/dev-run-ios.test.mjs" },
+      { cwd: CORE_REPO, command: "node --test integration/dev-stack-cli.test.mjs integration/lib/artifact-safety.test.mjs integration/lib/evidence-cli.test.mjs integration/lib/evidence-matrix.test.mjs integration/lib/lane-step-env.test.mjs integration/lib/process-owner.test.mjs integration/lib/receipts.test.mjs integration/lib/receipts-concurrency.test.mjs integration/lib/run-report.test.mjs integration/lib/sanitize-log.test.mjs integration/single-service-structure.test.mjs frontend/shells/macos/tests/consumer-evidence-writer.test.mjs frontend/shells/ios/tests/dev-run-ios.test.mjs" },
     ],
   },
   L3: {

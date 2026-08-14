@@ -14,8 +14,8 @@ const doctor = read("./doctor.sh");
 const evidenceCli = read("./lib/evidence-cli.mjs");
 const owner = read("./lib/process-owner.mjs");
 const sanitizer = read("./lib/sanitize-log.mjs");
-const macos = read("../core/shells/macos/scripts/dev-run-macos.sh");
-const ios = read("../core/shells/ios/scripts/dev-run-ios.sh");
+const macos = read("../frontend/shells/macos/scripts/dev-run-macos.sh");
+const ios = read("../frontend/shells/ios/scripts/dev-run-ios.sh");
 
 test("RED-PROOF the registered stack cannot reintroduce the retired service", () => {
   // red-proof: add the old port, prototype name, or launcher path to dev-stack.

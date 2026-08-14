@@ -23,11 +23,11 @@ The output `runtime.json` is exact `omi.polish.runtime/v1` metadata plus typed
 events. To prepare gate input, replay that file into a fresh output:
 
 ```sh
-node core/shells/tools/capture-native-runtime.mjs \
-  --manifest core/shells/.../coordinate.json \
-  --replay-input core/.build/polish-native-runtime/<run>/runtime.json \
-  --replay-output core/.build/polish-native-runtime/<run>/gate/runtime.json \
-  --output-dir core/.build/polish-native-runtime/<run>/gate
+node frontend/shells/tools/capture-native-runtime.mjs \
+  --manifest frontend/shells/.../coordinate.json \
+  --replay-input frontend/.build/polish-native-runtime/<run>/runtime.json \
+  --replay-output frontend/.build/polish-native-runtime/<run>/gate/runtime.json \
+  --output-dir frontend/.build/polish-native-runtime/<run>/gate
 ```
 
 The replay writes the immutable input set, batch member, command receipt, and

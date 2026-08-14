@@ -1,13 +1,13 @@
-# core/ Agent Guide
+# frontend/
 
-Rules for any agent working under `core/`. The root `AGENTS.md` still applies (Definition of
-Done, git, testing); this file carries what is different here. `core/README.md` explains what
+Rules for any agent working under `frontend/`. The root `AGENTS.md` still applies (Definition of
+Done, git, testing); this file carries what is different here. `frontend/README.md` explains what
 this directory *is* — read it first if you haven't.
 
 ## Setup / verify loop
 
 ```bash
-cd core
+cd frontend
 pnpm install
 pnpm -r build        # tsc project references; strict; must be clean
 pnpm -r test         # hermetic; node:test; no network, no wall clock
@@ -33,7 +33,7 @@ what you need, stop and surface it; that is a foundation gap, not your call to f
 
 ## Hard rules (violations are review-blocking, most are CI-enforced)
 
-1. **Never import old-tree code** (`app/`, `desktop/`, `web/`, `backend/`) into `core/`.
+1. **Never import old-tree code** (`app/`, `desktop/`, `web/`, `backend/`) into `frontend/`.
    Old code is reference material only. `check-isolation.mjs` enforces this.
 2. **Raw backend endpoints appear only in `packages/adapters-legacy/` and `shells/`.**
    Domain and sync code speak contracts. Also enforced by `check-isolation.mjs`.
@@ -54,7 +54,7 @@ what you need, stop and surface it; that is a foundation gap, not your call to f
 9. **Contracts changes are ratchet events**: anything under `contracts/` that a shell or
    the backend consumes bumps `BRIDGE_CONTRACT_VERSION` on breaking change and gets a
    tracker note. When a contract is silent on something you need — stop and surface it.
-10. **Old-tree mount points** (the thin patches that host `core/` surfaces in existing
+10. **Old-tree mount points** (the thin patches that host `frontend/` surfaces in existing
     apps) carry a `// core-seam:` marker comment at every call site.
 11. **Adapter export names carry the domain in the identifier** — `sendTaskOp`,
     `fetchMemoryIdSnapshot`, `tasksTransport` — because the barrels re-export every domain

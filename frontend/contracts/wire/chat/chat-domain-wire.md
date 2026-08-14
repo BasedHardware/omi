@@ -5,7 +5,7 @@ Status: **ratified contract**. The send/stream split is settled by
 generation stream, initial or resumed, uses the authenticated GET events resource.
 
 This document defines the Chat wire from
-`core/contracts/src/domain/chat.ts:60-115`. It does not adopt, alias, or reserve
+`frontend/contracts/src/domain/chat.ts:60-115`. It does not adopt, alias, or reserve
 the provisional `/v1/chat/messages` and `/v1/chat/messages/reconcile` paths in
 `adapters-platform/src/chat.ts`.
 
@@ -13,10 +13,10 @@ Evidence coordinates:
 
 - platform: `d9b91c0f9ab25ad91e45d0b7b8482042f7943534`
 - read-only core-foundation: `8e2e1c52b24fb1a80334c700dfb006db827a32a5`
-- domain record: `core/contracts/src/domain/chat.ts:60-115`
-- create operation and terminal frame: `core/contracts/src/domain/chat.ts:129-176`
-- surface row/reconciliation: `core/packages/surfaces/src/production/chat-reconcile.ts:6-105`
-- surface port: `core/packages/surfaces/src/production/ProductionChatStore.ts:18-38`
+- domain record: `frontend/contracts/src/domain/chat.ts:60-115`
+- create operation and terminal frame: `frontend/contracts/src/domain/chat.ts:129-176`
+- surface row/reconciliation: `frontend/packages/surfaces/src/production/chat-reconcile.ts:6-105`
+- surface port: `frontend/packages/surfaces/src/production/ProductionChatStore.ts:18-38`
 
 The inherited field names carry the pending markers already attached to the
 domain contract: `sender` is `domain-pending(DIV-CHAT-SENDER-001)`, `type` is

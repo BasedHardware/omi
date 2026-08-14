@@ -68,10 +68,10 @@ class DesktopManifestRoutesTests(unittest.TestCase):
         # the backend Firestore admission check on a core/packages push.
         self.assertTrue(trigger_matches("package.json", "package.json"))
         self.assertFalse(
-            trigger_matches("package.json", "core/packages/surfaces/package.json")
+            trigger_matches("package.json", "frontend/packages/surfaces/package.json")
         )
         self.assertTrue(
-            trigger_matches("**/package.json", "core/packages/surfaces/package.json")
+            trigger_matches("**/package.json", "frontend/packages/surfaces/package.json")
         )
 
     def test_every_macos_only_check_has_a_real_resolver_fixture(self) -> None:
