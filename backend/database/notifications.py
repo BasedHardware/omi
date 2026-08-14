@@ -14,7 +14,7 @@ from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
 from ._client import db
 from .cache import get_memory_cache
-from database.store import get_document_store
+from database.store import ensure_id_segment, get_document_store
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
@@ -62,7 +62,11 @@ def save_endpoint(uid: str, data: Dict[str, Any]) -> None:
     Mirrors the endpoint's ``time_zone`` onto the user doc (parity with ``save_token``) so the
     daily-summary timezone queries see UnifiedPush-only users too.
     """
-    device_key = str(data.get('device_key') or 'unknown_default')
+    # device_key comes from client headers (platform + X-Device-Id-Hash). A '/' would make an invalid
+    # logical path and diverge across backends (Firestore rejects the odd segment count; Mongo would
+    # store it outside the endpoints collection, so get_all_endpoints never finds it). Reject unsafe
+    # segments at the boundary (cubic PR 10887 B1) rather than composing a corrupt path.
+    device_key = ensure_id_segment(str(data.get('device_key') or 'unknown_default'), label='device_key')
     store = get_document_store()
     store.set(
         f'users/{uid}/{_UNIFIEDPUSH_COLLECTION}/{device_key}',

@@ -101,7 +101,11 @@ def save_unifiedpush_endpoint(
     endpoint_data: Dict[str, Any] = data.model_dump()
     endpoint_data['device_key'] = device_key
 
-    notification_db.save_endpoint(uid, endpoint_data)
+    try:
+        notification_db.save_endpoint(uid, endpoint_data)
+    except ValueError as e:
+        # An unsafe device_key (e.g. a header containing '/') is a client error, not a 500.
+        raise HTTPException(status_code=400, detail=str(e))
     return FcmTokenResponse(status='Ok')
 
 

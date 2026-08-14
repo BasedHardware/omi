@@ -123,3 +123,24 @@ def test_router_composes_device_key_and_saves(monkeypatch):
     # WebPush keys flow through the router to storage so the send channel can encrypt.
     assert saved['p256dh'] == 'BPk_pub'
     assert saved['auth'] == 'YXV0aA'
+
+
+def test_save_endpoint_rejects_device_key_with_slash(fake_store):
+    # cubic PR 10887 B1: a device_key containing '/' builds an invalid logical path (Firestore rejects
+    # the odd segment count; Mongo stores it outside the endpoints collection). Reject at the boundary.
+    with pytest.raises(ValueError):
+        notification_db.save_endpoint('u', {'endpoint': 'http://ntfy/x?up=1', 'device_key': 'android_a/b'})
+    assert notification_db.get_all_endpoints('u') == []  # nothing was stored at a corrupt path
+
+
+def test_endpoint_request_requires_both_or_neither_webpush_keys():
+    # cubic PR 10887 B4: a half-set p256dh/auth silently downgrades to plaintext (the channel encrypts
+    # only when both are present). Reject a malformed pair at registration.
+    from pydantic import ValidationError
+
+    SaveUnifiedPushEndpointRequest(endpoint='e', time_zone='UTC', p256dh='p', auth='a')  # both -> ok
+    SaveUnifiedPushEndpointRequest(endpoint='e', time_zone='UTC')  # neither -> ok
+    with pytest.raises(ValidationError):
+        SaveUnifiedPushEndpointRequest(endpoint='e', time_zone='UTC', p256dh='p')  # only one -> rejected
+    with pytest.raises(ValidationError):
+        SaveUnifiedPushEndpointRequest(endpoint='e', time_zone='UTC', auth='a')
