@@ -1,0 +1,561 @@
+desktop/context-for-claude/ARCHITECTURE.md
+  s_d58145f2e376ea::t_10fd0295f038d6 1-168
+desktop/context-for-claude/CONTRACTS.md
+  s_d58145f2e376ea::t_180d74c3980f58 1-614
+desktop/context-for-claude/LICENSE
+  s_d58145f2e376ea::t_eb90152e48ea18 1-21
+desktop/context-for-claude/NOTICE
+  s_d58145f2e376ea::t_8f2a518ab3c1af 1-68
+desktop/context-for-claude/Package.resolved
+  s_d58145f2e376ea::t_86fde42e38bd02 1-32
+desktop/context-for-claude/Package.swift
+  s_d58145f2e376ea::t_783b7e27f557ed 1-90
+desktop/context-for-claude/README.md
+  s_d58145f2e376ea::t_11f59455d5c7c9 1-190
+desktop/context-for-claude/Resources/ContextForClaude.entitlements
+  s_d58145f2e376ea::t_af93824d1e86fa 1-15
+desktop/context-for-claude/Resources/ContextForClaudeDev.entitlements
+  s_d58145f2e376ea::t_86add9424dc86b 1-19
+desktop/context-for-claude/Resources/Info.plist
+  s_d58145f2e376ea::t_5a786a63fd6a8f 1-95
+desktop/context-for-claude/Sources/ContextApp/Account/LoopbackCallbackServer.swift
+  s_d58145f2e376ea::t_330eae043997eb 1-455
+desktop/context-for-claude/Sources/ContextApp/Account/OmiAuth.swift
+  s_d58145f2e376ea::t_0dde46c25b5263 1-717
+desktop/context-for-claude/Sources/ContextApp/Account/SessionStore.swift
+  s_d58145f2e376ea::t_a6ab2b183bbce4 1-137
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityAccount.swift
+  s_d58145f2e376ea::t_2c09ac0c353962 1-204
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityAccountLocalNote.swift
+  s_d58145f2e376ea::t_b922dfda4ce35d 1-138
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityComposer.swift
+  s_d58145f2e376ea::t_ae51a29e1e5a74 1-531
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityDetail.swift
+  s_d58145f2e376ea::t_686a5d36ff1304 1-913
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityDetailView.swift
+  s_d58145f2e376ea::t_fc24c4bce891d4 1-1352
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityHourRail.swift
+  s_d58145f2e376ea::t_097853fc464998 1-262
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityLocalMemories.swift
+  s_d58145f2e376ea::t_ac7629fa155d1b 1-218
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityModel.swift
+  s_d58145f2e376ea::t_08da03e79abc0f 1-765
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityRowViews.swift
+  s_d58145f2e376ea::t_7ff7eabaa737a2 1-786
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityStore.swift
+  s_d58145f2e376ea::t_f8e6ee616dcce6 1-930
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityStream.swift
+  s_d58145f2e376ea::t_bdd33a41be9fa3 1-423
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivitySurface.swift
+  s_d58145f2e376ea::t_66b014ebca4e52 1-408
+desktop/context-for-claude/Sources/ContextApp/Backend/ClientDevice.swift
+  s_d58145f2e376ea::t_9f80ba6dacd3fa 1-74
+desktop/context-for-claude/Sources/ContextApp/Backend/ConversationUploader.swift
+  s_d58145f2e376ea::t_75fe871b0a4566 1-773
+desktop/context-for-claude/Sources/ContextApp/Backend/ListenSocket.swift
+  s_d58145f2e376ea::t_e4ed23f1b7572a 1-951
+desktop/context-for-claude/Sources/ContextApp/Backend/MCPKeyProvisioner.swift
+  s_d58145f2e376ea::t_f3fa022a6b7fa0 1-413
+desktop/context-for-claude/Sources/ContextApp/Backend/NetworkEgress.swift
+  s_d58145f2e376ea::t_be92a16b564265 1-178
+desktop/context-for-claude/Sources/ContextApp/Backend/OmiAPI.swift
+  s_d58145f2e376ea::t_d5cffba397b33e 1-510
+desktop/context-for-claude/Sources/ContextApp/Backend/OmiActivityFeed.swift
+  s_d58145f2e376ea::t_64e36b2f8acfe6 1-944
+desktop/context-for-claude/Sources/ContextApp/Backend/ScreenActivityUploader.swift
+  s_d58145f2e376ea::t_373dda455e70a3 1-755
+desktop/context-for-claude/Sources/ContextApp/Capture/AXElement.swift
+  s_d58145f2e376ea::t_ee884c35fd0da5 1-224
+desktop/context-for-claude/Sources/ContextApp/Capture/AudioMixer.swift
+  s_d58145f2e376ea::t_25742ee557ee29 1-292
+desktop/context-for-claude/Sources/ContextApp/Capture/AudioSource.swift
+  s_d58145f2e376ea::t_5e1ee9bc4825f6 1-41
+desktop/context-for-claude/Sources/ContextApp/Capture/MicCapture.swift
+  s_d58145f2e376ea::t_e89fe5449206f7 1-781
+desktop/context-for-claude/Sources/ContextApp/Capture/ScreenWatcher.swift
+  s_d58145f2e376ea::t_9b8fa6937f6a3b 1-1532
+desktop/context-for-claude/Sources/ContextApp/Capture/SystemAudioCapture.swift
+  s_d58145f2e376ea::t_bce0cec178dd50 1-520
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_d58145f2e376ea::t_cc31ea00984467 1-672
+desktop/context-for-claude/Sources/ContextApp/Engine.swift
+  s_d58145f2e376ea::t_79297f677da56e 1-1582
+desktop/context-for-claude/Sources/ContextApp/Integration/ClaudeRegistrar.swift
+  s_d58145f2e376ea::t_9ca0d79ec94f83 1-521
+desktop/context-for-claude/Sources/ContextApp/Integration/LoginItem.swift
+  s_d58145f2e376ea::t_481b7765512384 1-47
+desktop/context-for-claude/Sources/ContextApp/MenuBar/ContextMark.swift
+  s_d58145f2e376ea::t_4b8a4bbb6dc2b6 1-97
+desktop/context-for-claude/Sources/ContextApp/MenuBar/MenuBarPresentation.swift
+  s_d58145f2e376ea::t_f952e63a4e5112 1-259
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusItemController.swift
+  s_d58145f2e376ea::t_712121b27ddbea 1-107
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusView.swift
+  s_d58145f2e376ea::t_0fc9b78fe28ca3 1-575
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Cinematic.swift
+  s_d58145f2e376ea::t_eb82218501a7a8 1-769
+desktop/context-for-claude/Sources/ContextApp/Onboarding/CinematicMark.swift
+  s_d58145f2e376ea::t_a0e9c2258f328e 1-500
+desktop/context-for-claude/Sources/ContextApp/Onboarding/CinematicWindowArt.swift
+  s_d58145f2e376ea::t_ac0546442ae4ff 1-552
+desktop/context-for-claude/Sources/ContextApp/Onboarding/CinematicWindows.swift
+  s_d58145f2e376ea::t_ef26db7484c103 1-322
+desktop/context-for-claude/Sources/ContextApp/Onboarding/Ink.swift
+  s_d58145f2e376ea::t_36ce7c96b69ece 1-1098
+desktop/context-for-claude/Sources/ContextApp/Onboarding/InkGlass.swift
+  s_d58145f2e376ea::t_1e2590c0617b31 1-604
+desktop/context-for-claude/Sources/ContextApp/Onboarding/MenuBarSpotlight.swift
+  s_d58145f2e376ea::t_bc701636bd93e4 1-184
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingReset.swift
+  s_d58145f2e376ea::t_4d873b76cd3fd9 1-94
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingResume.swift
+  s_d58145f2e376ea::t_e6b80b61bf692e 1-78
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingView.swift
+  s_d58145f2e376ea::t_0181ab9bad7851 1-1347
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingWindow.swift
+  s_d58145f2e376ea::t_4c2e4802d71e69 1-497
+desktop/context-for-claude/Sources/ContextApp/Onboarding/PermissionChoreography.swift
+  s_d58145f2e376ea::t_71f8f34a7e2e0d 1-1420
+desktop/context-for-claude/Sources/ContextApp/Onboarding/PermissionInvitations.swift
+  s_d58145f2e376ea::t_5014425751762d 1-293
+desktop/context-for-claude/Sources/ContextApp/Onboarding/PermissionsCard.swift
+  s_d58145f2e376ea::t_0957303c373a9d 1-172
+desktop/context-for-claude/Sources/ContextApp/Onboarding/RandomizedText.swift
+  s_d58145f2e376ea::t_13ea9440cbffff 1-262
+desktop/context-for-claude/Sources/ContextApp/Onboarding/SettingsRowSighting.swift
+  s_d58145f2e376ea::t_2e40bcf26f65e2 1-578
+desktop/context-for-claude/Sources/ContextApp/Onboarding/SettingsSpotlight.swift
+  s_d58145f2e376ea::t_c23461294dab6c 1-1578
+desktop/context-for-claude/Sources/ContextApp/Onboarding/TalkingMark.swift
+  s_d58145f2e376ea::t_6fbc1da6bb7be9 1-549
+desktop/context-for-claude/Sources/ContextApp/Permissions.swift
+  s_d58145f2e376ea::t_03ebd332ceb3a3 1-1377
+desktop/context-for-claude/Sources/ContextApp/Rewind/AppIcon.swift
+  s_d58145f2e376ea::t_b321f9af3167e1 1-152
+desktop/context-for-claude/Sources/ContextApp/Rewind/FrameLoader.swift
+  s_d58145f2e376ea::t_6c9f8047800e1a 1-354
+desktop/context-for-claude/Sources/ContextApp/Rewind/LiveText.swift
+  s_d58145f2e376ea::t_da19b5c053b555 1-181
+desktop/context-for-claude/Sources/ContextApp/Rewind/OpenExternally.swift
+  s_d58145f2e376ea::t_20274848533977 1-129
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindGlide.swift
+  s_d58145f2e376ea::t_5ee3edf6cbc7a9 1-80
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindModel.swift
+  s_d58145f2e376ea::t_cdea3b471356a8 1-1223
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindPalette.swift
+  s_d58145f2e376ea::t_7e8428c650e6d4 1-242
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindScrub.swift
+  s_d58145f2e376ea::t_fcfc5637ffa28d 1-186
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindTrack.swift
+  s_d58145f2e376ea::t_e4b23939929b96 1-725
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindView.swift
+  s_d58145f2e376ea::t_515ed2c8b9d79c 1-510
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindWindow.swift
+  s_d58145f2e376ea::t_d63fdd1c8b69a9 1-236
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindZoom.swift
+  s_d58145f2e376ea::t_9b7dfd137540fd 1-184
+desktop/context-for-claude/Sources/ContextApp/Search/ClaudeRouter.swift
+  s_d58145f2e376ea::t_5411cb1ab9574e 1-440
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarView.swift
+  s_d58145f2e376ea::t_55928760e42d84 1-780
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarWindow.swift
+  s_d58145f2e376ea::t_fc11113f078183 1-654
+desktop/context-for-claude/Sources/ContextApp/Search/SearchRanking.swift
+  s_d58145f2e376ea::t_5608c4b1442dc9 1-191
+desktop/context-for-claude/Sources/ContextApp/Search/SearchResultsModel.swift
+  s_d58145f2e376ea::t_4ee3f9986d6009 1-535
+desktop/context-for-claude/Sources/ContextApp/Search/SearchResultsView.swift
+  s_d58145f2e376ea::t_f57acc1e748c7b 1-811
+desktop/context-for-claude/Sources/ContextApp/Search/SearchSurface.swift
+  s_d58145f2e376ea::t_771a3a5dc064d9 1-845
+desktop/context-for-claude/Sources/ContextApp/Settings/AgentDetection.swift
+  s_d58145f2e376ea::t_37be478b72f6a3 1-138
+desktop/context-for-claude/Sources/ContextApp/Settings/ExclusionsPaneModel.swift
+  s_d58145f2e376ea::t_56e6660c28af0c 1-573
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsAgentsPane.swift
+  s_d58145f2e376ea::t_840f90a26a7b94 1-303
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsAppearancePane.swift
+  s_d58145f2e376ea::t_fac9ae20918973 1-371
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsCapturePane.swift
+  s_d58145f2e376ea::t_45e02746d42f4b 1-97
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsExclusionsPane.swift
+  s_d58145f2e376ea::t_9a2752ee726aa4 1-397
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsGeneralPane.swift
+  s_d58145f2e376ea::t_cb461343e9d112 1-518
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsPreferences.swift
+  s_d58145f2e376ea::t_7953b7cf966664 1-773
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsRows.swift
+  s_d58145f2e376ea::t_51f46839167fe4 1-523
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsStoragePane.swift
+  s_d58145f2e376ea::t_2513d9bc2e785a 1-251
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsView.swift
+  s_d58145f2e376ea::t_034e8c070787c4 1-198
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsWindow.swift
+  s_d58145f2e376ea::t_05d901e894bbc6 1-139
+desktop/context-for-claude/Sources/ContextApp/Settings/ShortcutBinding.swift
+  s_d58145f2e376ea::t_809e9cf3000ebb 1-384
+desktop/context-for-claude/Sources/ContextApp/Settings/StorageUsage.swift
+  s_d58145f2e376ea::t_ccf0957ac0c5e7 1-90
+desktop/context-for-claude/Sources/ContextApp/Shortcuts/GlobalShortcuts.swift
+  s_d58145f2e376ea::t_bd1f1cd614f8d5 1-949
+desktop/context-for-claude/Sources/ContextApp/Shortcuts/LiveShortcutBindings.swift
+  s_d58145f2e376ea::t_d83a78ef3337d4 1-323
+desktop/context-for-claude/Sources/ContextApp/Shortcuts/ShortcutConflicts.swift
+  s_d58145f2e376ea::t_9434c1a4465919 1-516
+desktop/context-for-claude/Sources/ContextApp/Shortcuts/ShortcutKeyLabel.swift
+  s_d58145f2e376ea::t_ae4a93b92d53f5 1-86
+desktop/context-for-claude/Sources/ContextApp/Support/HostArchitecture.swift
+  s_d58145f2e376ea::t_c50b6c23a2965b 1-26
+desktop/context-for-claude/Sources/ContextApp/Support/Log.swift
+  s_d58145f2e376ea::t_655283dce0363e 1-160
+desktop/context-for-claude/Sources/ContextApp/Support/Sound.swift
+  s_d58145f2e376ea::t_7b6060aff72057 1-581
+desktop/context-for-claude/Sources/ContextApp/Support/Telemetry.swift
+  s_d58145f2e376ea::t_8688a645718b50 1-60
+desktop/context-for-claude/Sources/ContextApp/Support/WindowGlass.swift
+  s_d58145f2e376ea::t_e1b598b6e34d5d 1-105
+desktop/context-for-claude/Sources/ContextApp/Transcribe/Transcriber.swift
+  s_d58145f2e376ea::t_adb3568b932bde 1-810
+desktop/context-for-claude/Sources/ContextApp/Tutorial/Tutorial.swift
+  s_d58145f2e376ea::t_a90923f0c026b7 1-132
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialCardView.swift
+  s_d58145f2e376ea::t_953d9955cd74e5 1-369
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialDemonstrations.swift
+  s_d58145f2e376ea::t_44816285bd3973 1-845
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialDrag.swift
+  s_d58145f2e376ea::t_c8f08538723317 1-152
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialEnvironment.swift
+  s_d58145f2e376ea::t_22140a2fe736c2 1-835
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialModel.swift
+  s_d58145f2e376ea::t_1d53b087d1efaf 1-1315
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialOverlay.swift
+  s_d58145f2e376ea::t_5ae4c7d45a579c 1-461
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialResume.swift
+  s_d58145f2e376ea::t_6ac0a27b80ba5b 1-82
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialStep.swift
+  s_d58145f2e376ea::t_3a032ee809dfea 1-329
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialTargets.swift
+  s_d58145f2e376ea::t_0979ac619cf989 1-247
+desktop/context-for-claude/Sources/ContextApp/Update/ContextUpdater.swift
+  s_d58145f2e376ea::t_3ccb5deea7ee18 1-358
+desktop/context-for-claude/Sources/ContextApp/Update/UpdatePolicy.swift
+  s_d58145f2e376ea::t_e02b6d14ed94d3 1-262
+desktop/context-for-claude/Sources/ContextApp/Update/UpdateRelaunch.swift
+  s_d58145f2e376ea::t_acdf8eff54f328 1-98
+desktop/context-for-claude/Sources/ContextApp/Update/UpdatesSettingsRow.swift
+  s_d58145f2e376ea::t_fa9b2d59fe1e08 1-43
+desktop/context-for-claude/Sources/ContextCore/Accessibility.swift
+  s_d58145f2e376ea::t_96b98ed793bad9 1-574
+desktop/context-for-claude/Sources/ContextCore/CaptureHealth.swift
+  s_d58145f2e376ea::t_4d97a26cd3e03d 1-114
+desktop/context-for-claude/Sources/ContextCore/CaptureHostPolicy.swift
+  s_d58145f2e376ea::t_c4e2c03cfd9915 1-170
+desktop/context-for-claude/Sources/ContextCore/ClaudeConfig.swift
+  s_d58145f2e376ea::t_0d9ee9b2c726dc 1-313
+desktop/context-for-claude/Sources/ContextCore/ClaudeSkill.swift
+  s_d58145f2e376ea::t_d0074af9351e21 1-152
+desktop/context-for-claude/Sources/ContextCore/Exclusions.swift
+  s_d58145f2e376ea::t_894a459e2fba88 1-1562
+desktop/context-for-claude/Sources/ContextCore/Models.swift
+  s_d58145f2e376ea::t_2701673bf692c5 1-444
+desktop/context-for-claude/Sources/ContextCore/OmiMemoryStore.swift
+  s_d58145f2e376ea::t_6b32aefd8afa28 1-191
+desktop/context-for-claude/Sources/ContextCore/Paths.swift
+  s_d58145f2e376ea::t_8670a271be83eb 1-390
+desktop/context-for-claude/Sources/ContextCore/Policy.swift
+  s_d58145f2e376ea::t_3aaee81793894c 1-303
+desktop/context-for-claude/Sources/ContextCore/Queries.swift
+  s_d58145f2e376ea::t_f759a712fc1f87 1-1525
+desktop/context-for-claude/Sources/ContextCore/QueryStamp.swift
+  s_d58145f2e376ea::t_232769c25ec413 1-216
+desktop/context-for-claude/Sources/ContextCore/Redaction.swift
+  s_d58145f2e376ea::t_4cdee211290c49 1-337
+desktop/context-for-claude/Sources/ContextCore/RewindQueries.swift
+  s_d58145f2e376ea::t_916867b6cdae96 1-404
+desktop/context-for-claude/Sources/ContextCore/ScreenSearchQueries.swift
+  s_d58145f2e376ea::t_a09e42d3d57023 1-265
+desktop/context-for-claude/Sources/ContextCore/Store.swift
+  s_d58145f2e376ea::t_fe69a761c12a81 1-1310
+desktop/context-for-claude/Sources/ContextCore/UploadQueue.swift
+  s_d58145f2e376ea::t_141254667d9e0d 1-634
+desktop/context-for-claude/Sources/ContextMCP/main.swift
+  s_d58145f2e376ea::t_8dc83a0332f8c2 1-52
+desktop/context-for-claude/Sources/ContextMCPKit/Airgap.swift
+  s_d58145f2e376ea::t_f25cd4447ed485 1-105
+desktop/context-for-claude/Sources/ContextMCPKit/FrameImages.swift
+  s_d58145f2e376ea::t_1edd55e346ad0b 1-96
+desktop/context-for-claude/Sources/ContextMCPKit/JSONRPC.swift
+  s_d58145f2e376ea::t_849a8b7d71d0b1 1-251
+desktop/context-for-claude/Sources/ContextMCPKit/MCPServer.swift
+  s_d58145f2e376ea::t_193c9a14436f56 1-331
+desktop/context-for-claude/Sources/ContextMCPKit/OmiBackend.swift
+  s_d58145f2e376ea::t_e16e1fefb76f53 1-1263
+desktop/context-for-claude/Sources/ContextMCPKit/ServerIcon.swift
+  s_d58145f2e376ea::t_688d8b950d07f4 1-98
+desktop/context-for-claude/Sources/ContextMCPKit/StatusTool.swift
+  s_d58145f2e376ea::t_d0ed03c7554eef 1-240
+desktop/context-for-claude/Sources/ContextMCPKit/Tools.swift
+  s_d58145f2e376ea::t_d4d34348e944d9 1-2795
+desktop/context-for-claude/Tests/ContextAppTests/AccountPresentationTests.swift
+  s_d58145f2e376ea::t_775a06c5384776 1-196
+desktop/context-for-claude/Tests/ContextAppTests/ActivityCompositionTests.swift
+  s_d58145f2e376ea::t_d16a5db8c3e59e 1-1512
+desktop/context-for-claude/Tests/ContextAppTests/ActivityDetailRenderHarness.swift
+  s_d58145f2e376ea::t_e2246f560f51ac 1-418
+desktop/context-for-claude/Tests/ContextAppTests/ActivityDetailTests.swift
+  s_d58145f2e376ea::t_240169a17dd827 1-645
+desktop/context-for-claude/Tests/ContextAppTests/ActivityLocalMemoriesTests.swift
+  s_d58145f2e376ea::t_bc7a7971cbfe40 1-386
+desktop/context-for-claude/Tests/ContextAppTests/ActivityRenderHarness.swift
+  s_d58145f2e376ea::t_9997ebbd9040d3 1-638
+desktop/context-for-claude/Tests/ContextAppTests/AirgapEgressTests.swift
+  s_d58145f2e376ea::t_6716e4f9ebed0e 1-621
+desktop/context-for-claude/Tests/ContextAppTests/BrandColourGuard.swift
+  s_d58145f2e376ea::t_88c7a009fe3099 1-134
+desktop/context-for-claude/Tests/ContextAppTests/CaptureHealthTests.swift
+  s_d58145f2e376ea::t_0b24a99615d9b6 1-293
+desktop/context-for-claude/Tests/ContextAppTests/CapturePacingTests.swift
+  s_d58145f2e376ea::t_129d56a06633fe 1-339
+desktop/context-for-claude/Tests/ContextAppTests/CaptureWriteOrderTests.swift
+  s_d58145f2e376ea::t_99daf2e23deb77 1-179
+desktop/context-for-claude/Tests/ContextAppTests/CinematicTests.swift
+  s_d58145f2e376ea::t_3bd73a2849949a 1-826
+desktop/context-for-claude/Tests/ContextAppTests/ClaudeHandoffTests.swift
+  s_d58145f2e376ea::t_12e2b59270393c 1-484
+desktop/context-for-claude/Tests/ContextAppTests/ClaudeRouterTests.swift
+  s_d58145f2e376ea::t_a1d82b1e8cb0d5 1-389
+desktop/context-for-claude/Tests/ContextAppTests/DockPresenceTests.swift
+  s_d58145f2e376ea::t_692d59158c2a22 1-118
+desktop/context-for-claude/Tests/ContextAppTests/GlassRenderHarness.swift
+  s_d58145f2e376ea::t_e4ffc02a389fb9 1-262
+desktop/context-for-claude/Tests/ContextAppTests/InkAccentTests.swift
+  s_d58145f2e376ea::t_15ccaa94c7863f 1-264
+desktop/context-for-claude/Tests/ContextAppTests/InkGlassTests.swift
+  s_d58145f2e376ea::t_45e8c4e0891615 1-821
+desktop/context-for-claude/Tests/ContextAppTests/KeyboardReachTests.swift
+  s_d58145f2e376ea::t_bc7badea9f26b9 1-88
+desktop/context-for-claude/Tests/ContextAppTests/MenuBarPresentationTests.swift
+  s_d58145f2e376ea::t_cf65dd26c83dae 1-508
+desktop/context-for-claude/Tests/ContextAppTests/ModelPoolTests.swift
+  s_d58145f2e376ea::t_59c43b0b9df4c5 1-36
+desktop/context-for-claude/Tests/ContextAppTests/OmiActivityFeedTests.swift
+  s_d58145f2e376ea::t_61b2f825fee6e9 1-1208
+desktop/context-for-claude/Tests/ContextAppTests/OnboardingResetTests.swift
+  s_d58145f2e376ea::t_38c26e750fac77 1-221
+desktop/context-for-claude/Tests/ContextAppTests/OnboardingResumeTests.swift
+  s_d58145f2e376ea::t_1b1563f11382cd 1-184
+desktop/context-for-claude/Tests/ContextAppTests/OnboardingTests.swift
+  s_d58145f2e376ea::t_a9f3833511d002 1-1588
+desktop/context-for-claude/Tests/ContextAppTests/OnboardingWindowPlacementTests.swift
+  s_d58145f2e376ea::t_8358c3b852f668 1-154
+desktop/context-for-claude/Tests/ContextAppTests/PermissionInvitationTests.swift
+  s_d58145f2e376ea::t_30dcf102efc398 1-440
+desktop/context-for-claude/Tests/ContextAppTests/PermissionsCardTests.swift
+  s_d58145f2e376ea::t_4e9e0ca1c2757e 1-326
+desktop/context-for-claude/Tests/ContextAppTests/RewindScrubTests.swift
+  s_d58145f2e376ea::t_6d5b3da8f8b409 1-738
+desktop/context-for-claude/Tests/ContextAppTests/RewindStateTests.swift
+  s_d58145f2e376ea::t_edd0406156aca5 1-681
+desktop/context-for-claude/Tests/ContextAppTests/RewindTests.swift
+  s_d58145f2e376ea::t_7d60dbe87a9b4b 1-912
+desktop/context-for-claude/Tests/ContextAppTests/RewindTrackRenderHarness.swift
+  s_d58145f2e376ea::t_17fd44c24f92ee 1-325
+desktop/context-for-claude/Tests/ContextAppTests/RewindZoomTests.swift
+  s_d58145f2e376ea::t_48a2220b2a3849 1-399
+desktop/context-for-claude/Tests/ContextAppTests/ScreenActivityWireFormatTests.swift
+  s_d58145f2e376ea::t_0a3e8c7cd60254 1-165
+desktop/context-for-claude/Tests/ContextAppTests/ScreenCapabilityEvidenceTests.swift
+  s_d58145f2e376ea::t_d185502d10b052 1-189
+desktop/context-for-claude/Tests/ContextAppTests/ScreenGrantRecoveryTests.swift
+  s_d58145f2e376ea::t_99dc8426a73f7a 1-34
+desktop/context-for-claude/Tests/ContextAppTests/SearchRenderHarness.swift
+  s_d58145f2e376ea::t_a1a8359b1cd3fa 1-690
+desktop/context-for-claude/Tests/ContextAppTests/SearchSurfaceTests.swift
+  s_d58145f2e376ea::t_e6c22a43556054 1-1670
+desktop/context-for-claude/Tests/ContextAppTests/SettingsRowSightingTests.swift
+  s_d58145f2e376ea::t_1effb181baff12 1-534
+desktop/context-for-claude/Tests/ContextAppTests/SettingsSpotlightRenderHarness.swift
+  s_d58145f2e376ea::t_081c90b60ab9b7 1-221
+desktop/context-for-claude/Tests/ContextAppTests/SettingsSpotlightTests.swift
+  s_d58145f2e376ea::t_e43f58f80614ca 1-1265
+desktop/context-for-claude/Tests/ContextAppTests/SettingsTests.swift
+  s_d58145f2e376ea::t_34d215a45ca5fa 1-1128
+desktop/context-for-claude/Tests/ContextAppTests/ShortcutBindingsTests.swift
+  s_d58145f2e376ea::t_cd93da7575923b 1-532
+desktop/context-for-claude/Tests/ContextAppTests/ShortcutsTests.swift
+  s_d58145f2e376ea::t_3b5e14b3fae10f 1-813
+desktop/context-for-claude/Tests/ContextAppTests/SoundTests.swift
+  s_d58145f2e376ea::t_52b8cb981d97de 1-318
+desktop/context-for-claude/Tests/ContextAppTests/SpotlightDropSlotTests.swift
+  s_d58145f2e376ea::t_1967df6bde1bd9 1-276
+desktop/context-for-claude/Tests/ContextAppTests/TalkingMarkTests.swift
+  s_d58145f2e376ea::t_391a234c0ce9dc 1-566
+desktop/context-for-claude/Tests/ContextAppTests/TerminationRevivalTests.swift
+  s_d58145f2e376ea::t_990c6a6b003cab 1-382
+desktop/context-for-claude/Tests/ContextAppTests/TimelineHandoffTests.swift
+  s_d58145f2e376ea::t_2db7ce6366b708 1-640
+desktop/context-for-claude/Tests/ContextAppTests/TranscriptOwnershipTests.swift
+  s_d58145f2e376ea::t_291269dedb91e5 1-43
+desktop/context-for-claude/Tests/ContextAppTests/TutorialDragTests.swift
+  s_d58145f2e376ea::t_d10b2df065888c 1-188
+desktop/context-for-claude/Tests/ContextAppTests/TutorialRenderHarness.swift
+  s_d58145f2e376ea::t_34f57390e35c92 1-425
+desktop/context-for-claude/Tests/ContextAppTests/TutorialResumeTests.swift
+  s_d58145f2e376ea::t_68440ab0206f67 1-492
+desktop/context-for-claude/Tests/ContextAppTests/TutorialTests.swift
+  s_d58145f2e376ea::t_de0721a21f1ef6 1-2486
+desktop/context-for-claude/Tests/ContextAppTests/UpdatePolicyTests.swift
+  s_d58145f2e376ea::t_ab39817b8dad0c 1-405
+desktop/context-for-claude/Tests/ContextAppTests/WindowGlassTests.swift
+  s_d58145f2e376ea::t_a31dec86cdadce 1-180
+desktop/context-for-claude/Tests/ContextCoreTests/AccessibilityTests.swift
+  s_d58145f2e376ea::t_f3ceec693a2765 1-367
+desktop/context-for-claude/Tests/ContextCoreTests/CaptureAddressTests.swift
+  s_d58145f2e376ea::t_48c8a293d34853 1-428
+desktop/context-for-claude/Tests/ContextCoreTests/CaptureHostPolicyTests.swift
+  s_d58145f2e376ea::t_3e730b40f003fb 1-225
+desktop/context-for-claude/Tests/ContextCoreTests/ClaudeConfigTests.swift
+  s_d58145f2e376ea::t_bfdd96cd0159ce 1-218
+desktop/context-for-claude/Tests/ContextCoreTests/ClaudeSkillTests.swift
+  s_d58145f2e376ea::t_c36ead215617ff 1-147
+desktop/context-for-claude/Tests/ContextCoreTests/ExclusionsTests.swift
+  s_d58145f2e376ea::t_b2af1d178be54e 1-837
+desktop/context-for-claude/Tests/ContextCoreTests/Fixture.swift
+  s_d58145f2e376ea::t_17f5f92cb5405b 1-133
+desktop/context-for-claude/Tests/ContextCoreTests/MigrationTests.swift
+  s_d58145f2e376ea::t_fb9c3ce4522ade 1-234
+desktop/context-for-claude/Tests/ContextCoreTests/OmiMemoryStoreTests.swift
+  s_d58145f2e376ea::t_005f78db24ef79 1-267
+desktop/context-for-claude/Tests/ContextCoreTests/PolicyTests.swift
+  s_d58145f2e376ea::t_c21e11495799a9 1-176
+desktop/context-for-claude/Tests/ContextCoreTests/QueriesTests.swift
+  s_d58145f2e376ea::t_57a8c379910ad1 1-650
+desktop/context-for-claude/Tests/ContextCoreTests/QueryStampTests.swift
+  s_d58145f2e376ea::t_5e790fd08c4629 1-249
+desktop/context-for-claude/Tests/ContextCoreTests/RedactionTests.swift
+  s_d58145f2e376ea::t_fd4fd0029a3951 1-100
+desktop/context-for-claude/Tests/ContextCoreTests/RetentionSweepTests.swift
+  s_d58145f2e376ea::t_3a97248d719b07 1-397
+desktop/context-for-claude/Tests/ContextCoreTests/RewindQueriesTests.swift
+  s_d58145f2e376ea::t_49eb6870cdc5a1 1-261
+desktop/context-for-claude/Tests/ContextCoreTests/StoreTests.swift
+  s_d58145f2e376ea::t_052184d14d684c 1-1122
+desktop/context-for-claude/Tests/ContextCoreTests/UploadQueueTests.swift
+  s_d58145f2e376ea::t_aa7ccd15e8a7e1 1-236
+desktop/context-for-claude/Tests/ContextMCPKitTests/ActivityRangeBoundTests.swift
+  s_d58145f2e376ea::t_b58dde253bc87b 1-180
+desktop/context-for-claude/Tests/ContextMCPKitTests/AirgapTests.swift
+  s_d58145f2e376ea::t_9352f9c234ac4f 1-235
+desktop/context-for-claude/Tests/ContextMCPKitTests/CredentialRefreshTests.swift
+  s_d58145f2e376ea::t_de4fb611c5bab9 1-249
+desktop/context-for-claude/Tests/ContextMCPKitTests/LookToolTests.swift
+  s_d58145f2e376ea::t_176fcad90645e7 1-243
+desktop/context-for-claude/Tests/ContextMCPKitTests/MCPServerIconTests.swift
+  s_d58145f2e376ea::t_46e6b365ac7d8e 1-84
+desktop/context-for-claude/Tests/ContextMCPKitTests/MCPServerTests.swift
+  s_d58145f2e376ea::t_ba9d71c4e321d1 1-352
+desktop/context-for-claude/Tests/ContextMCPKitTests/OpenSessionLastLineTests.swift
+  s_d58145f2e376ea::t_1e7312be6f1b66 1-64
+desktop/context-for-claude/Tests/ContextMCPKitTests/QueryStampRecordingTests.swift
+  s_d58145f2e376ea::t_964168e3672f78 1-122
+desktop/context-for-claude/Tests/ContextMCPKitTests/StatusHonestyTests.swift
+  s_d58145f2e376ea::t_a6045bd9e6317d 1-248
+desktop/context-for-claude/Tests/ContextMCPKitTests/ToolsTests.swift
+  s_d58145f2e376ea::t_6f0c867ac29543 1-1187
+desktop/context-for-claude/changelog/unreleased/20260803-intel-cloud-transcription.json
+  s_d58145f2e376ea::t_faee38c7ebd7c7 1-3
+desktop/context-for-claude/core/CMakeLists.txt
+  s_d58145f2e376ea::t_265f1c6a8df859 1-61
+desktop/context-for-claude/core/README.md
+  s_d58145f2e376ea::t_0a533dc1f75d06 1-55
+desktop/context-for-claude/core/include/context_core/context_core.h
+  s_d58145f2e376ea::t_27d18c54e7112c 1-210
+desktop/context-for-claude/core/src/audio_policy.cpp
+  s_d58145f2e376ea::t_21fe2d5826bc50 1-104
+desktop/context-for-claude/core/src/moment_grouping.cpp
+  s_d58145f2e376ea::t_4a60404fa38cf6 1-172
+desktop/context-for-claude/core/src/recall_ranking.cpp
+  s_d58145f2e376ea::t_6bf21ffee2fbaf 1-35
+desktop/context-for-claude/core/src/session_policy.cpp
+  s_d58145f2e376ea::t_52579f8b2707b7 1-30
+desktop/context-for-claude/core/tests/context_core_tests.cpp
+  s_d58145f2e376ea::t_48c6c9929574d7 1-484
+desktop/context-for-claude/docs/design-system.md
+  s_d58145f2e376ea::t_057a73744fa5a8 1-617
+desktop/context-for-claude/docs/evals.md
+  s_d58145f2e376ea::t_6bbd8afc14a343 1-198
+desktop/context-for-claude/docs/first-run-experience.md
+  s_d58145f2e376ea::t_0687aba5a5aafb 1-409
+desktop/context-for-claude/docs/ocr-quality.md
+  s_d58145f2e376ea::t_19baf27014a25b 1-434
+desktop/context-for-claude/docs/releasing.md
+  s_d58145f2e376ea::t_2b2cda4be6757c 1-305
+desktop/context-for-claude/docs/requirements-checklist.md
+  s_d58145f2e376ea::t_29fec7af581ce7 1-230
+desktop/context-for-claude/docs/rewind-and-settings.md
+  s_d58145f2e376ea::t_8cc822fa7d0e14 1-261
+desktop/context-for-claude/scripts/build.sh
+  s_d58145f2e376ea::t_c12d24e45c991b 1-491
+desktop/context-for-claude/scripts/eval.py
+  s_d58145f2e376ea::t_a8d6f1a94c2138 1-2273
+desktop/context-for-claude/scripts/eval_compare.py
+  s_d58145f2e376ea::t_69e0136d772c3d 1-1050
+desktop/context-for-claude/scripts/generate-appcast.py
+  s_d58145f2e376ea::t_a08416aa0e75c8 1-256
+desktop/context-for-claude/scripts/make-dmg-background.sh
+  s_d58145f2e376ea::t_02a1b5436cecc0 1-193
+desktop/context-for-claude/scripts/make-icon.sh
+  s_d58145f2e376ea::t_bf327b30b82582 1-209
+desktop/context-for-claude/scripts/make-sounds.py
+  s_d58145f2e376ea::t_e34d11a226db88 1-475
+desktop/context-for-claude/scripts/package-dmg.sh
+  s_d58145f2e376ea::t_f078cc372e313d 1-601
+desktop/context-for-claude/scripts/release-context.sh
+  s_d58145f2e376ea::t_4ece8f22a2d485 1-28
+desktop/context-for-claude/scripts/release-micro-app.sh
+  s_d58145f2e376ea::t_14866d7dbccdff 1-432
+desktop/context-for-claude/scripts/test-release-path.sh
+  s_d58145f2e376ea::t_ddd050f55ec785 1-198
+desktop/context-for-claude/scripts/testbench.py
+  s_d58145f2e376ea::t_303813a8b3b6e2 1-402
+desktop/context-for-claude/scripts/uninstall.sh
+  s_d58145f2e376ea::t_cbb12ac3de7c17 1-139
+desktop/context-for-claude/windows/CMakeLists.txt
+  s_d58145f2e376ea::t_cf0a57341e7c51 1-215
+desktop/context-for-claude/windows/README.md
+  s_d58145f2e376ea::t_93087e668f9fcf 1-81
+desktop/context-for-claude/windows/main.cpp
+  s_d58145f2e376ea::t_6ade1461deebe3 1-13
+desktop/context-for-claude/windows/src/core_smoke.cpp
+  s_d58145f2e376ea::t_494b54331a021d 1-16
+desktop/context-for-claude/windows/src/pcm_host.cpp
+  s_d58145f2e376ea::t_8e639f76f36d72 1-154
+desktop/context-for-claude/windows/src/session_host.cpp
+  s_d58145f2e376ea::t_bdb39b69433a39 1-68
+desktop/context-for-claude/windows/swift-host/Package.swift
+  s_d58145f2e376ea::t_e31618a1c57b93 1-27
+desktop/context-for-claude/windows/swift-host/Sources/CContextCore/dummy.c
+  s_d58145f2e376ea::t_ac7e7a72a04c00 1-2
+desktop/context-for-claude/windows/swift-host/Sources/CContextCore/include/context_core.h
+  s_d58145f2e376ea::t_82fc1e14219d4d 1-2
+desktop/context-for-claude/windows/swift-host/Sources/CContextCore/include/module.modulemap
+  s_d58145f2e376ea::t_6ffb164b79fb06 1-4
+desktop/context-for-claude/windows/swift-host/Sources/ContextWindowsHost/main.swift
+  s_d58145f2e376ea::t_c87841e5aa1427 1-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0a154e7f3599ad19a1149032c438fdeac354b672",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
