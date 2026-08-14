@@ -336,6 +336,7 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                 current_subscription.cancel_at_period_end = False
                 users_db.update_user_subscription(uid, current_subscription.model_dump())
                 set_credits_invalidation_signal(uid)
+                clear_trial_paywall_cache(uid)
                 if recovered_from_stripe:
                     record_fallback(
                         component='other',
