@@ -93,6 +93,11 @@ class OIDCAuthProvider:
         except Exception as exc:  # JWKS fetch/transport failures
             raise errors.JWKSUnavailable(str(exc))
 
+        if check_revoked and not self._introspect_active(bearer):
+            # A JWT stays signature/exp-valid after a server-side logout/revocation; only introspection
+            # (RFC 7662) reflects the live session state. ``active: false`` => revoked/invalidated.
+            raise errors.RevokedToken("token is not active (revoked or invalidated server-side)")
+
         return Principal(
             uid=decoded["sub"],
             email=decoded.get("email"),
@@ -101,6 +106,32 @@ class OIDCAuthProvider:
             provider=decoded.get("iss"),
             claims=decoded,
         )
+
+    def _introspect_active(self, token: str) -> bool:
+        """RFC 7662 token introspection — the revocation check for stateless OIDC (``check_revoked``).
+
+        Reuses the confidential admin client to authenticate the introspection POST; the endpoint
+        defaults to ``{issuer}/protocol/openid-connect/token/introspect`` (override OIDC_INTROSPECTION_URL).
+        Returns the ``active`` flag; a caller that asked for revocation checking without the client
+        credentials configured gets a loud AuthError rather than a silent pass (fail-closed).
+        """
+        import httpx
+
+        url = (os.getenv("OIDC_INTROSPECTION_URL") or "").strip() or f"{_issuer()}/protocol/openid-connect/token/introspect"
+        client_id = (os.getenv("OIDC_ADMIN_CLIENT_ID") or "").strip()
+        client_secret = (os.getenv("OIDC_ADMIN_CLIENT_SECRET") or "").strip()
+        if not (client_id and client_secret):
+            raise errors.AuthError(
+                "check_revoked requires OIDC introspection credentials (OIDC_ADMIN_CLIENT_ID/OIDC_ADMIN_CLIENT_SECRET)"
+            )
+        resp = httpx.post(
+            url,
+            data={"token": token, "client_id": client_id, "client_secret": client_secret},
+            timeout=_HTTP_TIMEOUT_SECONDS,
+        )
+        if resp.status_code != 200:
+            raise errors.JWKSUnavailable(f"OIDC introspection failed: status={resp.status_code}")
+        return bool(resp.json().get("active", False))
 
     # --- Admin API (Keycloak) ---
     def _admin_token(self) -> str:
@@ -142,7 +173,9 @@ class OIDCAuthProvider:
             uid=rep.get("id", uid),
             email=rep.get("email"),
             email_verified=bool(rep.get("emailVerified", False)),
-            phone_number=(rep.get("attributes", {}) or {}).get("phone_number", [None])[0],
+            # ``or [None]`` (not a ``[None]`` default): Keycloak can return an attribute present but
+            # EMPTY (``{"phone_number": []}``), where a plain default would not fire and ``[][0]`` raises.
+            phone_number=((rep.get("attributes", {}) or {}).get("phone_number") or [None])[0],
             display_name=name,
             photo_url=None,
             disabled=not bool(rep.get("enabled", True)),
