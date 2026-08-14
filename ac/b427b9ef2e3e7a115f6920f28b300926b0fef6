@@ -1,0 +1,22 @@
+desktop/context-for-claude/scripts/release-context.sh
+  s_d58145f2e376ea::t_fd2ffd2436f595 14-34
+  s_d58145f2e376ea::t_ed7038a45df897 46
+desktop/context-for-claude/scripts/test-release-path.sh
+  s_d58145f2e376ea::t_0125cfd32ac77e 47-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "acb427b9ef2e3e7a115f6920f28b300926b0fef6",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
