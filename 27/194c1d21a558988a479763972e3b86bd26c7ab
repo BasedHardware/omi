@@ -1,0 +1,44 @@
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarWindow.swift
+  s_d58145f2e376ea::t_30f0ce570dc249 396-401,403,405-408
+  s_d58145f2e376ea::t_83ea8bce966c7c 382-395,402,404,411-413
+  s_d58145f2e376ea::t_38651e6bf007b6 414
+desktop/context-for-claude/Tests/ContextAppTests/HotkeyToggleTests.swift
+  s_d58145f2e376ea::t_0585f7b9f2283b 1-86,116-145
+  s_d58145f2e376ea::t_9a7fa322c8f7d2 87-115
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindWindow.swift
+  s_d58145f2e376ea::t_8d7a1026fd1d86 262-265
+  s_d58145f2e376ea::t_7d35b51b1b8904 268-275,277-281,283
+  s_d58145f2e376ea::t_52ad4b0167fe76 86-89
+  s_d58145f2e376ea::t_e631f5cbfdc3a0 80
+  s_d58145f2e376ea::t_359e8e598b57af 254-261
+  s_d58145f2e376ea::t_ee078dc9c50ab2 239-253,266-267,276,282,284-302
+  s_d58145f2e376ea::t_5aa5c49e1b4605 303
+desktop/context-for-claude/Sources/ContextApp/Shortcuts/HotkeyToggle.swift
+  s_d58145f2e376ea::t_0805acc6ac6c15 1-85
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_d58145f2e376ea::t_08197997106c13 428-434
+  s_d58145f2e376ea::t_81ed76edc9c67e 325
+  s_d58145f2e376ea::t_31f90f7ce11f4d 273-274,276
+  s_d58145f2e376ea::t_00a54cf948e082 293-324,326-329
+desktop/context-for-claude/Tests/ContextAppTests/TimelineEscapeTests.swift
+  s_d58145f2e376ea::t_5acf4dd0c86e1f 56-58,60,64
+  s_d58145f2e376ea::t_171462e655de30 41
+  s_d58145f2e376ea::t_e8887ba8014f8f 23
+  s_d58145f2e376ea::t_c3942c72e44e0b 1-22,24-40,42-55,59,61-63,65-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "27194c1d21a558988a479763972e3b86bd26c7ab",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
