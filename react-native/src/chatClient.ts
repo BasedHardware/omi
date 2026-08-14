@@ -5,10 +5,21 @@ export type ChatMessage = {
   text: string;
   sender: 'human' | 'ai';
   createdAt: number;
-  generationOutcome: 'completed' | 'cancelled' | null;
+  generationOutcome: 'completed' | 'cancelled' | 'failed' | null;
+  generationId?: string;
+  generationRetryable?: boolean;
+  localOnly?: boolean;
 };
 
-type HistoryEnvelope = {messages: ChatMessage[]};
+export type ChatHistoryPage = {
+  messages: ChatMessage[];
+  olderCursor: string | null;
+  hasOlder: boolean;
+};
+type HistoryEnvelope = {
+  messages: ChatMessage[];
+  page: {olderCursor: string | null; hasOlder: boolean};
+};
 type AdmissionEnvelope = {message: ChatMessage; generation: {id: string}};
 type TerminalFrame =
   | {kind: 'done'; message: ChatMessage}
@@ -47,6 +58,21 @@ export function chatErrorCopy(error: unknown): string {
 
 let messageSequence = 0;
 
+export function createLocalChatMessage(
+  text: string,
+  now: number = Date.now(),
+): ChatMessage {
+  messageSequence += 1;
+  return {
+    id: `desktop-${now}-${messageSequence}`,
+    text,
+    sender: 'human',
+    createdAt: now,
+    generationOutcome: null,
+    localOnly: true,
+  };
+}
+
 function parseObject(body: string | null): Record<string, unknown> {
   if (body === null) {
     throw new Error('Backend returned an empty response');
@@ -61,19 +87,77 @@ function parseObject(body: string | null): Record<string, unknown> {
 export async function loadChatHistory(
   backend: OmiBackend,
 ): Promise<ChatMessage[]> {
+  return (await loadNewestChatHistory(backend)).messages;
+}
+
+export async function loadNewestChatHistory(
+  backend: OmiBackend,
+): Promise<ChatHistoryPage> {
+  return loadChatHistoryPage(backend, '/v1/chat-messages?limit=50');
+}
+
+export async function loadOlderChatHistory(
+  backend: OmiBackend,
+  olderCursor: string,
+): Promise<ChatHistoryPage> {
+  if (olderCursor.length === 0) {
+    throw new Error('Chat history cursor is empty');
+  }
+  return loadChatHistoryPage(
+    backend,
+    `/v1/chat-messages?limit=50&olderCursor=${encodeURIComponent(olderCursor)}`,
+  );
+}
+
+async function loadChatHistoryPage(
+  backend: OmiBackend,
+  path: `/v1/chat-messages?${string}`,
+): Promise<ChatHistoryPage> {
   const response = await backend.request({
     id: 'chat-history',
     method: 'GET',
-    path: '/v1/chat-messages?limit=50',
+    path,
   });
   if (response.status !== 200) {
     throwBackendError(response);
   }
   const envelope = parseObject(response.body) as HistoryEnvelope;
-  if (!Array.isArray(envelope.messages)) {
+  if (
+    !Array.isArray(envelope.messages) ||
+    envelope.page === undefined ||
+    typeof envelope.page.hasOlder !== 'boolean' ||
+    !(
+      envelope.page.olderCursor === null ||
+      typeof envelope.page.olderCursor === 'string'
+    ) ||
+    envelope.page.hasOlder !== (envelope.page.olderCursor !== null)
+  ) {
     throw new Error('Chat history is malformed');
   }
-  return envelope.messages;
+  return {
+    messages: envelope.messages,
+    olderCursor: envelope.page.olderCursor,
+    hasOlder: envelope.page.hasOlder,
+  };
+}
+
+export function mergeOlderChatHistory(
+  current: ChatMessage[],
+  older: ChatMessage[],
+): ChatMessage[] {
+  const currentIds = new Set(current.map(message => message.id));
+  return [...older.filter(message => !currentIds.has(message.id)), ...current];
+}
+
+export function reconcileCanonicalChatHistory(
+  local: ChatMessage[],
+  canonical: ChatMessage[],
+): ChatMessage[] {
+  const canonicalIds = new Set(canonical.map(message => message.id));
+  return [
+    ...canonical,
+    ...local.filter(message => !canonicalIds.has(message.id)),
+  ];
 }
 
 export async function sendChatMessage(
@@ -81,9 +165,9 @@ export async function sendChatMessage(
   text: string,
   now: number = Date.now(),
   onGenerationStarted?: (generationId: string) => void,
+  localMessage?: ChatMessage,
 ): Promise<{human: ChatMessage; assistant: ChatMessage | null}> {
-  messageSequence += 1;
-  const id = `desktop-${now}-${messageSequence}`;
+  const id = (localMessage ?? createLocalChatMessage(text, now)).id;
   const response = await backend.request({
     id: `admit-${id}`,
     method: 'POST',
@@ -115,13 +199,17 @@ export async function sendChatMessage(
   let terminal: TerminalFrame;
   try {
     terminal = parseTerminal(
-      readGeneration(await backend.generationEvents(admission.generation.id, null)),
+      readGeneration(
+        await backend.generationEvents(admission.generation.id, null),
+      ),
     );
   } catch (error) {
     if (isNativeCancellation(error)) {
       try {
         terminal = parseTerminal(
-          readGeneration(await backend.generationEvents(admission.generation.id, null)),
+          readGeneration(
+            await backend.generationEvents(admission.generation.id, null),
+          ),
         );
       } catch (replayError) {
         if (!isReplayExpired(replayError)) {
@@ -137,7 +225,18 @@ export async function sendChatMessage(
     }
   }
   if (terminal.kind === 'failed') {
-    throw new Error(`Generation failed (${terminal.error.code})`);
+    return {
+      human: admission.message,
+      assistant: {
+        id: `generation:${admission.generation.id}`,
+        text: '',
+        sender: 'ai',
+        createdAt: admission.message.createdAt,
+        generationOutcome: 'failed',
+        generationId: admission.generation.id,
+        generationRetryable: terminal.error.retryable,
+      },
+    };
   }
   return {human: admission.message, assistant: terminal.message};
 }
@@ -149,13 +248,12 @@ function reconcileGeneration(
   const canonicalHuman = history.find(
     message => message.id === admission.message.id,
   );
+  const humanIndex = history.findIndex(
+    message => message.id === admission.message.id,
+  );
   const assistant = history
-    .filter(
-      message =>
-        message.sender === 'ai' &&
-        message.createdAt >= admission.message.createdAt,
-    )
-    .sort((left, right) => left.createdAt - right.createdAt)[0];
+    .slice(humanIndex + 1)
+    .find(message => message.sender === 'ai');
   if (canonicalHuman === undefined || assistant === undefined) {
     throw new Error(
       'Generation replay expired before canonical history reconciled',

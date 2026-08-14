@@ -39,8 +39,13 @@ import Search from 'lucide-react-native/icons/search';
 import Square from 'lucide-react-native/icons/square';
 import {
   cancelChatGeneration,
+  ChatBackendError,
   chatErrorCopy,
-  loadChatHistory,
+  createLocalChatMessage,
+  loadNewestChatHistory,
+  loadOlderChatHistory,
+  mergeOlderChatHistory,
+  reconcileCanonicalChatHistory,
   sendChatMessage,
   type ChatMessage,
 } from './src/chatClient';
@@ -554,6 +559,9 @@ function App(): React.JSX.Element {
   const [railExpanded, setRailExpanded] = useState(false);
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [olderChatCursor, setOlderChatCursor] = useState<string | null>(null);
+  const [hasOlderChat, setHasOlderChat] = useState(false);
+  const [loadingOlderChat, setLoadingOlderChat] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
   const [activeGenerationId, setActiveGenerationId] = useState<string | null>(
     null,
@@ -580,10 +588,12 @@ function App(): React.JSX.Element {
     if (backend === undefined || backend === null) {
       return () => undefined;
     }
-    loadChatHistory(backend)
-      .then(history => {
+    loadNewestChatHistory(backend)
+      .then(page => {
         if (active) {
-          setMessages(history);
+          setMessages(page.messages);
+          setOlderChatCursor(page.olderCursor);
+          setHasOlderChat(page.hasOlder);
         }
       })
       .catch(() => {
@@ -894,24 +904,91 @@ function App(): React.JSX.Element {
     }
     setChatBusy(true);
     setChatError(null);
+    const localMessage = createLocalChatMessage(text);
+    setMessages(current => [...current, localMessage]);
+    setDraft('');
     try {
-      const result = await sendChatMessage(backend, text, Date.now(), id => {
-        setActiveGenerationId(id);
+      const result = await sendChatMessage(
+        backend,
+        text,
+        localMessage.createdAt,
+        id => {
+          setActiveGenerationId(id);
+        },
+        localMessage,
+      );
+      setMessages(current => {
+        const echoIndex = current.findIndex(
+          message => message.id === localMessage.id,
+        );
+        const withoutCanonical = current.filter(
+          message =>
+            message.id !== result.human.id &&
+            message.id !== result.assistant?.id,
+        );
+        if (echoIndex < 0) {
+          return [
+            ...withoutCanonical,
+            result.human,
+            ...(result.assistant === null ? [] : [result.assistant]),
+          ];
+        }
+        const insertAt = Math.min(echoIndex, withoutCanonical.length);
+        return [
+          ...withoutCanonical.slice(0, insertAt),
+          result.human,
+          ...(result.assistant === null ? [] : [result.assistant]),
+          ...withoutCanonical.slice(insertAt),
+        ];
       });
-      setMessages(current => [
-        ...current.filter(message => message.id !== result.human.id),
-        result.human,
-        ...(result.assistant === null ? [] : [result.assistant]),
-      ]);
-      setDraft('');
     } catch (error) {
       setChatError(chatErrorCopy(error));
-      try {
-        setMessages(await loadChatHistory(backend));
-      } catch {}
     } finally {
       setActiveGenerationId(null);
       setChatBusy(false);
+    }
+  };
+
+  const loadOlderMessages = async () => {
+    const backend = omiBackend;
+    const cursor = olderChatCursor;
+    if (
+      backend === undefined ||
+      backend === null ||
+      cursor === null ||
+      loadingOlderChat
+    ) {
+      return;
+    }
+    setLoadingOlderChat(true);
+    setChatError(null);
+    try {
+      const page = await loadOlderChatHistory(backend, cursor);
+      setMessages(current => mergeOlderChatHistory(current, page.messages));
+      setOlderChatCursor(page.olderCursor);
+      setHasOlderChat(page.hasOlder);
+    } catch (error) {
+      if (
+        error instanceof ChatBackendError &&
+        error.status === 410 &&
+        error.action === 'refresh_history'
+      ) {
+        try {
+          const page = await loadNewestChatHistory(backend);
+          setMessages(current =>
+            reconcileCanonicalChatHistory(
+              current.filter(message => message.localOnly === true),
+              page.messages,
+            ),
+          );
+          setOlderChatCursor(page.olderCursor);
+          setHasOlderChat(page.hasOlder);
+          return;
+        } catch {}
+      }
+      setChatError('Older messages could not be loaded.');
+    } finally {
+      setLoadingOlderChat(false);
     }
   };
 
@@ -1216,16 +1293,58 @@ function App(): React.JSX.Element {
                             </Text>
                           ) : (
                             <View style={styles.transcript}>
-                              {messages.map(message => (
-                                <Text
-                                  key={message.id}
-                                  style={[
-                                    styles.message,
-                                    message.sender === 'human' &&
-                                      styles.humanMessage,
+                              {hasOlderChat && olderChatCursor !== null && (
+                                <FocusPressable
+                                  accessibilityLabel="Load older messages"
+                                  accessibilityRole="button"
+                                  disabled={loadingOlderChat}
+                                  onPress={loadOlderMessages}
+                                  style={({pressed}) => [
+                                    styles.loadOlderButton,
+                                    pressed && styles.pressed,
                                   ]}>
-                                  {message.text}
-                                </Text>
+                                  <Text style={styles.loadOlderText}>
+                                    {loadingOlderChat
+                                      ? 'Loading older…'
+                                      : 'Load older'}
+                                  </Text>
+                                </FocusPressable>
+                              )}
+                              {messages.map(message => (
+                                <View
+                                  accessibilityLabel={
+                                    message.generationOutcome === 'failed'
+                                      ? 'Failed response'
+                                      : undefined
+                                  }
+                                  key={message.id}>
+                                  {message.generationOutcome !== 'failed' && (
+                                    <Text
+                                      style={[
+                                        styles.message,
+                                        message.sender === 'human' &&
+                                          styles.humanMessage,
+                                        message.generationOutcome ===
+                                          'cancelled' &&
+                                          styles.cancelledMessage,
+                                      ]}>
+                                      {message.text}
+                                    </Text>
+                                  )}
+                                  {message.generationOutcome ===
+                                    'cancelled' && (
+                                    <Text style={styles.cancelledLabel}>
+                                      Response stopped
+                                    </Text>
+                                  )}
+                                  {message.generationOutcome === 'failed' && (
+                                    <Text style={styles.failedLabel}>
+                                      {message.generationRetryable === true
+                                        ? 'Response failed. Try again.'
+                                        : 'Response failed.'}
+                                    </Text>
+                                  )}
+                                </View>
                               ))}
                               {chatBusy && (
                                 <Text style={styles.empty}>Thinking…</Text>
@@ -1521,8 +1640,22 @@ const styles = StyleSheet.create({
   promptText: {color: '#e5e5e5', fontSize: 13, fontWeight: '500'},
   empty: {color: '#666666', fontSize: 12, textAlign: 'center'},
   transcript: {gap: 10},
+  loadOlderButton: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    borderColor: '#484848',
+    borderRadius: 18,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 18,
+  },
+  loadOlderText: {color: '#b0b0b0', fontSize: 13, fontWeight: '600'},
   message: {color: '#e5e5e5', fontSize: 14, lineHeight: 20},
   humanMessage: {color: '#ffffff', fontWeight: '600'},
+  cancelledMessage: {borderColor: '#666666', opacity: 0.72},
+  cancelledLabel: {color: '#888888', fontSize: 11, marginTop: 4},
+  failedLabel: {color: '#d8a0a0', fontSize: 12, marginTop: 4},
   error: {color: '#d8a0a0', fontSize: 12, textAlign: 'center'},
   projection: {flex: 1, paddingHorizontal: 28, paddingVertical: 24},
   projectionTitle: {color: '#ffffff', fontSize: 22, fontWeight: '600'},

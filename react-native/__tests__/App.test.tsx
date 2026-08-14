@@ -17,8 +17,12 @@ type MockRequest = {body?: string; id: string; method: string; path: string};
 type MockResponse = {body: string | null; id: string; status: number};
 const mockBackend = {
   cancelGenerationEvents: jest.fn(async (_generationId: string) => undefined),
-  generationEvents: jest.fn(
-    async (_generationId: string, _lastEventId: string | null) => '',
+  generationEvents: jest.fn<Promise<MockResponse>, [string, string | null]>(
+    async (_generationId: string, _lastEventId: string | null) => ({
+      body: null,
+      id: '',
+      status: 500,
+    }),
   ),
   request: jest.fn<Promise<MockResponse>, [MockRequest]>(
     async (_request: MockRequest) => ({
@@ -228,6 +232,72 @@ jest.mock('../src/omiNative', () => ({
 
 import App from '../App';
 
+function chatMessage(
+  id: string,
+  text: string = id,
+  sender: 'human' | 'ai' = 'ai',
+  generationOutcome: 'completed' | 'cancelled' | 'failed' | null = 'completed',
+) {
+  return {id, text, sender, createdAt: 1, generationOutcome};
+}
+
+function mockBackendResponse(request: MockRequest): MockResponse {
+  if (request.path === '/v1/chat-messages?limit=50') {
+    return {
+      id: request.id,
+      status: 200,
+      body: '{"messages":[],"page":{"olderCursor":null,"hasOlder":false}}',
+    };
+  }
+  if (request.path === '/v1/conversations?limit=50&offset=0') {
+    return {
+      id: request.id,
+      status: 200,
+      body: JSON.stringify([
+        {
+          id: 'conversation-1',
+          structured: {
+            title: 'QA bridge check',
+            overview: 'A deterministic conversation.',
+          },
+          created_at: '2026-08-07T10:00:00.000Z',
+          updated_at: '2026-08-07T12:00:00.000Z',
+          started_at: '2026-08-07T11:50:00.000Z',
+          finished_at: '2026-08-07T12:00:00.000Z',
+          source: 'omi',
+          status: 'completed',
+          discarded: false,
+          starred: false,
+          visibility: 'private',
+          is_locked: false,
+          folder_id: null,
+        },
+      ]),
+    };
+  }
+  const tasks = request.path === '/v1/tasks';
+  return {
+    id: request.id,
+    status: 200,
+    body: JSON.stringify({
+      contractVersion: '1.0.0',
+      items: [],
+      window: {
+        status: 'complete',
+        complete: true,
+        hasMore: false,
+        nextCursor: null,
+      },
+      completeness: {
+        version: tasks ? 'tasks-completeness-v1' : 'recall-completeness-v1',
+        status: 'complete',
+        reasons: [],
+      },
+      absence: null,
+    }),
+  };
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockViewportWidth = 1200;
@@ -236,59 +306,14 @@ beforeEach(() => {
   mockDesktopSearchListener = undefined;
   mockSearchFocus.mockClear();
   mockBackend.cancelGenerationEvents.mockResolvedValue(undefined);
-  mockBackend.generationEvents.mockResolvedValue('');
-  mockBackend.request.mockImplementation(async request => {
-    if (request.path === '/v1/chat-messages?limit=50') {
-      return {id: request.id, status: 200, body: '{"messages":[]}'};
-    }
-    if (request.path === '/v1/conversations?limit=50&offset=0') {
-      return {
-        id: request.id,
-        status: 200,
-        body: JSON.stringify([
-          {
-            id: 'conversation-1',
-            structured: {
-              title: 'QA bridge check',
-              overview: 'A deterministic conversation.',
-            },
-            created_at: '2026-08-07T10:00:00.000Z',
-            updated_at: '2026-08-07T12:00:00.000Z',
-            started_at: '2026-08-07T11:50:00.000Z',
-            finished_at: '2026-08-07T12:00:00.000Z',
-            source: 'omi',
-            status: 'completed',
-            discarded: false,
-            starred: false,
-            visibility: 'private',
-            is_locked: false,
-            folder_id: null,
-          },
-        ]),
-      };
-    }
-    const tasks = request.path === '/v1/tasks';
-    return {
-      id: request.id,
-      status: 200,
-      body: JSON.stringify({
-        contractVersion: '1.0.0',
-        items: [],
-        window: {
-          status: 'complete',
-          complete: true,
-          hasMore: false,
-          nextCursor: null,
-        },
-        completeness: {
-          version: tasks ? 'tasks-completeness-v1' : 'recall-completeness-v1',
-          status: 'complete',
-          reasons: [],
-        },
-        absence: null,
-      }),
-    };
+  mockBackend.generationEvents.mockResolvedValue({
+    body: null,
+    id: '',
+    status: 500,
   });
+  mockBackend.request.mockImplementation(async request =>
+    mockBackendResponse(request),
+  );
 });
 
 async function renderApp() {
@@ -358,7 +383,11 @@ test('renders the collapsed reference rail and search-first desktop Home', async
 test('keeps Home limited to chronological conversations and memories', async () => {
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/chat-messages?limit=50') {
-      return {id: request.id, status: 200, body: '{"messages":[]}'};
+      return {
+        id: request.id,
+        status: 200,
+        body: '{"messages":[],"page":{"olderCursor":null,"hasOlder":false}}',
+      };
     }
     if (request.path.startsWith('/v1/conversations')) {
       return {
@@ -609,7 +638,11 @@ test('opens a read-only selected-record pane from a loaded conversation row', as
 test('keeps successful reads visible and reports each unavailable domain', async () => {
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/chat-messages?limit=50') {
-      return {id: request.id, status: 200, body: '{"messages":[]}'};
+      return {
+        id: request.id,
+        status: 200,
+        body: '{"messages":[],"page":{"olderCursor":null,"hasOlder":false}}',
+      };
     }
     if (request.path === '/v1/conversations?limit=50&offset=0') {
       return {id: request.id, status: 503, body: null};
@@ -952,7 +985,7 @@ test('fills and preserves the ask pill draft from a quick prompt', async () => {
 });
 
 test('offers durable stop while a rewritten-backend generation is active', async () => {
-  let finishGeneration!: (value: string) => void;
+  let finishGeneration!: (value: MockResponse) => void;
   mockBackend.generationEvents.mockImplementation(
     () =>
       new Promise(resolve => {
@@ -978,7 +1011,11 @@ test('offers durable stop while a rewritten-backend generation is active', async
       };
     }
     if (request.path === '/v1/chat-messages?limit=50') {
-      return {id: request.id, status: 200, body: '{"messages":[]}'};
+      return {
+        id: request.id,
+        status: 200,
+        body: '{"messages":[],"page":{"olderCursor":null,"hasOlder":false}}',
+      };
     }
     return {
       id: request.id,
@@ -1034,9 +1071,11 @@ test('offers durable stop while a rewritten-backend generation is active', async
     'generation-stop',
   );
   await ReactTestRenderer.act(async () => {
-    finishGeneration(
-      'event: cancelled\nid: terminal\ndata: {"kind":"cancelled","message":null}\n\n',
-    );
+    finishGeneration({
+      id: 'generation-stop',
+      status: 200,
+      body: 'event: cancelled\nid: terminal\ndata: {"kind":"cancelled","message":null}\n\n',
+    });
     await Promise.resolve();
   });
   expect(
@@ -1044,4 +1083,302 @@ test('offers durable stop while a rewritten-backend generation is active', async
       node => node.props.accessibilityLabel === 'Stop response',
     ),
   ).toHaveLength(0);
+});
+
+test('renders a local echo immediately and replaces it in place canonically', async () => {
+  let finishGeneration!: (value: MockResponse) => void;
+  mockBackend.request.mockImplementation(async request => {
+    if (request.method === 'POST') {
+      const body = JSON.parse(request.body ?? '');
+      return {
+        id: request.id,
+        status: 201,
+        body: JSON.stringify({
+          message: {
+            id: body.id,
+            text: 'Canonical human',
+            sender: 'human',
+            createdAt: body.at,
+            generationOutcome: null,
+          },
+          generation: {id: 'generation-echo'},
+        }),
+      };
+    }
+    return mockBackendResponse(request);
+  });
+  mockBackend.generationEvents.mockImplementation(
+    () =>
+      new Promise(resolve => {
+        finishGeneration = resolve;
+      }),
+  );
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Ask Omi')
+      .props.onChangeText('Local echo');
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send message')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  expect(
+    renderer.root.findAll(
+      node =>
+        String(node.type) === 'Text' && node.props.children === 'Local echo',
+    ),
+  ).toHaveLength(1);
+
+  await ReactTestRenderer.act(async () => {
+    finishGeneration({
+      id: 'generation-echo',
+      status: 200,
+      body: 'event: done\nid: terminal\ndata: {"kind":"done","message":{"id":"assistant-echo","text":"Canonical assistant","sender":"ai","createdAt":2,"generationOutcome":"completed"}}\n\n',
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  const text = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .map(node => node.props.children);
+  expect(text).not.toContain('Local echo');
+  expect(text.indexOf('Canonical human')).toBeLessThan(
+    text.indexOf('Canonical assistant'),
+  );
+});
+
+test('loads older chat pages once in server order', async () => {
+  mockBackend.request.mockImplementation(async request => {
+    if (request.path === '/v1/chat-messages?limit=50') {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          messages: [chatMessage('new-a'), chatMessage('new-b')],
+          page: {olderCursor: 'older-page', hasOlder: true},
+        }),
+      };
+    }
+    if (request.path.includes('olderCursor=older-page')) {
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          messages: [
+            chatMessage('old-a'),
+            chatMessage('old-b'),
+            chatMessage('new-a'),
+          ],
+          page: {olderCursor: null, hasOlder: false},
+        }),
+      };
+    }
+    return mockBackendResponse(request);
+  });
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+  await ReactTestRenderer.act(async () => {
+    await renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load older messages')
+      .props.onPress();
+  });
+  const text = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .map(node => node.props.children);
+  expect(text.filter(value => value === 'new-a')).toHaveLength(1);
+  expect(
+    ['old-a', 'old-b', 'new-a', 'new-b'].map(value => text.indexOf(value)),
+  ).toEqual(
+    [
+      ...['old-a', 'old-b', 'new-a', 'new-b'].map(value => text.indexOf(value)),
+    ].sort((left, right) => left - right),
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load older messages',
+    ),
+  ).toHaveLength(0);
+});
+
+test('retains and visibly distinguishes a cancelled assistant response', async () => {
+  mockBackend.request.mockImplementation(async request => {
+    if (request.method === 'POST') {
+      const body = JSON.parse(request.body ?? '');
+      return {
+        id: request.id,
+        status: 201,
+        body: JSON.stringify({
+          message: chatMessage(body.id, body.text, 'human', null),
+          generation: {id: 'generation-cancelled'},
+        }),
+      };
+    }
+    return mockBackendResponse(request);
+  });
+  mockBackend.generationEvents.mockResolvedValue({
+    id: 'generation-cancelled',
+    status: 200,
+    body: 'event: cancelled\nid: terminal\ndata: {"kind":"cancelled","message":{"id":"assistant-cancelled","text":"Retained partial","sender":"ai","createdAt":2,"generationOutcome":"cancelled"}}\n\n',
+  });
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Ask Omi')
+      .props.onChangeText('Stop later');
+  });
+  await ReactTestRenderer.act(async () => {
+    await renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send message')
+      .props.onPress();
+  });
+  const partial = renderer.root.find(
+    node =>
+      String(node.type) === 'Text' &&
+      node.props.children === 'Retained partial',
+  );
+  expect(partial.props.style).toEqual(
+    expect.arrayContaining([expect.objectContaining({opacity: 0.72})]),
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain('Response stopped');
+});
+
+test('refreshes expired older history while retaining a pending local echo', async () => {
+  let newestLoads = 0;
+  mockBackend.request.mockImplementation(async request => {
+    if (request.method === 'POST') {
+      const body = JSON.parse(request.body ?? '');
+      return {
+        id: request.id,
+        status: 201,
+        body: JSON.stringify({
+          message: chatMessage(body.id, 'Canonical pending', 'human', null),
+          generation: {id: 'generation-pending'},
+        }),
+      };
+    }
+    if (request.path === '/v1/chat-messages?limit=50') {
+      newestLoads += 1;
+      return {
+        id: request.id,
+        status: 200,
+        body: JSON.stringify({
+          messages: [
+            chatMessage(
+              newestLoads === 1 ? 'stale newest' : 'refreshed newest',
+            ),
+          ],
+          page:
+            newestLoads === 1
+              ? {olderCursor: 'expired', hasOlder: true}
+              : {olderCursor: null, hasOlder: false},
+        }),
+      };
+    }
+    if (request.path.includes('olderCursor=expired')) {
+      return {
+        id: request.id,
+        status: 410,
+        body: '{"error":{"code":"cursor_expired","retryable":false,"action":"refresh_history"}}',
+      };
+    }
+    return mockBackendResponse(request);
+  });
+  mockBackend.generationEvents.mockImplementation(() => new Promise(() => {}));
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Ask Omi')
+      .props.onChangeText('Pending local');
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send message')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  await ReactTestRenderer.act(async () => {
+    await renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load older messages')
+      .props.onPress();
+  });
+  const text = renderer.root
+    .findAll(node => String(node.type) === 'Text')
+    .map(node => node.props.children);
+  expect(text).toContain('Pending local');
+  expect(text).toContain('refreshed newest');
+  expect(text).not.toContain('stale newest');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Load older messages',
+    ),
+  ).toHaveLength(0);
+});
+
+test('retains the canonical human and renders a failed assistant delivery', async () => {
+  mockBackend.request.mockImplementation(async request => {
+    if (request.method === 'POST') {
+      const body = JSON.parse(request.body ?? '');
+      return {
+        id: request.id,
+        status: 201,
+        body: JSON.stringify({
+          message: chatMessage(body.id, 'Canonical question', 'human', null),
+          generation: {id: 'generation-failed'},
+        }),
+      };
+    }
+    return mockBackendResponse(request);
+  });
+  mockBackend.generationEvents.mockResolvedValue({
+    id: 'generation-failed',
+    status: 200,
+    body: 'event: failed\nid: terminal\ndata: {"kind":"failed","error":{"code":"provider_failed","retryable":true}}\n\n',
+  });
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Ask Omi')
+      .props.onChangeText('Local question');
+  });
+  await ReactTestRenderer.act(async () => {
+    await renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send message')
+      .props.onPress();
+  });
+  const rendered = JSON.stringify(renderer.toJSON());
+  expect(rendered).toContain('Canonical question');
+  expect(rendered).toContain('Response failed. Try again.');
+  expect(rendered).not.toContain('Message not sent');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Failed response',
+    ),
+  ).not.toHaveLength(0);
 });
