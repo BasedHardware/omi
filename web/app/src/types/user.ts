@@ -128,6 +128,7 @@ export interface UserSubscription {
   status: string;
   is_unlimited: boolean;
   current_period_end?: number;
+  stripe_subscription_id?: string;
   cancel_at_period_end?: boolean;
   current_price_id?: string;
   features?: string[];
@@ -136,8 +137,11 @@ export interface UserSubscription {
 // Pricing option for a plan (matches backend PricingOption)
 export interface PricingOption {
   id: string;
+  plan_id?: string;
   title: string;
   description?: string;
+  subtitle?: string;
+  eyebrow?: string;
   price_string: string;
   interval?: string;
   unit_amount?: number;

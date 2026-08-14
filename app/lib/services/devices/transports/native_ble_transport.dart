@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
-import 'package:omi/services/capture/capture_keepalive_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
@@ -28,8 +27,6 @@ class NativeBleTransport extends DeviceTransport {
   Completer<List<BleService>>? _deviceReadyCompleter;
 
   DeviceTransportState _state = DeviceTransportState.disconnected;
-  Timer? _audioLivenessTimer;
-  int _audioSilenceResubscribes = 0;
 
   NativeBleTransport(this._peripheralUuid, {this.requiresBond = false, BleHostApi? hostApi})
       : _hostApi = hostApi ?? BleHostApi() {
@@ -103,8 +100,6 @@ class NativeBleTransport extends DeviceTransport {
 
     _activeSubscriptionKeys.clear();
     _subscribedSubscriptionKeys.clear();
-    _audioLivenessTimer?.cancel();
-    _audioSilenceResubscribes = 0;
     _closeAllStreams();
     _services = [];
 
@@ -162,9 +157,9 @@ class NativeBleTransport extends DeviceTransport {
     return _streamControllers[key]!.stream;
   }
 
-  Future<void> _subscribeCharacteristic(String serviceUuid, String characteristicUuid, {bool force = false}) async {
+  Future<void> _subscribeCharacteristic(String serviceUuid, String characteristicUuid) async {
     final key = '${serviceUuid.toLowerCase()}:${characteristicUuid.toLowerCase()}';
-    if (!force && _subscribedSubscriptionKeys.contains(key)) return;
+    if (_subscribedSubscriptionKeys.contains(key)) return;
     _subscribedSubscriptionKeys.add(key);
     try {
       await _hostApi.subscribeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid);
@@ -218,7 +213,6 @@ class NativeBleTransport extends DeviceTransport {
     BleBridge.instance.unregisterPeripheral(_peripheralUuid);
     _activeSubscriptionKeys.clear();
     _subscribedSubscriptionKeys.clear();
-    _audioLivenessTimer?.cancel();
     _closeAllStreams();
     await _connectionStateController.close();
   }
@@ -265,8 +259,6 @@ class NativeBleTransport extends DeviceTransport {
       }
 
       _subscribedSubscriptionKeys.clear();
-      _audioLivenessTimer?.cancel();
-      _audioSilenceResubscribes = 0;
       _services = [];
       _updateState(DeviceTransportState.disconnected);
 
@@ -322,8 +314,6 @@ class NativeBleTransport extends DeviceTransport {
       }
 
       _updateState(DeviceTransportState.connected);
-      _audioSilenceResubscribes = 0;
-      _armAudioLivenessWatch();
     } catch (e) {
       Logger.debug('[NativeBleTransport] Failed to re-subscribe after reconnect: $e');
       _updateState(DeviceTransportState.disconnected);
@@ -333,42 +323,6 @@ class NativeBleTransport extends DeviceTransport {
   }
 
   void _handleCharacteristicValue(String serviceUuid, String characteristicUuid, Uint8List value) {
-    if (isBleAudioCharacteristicUuid(characteristicUuid) && value.isNotEmpty) {
-      _audioSilenceResubscribes = 0;
-      _audioLivenessTimer?.cancel();
-    }
     _addToStream(serviceUuid, characteristicUuid, value);
-  }
-
-  bool get _hasAudioSubscription {
-    return _activeSubscriptionKeys.any((key) {
-      final parts = key.split(':');
-      return parts.length == 2 && isBleAudioCharacteristicUuid(parts[1]);
-    });
-  }
-
-  void _armAudioLivenessWatch() {
-    _audioLivenessTimer?.cancel();
-    if (_state != DeviceTransportState.connected || !_hasAudioSubscription) {
-      return;
-    }
-    _audioLivenessTimer = Timer(captureAudioLivenessWindow, _onAudioLivenessTimeout);
-  }
-
-  void _onAudioLivenessTimeout() {
-    if (_state != DeviceTransportState.connected) return;
-    if (_audioSilenceResubscribes < captureAudioSilenceResubscribeLimit) {
-      _audioSilenceResubscribes++;
-      Logger.debug('[NativeBleTransport] no audio after reconnect, retrying CCCD subscribe once');
-      for (final key in _activeSubscriptionKeys) {
-        final parts = key.split(':');
-        if (parts.length == 2 && isBleAudioCharacteristicUuid(parts[1]) && _hasCharacteristic(parts[0], parts[1])) {
-          unawaited(_subscribeCharacteristic(parts[0], parts[1], force: true));
-        }
-      }
-      _armAudioLivenessWatch();
-      return;
-    }
-    Logger.debug('[NativeBleTransport] audio path silent after reconnect — GATT connected is not capturing');
   }
 }

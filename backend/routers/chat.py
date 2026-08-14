@@ -1502,7 +1502,12 @@ def upload_file_chat(
 # CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
 
 
-@router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
+@router.post(
+    '/v1/files',
+    response_model=List[FileChat],
+    tags=['chat'],
+    operation_id='upload_file_chat_v1_files_post',
+)
 @max_part_size(CHAT_FILE_MAX_PART_SIZE)
 def upload_file_chat_v1(
     files: List[UploadFile] = File(...),
@@ -1558,7 +1563,12 @@ def upload_file_chat_v1(
     return response
 
 
-@router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
+@router.post(
+    '/v1/messages/{message_id}/report',
+    tags=['chat'],
+    response_model=dict,
+    operation_id='report_message_v1_messages__message_id__report_post',
+)
 def report_message_v1(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
     result = chat_db.get_message(uid, message_id)
     if result is None:
@@ -1572,7 +1582,12 @@ def report_message_v1(message_id: str, uid: str = Depends(auth.get_current_user_
     return {'message': 'Message reported'}
 
 
-@router.delete('/v1/messages', tags=['chat'], response_model=Message)
+@router.delete(
+    '/v1/messages',
+    tags=['chat'],
+    response_model=Message,
+    operation_id='clear_chat_messages_v1_messages_delete',
+)
 def clear_chat_messages_v1(
     plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -1604,7 +1619,12 @@ def clear_chat_messages_v1(
     return initial_message_util(uid, compat_app_id)
 
 
-@router.post('/v1/initial-message', tags=['chat'], response_model=Message)
+@router.post(
+    '/v1/initial-message',
+    tags=['chat'],
+    response_model=Message,
+    operation_id='create_initial_message_v1_initial_message_post',
+)
 def create_initial_message_v1(
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
