@@ -82,9 +82,9 @@ final class SuggestionGatePolicyTests: XCTestCase {
     XCTAssertEqual(decision, .skippedExcludedApp)
   }
 
-  /// Maximum (5) is the "nudge me in seconds" demo mode: 10 s dwell. Everything below —
+  /// Maximum (5) is the "nudge me in seconds" demo mode: 4 s dwell. Everything below —
   /// including Balanced (3) — keeps the deliberate 30 s so ordinary use is unchanged.
-  func testDwellIsTenSecondsOnlyAtMaximumLevel() {
+  func testDwellIsFourSecondsOnlyAtMaximumLevel() {
     XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 5), 4)
     XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 4), 30)
     XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 3), 30)
