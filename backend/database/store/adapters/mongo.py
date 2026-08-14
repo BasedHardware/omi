@@ -117,8 +117,10 @@ class _MongoBatch:
         self._store = store
         self._ops: List[tuple] = []
 
-    def _append(self, collection_name: str, op: Any, run: Callable[[Any], None], *, precond: bool = False) -> None:
-        self._ops.append((collection_name, op, run, precond))
+    def _append(self, collection_name: str, op: Any, run: Callable[[Any], None], *, checked: bool = False) -> None:
+        # ``checked`` ops need their individual result inspected (a precondition, or an update that must
+        # raise NotFound on a missing doc), which forces the sequential commit path.
+        self._ops.append((collection_name, op, run, checked))
 
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
         collection_name, parent, key = _doc_meta(path)
@@ -161,10 +163,13 @@ class _MongoBatch:
 
         def run(coll: Any) -> None:
             result = coll.update_one(query, update)
-            if if_updated_at is not None and result.matched_count == 0:
-                raise PreconditionFailed(path)
+            if result.matched_count == 0:
+                # A missing/changed doc: with a precondition the revision moved (PreconditionFailed);
+                # without one, update requires an existing doc, so raise NotFound — matching the Firestore
+                # batch (which raises at commit) instead of silently dropping the write (cubic 10887 #9).
+                raise PreconditionFailed(path) if if_updated_at is not None else NotFound(path)
 
-        self._append(collection_name, UpdateOne(query, update), run, precond=if_updated_at is not None)
+        self._append(collection_name, UpdateOne(query, update), run, checked=True)
 
     def delete(self, path: str, *, if_updated_at: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
@@ -177,16 +182,16 @@ class _MongoBatch:
             if if_updated_at is not None and result.deleted_count == 0:
                 raise PreconditionFailed(path)
 
-        self._append(collection_name, DeleteOne(query), run, precond=if_updated_at is not None)
+        self._append(collection_name, DeleteOne(query), run, checked=if_updated_at is not None)
 
     def commit(self) -> None:
         by_collection: Dict[str, list] = defaultdict(list)
-        for collection_name, op, run, precond in self._ops:
-            by_collection[collection_name].append((op, run, precond))
+        for collection_name, op, run, checked in self._ops:
+            by_collection[collection_name].append((op, run, checked))
         for collection_name, ops in by_collection.items():
             coll = self._store._db[collection_name]
-            if any(precond for _, _, precond in ops):
-                # Sequential in queued order so precondition ops are individually checkable.
+            if any(checked for _, _, checked in ops):
+                # Sequential in queued order so precondition/update ops are individually checkable.
                 for _, run, _ in ops:
                     run(coll)
             else:

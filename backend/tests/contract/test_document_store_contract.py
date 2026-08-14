@@ -572,6 +572,29 @@ def test_run_transaction_update_missing_raises_not_found(store, uid):
         store.run_transaction(txn)
 
 
+def test_batch_update_missing_doc_raises_not_found(store, uid):
+    # cubic PR 10887 #9/#11b: a batch update of a never-existing doc must raise the neutral NotFound on
+    # both backends (Mongo bulk_write silently ignored the unmatched update; Firestore leaked its NotFound).
+    batch = store.batch()
+    batch.update(f"users/{uid}/people/ghost", {"a": 1})
+    with pytest.raises(NotFound):
+        batch.commit()
+
+
+def test_run_transaction_update_stale_precondition_raises(store, uid):
+    # cubic PR 10887 #11c: a stale if_updated_at inside a transaction must surface PreconditionFailed on
+    # both backends (Firestore leaked FailedPrecondition from commit).
+    store.set(f"users/{uid}", {"v": 1})
+    stale = store.get(f"users/{uid}").updated_at
+    store.update(f"users/{uid}", {"v": 2})  # move the revision past ``stale``
+
+    def txn(tx):
+        tx.update(f"users/{uid}", {"v": 3}, if_updated_at=stale)
+
+    with pytest.raises(PreconditionFailed):
+        store.run_transaction(txn)
+
+
 def test_run_transaction_aborts_on_exception(store, uid):
     store.set(f"users/{uid}", {"samples": ["s1"]})
 

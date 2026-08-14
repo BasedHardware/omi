@@ -162,6 +162,10 @@ class _FirestoreBatch:
             self._batch.commit()
         except _FirestoreFailedPrecondition as exc:
             raise PreconditionFailed("batch") from exc
+        except _FirestoreNotFound as exc:
+            # A batch update of a missing doc raises Firestore NotFound at commit — map to the neutral
+            # NotFound so callers branch identically to the Mongo adapter (cubic PR 10887 #11b).
+            raise NotFound("batch") from exc
 
 
 class _FirestoreTransaction:
@@ -378,6 +382,10 @@ class FirestoreDocumentStore:
             raise AlreadyExists(str(exc)) from exc
         except _FirestoreNotFound as exc:
             raise NotFound(str(exc)) from exc
+        except _FirestoreFailedPrecondition as exc:
+            # A stale if_updated_at inside a transaction fails the precondition at commit — map to the
+            # neutral PreconditionFailed, matching _MongoTransaction.update (cubic PR 10887 #11c).
+            raise PreconditionFailed(str(exc)) from exc
 
     def batch(self) -> _FirestoreBatch:
         return _FirestoreBatch(self._client)
