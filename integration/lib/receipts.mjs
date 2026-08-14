@@ -203,6 +203,24 @@ function stampDeclaredRepos(row) {
 }
 
 /**
+ * L3's evidence matrix carries two hashes, the same split `dev-stack.sh` uses:
+ * the core-foundation worktree (frontend + integration) for the shells, and
+ * the surfaces-dist artifact scope (frontend/ only) for the built bundle.
+ * Collapsing them to one hash after colocation made every L3 receipt fail
+ * while `--assert` itself was green.
+ */
+function l3ExpectedTreeHashes(stamps) {
+  const core = stamps?.["core-foundation"];
+  const expectedShellTreeHash = core?.treeHash;
+  const expectedSurfaceTreeHash = worktreeStamp({
+    repo: "core-foundation",
+    repoRoot: core?.repoRoot,
+    artifact: "surfaces-dist",
+  }).treeHash;
+  return { expectedShellTreeHash, expectedSurfaceTreeHash };
+}
+
+/**
  * The measurement key: what makes two receipts the same measurement.
  *
  * Digests the lane id plus, per declared repo, `<repo>\0<root>\0<treeHash>`,
@@ -377,11 +395,9 @@ export function writeReceipt({
     const exactArbiters = arbiters !== null && typeof arbiters === "object" && !Array.isArray(arbiters)
       && Object.keys(arbiters).sort().join("\0") === arbiterKeys.sort().join("\0");
     const runIdError = rawRunIdFailure(arbiters.runId);
-    const expectedTreeHash = stamps["core-foundation"]?.treeHash;
     const matrixValidation = validateFinalEvidenceMatrix(matrix, {
       runId: arbiters.runId,
-      expectedShellTreeHash: expectedTreeHash,
-      expectedSurfaceTreeHash: expectedTreeHash,
+      ...l3ExpectedTreeHashes(stamps),
     });
     if (!exactArbiters || runIdError || !matrixValidation.ok) {
       throw new Error(
@@ -647,11 +663,9 @@ export function verifyReceiptObject(lane, receipt) {
     const exactArbiters = receipt.arbiters !== null && typeof receipt.arbiters === "object" && !Array.isArray(receipt.arbiters)
       && Object.keys(receipt.arbiters).sort().join("\0") === arbiterKeys.sort().join("\0");
     const runIdError = rawRunIdFailure(receipt.arbiters?.runId);
-    const expectedTreeHash = receipt.stamps?.["core-foundation"]?.treeHash;
     const matrixValidation = validateFinalEvidenceMatrix(receipt.arbiters?.evidenceMatrix, {
       runId: receipt.arbiters?.runId,
-      expectedShellTreeHash: expectedTreeHash,
-      expectedSurfaceTreeHash: expectedTreeHash,
+      ...l3ExpectedTreeHashes(receipt.stamps),
     });
     if (!exactArbiters || runIdError || !matrixValidation.ok) {
       return {

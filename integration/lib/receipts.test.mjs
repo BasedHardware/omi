@@ -34,7 +34,8 @@ let workspaceRoot;
 const L3_DOMAINS = ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"];
 function l3Arbiters() {
   const runId = "run-receipt-test";
-  const treeHash = worktreeStamp({ repo: "core-foundation" }).treeHash;
+  const shellTreeHash = worktreeStamp({ repo: "core-foundation" }).treeHash;
+  const surfaceTreeHash = worktreeStamp({ repo: "core-foundation", artifact: "surfaces-dist" }).treeHash;
   const consumer = {
     schema: CONSUMER_EVIDENCE_SCHEMA,
     runId,
@@ -44,7 +45,7 @@ function l3Arbiters() {
         route: domain, state: "ready", semantic: `${domain} rendered`,
         ...(domain === "listen" ? { transcript: "synthetic transcript" } : {}),
       },
-      shellTreeHash: treeHash, surfaceTreeHash: treeHash,
+      shellTreeHash, surfaceTreeHash,
     }))),
   };
   const producer = {
@@ -65,8 +66,8 @@ function l3Arbiters() {
       runId,
       consumer,
       producer,
-      expectedShellTreeHash: treeHash,
-      expectedSurfaceTreeHash: treeHash,
+      expectedShellTreeHash: shellTreeHash,
+      expectedSurfaceTreeHash: surfaceTreeHash,
     }),
     assertions: [],
   };
@@ -119,6 +120,23 @@ describe("the exact L3 evidence matrix is required, not merely an aggregate", ()
       arbiters: l3Arbiters(), workspaceRoot,
     });
     assert.equal(receipt.arbiters.evidenceMatrix.rows.length, 14);
+  });
+
+  it("RED-PROOF collapsing shell and surface hashes to one worktree stamp is refused", () => {
+    const shellTreeHash = worktreeStamp({ repo: "core-foundation" }).treeHash;
+    const surfaceTreeHash = worktreeStamp({ repo: "core-foundation", artifact: "surfaces-dist" }).treeHash;
+    assert.notEqual(shellTreeHash, surfaceTreeHash);
+    const collapsed = structuredClone(l3Arbiters());
+    for (const row of collapsed.evidenceMatrix.rows) {
+      row.consumer.shellTreeHash = shellTreeHash;
+      row.consumer.surfaceTreeHash = shellTreeHash;
+    }
+    collapsed.evidenceMatrix.expectedShellTreeHash = shellTreeHash;
+    collapsed.evidenceMatrix.expectedSurfaceTreeHash = shellTreeHash;
+    assert.throws(
+      () => writeReceipt({ lane: "L3", result: "pass", durationMs: 1000, arbiters: collapsed, workspaceRoot }),
+      /stale or mismatched surface tree hash/,
+    );
   });
 
   it("RED-PROOF an aggregate count cannot replace one missing coordinate", () => {
