@@ -6,10 +6,11 @@ import XCTest
 
 /// The two things retention leaves behind, and the one mistake neither sweep may ever make.
 ///
-/// Frames are deleted by row, and everything a row *named* has to go with it: the image on disk and
-/// the accessibility subtrees the frame's tree was built from. Neither followed the row, so both
-/// grew forever — the images invisibly, because `framesBytesOnDisk` counts rows and an orphan has
-/// none, and `ax_nodes` measurably, at ~370 MB a year on the shape this machine actually captures.
+/// Retention expires a frame's *picture* and keeps its row, so everything the row stopped naming has
+/// to go with it: the image on disk and the accessibility subtrees its tree was built from. Neither
+/// followed, so both grew forever — the images invisibly, because `framesBytesOnDisk` counts rows
+/// and an orphan has none, and `ax_nodes` measurably, at ~370 MB a year on the shape this machine
+/// actually captures.
 ///
 /// Every test here is written twice over, because a sweep has two failure modes and they are not
 /// equally bad. Failing to collect garbage costs disk. Collecting something live costs the user a
@@ -115,21 +116,33 @@ final class RetentionSweepTests: XCTestCase {
         }
     }
 
-    /// Retention is one call, and it has to finish the job it starts: the rows it deletes are
-    /// exactly what orphans the files and the subtrees. The count it returns stays frames, because
-    /// its caller reports it as frames.
-    func testEnforceRetentionCollectsWhatItsOwnDeletesOrphaned() throws {
+    /// Retention is one call, and it has to finish the job it starts: the pictures it expires are
+    /// exactly what orphans the files and the subtrees. The count it returns stays images, because
+    /// its caller reports it as images.
+    ///
+    /// **This is also the test that keeps `sweepAXNodes` alive.** Frame rows are no longer deleted
+    /// by retention, so if expiry left `axRootHash` in place every node would stay reachable from a
+    /// row that lives forever, and the sweep this file exists for would collect nothing ever again —
+    /// the table would go back to growing without bound. The subtree count going to zero here is
+    /// what proves the root was cleared with the picture; the frame's `ocrText` and `axText`, which
+    /// `StoreTests` asserts separately, are what proves the text was not.
+    func testEnforceRetentionCollectsWhatItsOwnExpiriesOrphaned() throws {
         let old = try writeImage(named: "old.heic", ageSeconds: 40 * 86_400)
         let tree = try seedTree(node("AXWindow", text: "Mail", children: [node("AXStaticText", text: "Inbox")]), seenAt: longAgo)
-        try fixture.addFrame(
+        let frame = try fixture.addFrame(
             at: ContextTime.now - 40 * 86_400, app: "Mail", imagePath: old.path,
             axRootHash: tree.root)
 
-        let removed = try store.enforceRetention(olderThanDays: 30)
+        let expired = try store.enforceRetention(olderThanDays: 30)
 
-        XCTAssertEqual(removed, 1, "the return value must count frames, not everything collected")
-        XCTAssertFalse(exists(old), "the frame's image outlived its row")
-        XCTAssertEqual(try nodeCount(), 0, "the frame's subtrees outlived their frame")
+        XCTAssertEqual(expired, 1, "the return value must count images, not everything collected")
+        XCTAssertFalse(exists(old), "the frame's image outlived the row that stopped naming it")
+        XCTAssertEqual(try nodeCount(), 0, "the frame's subtrees outlived the tree root")
+        // And the row itself is untouched, which is the whole tier.
+        let rows: Int = try store.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM frames WHERE id = ?", arguments: [frame]) ?? 0
+        }
+        XCTAssertEqual(rows, 1, "retention deleted a frame row")
     }
 
     // MARK: - Unreachable accessibility subtrees

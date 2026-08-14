@@ -718,12 +718,12 @@ final class StoreTests: XCTestCase {
         XCTAssertThrowsError(try reader.openSession(at: Fixture.base, appHint: nil)) { error in
             XCTAssertStoreError(error, .readOnly)
         }
-        XCTAssertThrowsError(try reader.pruneFrames(olderThanDays: 30)) { error in
+        // Both refuse before they scan, not after: a reader with nothing to expire must not report
+        // a successful sweep it never performed.
+        XCTAssertThrowsError(try reader.expireFrameImages(olderThanDays: 30)) { error in
             XCTAssertStoreError(error, .readOnly)
         }
-        // The byte cap refuses before it scans, not after: a reader that is under the cap must not
-        // report a successful sweep it never performed.
-        XCTAssertThrowsError(try reader.pruneFrames(toFitBytes: 0)) { error in
+        XCTAssertThrowsError(try reader.expireFrameImages(toFitBytes: 0)) { error in
             XCTAssertStoreError(error, .readOnly)
         }
         XCTAssertThrowsError(try reader.enforceRetention()) { error in
@@ -744,12 +744,17 @@ final class StoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: missing.path))
     }
 
-    // MARK: - Pruning
+    // MARK: - Expiring images by age
+    //
+    // Tiered retention: past the horizon a frame loses its **picture** and keeps everything that can
+    // be read. Every test in this section is written twice over, because the two failure modes are
+    // not equally bad — leaving a picture behind costs disk, and taking a row's text costs the user
+    // history that cannot be recaptured. So each asserts what went *and* what stayed.
 
-    func testPruneFramesDeletesOldRowsAndTheirImagesAndLeavesNewerOnesAlone() throws {
+    func testExpiringOldImagesRemovesThePictureAndKeepsTheRowAndAllOfItsText() throws {
         let store = fixture.store
-        // `pruneFrames` measures the cutoff from the wall clock, so the corpus has to be anchored to
-        // it too. Sampled once, so every row in this test shares one clock reading.
+        // The cutoff is measured from the wall clock, so the corpus has to be anchored to it too.
+        // Sampled once, so every row in this test shares one clock reading.
         let now = ContextTime.now
         let day: Double = 86_400
 
@@ -757,59 +762,93 @@ final class StoreTests: XCTestCase {
         let staleImage = try fixture.writeImage(named: "stale.jpg")
         let keptImage = try fixture.writeImage(named: "kept.jpg")
 
-        try fixture.addFrame(at: now - 400 * day, app: "Xcode", window: "ancient",
-                             ocr: "ancient vorpal text", imagePath: ancientImage)
-        try fixture.addFrame(at: now - 31 * day, app: "Xcode", window: "stale",
-                             ocr: "stale brillig text", imagePath: staleImage)
-        // No image at all: a frame whose OCR was captured but whose JPEG was skipped must not stop
-        // the sweep.
-        try fixture.addFrame(at: now - 90 * day, app: "Xcode", window: "no image", ocr: "mimsy")
-        let keptId = try fixture.addFrame(at: now - 2 * day, app: "Xcode", window: "kept",
-                                          ocr: "kept slithy text", imagePath: keptImage)
+        let ancient = try fixture.addFrame(at: now - 400 * day, app: "Xcode", window: "ancient",
+                                           ocr: "ancient vorpal text", imagePath: ancientImage)
+        let stale = try fixture.addFrame(at: now - 31 * day, app: "Xcode", window: "stale",
+                                         ocr: "stale brillig text", imagePath: staleImage)
+        // No image at all: a frame whose OCR was captured but whose JPEG was skipped is already
+        // exactly what an expired frame becomes, and must neither be counted nor disturbed.
+        let never = try fixture.addFrame(at: now - 90 * day, app: "Xcode", window: "no image",
+                                         ocr: "mimsy")
+        let kept = try fixture.addFrame(at: now - 2 * day, app: "Xcode", window: "kept",
+                                        ocr: "kept slithy text", imagePath: keptImage)
 
-        let deleted = try store.pruneFrames(olderThanDays: 30)
+        let expired = try store.expireFrameImages(olderThanDays: 30)
 
-        XCTAssertEqual(deleted, 3)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: ancientImage), "old JPEG leaked")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: staleImage), "old JPEG leaked")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: keptImage), "a surviving JPEG was unlinked")
+        // What went: two pictures, and only pictures.
+        XCTAssertEqual(expired, 2, "the row with no image was counted as an expiry")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: ancientImage), "an expired JPEG leaked")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: staleImage), "an expired JPEG leaked")
+        XCTAssertNil(try imagePath(of: ancient), "the row still points at a file that is gone")
+        XCTAssertNil(try imagePath(of: stale), "the row still points at a file that is gone")
 
+        // What stayed: every row, every word, and the picture inside the horizon.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: keptImage), "a recent JPEG was unlinked")
+        XCTAssertEqual(try imagePath(of: kept), keptImage)
         let remaining: [Int64] = try store.read { db in
             try Int64.fetchAll(db, sql: "SELECT id FROM frames ORDER BY id")
         }
-        XCTAssertEqual(remaining, [keptId])
-
-        // The delete trigger has to run for the prune too, or search keeps answering with rows whose
-        // screenshots and content are gone.
-        XCTAssertEqual(try frameMatches("brillig"), 0)
+        XCTAssertEqual(remaining, [ancient, stale, never, kept], "expiry deleted a frame row")
+        // The whole point of the tier. Search still finds the moment whose picture is gone.
+        XCTAssertEqual(try frameMatches("vorpal"), 1, "an expired frame fell out of the search index")
+        XCTAssertEqual(try frameMatches("brillig"), 1)
+        XCTAssertEqual(try frameMatches("mimsy"), 1)
         XCTAssertEqual(try frameMatches("slithy"), 1)
     }
 
-    func testPruneFramesNeverTouchesTranscripts() throws {
+    func testExpiringOldImagesNeverTouchesTranscripts() throws {
         let store = fixture.store
         let now = ContextTime.now
         let sessionId = try store.openSession(at: now - 400 * 86_400, appHint: nil)
         try fixture.addSegment(session: sessionId, at: now - 400 * 86_400, source: .mic,
                                "a year old and still the reason this app exists")
 
-        _ = try store.pruneFrames(olderThanDays: 30)
+        _ = try store.expireFrameImages(olderThanDays: 30)
 
-        let segments: Int = try store.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM segments") ?? 0
-        }
-        XCTAssertEqual(segments, 1)
+        XCTAssertEqual(try count(of: "segments"), 1)
+        XCTAssertEqual(try count(of: "sessions"), 1)
     }
 
-    // MARK: - Pruning to a byte cap
+    /// The tree root goes with the picture, and `axText` does not.
+    ///
+    /// Both directions matter here for a reason that is easy to miss: rows now live forever, so a
+    /// root kept forever would keep every `ax_nodes` row permanently reachable and silently disable
+    /// `sweepAXNodes` — the table would grow without bound again. Clearing the *text* instead would
+    /// be the opposite mistake, and would take the searchable half this whole feature exists to keep.
+    func testExpiringAnImageClearsItsTreeRootAndKeepsItsAccessibilityText() throws {
+        let store = fixture.store
+        let now = ContextTime.now
+        let root = Data(repeating: 0xAB, count: 32)
+        let image = try fixture.writeImage(named: "old.jpg")
+        let old = try store.insertFrame(
+            Frame(capturedAt: now - 40 * 86_400, appName: "Xcode", windowTitle: "old",
+                  ocrText: "ocr text", imagePath: image, axRootHash: root))
+        try store.write { db in
+            try db.execute(sql: "UPDATE frames SET axText = ? WHERE id = ?",
+                           arguments: ["borogove in the accessibility tree", old])
+        }
 
-    func testByteCapDeletesTheOldestFramesFirstAndStopsAtTheCap() throws {
+        XCTAssertEqual(try store.expireFrameImages(olderThanDays: 30), 1)
+
+        let (hash, text): (Data?, String?) = try store.read { db in
+            let row = try Row.fetchOne(db, sql: "SELECT axRootHash, axText FROM frames WHERE id = ?",
+                                       arguments: [old])!
+            return (row["axRootHash"], row["axText"])
+        }
+        XCTAssertNil(hash, "the tree root outlived the picture, so ax_nodes can never be collected")
+        XCTAssertEqual(text, "borogove in the accessibility tree", "the accessibility text was taken")
+    }
+
+    // MARK: - Expiring images to a byte cap
+
+    func testByteCapExpiresTheOldestPicturesFirstAndStopsAtTheCap() throws {
         let store = fixture.store
         let ocr = ["ancient vorpal", "old brillig", "middling mimsy", "recent slithy", "newest borogove"]
         var ids = [Int64](repeating: 0, count: 5)
         var paths = [String](repeating: "", count: 5)
 
         // Inserted out of chronological order on purpose: "oldest" has to mean `capturedAt`, never
-        // insertion order — a cap that deletes by rowid would pass a same-order corpus and still
+        // insertion order — a cap that expired by rowid would pass a same-order corpus and still
         // throw away the wrong week on a real machine.
         for index in [4, 2, 0, 3, 1] {
             paths[index] = try writeImage(named: "frame-\(index).jpg", bytes: 1_000)
@@ -819,40 +858,37 @@ final class StoreTests: XCTestCase {
         }
         XCTAssertEqual(try store.framesBytesOnDisk(), 5_000)
 
-        // Room for exactly three frames: the two oldest go, and not one frame more.
-        let deleted = try store.pruneFrames(toFitBytes: 3_000)
+        // Room for exactly three pictures: the two oldest go, and not one more.
+        let expired = try store.expireFrameImages(toFitBytes: 3_000)
 
-        XCTAssertEqual(deleted, 2, "the cap over- or under-deleted")
+        XCTAssertEqual(expired, 2, "the cap over- or under-expired")
         XCTAssertEqual(try store.framesBytesOnDisk(), 3_000)
 
+        for index in [0, 1] {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: paths[index]),
+                           "frame \(index)'s JPEG survived the cap")
+            XCTAssertNil(try imagePath(of: ids[index]), "the row still names a file that is gone")
+        }
+        for index in [2, 3, 4] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: paths[index]),
+                          "a surviving frame's JPEG was unlinked")
+            XCTAssertEqual(try imagePath(of: ids[index]), paths[index])
+        }
+
+        // Every row and every word survives a bound that is about bytes on disk.
         let remaining: [Int64] = try store.read { db in
             try Int64.fetchAll(db, sql: "SELECT id FROM frames ORDER BY capturedAt")
         }
-        XCTAssertEqual(remaining, [ids[2], ids[3], ids[4]], "what survived is not the newest stretch")
-
-        for index in [0, 1] {
-            XCTAssertFalse(
-                FileManager.default.fileExists(atPath: paths[index]),
-                "frame \(index)'s JPEG outlived its row")
+        XCTAssertEqual(remaining, ids)
+        for term in ["vorpal", "brillig", "mimsy", "borogove"] {
+            XCTAssertEqual(try frameMatches(term), 1, "\(term) fell out of the index")
         }
-        for index in [2, 3, 4] {
-            XCTAssertTrue(
-                FileManager.default.fileExists(atPath: paths[index]),
-                "a surviving frame's JPEG was unlinked")
-        }
-
-        // This sweep deletes by id list rather than by cutoff, so it needs its own proof that the FTS
-        // `ad` trigger ran: an index still answering with deleted rows is corrupt, not merely stale.
-        XCTAssertEqual(try frameMatches("vorpal"), 0)
-        XCTAssertEqual(try frameMatches("brillig"), 0)
-        XCTAssertEqual(try frameMatches("mimsy"), 1)
-        XCTAssertEqual(try frameMatches("borogove"), 1)
     }
 
     func testByteCapIsANoOpWhenAlreadyUnderTheCap() throws {
         let store = fixture.store
         // Nothing captured yet: the tightest possible cap still has nothing to do.
-        XCTAssertEqual(try store.pruneFrames(toFitBytes: 0), 0)
+        XCTAssertEqual(try store.expireFrameImages(toFitBytes: 0), 0)
 
         var paths: [String] = []
         for index in 0..<3 {
@@ -863,9 +899,9 @@ final class StoreTests: XCTestCase {
                 ocr: "note \(index)", imagePath: path)
         }
 
-        XCTAssertEqual(try store.pruneFrames(toFitBytes: 10_000), 0, "deleted while under the cap")
+        XCTAssertEqual(try store.expireFrameImages(toFitBytes: 10_000), 0, "expired while under the cap")
         // "At or under": a total sitting exactly on the cap is not over it.
-        XCTAssertEqual(try store.pruneFrames(toFitBytes: 3_000), 0, "deleted while exactly at the cap")
+        XCTAssertEqual(try store.expireFrameImages(toFitBytes: 3_000), 0, "expired while exactly at the cap")
 
         XCTAssertEqual(try count(of: "frames"), 3)
         for path in paths {
@@ -885,23 +921,30 @@ final class StoreTests: XCTestCase {
             at: Fixture.base + 20, app: "Xcode", window: "frame", ocr: "vorpal", imagePath: path)
 
         // A cap of zero is the harshest sweep there is; the transcript still has to survive it.
-        XCTAssertEqual(try store.pruneFrames(toFitBytes: 0), 1)
+        XCTAssertEqual(try store.expireFrameImages(toFitBytes: 0), 1)
 
-        XCTAssertEqual(try count(of: "frames"), 0)
+        XCTAssertEqual(try count(of: "frames"), 1, "retention ate a frame row")
         XCTAssertEqual(try count(of: "segments"), 1, "retention ate a transcript line")
         XCTAssertEqual(try count(of: "sessions"), 1, "retention ate a session")
         XCTAssertEqual(try segmentMatches("recaptured"), 1)
+        XCTAssertEqual(try frameMatches("vorpal"), 1)
         XCTAssertFalse(FileManager.default.fileExists(atPath: path))
     }
 
-    func testByteCapSweepsFramesWhoseJPEGWasNeverWritten() throws {
+    /// The bound that makes the two tiers composable, and the bug that made them not.
+    ///
+    /// The row-deleting predecessor of this method walked frames oldest-first and appended every one
+    /// of them to its doomed list, image or no image. A frame with no picture frees nothing, so once
+    /// the age tier began leaving image-less rows behind — which is now the *normal* state of
+    /// everything past the horizon — the byte pass would have deleted thousands of those rows, and
+    /// all of their text, before it freed a single byte. It has to skip them and keep walking.
+    func testByteCapSkipsFramesThatHaveNoImageInsteadOfSpendingThemOnTheCap() throws {
         let store = fixture.store
-        // A frame whose OCR was captured but whose JPEG was skipped costs no disk. It is still
-        // deleted when it is older than something that has to go, so what survives stays one
-        // contiguous recent stretch rather than a corpus with holes in it.
-        try fixture.addFrame(at: Fixture.base, app: "Xcode", window: "no image", ocr: "ancient vorpal")
+        // Oldest, and already expired: no picture to reclaim, all of its text still worth keeping.
+        let expiredAlready = try fixture.addFrame(
+            at: Fixture.base, app: "Xcode", window: "no image", ocr: "ancient vorpal")
         let olderPath = try writeImage(named: "older.jpg", bytes: 1_000)
-        try fixture.addFrame(
+        let older = try fixture.addFrame(
             at: Fixture.base + 60, app: "Xcode", window: "older", ocr: "old brillig",
             imagePath: olderPath)
         let newestPath = try writeImage(named: "newest.jpg", bytes: 1_000)
@@ -911,24 +954,29 @@ final class StoreTests: XCTestCase {
 
         XCTAssertEqual(try store.framesBytesOnDisk(), 2_000, "a row with no JPEG must count as zero")
 
-        let deleted = try store.pruneFrames(toFitBytes: 1_000)
+        let expired = try store.expireFrameImages(toFitBytes: 1_000)
 
-        XCTAssertEqual(deleted, 2)
+        // One picture went — the oldest one that *had* a picture — and the image-less row was not
+        // spent getting there.
+        XCTAssertEqual(expired, 1)
+        XCTAssertEqual(try store.framesBytesOnDisk(), 1_000)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: olderPath))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newestPath))
+
         let remaining: [Int64] = try store.read { db in
             try Int64.fetchAll(db, sql: "SELECT id FROM frames ORDER BY capturedAt")
         }
-        XCTAssertEqual(remaining, [newest])
-        XCTAssertFalse(FileManager.default.fileExists(atPath: olderPath))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: newestPath))
+        XCTAssertEqual(remaining, [expiredAlready, older, newest], "an image-less row was deleted")
+        XCTAssertEqual(try frameMatches("vorpal"), 1, "the text of an already-expired frame was taken")
     }
 
-    func testEnforceRetentionAppliesWhicheverBoundIsTighter() throws {
+    func testEnforceRetentionAppliesWhicheverBoundIsTighterAndKeepsEveryRow() throws {
         let store = fixture.store
         // The age half reads the wall clock, so this corpus is anchored to it — sampled once, so
         // every row shares one reading.
         let now = ContextTime.now
         let ancientPath = try writeImage(named: "ancient.jpg", bytes: 1_000)
-        try fixture.addFrame(
+        let ancient = try fixture.addFrame(
             at: now - 40 * 86_400, app: "Xcode", window: "ancient", ocr: "ancient vorpal",
             imagePath: ancientPath)
 
@@ -943,18 +991,28 @@ final class StoreTests: XCTestCase {
             recentIds.append(id)
         }
 
-        // Age takes the 40-day-old frame; the 2 KiB cap then takes one more that age would have kept.
-        let removed = try store.enforceRetention(olderThanDays: 30, toFitBytes: 2_000)
+        // Age takes the 40-day-old picture; the 2 KiB cap then takes one more that age would keep.
+        let expired = try store.enforceRetention(olderThanDays: 30, toFitBytes: 2_000)
 
-        XCTAssertEqual(removed, 2)
-        let remaining: [Int64] = try store.read { db in
-            try Int64.fetchAll(db, sql: "SELECT id FROM frames ORDER BY capturedAt")
-        }
-        XCTAssertEqual(remaining, [recentIds[1], recentIds[2]])
+        XCTAssertEqual(expired, 2)
         XCTAssertEqual(try store.framesBytesOnDisk(), 2_000)
         XCTAssertFalse(FileManager.default.fileExists(atPath: ancientPath))
         XCTAssertFalse(FileManager.default.fileExists(atPath: recentPaths[0]))
         XCTAssertTrue(FileManager.default.fileExists(atPath: recentPaths[1]))
+
+        // And the sentence the whole feature rests on: nothing was deleted from the database.
+        let remaining: [Int64] = try store.read { db in
+            try Int64.fetchAll(db, sql: "SELECT id FROM frames ORDER BY capturedAt")
+        }
+        XCTAssertEqual(remaining, [ancient] + recentIds)
+        XCTAssertEqual(try frameMatches("vorpal"), 1)
+    }
+
+    /// The `imagePath` a row currently names, or nil once its picture has expired.
+    private func imagePath(of id: Int64) throws -> String? {
+        try fixture.store.read { db in
+            try String.fetchOne(db, sql: "SELECT imagePath FROM frames WHERE id = ?", arguments: [id])
+        }
     }
 
     // MARK: - Helpers

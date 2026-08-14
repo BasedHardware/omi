@@ -197,8 +197,8 @@ final class SettingsTests: XCTestCase {
     func testBestQualityDisclosesThatItShortensHistoryUnderAStorageLimit() {
         let best = CaptureQuality.best.subtitle
         XCTAssertTrue(
-            best.localizedCaseInsensitiveContains("limit"),
-            "Best Quality must name the setting its cost lands on: \(best)")
+            best.localizedCaseInsensitiveContains("threshold"),
+            "Best Quality must name the bound its cost lands on: \(best)")
         XCTAssertTrue(
             best.localizedCaseInsensitiveContains("fewer days"),
             "…and say what is lost, not only that files are larger: \(best)")
@@ -228,9 +228,41 @@ final class SettingsTests: XCTestCase {
 
     // MARK: - Storage (I27–I30)
 
-    func testStorageDefaultsToOffAndCommitsImmediately() {
+    /// **The shipped default expires screenshots, and both readers of the preference have to agree
+    /// on that.**
+    ///
+    /// It used to be `off`, correctly, while the strategy deleted whole frame rows. It no longer
+    /// does — `ContextStore.expireFrameImages` keeps the row, its OCR, its accessibility text and
+    /// every FTS entry, and takes only the picture — so the choice is now pictures against disk
+    /// rather than history against disk.
+    ///
+    /// The second assertion is the load-bearing one. `Engine.scheduleRetentionSweep` does not read
+    /// this store; it parses `context.settings.storageStrategy` out of `UserDefaults` itself, with
+    /// its own inline fallback of `.off`. A default declared only on this type would therefore be a
+    /// default the sweep never saw, and the pane would draw a strategy that was not running.
+    @MainActor
+    func testStorageDefaultsToExpiringScreenshotsForBothReadersOfThePreference() {
+        let suite = "context.settings.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+        let store = SettingsStore(defaults: defaults, appliesToRunningApp: false)
+
+        XCTAssertEqual(StorageStrategy.default, .limit)
+        XCTAssertEqual(store.storage.strategy, .limit, "the pane would draw the wrong row")
+        XCTAssertFalse(store.storage.isAwaitingConfirmation)
+        // Exactly what the sweep does: a raw string read, with no knowledge of this type.
+        XCTAssertEqual(
+            defaults.string(forKey: "context.settings.storageStrategy"), "limit",
+            "the retention sweep reads the key directly and would fall back to off")
+    }
+
+    /// A neutral starting point is still expressible, and selecting what is already in force is a
+    /// no-op. `StorageSelection`'s own default stays `.off` so the gate below can be exercised from
+    /// a state that is not already the destination.
+    func testSelectingTheStrategyAlreadyInForceChangesNothing() {
         var selection = StorageSelection()
-        XCTAssertEqual(selection.strategy, .off, "Off is the default")
+        XCTAssertEqual(selection.strategy, .off)
         XCTAssertFalse(selection.isAwaitingConfirmation)
         XCTAssertEqual(selection.select(.off), .unchanged)
     }
@@ -310,6 +342,9 @@ final class SettingsTests: XCTestCase {
         let pane = SettingsStoragePane(store: store)
         let days = "\(StorageLimit.retentionDays) days"
 
+        // From the non-destructive strategy, so the gate is actually crossed: the store now ships
+        // with `.limit` already in force, and selecting what is in force is a no-op.
+        store.selectStorage(.off)
         // While the choice is parked, the pane is drawing the confirmation about it.
         store.selectStorage(.limit)
         XCTAssertTrue(pane.confirmationPresentation.wrappedValue)
@@ -338,7 +373,26 @@ final class SettingsTests: XCTestCase {
             confirmationBody.localizedCaseInsensitiveContains("whatever the threshold"),
             "the confirmation must say a bigger threshold does not keep older recordings")
         // Off promises the opposite and must keep promising it.
-        XCTAssertEqual(StorageStrategy.off.subtitle, "Keep all your data. Forever.")
+        XCTAssertTrue(
+            StorageStrategy.off.subtitle.localizedCaseInsensitiveContains("keep everything"),
+            "Off must still promise that nothing is deleted: \(StorageStrategy.off.subtitle)")
+
+        // **And the prose surfaces have to say what survives.** This strategy is the default, so
+        // most users meet it without ever answering the confirmation — copy that says only what is
+        // deleted would leave them believing a month-old moment is gone entirely, when its text,
+        // its window, its app and every transcript are all still there and still searchable. The
+        // confirmation *title* is exempt: it is a one-line question about what is being deleted, and
+        // padding it with the reassurance is how a title stops being readable at a glance.
+        let prose = [
+            ("the radio row", StorageStrategy.limit.subtitle),
+            ("the confirmation body", confirmationBody),
+            ("the header caption", store.storageLimitSummary),
+        ]
+        for (surface, copy) in prose {
+            XCTAssertTrue(
+                copy.localizedCaseInsensitiveContains("text"),
+                "\(surface) does not say the text of the moment is kept: \(copy)")
+        }
     }
 
     /// `I30`'s other half: the confirmed choice must survive whichever order SwiftUI uses.
@@ -354,6 +408,7 @@ final class SettingsTests: XCTestCase {
         // Ordering A: SwiftUI writes `isPresented = false` first, then runs the action.
         let first = makeStore()
         let firstPane = SettingsStoragePane(store: first)
+        first.selectStorage(.off)
         first.selectStorage(.limit)
         XCTAssertTrue(firstPane.confirmationPresentation.wrappedValue)
         firstPane.confirmationPresentation.wrappedValue = false
@@ -364,6 +419,7 @@ final class SettingsTests: XCTestCase {
         // Ordering B: the action runs first, then the dismissal is written.
         let second = makeStore()
         let secondPane = SettingsStoragePane(store: second)
+        second.selectStorage(.off)
         second.selectStorage(.limit)
         second.confirmStorage()
         secondPane.confirmationPresentation.wrappedValue = false
@@ -376,6 +432,9 @@ final class SettingsTests: XCTestCase {
     func testTheCancelButtonIsWhatCancels() {
         let store = makeStore()
         let pane = SettingsStoragePane(store: store)
+        // From the non-destructive strategy: `.limit` is the shipped default, so the gate has to be
+        // approached from the one state that is not already the destination.
+        store.selectStorage(.off)
         store.selectStorage(.limit)
         XCTAssertEqual(store.storage.highlighted, .limit)
 
@@ -388,13 +447,14 @@ final class SettingsTests: XCTestCase {
     @MainActor
     func testStoreNeverPersistsAnUnconfirmedStrategy() {
         let store = makeStore()
+        store.selectStorage(.off)
         XCTAssertEqual(store.selectStorage(.limit), .awaitingConfirmation)
         XCTAssertEqual(store.storage.strategy, .off)
         XCTAssertEqual(store.storageLimitSummary, "no storage limits set")
 
         store.confirmStorage()
         XCTAssertEqual(store.storage.strategy, .limit)
-        XCTAssertTrue(store.storageLimitSummary.hasPrefix("limited to "))
+        XCTAssertTrue(store.storageLimitSummary.hasPrefix("text kept forever"))
     }
 
     /// Every threshold the stepper can reach must print as a round number.

@@ -9,15 +9,21 @@ import SwiftUI
 /// **The usage figure is measured** (`I27`). `StorageMeasurement` walks the real support directory and
 /// adds up allocated sizes. Nothing on this pane multiplies a frame count by an average.
 ///
-/// **`Limit` deletes user data permanently** (`I30`), so it is not reachable by one click on a radio
-/// button. Selecting it parks the choice in `StorageSelection.pending` and opens a confirmation that
-/// states exactly what will happen; the radio group shows the parked option as selected so the user can
-/// see what they are being asked about, and cancelling puts it back. Only `confirm()` commits.
+/// **`Expire screenshots` deletes user data permanently** (`I30`), so *switching to it* is not
+/// reachable by one click on a radio button. Selecting it parks the choice in
+/// `StorageSelection.pending` and opens a confirmation that states exactly what will happen; the
+/// radio group shows the parked option as selected so the user can see what they are being asked
+/// about, and cancelling puts it back. Only `confirm()` commits.
 ///
-/// **And the confirmation states both bounds.** Limit is not only a size cap: the sweep prunes
-/// everything older than `StorageLimit.retentionDays` as well, whatever the threshold says. Copy that
-/// mentioned only the threshold made a 200 GB setting on an 8 GB disk look like "nothing will be
-/// deleted" while a month-old screenshot was deleted anyway.
+/// **And the confirmation states both bounds, and what survives them.** It is not only a size cap:
+/// the sweep expires every screenshot older than `StorageLimit.retentionDays` as well, whatever the
+/// threshold says. Copy that mentioned only the threshold made a 200 GB setting on an 8 GB disk look
+/// like "nothing will be deleted" while a month-old screenshot was deleted anyway.
+///
+/// **The footnote carries the disclosure the dialog cannot.** This strategy is now the shipped
+/// default (`StorageStrategy.default`), and a default raises no sheet — so the one place a user who
+/// never touches this pane can learn that their month-old screenshots are being deleted, and that
+/// the text of those moments is not, is the copy standing next to the selected row.
 struct SettingsStoragePane: View {
     @ObservedObject var store: SettingsStore
 
@@ -47,7 +53,11 @@ struct SettingsStoragePane: View {
 
             SettingsSection(
                 title: "Storage management",
-                footnote: "Context for Claude keeps everything. Pick a strategy if your disk is filling up."
+                footnote: "The text of everything you have seen and heard is kept forever, and is "
+                    + "always searchable. Screenshots are the part that grows without bound, so by "
+                    + "default they are deleted once they are \(StorageLimit.retentionDays) days "
+                    + "old — or sooner if they pass the threshold. Choose Keep screenshots to hold "
+                    + "on to the pictures as well."
             ) {
                 ForEach(Array(StorageStrategy.allCases.enumerated()), id: \.element.id) { index, strategy in
                     if index > 0 { SettingsRowDivider() }
@@ -68,9 +78,10 @@ struct SettingsStoragePane: View {
                     SettingsRow(
                         icon: "gauge.with.dots.needle.33percent",
                         title: "Threshold",
-                        subtitle: "Recordings are deleted oldest-first once the frames on disk pass this. "
-                            + "Recordings older than \(StorageLimit.retentionDays) days are deleted even "
-                            + "when the folder is well under it."
+                        subtitle: "Screenshots are deleted oldest-first once the ones on disk pass "
+                            + "this. Screenshots older than \(StorageLimit.retentionDays) days are "
+                            + "deleted even when the folder is well under it. Neither bound touches "
+                            + "text or transcripts."
                     ) {
                         StorageThresholdStepper(bytes: $store.storageLimitBytes)
                     }
@@ -180,7 +191,7 @@ struct SettingsStoragePane: View {
     var confirmationTitle: String {
         switch pending {
         case .limit:
-            "Delete recordings past \(StorageLimit.format(store.storageLimitBytes)) "
+            "Delete screenshots past \(StorageLimit.format(store.storageLimitBytes)) "
                 + "or \(StorageLimit.retentionDays) days old?"
         default: ""
         }
@@ -198,15 +209,16 @@ struct SettingsStoragePane: View {
             "Two things start happening. Screenshots are deleted oldest-first whenever the frames "
                 + "folder passes \(StorageLimit.format(store.storageLimitBytes)), and screenshots older "
                 + "than \(StorageLimit.retentionDays) days are deleted whatever the threshold says — "
-                + "raising it does not keep them. Deleted recordings cannot be recovered. Transcripts "
-                + "are never deleted by this."
+                + "raising it does not keep them. Deleted screenshots cannot be recovered. What is "
+                + "kept is everything you can read: the text of each screen, its window and app, and "
+                + "every transcript. Those moments stay searchable; they just lose their picture."
         default: ""
         }
     }
 
     var confirmationAction: String {
         switch pending {
-        case .limit: "Turn on storage limit"
+        case .limit: "Start expiring screenshots"
         default: "Continue"
         }
     }
