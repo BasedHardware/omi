@@ -147,6 +147,7 @@ class OIDCAuthProvider:
             photo_url=None,
             disabled=not bool(rep.get("enabled", True)),
             providers=[fi.get("identityProvider") for fi in (rep.get("federatedIdentities") or []) if fi.get("identityProvider")],
+            created_at=rep.get("createdTimestamp"),  # Keycloak exposes account creation as epoch ms
         )
 
     def update_user_profile(self, uid: str, *, display_name: Optional[str] = None) -> None:

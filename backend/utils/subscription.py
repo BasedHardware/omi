@@ -206,7 +206,7 @@ def _is_trial_expired_uncached(uid: str, *, firestore_client: Any | None = None,
         if users_db.is_byok_active(uid, firestore_client=firestore_client):
             return False
         user_record = _get_user(uid)
-        creation_ms: int = cast(int, user_record.user_metadata.creation_timestamp)
+        creation_ms = user_record.created_at  # neutral epoch-ms field (was Firebase-only user_metadata)
         if not creation_ms:
             return False
         age_seconds = time.time() - (creation_ms / 1000)
@@ -340,7 +340,7 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
             )
 
         user_record = _get_user(uid)
-        creation_ms: int = cast(int, user_record.user_metadata.creation_timestamp)
+        creation_ms = user_record.created_at  # neutral epoch-ms field (was Firebase-only user_metadata)
         if not creation_ms:
             # No creation timestamp — treat as active trial (fail-open).
             return TrialMetadata(

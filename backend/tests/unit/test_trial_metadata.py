@@ -89,11 +89,14 @@ class TestGetTrialMetadataExists:
         func_body = src[func_start : src.index('\ndef ', func_start + 1)]
         assert "is_byok_active" in func_body
 
-    def test_uses_firebase_creation_timestamp(self):
+    def test_uses_account_creation_time(self):
+        # Static tripwire: the account-age paywall must read the account creation time. After the
+        # auth-port migration (cubic 10887 C1) that is the neutral UserProfile.created_at field, not
+        # Firebase's user_metadata.creation_timestamp.
         src = _read_source(SUBSCRIPTION_SRC_PATH)
         func_start = src.index('def get_trial_metadata(')
         func_body = src[func_start : src.index('\ndef ', func_start + 1)]
-        assert "creation_timestamp" in func_body
+        assert "created_at" in func_body
 
     def test_fails_open_on_exception(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)
@@ -187,7 +190,7 @@ class TestGetTrialMetadataBehavior:
         self.ns['users_db'].is_byok_active.return_value = False
         creation_ms = (time.time() - age_seconds) * 1000
         user_record = MagicMock()
-        user_record.user_metadata.creation_timestamp = creation_ms
+        user_record.created_at = creation_ms  # neutral UserProfile field (was Firebase user_metadata)
         self.ns['firebase_auth'].get_user.return_value = user_record
 
     def _mock_user_expired(self, age_seconds=4 * 24 * 3600):
@@ -198,7 +201,7 @@ class TestGetTrialMetadataBehavior:
         self.ns['users_db'].is_byok_active.return_value = False
         creation_ms = (time.time() - age_seconds) * 1000
         user_record = MagicMock()
-        user_record.user_metadata.creation_timestamp = creation_ms
+        user_record.created_at = creation_ms  # neutral UserProfile field (was Firebase user_metadata)
         self.ns['firebase_auth'].get_user.return_value = user_record
 
     def _mock_paid_user(self):
@@ -311,7 +314,7 @@ class TestGetTrialMetadataBehavior:
         self.ns['users_db'].get_user_valid_subscription.return_value = sub
         self.ns['users_db'].is_byok_active.return_value = False
         user_record = MagicMock()
-        user_record.user_metadata.creation_timestamp = None
+        user_record.created_at = None  # neutral field absent -> fail open
         self.ns['firebase_auth'].get_user.return_value = user_record
         result = self.fn('uid_test')
         assert result.trial_expired is False
@@ -517,7 +520,7 @@ class TestTrialBoundaryDynamic:
         self.ns['users_db'].is_byok_active.return_value = False
         creation_ms = (self.now - age_seconds) * 1000
         user_record = MagicMock()
-        user_record.user_metadata.creation_timestamp = creation_ms
+        user_record.created_at = creation_ms  # neutral UserProfile field (was Firebase user_metadata)
         self.ns['firebase_auth'].get_user.return_value = user_record
 
     def test_exactly_at_trial_length_boundary(self):
@@ -561,7 +564,7 @@ class TestTrialBoundaryDynamic:
         ns['users_db'].is_byok_active.return_value = False
         creation_ms = (time.time() - 1800) * 1000
         user_record = MagicMock()
-        user_record.user_metadata.creation_timestamp = creation_ms
+        user_record.created_at = creation_ms  # neutral UserProfile field (was Firebase user_metadata)
         ns['firebase_auth'].get_user.return_value = user_record
 
         result = custom_fn('uid_test')
@@ -585,7 +588,7 @@ class TestTrialBoundaryDynamic:
         ns['users_db'].is_byok_active.return_value = False
         creation_ms = (time.time() - 7200) * 1000  # 2 hours ago
         user_record = MagicMock()
-        user_record.user_metadata.creation_timestamp = creation_ms
+        user_record.created_at = creation_ms  # neutral UserProfile field (was Firebase user_metadata)
         ns['firebase_auth'].get_user.return_value = user_record
 
         result = custom_fn('uid_test')

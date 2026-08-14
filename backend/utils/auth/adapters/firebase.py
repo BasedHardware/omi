@@ -77,6 +77,7 @@ class FirebaseAuthProvider:
             photo_url=getattr(rec, 'photo_url', None),
             disabled=bool(getattr(rec, 'disabled', False)),
             providers=[p for p in providers if p],
+            created_at=getattr(getattr(rec, 'user_metadata', None), 'creation_timestamp', None),
         )
 
     def update_user_profile(self, uid: str, *, display_name: Optional[str] = None) -> None:

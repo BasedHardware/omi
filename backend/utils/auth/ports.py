@@ -44,6 +44,10 @@ class UserProfile:
     photo_url: Optional[str] = None
     disabled: bool = False
     providers: List[str] = field(default_factory=list)
+    # Account creation time, epoch milliseconds (Firebase UserRecord.user_metadata.creation_timestamp /
+    # Keycloak user createdTimestamp). None when the backend does not expose it. Used by the desktop
+    # account-age trial paywall; keep it a neutral scalar so no caller reads a Firebase-only shape.
+    created_at: Optional[int] = None
 
 
 @runtime_checkable
