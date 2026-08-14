@@ -29,10 +29,38 @@ PREBUILD="${OMI_SWIFT_TEST_PREBUILD:-1}"
 # a clean main while CI (300s, see .github/workflows/desktop-swift-ci.yml) was
 # green. Keep this in sync with that workflow — the check below proves it.
 SUITE_TIMEOUT_SECONDS="${OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS:-300}"
+# A suite killed by a signal writes nothing but SwiftPM's one-line "Exited with
+# unexpected signal code N" into its log — no frames. The system crash reporter
+# holds the backtrace, and on a hosted runner it is discarded with the machine,
+# so a crasher that only reproduces on CI is undebuggable from the log alone
+# (#11573). Print the reports this run produced next to the failing suites.
+CRASH_REPORT_DIR="${OMI_SWIFT_TEST_CRASH_REPORT_DIR:-$HOME/Library/Logs/DiagnosticReports}"
+CRASH_REPORT_LIMIT="${OMI_SWIFT_TEST_CRASH_REPORT_LIMIT:-6}"
 
 fail() {
   echo "FAIL: $*" >&2
   exit 1
+}
+
+dump_crash_reports() {
+  local marker="$1"
+  if [ ! -d "$CRASH_REPORT_DIR" ]; then
+    echo "No crash reports: $CRASH_REPORT_DIR does not exist."
+    return
+  fi
+  local reports
+  reports="$(find "$CRASH_REPORT_DIR" -maxdepth 1 -type f -name '*.ips' -newer "$marker" 2>/dev/null \
+    | sort | head -n "$CRASH_REPORT_LIMIT")"
+  if [ -z "$reports" ]; then
+    echo "No crash reports newer than this run in $CRASH_REPORT_DIR."
+    return
+  fi
+  local report
+  while IFS= read -r report; do
+    echo "--- CRASH REPORT: $report ---"
+    cat "$report"
+    echo
+  done <<<"$reports"
 }
 
 terminate_process_tree() {
@@ -237,6 +265,7 @@ suite_log_dir="$(mktemp -d)"
 suite_worker_dir="$(mktemp -d)"
 trap 'rm -rf "$suite_log_dir" "$suite_worker_dir"' EXIT
 failed_suites=""
+crashed_suites=""
 suite_count="${#suites[@]}"
 worker_count=0
 
@@ -250,6 +279,11 @@ if [ "$PREBUILD" = "1" ] && [ "$suite_count" -gt 0 ]; then
   echo "Prebuilding Swift test bundle before parallel suite execution..."
   xcrun swift build --package-path "$PACKAGE_PATH" --build-tests
 fi
+
+# Only reports written after this point belong to the suite run; the prebuild
+# and anything the runner did earlier must not be attributed to a crasher.
+crash_marker="$suite_worker_dir/run-start"
+touch "$crash_marker"
 
 parallel_suite_count="${#parallel_suites[@]}"
 if [ "$parallel_suite_count" -gt 0 ]; then
@@ -323,8 +357,16 @@ for suite in "${suites[@]}"; do
     failed_suites="$failed_suites $suite"
     echo "--- FAILED: $suite ---"
     cat "$suite_log_dir/$suite.log"
+    if grep -q "Exited with unexpected signal" "$suite_log_dir/$suite.log"; then
+      crashed_suites="$crashed_suites $suite"
+    fi
   fi
 done
+
+if [ -n "$crashed_suites" ]; then
+  echo "Signal-killed Swift suites:$crashed_suites"
+  dump_crash_reports "$crash_marker"
+fi
 
 echo "Ran $suite_count Swift suites in isolation with $worker_count worker(s), ${SUITE_TIMEOUT_SECONDS}s per-suite budget."
 
