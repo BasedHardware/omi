@@ -147,6 +147,12 @@ if [ -n "$STAGED_WEB_FILES" ]; then
         echo "Run 'npm ci' in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
         exit 1
       fi
+      if [ "$(git show :"$dir/package-lock.json" 2>/dev/null | wc -c)" -gt 0 ]; then
+        echo "Prettier lockfile could not be resolved in $dir: refusing to compare against a guessed version." >&2
+        echo "A stale or unparseable lockfile reformats files into a shape CI rejects." >&2
+        echo "Run 'npm ci' in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
+        exit 1
+      fi
     fi
     for plugin in prettier-plugin-tailwindcss; do
       PLUGIN_RESOLVED=$(git show :"$dir/package-lock.json" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print((d.get('packages',{}).get('node_modules/' + sys.argv[1]) or {}).get('version',''))" "$plugin" 2>/dev/null)

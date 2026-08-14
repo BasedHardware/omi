@@ -386,7 +386,7 @@ checks:
     reason: "SCA-118: production web LLM traffic must not regain direct provider SDKs, URLs, or credentials"
   - id: web-frontend-tests
     command: ["bash", "scripts/run-web-frontend-tests.sh"]
-    triggers: ["web/frontend/**", "config/public-build-contract.json", ".github/actions/deploy-public-build/action.yml", ".github/workflows/gcp_frontend.yml", ".github/checks-manifest.yaml"]
+    triggers: ["web/frontend/**", "scripts/run-web-frontend-tests.sh", "config/public-build-contract.json", ".github/actions/deploy-public-build/action.yml", ".github/workflows/gcp_frontend.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "web/frontend's node --test suite had no lane, so its guards never ran in CI and a deleted frontend test had to be re-homed into a backend pytest to keep running"
   - id: web-llm-gateway-only-tests
