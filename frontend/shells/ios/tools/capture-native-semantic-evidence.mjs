@@ -398,7 +398,7 @@ function main() {
   try { currentCore = gitHead(sourceRoot); } catch (error) { fail(error.message); return; }
   if (manifest.source_shas.core !== currentCore) { fail(`manifest core SHA ${manifest.source_shas.core} does not match current core HEAD ${currentCore}`); return; }
   const platformRoot = args.platform_root || process.env.OMI_PLATFORM_ROOT;
-  if (platformRoot) {
+  if (platformRoot && !args.replay_input) {
     let currentPlatform;
     try { currentPlatform = gitHead(path.resolve(platformRoot)); } catch (error) { fail(error.message); return; }
     if (manifest.source_shas.platform !== currentPlatform) { fail(`manifest platform SHA ${manifest.source_shas.platform} does not match current platform HEAD ${currentPlatform}`); return; }

@@ -38,4 +38,3 @@ artifact and cannot close a row from a pre-existing no-op file.
 The iOS path remains honestly red when the managed simulator, app bundle, or
 typed host marker is unavailable; no browser preview or guessed state may be
 relabeled as native evidence.
-
