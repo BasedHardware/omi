@@ -65,7 +65,9 @@ RustFS/SeaweedFS, Keycloak, GPU inference.
 Every stateful backend that can hold on-prem data survives `docker compose down`/`up` on a **named
 volume** (compose.base.yaml `volumes:` block): `mongo-data:/data/db` (ADR-0002 datastore),
 `rustfs-data:/data` (ADR-0032 object store, `RUSTFS_VOLUMES=/data`), `qdrant-storage` (ADR-0033
-vectors), `keycloak-data:/opt/keycloak/data`. A plain `down` keeps them; only `down -v` wipes them
+vectors), `keycloak-data:/opt/keycloak/data`, `ntfy-cache:/var/cache/ntfy` (ADR-0011 push server —
+`NTFY_CACHE_FILE=/var/cache/ntfy/cache.db` SQLite; without it ntfy caches messages in memory only and
+a restart drops any notification a device has not yet fetched). A plain `down` keeps them; only `down -v` wipes them
 (and would also drop the pre-provisioned `inference-models` weights, which have no egress to refetch
 — avoid `-v` on this project).
 

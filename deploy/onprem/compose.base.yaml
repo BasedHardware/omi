@@ -108,12 +108,18 @@ services:
       NTFY_BASE_URL: https://${HOST_IP:-localhost}:${NTFY_HTTPS_PORT:-8455}
       NTFY_LISTEN_HTTP: ":80"
       NTFY_BEHIND_PROXY: "true"
+      # Durable message cache: without a cache file ntfy keeps messages in memory only, so a restart
+      # drops any notification a device has not yet fetched. Persist them to a SQLite file on the
+      # ntfy-cache volume (retained NTFY_CACHE_DURATION, ntfy default 12h) so they survive down/up.
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:80/v1/health | grep -q '\"healthy\":true'"]
       interval: 5s
       timeout: 5s
       retries: 30
       start_period: 5s
+    volumes:
+      - ntfy-cache:/var/cache/ntfy
     networks: [omi]
     restart: unless-stopped
 
@@ -444,3 +450,5 @@ volumes:
   rustfs-data:
   # Keycloak realm/H2 persistence incl. the imported omi-backend-admin client (`auth` profile).
   keycloak-data:
+  # ntfy message cache (SQLite) so undelivered UnifiedPush notifications survive restart (`push` profile).
+  ntfy-cache:
