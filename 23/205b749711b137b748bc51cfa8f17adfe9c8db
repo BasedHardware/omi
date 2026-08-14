@@ -1,0 +1,94 @@
+desktop/context-for-claude/Tests/ContextAppTests/RewindStateTests.swift
+  s_830a75a8050e25::t_a8eb7b4139d628 188-197,199,201-202,204
+  s_830a75a8050e25::t_e446a9843035cf 1-187,198,200,203,205-364,539-587,660-681
+  s_830a75a8050e25::t_e248c401599035 588-659
+  s_830a75a8050e25::t_0e9383d27022fb 365-538
+desktop/context-for-claude/Tests/ContextAppTests/TimelineHandoffTests.swift
+  s_830a75a8050e25::t_b17a9848829b5d 538-541
+  s_830a75a8050e25::t_12cc2b839024f8 184,218,229,255,295-367,371-419,422,548
+  s_830a75a8050e25::t_b00b31918933ad 127-129,132-133
+  s_830a75a8050e25::t_c8f677eca20c3a 368-370
+  s_830a75a8050e25::t_375ab2d8e886b6 147-149
+  s_830a75a8050e25::t_b80a4446e3dc15 134,169,183,202,219,224,247-248,250,264,279-280,287,420-421,423-426,437,495,499,508,512,542-547,567,577
+desktop/context-for-claude/Tests/ContextAppTests/RewindScrubTests.swift
+  s_830a75a8050e25::t_73cbc2597cbd3b 620-623
+  s_830a75a8050e25::t_70b7abf174968d 461,637
+  s_8c3ee8bebf7fff::t_bb393157873307 436,475-476,502-503,527-528,560-561,583,594-595,630-631
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindTrack.swift
+  s_830a75a8050e25::t_412f2769df6540 694-697,705,716
+  s_830a75a8050e25::t_83caebd9ea4ee2 605-649
+  s_830a75a8050e25::t_7e13653c2c816b 567-575,580-582
+  s_830a75a8050e25::t_4096581cc4f4d1 63-64
+  s_830a75a8050e25::t_d83fda9e82f1c1 503-506,511-529
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindWindow.swift
+  s_830a75a8050e25::t_9bbda025369af6 12-20
+  s_830a75a8050e25::t_cef7c1c4235970 142,147-152,157-160,163-166
+  s_830a75a8050e25::t_4a6c0e6849f89d 153-156,161-162
+  s_830a75a8050e25::t_f61bdc7d69f593 29-37,40
+  s_830a75a8050e25::t_ac77a3844c7106 53-57
+  s_830a75a8050e25::t_0c1d2da709725b 167-168
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindModel.swift
+  s_830a75a8050e25::t_5ddb3ab611c50d 108-119
+  s_830a75a8050e25::t_e70b5aed76296a 546,548-553,556-557
+  s_830a75a8050e25::t_6555da9e8d31bb 1127
+  s_830a75a8050e25::t_9e3330d8ce8810 735-762,765-784
+  s_830a75a8050e25::t_cf2a721b7a7ca7 1089-1100
+  s_830a75a8050e25::t_091dd4c5673e83 348,478,481,579,583,838,1109,1129,1131,1144-1215,1217
+  s_830a75a8050e25::t_4745d481096c1e 172-191,201-205,215-232,242,245-258,260,262-267,276-321,326,330-346
+  s_830a75a8050e25::t_6763d590fcbf3a 786,789-815,818-836
+  s_830a75a8050e25::t_214a420abdbe24 439-446,453-455,457,459
+  s_830a75a8050e25::t_7f396b8f7c197b 97-107
+  s_830a75a8050e25::t_dfa4d6c171c3ee 207-213
+  s_830a75a8050e25::t_cbdf97cdf01b4d 349-368,373-374,384,394,404,411,416-438
+  s_830a75a8050e25::t_fb94b4c2b77ee5 541-545,554-555,558-577
+  s_830a75a8050e25::t_6bdd6a00366de9 1105
+  s_830a75a8050e25::t_da005c82984bb0 369-372,375-383,385-393,395-403,405-410,412-415,447-452,456,458,460-476,843
+  s_830a75a8050e25::t_77a31462c7a9fd 123,347,477,479-480,482,578,580,584,785,837,839-842,1106-1108,1110-1113,1128,1130,1134,1216,1218-1222
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindView.swift
+  s_830a75a8050e25::t_5b91df456022e2 352-355
+  s_830a75a8050e25::t_c3fd87e4c994fd 269-270
+  s_830a75a8050e25::t_8d0b59d124d2be 114-116
+  s_830a75a8050e25::t_292c4efa371cf5 314
+  s_830a75a8050e25::t_812e0bdd92a504 250
+  s_830a75a8050e25::t_6c440c82033ae2 421
+  s_830a75a8050e25::t_1af3790ef35bb3 482-485
+  s_830a75a8050e25::t_9b0993c25568cc 378-387
+  s_830a75a8050e25::t_1f800fa0acb5c5 213-221
+  s_830a75a8050e25::t_c5246daf4f6fb2 15,275-281,283-313,315-318
+  s_830a75a8050e25::t_6c3df7c6e79bf7 407
+  s_830a75a8050e25::t_b3717857fef71d 432
+  s_830a75a8050e25::t_fd16e6476114cb 454-457
+  s_830a75a8050e25::t_409497d30a96ff 14
+  s_830a75a8050e25::t_a1d4c9904794bf 16-18
+  s_830a75a8050e25::t_ea73f08aeac950 375-377
+  s_830a75a8050e25::t_c6796e42b608c5 388-390
+  s_8c3ee8bebf7fff::t_5d0659623f45c2 19-20,129-131,133-135,370-371,391
+desktop/context-for-claude/Tests/ContextAppTests/RewindTests.swift
+  s_830a75a8050e25::t_c9454176cfe66d 864-901
+desktop/context-for-claude/Tests/ContextAppTests/RewindZoomTests.swift
+  s_830a75a8050e25::t_34546713077992 285,311,320-322,344-345,373-374
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "23205b749711b137b748bc51cfa8f17adfe9c8db",
+  "prompts": {},
+  "sessions": {
+    "s_830a75a8050e25": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c76762c9-b116-4248-8786-3ab36dd6ee16",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_8c3ee8bebf7fff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a66f13a34a5eb5aad",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
