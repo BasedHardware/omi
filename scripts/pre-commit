@@ -171,6 +171,13 @@ if [ -n "$STAGED_WEB_FILES" ]; then
         fi
       fi
     done
+    for file in $DIR_FILES; do
+      if ! git diff --quiet -- "$file"; then
+        echo "$file has unstaged edits; refusing to format-and-add because it would sweep them into the commit." >&2
+        echo "Stage or commit the remaining edits first, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
+        exit 1
+      fi
+    done
     echo "$DIR_FILES" | xargs "$PRETTIER_BIN" --write
     echo "$DIR_FILES" | xargs git add
   done
