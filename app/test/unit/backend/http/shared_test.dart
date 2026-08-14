@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,6 +12,7 @@ import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 Future<String> simulateGetAuthHeader({required bool isSignedIn, required String token}) async {
@@ -63,6 +65,26 @@ void main() {
       );
 
       expect(headers['Authorization'], equals('Bearer fresh-token'));
+    });
+
+    test('_drainStreamedResponse suppresses exceptions from aborted streams before replaying', () async {
+      var replayCount = 0;
+      final service = AuthService.forTesting(tokenGateway: _TestAuthTokenGateway(), refreshDelay: (_) async {});
+
+      final response = await refreshAndReplayAfter401(
+        firstResponse: http.StreamedResponse(_abortedResponseBody(), HttpStatus.unauthorized),
+        statusCode: (value) => value.statusCode,
+        disposeUnauthorizedResponse: drainStreamedResponseForTesting,
+        replay: () async {
+          replayCount++;
+          return http.StreamedResponse(const Stream<List<int>>.empty(), HttpStatus.ok);
+        },
+        expireTerminalSession: true,
+        authService: service,
+      );
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(replayCount, 1);
     });
   });
 
@@ -128,6 +150,23 @@ void main() {
   });
 }
 
+Stream<List<int>> _abortedResponseBody() async* {
+  yield [1, 2, 3];
+  throw StateError('aborted response');
+}
+
+final class _TestAuthTokenGateway implements AuthTokenGateway {
+  @override
+  AuthUserSnapshot? get currentUser => const AuthUserSnapshot(uid: 'test-user');
+
+  @override
+  Future<RefreshedAuthToken?> forceRefresh() async =>
+      RefreshedAuthToken(token: 'fresh-token', expirationTime: DateTime.now().add(const Duration(hours: 1)));
+
+  @override
+  Future<void> signOut() async {}
+}
+
 class _TestEnvFields implements EnvFields {
   String _requestBaseUrl = '';
 
@@ -157,9 +196,6 @@ class _TestEnvFields implements EnvFields {
 
   @override
   String? get intercomAndroidApiKey => null;
-
-  @override
-  String? get openAIAPIKey => null;
 
   @override
   String? get posthogApiKey => null;

@@ -198,10 +198,14 @@ struct ShellModalScrim: View {
       ZStack {
         if blocksInteraction {
           // Modality, at the host's full size — the part that was never wrong to draw host-wide,
-          // because it draws nothing.
+          // because it draws nothing. The reporter keeps the transparent barrier inside the
+          // window's pointer ownership: without it, the shell's click-through sync would pass
+          // clicks on the barrier straight to whatever is behind the window (see
+          // `ShellClickThrough.swift`), and the modal would stop being modal.
           Color.clear
             .contentShape(Rectangle())
             .onTapGesture { onTap?() }
+            .background(InkGlassHitRegionReporter())
         }
 
         RoundedRectangle(cornerRadius: ShellModalScrimLayout.cornerRadius, style: .continuous)

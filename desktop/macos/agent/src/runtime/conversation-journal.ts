@@ -585,13 +585,8 @@ function retirePendingColdStartQuestionForUnrelatedUserTurn(
   nowMs: number,
 ): void {
   if (input.role !== "user" || input.surfaceKind !== "main_chat") return;
-  const tail = store.getOptionalRow(
-    `SELECT turn_id FROM conversation_turns
-     WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
-    [input.conversationId],
-  );
-  if (!tail) return;
-  const parent = requireJournalTurn(store, input.conversationId, String(tail.turn_id));
+  const parent = canonicalConversationTail(store, input.conversationId);
+  if (!parent) return;
   if (parent.role !== "assistant" || parent.status !== "completed") return;
   const questionIndex = parent.contentBlocks.findIndex((block) => (
     block.type === "questionCard"
@@ -951,13 +946,8 @@ export function recordQuestionInteractionReply(
       return emptyQuestionInteractionReceipt();
     }
 
-    const tailRow = store.getOptionalRow(
-      `SELECT turn_id FROM conversation_turns
-       WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
-      [conversationId],
-    );
-    if (!tailRow) return emptyQuestionInteractionReceipt();
-    const parent = requireJournalTurn(store, conversationId, String(tailRow.turn_id));
+    const parent = canonicalConversationTail(store, conversationId);
+    if (!parent) return emptyQuestionInteractionReceipt();
     if (parent.role !== "assistant" || parent.status !== "completed") {
       return emptyQuestionInteractionReceipt();
     }
@@ -1661,12 +1651,8 @@ function appendNextColdStartSequenceQuestion(
   const descriptor = localColdStartSequenceDescriptor(metadata.coldStartSequence);
   const continuityKey = typeof metadata.continuityKey === "string" ? metadata.continuityKey : null;
   if (!descriptor || !continuityKey) return;
-  const tail = store.getOptionalRow(
-    `SELECT turn_id FROM conversation_turns
-     WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
-    [terminalized.conversationId],
-  );
-  if (!tail || String(tail.turn_id) !== terminalized.turnId) return;
+  const tail = canonicalConversationTail(store, terminalized.conversationId);
+  if (!tail || tail.turnId !== terminalized.turnId) return;
   if (!selectedColdStartParentMatchesContinuation(store, ownerId, terminalized, descriptor, continuityKey)) return;
 
   if (descriptor.step === 3) {
@@ -3610,13 +3596,8 @@ function materializationTailState(
   store: AgentStore,
   conversationId: string,
 ): { unansweredQuestion: boolean; streaming: boolean } {
-  const tail = store.getOptionalRow(
-    `SELECT turn_id FROM conversation_turns
-     WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
-    [conversationId],
-  );
-  if (!tail) return { unansweredQuestion: false, streaming: false };
-  const turn = requireJournalTurn(store, conversationId, String(tail.turn_id));
+  const turn = canonicalConversationTail(store, conversationId);
+  if (!turn) return { unansweredQuestion: false, streaming: false };
   const assistant = turn.role === "assistant";
   return {
     unansweredQuestion: assistant
@@ -3628,6 +3609,32 @@ function materializationTailState(
       )),
     streaming: assistant && (turn.status === "pending" || turn.status === "streaming"),
   };
+}
+
+/**
+ * Return the user-visible conversation tail by immutable creation order.
+ *
+ * `turn_seq` is a journal revision cursor: backend acknowledgements and other
+ * in-place mutations advance it even though the turn did not move in the
+ * conversation. Question actionability must therefore follow `created_at_ms`,
+ * the immutable conversation-order key, or a late ACK for an older response
+ * can make a newer question appear stale to the kernel while it remains the
+ * visible tail in Chat.
+ *
+ * When two turns share `created_at_ms`, prefer the higher `turn_seq` so a
+ * lexicographically larger older `turn_id` cannot beat the later append.
+ */
+function canonicalConversationTail(
+  store: AgentStore,
+  conversationId: string,
+): ConversationTurn | null {
+  const row = store.getOptionalRow(
+    `SELECT turn_id FROM conversation_turns
+     WHERE conversation_id = ?
+     ORDER BY created_at_ms DESC, turn_seq DESC, turn_id DESC LIMIT 1`,
+    [conversationId],
+  );
+  return row ? requireJournalTurn(store, conversationId, String(row.turn_id)) : null;
 }
 
 /**
@@ -3718,6 +3725,13 @@ function chatFirstIntentBlocks(
           summary: nonEmptyString(block.summary, "chat-first capture summary"),
         };
       }
+      case "conversationLink":
+        return {
+          type,
+          id,
+          conversationId: nonEmptyString(block.conversation_id, "chat-first conversation ID"),
+          summary: nonEmptyString(block.summary, "chat-first conversation summary"),
+        };
       default:
         throw new Error("Chat-first intent block type is invalid");
     }
@@ -3924,6 +3938,11 @@ function validateContentBlocks(blocks: readonly ConversationContentBlock[]): Con
       if (block.summary.length === 0 || block.summary.length > 200) throw new Error("Capture summary is out of bounds");
       if (block.momentTimestampMs !== undefined && (!Number.isSafeInteger(block.momentTimestampMs) || block.momentTimestampMs < 0)) {
         throw new Error("Capture moment timestamp is invalid");
+      }
+    } else if (block.type === "conversationLink") {
+      nonEmpty(block.conversationId, "conversation ID");
+      if (block.summary.length === 0 || block.summary.length > 200) {
+        throw new Error("Conversation summary is out of bounds");
       }
     }
     return structuredClone(block);

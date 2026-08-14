@@ -17,7 +17,7 @@ import json
 import logging
 import re
 from collections.abc import Mapping
-from typing import Protocol
+from typing import Protocol, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ _TOKEN_CHARS = re.compile(r'[A-Za-z0-9+/_\-]{8,}')
 
 
 class _ValidationErrorLike(Protocol):
-    def errors(self, *, include_input: bool = True) -> list[Mapping[str, object]]: ...
+    def errors(self, *, include_input: bool = True) -> Sequence[Mapping[str, object]]: ...
 
 
 def sanitize(value: object) -> str:

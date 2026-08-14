@@ -3,6 +3,12 @@ import Foundation
 /// Response wrapper for GET v1/action-items/ids (lightweight reconcile source).
 struct ActionItemIdsResponse: Decodable {
   let ids: [String]
+  let completedScope: Bool?
+
+  private enum CodingKeys: String, CodingKey {
+    case ids
+    case completedScope = "completed_scope"
+  }
 }
 
 /// One bounded page from the marker-scoped legacy task recovery endpoint.
@@ -23,6 +29,12 @@ struct LegacyConversationRecoveryPage: Decodable, Equatable, Sendable {
 }
 
 extension APIClient {
+  struct BatchDeletePartialFailure: Error {
+    let confirmedIDs: [String]
+    let pendingIDs: [String]
+    let underlying: Error
+  }
+
   /// The backend's action-item list orders every non-null `due_at` before the
   /// null bucket. Firestore inequality filters also exclude documents where
   /// `due_at` is missing/null, so this lower bound is the smallest supported
@@ -177,15 +189,74 @@ extension APIClient {
   /// Used as an independent confirmation before an empty incomplete-task page
   /// is allowed to reconcile (wipe) synced local rows.
   func getActionItemIds(
+    completed: Bool? = nil,
     expectedOwnerId: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> [String] {
+    let endpoint = completed.map { "v1/action-items/ids?completed=\($0)" } ?? "v1/action-items/ids"
     let response: ActionItemIdsResponse = try await get(
-      "v1/action-items/ids",
+      endpoint,
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot
     )
+    if let completed, response.completedScope != completed {
+      // Older backend revisions ignore the unknown query parameter and return
+      // every account ID. Never treat that unscoped response as proof of the
+      // visible completion bucket: Select All feeds destructive bulk actions.
+      throw APIError.invalidResponse
+    }
     return response.ids
+  }
+
+  /// Delete task IDs through the backend's existing chunked bulk endpoint.
+  /// The endpoint accepts at most 10,000 IDs; callers chunk larger selections
+  /// so an honest Select All never falls back to serial network requests. If a
+  /// later chunk fails, the error preserves the chunks whose server response
+  /// was validated so callers can reconcile confirmed and pending IDs instead
+  /// of reporting an all-or-nothing result for a partial remote commit.
+  func batchDeleteActionItems(
+    ids: [String],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws {
+    struct BatchDeleteRequest: Encodable { let ids: [String] }
+    struct BatchDeleteResponse: Decodable {
+      let status: String
+      let deletedCount: Int
+      let deletedIds: [String]
+
+      private enum CodingKeys: String, CodingKey {
+        case status
+        case deletedCount = "deleted_count"
+        case deletedIds = "deleted_ids"
+      }
+    }
+
+    var confirmedIDs: [String] = []
+    for (batchIndex, batch) in ids.chunked(maxSize: 10_000).enumerated() {
+      do {
+        let response: BatchDeleteResponse = try await post(
+          "v1/action-items/batch-delete",
+          body: BatchDeleteRequest(ids: batch),
+          expectedOwnerId: expectedOwnerId,
+          authorizationSnapshot: authorizationSnapshot
+        )
+        guard response.status.lowercased() == "ok",
+          response.deletedCount == batch.count,
+          Set(response.deletedIds) == Set(batch)
+        else {
+          throw APIError.invalidResponse
+        }
+        confirmedIDs.append(contentsOf: batch)
+      } catch {
+        let pendingStart = batchIndex * 10_000
+        throw BatchDeletePartialFailure(
+          confirmedIDs: confirmedIDs,
+          pendingIDs: Array(ids.dropFirst(pendingStart)),
+          underlying: error
+        )
+      }
+    }
   }
 
   /// Restore rows the retired migration moved out of action_items. A pre-fix

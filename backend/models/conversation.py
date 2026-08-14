@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from collections.abc import Mapping
 from typing import Dict, List, Literal, Optional
 import uuid
@@ -318,6 +318,10 @@ class CreateConversation(BaseModel):
 
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
+    # Capture provenance carried through the normal processing write. Keeping
+    # this on the create model prevents ID-less uploads from assigning role
+    # only after process_conversation has already persisted the row.
+    external_data: Optional[Dict] = None
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(

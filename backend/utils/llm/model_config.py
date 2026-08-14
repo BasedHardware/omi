@@ -73,6 +73,7 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'goals_advice': ('gpt-5.6-luna', 'openai'),
     'notifications': ('gpt-5.6-luna', 'openai'),
     'proactive_notification': ('gpt-5.6-luna', 'openai'),
+    'desktop_proactive_reasoning': ('gpt-5.6-luna', 'openai'),
     'what_matters_now': ('gpt-5.6-luna', 'openai'),
     'openglass': ('gpt-5.6-luna', 'openai'),
     'app_generator': ('gpt-5.6-luna', 'openai'),
@@ -88,6 +89,7 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'persona_chat': ('gpt-5-nano', 'openai'),
     'speaker_resolution': ('gpt-5-nano', 'openai'),
     'speaker_verification': ('gpt-5-nano', 'openai'),
+    'desktop_proactive_extraction': ('gpt-5-nano', 'openai'),
     # Non-OpenAI routes remain intentionally unchanged.
     'session_titles': ('gemini-2.5-flash-lite', 'gemini'),
     'followup': ('gemini-2.5-flash-lite', 'gemini'),
@@ -149,6 +151,8 @@ _CACHE_RETENTION_MODEL_PREFIXES = ('gpt-5', 'o1', 'o3', 'o4')
 _STRUCTURED_OUTPUT_FEATURES = {
     'chat_extraction',
     'proactive_notification',
+    'desktop_proactive_extraction',
+    'desktop_proactive_reasoning',
     'conv_app_select',
     'external_structure',
     'trends',

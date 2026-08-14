@@ -44,7 +44,7 @@ def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
     assert config.route_artifacts['route.memory_l2.model_config.001'].provider_options['reasoning_effort'] == 'medium'
     assert config.route_artifacts['route.chat_agent.model_config.001'].provider_options == {
         'extra_body': {'prompt_cache_retention': '24h'},
-        'reasoning_effort': 'medium',
+        'reasoning_effort': 'none',
     }
     chat_agent_lane = config.lanes['omi:auto:chat-agent']
     assert chat_agent_lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
@@ -62,6 +62,28 @@ def test_memory_l2_gateway_lane_resolves_to_luna():
     assert lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
     assert route.primary.model == 'gpt-5.6-luna'
     assert route.primary.provider == 'openai'
+
+
+def test_desktop_proactive_lanes_are_pinned_and_structured():
+    config = load_gateway_config(prod_mode=True)
+
+    extraction = config.lanes['omi:auto:desktop-proactive-extraction']
+    reasoning = config.lanes['omi:auto:desktop-proactive-reasoning']
+    extraction_route = config.route_artifacts[extraction.active_route]
+    reasoning_route = config.route_artifacts[reasoning.active_route]
+
+    assert extraction.capabilities.structured_output == StructuredOutputMode.JSON_SCHEMA
+    assert reasoning.capabilities.structured_output == StructuredOutputMode.JSON_SCHEMA
+    assert extraction_route.primary.model == 'gpt-5-nano'
+    assert extraction_route.provider_options == {
+        'extra_body': {'prompt_cache_retention': '24h'},
+        'reasoning_effort': 'minimal',
+    }
+    assert reasoning_route.primary.model == 'gpt-5.6-luna'
+    assert reasoning_route.provider_options == {
+        'extra_body': {'prompt_cache_retention': '24h'},
+        'reasoning_effort': 'low',
+    }
 
 
 def test_translation_uses_the_gateway_translation_capability():

@@ -44,7 +44,7 @@ struct QueryShellHome: View {
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject private var tasksStore = TasksStore.shared
   var taskChatCoordinator: TaskChatCoordinator? = nil
-  /// The cohort shell keeps the existing modern Home presentation even when the reversible legacy
+  /// The Chat-first shell keeps the existing modern Home presentation even when the reversible legacy
   /// preference is enabled. This is presentation-only; capability sampling and rich-block access
   /// remain owned by `ChatFirstShell`.
   var forceModernPresentation: Bool = false
@@ -66,7 +66,15 @@ struct QueryShellHome: View {
   /// and any test asserting composer behaviour through the bridge was asserting on a variable nothing
   /// rendered. A `QueryShellRequest` is assembled per render from the draft plus these.
   @State private var filters = QueryShellFilters()
-  @State private var mode: QueryShellMode = .results
+  /// The always-visible search bar's text. Not the chat draft: the one chat composer lives inside
+  /// the panel (INV-6) and keeps `chatProvider.composerDraft`; this field only narrows the spine.
+  @State private var searchText = ""
+  // Home IS the conversation. The panel rests on the chat and shows search results only while the
+  // search bar above it holds text — clearing the field (or esc) always lands back on the chat.
+  // There is no stored mode, so no bridge action or stale state can strand the page on the list.
+  private var mode: QueryShellMode {
+    searchText.isEmpty ? QueryShellMode.homeDefault : .results
+  }
   @State private var screenCount: Int?
   /// Two seconds of "copied", which is the whole confirmation a pasteboard write gets.
   @State private var didCopyTranscript = false
@@ -112,36 +120,40 @@ struct QueryShellHome: View {
   private var querySurface: some View {
     GeometryReader { proxy in
       let lane = QueryShellLayout.laneWidth(for: proxy.size.width)
-      let bodyHeight = QueryShellLayout.panelBodyHeight(
-        availableHeight: proxy.size.height,
-        composerHeight: composerHeight,
-        mode: mode)
+      // The search bar is always mounted above the panel, so the body's room subtracts it in both
+      // modes — `panelBodyHeight` only knows the hero reserve for `.results`.
+      let chrome = QueryShellLayout.panelChromeHeight(
+        mode: mode,
+        composerHeight: mode == .answer
+          ? max(QueryShellLayout.panelComposerMinHeight, composerHeight) : 0)
+      let room =
+        proxy.size.height - QueryShellLayout.surfaceTopInset - QueryShellLayout.barMinHeight
+        - QueryShellLayout.panelGap - chrome
+      let bodyHeight = min(
+        QueryShellLayout.maximumBodyHeight, max(QueryShellLayout.minimumBodyHeight, room))
       // **Only this column is woken by a keystroke.** The composer draft is not published on
       // `ChatProvider` (see `ChatComposerDraft`), so subscribing to it here keeps typing out of the
       // shell and the transcript while still giving the bar — and the list it filters — the live text.
       ChatDraftScope(draft: chatProvider.composerDraft) { draft in
         VStack(spacing: QueryShellLayout.panelGap) {
-          // **The search bar exists while you are searching.** In answer mode it is not hidden,
-          // moved or restyled in place — the same view is mounted inside the panel below instead, so
-          // the surface reads as one chat window with its input under the transcript rather than as
-          // a conversation with a search field parked on top of it.
-          if QueryComposerPlacement.of(mode) == .hero {
-            composerBar(draft: draft)
-          }
+          // **The search bar is always on screen.** It is pure search — typing narrows the spine
+          // below; clearing it returns the panel to the conversation. The chat composer is a
+          // different control and stays pinned inside the panel (INV-6: one chat composer).
+          QuerySearchBar(text: $searchText)
           QueryResultsPanel(
-            request: requestBinding(text: draft),
+            request: requestBinding(),
             mode: mode,
             total: total,
-            onExitAnswer: { showResults() },
+            onExitAnswer: nil,
             bodyHeight: bodyHeight,
             headerAccessory: { headerAccessory },
             footer: {
-              if QueryComposerPlacement.of(mode) == .panelFooter {
+              if mode == .answer {
                 composerBar(draft: draft)
               }
             }
           ) {
-            panelBody(request: QueryShellRequest(text: draft.wrappedValue, filters: filters))
+            panelBody(request: QueryShellRequest(text: searchText, filters: filters))
           }
           Spacer(minLength: 0)
         }
@@ -158,7 +170,6 @@ struct QueryShellHome: View {
     // surface, and a search surface that swallows the first letter you type is broken.
     .onAppear {
       claimCaret()
-      showOnboardingOpenerIfPresent()
     }
     // **Coming back to Omi puts the caret back in the field.** This surface's whole job is to be typed
     // into, and re-activating the app is the one moment it is certain the person is here to type.
@@ -169,7 +180,6 @@ struct QueryShellHome: View {
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       claimCaret()
     }
-    .onChange(of: chatProvider.onboardingOpener == nil) { _, _ in showOnboardingOpenerIfPresent() }
     // The two product flows the provider drives and nothing renders. Both were hosted only by the
     // deleted chat page, so since that deletion a browser tool with no extension token has killed
     // the turn and offered no way to fix it, and the usage-cap nudge has fired into nothing. They
@@ -203,28 +213,38 @@ struct QueryShellHome: View {
     // name over a different destination and let a flow assert a tray while watching another page, so
     // the bridge refuses it here instead — keyed on the stage mode this surface never publishes.
     // See `DesktopAutomationActionRegistry.registerBuiltins`.
+    // Each handler applies `HomeBridgeIntent.searchTextAfter` first: mode is derived from the
+    // search text, so an action that promises the conversation must clear it or its effect lands
+    // hidden behind the results panel while the bridge reports success.
     .onReceive(NotificationCenter.default.publisher(for: .homeStageOpenChat)) { _ in
       guard !usesLegacyPresentation else { return }
-      showAnswer()
+      searchText = HomeBridgeIntent.openChat.searchTextAfter(searchText)
+      claimCaret()
     }
+    // `home_close_panel` collapses Home to its resting chat state — the same thing Escape does.
+    // The bridge action posts this and reports success, so an unobserved notification here would
+    // be the "bridge answered ok and nothing happened" defect this file's actions exist to avoid.
     .onReceive(NotificationCenter.default.publisher(for: .homeStageClose)) { _ in
       guard !usesLegacyPresentation else { return }
-      showResults()
+      searchText = HomeBridgeIntent.closePanel.searchTextAfter(searchText)
+      claimCaret()
     }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAsk)) { note in
       guard !usesLegacyPresentation, let query = note.userInfo?["query"] as? String else { return }
+      searchText = HomeBridgeIntent.ask.searchTextAfter(searchText)
       chatProvider.draftText = query
       ask()
     }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAttach)) { note in
       guard !usesLegacyPresentation, let path = note.userInfo?["path"] as? String else { return }
+      searchText = HomeBridgeIntent.attach.searchTextAfter(searchText)
       stageAttachments([URL(fileURLWithPath: path)])
     }
-    // Escape leaves answer mode before the shell's own Escape handler navigates anywhere, because the
-    // answer *is* this page — there is nowhere else to go back to first.
+    // Escape while searching clears the search and lands back on the conversation; with an empty
+    // field it falls through to the shell's own Escape (dismiss the window).
     .onEscapeKey(priority: .content) {
-      guard mode == .answer else { return false }
-      showResults()
+      guard !searchText.isEmpty else { return false }
+      searchText = ""
       return true
     }
     .task { await loadScreenCount() }
@@ -266,11 +286,11 @@ struct QueryShellHome: View {
   /// The seam value the panel and its body are handed, **assembled rather than stored**: the text
   /// half has an owner already (`chatProvider.composerDraft`) and a second copy of it here is the
   /// two-variables defect this surface shipped with.
-  private func requestBinding(text: Binding<String>) -> Binding<QueryShellRequest> {
+  private func requestBinding() -> Binding<QueryShellRequest> {
     Binding(
-      get: { QueryShellRequest(text: text.wrappedValue, filters: filters) },
+      get: { QueryShellRequest(text: searchText, filters: filters) },
       set: { next in
-        if next.text != text.wrappedValue { text.wrappedValue = next.text }
+        if next.text != searchText { searchText = next.text }
         filters = next.filters
       })
   }
@@ -293,8 +313,7 @@ struct QueryShellHome: View {
     case .answer:
       QueryAnswerThread(
         chatProvider: chatProvider,
-        onOpenConversation: openConversation,
-        onOpenMemories: openMemories,
+        onOpenCitation: openCitation,
         onRetry: retry,
         chatFirstRichBlockContext: chatFirstRichBlockContext
       )
@@ -307,48 +326,9 @@ struct QueryShellHome: View {
   /// into the conversation, and in the conversation it is what you can do to it.
   @ViewBuilder
   private var headerAccessory: some View {
-    switch mode {
-    case .results:
-      HStack(spacing: OmiSpacing.sm) {
-        brainMapButton
-        if HomeChatReentry.isOffered(
-          messageCount: chatProvider.messages.count, isLoading: chatProvider.isLoading)
-        {
-          transcriptEntryButton
-        }
-      }
-    case .answer:
-      if menu.isPresentable {
-        chatMenu
-      }
+    if mode == .answer, menu.isPresentable {
+      chatMenu
     }
-  }
-
-  /// **The map, in the filter row — not a fifth chip.**
-  ///
-  /// The chips under this row all do one thing: narrow *these rows*, in place, leaving you on the
-  /// same list. The Brain Map is not a subset of those rows — it is a second drawing of the same
-  /// corpus, and it lives on a page that owns it. A control that sits among the chips, looks like
-  /// them, and then navigates somewhere is the worse of the two available mistakes: it teaches the
-  /// row a rule and then breaks it.
-  ///
-  /// So it goes in the header instead, where this panel already keeps the one other control that
-  /// leaves the list for a surface that owns something (`Chat ›`), and wears that control's exact
-  /// label. Leading rather than trailing so it never moves — `Chat ›` appears only once there is a
-  /// transcript to go back to.
-  ///
-  /// It opens the *real* Brain Map on the Library page (INV-NAV-1). The hub's own switcher is still
-  /// the mechanism that owns the destination; this is one more way in, never a smaller copy of it.
-  private var brainMapButton: some View {
-    Button(action: openBrainMap) {
-      QueryPanelChipLabel(
-        systemImage: "point.3.connected.trianglepath.dotted",
-        title: "Brain Map",
-        trailingSystemImage: "chevron.right")
-    }
-    .buttonStyle(.plain)
-    .help("See how everything Omi has kept connects")
-    .accessibilityIdentifier("query-shell-open-brain-map")
   }
 
   private var menu: HomeChatMenu {
@@ -356,22 +336,6 @@ struct QueryShellHome: View {
       messageCount: chatProvider.messages.count,
       isSending: chatProvider.isSending,
       isClearing: chatProvider.isClearing)
-  }
-
-  /// **The mirror of `‹ Results`.** Without it the transcript survives navigation and is invisible:
-  /// the mode is view state, so leaving Home and coming back leaves you on the list with no control
-  /// anywhere that admits a conversation exists. This is not a second destination — it is the same
-  /// panel, the same provider and the same transcript, one chip away.
-  private var transcriptEntryButton: some View {
-    Button(action: showAnswer) {
-      QueryPanelChipLabel(
-        systemImage: "bubble.left.and.text.bubble.right",
-        title: "Chat",
-        trailingSystemImage: "chevron.right")
-    }
-    .buttonStyle(.plain)
-    .help("Back to your conversation with omi")
-    .accessibilityIdentifier("query-shell-open-chat")
   }
 
   /// Clear, copy and the jump to AI settings — the deleted chat page's last three controls, which
@@ -419,12 +383,10 @@ struct QueryShellHome: View {
     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { didCopyTranscript = false }
   }
 
-  /// Clearing empties the one transcript, so the panel goes back to the list rather than sitting in
-  /// answer mode staring at nothing it can explain.
+  /// Clearing empties the one transcript; the page stays a chat, ready for the next question.
   private func clearTranscript() {
     Task {
       await chatProvider.clearChat()
-      await MainActor.run { showResults() }
     }
   }
 
@@ -434,13 +396,6 @@ struct QueryShellHome: View {
     let staged = urls.compactMap(ChatAttachment.from(url:))
     guard !staged.isEmpty else { return }
     chatProvider.addAttachments(staged)
-  }
-
-  /// The post-onboarding opener is a greeting with starters in it, and the only surface that can
-  /// show it is the answer thread — so its arrival puts the panel there.
-  private func showOnboardingOpenerIfPresent() {
-    guard chatProvider.onboardingOpener != nil, mode != .answer else { return }
-    showAnswer()
   }
 
   // MARK: - The one key
@@ -462,8 +417,8 @@ struct QueryShellHome: View {
   private func submit() {
     let submission = QueryShellSubmission.resolve(text: chatProvider.draftText)
     if chatProvider.draftText != submission.text { chatProvider.draftText = submission.text }
-    guard let next = submission.mode else { return }
-    setMode(next)
+    guard submission.mode != nil else { return }
+    claimCaret()
     guard let question = submission.question else { return }
     lastAskedQuestion = question
     send(question)
@@ -472,7 +427,6 @@ struct QueryShellHome: View {
   /// The one send. `Try again` on a failed turn enters here too, so a retry is the same turn through
   /// the same provider and never a second send path (INV-6).
   private func send(_ question: String) {
-    OmiUISound.play(.commit)
     AnalyticsManager.shared.chatMessageSent(
       messageLength: question.count, hasSelectedAppContext: false, source: "query_shell")
     chatProvider.dismissOnboardingOpener()
@@ -482,21 +436,7 @@ struct QueryShellHome: View {
   /// Re-sends the question that failed, not whatever the bar holds now — the send emptied it.
   private func retry() {
     guard !lastAskedQuestion.isEmpty else { return }
-    showAnswer()
     send(lastAskedQuestion)
-  }
-
-  private func showResults() { setMode(.results) }
-
-  private func showAnswer() { setMode(.answer) }
-
-  /// **The caret belongs to the bar.** Both modes leave you about to type — a filter or a follow-up —
-  /// so every transition hands it back. Only `⏎ Search` used to, which meant the two exits the
-  /// surface advertises (`esc Results`, `‹ Results`) and a sent question all dropped it: you pressed
-  /// the key the bar told you to press, and the next thing you typed went nowhere.
-  private func setMode(_ next: QueryShellMode) {
-    OmiMotion.withGated(.easeOut(duration: 0.16)) { mode = next }
-    claimCaret()
   }
 
   /// Asks for the caret. Monotonic, so a claim is never swallowed for already having been made — the
@@ -527,6 +467,71 @@ struct QueryShellHome: View {
     navigate(.memories)
   }
 
+  /// Typed citation routing stays at the shell boundary. The inline renderer knows presentation;
+  /// this root owns navigation and preserves exact entity identity where the destination supports it.
+  private func openCitation(_ reference: ChatCitationReference) {
+    guard reference.canOpen else { return }
+    if let context = chatFirstRichBlockContext {
+      switch reference.kind {
+      case .conversation:
+        let moment = reference.momentTimestampMs.map { TimeInterval($0) / 1_000 }
+        context.navigation.open(focus: .capture(id: reference.sourceID, momentTs: moment))
+      case .memory:
+        context.navigation.open(focus: .memory(id: reference.sourceID))
+      case .task:
+        context.navigation.open(focus: .task(id: reference.sourceID))
+      case .goal:
+        context.navigation.open(focus: .goal(id: reference.sourceID))
+      case .screenshot:
+        guard let id = RewindCitationFocusState.parseScreenshotID(reference.sourceID) else { return }
+        RewindCitationFocusState.shared.request(id)
+        context.navigation.selectMore(.rewind)
+      case .web:
+        if let url = reference.url { NSWorkspace.shared.open(url) }
+      case .unavailable:
+        break
+      }
+      return
+    }
+
+    switch reference.kind {
+    case .conversation:
+      openConversation(reference.sourceID)
+    case .memory:
+      Task { @MainActor in
+        guard await memoriesViewModel.openMemory(id: reference.sourceID) else { return }
+        openMemories()
+      }
+    case .task:
+      // TasksPage has a typed, owner-bound handoff. Resolve the exact task before changing pages;
+      // selecting the Tasks tab alone would silently discard the citation's identity.
+      Task { @MainActor in
+        guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+          let task = try? await APIClient.shared.getActionItem(
+            id: reference.sourceID,
+            expectedOwnerId: authorization.ownerID,
+            authorizationSnapshot: authorization),
+          RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+        else { return }
+        guard !task.isRetired else { return }
+        TaskNavigationRequestStore.shared.request(task: task)
+        selectedIndex = SidebarNavItem.tasks.rawValue
+      }
+    case .goal:
+      // QueryAnswerThread marks this kind unavailable in the legacy shell before rendering. Keep
+      // the routing boundary fail-closed as defense in depth.
+      return
+    case .screenshot:
+      guard let id = RewindCitationFocusState.parseScreenshotID(reference.sourceID) else { return }
+      RewindCitationFocusState.shared.request(id)
+      openRewind()
+    case .web:
+      if let url = reference.url { NSWorkspace.shared.open(url) }
+    case .unavailable:
+      break
+    }
+  }
+
   /// Where both of Home's ways into the graph land — the spine's end-of-day card and the header's
   /// `Brain Map ›`. One route, so the two controls cannot drift apart, and it goes to the surface
   /// that owns the map. The map is never a destination of this shell (INV-NAV-1).
@@ -545,7 +550,6 @@ struct QueryShellHome: View {
     if let hubView = route.memoryDestination {
       memoryDestinationRawValue = hubView.rawValue
     }
-    OmiUISound.play(.navigate)
     OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = route.navItem.rawValue }
   }
 

@@ -13,9 +13,31 @@
 **Owner:** llm-gateway / platform team.
 
 **First checks:**
-1. Confirm the current Cloud Run revisions are still `OMI_LLM_GATEWAY_FEATURE_MODE=direct` unless a deliberately gated promotion has occurred.
+1. Confirm Cloud Run / listen `OMI_LLM_GATEWAY_FEATURE_MODE` and `OMI_LLM_CHAT_AGENT_ROUTE`. Gateway-on + Luna chat-on is the intended prod default after the 2026-08 fix; chat can be killed alone via `OMI_LLM_CHAT_AGENT_ROUTE=direct` without flipping feature mode.
 2. Run the same evidence chain used by promotion: `verify-llm-gateway-serving.py` for deployment/Service/EndpointSlice/Ingress/ILB attachment, followed by the Cloud Run VPC probe. Do not treat a reserved IP as proof of reachability.
-3. Inspect `llm_gateway_circuit_open`, client fallback ratio, `llm_gateway_client_first_byte_seconds` p95, and `llm_gateway_backend_event` reasons. If the circuit is open, keep/direct-route while repairing the data plane.
+3. Inspect `llm_gateway_circuit_open`, client fallback ratio, `llm_gateway_client_first_byte_seconds` p95, and structured `llm_gateway_backend_event` reasons. If the circuit is open, keep/direct-route while repairing the data plane.
 4. Inspect `llm_gateway_requests_total` by `route_serving_class`, `fallback_reason`, and bounded from/to route artifact labels. Treat `route_serving_class="lkg"` as rollout exposure unless a separate error signal is present.
+
+## Agentic chat / Luna kill switch (2026-08)
+
+**Outage signature (fixed class):** `unsupported lane surface: anthropic.messages` on `feature=chat_agent` / `model=omi:auto:chat-agent` when the OpenAI-compatible client hit a lane whose surface was still Anthropic Messages.
+
+**Intended prod defaults after fix:**
+- `OMI_LLM_GATEWAY_FEATURE_MODE=gateway` — fleet LLM gateway on (Luna lanes for structured/chat_agent/etc. per `generated_route_overrides.yaml`)
+- `OMI_LLM_CHAT_AGENT_ROUTE=gateway` — managed agentic/desktop chat uses gateway OpenAI-compatible lane (`omi:auto:chat-agent` → Luna)
+
+**Emergency: turn off Luna/agentic chat only (leave gateway on for other features):**
+```text
+OMI_LLM_CHAT_AGENT_ROUTE=direct
+```
+Cloud Run env update on `backend` (+ integration if needed). No need to set `FEATURE_MODE=off`.
+
+**Emergency: turn off all gateway routing:**
+```text
+OMI_LLM_GATEWAY_FEATURE_MODE=off
+```
+(optional also set `CHAT_AGENT_ROUTE=direct`)
+
+**Contract:** `should_route_chat_agent_through_gateway()` requires **both** chat-agent route=`gateway` **and** feature mode on. Direct Anthropic BYOK still bypasses the managed lane.
 
 **Severity:** Ticket — investigate during business hours unless user-facing chat error rates also rise.

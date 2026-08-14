@@ -286,6 +286,7 @@ def test_tools_rest_memory_routes_fail_closed_for_unbounded_memory_like_text(loa
     response = tools_router.ToolResponse.model_validate(tools_router.get_memories(limit=10, offset=0, uid='uid-route'))
 
     assert response.result_text == 'No memories available for this request.'
+    assert response.sources == []
     assert 'SYSTEM:' not in response.result_text
     assert response.is_error is False
 

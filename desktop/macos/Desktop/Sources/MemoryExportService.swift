@@ -167,12 +167,12 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     switch self {
     case .notion: return "Live page in your workspace"
     case .obsidian: return "Choose once, refresh anytime"
-    case .chatgpt: return "Add Omi from the ChatGPT directory"
-    case .claude: return "Live MCP or memory pack"
+    case .chatgpt: return "Use your Omi context in every chat"
+    case .claude: return "Use your Omi context in every chat"
     case .gemini: return "Prompt + memory pack"
     case .agents: return "One prompt for your agent"
-    case .claudeCode: return "Connect via MCP"
-    case .codex: return "Connect via MCP"
+    case .claudeCode: return "MCP + context skill"
+    case .codex: return "MCP + context skill"
     case .openclaw: return "Memory bank for OpenClaw"
     case .hermes: return "Memory bank for Hermes"
     }
@@ -183,13 +183,16 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .notion: return "Connect once and Omi keeps an Omi Memories page fresh in your workspace."
     case .obsidian: return "Write Omi memories into your Obsidian vault."
     case .chatgpt:
-      return "Add Omi in ChatGPT, authorize once, and use your memories in every ChatGPT chat."
+      return
+        "Add Omi in ChatGPT once, then retrieve memories, conversations, people, commitments, and screen history with source evidence."
     case .claude:
-      return "Connect over MCP so Claude reads your memories live, or copy a memory pack."
+      return "Connect over MCP so Claude can retrieve your Omi context live with source evidence."
     case .gemini: return "Copy the prompt and memory pack, then open Gemini."
     case .agents: return "Give your agent one prompt that connects Omi memories and this Mac."
-    case .claudeCode: return "Add Omi as an MCP server so Claude Code always reads your memories."
-    case .codex: return "Add Omi as an MCP server so Codex always reads your memories."
+    case .claudeCode:
+      return "Connect Omi MCP and install a skill that teaches Claude Code when to retrieve your context."
+    case .codex:
+      return "Connect Omi MCP and install a skill that teaches Codex when to retrieve your context."
     case .openclaw: return "Wire Omi memory into OpenClaw so your agent reads your memories."
     case .hermes: return "Wire Omi memory into Hermes so your agent reads your memories."
     }
@@ -1119,57 +1122,7 @@ actor MemoryExportService {
   }
 
   static var omiAgentSkillText: String {
-    """
-    ---
-    name: omi
-    description: Use Omi memories, conversations, and same-Mac context through hosted MCP and the Omi local CLI.
-    ---
-
-    # Omi Agent Skill
-
-    Use this skill when the user asks about their Omi memories, conversations, screen history, transcriptions, tasks, or wants you to use Omi context while helping.
-
-    ## Discovery
-
-    - Hosted MCP: list available tools before use. If `get_user_profile` exists, use it for a high-level summary. If it is absent or returns `profile: null`, use `get_memories(limit=5)` and `search_memories`.
-    - Local Omi CLI: run `omi --json local status` and `omi --json local tools` before local work. If status fails, Omi Desktop, the local URL, or the local token is not ready.
-
-    ## Routing
-
-    - Hosted MCP: durable memories, synced conversations, preferences, relationships, projects, goals, and profile-like context.
-    - Local CLI: this Mac's screen history, screenshots, app/window activity, local transcriptions, read-only SQL, daily recaps, indexed files, local goals, and tasks.
-    - Use `search_conversations` for synced meetings, calls, and remembered events. Use local transcription tables only for recent same-Mac or unsynced local history.
-    - Use `omi --json local search-screen` for fuzzy Rewind/OCR questions. Use `omi --json local screenshot` only after a result returns a screenshot ID and the screenshot tool is present.
-    - Use `omi --json local sql` for read-only counts, exact filters, local transcriptions, action items, indexed files, goals, and database questions.
-    - Use `omi --json local task search` only if task tools are listed.
-    - Use `omi --json local task complete` or `omi --json local task delete --yes` only when the user clearly asked you to complete or delete that task. If task tools are absent, do not mutate tasks.
-    - Use `omi --json local call <tool> --args-json '{...}'` only when a listed local tool is not covered by a friendly command.
-    - Create, edit, or delete hosted memories only after explicit user intent.
-
-    ## Verification Checklist
-
-    - Hosted MCP tools are listed.
-    - Hosted memory query succeeds with `get_memories(limit=5)` or equivalent.
-    - Local status succeeds with `omi --json local status`.
-    - Local tools are listed with `omi --json local tools`.
-    - Route only to tools that were discovered.
-
-    ## Write Discipline
-
-    - Do not create, edit, complete, or delete Omi memories or local tasks unless the user clearly asked for that change.
-    - Prefer proposing the memory or task change first when intent is ambiguous.
-    - Never treat transient screen activity as a durable memory without explicit user intent or strong evidence.
-
-    ## Setup
-
-    Hosted MCP endpoint: \(MemoryExportDestination.mcpServerURL)
-    Authorization header: Bearer <omi_mcp_key>
-    Config-file MCP clients should prefer `mcp-remote` with the endpoint and Authorization header above.
-
-    Local Omi Desktop CLI:
-    - Install or update `omi-cli`.
-    - Configure local access with `omi local configure --url <local_api_url> --token <omi_local_key>`.
-    """
+    AgentContextSkillInstaller.document
   }
 
   static func omiAgentSetupPrompt(
@@ -1329,8 +1282,15 @@ actor MemoryExportService {
   }
 
   func fetchMemories(limit: Int) async throws -> [ServerMemory] {
+    let pageSize = max(1, min(limit, 500))
     do {
-      let remoteMemories = try await APIClient.shared.getMemories(limit: limit)
+      let remoteMemories: [ServerMemory] = try await Self.fetchAllCursorPages(pageSize: pageSize) {
+        pageLimit, cursor in
+        try await APIClient.shared.getMemoriesPage(
+          limit: pageLimit,
+          cursor: cursor,
+          includeArchive: true)
+      }
       if !remoteMemories.isEmpty {
         return remoteMemories
       }
@@ -1338,12 +1298,58 @@ actor MemoryExportService {
       log("MemoryExportService: Remote memory fetch failed, falling back to local cache: \(error)")
     }
 
-    let localMemories = try await MemoryStorage.shared.getLocalMemories(limit: limit)
+    let localMemories: [ServerMemory] = try await Self.fetchAllPages(pageSize: pageSize) {
+      pageLimit, offset in
+      try await MemoryStorage.shared.getLocalMemories(limit: pageLimit, offset: offset)
+    }
     if !localMemories.isEmpty {
       return localMemories
     }
 
     throw MemoryExportError.noMemories
+  }
+
+  /// Fetch a complete export without silently treating a UI page size as a
+  /// total-account cap. Advancing by the count returned also avoids gaps when a
+  /// backend clamps the requested page size.
+  static func fetchAllPages<Element>(
+    pageSize: Int,
+    fetch: (_ limit: Int, _ offset: Int) async throws -> [Element]
+  ) async throws -> [Element] {
+    let boundedPageSize = max(1, min(pageSize, 500))
+    var offset = 0
+    var result: [Element] = []
+    while true {
+      let page = try await fetch(boundedPageSize, offset)
+      result.append(contentsOf: page)
+      guard page.count == boundedPageSize else { return result }
+      offset += page.count
+    }
+  }
+
+  /// Page a remote memory list until the backend omits ``X-Omi-Memory-Next-Cursor``.
+  static func fetchAllCursorPages(
+    pageSize: Int,
+    fetch: (_ limit: Int, _ cursor: String?) async throws -> APIClient.MemoryListPage
+  ) async throws -> [ServerMemory] {
+    let boundedPageSize = max(1, min(pageSize, 500))
+    var cursor: String? = nil
+    var result: [ServerMemory] = []
+    var seenCursors = Set<String>()
+    while true {
+      let page = try await fetch(boundedPageSize, cursor)
+      result.append(contentsOf: page.memories)
+      guard let nextCursor = page.nextCursor, !nextCursor.isEmpty else {
+        return result
+      }
+      // Fail closed on a repeated continuation token so a buggy backend cannot
+      // pin export in an infinite loop.
+      if !seenCursors.insert(nextCursor).inserted {
+        throw MemoryExportError.requestFailed(
+          "Memory export stopped because the server repeated a continuation token.")
+      }
+      cursor = nextCursor
+    }
   }
 
   func buildMarkdownPack(

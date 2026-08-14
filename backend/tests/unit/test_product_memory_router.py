@@ -46,6 +46,7 @@ fastapi_stub.Depends = _identity
 fastapi_stub.HTTPException = _HTTPException
 fastapi_stub.Query = _identity
 fastapi_stub.Request = type("Request", (), {})
+fastapi_stub.Response = type("Response", (), {})
 auth_stub = types.ModuleType("utils.other.endpoints")
 auth_stub.get_current_user_uid = lambda: "u1"
 
@@ -60,7 +61,9 @@ from tests.unit.memory_import_isolation import (  # noqa: E402
 _ROUTER_STUB_NAMES = (
     "fastapi",
     "database._client",
+    "database.memories",
     "database.vector_db",
+    "utils.memory.memory_service",
     "utils.other.endpoints",
     "routers.memory_product",
 )
@@ -359,36 +362,36 @@ def test_product_routes_reject_missing_global_gate_before_per_user_rollout_vecto
     memory_product.fetch_archive_product_memory_search.assert_not_called()
 
 
-def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant_before_memory_items(monkeypatch):
+def test_product_search_endpoint_rejects_explicit_opt_out_and_malformed_control_before_memory_items(monkeypatch):
     cases = [
-        ({}, 'missing_rollout_state'),
         (
             {
                 'users/u1/memory_control/state': {
                     'schema_version': 1,
                     'uid': 'u1',
-                    'mode': 'off',
-                    'grants': {'omi_chat': {'default_memory': True}},
-                }
-            },
-            'memory_reads_disabled',
-        ),
-        (
-            {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}},
-            'malformed_rollout_state',
-        ),
-        (
-            {
-                'users/u1/memory_control/state': {
-                    'schema_version': 1,
-                    'uid': 'u1',
-                    'mode': 'read',
-                    'fallback_projection_ready': True,
-                    'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
-                    'grants': {'omi_chat': {}},
+                    'grants': {'omi_chat': {'default_memory': False}},
                 }
             },
             'missing_chat_default_memory_grant',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'schema_version': 1,
+                    'uid': 'u1',
+                    'grants': {'omi_chat': {'default_memory': 'yes'}},
+                }
+            },
+            'malformed_memory_control_state',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'schema_version': 1,
+                    'uid': 'other-user',
+                }
+            },
+            'uid_mismatch',
         ),
     ]
     monkeypatch.setattr(memory_product, "fetch_default_product_memory_search", MagicMock())
@@ -409,6 +412,29 @@ def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant
         assert db_client.collection_paths == []
 
     memory_product.fetch_default_product_memory_search.assert_not_called()
+
+
+def test_product_search_endpoint_uses_universal_defaults_without_control_backfill(monkeypatch):
+    db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
+    search = MagicMock(
+        return_value={
+            'uid': 'u1',
+            'query': 'coffee',
+            'items': [],
+            'total_count': 0,
+            'returned_count': 0,
+            'limit': 25,
+            'offset': 0,
+        }
+    )
+    monkeypatch.setattr(memory_product, 'db', db_client)
+    monkeypatch.setattr(memory_product, 'fetch_default_product_memory_search', search)
+
+    response = memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1')
+
+    assert response['rollout']['read_decision'] == 'USE_MEMORY'
+    assert response['policy']['app_has_default_memory_grant'] is True
+    search.assert_called_once()
 
 
 def test_product_search_endpoint_rejects_invalid_pagination(monkeypatch):
@@ -443,7 +469,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
     monkeypatch,
 ):
     cases = [
-        ({}, 'missing_rollout_state'),
+        ({}, 'missing_chat_archive_capability'),
         (
             {
                 'users/u1/memory_control/state': {
@@ -468,31 +494,27 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
                     'grants': {'omi_chat': {'default_memory': True, 'archive': 'yes'}},
                 }
             },
-            'malformed_archive_capability',
+            'malformed_memory_control_state',
         ),
         (
             {
                 'users/u1/memory_control/state': {
                     'schema_version': 1,
                     'uid': 'u1',
-                    'mode': 'off',
-                    'grants': {'omi_chat': {'default_memory': True, 'archive': True}},
-                }
-            },
-            'memory_reads_disabled',
-        ),
-        (
-            {
-                'users/u1/memory_control/state': {
-                    'schema_version': 1,
-                    'uid': 'u1',
-                    'mode': 'read',
-                    'fallback_projection_ready': True,
-                    'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
-                    'grants': {'omi_chat': {'archive': True}},
+                    'grants': {'omi_chat': {'default_memory': False, 'archive': True}},
                 }
             },
             'missing_chat_default_memory_grant',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'schema_version': 1,
+                    'uid': 'u1',
+                    'grants': {'omi_chat': {'default_memory': 'yes', 'archive': True}},
+                }
+            },
+            'malformed_memory_control_state',
         ),
     ]
     monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
@@ -554,7 +576,7 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
     assert response['archive_default_visible'] is False
 
 
-def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memory_item_reads(monkeypatch):
+def test_vector_search_endpoint_requires_vector_projection_commit_before_vector_or_memory_item_reads(monkeypatch):
     db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
     vector_query = MagicMock()
     monkeypatch.setattr(memory_product, "db", db_client)
@@ -563,9 +585,9 @@ def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memo
         memory_product.search_vector_memory(query='coffee', limit=10, uid='u1', vector_query=vector_query)
     except _HTTPException as exc:
         assert exc.status_code == 403
-        assert exc.detail['fallback_reason'] == 'missing_rollout_state'
+        assert exc.detail['fallback_reason'] == 'missing_vector_projection_commit_id'
     else:
-        raise AssertionError('expected disabled persisted rollout to fail closed')
+        raise AssertionError('expected missing vector projection commit to fail closed')
 
     assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
     assert db_client.collection_paths == []
