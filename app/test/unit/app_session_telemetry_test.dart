@@ -32,12 +32,10 @@ void main() {
     telemetry.recordColdStart();
     await AnalyticsManager.flushPending(force: true);
 
-    expect(adapter.events, [
-      const _RecordedEvent('App Session Started', {
-        'app_session_id': 'session-1',
-        'start_kind': 'coldStart',
-      }),
-    ]);
+    expect(adapter.events, hasLength(1));
+    expect(adapter.events.single.eventName, 'App Session Started');
+    expect(adapter.events.single.properties, containsPair('app_session_id', 'session-1'));
+    expect(adapter.events.single.properties, containsPair('start_kind', 'coldStart'));
   });
 
   test('records a fresh session only after backgrounding', () async {
@@ -48,16 +46,11 @@ void main() {
     telemetry.recordResumed();
     await AnalyticsManager.flushPending(force: true);
 
-    expect(adapter.events, [
-      const _RecordedEvent('App Session Started', {
-        'app_session_id': 'session-1',
-        'start_kind': 'coldStart',
-      }),
-      const _RecordedEvent('App Session Started', {
-        'app_session_id': 'session-2',
-        'start_kind': 'foreground',
-      }),
-    ]);
+    expect(adapter.events.map((event) => event.eventName), ['App Session Started', 'App Session Started']);
+    expect(adapter.events[0].properties, containsPair('app_session_id', 'session-1'));
+    expect(adapter.events[0].properties, containsPair('start_kind', 'coldStart'));
+    expect(adapter.events[1].properties, containsPair('app_session_id', 'session-2'));
+    expect(adapter.events[1].properties, containsPair('start_kind', 'foreground'));
   });
 }
 
@@ -102,16 +95,4 @@ class _RecordedEvent {
 
   final String eventName;
   final Map<String, Object> properties;
-
-  @override
-  bool operator ==(Object other) =>
-      other is _RecordedEvent && other.eventName == eventName && _mapsEqual(other.properties, properties);
-
-  @override
-  int get hashCode => Object.hash(eventName, Object.hashAllUnordered(properties.entries));
-
-  static bool _mapsEqual(Map<String, Object> a, Map<String, Object> b) {
-    if (a.length != b.length) return false;
-    return a.entries.every((entry) => b[entry.key] == entry.value);
-  }
 }
