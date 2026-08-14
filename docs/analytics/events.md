@@ -69,5 +69,7 @@ Every Flutter mobile event is stamped centrally with closed `app_platform` (`ios
 | `Chat Message Sent` | Flutter mobile and macOS desktop | On the user-send boundary: [`MessageProvider`](../../app/lib/providers/message_provider.dart) and the macOS chat surfaces through [`AnalyticsManager.chatMessageSent`](../../desktop/macos/Desktop/Sources/AnalyticsManager.swift) | Message length/count only, attachment/context booleans and counts, bounded source; no message text. No person properties. | [Specified: weekly unique people](posthog-alerts.md#weekly-volume-contract); not yet provisioned. |
 | `Upgrade Succeeded` | Flutter mobile | After the subscription purchase/restore result succeeds: [`PlansSheet`](../../app/lib/pages/settings/widgets/plans_sheet.dart) | No event or person properties. | [Specified: weekly unique people](posthog-alerts.md#weekly-volume-contract); not yet provisioned. |
 
+Mobile search-completion events (`Search Query Entered`, `Conversation Detail Search Query Entered`, `Fact Searched`, and `Apps Searched`) share the content-free fields `query_length`, `query_word_count`, `results_count`, and closed `search_surface`. Raw query text is never emitted.
+
 `Conversation Created` is not an Omi PostHog event: both current conversation
 emitters retain the historical name `Memory Created`.
