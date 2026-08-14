@@ -10,6 +10,7 @@ ACTION_SOURCE_RELATIVE_PATHS = (
     "Desktop/Sources/FloatingControlBar/RealtimeHubController.swift",
     "Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift",
     "Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift",
+    "Desktop/Sources/ProactiveAssistants/ContextBucketDirectorProbeRegistration.swift",
     "Desktop/Sources/Automation/DesktopAutomationHomeStageActions.swift",
     "Desktop/Sources/MainWindow/Pages/TasksPage.swift",
     "Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",

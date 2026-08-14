@@ -28,7 +28,8 @@ enum DesktopHomeSignedInStartup {
       AssistantSettings.shared.screenAnalysisEnabled = true
       UserDefaults.standard.set(true, forKey: .screenAnalysisAutoStartFixedV2)
       log("DesktopHomeView: Applied screenAnalysisAutoStart v2 migration — reset to enabled")
-      Task { await SettingsSyncManager.shared.syncToServer() }
+      SettingsSyncManager.shared.pushPartialUpdate(
+        SettingsSyncManager.screenAnalysisEnabledUpdate(true))
     }
 
     if RewindCaptureState.shouldRepairQuietBundleCaptureDefault(

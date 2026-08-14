@@ -7,10 +7,9 @@ from datetime import datetime, timezone
 import database.conversations as conversations_db
 import database._client as db_client_module
 import database.action_items as action_items_db
-import database.memories as memories_db
 import database.redis_db as redis_db
 import database.users as users_db
-from database.vector_db import delete_vector, delete_memory_vector, delete_transcript_chunk_vectors
+from database.vector_db import delete_vector, delete_transcript_chunk_vectors
 from utils.other.storage import delete_conversation_audio_files
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
@@ -49,9 +48,7 @@ from utils.conversations.process_conversation import process_conversation, retri
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem
 from utils import byok
-from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
     clamp_conversation_search_pagination,
@@ -113,10 +110,20 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
 
     def _run_enrichment():
         try:
+            from utils.task_intelligence.proactive_engine import persist_desktop_meeting_arrival_best_effort
+
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
-                process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
+                enriched = process_conversation(
+                    uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False
+                )
+            # Deferred desktop meetings must publish their exact Chat receipt
+            # at the same terminal transition as ordinary finalization. The
+            # initial lazy row deliberately skipped this adapter, so doing it
+            # here closes the gap without waking Chat for processing rows.
+            if enriched is not None:
+                persist_desktop_meeting_arrival_best_effort(uid, enriched)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
@@ -778,13 +785,7 @@ def delete_conversation(
         # Delete associated memories and action items before removing the conversation doc
         # so a partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
-        memory_system = pin_memory_system(uid, db_client=db_client)
-        if memory_system == MemorySystem.CANONICAL:
-            MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
-        else:
-            deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
-            for memory_id in deletion_result.get('vector_delete_ids', []):
-                delete_memory_vector(uid, memory_id)
+        MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
 
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)

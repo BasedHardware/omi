@@ -281,21 +281,22 @@ def test_dev_deploy_smoke_reaches_what_matters_now_through_the_real_entitlement_
     assert result is sentinel_projection
 
 
-def test_what_matters_now_stays_hidden_for_a_uid_outside_the_cohort(monkeypatch):
+def test_what_matters_now_is_available_for_a_uid_outside_the_former_cohort(monkeypatch):
     _stub_smoke_fixture_control(monkeypatch, object())
 
-    with pytest.raises(HTTPException) as error:
-        task_recommendations_router.get_what_matters_now(request_context=object(), device_id=None, uid='not-enrolled')
-
-    assert error.value.status_code == 404
+    result = task_recommendations_router.get_what_matters_now(
+        request_context=object(), device_id=None, uid='not-enrolled'
+    )
+    assert result is not None
 
 
 def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaults(monkeypatch):
     captured = {}
+    wake_calls = []
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
     def create(uid, payload):
         captured.update(payload)
-        now = datetime.now(timezone.utc)
         return {
             **payload,
             'goal_id': payload['id'],
@@ -308,6 +309,15 @@ def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaul
         }
 
     monkeypatch.setattr(goals_router.goals_db, 'create_goal', create)
+    # This contract covers the goal payload/response shape. Keep the proactive
+    # wake as an asserted seam instead of starting its Firestore-backed engine;
+    # that integration is covered by the proactive-engine tests and makes this
+    # otherwise pure unit sensitive to retry timing.
+    monkeypatch.setattr(
+        goals_router,
+        '_wake_goal_change',
+        lambda uid, goal_id, mutation_key: wake_calls.append((uid, goal_id, mutation_key)),
+    )
     result = goals_router.create_goal(
         GoalCreate(
             title='Launch desktop',
@@ -322,6 +332,7 @@ def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaul
     assert 'metric' not in captured
     assert result['metric'] is None
     assert result['target_value'] == 0
+    assert wake_calls == [('u1', captured['id'], now)]
 
 
 def test_all_goals_preserves_active_default_and_can_include_unbounded_history(monkeypatch):
@@ -341,7 +352,7 @@ def test_all_goals_preserves_active_default_and_can_include_unbounded_history(mo
     assert captured == {'uid': 'u1', 'include_inactive': True}
 
 
-def test_canonical_goal_list_blocks_nonmembers_without_changing_legacy_reads(monkeypatch):
+def test_universal_goal_list_keeps_legacy_and_task_routes_on_one_store(monkeypatch):
     calls = []
     monkeypatch.setattr(
         goals_router.goals_db,
@@ -355,9 +366,9 @@ def test_canonical_goal_list_blocks_nonmembers_without_changing_legacy_reads(mon
 
     assert legacy.status_code == 200
     assert legacy.json() == []
-    assert strict.status_code == 404
-    assert strict.json() == {'detail': 'Not found'}
-    assert calls == [('not-enrolled', False)]
+    assert strict.status_code == 200
+    assert strict.json() == []
+    assert calls == [('not-enrolled', False), ('not-enrolled', False)]
 
 
 def test_canonical_goal_list_projects_enrolled_users(monkeypatch):
@@ -444,29 +455,11 @@ def test_work_intent_route_forwards_idempotency_and_generation(monkeypatch):
     assert refreshed == [('u1', 'w1')]
 
 
-@pytest.mark.parametrize(
-    ('path', 'store', 'store_method'),
-    [
-        ('/v1/goals/goal-1/detail', goals_router.workstreams_db, 'get_goal_detail'),
-        ('/v1/goals/goal-1/progress-events', goals_router.goals_db, 'list_goal_progress_events'),
-        ('/v1/workstreams/workstream-1', workstreams_router.workstreams_db, 'get_workstream_detail'),
-        ('/v1/workstreams/workstream-1/events', workstreams_router.workstreams_db, 'list_workstream_events'),
-        ('/v1/workstreams/workstream-1/artifacts', workstreams_router.workstreams_db, 'list_artifact_descriptors'),
-        (
-            '/v1/workstreams/workstream-1/checkpoints',
-            workstreams_router.workstreams_db,
-            'list_continuation_checkpoints',
-        ),
-    ],
-)
-def test_noncanonical_task_reads_are_hidden_before_store_access(monkeypatch, path, store, store_method):
-    monkeypatch.setattr(
-        store,
-        store_method,
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('canonical store must not be read')),
-    )
+def test_formerly_noncanonical_task_dependency_requires_authentication():
+    app = FastAPI()
+    app.include_router(workstreams_router.router)
 
-    response = _canonical_task_router_client().get(path)
+    response = TestClient(app).get('/v1/workstreams/workstream-1')
 
-    assert response.status_code == 404
-    assert response.json() == {'detail': 'Not found'}
+    assert response.status_code == 401
+    assert response.json()['detail'] == 'Authorization header not found'

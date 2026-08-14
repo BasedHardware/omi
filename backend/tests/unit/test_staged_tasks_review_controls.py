@@ -1,43 +1,32 @@
-"""Staged-task review controls: promote-by-id and clear-all.
-
-Staged tasks are the buffer of AI-extracted task candidates a user reviews before they become
-action items (Nik's #5079 "Task Detection Is Too Aggressive"). This adds the two missing review
-verbs: promote a specific chosen candidate (POST /v1/staged-tasks/{task_id}/promote) and clear the
-whole active queue in one call (DELETE /v1/staged-tasks).
-
-- promote_staged_task now takes an optional task_id: when given it promotes that candidate through
-  the same dedup/merge/create tail as the top-scored path (default task_id=None is unchanged).
-- clear_staged_tasks batch-deletes only active (completed==False) staged tasks, preserving history.
-
-Test isolation: the modules import cleanly, so they are imported normally and the collection is
-faked via monkeypatch.setattr(staged_tasks_db, '_user_col'/'db') (no sys.modules mutation).
-"""
+"""Staged-task storage primitives and universal compatibility review controls."""
 
 import os
-
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
-os.environ.setdefault("OPENAI_API_KEY", "sk-test")
-
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
 
 from database import action_items as action_items_db
-from database import candidates as candidates_db
 from database import staged_tasks as staged_tasks_db
-import routers.staged_tasks as r
-from datetime import datetime, timezone
+from models.candidate import CandidateAction, CandidateCreate, CandidateRecord, CandidateStatus
+from models.task_intelligence import TaskWorkflowControl
+import routers.staged_tasks as router
+from utils.task_intelligence.staged_migration import proposal_from_legacy_staged
 
-from models.candidate import CandidateCreate, CandidateRecord, CandidateStatus
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
-from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+os.environ.setdefault('OPENAI_API_KEY', 'sk-test')
+
+NOW = datetime(2026, 8, 11, tzinfo=timezone.utc)
 
 
 @pytest.fixture(autouse=True)
-def legacy_workflow_mode(monkeypatch):
-    clear_canonical_cohort(monkeypatch)
-    monkeypatch.setattr(r.task_control_db, 'get_task_workflow_control', lambda uid: TaskWorkflowControl())
+def universal_control(monkeypatch):
+    monkeypatch.setattr(
+        router.task_control_db,
+        'get_task_workflow_control',
+        lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=7),
+    )
 
 
 def _make_doc(doc_id, data):
@@ -48,613 +37,316 @@ def _make_doc(doc_id, data):
 
 
 def _stub_staged_by_id(monkeypatch, task_id, data):
-    """Stub _user_col so document(task_id).get() returns a doc with `data` (exists=False if None)."""
-    snap = MagicMock()
-    snap.exists = data is not None
-    snap.id = task_id
-    snap.to_dict.return_value = data
-
-    update_calls = {}
+    snapshot = MagicMock()
+    snapshot.exists = data is not None
+    snapshot.id = task_id
+    snapshot.to_dict.return_value = data
+    updates = {}
     ref = MagicMock()
-    ref.get.return_value = snap
-    ref.update.side_effect = lambda payload: update_calls.update(payload)
+    ref.get.return_value = snapshot
+    ref.update.side_effect = lambda payload: updates.update(payload)
+    collection = MagicMock()
+    collection.document.return_value = ref
+    monkeypatch.setattr(staged_tasks_db, '_user_col', lambda uid, name: collection)
+    return collection, updates
 
-    fake_col = MagicMock()
-    fake_col.document.return_value = ref
-    monkeypatch.setattr(staged_tasks_db, "_user_col", lambda uid, name: fake_col)
-    return fake_col, update_calls
+
+def _candidate(candidate_id: str, *, row_id: str = 'compat-1', description: str = 'Task') -> CandidateRecord:
+    proposal = proposal_from_legacy_staged({'id': row_id, 'description': description})
+    return CandidateRecord(
+        **proposal.model_dump(mode='python'),
+        candidate_id=candidate_id,
+        account_generation=7,
+        idempotency_key=f'idem-{candidate_id}',
+        created_at=NOW,
+    )
 
 
-def _stub_clear(monkeypatch, doc_ids):
-    """Stub _user_col + db.batch for clear_staged_tasks."""
-    fake_query = MagicMock()
-    fake_query.select.return_value = fake_query
-    fake_query.stream.return_value = iter([_make_doc(d, {}) for d in doc_ids])
+def test_storage_promotes_exact_historical_row(monkeypatch):
+    collection, updates = _stub_staged_by_id(
+        monkeypatch,
+        'staged-x',
+        {'id': 'staged-x', 'description': 'Unique task', 'completed': False},
+    )
+    monkeypatch.setattr(action_items_db, 'get_active_action_item_by_description', lambda uid, desc: None)
+    monkeypatch.setattr(action_items_db, 'create_action_item', lambda uid, data: 'fresh-1')
+    monkeypatch.setattr(
+        action_items_db,
+        'get_action_item',
+        lambda uid, task_id: {'id': task_id, 'description': 'Unique task'},
+    )
 
-    fake_col = MagicMock()
-    fake_col.where.return_value = fake_query
+    result = staged_tasks_db.promote_staged_task('uid', task_id='staged-x')
 
+    assert result == {'id': 'fresh-1', 'description': 'Unique task'}
+    collection.document.assert_any_call('staged-x')
+    assert updates['completed'] is True
+    assert updates['promoted_to'] == 'fresh-1'
+
+
+def test_storage_clear_deletes_only_active_rows(monkeypatch):
+    query = MagicMock()
+    query.select.return_value = query
+    query.stream.return_value = iter([_make_doc('a', {}), _make_doc('b', {})])
+    collection = MagicMock()
+    collection.where.return_value = query
     batch = MagicMock()
-    monkeypatch.setattr(staged_tasks_db, "_user_col", lambda uid, name: fake_col)
-    monkeypatch.setattr(staged_tasks_db, "db", MagicMock(batch=MagicMock(return_value=batch)))
-    return fake_col, fake_query, batch
+    monkeypatch.setattr(staged_tasks_db, '_user_col', lambda uid, name: collection)
+    monkeypatch.setattr(staged_tasks_db, 'db', MagicMock(batch=MagicMock(return_value=batch)))
+
+    assert staged_tasks_db.clear_staged_tasks('uid') == 2
+    assert batch.delete.call_count == 2
+    batch.commit.assert_called_once()
+    collection.where.assert_called_once()
 
 
-# --- promote_staged_task(task_id=...) ---
+def test_historical_projection_reads_every_row_and_includes_pre_completed_schema(monkeypatch):
+    snapshots = [
+        _make_doc('old-1', {'description': 'Old task'}),
+        _make_doc('closed-1', {'description': 'Closed task', 'completed': True}),
+    ]
+    collection = MagicMock()
+    collection.order_by.return_value = collection
+    collection.stream.return_value = snapshots
+    monkeypatch.setattr(staged_tasks_db, '_user_col', lambda uid, name: collection)
+
+    rows = staged_tasks_db.get_active_staged_tasks_for_compatibility('user-1')
+
+    assert rows == [{'id': 'old-1', 'description': 'Old task'}]
+    collection.order_by.assert_called_once_with('__name__')
+    collection.limit.assert_not_called()
 
 
-class TestPromoteById:
-    def test_promotes_the_specified_candidate(self, monkeypatch):
-        fake_col, update_calls = _stub_staged_by_id(
-            monkeypatch, "staged-x", {"id": "staged-x", "description": "Unique task", "completed": False}
-        )
-        monkeypatch.setattr(action_items_db, "get_active_action_item_by_description", lambda uid, desc: None)
-        monkeypatch.setattr(action_items_db, "create_action_item", lambda uid, data: "fresh-1")
-        monkeypatch.setattr(
-            action_items_db, "get_action_item", lambda uid, aid: {"id": aid, "description": "Unique task"}
-        )
+def test_historical_point_lookup_includes_missing_completed_and_hides_terminal(monkeypatch):
+    snapshots = {
+        'active': _make_doc('active', {'description': 'Old task'}),
+        'closed': _make_doc('closed', {'description': 'Closed task', 'completed': True}),
+    }
+    for snapshot in snapshots.values():
+        snapshot.exists = True
+    missing = MagicMock(exists=False)
+    collection = MagicMock()
+    collection.document.side_effect = lambda staged_id: MagicMock(
+        get=MagicMock(return_value=snapshots.get(staged_id, missing))
+    )
+    monkeypatch.setattr(staged_tasks_db, '_user_col', lambda uid, name: collection)
 
-        result = staged_tasks_db.promote_staged_task("uid", task_id="staged-x")
-
-        assert result == {"id": "fresh-1", "description": "Unique task"}
-        fake_col.document.assert_any_call("staged-x")  # promoted the chosen doc, not a scored query
-        assert update_calls.get("completed") is True
-        assert update_calls.get("promoted_to") == "fresh-1"
-
-    def test_dedup_tail_still_applies_when_promoting_by_id(self, monkeypatch):
-        _stub_staged_by_id(
-            monkeypatch, "staged-y", {"id": "staged-y", "description": "Follow up on Volt", "completed": False}
-        )
-        existing = {"id": "existing-1", "description": "Follow up on Volt", "completed": False}
-        monkeypatch.setattr(action_items_db, "get_active_action_item_by_description", lambda uid, desc: existing)
-        create_called = []
-        monkeypatch.setattr(
-            action_items_db, "create_action_item", lambda uid, data: create_called.append(data) or "nope"
-        )
-
-        result = staged_tasks_db.promote_staged_task("uid", task_id="staged-y")
-
-        assert result == existing
-        assert create_called == []  # dedup guard fired instead of creating a duplicate
-
-    def test_nonexistent_id_returns_none(self, monkeypatch):
-        _stub_staged_by_id(monkeypatch, "ghost", None)  # snap.exists = False
-        assert staged_tasks_db.promote_staged_task("uid", task_id="ghost") is None
-
-    def test_already_completed_returns_none(self, monkeypatch):
-        _stub_staged_by_id(monkeypatch, "done-1", {"id": "done-1", "description": "x", "completed": True})
-        assert staged_tasks_db.promote_staged_task("uid", task_id="done-1") is None
+    assert staged_tasks_db.get_staged_task_for_compatibility('user-1', 'active') == {
+        'id': 'active',
+        'description': 'Old task',
+    }
+    assert staged_tasks_db.get_staged_task_for_compatibility('user-1', 'closed') is None
+    assert staged_tasks_db.get_staged_task_for_compatibility('user-1', 'missing') is None
 
 
-# --- clear_staged_tasks ---
+def test_candidate_by_id_promotion_never_calls_historical_promoter(monkeypatch):
+    candidate = _candidate('candidate-1')
+    monkeypatch.setattr(router.candidates_db, 'get_candidate', lambda uid, candidate_id: candidate)
+    monkeypatch.setattr(
+        router.staged_tasks_db,
+        'get_staged_task_for_compatibility',
+        lambda uid, staged_id: pytest.fail('canonical id must not read historical rows'),
+    )
+    monkeypatch.setattr(
+        router.staged_tasks_db,
+        'promote_staged_task',
+        lambda *args, **kwargs: pytest.fail('router must not use historical action-item authority'),
+    )
+    retired = []
+    monkeypatch.setattr(
+        router.staged_tasks_db,
+        'delete_staged_task',
+        lambda uid, row_id: retired.append(row_id) or False,
+    )
+    monkeypatch.setattr(
+        router.candidate_service,
+        'accept_candidate',
+        lambda *args, **kwargs: type('Receipt', (), {'task_id': 'task-1'})(),
+    )
+    monkeypatch.setattr(router.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
+
+    result = router.promote_staged_task_by_id('candidate-1', uid='user-1')
+
+    assert result == {'promoted': True, 'reason': None, 'promoted_task': {'id': 'task-1'}}
+    assert retired == ['compat-1']
 
 
-class TestClearStagedTasks:
-    def test_deletes_active_and_returns_count(self, monkeypatch):
-        fake_col, fake_query, batch = _stub_clear(monkeypatch, ["a", "b", "c"])
-        count = staged_tasks_db.clear_staged_tasks("uid")
-        assert count == 3
-        assert batch.delete.call_count == 3
-        batch.commit.assert_called_once()
-        fake_col.where.assert_called_once()  # scoped, not an unfiltered wipe
-        fake_query.select.assert_called_once()  # IDs-only projection
-
-    def test_empty_queue_returns_zero_without_commit(self, monkeypatch):
-        _fake_col, _fake_query, batch = _stub_clear(monkeypatch, [])
-        assert staged_tasks_db.clear_staged_tasks("uid") == 0
-        batch.delete.assert_not_called()
-        batch.commit.assert_not_called()
-
-    def test_terminal_candidate_suppression_closes_row_without_promoted_task(self, monkeypatch):
-        ref = MagicMock()
-        collection = MagicMock()
-        collection.document.return_value = ref
-        monkeypatch.setattr(staged_tasks_db, '_user_col', lambda uid, name: collection)
-
-        staged_tasks_db.suppress_staged_task_for_terminal_candidate('user-1', 'staged-1', reason='rejected')
-
-        patch = ref.update.call_args.args[0]
-        assert patch['completed'] is True
-        assert patch['candidate_terminal_reason'] == 'rejected'
-        assert patch['promotion_skipped'] == 'candidate_terminal'
-        assert 'promoted_to' not in patch
-
-
-# --- router handlers (called directly) ---
-
-
-class TestRouterHandlers:
-    def test_promote_by_id_success_shape(self, monkeypatch):
-        monkeypatch.setattr(
-            r.staged_tasks_db,
-            "promote_staged_task",
-            lambda uid, task_id, **kwargs: {"id": "a1", "description": "x"},
-        )
-        result = r.promote_staged_task_by_id("a1", uid="u1")
-        assert result == {"promoted": True, "reason": None, "promoted_task": {"id": "a1", "description": "x"}}
-
-    def test_promote_by_id_404_when_missing(self, monkeypatch):
-        monkeypatch.setattr(r.staged_tasks_db, "promote_staged_task", lambda uid, task_id, **kwargs: None)
-        with pytest.raises(HTTPException) as ei:
-            r.promote_staged_task_by_id("ghost", uid="u1")
-        assert ei.value.status_code == 404
-
-    def test_clear_returns_deleted_count(self, monkeypatch):
-        monkeypatch.setattr(r.staged_tasks_db, "clear_staged_tasks", lambda uid: 5)
-        assert r.clear_staged_tasks(uid="u1") == {"status": "ok", "deleted_count": 5}
-
-
-class TestModeAwareSidecarReconciliation:
-    @staticmethod
-    def _write_control(monkeypatch):
-        control = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.write, account_generation=7)
-        monkeypatch.setattr(r, '_effective_control', lambda uid: control)
-
-    def test_normal_and_duplicate_promotion_resolve_the_exact_sidecar(self, monkeypatch):
-        self._write_control(monkeypatch)
-        reconciled = []
-        rows = {
-            'normal': {'id': 'normal', 'description': 'Normal', 'completed': False},
-            'duplicate': {
-                'id': 'duplicate',
-                'description': 'Duplicate',
-                'completed': False,
-                'promotion_skipped': 'duplicate',
-            },
+def test_non_staged_candidate_is_not_mutable_through_compatibility_route(monkeypatch):
+    proposal = CandidateCreate.model_validate(
+        {
+            'subject_kind': 'task',
+            'proposed_action': CandidateAction.update,
+            'task_id': 'task-1',
+            'task_change': {'description': 'Update'},
+            'capture_confidence': 0.8,
+            'ownership_confidence': 0.8,
+            'evidence_refs': [{'kind': 'external', 'id': 'agent-1', 'scope': 'canonical'}],
+            'source_surface': 'agent',
         }
-        monkeypatch.setattr(r, '_staged_row', lambda uid, staged_id: rows[staged_id])
-        monkeypatch.setattr(
-            r,
-            '_reconcile_write_sidecar',
-            lambda uid, row, **kwargs: reconciled.append((row['id'], kwargs)) or True,
-        )
-        monkeypatch.setattr(
-            r,
-            '_claim_write_promotion',
-            lambda *args, **kwargs: (MagicMock(status=CandidateStatus.pending), 'claim-token'),
-        )
-        monkeypatch.setattr(
-            r,
-            '_begin_write_promotion',
-            lambda uid, row, candidate, claim_token, **kwargs: candidates_db.LegacyPromotionReservation(
-                task_id='task-existing' if row['id'] == 'duplicate' else 'task-1',
-                kind='existing' if row['id'] == 'duplicate' else 'create',
-            ),
-        )
-        results = iter(
-            [
-                {'id': 'task-1', '_staged_task_id': 'normal'},
-                {'id': 'task-existing', '_staged_task_id': 'duplicate'},
-            ]
-        )
+    )
+    candidate = CandidateRecord(
+        **proposal.model_dump(mode='python'),
+        candidate_id='candidate-update',
+        account_generation=7,
+        idempotency_key='idem',
+        created_at=NOW,
+    )
+    monkeypatch.setattr(router.candidates_db, 'get_candidate', lambda uid, candidate_id: candidate)
+    monkeypatch.setattr(router.staged_tasks_db, 'get_staged_task_for_compatibility', lambda uid, staged_id: None)
 
-        def promote(*args, **kwargs):
-            result = next(results)
-            task_id = kwargs['task_id']
-            rows[task_id].update(completed=True, promoted_to=result['id'])
-            return result
+    assert router.delete_staged_task('candidate-update', uid='user-1') == {'status': 'ok'}
+    with pytest.raises(HTTPException) as error:
+        router.promote_staged_task_by_id('candidate-update', uid='user-1')
+    assert error.value.status_code == 404
 
-        monkeypatch.setattr(r.staged_tasks_db, 'promote_staged_task', promote)
 
-        r.promote_staged_task_by_id('normal', uid='u1')
-        r.promote_staged_task_by_id('duplicate', uid='u1')
+def test_clear_rejects_candidate_and_each_historical_row_before_cleanup(monkeypatch):
+    candidate = _candidate('candidate-new', row_id='compat-new')
+    rows = [
+        {'id': 'old-1', 'description': 'Old 1', 'completed': False, 'created_at': NOW, 'updated_at': NOW},
+        {'id': 'old-2', 'description': 'Old 2', 'completed': False, 'created_at': NOW, 'updated_at': NOW},
+    ]
+    monkeypatch.setattr(
+        router.candidates_db,
+        'list_candidates_compatibility_page',
+        lambda uid, **kwargs: ([candidate], 1, candidate) if kwargs.get('cursor') is None else ([], 0, None),
+    )
+    monkeypatch.setattr(router.staged_tasks_db, 'get_active_staged_tasks_for_compatibility', lambda uid: rows)
+    events = []
 
-        assert reconciled[0][1]['status'].value == 'accepted'
-        assert reconciled[0][1]['result_task_id'] == 'task-1'
-        assert reconciled[1][1]['reason'] == 'duplicate'
-        assert reconciled[1][1]['result_task_id'] == 'task-existing'
+    def materialize(uid, proposal, *, idempotency_key, account_generation):
+        row_id = proposal.evidence_refs[0].id.removeprefix('legacy-staged-')
+        events.append(f'materialize:{row_id}')
+        return _candidate(f'candidate-{row_id}', row_id=row_id)
 
-    def test_delete_and_clear_reject_every_write_mode_sidecar(self, monkeypatch):
-        self._write_control(monkeypatch)
-        rows = [{'id': f'staged-{index}', 'description': f'Task {index}', 'completed': False} for index in range(501)]
-        reconciled = []
-        monkeypatch.setattr(r.staged_tasks_db, 'get_all_staged_tasks_for_migration', lambda uid: rows)
-        monkeypatch.setattr(r.staged_tasks_db, 'delete_staged_task', lambda uid, task_id: True)
-        monkeypatch.setattr(r.staged_tasks_db, 'clear_staged_tasks', lambda uid: len(rows))
-        monkeypatch.setattr(
-            r,
-            '_reconcile_write_sidecar',
-            lambda uid, row, **kwargs: reconciled.append((row['id'], kwargs['reason'])) or True,
-        )
+    monkeypatch.setattr(router.candidate_service, 'create_candidate', materialize)
+    monkeypatch.setattr(
+        router.candidate_service,
+        'reject_candidate',
+        lambda uid, candidate_id, **kwargs: events.append(f'reject:{candidate_id}'),
+    )
+    monkeypatch.setattr(
+        router.staged_tasks_db,
+        'delete_staged_task',
+        lambda uid, row_id: events.append(f'retire:{row_id}') or True,
+    )
 
-        r.delete_staged_task('staged-0', uid='u1')
-        assert reconciled == [('staged-0', 'legacy_delete')]
-        reconciled.clear()
-        result = r.clear_staged_tasks(uid='u1')
-        assert result['deleted_count'] == 501
-        assert len(reconciled) == 501
-        assert {reason for _, reason in reconciled} == {'legacy_clear'}
+    response = router.clear_staged_tasks(uid='user-1')
 
-    def test_promote_surfaces_reconciliation_failure_and_retry_heals_terminal_row(self, monkeypatch):
-        self._write_control(monkeypatch)
-        row = {'id': 'staged-1', 'description': 'Send budget', 'completed': False}
-        promote_calls = []
+    assert response == {'status': 'ok', 'deleted_count': 3}
+    assert events == [
+        'reject:candidate-new',
+        'materialize:old-1',
+        'reject:candidate-old-1',
+        'retire:old-1',
+        'materialize:old-2',
+        'reject:candidate-old-2',
+        'retire:old-2',
+    ]
 
-        def promote(*args, **kwargs):
-            promote_calls.append(kwargs)
-            row.update(completed=True, promoted_to='task-1')
-            return {'id': 'task-1', 'description': 'Send budget', '_staged_task_id': 'staged-1'}
 
-        outcomes = iter([False, True])
-        monkeypatch.setattr(r, '_staged_row', lambda uid, staged_id: row)
-        monkeypatch.setattr(
-            r,
-            '_claim_write_promotion',
-            lambda *args, **kwargs: (MagicMock(status=CandidateStatus.pending), 'claim-token'),
-        )
-        monkeypatch.setattr(
-            r,
-            '_begin_write_promotion',
-            lambda *args, **kwargs: candidates_db.LegacyPromotionReservation(task_id='task-1', kind='create'),
-        )
-        monkeypatch.setattr(
-            r.candidates_db,
-            'begin_candidate_legacy_promotion',
-            lambda *args, **kwargs: candidates_db.LegacyPromotionReservation(task_id='task-1', kind='committed'),
-        )
-        monkeypatch.setattr(r.staged_tasks_db, 'promote_staged_task', promote)
-        monkeypatch.setattr(r, '_reconcile_write_sidecar', lambda *args, **kwargs: next(outcomes))
-        monkeypatch.setattr(
-            r.action_items_db,
-            'get_action_item',
-            lambda uid, task_id: {'id': task_id, 'description': 'Send budget'},
-        )
+def test_batch_scores_update_canonical_candidate_compatibility(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        router,
+        '_candidate_for_public_id',
+        lambda uid, task_id, **kwargs: _candidate('candidate-1', row_id=task_id),
+    )
+    monkeypatch.setattr(
+        router.candidates_db,
+        'update_candidate_compatibility_score',
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
 
-        with pytest.raises(HTTPException) as first:
-            r.promote_staged_task_by_id('staged-1', uid='u1')
-        assert first.value.status_code == 503
+    response = router.batch_update_staged_scores(
+        router.BatchUpdateScoresRequest(scores=[router.BatchScoreEntry(id='old-1', relevance_score=42)]),
+        uid='user-1',
+    )
 
-        retried = r.promote_staged_task_by_id('staged-1', uid='u1')
-        assert retried['promoted_task']['id'] == 'task-1'
-        assert len(promote_calls) == 1
+    assert response == {'status': 'ok'}
+    assert calls == [
+        (('user-1', 'candidate-1'), {'relevance_score': 42, 'account_generation': 7}),
+    ]
 
-    @pytest.mark.parametrize('status', [CandidateStatus.rejected, CandidateStatus.expired])
-    def test_route_never_mutates_legacy_state_for_terminal_sidecar(self, monkeypatch, status):
-        self._write_control(monkeypatch)
-        row = {'id': 'staged-1', 'description': 'Send budget', 'completed': False}
-        proposal = r.proposal_from_legacy_staged(row)
-        candidate = CandidateRecord(
+
+def test_batch_scores_ignore_terminal_candidate_conflict(monkeypatch):
+    monkeypatch.setattr(
+        router,
+        '_candidate_for_public_id',
+        lambda uid, task_id, **kwargs: _candidate('candidate-1', row_id=task_id),
+    )
+    monkeypatch.setattr(
+        router.candidates_db,
+        'update_candidate_compatibility_score',
+        lambda *args, **kwargs: (_ for _ in ()).throw(router.candidates_db.CandidateConflictError('accepted')),
+    )
+
+    response = router.batch_update_staged_scores(
+        router.BatchUpdateScoresRequest(scores=[router.BatchScoreEntry(id='old-1', relevance_score=42)]),
+        uid='user-1',
+    )
+
+    assert response == {'status': 'ok'}
+
+
+def test_create_preserves_staged_annotations_and_uses_them_in_identity(monkeypatch):
+    rows = []
+
+    def materialize(uid, row, *, account_generation):
+        rows.append(row)
+        proposal = proposal_from_legacy_staged(row)
+        return CandidateRecord(
             **proposal.model_dump(mode='python'),
-            candidate_id='candidate-1',
-            account_generation=7,
-            idempotency_key='idem',
-            status=status,
-            resolution_reason=status.value,
-            created_at=datetime(2026, 7, 9, tzinfo=timezone.utc),
-            resolved_at=datetime(2026, 7, 9, tzinfo=timezone.utc),
-        )
-        monkeypatch.setattr(r, '_staged_row', lambda uid, staged_id: row)
-        monkeypatch.setattr(
-            r,
-            '_create_candidate_from_staged_row',
-            lambda *args, **kwargs: candidate,
-        )
-        suppressed = []
-        monkeypatch.setattr(
-            r.staged_tasks_db,
-            'suppress_staged_task_for_terminal_candidate',
-            lambda uid, staged_id, **kwargs: suppressed.append((staged_id, kwargs['reason']))
-            or row.update(completed=True),
-        )
-        monkeypatch.setattr(
-            r.staged_tasks_db,
-            'promote_staged_task',
-            lambda *args, **kwargs: pytest.fail('terminal Candidate must fence legacy action-item creation'),
+            candidate_id=row['id'],
+            account_generation=account_generation,
+            idempotency_key=row['id'],
+            created_at=NOW,
         )
 
-        with pytest.raises(HTTPException) as error:
-            r.promote_staged_task_by_id('staged-1', uid='u1')
+    monkeypatch.setattr(router, '_materialize_historical_candidate', materialize)
 
-        assert error.value.status_code == 404
-        assert row['completed'] is True
-        assert suppressed == [('staged-1', status.value)]
+    first = router.create_staged_task(
+        router.CreateStagedTaskRequest(
+            description='Send the budget',
+            metadata='from-agent',
+            category='finance',
+            relevance_score=10,
+        ),
+        uid='user-1',
+    )
+    second = router.create_staged_task(
+        router.CreateStagedTaskRequest(
+            description='Send the budget',
+            metadata='from-agent',
+            category='finance',
+            relevance_score=20,
+        ),
+        uid='user-1',
+    )
 
-    def test_top_promotion_suppresses_terminal_row_and_advances_to_pending(self, monkeypatch):
-        self._write_control(monkeypatch)
-        terminal_row = {'id': 'staged-terminal', 'description': 'Old task', 'completed': False}
-        pending_row = {'id': 'staged-pending', 'description': 'Next task', 'completed': False}
-        terminal = MagicMock(status=CandidateStatus.rejected)
-        pending = MagicMock(status=CandidateStatus.pending)
-        selected_rows = iter([terminal_row, pending_row])
-        promoted = []
-        monkeypatch.setattr(r.staged_tasks_db, 'get_all_staged_tasks_for_migration', lambda uid: [])
-        monkeypatch.setattr(
-            r.staged_tasks_db,
-            'get_top_staged_task_for_promotion',
-            lambda uid: next(selected_rows),
-        )
+    assert rows[0]['metadata'] == 'from-agent'
+    assert rows[0]['category'] == 'finance'
+    assert rows[0]['relevance_score'] == 10
+    assert rows[0]['id'] != rows[1]['id']
+    assert first['metadata'] == 'from-agent'
+    assert first['category'] == 'finance'
+    assert first['relevance_score'] == 10
+    assert second['relevance_score'] == 20
 
-        def claim(uid, row, **kwargs):
-            if row['id'] == 'staged-terminal':
-                row['completed'] = True
-                return terminal, None
-            return pending, 'claim-token'
 
-        def promote(uid, task_id, **kwargs):
-            promoted.append(task_id)
-            pending_row.update(completed=True, promoted_to='task-next')
-            return {'id': 'task-next', '_staged_task_id': task_id}
-
-        monkeypatch.setattr(r, '_claim_write_promotion', claim)
-        monkeypatch.setattr(
-            r,
-            '_begin_write_promotion',
-            lambda *args, **kwargs: candidates_db.LegacyPromotionReservation(task_id='task-next', kind='create'),
-        )
-        monkeypatch.setattr(r.staged_tasks_db, 'promote_staged_task', promote)
-        monkeypatch.setattr(r, '_staged_row', lambda uid, staged_id: pending_row)
-        monkeypatch.setattr(r, '_reconcile_write_sidecar', lambda *args, **kwargs: True)
-
-        result = r.promote_staged_task(uid='u1')
-
-        assert terminal_row['completed'] is True
-        assert promoted == ['staged-pending']
-        assert result['promoted_task']['id'] == 'task-next'
-
-    @pytest.mark.parametrize(
-        ('status', 'result_task_id'),
-        [
-            (CandidateStatus.rejected, None),
-            (CandidateStatus.expired, None),
-            (CandidateStatus.accepted, 'another-task'),
+def test_top_promotion_uses_deterministic_merged_first_item(monkeypatch):
+    monkeypatch.setattr(
+        router,
+        '_merged_staged_projection',
+        lambda uid, *, account_generation: [
+            {'id': 'first', 'description': 'First'},
+            {'id': 'second', 'description': 'Second'},
         ],
     )
-    def test_promotion_reconciliation_rejects_wrong_terminal_sidecar(self, monkeypatch, status, result_task_id):
-        proposal = r.proposal_from_legacy_staged({'id': 'staged-1', 'description': 'Send budget'})
-        candidate = CandidateRecord(
-            **proposal.model_dump(mode='python'),
-            candidate_id='candidate-1',
-            account_generation=7,
-            idempotency_key='idem',
-            status=status,
-            result_task_id=result_task_id,
-            resolution_reason=status.value,
-            created_at=datetime(2026, 7, 9, tzinfo=timezone.utc),
-            resolved_at=datetime(2026, 7, 9, tzinfo=timezone.utc),
-        )
-        monkeypatch.setattr(r, '_create_candidate_from_staged_row', lambda *args, **kwargs: candidate)
+    monkeypatch.setattr(
+        router,
+        'promote_staged_task_by_id',
+        lambda task_id, uid: {'promoted': True, 'reason': None, 'promoted_task': {'id': task_id}},
+    )
 
-        assert (
-            r._reconcile_write_sidecar(
-                'u1',
-                {'id': 'staged-1', 'description': 'Send budget'},
-                account_generation=7,
-                status=CandidateStatus.accepted,
-                result_task_id='task-1',
-                reason='legacy_promoted',
-            )
-            is False
-        )
-
-    @pytest.mark.parametrize('workflow_mode', ['off', 'shadow', 'write', 'read'])
-    def test_legacy_migrations_only_recover_legacy_read_modes(self, monkeypatch, workflow_mode):
-        monkeypatch.setattr(
-            r.task_control_db,
-            'get_task_workflow_control',
-            lambda uid: TaskWorkflowControl(workflow_mode=workflow_mode, account_generation=7),
-        )
-        restore_calls = []
-        monkeypatch.setattr(
-            r,
-            '_restore_all_legacy_conversation_items',
-            lambda uid, **kwargs: restore_calls.append(uid)
-            or {'restored': 0, 'skipped_existing': 0, 'has_more': False, 'next_cursor': None},
-        )
-        monkeypatch.setattr(r.staged_tasks_db, 'get_all_staged_tasks_for_migration', lambda uid: [])
-        assert r.migrate_ai_tasks(uid='u1')['status'].startswith('legacy task migration retired')
-        assert r.migrate_conversation_items(uid='u1', limit=50, cursor=None) == {
-            'status': 'ok',
-            'migrated': 0,
-            'deleted': 0,
-            'restored': 0,
-            'skipped_existing': 0,
-            'has_more': False,
-            'next_cursor': None,
-        }
-        assert restore_calls == ([] if workflow_mode in {'write', 'read'} else ['u1'])
-
-    @pytest.mark.parametrize('workflow_mode', ['write', 'read'])
-    def test_canonical_mode_recovery_keeps_legacy_staged_candidate_authoritative(self, monkeypatch, workflow_mode):
-        monkeypatch.setattr(
-            r.task_control_db,
-            'get_task_workflow_control',
-            lambda uid: TaskWorkflowControl(workflow_mode=workflow_mode, account_generation=7),
-        )
-        monkeypatch.setattr(
-            r.staged_tasks_db,
-            'restore_legacy_conversation_items',
-            lambda *args, **kwargs: pytest.fail('canonical recovery must not duplicate a legacy_staged Candidate'),
-        )
-        monkeypatch.setattr(
-            r.staged_tasks_db,
-            'get_all_staged_tasks_for_migration',
-            lambda uid: [{'id': 'legacy-1', 'source': 'conversation_migration', 'completed': False}],
-        )
-        monkeypatch.setattr(
-            r.candidates_db,
-            'get_candidate',
-            lambda uid, candidate_id: MagicMock(status=CandidateStatus.pending),
-        )
-
-        assert r.restore_legacy_conversation_items(uid='u1', limit=50, cursor=None) == {
-            'status': 'ok',
-            'restored': 0,
-            'skipped_existing': 0,
-            'has_more': False,
-            'next_cursor': None,
-        }
-
-    def test_canonical_compatibility_recovery_repairs_missing_candidate_before_ack(self, monkeypatch):
-        control = TaskWorkflowControl(workflow_mode='write', account_generation=7)
-        monkeypatch.setattr(r.task_control_db, 'get_task_workflow_control', lambda uid: control)
-        monkeypatch.setattr(
-            r.staged_tasks_db,
-            'get_all_staged_tasks_for_migration',
-            lambda uid: [{'id': 'legacy-1', 'source': 'conversation_migration', 'completed': False}],
-        )
-        candidates = iter([None, MagicMock(status=CandidateStatus.pending)])
-        candidate_ids = []
-        monkeypatch.setattr(
-            r.candidates_db,
-            'get_candidate',
-            lambda uid, candidate_id: candidate_ids.append(candidate_id) or next(candidates),
-        )
-        migration_calls = []
-        monkeypatch.setattr(
-            r,
-            'migrate_staged_tasks',
-            lambda uid, current_control, *, after_id=None, limit: migration_calls.append(
-                (uid, current_control, after_id, limit)
-            )
-            or MagicMock(failed=0, scanned=1, checkpoint='legacy-1'),
-        )
-
-        result = r.migrate_conversation_items(uid='u1', limit=50, cursor=None)
-
-        assert result['status'] == 'ok'
-        assert migration_calls == [('u1', control, None, 500)]
-        assert candidate_ids == [
-            candidates_db.candidate_id_for_idempotency('u1', 7, 'legacy-staged:legacy-1'),
-            candidates_db.candidate_id_for_idempotency('u1', 7, 'legacy-staged:legacy-1'),
-        ]
-
-    def test_canonical_compatibility_recovery_does_not_ack_missing_candidate(self, monkeypatch):
-        control = TaskWorkflowControl(workflow_mode='read', account_generation=7)
-        monkeypatch.setattr(r.task_control_db, 'get_task_workflow_control', lambda uid: control)
-        monkeypatch.setattr(
-            r.staged_tasks_db,
-            'get_all_staged_tasks_for_migration',
-            lambda uid: [{'id': 'legacy-1', 'source': 'conversation_migration', 'completed': False}],
-        )
-        monkeypatch.setattr(r.candidates_db, 'get_candidate', lambda uid, candidate_id: None)
-        monkeypatch.setattr(r, 'migrate_staged_tasks', lambda *args, **kwargs: MagicMock(failed=1))
-
-        with pytest.raises(HTTPException) as error:
-            r.migrate_conversation_items(uid='u1', limit=50, cursor=None)
-
-        assert error.value.status_code == 503
-
-    def test_canonical_compatibility_recovery_pages_past_unrelated_rows(self, monkeypatch):
-        control = TaskWorkflowControl(workflow_mode='write', account_generation=7)
-        monkeypatch.setattr(r.staged_tasks_db, 'get_all_staged_tasks_for_migration', lambda uid: [])
-        missing = iter([True, False])
-        monkeypatch.setattr(
-            r,
-            '_legacy_rows_missing_canonical_representation',
-            lambda uid, *, account_generation: next(missing),
-        )
-        reports = iter(
-            [
-                MagicMock(failed=0, scanned=500, checkpoint='page-1'),
-                MagicMock(failed=0, scanned=1, checkpoint='page-2'),
-            ]
-        )
-        migration_calls = []
-        monkeypatch.setattr(
-            r,
-            'migrate_staged_tasks',
-            lambda uid, current_control, *, after_id=None, limit: migration_calls.append(
-                (uid, current_control, after_id, limit)
-            )
-            or next(reports),
-        )
-
-        r._ensure_canonical_legacy_recovery('u1', control)
-
-        assert migration_calls == [
-            ('u1', control, None, 500),
-            ('u1', control, 'page-1', 500),
-        ]
-
-    def test_retired_conversation_migration_uses_only_the_marked_recovery(self, monkeypatch):
-        monkeypatch.setattr(
-            r.task_control_db,
-            'get_task_workflow_control',
-            lambda uid: TaskWorkflowControl(workflow_mode='off', account_generation=7),
-        )
-        monkeypatch.setattr(
-            r,
-            '_restore_all_legacy_conversation_items',
-            lambda uid, **kwargs: {
-                'restored': 2,
-                'skipped_existing': 1,
-                'has_more': False,
-                'next_cursor': None,
-            },
-        )
-        monkeypatch.setattr(
-            r.staged_tasks_db,
-            'restore_legacy_conversation_items',
-            lambda uid, **kwargs: {
-                'restored': 2,
-                'skipped_existing': 1,
-                'has_more': True,
-                'next_cursor': 'legacy-2',
-            },
-        )
-
-        assert r.migrate_conversation_items(uid='u1', limit=2, cursor='legacy-1') == {
-            'status': 'ok',
-            'migrated': 0,
-            'deleted': 0,
-            'restored': 2,
-            'skipped_existing': 1,
-            'has_more': False,
-            'next_cursor': None,
-        }
-
-        assert r.restore_legacy_conversation_items(uid='u1', limit=2, cursor='legacy-1') == {
-            'status': 'ok',
-            'restored': 2,
-            'skipped_existing': 1,
-            'has_more': True,
-            'next_cursor': 'legacy-2',
-        }
-
-    def test_read_mode_by_id_routes_ignore_non_staged_candidates(self, monkeypatch):
-        control = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=7)
-        monkeypatch.setattr(r, '_effective_control', lambda uid: control)
-        proposal = CandidateCreate.model_validate(
-            {
-                'subject_kind': 'task',
-                'proposed_action': 'update',
-                'task_id': 'task-1',
-                'task_change': {'description': 'Revise the budget'},
-                'capture_confidence': 0.8,
-                'ownership_confidence': 1,
-                'evidence_refs': [{'kind': 'conversation', 'id': 'c1', 'scope': 'canonical'}],
-                'source_surface': 'conversation',
-            }
-        )
-        candidate = CandidateRecord(
-            **proposal.model_dump(mode='python'),
-            candidate_id='candidate-update',
-            account_generation=7,
-            idempotency_key='idem',
-            created_at=datetime(2026, 7, 9, tzinfo=timezone.utc),
-        )
-        monkeypatch.setattr(r.candidates_db, 'get_candidate', lambda uid, candidate_id: candidate)
-        monkeypatch.setattr(
-            r.candidate_service,
-            'reject_candidate',
-            lambda *args, **kwargs: pytest.fail('legacy delete cannot reject a universal mutation Candidate'),
-        )
-        monkeypatch.setattr(
-            r.candidate_service,
-            'accept_candidate',
-            lambda *args, **kwargs: pytest.fail('legacy promote cannot accept a universal mutation Candidate'),
-        )
-
-        assert r.delete_staged_task(candidate.candidate_id, uid='u1') == {'status': 'ok'}
-        with pytest.raises(HTTPException) as error:
-            r.promote_staged_task_by_id(candidate.candidate_id, uid='u1')
-        assert error.value.status_code == 404
-
-        candidate.source_surface = 'legacy_staged'
-        candidate.proposed_action = 'create'
-        candidate.task_id = None
-        candidate.account_generation = 6
-        assert r.delete_staged_task(candidate.candidate_id, uid='u1') == {'status': 'ok'}
-        with pytest.raises(HTTPException) as stale_error:
-            r.promote_staged_task_by_id(candidate.candidate_id, uid='u1')
-        assert stale_error.value.status_code == 404
+    assert router.promote_staged_task(uid='user-1')['promoted_task']['id'] == 'first'

@@ -2,7 +2,7 @@ import Foundation
 import OmiTheme
 import SwiftUI
 
-/// Cohort-only canonical Goals destination. The page owns no copied goal or
+/// Universal canonical Goals destination. The page owns no copied goal or
 /// task state: it renders the shared projection and delegates task mutation to
 /// `TasksStore` after that store hydrates the canonical task ID.
 @MainActor

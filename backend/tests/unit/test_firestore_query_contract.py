@@ -13,6 +13,7 @@ import routers.task_recommendations as task_recommendations_router
 from database.firestore_index_registry import (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
+    CANONICAL_MEMORY_ATLAS_READ_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
@@ -27,9 +28,13 @@ from database.firestore_index_registry import (
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
+    UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
+    UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
     firebase_index_manifest,
 )
 from scripts import firestore_query_coverage, generate_firestore_indexes
+from utils.memory import canonical_graph as canonical_graph_service
 
 
 class _RecordingQuery:
@@ -312,6 +317,59 @@ def test_generated_firestore_manifest_matches_the_checked_in_contract():
         STALE_IN_PROGRESS_CONVERSATIONS_QUERY.index_requirement.to_manifest() == expected_conversations_status_finished
     )
     assert firebase_index_manifest()['indexes'].count(expected_conversations_status_finished) == 1
+    assert CANONICAL_MEMORY_ATLAS_READ_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
+    assert CANONICAL_MEMORY_ATLAS_READ_QUERY.identifier == 'memory_items_canonical_atlas_read'
+    assert CANONICAL_MEMORY_ATLAS_READ_QUERY.index_requirement.signature == (
+        'memory_items',
+        'COLLECTION',
+        (
+            ('account_generation', 'ASCENDING'),
+            ('tier', 'ASCENDING'),
+            ('status', 'ASCENDING'),
+            ('processing_state', 'ASCENDING'),
+            ('updated_at', 'DESCENDING'),
+            ('__name__', 'DESCENDING'),
+        ),
+    )
+
+
+def _equality_plus_order_signature(collection_group, filters, orders):
+    """Composite Firestore requires for equality filters plus explicit orderings."""
+    fields = [(field_path, 'ASCENDING') for field_path, operator in filters if operator == '==']
+    fields.extend(orders)
+    if not fields or fields[-1][0] != '__name__':
+        fields.append(('__name__', orders[-1][1] if orders else 'ASCENDING'))
+    return (collection_group, 'COLLECTION', tuple(fields))
+
+
+def test_canonical_atlas_read_serving_query_requires_declared_composite():
+    """The live atlas list query must keep its apply-spec composite.
+
+    firestore_readiness failed on based-hardware-dev (run 31666135748) with
+    COLLECTION/memory_items (account_generation ASC, tier ASC, status ASC,
+    processing_state ASC, updated_at DESC, __name__ DESC)=MISSING. That tuple is
+    memory_items_canonical_atlas_read; dropping it from the apply spec while the
+    serving builder still uses it must fail here.
+    """
+    recorded = _StreamRecordingQuery(recorder=[])
+    client = SimpleNamespace(collection=lambda path: recorded)
+    revision = canonical_graph_service._CanonicalGraphRevision(
+        account_generation=3,
+        commit_sequence=1,
+        head_commit_id='head-atlas',
+    )
+
+    built = canonical_graph_service._build_canonical_graph_items_query(
+        client,
+        'atlas-index-user',
+        revision,
+        cursor_boundary=None,
+    )
+
+    assert built is not recorded
+    signature = _equality_plus_order_signature('memory_items', built._filters, built._orders)
+    assert signature == CANONICAL_MEMORY_ATLAS_READ_QUERY.index_requirement.signature
+    assert signature in _declared_index_signatures()
 
 
 @pytest.mark.slow
@@ -334,6 +392,9 @@ def test_query_inventory_registers_the_migrated_query_shapes():
         EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
         ACTIVE_ATTENTION_OVERRIDE_QUERY,
         STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+        UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
+        UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
+        UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
     ):
         matching = [query for query in report['queries'] if query['registered_spec'] == spec.identifier]
         assert len(matching) == 1
@@ -445,14 +506,6 @@ class _StreamRecordingFirestore:
         return SimpleNamespace(document=lambda _uid: _StreamRecordingUserRef(self._recorder))
 
 
-def _required_index_signature(collection_group, filters, orders):
-    """The composite index Firestore requires for one equality-plus-ordering chain."""
-    fields = [(field_path, 'ASCENDING') for field_path, operator in filters if operator == '==']
-    fields.extend(orders)
-    fields.append(('__name__', orders[-1][1]))
-    return (collection_group, 'COLLECTION', tuple(fields))
-
-
 def _declared_index_signatures():
     return {
         (
@@ -486,7 +539,7 @@ def test_due_date_filtered_action_item_reads_have_a_declared_composite_index(mon
     assert compound, 'due-date filtered reads no longer build an equality + ordering chain'
     declared = _declared_index_signatures()
     for filters, orders in compound:
-        assert _required_index_signature('action_items', filters, orders) in declared
+        assert _equality_plus_order_signature('action_items', filters, orders) in declared
 
 
 def test_query_source_paths_are_posix_canonical_on_every_host_platform():

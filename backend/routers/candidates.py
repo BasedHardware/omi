@@ -273,8 +273,8 @@ def get_candidate_workflow_control(uid: str = Depends(auth.get_current_user_uid)
         )
         chat_first_ui = resolve_chat_first_ui(rollout)
     except Exception:
-        # Cohort resolution is intentionally fail-closed: a backend outage or
-        # stale selector keeps this user in the existing shell.
+        # Control resolution is intentionally fail-closed: a backend outage or
+        # malformed generation fence keeps this user in the existing shell.
         return control.model_copy(
             update={
                 'workflow_mode': TaskWorkflowMode.off,
@@ -284,7 +284,7 @@ def get_candidate_workflow_control(uid: str = Depends(auth.get_current_user_uid)
 
     # Desktop samples both fields as one generation-bound projection. Preserve
     # the raw generation, but never let a stale workflow record select the
-    # legacy shell for an enrolled account.
+    # legacy shell for a universally entitled account.
     effective_control = effective_task_workflow_control(control, rollout)
     return effective_control.model_copy(update={'chat_first_ui': chat_first_ui})
 

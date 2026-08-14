@@ -564,7 +564,7 @@ def _perform_authoritative_side_effect(
         else None
     )
     if event.event_type == MemoryOutboxEventType.projection_sync:
-        if item is not None and _is_compatibility_projection_indexable(item):
+        if item is not None and _is_search_projection_indexable(item):
             _require_side_effect_success(
                 lambda: side_effects.projection_upsert(item, state.account_generation),
                 error_code="projection_upsert_failed",
@@ -591,7 +591,7 @@ def _perform_authoritative_side_effect(
     raise _ProcessingFailure("unsupported_event_type")
 
 
-def _is_compatibility_projection_indexable(item: MemoryItem) -> bool:
+def _is_search_projection_indexable(item: MemoryItem) -> bool:
     return (
         item.tier in {MemoryTier.short_term, MemoryTier.long_term}
         and item.status == MemoryItemStatus.active

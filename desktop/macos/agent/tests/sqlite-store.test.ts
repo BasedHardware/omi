@@ -21,9 +21,9 @@ describe("SqliteAgentStore", () => {
     store.migrate();
     store.migrate();
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(32);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(33);
     expect(store.allRows("SELECT version FROM schema_migrations ORDER BY version")).toEqual(
-      Array.from({ length: 32 }, (_, index) => ({ version: index + 1 })),
+      Array.from({ length: 33 }, (_, index) => ({ version: index + 1 })),
     );
     expect(tableNames(store)).toEqual([
       "adapter_bindings",

@@ -35,4 +35,18 @@ final class ProactiveCapturePolicyTests: XCTestCase {
       ProactiveCapturePolicy.captureTickAllowed(
         isMonitoring: false, isInRecoveryMode: false, isInBackgroundPolling: false))
   }
+
+  func testResumePreservesBackgroundPollingInsteadOfStartingNormalCapture() {
+    XCTAssertEqual(
+      ProactiveCapturePolicy.resumeMode(
+        isMonitoring: true, isInRecoveryMode: false, isInBackgroundPolling: true),
+      .backgroundPolling)
+  }
+
+  func testResumeRestartsActiveRecoveryPolling() {
+    XCTAssertEqual(
+      ProactiveCapturePolicy.resumeMode(
+        isMonitoring: true, isInRecoveryMode: true, isInBackgroundPolling: false),
+      .recovery)
+  }
 }

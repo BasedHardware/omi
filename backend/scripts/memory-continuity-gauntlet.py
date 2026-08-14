@@ -259,7 +259,7 @@ class HermeticState:
 
 
 class HermeticRuntime:
-    """Keeps e2e fakes + cohort patches alive for the full gauntlet run."""
+    """Keeps e2e fakes and universal runtime patches alive for the full gauntlet run."""
 
     def __init__(self, uid: str) -> None:
         self.uid = uid
@@ -277,7 +277,7 @@ class HermeticRuntime:
         from fakes.redis import setup_fake_redis
         from fakes.storage import setup_fake_storage
         from fastapi.testclient import TestClient
-        from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+        from tests.unit.universal_memory_test_helpers import configure_universal_memory
 
         e2e_conftest._set_e2e_env()
         fake_firestore = setup_fake_firestore()
@@ -286,7 +286,7 @@ class HermeticRuntime:
         app = e2e_conftest._create_backend_app(fake_firestore, fake_redis, fake_storage)
         self.client = TestClient(app)
         self.db = fake_firestore
-        set_canonical_cohort(_GauntletMonkeypatch(), self.uid)
+        configure_universal_memory(_GauntletMonkeypatch(), self.uid)
         self._patchers.extend(self._start_canonical_patches())
         return HermeticState(uid=self.uid, db=self.db, client=self.client)
 
@@ -359,10 +359,8 @@ class MemoryContinuityGauntlet:
         return "hermetic", reason, api_url
 
     def _seed_rollout(self, db: Any, uid: str, *, grant_consumer: str = "omi_chat") -> None:
-        from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
         from tests.unit.fixtures.memory_adapter_fakes import enabled_rollout_doc
         from utils.memory.default_read_rollout import GLOBAL_READ_GATE_PATH
-        from utils.memory.v3.limited_rollout_config import WRITE_CONVERGENCE_GATE_PATH
 
         def _set_gate(path: str, payload: dict[str, Any]) -> None:
             parts = path.split("/")
@@ -372,22 +370,7 @@ class MemoryContinuityGauntlet:
             ref.set(payload)
 
         _set_gate(GLOBAL_READ_GATE_PATH, {"memory_reads_enabled": True, "kill_switch_active": False})
-        _set_gate(
-            WRITE_CONVERGENCE_GATE_PATH,
-            {
-                "durable_outbox_enabled": True,
-                "dual_write_projection_ready": True,
-                "delete_convergence_ready": True,
-                "idempotency_contract_ready": True,
-            },
-        )
         rollout = enabled_rollout_doc(uid, grant_consumer=grant_consumer)
-        rollout["mode"] = MemoryRolloutMode.read.value
-        rollout["stage_gates"] = {
-            MemoryRolloutStageGate.shadow.value: PASSED,
-            MemoryRolloutStageGate.write.value: PASSED,
-            MemoryRolloutStageGate.read.value: PASSED,
-        }
         db.collection("users").document(uid).collection("memory_control").document("state").set(rollout)
 
     def _seed_apply_control(self, db: Any, uid: str) -> None:
@@ -670,8 +653,10 @@ class MemoryContinuityGauntlet:
             )
 
     def run_resilience_hermetic(self, state: HermeticState) -> None:
+        from unittest.mock import patch
+
+        from fastapi import HTTPException
         from fakes.firestore import seed_memory
-        from testing.e2e.test_canonical_memory_pipeline import _override_memory_runtime, _runtime
 
         seed_memory(
             state.uid,
@@ -683,21 +668,15 @@ class MemoryContinuityGauntlet:
             },
         )
 
-        def failing_memory_service(_params, _adapters):
-            from utils.memory.v3.composed_get_service import V3ComposedResponse
-
-            return V3ComposedResponse.error(503, "infrastructure_failure")
-
         assert state.client is not None
         auth_headers = {"Authorization": "Bearer dev-token"}
-        with _override_memory_runtime(
-            state.client,
-            _runtime(enabled=True, source_decision="memory_read", service=failing_memory_service),
+        with patch(
+            "utils.memory.memory_service.MemoryService.read",
+            side_effect=HTTPException(status_code=503, detail="Canonical memory unavailable"),
         ):
             resp = state.client.get("/v3/memories", headers=auth_headers)
         assert resp.status_code == 503, resp.text
-        assert resp.json() == {"detail": "infrastructure_failure"}
-        assert resp.headers.get("x-omi-memory-read-source") == "none"
+        assert resp.json() == {"detail": "Canonical memory unavailable"}
         assert "legacy-must-not-bleed-gauntlet" not in resp.text
         self.record_step(
             "resilience",
@@ -810,7 +789,7 @@ class MemoryContinuityGauntlet:
 
 
 class _GauntletMonkeypatch:
-    """Minimal monkeypatch shim for canonical_cohort_test_helpers outside pytest."""
+    """Minimal monkeypatch shim for universal_memory_test_helpers outside pytest."""
 
     def setattr(self, target, name, value, raising=True):  # noqa: ARG002
         if isinstance(target, str):
