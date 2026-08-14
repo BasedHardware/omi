@@ -1,0 +1,118 @@
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsGeneralPane.swift
+  s_830a75a8050e25::t_99a39f9ec642be 398-401
+  s_830a75a8050e25::t_1959448a1bd928 392-397
+  s_830a75a8050e25::t_068406dec5238f 443-445
+  s_830a75a8050e25::t_bfb66455651dea 440-442
+  s_830a75a8050e25::t_05a3b58997059b 446-448
+  s_ab9fc0a75db486::t_5f55114c8c8453 424-439,449
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialOverlay.swift
+  s_830a75a8050e25::t_4485b74ba3fef4 434-438,440-441
+  s_830a75a8050e25::t_fbb162ccf7a4ed 89-92
+  s_830a75a8050e25::t_9c7594e1d41dc2 412-416
+  s_830a75a8050e25::t_9c8388164a70cb 411,419-433,439,442-449
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivitySurface.swift
+  s_830a75a8050e25::t_62955a23d9ed36 158-159
+  s_830a75a8050e25::t_fd4d1e2e951257 157,160-164,166
+  s_830a75a8050e25::t_f713b8b73fb667 152-156
+  s_830a75a8050e25::t_c064748df25061 165
+  s_830a75a8050e25::t_da3006de2ae3d1 117-122
+  s_830a75a8050e25::t_ef626c3ada32f9 123-124
+  s_830a75a8050e25::t_71d7208b591542 146-149
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityStore.swift
+  s_830a75a8050e25::t_ee67eda27702ad 326
+  s_830a75a8050e25::t_f3c8e6460f9d5b 132-134
+  s_830a75a8050e25::t_6eaba42d418245 393-394,396-403
+  s_830a75a8050e25::t_3e1504eaeae056 530-541
+  s_830a75a8050e25::t_66c4580759f7ba 121-128
+  s_830a75a8050e25::t_5cd23ca30bde7c 346-349
+  s_830a75a8050e25::t_9d33587f2eb278 75-96
+  s_830a75a8050e25::t_00853cbc352032 327,341,350,392,404-406,508-510,522-524,542-544,656-657
+desktop/context-for-claude/Tests/ContextAppTests/ActivityCompositionTests.swift
+  s_830a75a8050e25::t_bbf83121fe90fe 699-793,805-806,812,816-939,943,953,956,967,974-975,980-982
+  s_830a75a8050e25::t_5862b083a05525 83-89
+  s_830a75a8050e25::t_d89b9c54a46986 521-525
+  s_830a75a8050e25::t_e88d5c5307dc1a 556-620,950
+  s_830a75a8050e25::t_ba5879cf9342da 940-942,944-949,951-952,954-955,957-966,968-973,976-979,983
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsWindow.swift
+  s_830a75a8050e25::t_642832b6482ebe 124-127
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityComposer.swift
+  s_830a75a8050e25::t_71ba22cd77dc17 259-267,287,305-306,313-315
+  s_830a75a8050e25::t_41b8816b1a61fa 17-39,408
+  s_830a75a8050e25::t_de48758b15ff02 131
+  s_830a75a8050e25::t_8427edfdbf9af8 385-387
+  s_830a75a8050e25::t_e2b687fc7ef5cb 173-178,183-184,187,193
+  s_830a75a8050e25::t_d37e50d18da0fd 360
+  s_830a75a8050e25::t_8d494c41f77d3a 221-224,229
+  s_830a75a8050e25::t_cfcff579184511 276-278
+  s_830a75a8050e25::t_0fdbc38681618c 318,321,324-329
+  s_830a75a8050e25::t_e80a4eca21422d 397-407
+  s_830a75a8050e25::t_1300cb19528390 279,283-286,297-301
+  s_830a75a8050e25::t_1065a4da319e4e 268-273
+  s_830a75a8050e25::t_1a53500590efd4 84-98,100-111
+  s_830a75a8050e25::t_3f6349aa78d68d 274
+  s_830a75a8050e25::t_c39236b9d716a2 409
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityModel.swift
+  s_830a75a8050e25::t_a0b2a4c77792d3 646-653
+  s_830a75a8050e25::t_e8e4b3e5fe77ba 608
+  s_830a75a8050e25::t_c09cf5a7270073 618-626,637
+  s_830a75a8050e25::t_efebede48a3605 297-299,301,305,311-312
+  s_830a75a8050e25::t_29a26fae457c81 436-442
+  s_830a75a8050e25::t_d042c07d4c55ce 595-604,616-617
+  s_830a75a8050e25::t_0b9e80af29b93f 58-82
+  s_830a75a8050e25::t_5a73afb76e8633 631-634
+  s_830a75a8050e25::t_fcf4fd2d9c93fc 605-607,609-615
+  s_830a75a8050e25::t_064464ac6f8742 627
+  s_830a75a8050e25::t_082863f646649d 654
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsPreferences.swift
+  s_830a75a8050e25::t_179ef4bceb49b2 454-458,461-463
+  s_830a75a8050e25::t_1d428bfa8215fd 671-677
+  s_830a75a8050e25::t_02631989d3b66b 440-442
+  s_830a75a8050e25::t_a4a3add8bedee5 661-670,678
+  s_830a75a8050e25::t_3e9004030a2fca 319-324,327-328,332-339,342,344-347
+  s_830a75a8050e25::t_1223e31222f2ba 353-354,360-366
+  s_830a75a8050e25::t_f580d5ed7226eb 257-259,261-262
+  s_830a75a8050e25::t_c2b40bc97d15a4 288-303
+  s_830a75a8050e25::t_2d97f9a1ed897d 728-729
+  s_830a75a8050e25::t_7f0e3bc1859a68 274-276
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarView.swift
+  s_830a75a8050e25::t_09f01d42f8fbbc 699-700,704-711,713-714,717-741
+  s_830a75a8050e25::t_2c8a4ccc281a2b 230-235
+  s_830a75a8050e25::t_c2c6c73dd382fa 229
+desktop/context-for-claude/Tests/ContextAppTests/KeyboardReachTests.swift
+  s_830a75a8050e25::t_44a12a757e5238 1-88
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityAccount.swift
+  s_830a75a8050e25::t_9fe2e6b9f0541b 67-71,78-94,100-105,110-112,114,116,128-133,135-140,142-152,154-159,161
+  s_830a75a8050e25::t_2e5edbffeb30f8 153,160
+  s_830a75a8050e25::t_53778ed2b6ddd5 72-77
+  s_830a75a8050e25::t_e0422fe6687325 40-56
+  s_830a75a8050e25::t_089b5d062609d5 113,115,117-126,134,141
+  s_830a75a8050e25::t_9f78cb36b5ff69 127
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityStream.swift
+  s_830a75a8050e25::t_6c1e23d7d6f0d0 252-259,264-278,282,288-309,319-324,329-341,346,350,358,367,370
+  s_830a75a8050e25::t_476ac24180262a 219
+  s_830a75a8050e25::t_b2941408941591 95-106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c9662fe981cec85cac2bf552fbc71d14c53230c2",
+  "prompts": {},
+  "sessions": {
+    "s_830a75a8050e25": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c76762c9-b116-4248-8786-3ab36dd6ee16",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_ab9fc0a75db486": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a054ea408a47ebcb6",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
