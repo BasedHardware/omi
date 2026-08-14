@@ -27,8 +27,9 @@ export interface AgentApprovalCoordinatorRequest {
 
 export interface AgentApprovalCoordinatorResolve {
   readonly runId: string;
-  readonly approvalId: string;
   readonly resolution: AgentApprovalResolution;
+  /** Omit to resolve the single pending approval for this run. */
+  readonly approvalId?: string;
 }
 
 export interface AgentApprovalCoordinatorSnapshot {
@@ -41,6 +42,7 @@ export interface AgentApprovalCoordinatorSnapshot {
     readonly toolName: string;
     readonly idempotencyKey: string;
     readonly inputHash: string;
+    readonly input: unknown;
   }[];
 }
 
@@ -219,17 +221,22 @@ export const createAgentApprovalCoordinator = (
 
   const resolve = async (input: AgentApprovalCoordinatorResolve): Promise<AgentToolOutcome> => {
     const pending = pendingByRun.get(input.runId);
-    if (pending === undefined || pending.approvalId !== input.approvalId) {
-      return { kind: "failed", callId: pending?.call.callId ?? "call:unknown",
+    if (pending === undefined) {
+      return { kind: "failed", callId: "call:unknown",
+        code: "approval_unknown", summary: "The approval request is unavailable.", retryable: false };
+    }
+    const approvalId = input.approvalId ?? pending.approvalId;
+    if (pending.approvalId !== approvalId) {
+      return { kind: "failed", callId: pending.call.callId,
         code: "approval_unknown", summary: "The approval request is unavailable.", retryable: false };
     }
     const outcome = await runner.resolveApproval({
-      approvalId: input.approvalId,
+      approvalId,
       resolution: input.resolution,
       call: pending.call,
     });
     if (outcome.kind !== "pending_approval") pendingByRun.delete(input.runId);
-    deliverResolution(input.runId, input.approvalId, outcome);
+    deliverResolution(input.runId, approvalId, outcome);
     return outcome;
   };
 
@@ -277,6 +284,7 @@ export const createAgentApprovalCoordinator = (
       toolName: entry.call.toolName,
       idempotencyKey: entry.call.idempotencyKey,
       inputHash: runner.snapshot().calls.find((call) => call.callId === entry.call.callId)?.inputHash ?? "",
+      input: entry.call.input,
     }))),
   });
 
@@ -292,10 +300,14 @@ export const createAgentApprovalCoordinator = (
     for (const value of record.pending) {
       const item = ownDataRecord(value);
       if (item === null || !exactKeys(item, ["approvalId", "attemptId", "callId", "idempotencyKey",
-        "inputHash", "runId", "toolName"])
+        "input", "inputHash", "runId", "toolName"])
         || !SAFE_TOKEN.test(item.runId) || !SAFE_TOKEN.test(item.attemptId)
         || !SAFE_TOKEN.test(item.callId) || !SAFE_TOKEN.test(item.approvalId)
         || !SAFE_TOKEN.test(item.toolName) || !SAFE_TOKEN.test(item.idempotencyKey)) {
+        throw new TypeError("invalid agent approval coordinator pending snapshot");
+      }
+      const inputRecord = ownDataRecord(item.input);
+      if (inputRecord === null) {
         throw new TypeError("invalid agent approval coordinator pending snapshot");
       }
       const callState = runner.snapshot().calls.find((call) => call.callId === item.callId);
@@ -310,7 +322,7 @@ export const createAgentApprovalCoordinator = (
           callId: item.callId,
           toolName: item.toolName,
           idempotencyKey: item.idempotencyKey,
-          input: {},
+          input: inputRecord,
         },
       });
     }

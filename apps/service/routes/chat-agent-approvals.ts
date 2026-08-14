@@ -44,13 +44,16 @@ export const registerChatAgentApprovalRoutes = (
     const record = body as Record<string, unknown>;
     const approvalId = record.approvalId;
     const resolution = record.resolution;
-    if (typeof approvalId !== "string" || typeof resolution !== "string"
-      || !["approved", "denied", "cancelled"].includes(resolution)) {
+    if (typeof resolution !== "string"
+      || !["approved", "denied", "cancelled"].includes(resolution)
+      || (approvalId !== undefined && typeof approvalId !== "string")) {
       return badRequest();
     }
+    const extraKeys = Object.keys(record).filter((key) => key !== "resolution" && key !== "approvalId");
+    if (extraKeys.length > 0) return badRequest();
     const outcome = await deps.coordinator.resolve({
       runId,
-      approvalId,
+      ...(typeof approvalId === "string" ? { approvalId } : {}),
       resolution: resolution as "approved" | "denied" | "cancelled",
     });
     if (outcome.kind === "failed" && outcome.code === "approval_unknown") return notFound();

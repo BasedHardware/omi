@@ -99,6 +99,43 @@ describe("chat agent approval route", () => {
     db.close();
   });
 
+  test("resolution without approvalId uses the pending approval for that generation", async () => {
+    const db = new Database(":memory:");
+    const stores = createInMemoryLocalServiceStores();
+    const local = createLocalDevService({
+      db,
+      stores,
+      ownerAccountId: "approval-owner",
+      memoryCount: 0,
+      accountTimezone: "UTC",
+      devSecretLabel: "agent-approval-route-pending",
+    });
+    const runId = "generation-approval-pending";
+    admitGeneration(stores, "approval-owner", runId, "message-approval-pending");
+    await local.writePath.agentApprovalCoordinator.request({
+      runId,
+      attemptId: `${runId}:attempt:1`,
+      call: {
+        callId: "call:write-pending",
+        toolName: "safe.write",
+        idempotencyKey: "idem:write-pending",
+        input: { note: "pending note" },
+      },
+    });
+    const response = await local.app.request(`/v1/chat-generations/${runId}/agent-approvals`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${local.devToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ resolution: "approved" }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json() as { outcome: { kind: string; summary?: string } };
+    expect(body.outcome).toMatchObject({ kind: "completed", summary: "Scoped write recorded." });
+    db.close();
+  });
+
   test("deny and cancel return 202 without executing safe.write", async () => {
     for (const resolution of ["denied", "cancelled"] as const) {
       const db = new Database(":memory:");

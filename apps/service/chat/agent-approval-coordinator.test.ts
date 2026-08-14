@@ -82,6 +82,38 @@ describe("agent approval coordinator", () => {
     expect(second.events.list("run:approval").some((event) => event.kind === "tool_result")).toBe(true);
   });
 
+  test("post-reload approve keeps the original safe.write input", async () => {
+    executions = 0;
+    const first = boot();
+    const call = {
+      callId: "call:write-note",
+      toolName: "safe.write",
+      idempotencyKey: "idem:write-note",
+      input: { note: "scoped note" },
+    } as const;
+    first.supervisor.accepted({
+      runId: "run:approval-note",
+      attemptId: "run:approval-note:attempt:1",
+      admissionId: "message-approval-note",
+    });
+    const pending = await first.coordinator.request({
+      runId: "run:approval-note",
+      attemptId: "run:approval-note:attempt:1",
+      call,
+    });
+    expect(pending.kind).toBe("pending_approval");
+    expect(executions).toBe(0);
+    const snapshot = first.coordinator.snapshot();
+    const second = boot(first.events);
+    second.coordinator.restore(snapshot);
+    const completed = await second.coordinator.resolve({
+      runId: "run:approval-note",
+      resolution: "approved",
+    });
+    expect(completed).toMatchObject({ kind: "completed", summary: "Scoped write recorded." });
+    expect(executions).toBe(1);
+  });
+
   test("deny and cancel do not execute", async () => {
     for (const resolution of ["denied", "cancelled"] as const) {
       executions = 0;
