@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import _clamp_review_score, fetch_app_chat_tools_from_manifest
 from utils.executors import (
+    auth_idp_executor,
     critical_executor,
     db_executor,
     llm_executor,
@@ -1692,7 +1693,10 @@ async def verify_twitter_ownership_tweet(
     # Neutral auth port: get_user returns a UserProfile whose ``providers`` are already provider-id
     # strings (was a Firebase UserRecord with ``.provider_data`` objects). Offload the blocking lookup
     # (Firebase Admin, or two OIDC HTTP round-trips) so it does not stall the event loop (cubic 10887 C3).
-    provider_data = (await run_blocking(critical_executor, auth.get_user, uid)).providers
+    # Profile lookup does a synchronous IdP HTTP call (Keycloak Admin API under OIDC); run it on the
+    # dedicated auth_idp_executor so a slow IdP cannot starve critical_executor's bearer-verification
+    # workers (cubic review PR 10887, review 4939247683).
+    provider_data = (await run_blocking(auth_idp_executor, auth.get_user, uid)).providers
 
     # Verify handle
     if handle.startswith('@'):
@@ -1749,7 +1753,9 @@ async def migrate_app_owner(
         source_principal = await run_blocking(
             critical_executor, auth.get_auth_provider().verify_token, source_token, check_revoked=True
         )
-        source_user = await run_blocking(critical_executor, auth.get_user, old_id)
+        # Keep bearer verification on critical_executor (above); the profile lookup is a separate IdP
+        # HTTP call → auth_idp_executor, so it cannot saturate critical_executor (review 4939247683).
+        source_user = await run_blocking(auth_idp_executor, auth.get_user, old_id)
     except Exception:
         # Invalid/revoked tokens, missing/deleted users, and Admin lookup failures
         # are deliberately indistinguishable to callers. Neither may mutate state.

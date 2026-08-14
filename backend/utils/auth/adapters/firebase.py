@@ -43,7 +43,12 @@ def _translate(exc: Exception) -> errors.AuthError:
         return errors.JWKSUnavailable(str(exc))
     if isinstance(exc, invalid):
         return errors.InvalidToken(str(exc))
-    return errors.InvalidToken(str(exc))
+    # Unknown failure (SDK not initialized, transport/cert glitch, unexpected error) is NOT a genuine
+    # invalid token — map it to AuthError, not InvalidToken. The LOCAL_DEVELOPMENT uid-123 fallback in
+    # utils/other/endpoints.py catches only InvalidToken, so a setup/transport failure must not slip
+    # through it and grant every request the same identity (cubic review PR 10887, review 4939247683).
+    # Genuine invalid/malformed tokens still surface as InvalidIdTokenError (the branch above).
+    return errors.AuthError(str(exc))
 
 
 class FirebaseAuthProvider:

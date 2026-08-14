@@ -82,7 +82,11 @@ class OIDCAuthProvider:
                 algorithms=["RS256"],
                 audience=audience,
                 issuer=_issuer(),
-                options={"verify_aud": True},
+                # require exp + sub explicitly: PyJWT verifies exp only when PRESENT, so a token minted
+                # WITHOUT exp would otherwise be accepted (never-expiring identity); and sub is the uid
+                # (read below), so a token without it must fail closed as InvalidToken here, not KeyError
+                # 500 downstream (cubic review PR 10887).
+                options={"verify_aud": True, "require": ["exp", "sub"]},
             )
         except jwt.ExpiredSignatureError as exc:
             raise errors.ExpiredToken(str(exc))

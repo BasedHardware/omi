@@ -18,7 +18,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
 from pydantic import BaseModel
 
-from utils.auth import get_auth_provider
+from utils.auth import auth_backend_name, get_auth_provider
 from utils.auth import errors as auth_errors
 from google.api_core.exceptions import FailedPrecondition
 from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
@@ -1560,6 +1560,14 @@ async def _get_token_request_data(request: Request) -> Dict[str, Any]:
     return dict(form_data)
 
 
+def _guard_firebase_authorize_backend() -> None:
+    # The MCP /authorize consent UX loads the Firebase JS SDK and posts a firebase_id_token, so it
+    # only works under AUTH_BACKEND=firebase. Under OIDC there is no Firebase project and serving this
+    # page would dead-end the flow — fail 501 like /v1/oauth/authorize (cubic review 4939247683).
+    if auth_backend_name() != "firebase":
+        raise HTTPException(status_code=501, detail="MCP OAuth authorize is only available with AUTH_BACKEND=firebase")
+
+
 @router.get("/authorize", response_class=HTMLResponse, tags=["mcp"])
 def mcp_authorize(
     request: Request,
@@ -1573,6 +1581,7 @@ def mcp_authorize(
     code_challenge_method: Optional[str] = None,
 ):
     """OAuth authorize endpoint."""
+    _guard_firebase_authorize_backend()
     try:
         client, scopes = _validate_authorize_request(
             response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
@@ -1619,6 +1628,7 @@ async def mcp_authorize_consent(
     code_challenge: Optional[str] = Form(None),
     code_challenge_method: Optional[str] = Form(None),
 ):
+    _guard_firebase_authorize_backend()
     try:
         _, scopes = await run_blocking(
             db_executor,
