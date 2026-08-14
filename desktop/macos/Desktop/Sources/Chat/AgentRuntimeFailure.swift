@@ -100,12 +100,12 @@ struct AgentRuntimeFailure: Equatable, Sendable {
       source: payload["source"] as? String,
       adapterId: payload["adapterId"] as? String,
       provider: payload["provider"] as? String,
-        retryable: payload["retryable"] as? Bool,
-        phase: payload["phase"] as? String,
-        recoveryAction: payload["recoveryAction"] as? String,
-        recoveryOutcome: payload["recoveryOutcome"] as? String,
-        retryDisposition: payload["retryDisposition"] as? String
-      )
+      retryable: payload["retryable"] as? Bool,
+      phase: payload["phase"] as? String,
+      recoveryAction: payload["recoveryAction"] as? String,
+      recoveryOutcome: payload["recoveryOutcome"] as? String,
+      retryDisposition: payload["retryDisposition"] as? String
+    )
   }
 }
 
