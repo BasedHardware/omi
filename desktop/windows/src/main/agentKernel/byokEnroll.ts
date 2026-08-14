@@ -78,11 +78,12 @@ async function deleteActivate(
 /**
  * Validate the current key set and reconcile the backend BYOK activation.
  *
- * - Not all four present → never validate; ensure the backend is OFF; no results.
- * - All four present → live-validate all in parallel:
- *   - all authenticate → POST fingerprints (active) unless the backend call fails.
- *   - any fail → DELETE (inactive) and return the per-key results so the UI can
- *     show which provider rejected.
+ * - No LLM key present → never validate; ensure the backend is OFF; no results.
+ * - At least one LLM key present → live-validate all configured keys in parallel:
+ *   - at least one LLM key authenticates → POST fingerprints (active) unless the
+ *     backend call fails.
+ *   - every LLM key fails → DELETE (inactive) and return the per-key results so
+ *     the UI can show which provider rejected.
  */
 export async function enrollByok(opts: {
   keys: ByokKeys

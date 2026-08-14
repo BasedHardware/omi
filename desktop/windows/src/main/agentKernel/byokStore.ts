@@ -108,7 +108,7 @@ export class ByokKeyStore {
     }
   }
 
-  /** True when all four providers have a stored key (backend all-or-nothing). */
+  /** True when a configured LLM provider has a stored key. */
   isActive(): boolean {
     return isByokActive(this.getAllKeys())
   }
