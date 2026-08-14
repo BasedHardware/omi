@@ -121,6 +121,10 @@ enum SettingsWindow {
 
     static var isVisible: Bool { current?.isVisible ?? false }
 
+    /// The Settings window itself, for the one thing that has to know which window an event was
+    /// delivered to: the shortcut recorder's key monitor. See `ShortcutRecorderScope`.
+    static var window: NSWindow? { current }
+
     private static func centredFrame(on screen: NSScreen) -> NSRect {
         let visible = screen.visibleFrame
         let size = NSSize(

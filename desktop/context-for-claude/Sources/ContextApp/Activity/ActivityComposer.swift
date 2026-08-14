@@ -14,6 +14,29 @@
 import ContextCore
 import Foundation
 
+/// How many captured frames one sampled frame stands for, and the one place a run of the sample is
+/// turned back into a count of the day.
+///
+/// A value rather than a division written out three times, because the three call sites — the
+/// conversation's `N screen moments`, its attached strip's `8 of N`, and a loose run's — have to
+/// agree or a conversation says six where the strip under it says two hundred.
+struct MomentScale: Equatable {
+    /// How many of the day's frames the composer was actually handed.
+    let sampled: Int
+    /// How many the day really holds, from `ActivityDayScreen.total`.
+    let captured: Int
+
+    /// What a run of `count` sampled frames stands for.
+    ///
+    /// Never fewer than the frames themselves: a `captured` smaller than `sampled` is not a state
+    /// the store can produce, and a strip that said "8 of 3" would be worse than one that said
+    /// nothing. Below the sampling ceiling the sample *is* the day and this is the identity.
+    func forRun(of count: Int) -> Int {
+        guard sampled > 0, captured > sampled else { return count }
+        return max(count, Int((Double(count) * Double(captured) / Double(sampled)).rounded()))
+    }
+}
+
 enum ActivityComposer {
     /// How many frames a single strip draws. Eight is what fits a strip at the panel's narrowest
     /// before it starts scrolling, and a strip is a glance, not a gallery.
@@ -58,8 +81,34 @@ enum ActivityComposer {
                 .append(conversation)
         }
 
-        var memoriesByDay: [Date: [ActivityMemory]] = [:]
+        // **A memory naming a conversation we are actually holding attaches to it; everything else
+        // stands on its own at the time it was made.** The conversation is the thing that happened
+        // and the memory is what was learned from it, so they belong on the same day — and they
+        // routinely are not on the same day by the clock. Extraction runs after the fact, so a
+        // conversation at eleven at night leaves a memory timestamped the following morning, and
+        // filing that on its own instant puts the fact on a day the user did not live it. This is
+        // the one attachment the account can *state*; the composer never infers one from a
+        // timestamp, which is why tasks — whose seam carries no conversation id — do not attach.
+        //
+        // A memory pointing at a conversation on a page we have not loaded must not vanish: it falls
+        // through to `looseMemories` and gets a row of its own rather than being filed against a
+        // conversation that is not on screen to hold it.
+        let conversationIDs = Set(conversations.map(\.id))
+        var attachedMemories: [String: [ActivityMemory]] = [:]
+        var looseMemories: [ActivityMemory] = []
         for memory in uniqued(account.memories, by: \.id).map(ActivityMemory.init(memory:)) {
+            if let conversationID = memory.conversationID, conversationIDs.contains(conversationID) {
+                attachedMemories[conversationID, default: []].append(memory)
+            } else {
+                looseMemories.append(memory)
+            }
+        }
+
+        // Only the loose ones can put a day on the stream. An attached memory is shown on its
+        // conversation's day, so counting its own day here would open a header over a day whose
+        // only row had been re-seated onto another one.
+        var memoriesByDay: [Date: [ActivityMemory]] = [:]
+        for memory in looseMemories {
             memoriesByDay[calendar.startOfDay(for: memory.timestamp), default: []].append(memory)
         }
 
@@ -79,6 +128,7 @@ enum ActivityComposer {
                 day: day,
                 conversations: conversationsByDay[day] ?? [],
                 memories: memoriesByDay[day] ?? [],
+                attachedMemories: attachedMemories,
                 tasks: tasksByDay[day] ?? [],
                 screen: screen[day] ?? .empty,
                 calendar: calendar
@@ -120,19 +170,27 @@ enum ActivityComposer {
     ///
     /// - Parameter query: already trimmed and case-folded by the caller, so there is one
     ///   normalisation on this surface rather than one per call site.
+    /// - Parameter latest: the top of the window, and **not decoration on `earliest`**. Tasks are
+    ///   read unwindowed on purpose (`OmiActivityFeed.read` — an open commitment matters whenever it
+    ///   was written) and are placed on their *due* date, which can be days either side of what the
+    ///   time chips asked for. With no upper bound here, picking `Yesterday` composed a `TODAY`
+    ///   header above it out of tasks due today; a task due next Friday put a day in the future at
+    ///   the top of a stream whose whole claim is that it is a record of the past.
     static func filter(
         _ days: [ActivityDay],
         kind: ActivityKind,
         query: String,
-        earliest: Date? = nil
+        earliest: Date? = nil,
+        latest: Date? = nil
     ) -> [ActivityDay] {
         let needle = query
-        guard kind != .all || !needle.isEmpty || earliest != nil else { return days }
+        guard kind != .all || !needle.isEmpty || earliest != nil || latest != nil else { return days }
 
         return days.compactMap { day in
             var rows = day.rows.filter { row in
                 guard kind == .all || row.kind == kind else { return false }
                 if let earliest, row.anchor < earliest { return false }
+                if let latest, row.anchor > latest { return false }
                 guard !needle.isEmpty else { return true }
                 return row.searchText.contains(needle)
             }
@@ -160,10 +218,15 @@ enum ActivityComposer {
         }
     }
 
+    /// - Parameter memories: the day's *loose* memories — the ones filed on their own timestamp.
+    /// - Parameter attachedMemories: every attached memory in the whole stream, keyed by the
+    ///   conversation that produced it. Not narrowed to this day on purpose: an attached memory is
+    ///   shown on its conversation's day, and its own timestamp routinely falls on another one.
     private static func composeDay(
         day: Date,
         conversations: [ActivityConversation],
         memories: [ActivityMemory],
+        attachedMemories: [String: [ActivityMemory]],
         tasks: [ActivityTask],
         screen: ActivityDayScreen,
         calendar: Calendar
@@ -193,11 +256,35 @@ enum ActivityComposer {
             }
         }
 
+        // **What one sampled frame stands for.** `ActivityStore.project` keeps at most
+        // `sampleCeiling` frames of a day, spread evenly (`evenlySampled`), and a day of screen
+        // capture at three-second intervals is thousands — so every number derived from the sample
+        // is short by the sampling ratio unless it is scaled back. Counting the sample instead was
+        // visible on screen: a conversation said "6 screen moments" for a stretch that held two
+        // hundred, and the corner reported a chip that excluded nothing as "51 results · of 2,954".
+        //
+        // Even sampling is exactly the claim "these N stand for those M evenly", so the scale is a
+        // reading of the sample rather than an estimate laid over it.
+        //
+        // Denominated in the sample **as the store delivered it**, not in `moments` — which is that
+        // sample after `uniqued`. A frame that reached the composer twice was still counted once by
+        // the day's own read, so dividing by the deduped count would inflate every run by exactly
+        // the duplicates it had just removed.
+        let stands = MomentScale(sampled: screen.sampled.count, captured: screen.total)
+
         var rows: [ActivityRow] = []
+        // How many memories this day is showing because a conversation on it produced them. They
+        // are the day's memories as far as the reader is concerned, so the header counts them — and
+        // it cannot get them from `memories`, which is only the loose half.
+        var attachedMemoryCount = 0
 
         for summary in ordered {
             let attached = momentsByConversation[summary.id] ?? []
-            let counted = summary.counted(momentCount: attached.count)
+            let remembered = (attachedMemories[summary.id] ?? []).sorted {
+                $0.timestamp > $1.timestamp
+            }
+            attachedMemoryCount += remembered.count
+            let counted = summary.counted(momentCount: stands.forRun(of: attached.count))
             rows.append(
                 ActivityRow(
                     id: "conv:\(summary.id)",
@@ -207,39 +294,39 @@ enum ActivityComposer {
                     content: .conversation(counted),
                     searchText: counted.searchText
                 ))
+            // What was learned before what was on screen: the memory is the conversation's own
+            // residue and the strip is context around it.
+            if !remembered.isEmpty {
+                rows.append(memoryRow(remembered, id: "conv-mem:\(summary.id)", isAttached: true))
+            }
             if !attached.isEmpty {
                 rows.append(
                     momentRow(
-                        attached, total: attached.count, id: "conv-shot:\(summary.id)",
-                        isAttached: true))
+                        attached, total: stands.forRun(of: attached.count),
+                        id: "conv-shot:\(summary.id)", isAttached: true))
             }
         }
 
         for cluster in clusters(of: looseMoments) {
             guard let first = cluster.first else { continue }
             rows.append(
-                momentRow(cluster, total: cluster.count, id: "shot:\(first.id)", isAttached: false))
+                momentRow(
+                    cluster, total: stands.forRun(of: cluster.count), id: "shot:\(first.id)",
+                    isAttached: false))
         }
 
-        // **Memories and tasks stand on the clock in their own right — they never attach.** The seam
-        // carries no conversation id for either (see `ActivityAccountMemory`), so claiming a memory
-        // as the child of the conversation it happens to fall inside would be an attachment invented
-        // from a timestamp. A frame can be attached because being on screen *during* a conversation
-        // is exactly what the window means; a memory landing in the same minute is a coincidence
-        // until the account says otherwise.
+        // What is left stands on the clock in its own right, grouped by the run it came out of.
         for cluster in runs(of: memories, at: \.timestamp) {
             guard let first = cluster.first else { continue }
-            rows.append(
-                ActivityRow(
-                    id: "mem:\(first.id)",
-                    anchor: cluster.map(\.timestamp).max() ?? first.timestamp,
-                    kind: .memories,
-                    isAttached: false,
-                    content: .memories(cluster),
-                    searchText: cluster.map(\.text).joined(separator: " ").lowercased()
-                ))
+            rows.append(memoryRow(cluster, id: "mem:\(first.id)", isAttached: false))
         }
 
+        // **Tasks never attach, and that is not an oversight.** The seam carries no conversation id
+        // for a task, so claiming one as the child of the conversation it happens to fall inside
+        // would be an attachment invented from a timestamp. A frame can be attached because being on
+        // screen *during* a conversation is exactly what the window means, and a memory because the
+        // account says which conversation it came out of; a task landing in the same minute is a
+        // coincidence until something states otherwise.
         for cluster in runs(of: tasks, at: \.timestamp) {
             guard let first = cluster.first else { continue }
             rows.append(
@@ -270,7 +357,7 @@ enum ActivityComposer {
             title: ActivityFormat.day(day, calendar: calendar),
             momentCount: screen.total,
             conversationCount: conversations.count,
-            memoryCount: memories.count,
+            memoryCount: memories.count + attachedMemoryCount,
             taskCount: tasks.count,
             rows: rows
         )
@@ -295,8 +382,9 @@ enum ActivityComposer {
                 spine.append(row)
                 continue
             }
-            // "conv-shot:<id>" — the owner is everything after the *first* colon, because a local
-            // session's id carries one of its own (`ActivityConversation.localID`).
+            // "conv-shot:<id>" / "conv-mem:<id>" — the owner is everything after the *first* colon,
+            // because a local session's id carries one of its own
+            // (`ActivityConversation.localID`).
             let owner = String(row.id.drop(while: { $0 != ":" }).dropFirst())
             attachments[owner, default: []].append(row)
         }
@@ -304,6 +392,19 @@ enum ActivityComposer {
             guard case .conversation(let summary) = row.content else { return [row] }
             return [row] + (attachments["\(summary.id)"] ?? [])
         }
+    }
+
+    private static func memoryRow(
+        _ memories: [ActivityMemory], id: String, isAttached: Bool
+    ) -> ActivityRow {
+        ActivityRow(
+            id: id,
+            anchor: memories.map(\.timestamp).max() ?? Date(),
+            kind: .memories,
+            isAttached: isAttached,
+            content: .memories(memories),
+            searchText: memories.map(\.text).joined(separator: " ").lowercased()
+        )
     }
 
     private static func momentRow(

@@ -226,7 +226,13 @@ struct SearchBarView: View {
                     // memories, tasks — have no local source at all, so a surface built with the
                     // default `ActivityAccountAbsent` renders four of its five filters permanently
                     // empty and says the account is unreachable while the user is signed in.
-                    account: OmiActivityFeed(),
+                    //
+                    // Wrapped so the memory column is read the way the shipping Omi app reads it —
+                    // this Mac's own database first, the account second. Without it a `/v3/memories`
+                    // outage draws an empty column indistinguishable from an empty account, which is
+                    // the state the backend has actually been in. See `ActivityLocalMemories`; it is
+                    // a decorator precisely so this line is the only place the app decides to use it.
+                    account: ActivityLocalMemories(OmiActivityFeed()),
                     query: query,
                     since: bounds.since,
                     until: bounds.until,
@@ -690,14 +696,49 @@ private struct SearchField: NSViewRepresentable {
     }
 }
 
-/// Takes focus the moment it joins a window, so the bar is typeable on the first open.
+/// Takes focus the moment it joins a window, so the bar is typeable on the first open — **and takes
+/// it back whenever the panel is summoned again.**
 ///
 /// The async pass is the one that sticks: SwiftUI is still assembling the hierarchy when
 /// `viewDidMoveToWindow` runs, and a first responder set inside that pass gets replaced.
+///
+/// The second half closes a gap between what `refocusNotification` promises and what anything did
+/// about it. `SearchBarWindow` posts it on `didBecomeKey` and on a `present()` that found the panel
+/// already up, documented as the way the field re-takes focus — but its only observer was the
+/// prefill handler in `SearchBarView`, which returns immediately when there is no prefill. So focus
+/// was taken exactly once per panel *construction*, and a panel re-summoned after focus had moved
+/// off the field (to the filter block's date picker, to the Timeline pill) came forward untypeable.
+/// The field is the thing that knows how to be focused, so it is the thing that listens.
 final class FocusingTextField: NSTextField {
+    private var refocus: NSObjectProtocol?
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard let window else { return }
+        guard let window else {
+            // Left the hierarchy: an observer outliving the field would be a strong reference to a
+            // panel that has already closed.
+            if let refocus { NotificationCenter.default.removeObserver(refocus) }
+            refocus = nil
+            return
+        }
+        takeFocus(in: window)
+        guard refocus == nil else { return }
+        refocus = NotificationCenter.default.addObserver(
+            forName: SearchBarWindow.refocusNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let window = self.window else { return }
+                self.takeFocus(in: window)
+            }
+        }
+    }
+
+    deinit {
+        if let refocus { NotificationCenter.default.removeObserver(refocus) }
+    }
+
+    /// Both passes, because only the second one sticks while SwiftUI is still assembling.
+    private func takeFocus(in window: NSWindow) {
         window.makeFirstResponder(self)
         DispatchQueue.main.async { [weak self] in
             guard let self, self.window === window else { return }

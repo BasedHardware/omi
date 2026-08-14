@@ -80,10 +80,13 @@ final class ActivityCompositionTests: XCTestCase {
             overview: overview)
     }
 
-    private func accountMemory(id: String, at timestamp: Date, content: String = "prefers async")
-        -> ActivityAccountMemory
-    {
-        ActivityAccountMemory(id: id, content: content, at: timestamp.timeIntervalSince1970)
+    private func accountMemory(
+        id: String, at timestamp: Date, content: String = "prefers async",
+        conversation: String? = nil
+    ) -> ActivityAccountMemory {
+        ActivityAccountMemory(
+            id: id, content: content, at: timestamp.timeIntervalSince1970,
+            conversationID: conversation)
     }
 
     private func accountTask(
@@ -515,10 +518,11 @@ final class ActivityCompositionTests: XCTestCase {
             "the day counts the conversations it kept, not the records it read")
     }
 
-    /// Memories and tasks are their own rows, grouped by the run they came out of, and they **never
-    /// attach**: the seam carries no conversation id, so a memory landing inside a conversation's
-    /// window is a coincidence until the account says otherwise.
-    func testMemoriesAndTasksClusterIntoRowsAndNeverAttach() {
+    /// Memories and tasks are their own rows, grouped by the run they came out of, and a memory the
+    /// account named no conversation for **does not attach**: landing inside a conversation's window
+    /// is a coincidence, and an attachment drawn from a timestamp is a claim the record does not
+    /// support. A task never attaches at all — its seam carries no conversation id to attach by.
+    func testMemoriesWithNoConversationAndTasksClusterIntoRowsAndNeverAttach() {
         let start = at(day: 10, hour: 14)
         let gap = ActivityComposer.momentClusterGap
         let days = compose(
@@ -547,6 +551,71 @@ final class ActivityCompositionTests: XCTestCase {
         XCTAssertEqual(day.taskCount, 1)
         XCTAssertEqual(
             day.matchCount, 5, "three memories, one task and one conversation — things, not rows")
+    }
+
+    /// **A memory the account attributes to a conversation is shown on that conversation's day, not
+    /// on the day it was written.** Extraction runs after the fact, so a late conversation leaves a
+    /// memory stamped the following morning — and filing that on its own instant is how a fact ends
+    /// up on a day the user did not live it, under a day header the conversation is not even on.
+    ///
+    /// It also has to sit *directly under* its conversation once it is there: its timestamp puts it
+    /// at the top of the day, so nothing but the re-seat can hold it to the thing it came out of.
+    func testAMemoryFromALoadedConversationIsShownUnderItOnThatConversationsDay() throws {
+        let days = compose(
+            account: ActivityAccountFeed(
+                conversations: [
+                    accountConversation(id: "a1", start: at(day: 10, hour: 9), minutes: 40)
+                ],
+                memories: [
+                    // The next morning by the clock, and the account says which conversation it came
+                    // out of.
+                    accountMemory(id: "m1", at: at(day: 11, hour: 9), conversation: "a1"),
+                    // Nothing to attach to, hours after the conversation ended: stays where it is.
+                    accountMemory(id: "loose", at: at(day: 10, hour: 20)),
+                ]))
+
+        XCTAssertEqual(
+            days.map(\.id), [startOfDay(10)],
+            "the attached memory did not open a day of its own on the day it was written")
+
+        let day = try XCTUnwrap(days.first)
+        XCTAssertEqual(
+            day.rows.map(\.id), ["mem:loose", "conv:a1", "conv-mem:a1"],
+            "re-seated under its conversation, not sorted to the top of the day by its timestamp")
+        XCTAssertTrue(try XCTUnwrap(day.rows.last).isAttached)
+
+        guard case .memories(let attached) = try XCTUnwrap(day.rows.last).content else {
+            return XCTFail("the attached row is a memory")
+        }
+        XCTAssertEqual(attached.map(\.id), ["m1"])
+        XCTAssertEqual(
+            day.memoryCount, 2,
+            "the header counts the memories the day shows, attached ones included")
+        XCTAssertEqual(day.matchCount, 3)
+    }
+
+    /// **A memory naming a conversation the stream is not holding must not vanish.** The account
+    /// pages independently of this window, so a memory routinely outlives the conversation's page —
+    /// and dropping it, or filing it against a conversation that is not on screen to hold it, would
+    /// silently delete a fact from the record. It stands on its own timestamp instead.
+    func testAMemoryNamingAConversationTheStreamDoesNotHoldStillStandsOnItsOwnDay() throws {
+        let days = compose(
+            account: ActivityAccountFeed(
+                conversations: [
+                    accountConversation(id: "a1", start: at(day: 10, hour: 9), minutes: 40)
+                ],
+                memories: [
+                    accountMemory(id: "m1", at: at(day: 11, hour: 9), conversation: "unloaded")
+                ]))
+
+        XCTAssertEqual(days.map(\.id), [startOfDay(11), startOfDay(10)])
+
+        let day = try XCTUnwrap(days.first)
+        XCTAssertEqual(day.rows.map(\.id), ["mem:m1"])
+        XCTAssertFalse(
+            try XCTUnwrap(day.rows.first).isAttached,
+            "nothing on this day produced it, so it is a child of nothing")
+        XCTAssertEqual(day.memoryCount, 1)
     }
 
     /// A day of nothing but memories still gets a header, and the header says what is in it.
@@ -627,6 +696,101 @@ final class ActivityCompositionTests: XCTestCase {
         }
     }
 
+    /// **A machine that could not be asked outranks an account that answered.**
+    ///
+    /// The failure this pins was observed on a real launch: the capture database's first open threw,
+    /// so no read ever ran, `readFailure` stayed nil and `isPreparing` was false — and the empty
+    /// state fell all the way through to the account, telling somebody holding 2,837 captured frames
+    /// to "Sign in to Omi to see your account here". True, irrelevant, and the most misleading
+    /// sentence available at that moment.
+    func testADatabaseThatNeverOpenedIsReportedBeforeTheAccountIs() throws {
+        func copy(_ capture: ActivityCaptureAvailability) -> ActivityEmptyCopy {
+            ActivityEmptyCopy.resolve(
+                isPreparing: false, readFailure: nil, capture: capture, query: "", kind: .all,
+                accountReachable: false, accountUnreachableReason: .signedOut)
+        }
+
+        XCTAssertEqual(copy(.opening).headline, "This Mac's capture isn't open yet.")
+        XCTAssertEqual(copy(.unavailable).headline, "This Mac's capture didn't open.")
+        XCTAssertEqual(
+            copy(.open).headline, "Sign in to Omi to see your account here.",
+            "an open database still lets the account explain itself")
+
+        // …and neither of the two says the local half is on screen, because at that instant it is
+        // not. That promise is what made the observed frame contradict itself.
+        for capture in [ActivityCaptureAvailability.opening, .unavailable] {
+            XCTAssertFalse(
+                try XCTUnwrap(copy(capture).detail).contains("still show up here"),
+                "\(capture) must not promise rows it has none of")
+        }
+        XCTAssertTrue(
+            try XCTUnwrap(copy(.unavailable).detail).contains("open it again"),
+            "a wait that gave up has to leave the reader somewhere to go")
+        XCTAssertNotEqual(
+            copy(.opening), copy(.unavailable),
+            "\"being opened\" and \"never opened\" are a wait and a failure, not one state")
+    }
+
+    /// **A soloed chip decides which sources are even in scope**, and therefore what an empty list
+    /// is allowed to blame.
+    ///
+    /// Two ways this went wrong, both visible in the render harness: `Rewind` — which shows nothing
+    /// from the account at all — reported an account failure as the reason a day held no screen
+    /// capture; and `Memories` — which excludes screen moments by definition — promised that "screen
+    /// moments from this Mac still show up here" on a list that was filtering them out.
+    func testAnEmptyChipOnlyBlamesTheSourcesItActuallyShows() throws {
+        func copy(_ kind: ActivityKind) -> ActivityEmptyCopy {
+            ActivityEmptyCopy.resolve(
+                isPreparing: false, readFailure: nil, query: "", kind: kind,
+                accountReachable: false, accountUnreachableReason: .signedOut)
+        }
+
+        XCTAssertEqual(
+            copy(.rewind).headline, "Nothing captured in this window yet.",
+            "the account is not a source of screen moments and may not be blamed for their absence")
+        XCTAssertEqual(copy(.rewind).detail, "Screen moments appear here while screen capture is on.")
+
+        for kind in [ActivityKind.conversations, .memories, .tasks] {
+            let detail = try XCTUnwrap(copy(kind).detail)
+            XCTAssertFalse(
+                detail.contains("Screen moments"),
+                "\(kind) excludes screen moments, so it may not promise them")
+            XCTAssertTrue(detail.hasPrefix(kind.title))
+        }
+        XCTAssertTrue(
+            try XCTUnwrap(copy(.all).detail).contains("Screen moments from this Mac still show up here"),
+            "the merged view really is still showing them, and says so")
+    }
+
+    /// The local half's failures are the local half's. A soloed `Memories` is not explained by a
+    /// database this surface was not asking anything of.
+    func testTheLocalHalfsFailuresAreOnlyReportedWhereTheLocalHalfIsShown() {
+        let readFailure = ActivityStore.readFailureNote
+        XCTAssertEqual(
+            ActivityEmptyCopy.resolve(
+                isPreparing: false, readFailure: readFailure, capture: .unavailable, query: "",
+                kind: .memories, accountReachable: true
+            ).headline,
+            "Nothing captured in this window yet.")
+        XCTAssertEqual(
+            ActivityEmptyCopy.resolve(
+                isPreparing: false, readFailure: readFailure, capture: .unavailable, query: "",
+                kind: .all, accountReachable: true
+            ).headline,
+            "Couldn't read this Mac's capture.")
+    }
+
+    /// A read that could not run must never be reported as a search that found nothing — including
+    /// when there is a query on screen to blame it on.
+    func testAClosedDatabaseIsNotReportedAsAQueryThatMatchedNothing() {
+        XCTAssertEqual(
+            ActivityEmptyCopy.resolve(
+                isPreparing: false, readFailure: nil, capture: .opening, query: "invoice",
+                kind: .all, accountReachable: true
+            ).headline,
+            "This Mac's capture isn't open yet.")
+    }
+
     // MARK: - The corpus line
 
     /// The corner has two jobs and they are not the same sentence: at rest it says how much is being
@@ -638,14 +802,183 @@ final class ActivityCompositionTests: XCTestCase {
             "2,278 so far · still counting everything Omi has kept")
         XCTAssertEqual(
             ActivityCount.sentence(matching: 12, total: 2_278, isFiltering: false, isSettled: true),
-            "2,278 moments in everything Omi has kept")
+            "2,278 things in everything Omi has kept",
+            "the total is moments *plus* conversations, memories and tasks — see `ActivityCount.unit`")
         XCTAssertEqual(
             ActivityCount.sentence(matching: 1, total: 2_278, isFiltering: true, isSettled: true),
             "1 result · of 2,278 in everything Omi has kept")
         XCTAssertEqual(
             ActivityCount.sentence(matching: 0, total: 1, isFiltering: false, isSettled: true),
-            "1 moment in everything Omi has kept",
+            "1 thing in everything Omi has kept",
             "the noun agrees with the number it is beside")
+    }
+
+    /// **The corner's two numbers must count the same unit.**
+    ///
+    /// The rows only ever hold the *sample* — `ActivityStore.project` keeps at most `sampleCeiling`
+    /// frames of a day — while the day header counts every frame there was. Summing the sample on
+    /// one side of `N results · of M` and the real capture on the other made a chip that excluded
+    /// nothing look like a chip that had thrown away nine captures in ten: the render harness caught
+    /// `51 results · of 2,954 in everything Omi has kept` with `Rewind` lit over 2,845 frames.
+    func testASurvivingStripIsCountedInRealFramesAndNotInTiles() throws {
+        let start = at(day: 10, hour: 9)
+        // Ten sampled frames standing for a thousand — the ratio a day of three-second capture
+        // really produces once `sampleCeiling` bites.
+        let sampled = (0..<10).map { moment(id: Int64(200 + $0), at: start.addingTimeInterval(Double($0) * 60)) }
+        let days = compose(account: .empty, screen: screen(10, sampled, total: 1_000))
+        let day = try XCTUnwrap(days.first)
+
+        XCTAssertEqual(day.momentCount, 1_000, "the header counts the day, not the sample")
+        XCTAssertEqual(
+            day.matchCount, 1_000,
+            "an unfiltered day must match its own header, or the corner reports a filter nobody applied")
+
+        // Soloing `Rewind` excludes nothing here, so the corner must say so.
+        let soloed = ActivityComposer.filter(days, kind: .rewind, query: "")
+        XCTAssertEqual(soloed.reduce(0) { $0 + $1.matchCount }, 1_000)
+        XCTAssertEqual(
+            ActivityCount.sentence(
+                matching: 1_000, total: day.thingCount, isFiltering: true, isSettled: true),
+            "1,000 results · of 1,000 in everything Omi has kept")
+    }
+
+    /// The same scaling reaches the two sentences a reader actually looks at: what a conversation
+    /// says it caught, and what the strip under it says it is showing. They are one number stated
+    /// twice and they may never disagree.
+    func testAConversationAndItsStripAgreeAboutHowMuchTheyStandFor() throws {
+        let start = at(day: 10, hour: 9)
+        let inside = (0..<4).map { moment(id: Int64(300 + $0), at: start.addingTimeInterval(Double($0) * 60)) }
+        let days = compose(
+            account: ActivityAccountFeed(
+                conversations: [accountConversation(id: "c1", start: start, minutes: 30)]),
+            screen: screen(10, inside, total: 400))
+        let rows = try XCTUnwrap(days.first).rows
+
+        guard case .conversation(let conversation)? = rows.first?.content else {
+            return XCTFail("the conversation is the first row of the day")
+        }
+        guard case .moments(let shown, let total)? = rows.dropFirst().first?.content else {
+            return XCTFail("its strip is directly under it")
+        }
+        XCTAssertEqual(conversation.momentCount, total)
+        XCTAssertEqual(total, 400, "four sampled frames of a four-hundred-frame day stand for all of it")
+        XCTAssertEqual(shown.count, 4)
+        XCTAssertTrue(conversation.subtitle.contains("400 screen moments"))
+    }
+
+    /// A day whose capture never reached the sampling ceiling is its own sample, and nothing is
+    /// scaled. The identity case, because it is the one every other test in this file runs in.
+    func testAnUnsampledDayIsCountedExactly() throws {
+        let start = at(day: 10, hour: 9)
+        let all = (0..<3).map { moment(id: Int64(400 + $0), at: start.addingTimeInterval(Double($0) * 60)) }
+        let day = try XCTUnwrap(compose(account: .empty, screen: screen(10, all)).first)
+        XCTAssertEqual(day.matchCount, 3)
+        XCTAssertEqual(MomentScale(sampled: 3, captured: 3).forRun(of: 2), 2)
+    }
+
+    /// **The window has a top as well as a bottom.**
+    ///
+    /// Tasks are read unwindowed on purpose and are placed on their *due* date, so the feed
+    /// routinely carries commitments from outside the window the chips asked for. With only an
+    /// `earliest` bound, picking `Yesterday` composed a `TODAY` header above it out of tasks due
+    /// today — and a task due next week put a day in the *future* at the top of a stream whose whole
+    /// claim is that it is a record of the past.
+    func testTheTimeWindowBoundsBothEndsOfTheStream() throws {
+        let days = compose(
+            account: ActivityAccountFeed(
+                tasks: [
+                    accountTask(id: "yesterday", at: at(day: 10, hour: 11)),
+                    accountTask(id: "today", at: at(day: 11, hour: 11)),
+                    accountTask(id: "due-next-week", at: at(day: 18, hour: 11)),
+                ]))
+        XCTAssertEqual(days.count, 3, "unbounded, every dated task is its own day")
+
+        // The window the `Yesterday` chip asks for: one day, half-open at the top.
+        let bounded = ActivityComposer.filter(
+            days, kind: .all, query: "",
+            earliest: startOfDay(10),
+            latest: startOfDay(11).addingTimeInterval(-0.001))
+        XCTAssertEqual(bounded.map(\.id), [startOfDay(10)])
+    }
+
+    /// **The corner may not claim a corpus it is only showing half of.**
+    ///
+    /// Three of the five kinds live in the account, and the empty copy that reports a silent account
+    /// is only reachable when the stream is *completely* empty — which, on any Mac with screen
+    /// capture on, it never is. So a signed-out user saw a full-looking list of their screen moments
+    /// under a line promising "everything Omi has kept".
+    func testTheCorpusLineNarrowsItsScopeWhenTheAccountDidNotAnswer() {
+        XCTAssertEqual(
+            ActivityCount.sentence(
+                matching: 0, total: 743, isFiltering: false, isSettled: true,
+                scope: ActivityCount.scope(accountUnreachable: .signedOut)),
+            "743 things in what this Mac has kept")
+        XCTAssertEqual(
+            ActivityCount.sentence(
+                matching: 0, total: 743, isFiltering: false, isSettled: true,
+                scope: ActivityCount.scope(accountUnreachable: nil)),
+            "743 things in everything Omi has kept")
+        // No reason recorded means no read has come back unreachable, so the wide claim stands and
+        // the line cannot flicker to the narrow one during the opening moments.
+        XCTAssertEqual(ActivityCount.scope(accountUnreachable: nil), ActivityCount.scope)
+    }
+
+    /// The wait for a database that is not open yet has to outlast the thing that opens it.
+    ///
+    /// **A value assertion, not a behavioural one** — it pins a number against another component's
+    /// documented cadence rather than executing a wait. `Engine`'s maintenance loop re-runs
+    /// `ensureStorage()` every 30 seconds; this wait was 60 polls of 0.5 s, which is exactly one of
+    /// those, so it expired on the very tick that would have answered it and the panel sat empty for
+    /// the rest of the session with a live database underneath it.
+    func testTheStoreWaitOutlastsMoreThanOneOfTheEnginesRetries() {
+        let engineRetryCadence: TimeInterval = 30
+        let wait = Double(ActivityStore.storeWaitAttempts) * 0.5
+        XCTAssertGreaterThan(
+            wait, engineRetryCadence * 2,
+            "a wait that ends on the first retry is a wait that never sees the second")
+    }
+
+    /// **"Still counting" and "there was nothing" are different claims, and the corner could only
+    /// make the first one.**
+    ///
+    /// `corpusTotal` is `nil` for both — nothing read yet, and nothing to read — so on a Mac that has
+    /// genuinely captured nothing the corner said "Counting what you've captured…" for the rest of
+    /// the session, opposite a body that already said "Nothing captured in this window yet." Caught
+    /// in the render harness with the two sentences on screen together.
+    func testTheCornerStopsCountingOnceThereIsNothingLeftToCount() {
+        XCTAssertNotEqual(ActivityCount.nothingYet, ActivityCount.counting)
+        XCTAssertFalse(
+            ActivityCount.nothingYet.hasSuffix("…"),
+            "an ellipsis is the tell that something is still running")
+    }
+
+    /// **The store says which of the three it is in, from the provider alone.**
+    ///
+    /// The observed launch is exactly this: the database's first open threw, so `Engine`'s provider
+    /// answered `nil`, no read ever ran, and `readFailure` stayed nil. Reproduced with an injected
+    /// provider rather than by breaking a real database — the user's capture history is not a
+    /// fixture.
+    @MainActor
+    func testAStoreThatCannotBeOpenedSaysSoRatherThanLookingLikeAnEmptyOne() {
+        let store = ActivityStore(store: { nil }, calendar: Self.calendar)
+        XCTAssertEqual(store.capture, .open, "nothing has been asked yet")
+
+        store.start()
+        XCTAssertEqual(
+            store.capture, .opening,
+            "a provider with no database is a third state, not an empty answer")
+        XCTAssertNil(store.readFailure, "nothing was read, so nothing threw — which is the trap")
+        XCTAssertFalse(store.isPreparing, "and nothing is being prepared either")
+
+        // Which is what the copy has to be resolved from: the same inputs the real surface hands it.
+        XCTAssertEqual(
+            ActivityEmptyCopy.resolve(
+                isPreparing: store.isPreparing, readFailure: store.readFailure,
+                capture: store.capture, query: store.currentQuery, kind: store.kind,
+                accountReachable: store.accountReachable,
+                accountUnreachableReason: store.accountUnreachableReason
+            ).headline,
+            "This Mac's capture isn't open yet.")
     }
 
     // MARK: - The day walk

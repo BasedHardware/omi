@@ -55,6 +55,31 @@ enum ActivityKind: String, CaseIterable, Identifiable, Sendable {
     /// The chips, in the order they are shown — the declaration order, so there is one place the
     /// order lives rather than a list that can drift out of step with the cases.
     static let chips: [ActivityKind] = allCases
+
+    /// **Which of the two halves this filter is actually asking for.**
+    ///
+    /// The spine has two sources and the chips solo across them, so "why is this empty" has a
+    /// different answer under every chip. Without these two questions the surface reported the
+    /// account's silence as the reason an empty `Rewind` was empty — a confident wrong answer about
+    /// the wrong machine — and promised, under a soloed `Memories`, that "screen moments from this
+    /// Mac still show up here" on a list that was excluding them.
+    ///
+    /// Screen moments are the only local kind, so this is one case rather than a set.
+    var showsLocalCapture: Bool {
+        switch self {
+        case .all, .rewind: return true
+        case .conversations, .memories, .tasks: return false
+        }
+    }
+
+    /// True when the Omi account is a source of what this filter shows. Conversations come from
+    /// both halves, so only `rewind` is outside it.
+    var showsAccount: Bool {
+        switch self {
+        case .all, .conversations, .memories, .tasks: return true
+        case .rewind: return false
+        }
+    }
 }
 
 // MARK: - Leaves
@@ -269,17 +294,22 @@ struct ActivityMemory: Identifiable, Equatable, Sendable {
     let id: String
     let text: String
     let timestamp: Date
+    /// The conversation this fact came out of, when the account named one — and the only thing that
+    /// can attach a memory to a row, because a timestamp cannot. See `ActivityAccountMemory`.
+    let conversationID: String?
 
-    init(id: String, text: String, timestamp: Date) {
+    init(id: String, text: String, timestamp: Date, conversationID: String? = nil) {
         self.id = id
         self.text = text
         self.timestamp = timestamp
+        self.conversationID = conversationID
     }
 
     init(memory: ActivityAccountMemory) {
         self.init(
             id: memory.id, text: memory.content,
-            timestamp: Date(timeIntervalSince1970: memory.at))
+            timestamp: Date(timeIntervalSince1970: memory.at),
+            conversationID: memory.conversationID)
     }
 }
 
@@ -403,6 +433,13 @@ struct ActivityDay: Identifiable, Equatable {
     /// How many *things* this day is showing, which is not the same as how many rows it drew: one
     /// strip can stand for a hundred and eighty-four frames. The count the surface says out loud is
     /// a fraction of the corpus, so it has to count the corpus's units rather than the stream's.
+    ///
+    /// **A strip's `total` is the count of real frames it stands for, not the tiles it drew** — see
+    /// `ActivityComposer.momentRow`, which scales the sample back up. Before it did, this sum was
+    /// denominated in *sampled* frames while `thingCount` above was denominated in real ones, and
+    /// the corner compared the two: soloing `Rewind` over 2,845 captures that the chip excluded
+    /// none of read "51 results · of 2,954 in everything Omi has kept". Observed in the render
+    /// harness; the two halves of that sentence must always count the same unit.
     var matchCount: Int {
         rows.reduce(0) { total, row in
             switch row.content {
@@ -555,13 +592,49 @@ enum ActivityCount {
     /// literals, so the branches cannot end up describing three different corpora.
     static let scope = "everything Omi has kept"
 
+    /// …and what it counts when the account did not answer.
+    ///
+    /// **The wide sentence is a claim, and while the account is silent it is false.** Three of the
+    /// five kinds on this surface live in the account, so a signed-out, rate-limited or airgapped
+    /// Mac is showing *half* the corpus — and the empty copy that would have said so is only ever
+    /// reached when the stream is completely empty. On any Mac with screen capture on it never
+    /// appears, so the panel quietly presented one half of the record under a line promising the
+    /// whole of it. Naming the narrower scope is the smallest true thing this corner can say.
+    static let localScope = "what this Mac has kept"
+
+    /// Which of the two the corner is entitled to name. A reason is only ever recorded after a read
+    /// really came back unreachable, so this cannot flicker to the narrow claim during the opening
+    /// moments when nothing has answered yet.
+    ///
+    /// **It stays correct when `ActivityLocalMemories` fills the memory column from the Omi app's
+    /// own database**, and that is not a coincidence — those rows are kept on this Mac, in
+    /// `~/Library/Application Support/Omi`, exactly as the screen capture is. "What this Mac has
+    /// kept" is the true description of both halves, so a surface reading its memories locally needs
+    /// no third sentence here.
+    static func scope(accountUnreachable reason: ActivityAccountUnreachableReason?) -> String {
+        reason == nil ? scope : localScope
+    }
+
+    /// **The unit this corner is denominated in, and it is deliberately not "moments".**
+    ///
+    /// The number is `ActivityDay.thingCount` summed — screen moments *plus* conversations,
+    /// memories and tasks — and this line said "moments", the word the day header a hundred points
+    /// below it uses for screen frames alone. The render harness caught the two side by side:
+    /// `1,213 moments in everything Omi has kept` over `TODAY · 1,204 moments · 3 conversations ·
+    /// 3 memories · 3 tasks`. One word, two counts, one screen. "Things" is the only noun true of
+    /// all four kinds, and it is the word the model itself uses (`thingCount`).
+    static func unit(_ count: Int) -> String { count == 1 ? "thing" : "things" }
+
     /// - Parameter isSettled: whether `total` is a finished count. The day walk fills older days in
     ///   behind an already-readable list, so the number climbs under the reader — it says so instead
     ///   of presenting a moving figure as a settled one.
-    static func sentence(matching: Int, total: Int, isFiltering: Bool, isSettled: Bool) -> String {
+    /// - Parameter scope: what the number is a count *of* — see `scope(accountUnreachable:)`.
+    static func sentence(
+        matching: Int, total: Int, isFiltering: Bool, isSettled: Bool, scope: String = scope
+    ) -> String {
         guard isFiltering else {
             guard isSettled else { return "\(number(total)) so far · still counting \(scope)" }
-            return "\(number(total)) moment\(total == 1 ? "" : "s") in \(scope)"
+            return "\(number(total)) \(unit(total)) in \(scope)"
         }
         return "\(number(matching)) result\(matching == 1 ? "" : "s") · of \(number(total)) in \(scope)"
     }
@@ -569,6 +642,15 @@ enum ActivityCount {
     /// What the corner says before anything has been counted. Not a confident zero: nothing has been
     /// read yet, and a zero is a claim about the machine.
     static let counting = "Counting what you've captured…"
+
+    /// …and what it says once the count *has* finished and the answer really is nothing.
+    ///
+    /// **`corpusTotal` is nil for both, which is how this corner got stuck.** An empty stream leaves
+    /// it nil forever, so on a Mac that has genuinely captured nothing the corner went on saying
+    /// "Counting what you've captured…" for the rest of the session — directly opposite a body
+    /// reading "Nothing captured in this window yet." One surface, two contradictory claims about
+    /// the same read, side by side in the render harness. `corpusSettled` is what tells them apart.
+    static let nothingYet = "Nothing captured yet"
 
     /// Grouped digits, because the count is routinely five figures and an ungrouped one is unreadable
     /// at a glance — which is the only way this line is ever read.

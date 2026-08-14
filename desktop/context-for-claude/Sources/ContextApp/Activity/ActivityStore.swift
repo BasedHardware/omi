@@ -72,6 +72,28 @@ protocol ActivityAccountDiagnosing: Sendable {
     func unreachableReason() async -> ActivityAccountUnreachableReason?
 }
 
+// MARK: - Whether this Mac's own half could be asked at all
+
+/// Whether there is a capture database behind the local half of the spine.
+///
+/// **A third state, and it shipped as neither of the other two.** `readFailure` says a read ran and
+/// threw; an empty stream says a read ran and found nothing. A store that never opened is neither:
+/// nothing was asked, so nothing threw, and the surface fell through to reporting *the account's*
+/// state instead. Observed on a real launch whose migration threw — a Mac holding 2,837 frames drew
+/// "Sign in to Omi to see your account here", which is true, irrelevant, and the single most
+/// misleading sentence available at that moment.
+///
+/// So the local half's availability travels beside the account's, and `ActivityEmptyCopy` reports it
+/// first: a machine that could not be asked outranks an account that answered.
+enum ActivityCaptureAvailability: Equatable, Sendable {
+    /// There is a database, and everything the spine says about this Mac came out of it.
+    case open
+    /// There is not one yet, and the store is still waiting — see `ActivityStore.waitForTheStore`.
+    case opening
+    /// The wait ran out. This Mac's capture never opened, and this surface is not going to see it.
+    case unavailable
+}
+
 @MainActor
 final class ActivityStore: ObservableObject {
 
@@ -96,9 +118,20 @@ final class ActivityStore: ObservableObject {
     /// Why it did not answer, when the reader knows. `nil` for a reachable account and for a reader
     /// with no diagnosis to give — the empty copy falls back to the general sentence there.
     @Published private(set) var accountUnreachableReason: ActivityAccountUnreachableReason?
+    /// Which account columns on screen were read from this Mac rather than from the account, and
+    /// which the account answered for. Both are needed together and neither is derivable from the
+    /// other: a column can be locally sourced *and* answered — the normal state, where a few
+    /// not-yet-synced memories merge alongside the account's own — and the state worth a sentence is
+    /// the one where it is locally sourced and the account said nothing. See
+    /// `ActivityAccountLocalNote`, which is the only reason either is on the store.
+    @Published private(set) var accountLocallySourced: Set<ActivityAccountSource> = []
+    @Published private(set) var accountAnswered: Set<ActivityAccountSource> = []
     /// Set when a read threw. **Not the same as an empty day**, and the surface has to be able to
     /// say which: an empty list under a failed read is not an answer about the machine.
     @Published private(set) var readFailure: String?
+    /// Whether this Mac's own half could be asked at all. See `ActivityCaptureAvailability` — the
+    /// third state, and the one the empty copy used to fall through entirely.
+    @Published private(set) var capture: ActivityCaptureAvailability = .open
 
     /// What the bar says when a read itself failed. One sentence, and deliberately not the
     /// underlying error — a GRDB error renders its failing statement and its bound arguments, one
@@ -290,6 +323,8 @@ final class ActivityStore: ObservableObject {
         accountSettled = false
         accountReachable = false
         accountUnreachableReason = nil
+        accountLocallySourced = []
+        accountAnswered = []
         // The healing schedule belongs to the window that failed. A new window asks a new question,
         // and it is entitled to the whole ladder again.
         accountRetry?.cancel()
@@ -303,10 +338,16 @@ final class ActivityStore: ObservableObject {
         readAccount(generation: generation)
 
         guard let store = store() else {
+            capture = .opening
             recompose()
             waitForTheStore()
             return
         }
+        capture = .open
+        // A watch left over from a window opened before the database existed would fire again the
+        // moment it noticed one, re-opening a window this call has just opened.
+        storeWatch?.cancel()
+        storeWatch = nil
         let calendar = self.calendar
         let since = self.since
         let until = self.until
@@ -348,8 +389,21 @@ final class ActivityStore: ObservableObject {
         accountSettled = true
         accountReachable = feed.reachable
         accountUnreachableReason = feed.reachable ? nil : reason
-        if feed.reachable {
+        accountLocallySourced = feed.locallySourced
+        accountAnswered = feed.answered
+        if feed.answered.count == ActivityAccountSource.allCases.count {
             accountRereads = 0
+        } else if feed.reachable {
+            // **A partial answer is still a failure for the sources that did not give one**, and
+            // until the cache existed it was invisible: the feed was reachable, the ladder reset,
+            // and a source that 503'd stayed missing until the user moved the window. That is the
+            // exact state the backend was in when this was written — conversations serving while
+            // `/v3/memories` returned 503 — so the surface would have kept showing an hours-old
+            // memory list, correctly labelled and never refreshed. There is no whole-feed reason to
+            // classify here (the feed reached the account), so it climbs the same ladder as the
+            // failures time fixes; `accountRereads` is deliberately *not* reset, which is what keeps
+            // a permanently half-dead endpoint from being polled for the life of the window.
+            scheduleAccountReread(.noAnswer, generation: generation)
         } else {
             scheduleAccountReread(reason, generation: generation)
         }
@@ -451,7 +505,9 @@ final class ActivityStore: ObservableObject {
     ///
     /// **Bounded, and that is not a detail.** A store that never opens is a real state — a denied
     /// permission, a disk that will not take a database — and a poll without an end turns it into a
-    /// surface that spins for the rest of the session instead of saying so.
+    /// surface that spins for the rest of the session instead of saying so. Giving up is therefore
+    /// a *state* and not merely the end of a loop: `capture` becomes `.unavailable`, and the empty
+    /// copy says so rather than leaving whatever it happened to be showing on screen.
     private func waitForTheStore() {
         guard storeWatch == nil else { return }
         storeWatch = Task { @MainActor [weak self] in
@@ -463,13 +519,29 @@ final class ActivityStore: ObservableObject {
                 self.openWindow()
                 return
             }
-            self?.storeWatch = nil
+            guard let self else { return }
+            self.storeWatch = nil
+            self.capture = .unavailable
         }
     }
 
     private var storeWatch: Task<Void, Never>?
     private static let storeWaitInterval: Double = 0.5
-    private static let storeWaitAttempts = 60
+
+    /// How long the surface waits for a database that is not open yet, in polls of
+    /// `storeWaitInterval`.
+    ///
+    /// **Derived from the engine's own retry cadence rather than chosen.** `Engine`'s maintenance
+    /// loop re-runs `ensureStorage()` every 30 seconds, so a database whose first open threw — a
+    /// migration that lost a race, a volume that was busy — opens on one of *those* ticks and never
+    /// before. This wait was 60 polls: exactly 30 seconds, exactly one cadence, which is the worst
+    /// possible number. Observed on a real launch: the first open threw, the wait expired, the store
+    /// opened a moment later, and the panel sat empty for the rest of the session with the database
+    /// live underneath it.
+    ///
+    /// Three retries plus slack survives two failures in a row and still ends, which is what lets
+    /// the surface *say* a database is not coming rather than spin on one.
+    static let storeWaitAttempts = 200
 
     private func pump() {
         guard let store = store() else { return }
@@ -581,7 +653,8 @@ final class ActivityStore: ObservableObject {
     private func refilter() {
         let filtered = ActivityComposer.filter(
             composed, kind: kind, query: currentQuery,
-            earliest: since.map { Date(timeIntervalSince1970: $0) })
+            earliest: since.map { Date(timeIntervalSince1970: $0) },
+            latest: until.map { Date(timeIntervalSince1970: $0) })
         days = filtered
         matchCount = filtered.reduce(0) { $0 + $1.matchCount }
     }

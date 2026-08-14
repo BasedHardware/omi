@@ -114,6 +114,14 @@ struct ActivitySurface: View {
                 ActivityKindChips(selection: kind, onSelect: { kind = $0 })
                     .padding(.horizontal, ActivitySurfaceLayout.horizontalPadding)
             }
+            // Only when a column on screen is standing in for the account, and never for a reason
+            // the reader has to go looking for. See `ActivityAccountLocalNote` — a locally-read
+            // memory column is the one degraded state this surface has that is otherwise completely
+            // invisible.
+            if let local = localNote {
+                ActivityAccountLocalStrip(note: local)
+                    .padding(.horizontal, ActivitySurfaceLayout.horizontalPadding)
+            }
             ActivityStream(
                 store: store,
                 onOpenMoment: onOpenMoment,
@@ -135,10 +143,27 @@ struct ActivitySurface: View {
     /// second count of the same data by different code is the standard way a search surface starts
     /// lying about itself.
     private var countSentence: String {
-        guard let total = store.corpusTotal else { return ActivityCount.counting }
+        guard let total = store.corpusTotal else {
+            // A count that finished and found nothing is an answer, not a count still running.
+            return store.corpusSettled ? ActivityCount.nothingYet : ActivityCount.counting
+        }
         return ActivityCount.sentence(
             matching: store.matchCount, total: total, isFiltering: store.isFiltering,
-            isSettled: store.corpusSettled)
+            isSettled: store.corpusSettled,
+            // **The scope narrows when the account is silent.** The empty copy that would otherwise
+            // say so is only reachable on a *completely* empty stream, which on any Mac with screen
+            // capture on never happens — so this line was the only thing on screen, and it was
+            // claiming to count "everything Omi has kept" over half of it.
+            scope: ActivityCount.scope(accountUnreachable: store.accountUnreachableReason))
+    }
+
+    /// The caveat over the stream, or nil when nothing on it is standing in for the account.
+    private var localNote: ActivityAccountLocalNote? {
+        ActivityAccountLocalNote.resolve(
+            locallySourced: store.accountLocallySourced,
+            answered: store.accountAnswered,
+            kind: kind,
+            reason: store.accountUnreachableReason)
     }
 
     private func toggleChips() {

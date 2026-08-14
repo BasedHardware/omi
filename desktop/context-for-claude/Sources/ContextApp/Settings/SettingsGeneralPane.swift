@@ -389,6 +389,16 @@ struct ShortcutRecorderField: View {
     private func arm() {
         disarm()
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
+            // **Only the window the recorder is in.** `addLocalMonitorForEvents` is a *process*
+            // monitor, and every branch below returns `nil` — so an armed recorder used to swallow
+            // every keystroke in every window of this app. Concretely: while the field said "…",
+            // ⌘W would not close the timeline and **⌘Q would not quit**, because Quit was captured
+            // here, then rejected as a reserved chord, and the user was shown a rejection message
+            // for a key they meant for the application.
+            guard
+                ShortcutRecorderScope.belongsToTheRecorder(
+                    event.window, settingsWindow: SettingsWindow.window)
+            else { return event }
             // Escape abandons the recording rather than binding ⎋, which nothing should be bound to.
             // Named rather than `53`, and it is the same constant `GlobalShortcuts.Recorded`
             // refuses on the other path — two spellings of one key code is how the recorder and the
@@ -409,5 +419,31 @@ struct ShortcutRecorderField: View {
     private func disarm() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+    }
+}
+
+// MARK: - How far an armed recorder reaches
+
+/// Whether a key press belongs to the shortcut recorder, as a value.
+///
+/// **The recorder is the one control in this app that consumes raw key events**, and it does it
+/// through `NSEvent.addLocalMonitorForEvents`, which is process-wide. Every window of this
+/// application shares that monitor, so the question "is this keystroke mine" is the whole of
+/// whether an armed field is a text input or an app-wide keyboard outage.
+///
+/// Split out from the closure because none of it can be produced in a headless suite — an `NSEvent`
+/// carries a window this test bundle has no way to make key — and because the rule is one sentence
+/// that has to survive being reread: **a recorder only ever hears the window it is drawn in.**
+@MainActor
+enum ShortcutRecorderScope {
+
+    /// - Parameter eventWindow: `NSEvent.window`. **`nil` is not ours**: a key event with no window
+    ///   was not delivered to a window of this app at all, and consuming it would be the process-wide
+    ///   swallow this type exists to stop.
+    /// - Parameter settingsWindow: injected rather than read, so the rule is assertable without a
+    ///   Settings window on screen. Production passes the real one.
+    static func belongsToTheRecorder(_ eventWindow: NSWindow?, settingsWindow: NSWindow?) -> Bool {
+        guard let eventWindow, let settingsWindow else { return false }
+        return eventWindow === settingsWindow
     }
 }

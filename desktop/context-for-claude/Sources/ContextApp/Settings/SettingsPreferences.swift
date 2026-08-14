@@ -254,11 +254,12 @@ enum CaptureQuality: String, CaseIterable, Identifiable, Codable, Sendable {
     /// The line under the tile row, describing the *selected* tile.
     ///
     /// **`best` states its consequence, not only its cost.** "Largest files" is a disk-space remark
-    /// and reads as one; what it leaves out is that on this app larger files also mean *less
-    /// history*. `Engine.scheduleRetentionSweep` runs `enforceRetention(olderThanDays:toFitBytes:)`
-    /// only when the strategy is `.limit`, and that sweep deletes oldest-first the moment the frames
+    /// and reads as one; what it leaves out is that on this app larger files also mean *fewer days
+    /// of pictures*. `Engine.scheduleRetentionSweep` runs `enforceRetention(olderThanDays:toFitBytes:)`
+    /// under the default strategy, and that sweep expires images oldest-first the moment the frames
     /// folder passes the user's threshold — so the same threshold that holds a month of Default
-    /// frames holds materially less at 2400 px and q0.40. `ScreenWatcher.writeFrameImage` already
+    /// frames holds materially less at 2400 px and q0.40. The text is not part of that trade at all,
+    /// which is the half this string now says. `ScreenWatcher.writeFrameImage` already
     /// documents this trade from the capture side ("A user who picks **Best Quality** is choosing to
     /// spend that headroom"); until now no string the user reads said it. Storage's own copy had to
     /// be fixed for exactly this omission — a bound that silently deletes data has to be disclosed
@@ -270,9 +271,9 @@ enum CaptureQuality: String, CaseIterable, Identifiable, Codable, Sendable {
     var subtitle: String {
         switch self {
         case .best:
-            "2400 px on the longest side · sharpest text, largest files. With Storage set to Limit, "
-                + "the threshold is reached sooner, so the same threshold keeps fewer days of "
-                + "history than it does at Default."
+            "2400 px on the longest side · sharpest text, largest files. Screenshots reach the "
+                + "Storage threshold sooner, so the same threshold keeps fewer days of pictures "
+                + "than it does at Default. The text of your history is unaffected."
         case .standard: "1600 px on the longest side · sharp on Retina; recommended"
         case .compact: "1280 px on the longest side · readable, noticeably smaller"
         case .smallest: "1024 px on the longest side · layout and headings only"
@@ -284,7 +285,22 @@ enum CaptureQuality: String, CaseIterable, Identifiable, Codable, Sendable {
 
 /// The Storage pane's radio group.
 ///
-/// `off` is the default, and it is the only option that cannot destroy anything.
+/// **`limit` is the default, and what it deletes is pictures — never text.** It used to be `off`,
+/// on the reasoning that `off` "is the only option that cannot destroy anything", and that was the
+/// right call while `limit` deleted whole frame rows: turning it on threw away the OCR, the
+/// accessibility text and every FTS entry for a moment along with its screenshot, so the safe
+/// default was to enforce nothing at all. `ContextStore.expireFrameImages` changed what the option
+/// means. A frame past the horizon now keeps its row and all of its text and loses only the image,
+/// which is 88% of what a year of capture costs (27.0 KB per stored image against 3.7 KB of
+/// database per frame, measured) and the one part no reader opens: `recall`, `screen` and the
+/// search panel all read `ocrText`/`axText`.
+///
+/// So the two options no longer trade *history* against disk — they trade **pictures** against
+/// disk, and `off` is no longer the cautious choice so much as the unbounded one. It kept its
+/// promise by having no backstop whatsoever: a Mac left at login accumulated screenshots forever,
+/// measured at ~1.8 GB a year on a machine that captures lightly.
+///
+/// `off` remains, unchanged and one click away, for anyone who wants the pictures kept too.
 ///
 /// **There is no `compress` case.** The pane used to offer one behind a red destructive confirmation
 /// reading "The original detail cannot be recovered", and nothing anywhere re-encoded a frame:
@@ -300,37 +316,54 @@ enum StorageStrategy: String, CaseIterable, Identifiable, Codable, Sendable {
 
     var id: String { rawValue }
 
+    /// The shipped default. Named rather than written inline because two readers have to agree on
+    /// it: this store, and `Engine.scheduleRetentionSweep`, which parses the same defaults key on
+    /// its own. `SettingsStore.init` registers it so both answer the same way for an install that
+    /// has never opened this pane.
+    static let `default`: StorageStrategy = .limit
+
     var title: String {
         switch self {
-        case .off: "Off"
-        case .limit: "Limit"
+        case .off: "Keep screenshots"
+        case .limit: "Expire screenshots"
         }
     }
 
-    /// **States the age bound as well as the threshold.** The sweep enforces both
-    /// (`ContextStore.enforceRetention` prunes by age *and* by bytes), so copy that mentioned only
-    /// the threshold meant a user who set 200 GB with 8 GB on disk still lost everything older than
-    /// `StorageLimit.retentionDays` — permanent deletion of their data that no string disclosed.
+    /// **States the age bound as well as the threshold, and states what survives.** The sweep
+    /// enforces both bounds (`ContextStore.enforceRetention` expires by age *and* by bytes), so copy
+    /// that mentioned only the threshold meant a user who set 200 GB with 8 GB on disk still lost
+    /// every screenshot older than `StorageLimit.retentionDays` with nothing disclosing it.
+    ///
+    /// The second half — "the text is kept" — is load-bearing now that this is the default. A user
+    /// who never opens this pane has still agreed to nothing, so the row that is selected for them
+    /// has to say exactly what it does the first time they read it.
     var subtitle: String {
         switch self {
-        case .off: "Keep all your data. Forever."
+        case .off: "Keep everything, screenshots included, for as long as there is disk for it."
         case .limit:
-            "Limit Storage. Deletes the oldest recordings when the threshold is reached, and "
-                + "everything older than \(StorageLimit.retentionDays) days whatever the threshold is."
+            "Keeps the text of every screen moment forever, and deletes the screenshot itself "
+                + "after \(StorageLimit.retentionDays) days — or sooner, once the screenshots on "
+                + "disk pass the threshold. Searching your history still finds these moments; they "
+                + "just no longer have a picture."
         }
     }
 
     var symbol: String {
         switch self {
-        case .off: "pause.circle"
-        case .limit: "trash"
+        case .off: "infinity"
+        case .limit: "photo.badge.arrow.down"
         }
     }
 
     /// True for anything that irreversibly changes what is already on disk.
     ///
-    /// `limit` deletes recordings outright, and it may not be reachable by one stray click on a
-    /// radio button.
+    /// `limit` unlinks screenshots that are already there, and *switching to it* may not be
+    /// reachable by one stray click on a radio button.
+    ///
+    /// It being the default does not weaken this. A default is not a click, so it does not raise
+    /// the sheet — which is exactly why `subtitle` above and the pane's own footnote have to state
+    /// the behaviour outright rather than leaving the disclosure to a dialog most users will never
+    /// see. The sheet still guards the deliberate act of turning it back on after turning it off.
     var destroysExistingData: Bool {
         switch self {
         case .off: false
@@ -404,8 +437,9 @@ enum StorageLimit {
     /// Deliberately not `ContextStore.defaultFrameBytesCap` (4 GiB). That constant is only the
     /// *default argument* of `ContextStore.enforceRetention(olderThanDays:toFitBytes:)`, and nothing
     /// in this app takes it: `Engine.scheduleRetentionSweep` runs only when the strategy is `.limit`
-    /// and always passes this number explicitly. So there is no 4 GiB backstop under a user who left
-    /// Storage on **Off** — that user keeps everything, forever, exactly as the radio row promises.
+    /// and always passes this number explicitly. So there is still no 4 GiB backstop under a user
+    /// who has chosen **Keep screenshots** — that user keeps every picture, forever, exactly as the
+    /// radio row promises.
     ///
     /// Said here because this comment used to claim the opposite ("that cap is the app's own backstop
     /// and applies whether or not the user asked for a limit"), and a note that describes a bound
@@ -417,14 +451,16 @@ enum StorageLimit {
 
     /// The age bound the retention sweep is started with, in days.
     ///
-    /// `Limit` is two bounds, not one: `ContextStore.enforceRetention` calls `pruneFrames(olderThanDays:)`
-    /// *and* `pruneFrames(toFitBytes:)`, and `Engine.ensureStorage` passes `olderThanDays: 30`. So
-    /// turning Limit on deletes everything older than a month even when the disk figure is nowhere
-    /// near the threshold — and until this constant existed, not one string the user reads said so.
+    /// `Expire screenshots` is two bounds, not one: `ContextStore.enforceRetention` calls
+    /// `expireFrameImages(olderThanDays:)` *and* `expireFrameImages(toFitBytes:)`, and
+    /// `Engine.ensureStorage` passes `olderThanDays: 30`. So the screenshot for a moment a month old
+    /// is deleted even when the disk figure is nowhere near the threshold — and until this constant
+    /// existed, not one string the user reads said so.
     ///
     /// Pinned as a literal because the number is passed inline at that call site, in a file this one
-    /// does not own. It lives here so the three strings that must disclose the age prune — the radio
-    /// row, the threshold row and the confirmation — cannot drift apart from each other.
+    /// does not own. It lives here so the four strings that must disclose the age bound — the radio
+    /// row, the threshold row, the pane's footnote and the confirmation — cannot drift apart from
+    /// each other.
     static let retentionDays = 30
 
     static func clamp(_ bytes: Int64) -> Int64 {
@@ -622,6 +658,24 @@ final class SettingsStore: ObservableObject {
         // and not this pane's to do.
         self.pausesOnInactivity = flag(Key.pausesOnInactivity, default: false)
         self.captureQuality = enumValue(Key.captureQuality, CaptureQuality.default)
+        // **Registered, not written.** `Engine.scheduleRetentionSweep` reads this key straight out
+        // of `UserDefaults` rather than through this store, and its own inline fallback is `.off` —
+        // so a default declared only here would be a default the sweep never saw, and the strategy
+        // this pane draws as selected would not be the one running. Registering puts the value in
+        // the volatile registration domain, where `string(forKey:)` finds it, which makes the two
+        // readers agree without this store having to fabricate a stored preference.
+        //
+        // `defaults.set` is deliberately not used: a written value is indistinguishable from a
+        // choice the user made, forever, and would survive a later change of default. This is the
+        // same reasoning `DockPresence.showsDockIcon` records for reading with `object(forKey:)`.
+        //
+        // The fallback below stays `.off`, and the two are not the same thing. Registration answers
+        // "nothing is stored", which is every install that has never opened this pane; the fallback
+        // answers "something unreadable is stored", which is the retired `"compress"` value. Engine's
+        // own parse falls back to `.off` for that case, so this one must too — a default reached by
+        // *both* readers is the point, and a pane claiming to expire screenshots while the sweep
+        // does nothing would be worse than either behaviour on its own.
+        defaults.register(defaults: [Key.storageStrategy: StorageStrategy.default.rawValue])
         self.storage = StorageSelection(strategy: enumValue(Key.storageStrategy, StorageStrategy.off))
         let storedLimit = defaults.object(forKey: Key.storageLimitBytes) as? Int
         self.storageLimitBytes = StorageLimit.clamp(Int64(storedLimit ?? Int(StorageLimit.defaultBytes)))
@@ -671,8 +725,8 @@ final class SettingsStore: ObservableObject {
         switch storage.strategy {
         case .off: "no storage limits set"
         case .limit:
-            "limited to \(StorageLimit.format(storageLimitBytes)) and to the last "
-                + "\(StorageLimit.retentionDays) days"
+            "text kept forever · screenshots kept for \(StorageLimit.retentionDays) days "
+                + "or \(StorageLimit.format(storageLimitBytes)), whichever comes first"
         }
     }
 

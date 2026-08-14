@@ -86,6 +86,10 @@ final class TutorialOverlay {
             window = makeWindow(for: model)
         }
         self.window = window
+        // Rebound on every step, for the same reason the card's root view is: a resumed run is a
+        // second `TutorialModel` in this process, and an Escape route captured once would end the
+        // walkthrough that already finished.
+        window.onEscape = { [weak model] in model?.skip() }
 
         layout(step: step)
 
@@ -404,10 +408,45 @@ final class TutorialOverlay {
 
 // MARK: - Window and views
 
-/// Borderless windows refuse key status by default, which would leave the query field untypable.
-private final class TutorialOverlayWindow: NSWindow {
+/// Borderless windows refuse key status by default, and this one has buttons to press.
+///
+/// Module-internal rather than file-private only so `TutorialTests` can press Escape on a real one:
+/// the Escape route below is the only way off this card without a pointer, and a rule about the one
+/// way out is a rule that has to be executed rather than read.
+final class TutorialOverlayWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    /// **Escape ends the walkthrough**, the same thing the `Skip` control does.
+    ///
+    /// It closes a real dead end. This card is borderless, so `performClose:` and ⌘W do nothing to
+    /// it; nothing in `Tutorial/` carried a `keyboardShortcut`; and `Skip` was reachable by pointer
+    /// only. The onboarding cinematic immediately before it *does* take Escape
+    /// (`OnboardingWindow`), so the user is taught the key and then it silently stops working on a
+    /// floating card sitting on top of everything they own.
+    ///
+    /// **In `sendEvent`, and that is the whole of its scope.** A window only receives key events
+    /// while it is key, which is exactly the steps whose card is the thing being interacted with
+    /// (`TutorialStep.takesFocusOnEntry`). On a coach-mark step the overlay deliberately never takes
+    /// focus — the user is working in somebody else's window — and Escape there belongs to that
+    /// window, not to this one. A process-wide monitor would take it from them, which is the defect
+    /// this fix must not trade for.
+    /// What Escape runs. Handed in by the controller rather than reached for through the view tree:
+    /// the card is rebound to a new `TutorialModel` on a resumed run, and a window holding its own
+    /// reference to the first one would end the walkthrough that already finished.
+    var onEscape: (() -> Void)?
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, event.keyCode == Self.escapeKeyCode, let onEscape {
+            MainActor.assumeIsolated { onEscape() }
+            return
+        }
+        super.sendEvent(event)
+    }
+
+    /// Named rather than `53` at the point of use, like every other reading of this key in the
+    /// package.
+    private static let escapeKeyCode: UInt16 = 53
 }
 
 // An accessory app is never the active application when a coach mark appears, and AppKit spends the
