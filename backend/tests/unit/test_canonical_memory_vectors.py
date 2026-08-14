@@ -54,10 +54,8 @@ from models.memory_search_gateway import SearchDecision, SearchMode, SearchVecto
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 
 from database import document_store
-import database.memory_apply_store as _mas_store
-import database.knowledge_graph as _kg_store
-import database.review_queue as _rq_store
-from tests.store_fakes import FakeDocumentStore
+from tests.store_fakes import FakeDocumentStore, install_fake_db_client
+from database.store.firestore_facade import NeutralFirestoreClient
 
 _FIXTURE_NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
 
@@ -615,11 +613,6 @@ def test_sync_canonical_memory_vector_deletes_restricted_item_without_upsert(mon
     assert upserted == []
 
 
-@pytest.mark.skip(
-    reason="ADR-0044: monkeypatches the retired per-module `_store` seam (memory_apply_store / "
-    "knowledge_graph / review_queue now thread db_client via the facade). Re-express against the "
-    "facade backing in the D37 C-fix follow-up."
-)
 def test_write_path_does_not_fast_sync_vector_on_idempotent_skip(canonical_write_support, monkeypatch):
     support = canonical_write_support
     uid = "uid-canonical"
@@ -647,12 +640,13 @@ def test_write_path_does_not_fast_sync_vector_on_idempotent_skip(canonical_write
             f"users/{uid}/memory_items/{memory_id}": support.stored_item(committed_item),
         }
     )
-    # document_store now reads/writes through the neutral port, not the injected Firestore fake.
-    # Share the fake's backing dict so the seeded committed item is visible to document_store.
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
-    monkeypatch.setattr(_mas_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
-    monkeypatch.setattr(_kg_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
-    monkeypatch.setattr(_rq_store, "_store", lambda: FakeDocumentStore(backing=db.docs))
+    # ADR-0044: memory_apply_store / knowledge_graph / review_queue no longer expose a per-module
+    # `_store` seam — they thread the db_client facade — while document_store still reads/writes the
+    # neutral port directly. Back BOTH onto ONE shared store over the seeded docs so every path sees
+    # the committed item.
+    shared = FakeDocumentStore(backing=db.docs)
+    monkeypatch.setattr(document_store, "_store", lambda: shared)
+    install_fake_db_client(monkeypatch, store=shared)
     apply_result = SimpleNamespace(
         status=ApplyStatus.idempotent_skip,
         memory_items=[],
@@ -677,11 +671,6 @@ def test_write_path_does_not_fast_sync_vector_on_idempotent_skip(canonical_write
     assert support.fake_index.upserts == []
 
 
-@pytest.mark.skip(
-    reason="ADR-0044: monkeypatches the retired per-module `_store` seam (memory_apply_store / "
-    "knowledge_graph / review_queue now thread db_client via the facade). Re-express against the "
-    "facade backing in the D37 C-fix follow-up."
-)
 def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
     from tests.unit.fixtures.canonical_memory_fakes import _install_heavy_import_stubs
 
@@ -696,33 +685,6 @@ def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
     committed_item = _item(memory_id=canonical_memory_id, tier=MemoryTier.long_term)
     committed_item = committed_item.model_copy(update={"content": content, "uid": uid})
 
-    class _BackfillDb:
-        def __init__(self):
-            self._get_calls_by_path = {}
-
-        def document(self, path):
-            return _BackfillDocRef(self, path)
-
-    class _BackfillDocRef:
-        def __init__(self, db, path):
-            self._db = db
-            self.path = path
-
-        def get(self):
-            calls = self._db._get_calls_by_path.get(self.path, 0) + 1
-            self._db._get_calls_by_path[self.path] = calls
-            if self.path.endswith(canonical_memory_id) and calls == 1:
-                return SimpleNamespace(exists=False, to_dict=lambda: {})
-            if self.path.endswith(canonical_memory_id):
-                return SimpleNamespace(
-                    exists=True,
-                    to_dict=lambda: committed_item.model_dump(mode="json"),
-                )
-            return SimpleNamespace(exists=False, to_dict=lambda: {})
-
-        def set(self, *args, **kwargs):
-            return None
-
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
     apply_result = SimpleNamespace(
         status=ApplyStatus.idempotent_skip,
@@ -736,10 +698,9 @@ def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
     # apply), then re-reads it after an idempotent_skip apply to sync its vector. Model that:
     # start empty, and have the (patched) apply materialize the committed item in the store.
     backfill_store_docs: dict = {}
-    monkeypatch.setattr(document_store, "_store", lambda: FakeDocumentStore(backing=backfill_store_docs))
-    monkeypatch.setattr(_mas_store, "_store", lambda: FakeDocumentStore(backing=backfill_store_docs))
-    monkeypatch.setattr(_kg_store, "_store", lambda: FakeDocumentStore(backing=backfill_store_docs))
-    monkeypatch.setattr(_rq_store, "_store", lambda: FakeDocumentStore(backing=backfill_store_docs))
+    shared = FakeDocumentStore(backing=backfill_store_docs)
+    monkeypatch.setattr(document_store, "_store", lambda: shared)
+    install_fake_db_client(monkeypatch, store=shared)
 
     def _apply_materializes_item(**_kwargs):
         backfill_store_docs[f"users/{uid}/memory_items/{canonical_memory_id}"] = committed_item.model_dump(
@@ -766,6 +727,7 @@ def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
             index=0,
             control=control,
             run_id="run-1",
+            db_client=NeutralFirestoreClient(shared),
         )
 
     assert row_result.written is False
