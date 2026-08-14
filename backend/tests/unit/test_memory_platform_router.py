@@ -5,6 +5,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import database.memories as memories_db
 from tests.unit.memory_import_isolation import restore_sys_modules, snapshot_sys_modules
 
 _MODULE_NAMES = ('routers.memory_platform', 'utils.other.endpoints')
@@ -42,6 +43,17 @@ def memory_platform_router():
         yield module
     finally:
         restore_sys_modules(saved)
+
+
+@pytest.fixture(autouse=True)
+def _empty_historical_store(monkeypatch):
+    """The canonical product search path calls into the legacy historical store.
+
+    Like the read-service suite, the router tests have no legacy rows; stub the
+    historical read so the merged memory_service scan path does not reach a live
+    Firestore connection in hermetic CI.
+    """
+    monkeypatch.setattr(memories_db, 'get_memories', lambda *args, **kwargs: [])
 
 
 def test_memory_platform_router_registers_authenticated_get(memory_platform_router):
