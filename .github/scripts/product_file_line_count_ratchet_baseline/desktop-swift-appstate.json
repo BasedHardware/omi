@@ -1,9 +1,0 @@
-{
-  "files": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": 1608
-  },
-  "raise_justifications": {
-    "desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift": "Adds local transcript duplicate suppression and persistence flushes before stop or rotation so source-aware deduplication cannot leave stale rows."
-  },
-  "threshold": 1500
-}

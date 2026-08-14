@@ -15,6 +15,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryResultsPanel.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryAnswerThread.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryChatCapability.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatCitation.swift
 preconditions:
   - auth_ready
 
@@ -42,6 +43,12 @@ steps:
   - id: S2c
     name: Conversation menu and the way back
     do: "Open the '…' menu in the panel's corner and verify it offers Copy conversation, Clear conversation and AI settings. Type in the search bar and verify the panel shows live-narrowing results; clear it (or press esc) and verify the same conversation returns with no duplicated turns."
+    expect:
+      interactive_count: { min: 2 }
+
+  - id: S2d
+    name: Inline citations preview and open their exact source
+    do: "Ask a question grounded in at least one task, memory, or conversation and request citations. After the answer settles, verify its bracketed citation markers are individual focusable controls rather than plain text and no duplicate source rail appears below the answer. Hover a marker and verify an anchored preview shows the source type, title, and bounded summary without moving the transcript. Activate the marker with the pointer, then repeat with Tab and Return; verify the app opens the exact cited task, memory, or conversation rather than the generic destination. Return to Chat and verify the citation remains interactive after journal replay."
     expect:
       interactive_count: { min: 2 }
 

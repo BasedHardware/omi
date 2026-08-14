@@ -272,6 +272,30 @@ import XCTest
       XCTAssertEqual(attempts, [Attempt(keyCode: 31, modifiers: 256)])
     }
 
+    func testOnboardingValidationSurfacesAConflictingAskOmiChord() {
+      let original = savedRegistration()
+      defer { restoreRegistration(original) }
+      settings.updateAskOmiRegistration(enabled: true, shortcut: ShortcutSettings.askOmiCommandJShortcut)
+
+      var attempts: [Attempt] = []
+      let manager = makeManager(
+        registrar: { keyCode, modifiers in
+          attempts.append(Attempt(keyCode: keyCode, modifiers: modifiers))
+          return .testing(status: OSStatus(eventHotKeyExistsErr), reference: nil)
+        },
+        observesSettings: false
+      )
+      defer { manager.stopObservingSettingsForTests() }
+
+      manager.setRegistrationSuspended(true)
+
+      XCTAssertEqual(
+        manager.validateAskOmiShortcutForOnboarding(),
+        .alreadyInUse,
+        "onboarding must not advance after Carbon rejects the selected chord")
+      XCTAssertEqual(attempts, [Attempt(keyCode: 38, modifiers: 256)])
+    }
+
     private func savedRegistration() -> (enabled: Bool, shortcut: ShortcutSettings.KeyboardShortcut) {
       (settings.askOmiEnabled, settings.askOmiShortcut)
     }

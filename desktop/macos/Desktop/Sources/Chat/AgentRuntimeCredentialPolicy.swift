@@ -29,6 +29,21 @@ enum AgentRuntimeCredentialPolicy {
     (requestedCredentials || !isNonProduction) && hermeticFaultModelToken == nil
   }
 
+  /// Refuse a pi-mono *start* when the managed token is required. Alternate
+  /// harnesses must still fetch that token so a pinned pi-mono session can run.
+  static func shouldRequirePiMonoCredentials(
+    preferredAdapterIsPiMono: Bool,
+    requestedCredentials: Bool,
+    isNonProduction: Bool,
+    hermeticFaultModelToken: String? = nil
+  ) -> Bool {
+    preferredAdapterIsPiMono
+      && requiresManagedCredentials(
+        requestedCredentials: requestedCredentials,
+        isNonProduction: isNonProduction,
+        hermeticFaultModelToken: hermeticFaultModelToken)
+  }
+
   /// Named QA bundles have a valid owner-bound token seeded from another app,
   /// but intentionally lack that app's Firebase SDK session. Let AuthService
   /// reuse the token until its normal expiry path refreshes it.

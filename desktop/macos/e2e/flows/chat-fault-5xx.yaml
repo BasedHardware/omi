@@ -6,6 +6,8 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
   - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeFailure.swift
+  - desktop/macos/agent/src/runtime/failures.ts
   - desktop/macos/scripts/omi-fault-inject.sh
 preconditions:
   - automation_bridge_ready

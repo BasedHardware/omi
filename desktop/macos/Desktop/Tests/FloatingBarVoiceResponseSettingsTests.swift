@@ -1,9 +1,28 @@
+import AVFoundation
 import XCTest
 
 @testable import Omi_Computer
 
 @MainActor
 final class FloatingBarVoiceResponseSettingsTests: XCTestCase {
+
+  /// The system voice honors the user's Voice Speed multiplier the same way the OpenAI
+  /// audio path does — a hardcoded utterance rate made spoken notifications crawl at ~1×
+  /// while push-to-talk answers played at the default 1.4×.
+  func testSystemSpeechRateScalesWithVoiceSpeed() {
+    let normal = FloatingBarVoicePlaybackService.systemSpeechRate(playbackSpeed: 1.0)
+    let fast = FloatingBarVoicePlaybackService.systemSpeechRate(playbackSpeed: 1.4)
+    XCTAssertEqual(normal, 0.47, accuracy: 0.001)
+    XCTAssertEqual(fast, 0.658, accuracy: 0.001)
+    XCTAssertGreaterThan(fast, normal)
+    // Extreme multipliers stay inside AVSpeechUtterance's legal range.
+    XCTAssertLessThanOrEqual(
+      FloatingBarVoicePlaybackService.systemSpeechRate(playbackSpeed: 10),
+      AVSpeechUtteranceMaximumSpeechRate)
+    XCTAssertGreaterThanOrEqual(
+      FloatingBarVoicePlaybackService.systemSpeechRate(playbackSpeed: 0),
+      AVSpeechUtteranceMinimumSpeechRate)
+  }
 
   func testDefaultVoiceIsShimmerOpenAIHumanVoice() {
     XCTAssertEqual(ShortcutSettings.defaultVoiceID, ShortcutSettings.openAIShimmerVoiceID)

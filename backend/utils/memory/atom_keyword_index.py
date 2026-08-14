@@ -1,7 +1,7 @@
-"""Typesense keyword index for canonical long-term memory atoms (WS-M).
+"""Typesense keyword index for universal long-term memory atoms (WS-M).
 
-Prod-inert: indexing and search run only for the canonical cohort and only for
-``layer=long_term``, ``status=active``, ``processing_state=processed`` items.
+Indexing and search run only for ``layer=long_term``, ``status=active``,
+``processing_state=processed`` items.
 Users on ``e2ee`` data protection are skipped (same posture as conversation Typesense).
 """
 
@@ -23,8 +23,12 @@ from models.product_memory import (
     ProcessingState,
     MemoryItem,
 )
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
+from utils.memory.memory_system import (
+    MemorySystem as MemorySystem,  # compatibility export for legacy test doubles
+    ensure_canonical_apply_control_state,
+    resolve_memory_system as resolve_memory_system,  # compatibility export; user policy is not a UID gate
+)
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +109,12 @@ def is_indexable_long_term_atom(item: MemoryItem) -> bool:
 
 
 def user_allows_atom_keyword_index(uid: str, *, db_client: Any = None) -> bool:
-    """Canonical cohort + conversation-Typesense-compatible data protection."""
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+    """Return whether the universal account may use the keyword projection.
+
+    Indexing remains opt-out for E2EE accounts, matching the conversation
+    Typesense policy.  There is no UID entitlement/cohort branch.
+    """
+    if not uid.strip():
         return False
     client = db_client if db_client is not None else default_db_client
     user_doc: Any = client.document(f"users/{uid}").get()
@@ -207,6 +215,14 @@ def ensure_memories_collection() -> None:
 
 def upsert_atom_keyword_doc(item: MemoryItem, *, db_client: Any = None) -> bool:
     """Upsert one long-term atom when indexable; no-op otherwise."""
+    try:
+        ensure_canonical_apply_control_state(
+            item.uid,
+            db_client=db_client if db_client is not None else default_db_client,
+        )
+    except Exception:
+        logger.warning("upsert_atom_keyword_doc blocked by canonical state uid=%s", item.uid)
+        return False
     if not user_allows_atom_keyword_index(item.uid, db_client=db_client):
         return False
     if not is_indexable_long_term_atom(item):
@@ -341,6 +357,10 @@ def keyword_search_memory_ids(
 def rebuild_atom_keyword_index(uid: str, *, db_client: Any = None) -> AtomKeywordRebuildReport:
     """Rebuild the keyword index for one user from the canonical store (idempotent)."""
     client = db_client if db_client is not None else default_db_client
+    try:
+        ensure_canonical_apply_control_state(uid, db_client=client)
+    except Exception:
+        return AtomKeywordRebuildReport(uid=uid, failure_reason="canonical_state_unavailable")
     is_indexable_user = user_allows_atom_keyword_index(uid, db_client=client)
     try:
         # Purge first and fail closed. A rebuild is also the repair path for

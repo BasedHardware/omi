@@ -41,6 +41,13 @@ class SettingsSyncManager {
     }
   }
 
+  /// Builds the narrow request used by capture-default migrations. A migration of one
+  /// setting must not resend unrelated prompts or other user-authored settings.
+  static func screenAnalysisEnabledUpdate(_ enabled: Bool) -> AssistantSettingsResponse {
+    AssistantSettingsResponse(
+      shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: enabled))
+  }
+
   // MARK: - Apply Remote → Local
 
   /// Applies a server-authoritative snapshot, then notifies runtime owners to
@@ -62,7 +69,14 @@ class SettingsSyncManager {
     // Task settings
     if let task = remote.task {
       if let v = task.enabled { TaskAssistantSettings.shared.isEnabled = v }
-      if let v = task.analysisPrompt { TaskAssistantSettings.shared.analysisPrompt = v }
+      if let v = task.analysisPrompt {
+        applyRemotePrompt(
+          v,
+          overLocalPrompt: TaskAssistantSettings.shared.analysisPrompt,
+          assistantName: "task",
+          maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength
+        ) { TaskAssistantSettings.shared.analysisPrompt = $0 }
+      }
       if let v = task.extractionInterval { TaskAssistantSettings.shared.extractionInterval = v }
       if let v = task.minConfidence { TaskAssistantSettings.shared.minConfidence = v }
       if let v = task.notificationsEnabled { TaskAssistantSettings.shared.notificationsEnabled = v }
@@ -73,7 +87,14 @@ class SettingsSyncManager {
     // Insight settings
     if let insight = remote.insight {
       if let v = insight.enabled { InsightAssistantSettings.shared.isEnabled = v }
-      if let v = insight.analysisPrompt { InsightAssistantSettings.shared.analysisPrompt = v }
+      if let v = insight.analysisPrompt {
+        applyRemotePrompt(
+          v,
+          overLocalPrompt: InsightAssistantSettings.shared.analysisPrompt,
+          assistantName: "insight",
+          maximumLength: 10_000
+        ) { InsightAssistantSettings.shared.analysisPrompt = $0 }
+      }
       if let v = insight.extractionInterval { InsightAssistantSettings.shared.extractionInterval = v }
       if let v = insight.minConfidence { InsightAssistantSettings.shared.minConfidence = v }
       if let v = insight.notificationsEnabled { InsightAssistantSettings.shared.notificationsEnabled = v }
@@ -83,7 +104,14 @@ class SettingsSyncManager {
     // Memory settings
     if let memory = remote.memory {
       if let v = memory.enabled { MemoryAssistantSettings.shared.isEnabled = v }
-      if let v = memory.analysisPrompt { MemoryAssistantSettings.shared.analysisPrompt = v }
+      if let v = memory.analysisPrompt {
+        applyRemotePrompt(
+          v,
+          overLocalPrompt: MemoryAssistantSettings.shared.analysisPrompt,
+          assistantName: "memory",
+          maximumLength: 10_000
+        ) { MemoryAssistantSettings.shared.analysisPrompt = $0 }
+      }
       if let v = memory.extractionInterval { MemoryAssistantSettings.shared.extractionInterval = v }
       if let v = memory.minConfidence { MemoryAssistantSettings.shared.minConfidence = v }
       if let v = memory.notificationsEnabled { MemoryAssistantSettings.shared.notificationsEnabled = v }
@@ -121,7 +149,10 @@ class SettingsSyncManager {
 
     let task = TaskSettingsResponse(
       enabled: TaskAssistantSettings.shared.isEnabled,
-      analysisPrompt: TaskAssistantSettings.shared.analysisPrompt,
+      analysisPrompt: Self.promptForSync(
+        TaskAssistantSettings.shared.analysisPrompt,
+        assistantName: "task",
+        maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength),
       extractionInterval: TaskAssistantSettings.shared.extractionInterval,
       minConfidence: TaskAssistantSettings.shared.minConfidence,
       notificationsEnabled: TaskAssistantSettings.shared.notificationsEnabled,
@@ -131,7 +162,10 @@ class SettingsSyncManager {
 
     let insight = InsightSettingsResponse(
       enabled: InsightAssistantSettings.shared.isEnabled,
-      analysisPrompt: InsightAssistantSettings.shared.analysisPrompt,
+      analysisPrompt: Self.promptForSync(
+        InsightAssistantSettings.shared.analysisPrompt,
+        assistantName: "insight",
+        maximumLength: 10_000),
       extractionInterval: InsightAssistantSettings.shared.extractionInterval,
       minConfidence: InsightAssistantSettings.shared.minConfidence,
       notificationsEnabled: InsightAssistantSettings.shared.notificationsEnabled,
@@ -140,7 +174,10 @@ class SettingsSyncManager {
 
     let memory = MemorySettingsResponse(
       enabled: MemoryAssistantSettings.shared.isEnabled,
-      analysisPrompt: MemoryAssistantSettings.shared.analysisPrompt,
+      analysisPrompt: Self.promptForSync(
+        MemoryAssistantSettings.shared.analysisPrompt,
+        assistantName: "memory",
+        maximumLength: 10_000),
       extractionInterval: MemoryAssistantSettings.shared.extractionInterval,
       minConfidence: MemoryAssistantSettings.shared.minConfidence,
       notificationsEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
@@ -159,5 +196,74 @@ class SettingsSyncManager {
       floatingBar: floatingBar,
       updateChannel: UpdaterViewModel.shared.updateChannel.rawValue
     )
+  }
+
+  /// The backend owns a bounded prompt field. Omitting an oversized custom value keeps
+  /// partial PATCH semantics: other settings can sync while neither local nor remote user
+  /// data is overwritten with a truncated prompt.
+  static func promptForSync(
+    _ prompt: String,
+    assistantName: String,
+    maximumLength: Int
+  ) -> String? {
+    // Pydantic validates Python string length in Unicode code points. Swift's
+    // unicodeScalars is the corresponding count; String.count measures extended
+    // grapheme clusters and can undercount emoji and composed scripts.
+    let length = prompt.unicodeScalars.count
+    guard length <= maximumLength else {
+      if let owner = currentOwnerID {
+        UserDefaults.standard.set(owner, forKey: oversizedPromptOwnerKey(assistantName))
+      }
+      log(
+        "SettingsSyncManager: omitted oversized \(assistantName) prompt from sync "
+          + "(\(length) Unicode scalars; max \(maximumLength))")
+      return nil
+    }
+    UserDefaults.standard.removeObject(forKey: oversizedPromptOwnerKey(assistantName))
+    return prompt
+  }
+
+  /// Record prompt ownership at the local write boundary so an oversized value is
+  /// protected even before the next network sync attempt.
+  static func recordLocalPromptOwner(_ assistantName: String) {
+    guard let owner = currentOwnerID else { return }
+    UserDefaults.standard.set(owner, forKey: oversizedPromptOwnerKey(assistantName))
+  }
+
+  /// An oversized local prompt is unsynced user data. Preserve it across pulls until
+  /// the user edits it back within the contract; otherwise a later server hydration
+  /// would destroy the exact value deliberately omitted from PATCH.
+  private func applyRemotePrompt(
+    _ remotePrompt: String,
+    overLocalPrompt localPrompt: String,
+    assistantName: String,
+    maximumLength: Int,
+    apply: (String) -> Void
+  ) {
+    let localLength = localPrompt.unicodeScalars.count
+    let recordedOwner = UserDefaults.standard.string(forKey: Self.oversizedPromptOwnerKey(assistantName))
+    if localLength > maximumLength,
+      let currentOwner = Self.currentOwnerID,
+      recordedOwner == currentOwner
+    {
+      log(
+        "SettingsSyncManager: preserved oversized local \(assistantName) prompt during server sync "
+          + "(\(localLength) Unicode scalars; max \(maximumLength))")
+      return
+    }
+    UserDefaults.standard.removeObject(forKey: Self.oversizedPromptOwnerKey(assistantName))
+    apply(remotePrompt)
+  }
+
+  private static var currentOwnerID: String? {
+    guard
+      let value = UserDefaults.standard.string(forKey: .authUserId)?
+        .trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty
+    else { return nil }
+    return value
+  }
+
+  private static func oversizedPromptOwnerKey(_ assistantName: String) -> String {
+    "assistantPrompt.unsyncedOversizedOwner.\(assistantName)"
   }
 }

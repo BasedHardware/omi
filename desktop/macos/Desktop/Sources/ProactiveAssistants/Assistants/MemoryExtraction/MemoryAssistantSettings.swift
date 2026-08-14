@@ -189,6 +189,7 @@ class MemoryAssistantSettings {
     set {
       let isCustom = newValue != MemoryAssistantSettings.defaultAnalysisPrompt
       UserDefaults.standard.set(newValue, forKey: analysisPromptKey)
+      SettingsSyncManager.recordLocalPromptOwner("memory")
       let previewLength = min(newValue.count, 50)
       let preview = String(newValue.prefix(previewLength)) + (newValue.count > 50 ? "..." : "")
       log("Memory analysis prompt updated (\(newValue.count) chars, custom: \(isCustom)): \(preview)")

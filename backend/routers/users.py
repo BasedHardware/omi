@@ -1917,8 +1917,11 @@ def get_llm_top_features(
 @router.get('/v1/users/export', tags=['v1'], responses={200: {'model': UserDataExportResponse}})
 def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
     """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""
+    # Iterator construction eagerly spools canonical memories so an authority
+    # failure is raised before StreamingResponse commits HTTP 200 and headers.
+    export_stream = iter_user_data_export(uid)
     return StreamingResponse(
-        iter_user_data_export(uid),
+        export_stream,
         media_type='application/json',
         headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
     )
@@ -1972,9 +1975,12 @@ class FocusAssistantSettings(BaseModel):
     excluded_apps: list[str] | None = None
 
 
+ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH = 10000
+
+
 class TaskAssistantSettings(BaseModel):
     enabled: bool | None = None
-    analysis_prompt: str | None = Field(None, max_length=10000)
+    analysis_prompt: str | None = Field(None, max_length=ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH)
     extraction_interval: float | None = None
     min_confidence: float | None = Field(None, ge=0.0, le=1.0)
     notifications_enabled: bool | None = None

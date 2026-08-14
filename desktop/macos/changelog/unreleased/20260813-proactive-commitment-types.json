@@ -1,0 +1,3 @@
+{
+  "change": "Improved proactive suggestions so requirement changes no longer create duplicate task candidates unless the context contains an explicit commitment."
+}
