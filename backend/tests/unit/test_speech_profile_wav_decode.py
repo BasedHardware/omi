@@ -19,6 +19,8 @@ import types
 from unittest.mock import MagicMock, patch
 
 import pytest
+from scripts.stt import j_apply_vad_to_speech_profiles as batch_mod
+from utils.stt import vad as vad_mod
 
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
@@ -72,8 +74,6 @@ for _n in list(sys.modules):
 sys.meta_path.insert(0, _f)
 try:
     from routers import speech_profile as mod
-    from scripts.stt import j_apply_vad_to_speech_profiles as batch_mod
-    from utils.stt import vad as vad_mod
 finally:
     sys.meta_path.remove(_f)
     for _n in list(sys.modules):
