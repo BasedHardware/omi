@@ -831,7 +831,7 @@ realTest("derived group dream PostgreSQL one-shot runtime", () => {
      * is exactly the one this belief's owner mass earns, and it is bound to the
      * about_ref that was persisted.
      */
-    expect(labels[0]?.label).toBe("source_attributed");
+    expect(labels[0]?.label).toBe("source_local");
     expect(labels[0]?.owner_probability_micros).toBe(0);
     expect(labels[0]?.about_ref).toBe(loadedBeliefs.beliefs[0]?.about_ref);
     // The dark HTTP/MCP doors stay unmounted; that is asserted without a
