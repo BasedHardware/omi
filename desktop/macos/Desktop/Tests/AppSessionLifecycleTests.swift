@@ -16,7 +16,13 @@ final class AppSessionLifecycleTests: XCTestCase {
 
   func testForegroundResumeRequiresAnInactiveTransition() {
     var ids = ["cold-session", "resume-session"].makeIterator()
-    let lifecycle = AppSessionLifecycle(makeID: { ids.next()! })
+    let lifecycle = AppSessionLifecycle(makeID: {
+      guard let id = ids.next() else {
+        XCTFail("session ID generator exhausted")
+        return "unexpected-session"
+      }
+      return id
+    })
 
     _ = lifecycle.appLaunched()
     lifecycle.appResignedActive()
