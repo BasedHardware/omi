@@ -30,6 +30,10 @@ generated_route_overrides:
     primary: {provider: openai, model: qwen2.5:14b}
   - feature: daily_summary_simple
     primary: {provider: openai, model: qwen2.5:14b}
+  - feature: desktop_proactive_extraction
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: desktop_proactive_reasoning
+    primary: {provider: openai, model: qwen2.5:14b}
   - feature: external_structure
     primary: {provider: openai, model: qwen2.5:14b}
   - feature: fair_use
