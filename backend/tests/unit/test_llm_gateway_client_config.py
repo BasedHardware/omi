@@ -15,12 +15,16 @@ from utils.llm import clients, gateway_shadow, gateway_serving
 from utils.llm import providers
 from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, GatewayContextChatOpenAI, get_llm_gateway_base_url
 from utils.llm.gateway_client import (
+    LLM_CHAT_AGENT_ROUTE_ENV_VAR,
     LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR,
     LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR,
     LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
     LLM_GATEWAY_URL_ENV_VAR,
+    GatewayDirectModelSurfaceBlocked,
     feature_auto_lane_id,
+    get_chat_agent_route,
     raise_if_gateway_feature_mode_blocks_direct_model_surface,
+    should_route_chat_agent_through_gateway,
     should_route_features_through_gateway,
 )
 from utils.llm.clients import get_llm_gateway_chat_structured
@@ -202,6 +206,53 @@ def test_get_llm_feature_gateway_mode_uses_generated_auto_lane(monkeypatch):
     assert legacy.calls == []
 
 
+def test_memory_l2_gateway_mode_uses_luna_auto_lane_without_direct_fallback(monkeypatch):
+    captured = {}
+    gateway = FakeChatModel(name='gateway', calls=[])
+    legacy = FakeChatModel(name='legacy', calls=[])
+
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
+        captured['lane_id'] = lane_id
+        captured['streaming'] = streaming
+        captured['feature'] = feature
+        return gateway
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', fake_gateway)
+    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
+
+    result = clients.get_llm('memory_l2').invoke('promote this memory')
+
+    assert result.content == 'gateway response'
+    assert captured == {'lane_id': 'omi:auto:memory-l2', 'streaming': False, 'feature': 'memory_l2'}
+    assert len(gateway.calls) == 1
+    assert legacy.calls == []
+
+
+def test_get_llm_forwards_an_explicit_gateway_transport_timeout(monkeypatch):
+    captured = {}
+
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
+        captured.update(lane_id=lane_id, streaming=streaming, options=options, feature=feature)
+        return FakeChatModel(name="gateway", calls=[])
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, "gateway")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway)
+
+    clients.get_llm("memory_l2", request_timeout=20.0)
+
+    assert captured == {
+        "lane_id": "omi:auto:memory-l2",
+        "streaming": False,
+        "options": {"request_timeout": 20.0},
+        "feature": "memory_l2",
+    }
+
+
 def test_get_llm_feature_gateway_mode_fails_closed_on_transport_failure(monkeypatch):
     legacy = FakeChatModel(name='legacy', calls=[])
 
@@ -223,7 +274,6 @@ def test_get_llm_feature_gateway_mode_fails_closed_on_transport_failure(monkeypa
 
 
 def test_gateway_serving_does_not_fallback_on_gateway_configuration_503():
-    from utils.llm import gateway_serving
 
     request = httpx.Request('POST', 'http://gateway/v1/chat/completions')
     response = httpx.Response(503, request=request)
@@ -333,8 +383,10 @@ def test_gateway_feature_mode_blocks_direct_exception_surfaces(monkeypatch):
 
     try:
         raise_if_gateway_feature_mode_blocks_direct_model_surface('file_chat.openai_files')
-    except RuntimeError as exc:
+    except GatewayDirectModelSurfaceBlocked as exc:
         assert 'file_chat.openai_files' in str(exc)
+        assert exc.error_code == 'file_chat_gateway_blocked'
+        assert exc.surface == 'file_chat.openai_files'
     else:
         raise AssertionError('expected direct model surface to be blocked')
 
@@ -385,6 +437,48 @@ def test_perplexity_gateway_response_preserves_top_level_citations():
     assert 'answer' in formatted
     assert 'Source title' in formatted
     assert 'https://example.com/source' in formatted
+
+
+def test_chat_agent_route_direct_while_feature_mode_gateway(monkeypatch):
+    """Chat can stay direct while other features use the gateway."""
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'direct')
+    monkeypatch.delenv('K_SERVICE', raising=False)
+    monkeypatch.delenv('KUBERNETES_SERVICE_HOST', raising=False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+
+    assert should_route_features_through_gateway() is True
+    assert get_chat_agent_route() == 'direct'
+    assert should_route_chat_agent_through_gateway() is False
+
+
+def test_chat_agent_route_gateway_requires_feature_mode(monkeypatch):
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'gateway')
+    monkeypatch.delenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, raising=False)
+    monkeypatch.delenv('K_SERVICE', raising=False)
+
+    assert get_chat_agent_route() == 'gateway'
+    assert should_route_chat_agent_through_gateway() is False
+
+
+def test_chat_agent_route_gateway_with_feature_mode(monkeypatch):
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'luna')  # alias
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv('K_SERVICE', raising=False)
+
+    assert get_chat_agent_route() == 'gateway'
+    assert should_route_chat_agent_through_gateway() is True
+
+
+def test_chat_agent_route_invalid_raises(monkeypatch):
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'not-a-route')
+    try:
+        get_chat_agent_route()
+    except RuntimeError as exc:
+        assert LLM_CHAT_AGENT_ROUTE_ENV_VAR in str(exc)
+    else:
+        raise AssertionError('expected invalid chat agent route to raise')
 
 
 def _load_perplexity_tools():

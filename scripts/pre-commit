@@ -1,5 +1,11 @@
 #!/bin/sh
 
+# Fail before minting a commit if this clone still has a test-fixture Git identity.
+# A leftover repo-local user.email (Ratchet Test / *.invalid) overrides the global
+# identity, and GitHub then will not attribute the commit to the person who pushed.
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+python3 "$ROOT/.github/scripts/check_git_author_identity.py" --pending || exit 1
+
 # Universal source hygiene: fail fast on unresolved merge conflict markers.
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
 

@@ -4,7 +4,11 @@
 // === Swift → Bridge (stdin) ===
 
 export const PROTOCOL_VERSION = 2 as const;
-export const RUNTIME_CAPABILITIES = ["journal_import_remote_turn", "runtime_adapter_availability"] as const;
+export const RUNTIME_CAPABILITIES = [
+  "journal_import_remote_turn",
+  "runtime_adapter_availability",
+  "chat_first_capability_projection",
+] as const;
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
 export interface ProtocolEnvelope {
@@ -25,6 +29,8 @@ export interface CanonicalCorrelation {
 export interface QueryMessage extends ProtocolEnvelope {
   type: "query";
   sessionId: string;
+  /** Requested projection surface; the runtime accepts it only when bound to the canonical session. */
+  surfaceKind: string;
   producingTurnId?: string;
   prompt: string;
   mode?: "ask" | "act";
@@ -169,6 +175,14 @@ export interface ResolveSurfaceSessionMessage extends ProtocolEnvelope {
     adapterId: string;
     modelProfile: string | null;
     workingDirectory: string;
+  };
+  /**
+   * Ephemeral server-derived capability, accepted only for the main Chat
+   * surface.  It is never persisted to the kernel journal or preferences.
+   */
+  chatFirstCapability?: {
+    chatFirstUi: boolean;
+    controlGeneration: number;
   };
 }
 
@@ -376,6 +390,108 @@ export interface JournalClearTurnsMessage extends ProtocolEnvelope {
   deleteBackend?: boolean;
 }
 
+/**
+ * Privileged local-only append for server-validated chat-first blocks. The
+ * capability and producing run/attempt bind this mutation to the assistant
+ * turn that invoked `render_chat_blocks`; Swift cannot select an arbitrary
+ * journal turn.
+ */
+export interface AppendChatFirstBlocksMessage extends ProtocolEnvelope {
+  type: "append_chat_first_blocks";
+  ownerId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  capabilityRef: string;
+  controlGeneration: number;
+  blocks: unknown[];
+}
+
+/**
+ * Privileged local-only append for one Rewind evidence resource. The same
+ * capability/run binding prevents a tool from attaching an image to an
+ * arbitrary Chat turn.
+ */
+export interface AppendChatFirstEvidenceMessage extends ProtocolEnvelope {
+  type: "append_chat_first_evidence";
+  ownerId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  capabilityRef: string;
+  controlGeneration: number;
+  resource: unknown;
+}
+
+/** Kernel-owned selection for one persisted, tail-actionable question card. */
+export interface RecordQuestionInteractionReplyMessage extends ProtocolEnvelope {
+  type: "record_question_interaction_reply";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  ownerId: string;
+  sessionId: string;
+  questionId: string;
+  optionId: string;
+  controlGeneration: number;
+}
+
+/**
+ * Privileged local receipt for an ordered server-owned deterministic-tier
+ * batch. Swift only transports typed server responses; the kernel derives
+ * journal identities and enforces tail suppression in one transaction.
+ */
+export interface MaterializeChatFirstIntentsMessage extends ProtocolEnvelope {
+  type: "materialize_chat_first_intents";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  ownerId: string;
+  sessionId: string;
+  controlGeneration: number;
+  intents: Array<{
+    intentId: string;
+    continuityKey: string;
+    source:
+      | "daily_opener"
+      | "capture_arrival"
+      | "deferral_reraise"
+      | "agent_judgment"
+      | "cold_start_rich"
+      | "cold_start_sparse";
+    blocks: unknown[];
+  }>;
+}
+
+/** Read restart-safe kernel receipts to include in the next server fetch/ack. */
+export interface ListChatFirstMaterializationReceiptsMessage extends ProtocolEnvelope {
+  type: "list_chat_first_materialization_receipts";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  ownerId: string;
+  sessionId: string;
+  controlGeneration: number;
+  limit?: number;
+}
+
+/** Drop only receipts that the server accepted in a successful fetch/ack call. */
+export interface AcknowledgeChatFirstMaterializationReceiptsMessage extends ProtocolEnvelope {
+  type: "acknowledge_chat_first_materialization_receipts";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  ownerId: string;
+  sessionId: string;
+  controlGeneration: number;
+  receipts: Array<{ intentId: string; receiptId: string }>;
+  coldStartSequenceTerminalReceipts: Array<{
+    sequenceId: string;
+    receiptId: string;
+    terminalState: "completed" | "abandoned";
+  }>;
+}
+
 export interface EnsureAgentSpawnJournalMessage extends ProtocolEnvelope {
   type: "ensure_agent_spawn_journal";
   ownerId: string;
@@ -423,6 +539,17 @@ export interface JournalBackendReconcileResultMessage extends ProtocolEnvelope {
   errorCode?: string;
 }
 
+/** Swift's physical transport result for the separate deferral outbox. */
+export interface ChatFirstDeferralDeliveryResultMessage extends ProtocolEnvelope {
+  type: "chat_first_deferral_delivery_result";
+  ownerId: string;
+  continuityKey: string;
+  deliveryGeneration: number;
+  payloadHash: string;
+  ok: boolean;
+  errorCode?: string;
+}
+
 /** Swift pushes a refreshed Firebase ID token to the bridge (piMono mode) */
 export interface RefreshTokenMessage {
   type: "refresh_token";
@@ -434,6 +561,20 @@ export interface RefreshTokenMessage {
 export interface RefreshOwnerMessage {
   type: "refresh_owner";
   ownerId: string;
+}
+
+/**
+ * Local/offline-only E2E probe for the real Chat-first Swift tool executor.
+ * The kernel derives capability from the already-resolved session; this message
+ * cannot carry or manufacture a rollout projection.
+ */
+export interface ChatFirstHarnessExecutorBeginMessage extends ProtocolEnvelope {
+  type: "chat_first_harness_executor_begin";
+  ownerId: string;
+  sessionId: string;
+  producingTurnId: string;
+  controlGeneration: number;
+  input: Record<string, unknown>;
 }
 
 export type InboundMessage =
@@ -463,10 +604,18 @@ export type InboundMessage =
   | JournalRepairTurnsMessage
   | JournalListTurnsMessage
   | JournalClearTurnsMessage
+  | AppendChatFirstBlocksMessage
+  | AppendChatFirstEvidenceMessage
+  | RecordQuestionInteractionReplyMessage
+  | MaterializeChatFirstIntentsMessage
+  | ListChatFirstMaterializationReceiptsMessage
+  | AcknowledgeChatFirstMaterializationReceiptsMessage
   | EnsureAgentSpawnJournalMessage
   | JournalBackendSyncResultMessage
   | JournalBackendDeleteResultMessage
   | JournalBackendReconcileResultMessage
+  | ChatFirstDeferralDeliveryResultMessage
+  | ChatFirstHarnessExecutorBeginMessage
   | RefreshTokenMessage
   | RefreshOwnerMessage;
 
@@ -475,6 +624,7 @@ const INBOUND_RESPONSE_MESSAGE_TYPES = new Set<InboundMessage["type"]>([
   "journal_backend_sync_result",
   "journal_backend_delete_result",
   "journal_backend_reconcile_result",
+  "chat_first_deferral_delivery_result",
 ]);
 
 /** Response handlers log invalid replies locally; they never echo request errors back to Swift. */
@@ -535,6 +685,7 @@ export interface AuthorizedToolExecutionMessage extends OutboundEnvelope {
   manifestDigest: string;
   daemonBootEpoch: string;
   executionGeneration: number;
+  capabilityRef: string;
   toolName: string;
   input: Record<string, unknown>;
   inputHash: string;
@@ -547,6 +698,8 @@ export interface AuthorizedToolExecutionMessage extends OutboundEnvelope {
   precedingAssistantText: string | null;
   runMode: "ask" | "act";
   chatMode: string | null;
+  /** Present only for the server-authorized Main Chat structured-block tool. */
+  chatFirstControlGeneration?: number;
   /** Bounded policy recovery telemetry; absent for ordinary authorized calls. */
   policyRecovery?: "permission_delegation_to_native";
 }
@@ -589,6 +742,20 @@ export interface ExternalSurfaceRunCompleteResultMessage extends OutboundEnvelop
   ok: boolean;
   terminalStatus?: "completed" | "failed" | "cancelled";
   duplicate?: boolean;
+  error?: ExternalAuthorityError;
+}
+
+/** Shape-only completion for the local/offline Chat-first executor probe. */
+export interface ChatFirstHarnessExecutorResultMessage extends OutboundEnvelope {
+  type: "chat_first_harness_executor_result";
+  ownerId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  ok: boolean;
+  executorInvoked: boolean;
+  validated: boolean;
+  journalBlockRendered: boolean;
   error?: ExternalAuthorityError;
 }
 
@@ -646,6 +813,9 @@ export interface RuntimeFailurePayload {
   provider?: string;
   retryable?: boolean;
   phase?: "startup";
+  recoveryAction?: "worker_recycled";
+  recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
+  retryDisposition?: "next_send";
 }
 
 export interface ToolActivityMessage extends QueryScopedOutbound {
@@ -825,6 +995,8 @@ export interface ContextSnapshotProjection {
     manifestVersion: number;
     manifestDigest: string;
     allowedToolNames: string[];
+    chatFirstUi: boolean;
+    chatFirstControlGeneration: number | null;
   };
 }
 
@@ -887,7 +1059,20 @@ export interface AgentSpawnJournalEnsuredMessage extends OutboundEnvelope {
 
 export interface JournalOperationResultMessage extends OutboundEnvelope {
   type: "journal_operation_result";
-  operation: "record" | "record_exchange" | "import_remote" | "update" | "repair" | "list" | "clear";
+  operation:
+    | "record"
+    | "record_exchange"
+    | "import_remote"
+    | "update"
+    | "repair"
+    | "list"
+    | "clear"
+    | "append_chat_first_blocks"
+    | "append_chat_first_evidence"
+    | "record_question_interaction_reply"
+    | "materialize_chat_first_intents"
+    | "list_chat_first_materialization_receipts"
+    | "acknowledge_chat_first_materialization_receipts";
   conversationId: string;
   surfaceKind: string;
   externalRefKind: string;
@@ -899,6 +1084,19 @@ export interface JournalOperationResultMessage extends OutboundEnvelope {
   generationBaseTurnSeq: number;
   conversationGeneration: number;
   backendDeleteOperationId?: string;
+  accepted?: boolean;
+  duplicate?: boolean;
+  continuityKey?: string | null;
+  suppressedByTailQuestion?: boolean;
+  suppressedByStreamingTail?: boolean;
+  materializationStoppedByTail?: boolean;
+  materializationReceipts?: Array<{ intentId: string; receiptId: string }>;
+  coldStartSequenceTerminalReceipts?: Array<{
+    sequenceId: string;
+    receiptId: string;
+    terminalState: "completed" | "abandoned";
+  }>;
+  acknowledgedReceiptCount?: number;
 }
 
 export interface JournalTurnChangedMessage extends OutboundEnvelope {
@@ -959,6 +1157,23 @@ export interface JournalBackendReconcileMessage extends OutboundEnvelope {
   pageLimit: number;
 }
 
+export interface ChatFirstDeferralDeliveryMessage extends OutboundEnvelope {
+  type: "chat_first_deferral_delivery";
+  ownerId: string;
+  continuityKey: string;
+  controlGeneration: number;
+  subject: { kind: "task" | "goal" | "capture"; id: string };
+  question: {
+    questionId: string;
+    text: string;
+    subject: { kind: "task" | "goal" | "capture"; id: string };
+    options: Array<{ optionId: string; label: string; preparedAnswer: string; defer?: boolean }>;
+  };
+  attemptCount: number;
+  deliveryGeneration: number;
+  payloadHash: string;
+}
+
 export type OutboundMessage =
   | InitMessage
   | TextDeltaMessage
@@ -975,6 +1190,7 @@ export type OutboundMessage =
   | ExternalSurfaceRunBeginResultMessage
   | ExternalSurfaceToolResultMessage
   | ExternalSurfaceRunCompleteResultMessage
+  | ChatFirstHarnessExecutorResultMessage
   | OwnerRuntimeRevokedMessage
   | ControlToolResultMessage
   | DefaultExecutionProfileConfiguredMessage
@@ -988,7 +1204,8 @@ export type OutboundMessage =
   | JournalTurnChangedMessage
   | JournalBackendSyncMessage
   | JournalBackendDeleteMessage
-  | JournalBackendReconcileMessage;
+  | JournalBackendReconcileMessage
+  | ChatFirstDeferralDeliveryMessage;
 
 type OutboundWithEnvelope = Exclude<OutboundMessage, AuthRequiredMessage | AuthSuccessMessage>;
 
@@ -1011,6 +1228,7 @@ export type OutboundMessageDraft =
   | DraftEnvelope<ExternalSurfaceRunBeginResultMessage>
   | DraftEnvelope<ExternalSurfaceToolResultMessage>
   | DraftEnvelope<ExternalSurfaceRunCompleteResultMessage>
+  | DraftEnvelope<ChatFirstHarnessExecutorResultMessage>
   | DraftEnvelope<OwnerRuntimeRevokedMessage>
   | DraftEnvelope<ControlToolResultMessage>
   | DraftEnvelope<DefaultExecutionProfileConfiguredMessage>
@@ -1024,7 +1242,8 @@ export type OutboundMessageDraft =
   | DraftEnvelope<JournalTurnChangedMessage>
   | DraftEnvelope<JournalBackendSyncMessage>
   | DraftEnvelope<JournalBackendDeleteMessage>
-  | DraftEnvelope<JournalBackendReconcileMessage>;
+  | DraftEnvelope<JournalBackendReconcileMessage>
+  | DraftEnvelope<ChatFirstDeferralDeliveryMessage>;
 
 export function ensureOutboundProtocolVersion(message: OutboundMessageDraft): OutboundMessage {
   if (message.type === "auth_required" || message.type === "auth_success") {

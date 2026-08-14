@@ -2,7 +2,6 @@ import XCTest
 
 @testable import Omi_Computer
 
-@MainActor
 final class ChatToolExecutorSpawnAgentTests: XCTestCase {
   private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
 
@@ -93,6 +92,20 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
 
     XCTAssertEqual(result, "Error: Missing objective. Pass a clear, self-contained task objective.")
     XCTAssertEqual(AgentPillsManager.shared.pills.count, before)
+  }
+
+  func testDirectPermissionToolsRemainCanonicalPhysicalExecutors() {
+    XCTAssertEqual(
+      GeneratedToolExecutors.chatDispatch(for: "check_permission_status"),
+      .checkPermissionStatus)
+    XCTAssertEqual(
+      GeneratedToolExecutors.chatDispatch(for: "request_permission"),
+      .requestPermission)
+  }
+
+  func testSpawnAgentHasNoDormantSwiftExecutionPath() {
+    XCTAssertNil(GeneratedToolExecutors.resolve("spawn_agent"))
+    XCTAssertEqual(GeneratedToolExecutors.chatDispatch(for: "spawn_agent"), .unhandled)
   }
 
   func testSpawnAgentResponseReportsTheCurrentPillStatus() {

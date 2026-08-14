@@ -24,6 +24,7 @@ import {
   __resetAuditWarnedForTest,
   OMI_TOOLS,
   omiToolsForExecutionRole,
+  omiToolsForProjectionContext,
   OMI_TOOL_TIMEOUT_MS,
   OMI_LONG_CONTROL_TOOL_TIMEOUT_MS,
   isSafeSkillName,
@@ -39,13 +40,13 @@ import {
   OMI_CHAT_CONTRACT_VERSION,
 } from "./index.ts";
 import type { ToolCallEvent } from "@earendil-works/pi-coding-agent";
-import { agentControlCapabilityManifest } from "../agent/src/runtime/control-tool-manifest.ts";
-import { discoverSkillCatalog, searchSkills } from "../agent/src/runtime/node-tools.ts";
+import { agentControlCapabilityManifest } from "../agent/dist/runtime/control-tool-manifest.js";
+import { discoverSkillCatalog, searchSkills } from "../agent/dist/runtime/node-tools.js";
 import {
   buildToolAvailabilitySnapshot,
   toolNamesForAdapter,
   toolsForAdapter,
-} from "../agent/src/runtime/omi-tool-manifest.ts";
+} from "../agent/dist/runtime/omi-tool-manifest.js";
 
 // ---------------------------------------------------------------------------
 // classifyBash — allow-by-default for normal dev commands
@@ -1060,6 +1061,33 @@ test("OMI_TOOLS: leaf projection omits every agent-management tool", () => {
   assert.ok(!names.includes("send_agent_message"));
 });
 
+test("OMI_TOOLS: chat-first main Chat projects rich blocks without leaking to other surfaces", () => {
+  const enabled = omiToolsForProjectionContext({
+    executionRole: "coordinator",
+    surfaceKind: "main_chat",
+    chatFirstUi: true,
+    controlGeneration: 7,
+  }).map((tool) => tool.name);
+  const disabled = omiToolsForProjectionContext({
+    executionRole: "coordinator",
+    surfaceKind: "main_chat",
+    chatFirstUi: false,
+    controlGeneration: 7,
+  }).map((tool) => tool.name);
+  const otherSurface = omiToolsForProjectionContext({
+    executionRole: "coordinator",
+    surfaceKind: "floating_chat",
+    chatFirstUi: true,
+    controlGeneration: 7,
+  }).map((tool) => tool.name);
+
+  assert.ok(enabled.includes("render_chat_blocks"));
+  assert.ok(enabled.includes("search_chat_history"));
+  assert.ok(enabled.includes("show_rewind_evidence"));
+  assert.ok(!disabled.includes("render_chat_blocks"));
+  assert.ok(!otherSurface.includes("render_chat_blocks"));
+});
+
 test("OMI_TOOLS: all tools preserve canonical pi-mono projection metadata and schema shape", () => {
   const canonicalTools = toolsForAdapter("pi-mono");
 
@@ -1168,7 +1196,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     delete_task: ["task_id"],
     read_tool_output: ["artifactId"],
     search_tool_output: ["artifactId", "query"],
-    save_knowledge_graph: ["nodes", "edges"],
+    save_knowledge_graph: [],
     get_conversations: [],
     search_conversations: ["query"],
     get_memories: [],

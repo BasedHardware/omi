@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from google.auth.credentials import AnonymousCredentials
+from google.api_core.exceptions import FailedPrecondition
 from google.cloud import firestore
 from google.cloud.firestore import transactional
 from google.cloud.firestore_v1.document import DocumentReference
@@ -38,6 +39,7 @@ from database.desktop_update_channels import (  # noqa: E402
     reserve_beta_candidate,
     set_beta_admission_enabled,
 )
+from database.staged_tasks import restore_legacy_conversation_items  # noqa: E402
 
 _WAIT_SECONDS = 20
 
@@ -290,6 +292,68 @@ def _run_pessimistic_serialization_case() -> None:
             _delete_if_present(ref)
 
 
+def _run_staged_recovery_delete_race() -> None:
+    """Prove a real update-time mismatch rolls back the batch and is retried."""
+    client = firestore.Client(project=PROJECT_ID, credentials=AnonymousCredentials())
+    uid = f'staged-recovery-{uuid.uuid4().hex}'
+    staged_ref = client.collection('users').document(uid).collection('staged_tasks').document('legacy-task')
+    action_item_ref = client.collection('users').document(uid).collection('action_items').document('legacy-task')
+    staged_ref.set(
+        {
+            'description': 'Call supplier',
+            'completed': False,
+            'source': 'conversation_migration',
+            'relevance_score': 10,
+            'updated_at': datetime.now(timezone.utc),
+        }
+    )
+    race_state = {'raced': False}
+
+    class RacingBatch:
+        def __init__(self, batch: Any):
+            self._batch = batch
+
+        def create(self, *args: Any, **kwargs: Any) -> None:
+            self._batch.create(*args, **kwargs)
+
+        def delete(self, *args: Any, **kwargs: Any) -> None:
+            self._batch.delete(*args, **kwargs)
+
+        def commit(self) -> Any:
+            if not race_state['raced']:
+                race_state['raced'] = True
+                staged_ref.update({'relevance_score': 20, 'updated_at': datetime.now(timezone.utc)})
+                try:
+                    return self._batch.commit()
+                except FailedPrecondition:
+                    assert not action_item_ref.get().exists
+                    assert staged_ref.get().to_dict()['relevance_score'] == 20
+                    raise
+            return self._batch.commit()
+
+    class RacingClient:
+        def __getattr__(self, name: str) -> Any:
+            return getattr(client, name)
+
+        def batch(self) -> RacingBatch:
+            return RacingBatch(client.batch())
+
+    try:
+        result = restore_legacy_conversation_items(uid, firestore_client=RacingClient())
+        assert result == {
+            'restored': 1,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        assert action_item_ref.get().exists
+        assert not staged_ref.get().exists
+        print('staged recovery delete race: mismatch=rolled_back retry=restored staged_row_preserved=true')
+    finally:
+        _delete_if_present(action_item_ref)
+        _delete_if_present(staged_ref)
+
+
 def main() -> int:
     _require_safe_emulator()
     _run_stale_capture_case(
@@ -306,6 +370,7 @@ def main() -> int:
         "direct-generation-before-final-read", lambda client, _tag_b: _direct_generation_transition(client)
     )
     _run_pessimistic_serialization_case()
+    _run_staged_recovery_delete_race()
     print("desktop Beta admission Firestore emulator proof passed")
     return 0
 

@@ -355,13 +355,13 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "search_conversations",
-    "description": "Search the user's past conversations for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'). Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
+    "description": "Search the user's past conversations for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'), or pass a canonical conversation UUID/share link for an exact lookup. Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
     "parameters": {
       "type": "object",
       "properties": {
         "query": {
           "type": "string",
-          "description": "Event or topic to search for"
+          "description": "Event/topic, canonical UUID, or https://h.omi.me/conversations/<uuid> link"
         },
         "start_date": {
           "type": "string"

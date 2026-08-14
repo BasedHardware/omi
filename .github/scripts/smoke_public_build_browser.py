@@ -18,6 +18,27 @@ class BrowserSmokeError(RuntimeError):
     """The candidate did not render its client public-build canary."""
 
 
+SAFE_BROWSER_SMOKE_REASONS = frozenset(
+    {
+        "candidate URL must be an absolute HTTPS URL",
+        "headless browser did not run",
+        "headless browser could not render the candidate",
+        "unknown public-build target",
+        "client public-build canary did not become ready",
+        "no supported headless browser is available",
+    }
+)
+
+
+def sanitized_browser_smoke_reason(error: BrowserSmokeError) -> str:
+    """Return a useful, non-sensitive diagnostic for CI output."""
+
+    reason = str(error)
+    if reason in SAFE_BROWSER_SMOKE_REASONS:
+        return reason
+    return "unspecified browser smoke failure"
+
+
 def absolute_https_url(value: str) -> str:
     parsed = urlsplit(value)
     if parsed.scheme != "https" or not parsed.netloc or value != value.strip():
@@ -90,7 +111,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         smoke(target=args.target, base_url=args.base_url, contract_path=args.contract)
-    except (OSError, ValueError, BrowserSmokeError):
+    except BrowserSmokeError as exc:
+        print(
+            f"public-build browser smoke failed: target={args.target} " f"reason={sanitized_browser_smoke_reason(exc)}",
+            file=sys.stderr,
+        )
+        return 1
+    except (OSError, ValueError):
         print(f"public-build browser smoke failed: target={args.target}", file=sys.stderr)
         return 1
     print(f"public-build browser smoke passed: target={args.target}")

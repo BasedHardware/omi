@@ -8,10 +8,14 @@ import Foundation
 /// `run.sh`, and that relaunch must remain isolated.
 package struct DesktopStorageIdentity: Equatable {
   package static let namedDevelopmentBundlePrefix = "com.omi.omi-"
+  package static let productionBundleIdentifier = "com.omi.computer-macos"
   /// The separately-installable "Omi Beta" app. Kept in sync with
   /// `AppBuild.betaProductionBundleIdentifier` (asserted by a unit test); OmiSupport
   /// sits below the main target, so the literal is duplicated rather than imported.
   package static let betaProductionBundleIdentifier = "com.omi.computer-macos.beta"
+  package static let productionFamilyBundleIdentifiers: Set<String> = [
+    productionBundleIdentifier, betaProductionBundleIdentifier,
+  ]
 
   package let bundleIdentifier: String?
   package let localProfileEnabled: Bool
@@ -72,7 +76,14 @@ package struct DesktopStorageIdentity: Equatable {
 /// their existing shared storage roots.
 package enum DesktopLocalProfile {
   package static var isEnabled: Bool {
-    value("OMI_DESKTOP_LOCAL_PROFILE") == "1"
+    isEnabled(bundleIdentifier: Bundle.main.bundleIdentifier, profileValue: value("OMI_DESKTOP_LOCAL_PROFILE"))
+  }
+
+  package static func isEnabled(bundleIdentifier: String?, profileValue: String?) -> Bool {
+    guard !DesktopStorageIdentity.productionFamilyBundleIdentifiers.contains(bundleIdentifier ?? "") else {
+      return false
+    }
+    return profileValue == "1"
   }
 
   package static var storageDirectoryName: String {

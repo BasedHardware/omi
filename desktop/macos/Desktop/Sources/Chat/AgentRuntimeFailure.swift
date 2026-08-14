@@ -38,6 +38,9 @@ struct AgentRuntimeFailure: Equatable, Sendable {
   /// class where re-running the same brief on another provider cannot
   /// duplicate side effects.
   var isStartupPhase: Bool { phase == "startup" }
+  let recoveryAction: String?
+  let recoveryOutcome: String?
+  let retryDisposition: String?
 
   init(
     code: String,
@@ -48,7 +51,10 @@ struct AgentRuntimeFailure: Equatable, Sendable {
     adapterId: String? = nil,
     provider: String? = nil,
     retryable: Bool? = nil,
-    phase: String? = nil
+    phase: String? = nil,
+    recoveryAction: String? = nil,
+    recoveryOutcome: String? = nil,
+    retryDisposition: String? = nil
   ) {
     self.code = code
     self.failureCode = failureCode
@@ -59,6 +65,9 @@ struct AgentRuntimeFailure: Equatable, Sendable {
     self.provider = provider
     self.retryable = retryable
     self.phase = phase
+    self.recoveryAction = recoveryAction
+    self.recoveryOutcome = recoveryOutcome
+    self.retryDisposition = retryDisposition
   }
 
   var displayMessage: String {
@@ -91,9 +100,12 @@ struct AgentRuntimeFailure: Equatable, Sendable {
       source: payload["source"] as? String,
       adapterId: payload["adapterId"] as? String,
       provider: payload["provider"] as? String,
-      retryable: payload["retryable"] as? Bool,
-      phase: payload["phase"] as? String
-    )
+        retryable: payload["retryable"] as? Bool,
+        phase: payload["phase"] as? String,
+        recoveryAction: payload["recoveryAction"] as? String,
+        recoveryOutcome: payload["recoveryOutcome"] as? String,
+        retryDisposition: payload["retryDisposition"] as? String
+      )
   }
 }
 

@@ -62,13 +62,16 @@ enum MemoryBankConnector {
   /// `ConnectError.notInstalled` when the framework isn't found locally.
   @discardableResult
   static func connect(_ destination: MemoryExportDestination, key: String) throws -> String {
+    let message: String
     switch destination {
-    case .claudeCode: return try connectClaudeCode(key: key)
-    case .codex: return try connectCodex(key: key)
-    case .openclaw: return try connectOpenClaw(key: key)
-    case .hermes: return try connectHermes(key: key)
+    case .claudeCode: message = try connectClaudeCode(key: key)
+    case .codex: message = try connectCodex(key: key)
+    case .openclaw: message = try connectOpenClaw(key: key)
+    case .hermes: message = try connectHermes(key: key)
     default: throw ConnectError.notInstalled("\(destination.title) is not a local memory-bank target.")
     }
+    installAgentContextSkillIfSupported(for: destination)
+    return message
   }
 
   nonisolated(unsafe) static var homeOverrideForTesting: URL?
@@ -78,6 +81,29 @@ enum MemoryBankConnector {
   nonisolated(unsafe) static var processTimeoutSecondsForTesting: TimeInterval?
   private static var home: URL { homeOverrideForTesting ?? FileManager.default.homeDirectoryForCurrentUser }
   private static var processTimeoutSeconds: TimeInterval { processTimeoutSecondsForTesting ?? 20 }
+
+  private static func installAgentContextSkillIfSupported(for destination: MemoryExportDestination) {
+    do {
+      guard let outcome = try AgentContextSkillInstaller.install(for: destination, home: home) else {
+        return
+      }
+      switch outcome {
+      case .installed:
+        log("MemoryBankConnector: installed Omi context skill for \(destination.title)")
+      case .unchanged:
+        break
+      case .preservedExisting:
+        log("MemoryBankConnector: preserved existing Omi skill for \(destination.title)")
+      }
+    } catch {
+      // MCP is the connection contract; the skill only improves tool discovery.
+      // A skill-directory permission failure must not turn a working connector
+      // into a failed one.
+      log(
+        "MemoryBankConnector: couldn't install Omi context skill for \(destination.title): \(error.localizedDescription)"
+      )
+    }
+  }
 
   // MARK: - Claude Code (~/.claude.json mcpServers)
 

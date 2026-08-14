@@ -4,7 +4,11 @@ import Foundation
 // MARK: - Database Record
 
 /// Database record for AI-generated user profile history
-struct AIUserProfileRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
+// `MutablePersistableRecord` — not `PersistableRecord` — because the rowid is
+// captured by a `mutating didInsert`. `PersistableRecord`'s requirement is
+// non-mutating, so a mutating declaration silently witnesses nothing and the
+// empty default runs instead, leaving `id` nil after every insert.
+struct AIUserProfileRecord: Codable, FetchableRecord, MutablePersistableRecord, Identifiable {
   var id: Int64?
   var profileText: String
   var dataSourcesUsed: Int
@@ -60,6 +64,20 @@ actor AIUserProfileService {
     _dbQueue = db
     _dbGeneration = generation
     return db
+  }
+
+  /// Insert a profile row and return it carrying its persisted rowid.
+  ///
+  /// Every caller hands the returned record's `id` to a `WHERE id = ?` consumer
+  /// (the backend-sync flag update, Settings edit/delete), so the insert must go
+  /// through the mutating path that runs `didInsert`.
+  func insertProfile(_ record: AIUserProfileRecord) async throws -> AIUserProfileRecord {
+    let db = try await ensureDB()
+    return try await db.write { database in
+      var inserted = record
+      try inserted.insert(database)
+      return inserted
+    }
   }
 
   // MARK: - Public Interface
@@ -145,10 +163,6 @@ actor AIUserProfileService {
 
   /// Save exploration text as a new profile record (when no profile exists yet)
   func saveExplorationAsProfile(text: String) async -> Bool {
-    guard let db = try? await ensureDB() else {
-      log("AIUserProfileService: DB not available for saving exploration profile")
-      return false
-    }
     let generatedAt = Date()
     let record = AIUserProfileRecord(
       profileText: String(text.prefix(maxProfileLength)),
@@ -157,11 +171,7 @@ actor AIUserProfileService {
       generatedAt: generatedAt
     )
     do {
-      let insertedId = try await db.write { database -> Int64? in
-        let mutableRecord = record
-        try mutableRecord.insert(database)
-        return mutableRecord.id
-      }
+      let insertedId = try await insertProfile(record).id
       log("AIUserProfileService: Saved exploration as new profile (\(record.profileText.count) chars)")
 
       // Sync to backend (fire-and-forget)
@@ -237,110 +247,38 @@ actor AIUserProfileService {
       throw ProfileError.insufficientData
     }
 
-    // 3. Build prompt
-    let prompt = buildPrompt(
-      memories: memories, tasks: tasks, goals: goals, conversations: conversations, messages: messages)
-
-    // 4. Call Gemini
-    let gemini = try GeminiClient()
-    let systemPrompt = """
-      You are generating a structured user profile that will be injected as context into AI pipelines \
-      (task extraction, goal extraction, memory extraction) that analyze the user's screen and audio activity.
-
-      OUTPUT FORMAT:
-      - A flat list of factual statements, one per line, prefixed with "- "
-      - Each statement must be a concrete fact directly supported by the provided data
-      - No prose, no paragraphs, no headers, no markdown formatting
-      - No adjectives like "passionate", "dedicated", "impressive"
-      - Write in third person ("User works at...", not "You work at...")
-
-      WHAT TO INCLUDE (only if clearly supported by the data):
-      - Full name, role, company, industry
-      - Current projects and what tools/apps they use for each
-      - Key people they interact with (names, roles, relationship)
-      - Active goals and their progress
-      - Recurring meetings, deadlines, routines
-      - Communication platforms they use (Slack, email, iMessage, etc.)
-      - Technical stack, programming languages, frameworks
-      - Topics they frequently discuss or research
-      - Pending tasks and commitments to others
-      - Time zone, work schedule patterns
-
-      CRITICAL RULES:
-      - ONLY include facts that are directly evidenced in the provided data
-      - If a category has no supporting data, skip it entirely — do not guess or infer
-      - Do NOT hallucinate names, roles, companies, or relationships not present in the data
-      - Do NOT add personality descriptions or subjective assessments
-      - When uncertain, omit rather than speculate
-      - NEVER fabricate email addresses, phone numbers, URLs, or contact information
-      - The provided data contains NO email addresses — do not invent any
-      - If you cannot find a piece of information verbatim in the data, do not include it
-
-      The output MUST be under 2000 characters total.
-      """
-
-    let stageOneText = try await gemini.sendTextRequest(prompt: prompt, systemPrompt: systemPrompt)
-    log("AIUserProfileService: Stage 1 complete (\(stageOneText.count) chars)")
-
-    // 5. Stage 2 — Consolidate with past profiles for holistic view
+    // 3. Synthesize through the backend SSOT. The prompts, the model and the
+    // stage-2 consolidation with past profiles all live behind
+    // POST /v1/users/ai-profile/synthesize; this only ships the source lines.
+    // Stored newest-first, sent oldest-first for the consolidation stage.
     let pastProfiles = await getAllProfiles(limit: 5)
-    let finalText: String
-    if pastProfiles.isEmpty {
-      finalText = stageOneText
-    } else {
-      let consolidationPrompt = buildConsolidationPrompt(
-        newProfile: stageOneText,
-        pastProfiles: pastProfiles
-      )
-      let consolidationSystemPrompt = """
-        You are merging a newly generated user profile with historical profiles to create \
-        one holistic, up-to-date user profile. This profile is injected as context into AI pipelines \
-        (task extraction, goal extraction, memory extraction) that analyze the user's screen and audio activity.
+    let synthesis = try await APIClient.shared.synthesizeAIUserProfile(
+      memories: memories,
+      tasks: tasks,
+      goals: goals,
+      conversations: conversations,
+      messages: messages,
+      pastProfilesOldestFirst: pastProfiles.reversed().map { $0.profileText }
+    )
+    let finalText = synthesis.profileText
+    log(
+      "AIUserProfileService: Synthesis complete (\(finalText.count) chars, \(pastProfiles.count) past profiles)"
+    )
 
-        OUTPUT FORMAT:
-        - A flat list of factual statements, one per line, prefixed with "- "
-        - Each statement must be a concrete fact
-        - No prose, no paragraphs, no headers, no markdown formatting
-        - No adjectives or subjective assessments
-        - Write in third person
-
-        MERGE RULES:
-        - The NEW profile reflects today's data and takes priority for current state
-        - Past profiles provide historical context — retain facts that are still relevant
-        - If a fact from the past contradicts the new profile, use the new one
-        - Remove outdated information (completed tasks, past deadlines, old routines)
-        - Keep stable facts (name, role, company, key relationships, tech stack)
-        - Accumulate knowledge: if past profiles mention people, projects, or patterns \
-          not in today's data, keep them if they seem ongoing
-        - Do NOT hallucinate — only include facts present in the provided profiles
-        - Do NOT add commentary about changes or evolution over time
-
-        The output MUST be under 2000 characters total.
-        """
-      finalText = try await gemini.sendTextRequest(
-        prompt: consolidationPrompt,
-        systemPrompt: consolidationSystemPrompt
-      )
-      log("AIUserProfileService: Stage 2 consolidation complete (\(finalText.count) chars)")
-    }
-
-    // 6. Truncate if needed
+    // 4. Truncate if needed
     let truncated = String(finalText.prefix(maxProfileLength))
     let generatedAt = Date()
 
-    // 6. Save to database
-    let db = try await ensureDB()
-    let record = AIUserProfileRecord(
-      profileText: truncated,
-      dataSourcesUsed: dataSourcesUsed,
-      backendSynced: false,
-      generatedAt: generatedAt
-    )
-    try await db.write { database in
-      try record.insert(database)
-    }
+    // 5. Save to database
+    let record = try await insertProfile(
+      AIUserProfileRecord(
+        profileText: truncated,
+        dataSourcesUsed: dataSourcesUsed,
+        backendSynced: false,
+        generatedAt: generatedAt
+      ))
 
-    // 7. Sync to backend (fire-and-forget)
+    // 6. Sync to backend (fire-and-forget)
     let recordId = record.id
     Task {
       do {
@@ -457,73 +395,6 @@ actor AIUserProfileService {
       log("AIUserProfileService: Failed to fetch messages: \(error.localizedDescription)")
       return []
     }
-  }
-
-  // MARK: - Prompt Building
-
-  private func buildPrompt(
-    memories: [String],
-    tasks: [String],
-    goals: [String],
-    conversations: [String],
-    messages: [String]
-  ) -> String {
-    var sections: [String] = []
-
-    if !memories.isEmpty {
-      sections.append("## Memories about the user\n\(memories.joined(separator: "\n"))")
-    }
-
-    if !tasks.isEmpty {
-      sections.append("## Recent tasks\n\(tasks.joined(separator: "\n"))")
-    }
-
-    if !goals.isEmpty {
-      sections.append("## Active goals\n\(goals.joined(separator: "\n"))")
-    }
-
-    if !conversations.isEmpty {
-      sections.append("## Recent conversations (past 7 days)\n\(conversations.joined(separator: "\n"))")
-    }
-
-    if !messages.isEmpty {
-      sections.append("## Recent AI chat messages\n\(messages.joined(separator: "\n"))")
-    }
-
-    return """
-      Generate a factual user profile from the following data. \
-      Output a flat list of concrete facts (one per line, prefixed with "- "). \
-      This profile will be used as context for AI pipelines that analyze the user's screen and audio activity \
-      to extract tasks, goals, and memories. Focus on facts that help identify who is who, what projects are active, \
-      and what the user's current priorities are. Under 2000 characters.
-
-      \(sections.joined(separator: "\n\n"))
-      """
-  }
-
-  private func buildConsolidationPrompt(
-    newProfile: String,
-    pastProfiles: [AIUserProfileRecord]
-  ) -> String {
-    let dateFormatter = DateFormatter()
-    dateFormatter.dateStyle = .medium
-    dateFormatter.timeStyle = .none
-
-    var pastSection = ""
-    for profile in pastProfiles {
-      let dateStr = dateFormatter.string(from: profile.generatedAt)
-      pastSection += "--- Profile from \(dateStr) ---\n\(profile.profileText)\n\n"
-    }
-
-    return """
-      Merge the following into one holistic user profile. Under 2000 characters.
-
-      === NEW PROFILE (generated today from latest data) ===
-      \(newProfile)
-
-      === PAST PROFILES (oldest to newest, up to 5) ===
-      \(pastSection)
-      """
   }
 
   // MARK: - Errors

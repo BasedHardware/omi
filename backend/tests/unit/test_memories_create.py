@@ -107,14 +107,14 @@ class TestMemoriesRateLimitWiring:
 
     def test_modify_endpoints_have_rate_limit(self):
         matches = _grep_router(r"with_rate_limit.*memories:modify")
-        assert len(matches) == 4, f"Edit/visibility/review/baseline must have memories:modify, found: {matches}"
+        assert len(matches) == 5, f"Edit/visibility/review/baseline/read must have memories:modify, found: {matches}"
 
     def test_all_write_endpoints_rate_limited(self):
         """Every write endpoint in memories.py must use with_rate_limit."""
         matches = _grep_router(r"with_rate_limit.*memories:")
-        # create, batch, review queue list/get/resolve, delete, delete_all, delete_batch,
-        # modify(review), modify(edit), modify(visibility), modify(baseline) = 12
-        assert len(matches) == 12, f"Expected 12 rate-limited endpoints, got {len(matches)}: {matches}"
+        # extract, create, batch, review queue list/get/resolve, delete, delete_all, delete_batch,
+        # modify(review), modify(edit), modify(visibility), modify(baseline), modify(read) = 14
+        assert len(matches) == 14, f"Expected 14 rate-limited endpoints, got {len(matches)}: {matches}"
 
 
 # ---------------------------------------------------------------------------
@@ -140,25 +140,25 @@ class TestCreateMemoryErrorHandling:
         source = _read_router()
         assert re.search(r'async def create_memory\(', source), "create_memory must be async def"
 
-    def test_create_memory_uses_run_blocking_for_firestore(self):
-        """Firestore write in create_memory must use run_blocking."""
+    def test_create_memory_offloads_universal_service_write(self):
+        """The canonical service write must stay off the async event loop."""
         source = _read_router()
         match = re.search(r'(async def create_memory\(.+?)(?=\n@router\.)', source, re.DOTALL)
         assert match, "create_memory function not found"
         fn_body = match.group(1)
-        assert (
-            'run_blocking' in fn_body and 'memories_db.create_memory' in fn_body
-        ), "create_memory must offload Firestore write via run_blocking"
+        assert 'run_blocking' in fn_body
+        assert 'MemoryService' in fn_body
+        assert '.create_external_memory' in fn_body
+        assert 'memories_db.create_memory' not in fn_body
 
-    def test_create_memory_uses_run_blocking_for_vector(self):
-        """Vector upsert in create_memory must use run_blocking."""
+    def test_create_memory_has_no_direct_vector_projection(self):
+        """Canonical outbox projection, not the HTTP route, owns vectors."""
         source = _read_router()
         match = re.search(r'(async def create_memory\(.+?)(?=\n@router\.)', source, re.DOTALL)
         assert match, "create_memory function not found"
         fn_body = match.group(1)
-        assert (
-            'run_blocking' in fn_body and 'upsert_memory_vector' in fn_body
-        ), "create_memory must offload vector upsert via run_blocking"
+        assert 'upsert_memory_vector' not in fn_body
+        assert 'upsert_vector=False' in fn_body
 
     def test_firestore_write_has_error_handling(self):
         """Firestore write in create_memory must be wrapped in try/except."""
@@ -166,37 +166,33 @@ class TestCreateMemoryErrorHandling:
         # The pattern: try + run_blocking(_persist) + except -> 503
         assert 'HTTPException(status_code=503' in source, "Firestore failure must return 503"
 
-    def test_vector_upsert_has_error_handling(self):
-        """Vector upsert failure must be caught and logged (not 500)."""
+    def test_projection_failure_is_not_a_route_side_effect(self):
+        """The route never performs a best-effort provider write."""
         source = _read_router()
-        assert 'Vector upsert failed' in source, "Vector upsert failure must be logged"
+        assert 'Vector upsert failed' not in source
 
-    def test_batch_vector_upsert_has_error_handling(self):
-        """Batch vector upsert failure must be caught after Firestore commit."""
+    def test_batch_create_uses_one_universal_service_call(self):
         source = _read_router()
         match = re.search(r'(async def create_memories_batch\(.+?)(?=\n@router\.)', source, re.DOTALL)
         assert match, "create_memories_batch function not found"
         fn_body = match.group(1)
-        assert 'memories_db.save_memories' in fn_body
-        assert 'Batch vector upsert failed' in fn_body
-        assert fn_body.find('memories_db.save_memories') < fn_body.find('upsert_memory_vectors_batch')
+        assert 'MemoryService' in fn_body
+        assert '.create_external_memory_batch' in fn_body
+        assert 'memories_db.save_memories' not in fn_body
+        assert 'upsert_memory_vectors_batch' not in fn_body
 
-    def test_vector_delete_has_error_handling(self):
-        """Vector delete in delete_memory must be caught (not 500)."""
+    def test_delete_has_no_direct_vector_side_effect(self):
+        """Canonical tombstone/outbox authority owns provider deletion."""
         source = _read_router()
-        assert 'Vector delete failed' in source, "Vector delete failure must be logged"
+        delete_body = source.split("def delete_memory(", 1)[1].split("\n@router.", 1)[0]
+        assert 'MemoryService' in delete_body
+        assert 'delete_memory_vector' not in delete_body
 
-    def test_firestore_failure_blocks_vector_upsert(self):
-        """If Firestore fails (raises), vector upsert must not execute.
-
-        Verified by structural ordering: Firestore try/except with raise
-        appears before vector try/except in the create_memory function.
-        """
+    def test_service_failure_returns_503_without_wrong_store_fallback(self):
         source = _read_router()
-        # Find positions of both error-handling blocks
-        firestore_pos = source.find('HTTPException(status_code=503')
-        vector_pos = source.find('Vector upsert failed')
-        assert firestore_pos < vector_pos, "Firestore error handling must come before vector upsert"
+        create_body = source.split("async def create_memory(", 1)[1].split("\n@router.", 1)[0]
+        assert 'HTTPException(status_code=503' in create_body
+        assert 'memories_db.' not in create_body
 
 
 # ---------------------------------------------------------------------------
@@ -244,3 +240,48 @@ class TestPolicyBoundaries:
         ]:
             _, window = RATE_POLICIES[name]
             assert window == 3600, f"{name} window is {window}, expected 3600"
+
+
+# ---------------------------------------------------------------------------
+# Integration memory lifecycle contract
+# ---------------------------------------------------------------------------
+
+CONVERSATIONS_MEMORIES_PATH = os.path.join(
+    os.path.dirname(__file__), '..', '..', 'utils', 'conversations', 'memories.py'
+)
+
+
+def _read_conversations_memories():
+    with open(CONVERSATIONS_MEMORIES_PATH, encoding='utf-8') as f:
+        return f.read()
+
+
+class TestIntegrationMemoryLifecycle:
+    """Integration and twitter memory paths must go through the canonical
+    required-processing workflow, not a raw write_batch that bypasses
+    tier/promotion/processor tracking."""
+
+    def test_integration_path_uses_create_external_memory_batch(self):
+        source = _read_conversations_memories()
+        # process_external_integration_memory must call create_external_memory_batch
+        match = re.search(r'(def process_external_integration_memory\(.+?)(?=\ndef )', source, re.DOTALL)
+        assert match, "process_external_integration_memory not found"
+        fn_body = match.group(1)
+        assert (
+            '.create_external_memory_batch(' in fn_body
+        ), "integration memory path must use create_external_memory_batch for required-processing lifecycle"
+        assert (
+            '.write_batch(' not in fn_body
+        ), "integration memory path must not use raw write_batch (skips required_processing_payload)"
+
+    def test_twitter_path_uses_create_external_memory_batch(self):
+        source = _read_conversations_memories()
+        match = re.search(r'(def process_twitter_memories\(.+?)(?=\ndef |\Z)', source, re.DOTALL)
+        assert match, "process_twitter_memories not found"
+        fn_body = match.group(1)
+        assert (
+            '.create_external_memory_batch(' in fn_body
+        ), "twitter memory path must use create_external_memory_batch for required-processing lifecycle"
+        assert (
+            '.write_batch(' not in fn_body
+        ), "twitter memory path must not use raw write_batch (skips required_processing_payload)"

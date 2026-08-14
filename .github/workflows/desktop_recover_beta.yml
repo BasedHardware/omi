@@ -1,13 +1,12 @@
-name: Recover Qualified Desktop Beta
+name: Retry Desktop Beta Promotion
 
-# The sole break-glass path. It can only retry the server-owned promotion of an
-# already signed and qualified immutable candidate; it cannot create a build,
-# waive evidence, or mutate Stable.
+# Manual retry for the same server-owned promotion Codemagic normally performs.
+# It cannot create a build, waive signed-smoke evidence, or mutate Stable.
 on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Exact qualified v*-macos candidate tag to retry on Beta'
+        description: 'Exact signed v*-macos candidate tag to retry on Beta'
         required: true
         type: string
       confirm:
@@ -44,11 +43,13 @@ jobs:
             echo "- Candidate: \`$RELEASE_TAG\`"
             echo "- Requested by: \`${{ github.actor }}\`"
             echo "- Reason: $REASON"
-            echo '- Admission, qualification evidence, pointer generation, and pause state remain server-verified.'
+            echo '- Admission, signed-smoke evidence, pointer generation, and pause state remain server-verified.'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  recover-qualified-beta:
+  retry-beta-promotion:
     needs: validate-recovery
+    permissions:
+      contents: read
     uses: ./.github/workflows/desktop_promote_beta.yml
     with:
       release_tag: ${{ inputs.release_tag }}

@@ -6,6 +6,8 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
   - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeFailure.swift
+  - desktop/macos/agent/src/runtime/failures.ts
   - desktop/macos/scripts/omi-fault-inject.sh
 preconditions:
   - automation_bridge_ready
@@ -20,12 +22,12 @@ steps:
       result.detail.reset: "true"
 
   - id: S2
-    name: Navigate to Chat
+    name: Navigate to Home, which is the chat surface
     bridge.navigate:
       target: chat
       activateApp: false
     wait:
-      state.selectedTabIndex: 2
+      state.selectedTabIndex: 0
 
   - id: S3
     name: Send chat query against fault backend

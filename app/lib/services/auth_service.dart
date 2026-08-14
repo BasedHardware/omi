@@ -75,10 +75,7 @@ Future<ProviderLinkResult> resolveProviderCredentialCollision({
   final anonymousSourceMigration =
       sourceToken == null ? null : AnonymousSourceMigration(uid: sourceUid, token: sourceToken);
   final destinationUid = await establishDestination();
-  return ProviderLinkResult(
-    destinationUid: destinationUid,
-    anonymousSourceMigration: anonymousSourceMigration,
-  );
+  return ProviderLinkResult(destinationUid: destinationUid, anonymousSourceMigration: anonymousSourceMigration);
 }
 
 class AuthService {
@@ -463,11 +460,12 @@ class AuthService {
       final state = _generateState();
       final codeVerifier = _generateCodeVerifier();
       final codeChallenge = _codeChallengeForVerifier(codeVerifier);
-      const redirectUri = 'omi://auth/callback';
+      final redirectUri = Env.authRedirectUri;
+      final callbackScheme = Env.authCallbackScheme;
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize').replace(
+      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
         queryParameters: {
           'provider': provider,
           'redirect_uri': redirectUri,
@@ -488,7 +486,7 @@ class AuthService {
       linkSubscription = appLinks.uriLinkStream.listen(
         (Uri uri) {
           Logger.debug('Received callback URI via app_links: $uri');
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
             if (!completer.isCompleted) {
               linkSubscription.cancel();
               completer.complete(uri.toString());
@@ -510,7 +508,7 @@ class AuthService {
           final urlString = call.arguments as String;
           Logger.debug('Received callback URI via method channel: $urlString');
           final uri = Uri.parse(urlString);
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
             if (!completer.isCompleted) {
               linkSubscription.cancel();
               _deepLinkChannel.setMethodCallHandler(null);
@@ -581,7 +579,7 @@ class AuthService {
       final useCustomToken = Env.useAuthCustomToken;
 
       final response = await http.post(
-        Uri.parse('${Env.apiBaseUrl}v1/auth/token'),
+        Uri.parse('${Env.authApiBaseUrl}v1/auth/token'),
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
           'grant_type': 'authorization_code',
@@ -818,11 +816,12 @@ class AuthService {
       final state = _generateState();
       final codeVerifier = _generateCodeVerifier();
       final codeChallenge = _codeChallengeForVerifier(codeVerifier);
-      const redirectUri = 'omi://auth/callback';
+      final redirectUri = Env.authRedirectUri;
+      final callbackScheme = Env.authCallbackScheme;
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize').replace(
+      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
         queryParameters: {
           'provider': provider,
           'redirect_uri': redirectUri,
@@ -848,7 +847,7 @@ class AuthService {
       linkSubscription = appLinks.uriLinkStream.listen(
         (Uri uri) {
           Logger.debug('Received callback URI: $uri');
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+          if (uri.scheme == callbackScheme && uri.host == 'auth' && uri.path == '/callback') {
             linkSubscription.cancel();
             completer.complete(uri.toString());
           }

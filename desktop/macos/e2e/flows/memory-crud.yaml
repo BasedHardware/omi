@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+MemoryCreation.swift
 preconditions:
   - automation_bridge_ready
 

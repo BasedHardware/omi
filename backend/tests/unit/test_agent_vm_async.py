@@ -1,16 +1,4 @@
-"""The agent-VM endpoints must not block the event loop on Firestore writes.
-
-``ensure_vm`` (``POST /v1/agent/vm-ensure``) and its background task
-``_restart_vm_background`` are ``async`` and ``await`` the GCE lifecycle calls, but they
-wrote the user's ``agentVm`` status to Firestore by calling the synchronous
-``_update_firestore_vm`` directly on the event loop. The Firestore sync SDK blocks the loop
-(``database.*`` is exactly the class the async-blocker lint does not catch), and ``ensure_vm``
-already offloads its read via ``run_blocking`` one line up, so the writes were the
-inconsistent part.
-
-They must be offloaded with ``await run_blocking(db_executor, _update_firestore_vm, ...)``.
-These AST checks assert the offload stays in place.
-"""
+"""The Agent VM tools route must only enqueue reconciler intent off the event loop."""
 
 import ast
 from pathlib import Path
@@ -18,8 +6,8 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 AGENT_ROUTER = BACKEND_DIR / "routers" / "agent_tools.py"
 
-_HANDLERS = {"ensure_vm", "_restart_vm_background"}
-_BLOCKING = {"_update_firestore_vm"}
+_HANDLERS = {"ensure_vm"}
+_BLOCKING = {"request_vm_start"}
 
 
 def _func_nodes():
@@ -53,24 +41,22 @@ def _offloaded_via_run_blocking(node):
     return offloaded
 
 
-class TestAgentVmOffloadsFirestoreWrites:
-    def test_firestore_write_is_not_called_directly_in_the_async_functions(self):
+class TestAgentVmQueuesReconcilerIntent:
+    def test_reconciler_intent_is_not_called_directly_in_the_async_handler(self):
         for node in _func_nodes():
             leaked = _BLOCKING & _direct_calls(node)
             assert not leaked, (
-                f"{node.name} writes Firestore directly on the event loop via {sorted(leaked)}. "
-                f"Offload with await run_blocking(db_executor, _update_firestore_vm, ...)."
+                f"{node.name} calls the reconciler intent directly via {sorted(leaked)}. "
+                f"Offload with await run_blocking(db_executor, request_vm_start, ...)."
             )
 
-    def test_firestore_write_is_offloaded_via_run_blocking(self):
+    def test_reconciler_intent_is_offloaded_via_run_blocking(self):
         offloaded = set()
         for node in _func_nodes():
             offloaded |= _offloaded_via_run_blocking(node)
         missing = _BLOCKING - offloaded
-        assert not missing, f"_update_firestore_vm is not offloaded via run_blocking: {sorted(missing)}"
+        assert not missing, f"request_vm_start is not offloaded via run_blocking: {sorted(missing)}"
 
     def test_functions_are_async(self):
-        # Plain def would run in FastAPI's threadpool (background tasks excepted); this fix
-        # matters because these are async and await the GCE lifecycle calls.
         for node in _func_nodes():
             assert isinstance(node, ast.AsyncFunctionDef)

@@ -95,8 +95,8 @@ class _LoopbackOpenAI:
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Content-Length", str(len(encoded_response)))
                     self.end_headers()
-                    self.wfile.write(encoded_response)
                     upstream.events.append("upstream_response")
+                    self.wfile.write(encoded_response)
                 except BaseException as error:
                     upstream._handler_failure = error
                     self.send_response(500)

@@ -4,9 +4,12 @@ tier: 2
 description: Hermetic capture lifecycle via capture_test_transcript seam (no mic/STT)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/AppState/AppState+FinishedRecordingLifecycle.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  - desktop/macos/Desktop/Sources/Audio/PreferredMicrophoneReconnect.swift
   - desktop/macos/Desktop/Sources/AppState/SharedCaptureSilentMicRecoveryPolicy.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
+  - desktop/macos/Desktop/Sources/AppState/LocalTranscriptionDuplicatePolicy.swift
   - desktop/macos/Desktop/Sources/AppState/STTSessionState.swift
   - desktop/macos/Desktop/Sources/LocalTranscriptionService.swift
   - desktop/macos/Desktop/Sources/TranscriptionService.swift
@@ -66,8 +69,10 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/ProactiveModels.swift
   - desktop/macos/Desktop/Sources/ScreenActivitySyncService.swift
   - desktop/macos/Desktop/Sources/SingleInstanceGuard.swift
-  - desktop/macos/Desktop/Sources/MainWindow/CaptureListeningControls.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
   - desktop/macos/Desktop/Sources/MainWindow/CaptureListeningLogic.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+MeetingBoundaries.swift
+  - desktop/macos/Desktop/Sources/AppState/MeetingConversationBoundaryPolicy.swift
 preconditions:
   - automation_bridge_ready
 
@@ -80,18 +85,66 @@ steps:
       ok: true
 
   - id: S2
-    name: Run capture lifecycle with marker transcript
+    name: Start hermetic capture lifecycle
     bridge.action:
       name: capture_test_transcript
       params:
-        phase: lifecycle
-        text: "[[MARKER:capture-lifecycle]] hermetic desktop capture"
+        phase: start
+    expect:
+      result.detail.started: "true"
+
+  - id: S3
+    name: Suppress mic copy of system playback
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: inject_multi
+        segments: '[{"text":"[[MARKER:capture-lifecycle]] system playback phrase","speaker":"SPEAKER_01","speaker_id":1,"is_user":false,"start":0,"end":2},{"text":"[[MARKER:capture-lifecycle]] system playback phrase","speaker":"SPEAKER_00","speaker_id":0,"is_user":true,"start":0.1,"end":2.1}]'
+    expect:
+      result.detail.injected_count: "2"
+      result.detail.segment_count: "1"
+
+  - id: S4
+    name: Promote system copy over mic playback
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: inject_multi
+        segments: '[{"text":"[[MARKER:capture-lifecycle]] mic playback phrase","speaker":"SPEAKER_00","speaker_id":0,"is_user":true,"start":3,"end":5},{"text":"[[MARKER:capture-lifecycle]] mic playback phrase","speaker":"SPEAKER_01","speaker_id":1,"is_user":false,"start":3.1,"end":5.1}]'
+    expect:
+      result.detail.injected_count: "2"
+      result.detail.segment_count: "2"
+
+  - id: S5
+    name: Rotate into a detected meeting
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: meeting_start
+    expect:
+      result.detail.conversation_role: "meeting"
+
+  - id: S6
+    name: Rotate back to ambient after the meeting ends
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: meeting_end
+    expect:
+      result.detail.conversation_role: "ambient"
+
+  - id: S7
+    name: Stop hermetic capture lifecycle
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: stop
     expect:
       result.detail.stopped: "true"
       result.detail.conversation_count_increased: "true"
-      result.detail.segment_count: "1"
+      result.detail.segment_count: "2"
 
-  - id: S3
+  - id: S8
     name: Navigate to Conversations
     bridge.navigate:
       target: conversations
@@ -99,7 +152,7 @@ steps:
     wait:
       state.selectedTabIndex: 1
 
-  - id: S4
+  - id: S9
     name: Reconcile cached list and canonical detail
     bridge.action:
       name: conversation_reconciliation_snapshot
@@ -113,7 +166,7 @@ steps:
       result.detail.cache_revision_matches: "true"
       result.detail.opened_detail: "true"
 
-  - id: S5
+  - id: S10
     name: Assert conversation list reflects new capture
     bridge.action:
       name: conversation_list_snapshot
@@ -123,7 +176,7 @@ steps:
       ok: true
       result.detail.is_transcribing: "false"
 
-  - id: S6
+  - id: S11
     name: Logs clean
     log.expect:
       absent:

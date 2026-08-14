@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildToolAvailabilitySnapshot,
+  chatFirstToolManifest,
   mcpToolDefinitionsForAdapter,
   normalizeOmiToolName,
   omiToolManifest,
@@ -9,6 +10,47 @@ import {
 } from "../src/runtime/omi-tool-manifest.js";
 
 describe("omi tool manifest", () => {
+  it("registers canonical goal creation for Chat-first main Chat", () => {
+    const tool = chatFirstToolManifest.find((entry) => entry.name === "create_canonical_goal");
+
+    expect(tool).toMatchObject({
+      executor: { kind: "swiftTool" },
+      surfaces: ["desktop_chat"],
+      annotations: expect.objectContaining({ readOnlyHint: false }),
+    });
+    expect(tool?.inputSchema.required).toEqual(["title", "desired_outcome"]);
+  });
+
+  it("projects create_memory only to the coordinator's typed chat surfaces", () => {
+    const mainChat = toolsForAdapter("omi-tools-stdio", {
+      surfaceKind: "main_chat",
+      executionRole: "coordinator",
+    });
+    const tool = mainChat.find((entry) => entry.name === "create_memory");
+
+    expect(tool).toMatchObject({
+      surfaces: ["desktop_chat"],
+      executor: { kind: "swiftTool", executorName: "chatToolExecutor" },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    });
+    expect(tool?.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        content: { type: "string", description: "The exact user-provided content to save as a short-term memory." },
+      },
+      required: ["content"],
+      additionalProperties: false,
+    });
+    expect(tool?.voice).toBeUndefined();
+    expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "floating_chat", executionRole: "coordinator" }))
+      .toContain("create_memory");
+    expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "realtime_voice", executionRole: "coordinator" }))
+      .not.toContain("create_memory");
+    expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "task_chat", executionRole: "coordinator" }))
+      .not.toContain("create_memory");
+    expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "main_chat", executionRole: "leaf" }))
+      .not.toContain("create_memory");
+  });
   it("projects agent-management tools out of leaf worker contexts", () => {
     for (const adapterId of ["pi-mono", "omi-tools-stdio"] as const) {
       const names = toolNamesForAdapter(adapterId, { executionRole: "leaf", screenContext: true });
@@ -160,6 +202,14 @@ describe("omi tool manifest", () => {
     );
   });
 
+  it("documents exact conversation IDs and share links as search inputs", () => {
+    const tool = omiToolManifest.find((entry) => entry.name === "search_conversations");
+
+    expect(tool?.capabilityDoc.summary).toContain("exact canonical ID/share link");
+    expect(tool?.capabilityDoc.bullets.join(" ")).toContain("canonical conversation UUID");
+    expect(tool?.inputSchema.properties.query.description).toContain("canonical UUID");
+  });
+
   it("advertises optional positional parameters for execute_sql", () => {
     const executeSql = mcpToolDefinitionsForAdapter("omi-tools-stdio").find(
       (tool) => tool.name === "execute_sql",
@@ -171,6 +221,49 @@ describe("omi tool manifest", () => {
       description: "Optional positional values bound to ? placeholders in query. Use this instead of interpolating values into SQL literals.",
     });
     expect(executeSql?.inputSchema.required).toEqual(["query"]);
+  });
+
+  it("keeps the capability-off stdio manifest byte-stable and never leaks the chat-first tool", () => {
+    const legacyBytes = JSON.stringify(mcpToolDefinitionsForAdapter("omi-tools-stdio"));
+    const capabilityOffBytes = JSON.stringify(mcpToolDefinitionsForAdapter("omi-tools-stdio", {
+      surfaceKind: "main_chat", chatFirstUi: false, controlGeneration: 7,
+    }));
+    const nonMainBytes = JSON.stringify(mcpToolDefinitionsForAdapter("omi-tools-stdio", {
+      surfaceKind: "floating_chat", chatFirstUi: true, controlGeneration: 7,
+    }));
+
+    expect(capabilityOffBytes).toBe(legacyBytes);
+    expect(nonMainBytes).toBe(legacyBytes);
+    expect(capabilityOffBytes).not.toContain("render_chat_blocks");
+    expect(capabilityOffBytes).not.toContain("get_canonical_goals");
+    expect(capabilityOffBytes).not.toContain("search_chat_history");
+  });
+
+  it("exposes chat-first tools only to the authorized main-chat stdio projection", () => {
+    const enabled = mcpToolDefinitionsForAdapter("omi-tools-stdio", {
+      surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
+    });
+    const snapshot = buildToolAvailabilitySnapshot("omi-tools-stdio", {
+      surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
+    });
+
+    expect(enabled.map((tool) => tool.name)).toContain("render_chat_blocks");
+    expect(enabled.map((tool) => tool.name)).toContain("get_canonical_goals");
+    expect(enabled.map((tool) => tool.name)).toContain("search_chat_history");
+    expect(snapshot.advertisedToolNames).toContain("render_chat_blocks");
+    expect(snapshot.advertisedToolNames).toContain("get_canonical_goals");
+    expect(snapshot.advertisedToolNames).toContain("search_chat_history");
+    expect(snapshot.advertisedToolNames).toContain("show_rewind_evidence");
+    expect(snapshot.manifestDigest).not.toBe(buildToolAvailabilitySnapshot("omi-tools-stdio").manifestDigest);
+    expect(toolNamesForAdapter("pi-mono", {
+      surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
+    })).toEqual(expect.arrayContaining(["get_canonical_goals", "render_chat_blocks", "search_chat_history", "show_rewind_evidence"]));
+    expect(enabled.find((tool) => tool.name === "render_chat_blocks")?.description).toContain(
+      "call this in the same turn whenever you retrieve, create, or summarize tasks",
+    );
+    expect(enabled.find((tool) => tool.name === "render_chat_blocks")?.description).toContain(
+      "never use a local SQLite/execute_sql numeric row ID",
+    );
   });
 
   it("keeps schemas expressive enough for nested onboarding tools", () => {

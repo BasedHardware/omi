@@ -106,7 +106,7 @@ export function adapterActivationError(adapterId: ProductionAdapterId): string |
   if (adapterId === "hermes" || adapterId === "openclaw" || adapterId === "codex") {
     return `${label} is not available. Make sure ${label} is installed first, then try again.`;
   }
-  return `${label} adapter is unavailable.`;
+  return "Omi AI is not available. Sign in and try again.";
 }
 
 export function ensureRegisteredAdapter(

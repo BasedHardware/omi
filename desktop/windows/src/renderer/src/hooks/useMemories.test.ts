@@ -69,6 +69,18 @@ afterEach(cleanup)
 // per module lifetime (`if (cache.loaded) return`) — that keeps tests
 // order-independent regardless of what a prior test left in the cache.
 describe('useMemories — edit/visibility query-param contract (C9)', () => {
+  it('createMemory sends the requested manual category', async () => {
+    omiApiPost.mockResolvedValue({ data: memory('m2', 'Added memory', 'private') })
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.createMemory('Added memory', { category: 'manual' })
+    })
+    expect(omiApiPost).toHaveBeenCalledWith('/v3/memories', {
+      content: 'Added memory',
+      category: 'manual'
+    })
+  })
+
   it('editMemory sends the new content as a query param, not a JSON body', async () => {
     const { result } = renderHook(() => useMemories())
     await act(async () => {

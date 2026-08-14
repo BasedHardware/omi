@@ -1,3 +1,4 @@
+import Network
 import XCTest
 
 @testable import Omi_Computer
@@ -166,6 +167,74 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
       aliveFor: 120)
 
     XCTAssertNil(category)
+    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testRecordsTypedPOSIXErrnoForNetworkFrameworkFailures() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ECONNRESET), phase: .receive)
+
+    XCTAssertEqual(failure.systemDomain, "posix")
+    XCTAssertEqual(failure.systemCode, Int(POSIXErrorCode.ECONNRESET.rawValue))
+  }
+
+  func testClassifiesAgedIdleReceiveResetAsExpectedTeardown() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ECONNRESET), phase: .receive)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: RealtimeHubCloseClassifier.idleTeardownThreshold + 1,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .expectedIdleTeardown)
+    XCTAssertFalse(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testClassifiesAgedIdleSendDisconnectAsExpectedTeardown() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ENOTCONN), phase: .send)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 600,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .expectedIdleTeardown)
+  }
+
+  func testClassifiesFastReceiveResetAsReportableTransportError() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ECONNRESET), phase: .receive)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 3,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .transportReceive)
+    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testClassifiesAgedReceiveResetDuringTurnAsReportableTransportError() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ECONNRESET), phase: .receive)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 600,
+      hasActiveTurn: true,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .transportReceive)
+    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testClassifiesAgedIdleNonDisconnectReceiveFailureAsReportableTransportError() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.EHOSTUNREACH), phase: .receive)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 600,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .transportReceive)
     XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
   }
 

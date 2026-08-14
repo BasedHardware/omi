@@ -158,7 +158,7 @@ async def test_screen_activity_rejects_paywalled_desktop_user(monkeypatch):
         return function(*args)
 
     monkeypatch.setattr(desktop_screen_crisp, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_screen_crisp, "is_trial_paywalled", lambda uid, platform: True)
+    monkeypatch.setattr(desktop_screen_crisp, "is_desktop_trial_paywalled", lambda uid, platform: True)
 
     with pytest.raises(HTTPException) as error:
         await desktop_screen_crisp._authorized_desktop_user("user")

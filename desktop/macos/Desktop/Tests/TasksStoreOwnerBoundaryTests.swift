@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 @testable import Omi_Computer
@@ -38,10 +39,347 @@ private final class TasksStoreOperationProbe {
   var rollbacks = 0
   var dashboardRefreshes = 0
   var hardDeletes = 0
-  var migrations = 0
 }
 
 final class TasksStoreOwnerBoundaryTests: XCTestCase {
+  @MainActor
+  func testToggleNeverPublishesAnIntervalWithoutTheCanonicalTask() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+    let original = task(id: "published-toggle")
+    let completed = task(id: original.id, completed: true)
+    store.incompleteTasks = [original]
+    var visibility: [Bool] = []
+    let observation = Publishers.CombineLatest(store.$incompleteTasks, store.$completedTasks)
+      .dropFirst()
+      .sink { incomplete, completed in
+        visibility.append((incomplete + completed).contains { $0.id == original.id })
+      }
+
+    await store.toggleTask(
+      original,
+      operationOverrides: TasksStore.ToggleOperationOverrides(
+        updateLocal: { _, _ in completed },
+        refreshDashboard: { _ in },
+        updateRemote: { _, _ in completed },
+        syncRemote: { _, _ in },
+        rollbackLocal: {}
+      )
+    )
+
+    withExtendedLifetime(observation) {
+      XCTAssertFalse(visibility.isEmpty)
+      XCTAssertTrue(visibility.allSatisfy { $0 })
+    }
+  }
+
+  @MainActor
+  func testToggleRollbackNeverPublishesAnIntervalWithoutTheCanonicalTask() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+    let original = task(id: "published-toggle-rollback")
+    let completed = task(id: original.id, completed: true)
+    store.incompleteTasks = [original]
+    var visibility: [Bool] = []
+    let observation = Publishers.CombineLatest(store.$incompleteTasks, store.$completedTasks)
+      .dropFirst()
+      .sink { incomplete, completed in
+        visibility.append((incomplete + completed).contains { $0.id == original.id })
+      }
+
+    await store.toggleTask(
+      original,
+      operationOverrides: TasksStore.ToggleOperationOverrides(
+        updateLocal: { _, _ in completed },
+        refreshDashboard: { _ in },
+        updateRemote: { _, _ in throw TasksStoreOwnerBoundaryFailure.backendRejected },
+        syncRemote: { _, _ in },
+        rollbackLocal: {}
+      )
+    )
+
+    withExtendedLifetime(observation) {
+      XCTAssertFalse(visibility.isEmpty)
+      XCTAssertTrue(visibility.allSatisfy { $0 })
+    }
+    XCTAssertEqual(store.incompleteTasks, [original])
+    XCTAssertTrue(store.completedTasks.isEmpty)
+  }
+
+  @MainActor
+  func testCanonicalTaskResolutionRepublishesCompletedLocalTaskBeforeRemoteFetch() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+    let completed = task(id: "completed-chat-card", completed: true)
+    var remoteFetches = 0
+
+    let resolved = await store.resolveCanonicalTask(
+      id: completed.id,
+      operations: TasksStore.OwnerBoundOperations(
+        fetchTaskDetail: { _, _ in
+          remoteFetches += 1
+          return nil
+        },
+        loadTaskDetail: { id, ownerID in
+          XCTAssertEqual(id, completed.id)
+          XCTAssertEqual(ownerID, "owner-a")
+          return completed
+        }
+      )
+    )
+
+    XCTAssertEqual(resolved, completed)
+    XCTAssertEqual(store.completedTasks, [completed])
+    XCTAssertTrue(store.incompleteTasks.isEmpty)
+    XCTAssertEqual(remoteFetches, 0)
+  }
+
+  @MainActor
+  func testNoDeadlinePaginationUsesAPIConsumptionOffsetInsteadOfLocalPresentationCount() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let dated = task(id: "dated", dueAt: Date(timeIntervalSince1970: 1_700_000_100))
+    let firstPage = (0..<100).map { task(id: "undated-\($0)") }
+    let initialSurface = TasksStore.OwnerBoundOperations.IncompleteTaskSurface(
+      datedTasks: [dated],
+      noDeadlineTasks: firstPage,
+      hasMoreNoDeadline: true,
+      apiConsumedNoDeadlineCount: 100
+    )
+    var requestedOffsets: [Int] = []
+    var pageNumber = 0
+    let operations = TasksStore.OwnerBoundOperations(
+      fetchIncompleteSurface: { _ in initialSurface },
+      fetchDatedTasks: { _ in [dated] },
+      fetchNoDeadlinePage: { offset, _, _ in
+        requestedOffsets.append(offset)
+        defer { pageNumber += 1 }
+        if pageNumber == 0 {
+          return .init(items: [firstPage[0], self.task(id: "undated-100")], hasMore: true)
+        }
+        return .init(items: [self.task(id: "undated-101")], hasMore: false)
+      },
+      syncPage: { _, _, _ in },
+      loadIncompleteSurface: { _ in initialSurface }
+    )
+
+    await store.loadIncompleteTasks(allowInitialReconciliation: false, operations: operations)
+    guard let firstAnchor = firstPage.last else {
+      XCTFail("Expected the first page to provide a pagination anchor")
+      return
+    }
+    await store.loadMoreIncompleteIfNeeded(currentTask: firstAnchor, operations: operations)
+    guard let nextAnchor = store.incompleteTasks.last else {
+      XCTFail("Expected the loaded tasks to provide a pagination anchor")
+      return
+    }
+    await store.loadMoreIncompleteIfNeeded(currentTask: nextAnchor, operations: operations)
+
+    XCTAssertEqual(requestedOffsets, [100, 102])
+    XCTAssertEqual(store.incompleteTasks.filter { $0.dueAt == nil }.count, 102)
+    XCTAssertEqual(Set(store.incompleteTasks.map(\.id)).count, store.incompleteTasks.count)
+  }
+
+  @MainActor
+  func testFullSyncReloadPreservesExpandedNoDeadlineWindowAndAllDatedRows() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let expanded = (0..<150).map { task(id: "undated-\($0)") }
+    store.incompleteTasks = expanded
+    let dated = (0..<3).map {
+      task(id: "dated-\($0)", dueAt: Date(timeIntervalSince1970: 1_700_000_100 + Double($0)))
+    }
+    var requestedLimit: Int?
+    let operations = TasksStore.OwnerBoundOperations(
+      loadIncompleteSurfaceForLimit: { _, limit in
+        requestedLimit = limit
+        return .init(
+          datedTasks: dated,
+          noDeadlineTasks: expanded,
+          hasMoreNoDeadline: true
+        )
+      }
+    )
+
+    await store.reloadIncompleteTaskSurfaceAfterFullSync(operations: operations)
+
+    XCTAssertEqual(requestedLimit, 150)
+    XCTAssertEqual(store.incompleteTasks.filter { $0.dueAt != nil }.map(\.id), dated.map(\.id))
+    XCTAssertEqual(store.incompleteTasks.filter { $0.dueAt == nil }.count, 150)
+    XCTAssertTrue(store.hasMoreIncompleteTasks)
+  }
+
+  @MainActor
+  func testReloadIncompleteTasksPreservesExpandedNoDeadlineAPICursor() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let dated = task(id: "dated", dueAt: Date(timeIntervalSince1970: 1_700_000_100))
+    let firstPage = (0..<100).map { task(id: "undated-\($0)") }
+    let secondPage = (100..<150).map { task(id: "undated-\($0)") }
+    let initialSurface = TasksStore.OwnerBoundOperations.IncompleteTaskSurface(
+      datedTasks: [dated],
+      noDeadlineTasks: firstPage,
+      hasMoreNoDeadline: true,
+      apiConsumedNoDeadlineCount: 100
+    )
+    let expandedSurface = TasksStore.OwnerBoundOperations.IncompleteTaskSurface(
+      datedTasks: [dated],
+      noDeadlineTasks: firstPage + secondPage,
+      hasMoreNoDeadline: true,
+      apiConsumedNoDeadlineCount: 150
+    )
+    let refreshedSurface = TasksStore.OwnerBoundOperations.IncompleteTaskSurface(
+      datedTasks: [dated],
+      noDeadlineTasks: firstPage,
+      hasMoreNoDeadline: true,
+      apiConsumedNoDeadlineCount: 100
+    )
+    var requestedOffsets: [Int] = []
+    var pageNumber = 0
+    let operations = TasksStore.OwnerBoundOperations(
+      fetchIncompleteSurface: { _ in refreshedSurface },
+      fetchDatedTasks: { _ in [dated] },
+      fetchNoDeadlinePage: { offset, _, _ in
+        requestedOffsets.append(offset)
+        defer { pageNumber += 1 }
+        switch pageNumber {
+        case 0:
+          return .init(items: secondPage, hasMore: true)
+        case 1:
+          return .init(items: [self.task(id: "undated-150")], hasMore: false)
+        default:
+          return .init(items: [], hasMore: false)
+        }
+      },
+      syncPage: { _, _, _ in },
+      loadIncompleteSurface: { _ in initialSurface },
+      loadIncompleteSurfaceForLimit: { _, limit in
+        XCTAssertEqual(limit, 150)
+        return expandedSurface
+      }
+    )
+
+    await store.loadIncompleteTasks(allowInitialReconciliation: false, operations: operations)
+    guard let firstAnchor = firstPage.last else {
+      XCTFail("Expected the first page to provide a pagination anchor")
+      return
+    }
+    await store.loadMoreIncompleteIfNeeded(currentTask: firstAnchor, operations: operations)
+    XCTAssertEqual(requestedOffsets, [100])
+
+    requestedOffsets = []
+    pageNumber = 0
+    await store.loadIncompleteTasks(allowInitialReconciliation: false, operations: operations)
+    guard let expandedAnchor = store.incompleteTasks.last(where: { $0.dueAt == nil }) else {
+      XCTFail("Expected a No Deadline pagination anchor after refresh")
+      return
+    }
+    await store.loadMoreIncompleteIfNeeded(currentTask: expandedAnchor, operations: operations)
+
+    XCTAssertEqual(requestedOffsets, [150])
+  }
+
+  @MainActor
+  func testNoDeadlinePaginationReplacesDatedProjectionWithServerFetch() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let staleDated = task(id: "dated", dueAt: Date(timeIntervalSince1970: 1_000))
+    let freshDated = task(id: "dated", dueAt: Date(timeIntervalSince1970: 1_700_000_100))
+    let firstPage = (0..<100).map { task(id: "undated-\($0)") }
+    store.incompleteTasks = [staleDated] + firstPage
+
+    let initialSurface = TasksStore.OwnerBoundOperations.IncompleteTaskSurface(
+      datedTasks: [staleDated],
+      noDeadlineTasks: firstPage,
+      hasMoreNoDeadline: true,
+      apiConsumedNoDeadlineCount: 100
+    )
+    let operations = TasksStore.OwnerBoundOperations(
+      fetchIncompleteSurface: { _ in initialSurface },
+      fetchDatedTasks: { _ in [freshDated] },
+      fetchNoDeadlinePage: { _, _, _ in
+        .init(items: [self.task(id: "undated-100")], hasMore: false)
+      },
+      syncPage: { _, _, _ in },
+      loadIncompleteSurface: { _ in initialSurface }
+    )
+
+    await store.loadIncompleteTasks(allowInitialReconciliation: false, operations: operations)
+    guard let anchor = firstPage.last else {
+      XCTFail("Expected the first page to provide a pagination anchor")
+      return
+    }
+    await store.loadMoreIncompleteIfNeeded(currentTask: anchor, operations: operations)
+
+    let refreshedDated = store.incompleteTasks.first(where: { $0.id == "dated" })
+    XCTAssertEqual(refreshedDated?.dueAt, freshDated.dueAt)
+    XCTAssertEqual(store.incompleteTasks.filter { $0.dueAt != nil }.map(\.id), ["dated"])
+  }
+
+  @MainActor
+  func testOwnerFenceDuringNoDeadlinePageAlwaysClearsLoadingState() async {
+    let defaults = UserDefaults.standard
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let firstPage = (0..<100).map { task(id: "undated-\($0)") }
+    let surface = TasksStore.OwnerBoundOperations.IncompleteTaskSurface(
+      datedTasks: [],
+      noDeadlineTasks: firstPage,
+      hasMoreNoDeadline: true
+    )
+    let gate = TasksStorePauseGate()
+    let operations = TasksStore.OwnerBoundOperations(
+      fetchIncompleteSurface: { _ in surface },
+      fetchDatedTasks: { _ in [] },
+      fetchNoDeadlinePage: { _, _, _ in
+        await gate.pause()
+        return .init(items: [self.task(id: "late-owner-a")], hasMore: false)
+      },
+      syncPage: { _, _, _ in },
+      loadIncompleteSurface: { _ in surface }
+    )
+    await store.loadIncompleteTasks(allowInitialReconciliation: false, operations: operations)
+
+    guard let firstAnchor = firstPage.last else {
+      XCTFail("Expected the first page to provide a pagination anchor")
+      return
+    }
+    let load = Task { @MainActor in
+      await store.loadMoreIncompleteIfNeeded(currentTask: firstAnchor, operations: operations)
+    }
+    await gate.waitUntilStarted()
+    XCTAssertTrue(store.isLoadingMore)
+    illegallyMutateOwnerDefaults(to: "owner-b", defaults: defaults)
+    await gate.release()
+    await load.value
+
+    XCTAssertFalse(store.isLoadingMore)
+    XCTAssertFalse(store.incompleteTasks.contains { $0.id == "late-owner-a" })
+  }
+
+  func testStaticGuardRetiredLocalStagingMigrationDoesNotWriteTaskRows() throws {
+    let source = try productionSource("Rewind/Core/RewindDatabase.swift")
+    let migrationMarker = "migrator.registerMigration(\"migrateAITasksToStaged\")"
+    let migrationStart = try XCTUnwrap(source.range(of: migrationMarker)?.lowerBound)
+    let nextMigration = source.range(
+      of: "\n    migrator.registerMigration(",
+      range: migrationStart..<source.endIndex
+    )
+    let migrationBody = String(source[migrationStart..<(nextMigration?.lowerBound ?? source.endIndex)])
+
+    // omi-test-quality: source-inspection -- static tripwire for the retired
+    // migration; a behavioral recovery test covers server-side task restoration.
+    XCTAssertFalse(
+      migrationBody.contains("db.execute"),
+      "the retired local staging migration must never move or delete action_items"
+    )
+  }
+
   func testStaticGuardTasksStoreHasNoUnrestrictedSQLiteMutationCallSites() throws {
     let lines = try productionSource("Stores/TasksStore.swift")
       .components(separatedBy: .newlines)
@@ -52,6 +390,7 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
       "updateCompletionStatus(",
       "updateActionItemFields(",
       "deleteActionItemByBackendId(",
+      "deleteActionItemsByBackendIds(",
       "compactScoresAfterRemoval(",
       "hardDeleteAbsentTasks(",
       "markAbsentTasksAsStaged(",
@@ -419,6 +758,8 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
       purgeDeleted: { _ in
         probe.hardDeletes += 1
         return 0
+      },
+      restoreLegacyConversationItems: { _, _ in .init(restored: 0, skippedExisting: 0, hasMore: false, nextCursor: nil)
       })
 
     let maintenanceTasks = store.scheduleStartupMaintenanceIfNeeded(
@@ -439,13 +780,12 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   }
 
   @MainActor
-  func testSuspendedStartupMigrationCannotContinueIntoReplacementOwner() async {
+  func testSuspendedStartupRecoveryCannotContinueIntoReplacementOwner() async {
     let defaults = UserDefaults.standard
     let fullSyncKey = "tasksFullSyncCompleted_v9_owner-a"
-    let ownerAMigrationKey = "stagedTasksMigrationCompleted_v4_owner-a"
-    let ownerBMigrationKey = "stagedTasksMigrationCompleted_v4_owner-b"
-    let ownerAConversationKey = "conversationItemsMigrationCompleted_v4_owner-a"
-    let keys = [fullSyncKey, ownerAMigrationKey, ownerBMigrationKey, ownerAConversationKey]
+    let ownerARecoveryKey = "restoreLegacyConversationItemsCompleted_v1_owner-a"
+    let ownerBRecoveryKey = "restoreLegacyConversationItemsCompleted_v1_owner-b"
+    let keys = [fullSyncKey, ownerARecoveryKey, ownerBRecoveryKey]
     let previousValues = Dictionary(uniqueKeysWithValues: keys.map { ($0, defaults.object(forKey: $0)) })
     let store = TasksStore.shared
     defer {
@@ -453,19 +793,18 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
     }
     await prepareOwnerBoundaryTest(store: store)
     defaults.set(true, forKey: fullSyncKey)
-    defaults.removeObject(forKey: ownerAMigrationKey)
-    defaults.removeObject(forKey: ownerBMigrationKey)
-    defaults.removeObject(forKey: ownerAConversationKey)
+    defaults.removeObject(forKey: ownerARecoveryKey)
+    defaults.removeObject(forKey: ownerBRecoveryKey)
 
     let gate = TasksStorePauseGate()
     let probe = TasksStoreOperationProbe()
     let operations = TasksStore.OwnerBoundOperations(
-      migrateAI: { ownerID in
+      restoreLegacyConversationItems: { ownerID, _ in
         XCTAssertEqual(ownerID, "owner-a")
         probe.remoteRequests += 1
         await gate.pause()
-      },
-      migrateConversation: { _ in probe.migrations += 1 })
+        return .init(restored: 1, skippedExisting: 0, hasMore: false, nextCursor: nil)
+      })
 
     let maintenanceTasks = store.scheduleStartupMaintenanceIfNeeded(
       relevanceBackfill: { _ in },
@@ -476,10 +815,8 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
     for task in maintenanceTasks { await task.value }
 
     XCTAssertEqual(probe.remoteRequests, 1)
-    XCTAssertEqual(probe.migrations, 0)
-    XCTAssertTrue(defaults.bool(forKey: ownerAMigrationKey))
-    XCTAssertFalse(defaults.bool(forKey: ownerBMigrationKey))
-    XCTAssertFalse(defaults.bool(forKey: ownerAConversationKey))
+    XCTAssertFalse(defaults.bool(forKey: ownerARecoveryKey))
+    XCTAssertFalse(defaults.bool(forKey: ownerBRecoveryKey))
     XCTAssertFalse(store.hasScheduledStartupMaintenance)
   }
 
@@ -589,6 +926,16 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
     }
     await prepareOwnerBoundaryTest(store: store)
     AuthService.shared.isSignedIn = true
+    let recoveryKey = "restoreLegacyConversationItemsCompleted_v1_owner-a"
+    let priorRecoveryValue = defaults.object(forKey: recoveryKey)
+    defaults.set(true, forKey: recoveryKey)
+    defer {
+      if let priorRecoveryValue {
+        defaults.set(priorRecoveryValue, forKey: recoveryKey)
+      } else {
+        defaults.removeObject(forKey: recoveryKey)
+      }
+    }
 
     let gate = TasksStorePauseGate()
     let probe = TasksStoreOperationProbe()
@@ -619,12 +966,231 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   }
 
   @MainActor
-  private func task(id: String, completed: Bool = false) -> TaskActionItem {
+  func testChatFirstUpdateRollsBackRejectedRenameThroughStoreSeam() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let original = task(id: "owner-a-chat-first-update")
+    let optimistic = TaskActionItem(
+      id: original.id,
+      description: "Renamed task",
+      completed: false,
+      createdAt: original.createdAt)
+    store.incompleteTasks = [original]
+    let probe = TasksStoreOperationProbe()
+
+    let outcome = await store.updateTask(
+      original,
+      description: optimistic.description,
+      remoteFailureBehavior: .rollbackForChatFirst,
+      operationOverrides: TasksStore.TaskUpdateOperationOverrides(
+        updateLocal: { ownerID in
+          XCTAssertEqual(ownerID, "owner-a")
+          probe.localWrites += 1
+          return optimistic
+        },
+        updateRemote: { ownerID in
+          XCTAssertEqual(ownerID, "owner-a")
+          probe.remoteRequests += 1
+          throw TasksStoreOwnerBoundaryFailure.backendRejected
+        },
+        syncRemote: { _, _ in probe.remoteSyncs += 1 },
+        rollbackLocal: { probe.rollbacks += 1 }
+      )
+    )
+
+    XCTAssertEqual(outcome, .rolledBackAfterRemoteFailure)
+    XCTAssertEqual(probe.localWrites, 1)
+    XCTAssertEqual(probe.remoteRequests, 1)
+    XCTAssertEqual(probe.remoteSyncs, 0)
+    XCTAssertEqual(probe.rollbacks, 1)
+    XCTAssertEqual(store.incompleteTasks, [original])
+  }
+
+  @MainActor
+  func testLegacyUpdatePreservesItsLocalEditAfterRemoteFailure() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let original = task(id: "owner-a-legacy-update")
+    let optimistic = TaskActionItem(
+      id: original.id,
+      description: "Locally renamed task",
+      completed: false,
+      createdAt: original.createdAt)
+    store.incompleteTasks = [original]
+    let probe = TasksStoreOperationProbe()
+
+    let outcome = await store.updateTask(
+      original,
+      description: optimistic.description,
+      operationOverrides: TasksStore.TaskUpdateOperationOverrides(
+        updateLocal: { _ in
+          probe.localWrites += 1
+          return optimistic
+        },
+        updateRemote: { _ in
+          probe.remoteRequests += 1
+          throw TasksStoreOwnerBoundaryFailure.backendRejected
+        },
+        syncRemote: { _, _ in probe.remoteSyncs += 1 },
+        rollbackLocal: { probe.rollbacks += 1 }
+      )
+    )
+
+    XCTAssertEqual(outcome, .preservedLocalAfterRemoteFailure)
+    XCTAssertEqual(probe.localWrites, 1)
+    XCTAssertEqual(probe.remoteRequests, 1)
+    XCTAssertEqual(probe.remoteSyncs, 0)
+    XCTAssertEqual(probe.rollbacks, 0)
+    XCTAssertEqual(store.incompleteTasks, [optimistic])
+  }
+
+  @MainActor
+  func testChatFirstUpdateCannotRollBackIntoReplacementOwner() async {
+    let defaults = UserDefaults.standard
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let original = task(id: "owner-a-chat-first-owner-update")
+    let optimistic = TaskActionItem(
+      id: original.id,
+      description: "Renamed task",
+      completed: false,
+      createdAt: original.createdAt)
+    let replacement = task(id: "owner-b-chat-first-sentinel")
+    store.incompleteTasks = [original]
+    let gate = TasksStorePauseGate()
+    let probe = TasksStoreOperationProbe()
+
+    let operation = Task { @MainActor in
+      await store.updateTask(
+        original,
+        description: optimistic.description,
+        remoteFailureBehavior: .rollbackForChatFirst,
+        operationOverrides: TasksStore.TaskUpdateOperationOverrides(
+          updateLocal: { _ in
+            probe.localWrites += 1
+            return optimistic
+          },
+          updateRemote: { _ in
+            probe.remoteRequests += 1
+            await gate.pause()
+            throw TasksStoreOwnerBoundaryFailure.backendRejected
+          },
+          syncRemote: { _, _ in probe.remoteSyncs += 1 },
+          rollbackLocal: { probe.rollbacks += 1 }
+        )
+      )
+    }
+    await gate.waitUntilStarted()
+    illegallyMutateOwnerDefaults(to: "owner-b", defaults: defaults)
+    store.incompleteTasks = [replacement]
+    await gate.release()
+    let outcome = await operation.value
+
+    XCTAssertEqual(outcome, .ownerChanged)
+    XCTAssertEqual(probe.localWrites, 1)
+    XCTAssertEqual(probe.remoteRequests, 1)
+    XCTAssertEqual(probe.remoteSyncs, 0)
+    XCTAssertEqual(probe.rollbacks, 0)
+    XCTAssertEqual(store.incompleteTasks, [replacement])
+    XCTAssertNil(store.error)
+  }
+
+  @MainActor
+  func testChatFirstUpdateReportsRollbackFailureWithoutPretendingTheOwnerChanged() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let original = task(id: "owner-a-chat-first-rollback-failure")
+    let optimistic = TaskActionItem(
+      id: original.id,
+      description: "Renamed task",
+      completed: false,
+      createdAt: original.createdAt)
+    store.incompleteTasks = [original]
+
+    let outcome = await store.updateTask(
+      original,
+      description: optimistic.description,
+      remoteFailureBehavior: .rollbackForChatFirst,
+      operationOverrides: TasksStore.TaskUpdateOperationOverrides(
+        updateLocal: { _ in optimistic },
+        updateRemote: { _ in throw TasksStoreOwnerBoundaryFailure.backendRejected },
+        syncRemote: { _, _ in },
+        rollbackLocal: { throw TasksStoreOwnerBoundaryFailure.backendRejected }
+      )
+    )
+
+    XCTAssertEqual(outcome, .rollbackFailed)
+    XCTAssertEqual(store.incompleteTasks, [optimistic])
+    XCTAssertEqual(store.error, "backend rejected")
+  }
+
+  @MainActor
+  func testBulkDeleteRemoteRejectionPreservesEveryLocalRow() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+    let locked = task(id: "locked")
+    let unlocked = task(id: "unlocked")
+    store.incompleteTasks = [locked, unlocked]
+    var remoteAttempts = 0
+    var localDeletes = 0
+    let operations = TasksStore.BulkDeleteOperations(
+      loadLocalTasks: { [locked, unlocked] },
+      deleteLocalTaskIDs: { _, _ in localDeletes += 1 },
+      deleteRemoteTaskIDs: { _, _, _ in
+        remoteAttempts += 1
+        throw TasksStoreOwnerBoundaryFailure.backendRejected
+      }
+    )
+
+    let outcome = await store.deleteMultipleTasks(
+      ids: [locked.id, unlocked.id],
+      expectedOwnerID: "owner-a",
+      operations: operations
+    )
+
+    XCTAssertEqual(outcome, .remoteFailure(confirmedIDs: []))
+    XCTAssertEqual(remoteAttempts, 1)
+    XCTAssertEqual(localDeletes, 0)
+    XCTAssertEqual(store.incompleteTasks, [locked, unlocked])
+  }
+
+  @MainActor
+  func testBulkDeleteConfirmsRemoteBeforeCommittingLocalMutation() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+    let first = task(id: "first")
+    let second = task(id: "second")
+    store.incompleteTasks = [first, second]
+    var operationOrder: [String] = []
+    let operations = TasksStore.BulkDeleteOperations(
+      loadLocalTasks: { [first, second] },
+      deleteLocalTaskIDs: { _, _ in operationOrder.append("local") },
+      deleteRemoteTaskIDs: { _, _, _ in operationOrder.append("remote") }
+    )
+
+    let outcome = await store.deleteMultipleTasks(
+      ids: [first.id, second.id],
+      expectedOwnerID: "owner-a",
+      operations: operations
+    )
+
+    XCTAssertEqual(outcome, .deletedEverywhere)
+    XCTAssertEqual(operationOrder, ["remote", "local"])
+    XCTAssertTrue(store.incompleteTasks.isEmpty)
+  }
+
+  @MainActor
+  private func task(id: String, completed: Bool = false, dueAt: Date? = nil) -> TaskActionItem {
     TaskActionItem(
       id: id,
       description: id,
       completed: completed,
-      createdAt: Date(timeIntervalSince1970: 0))
+      createdAt: Date(timeIntervalSince1970: 0),
+      dueAt: dueAt)
   }
 
   private func productionSource(_ relativePath: String) throws -> String {
@@ -715,19 +1281,20 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
           await MainActor.run {
             NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
           }
+        },
+        { defaults in
+          if let authOwnerID {
+            defaults.set(authOwnerID, forKey: .authUserId)
+          } else {
+            defaults.removeObject(forKey: .authUserId)
+          }
+          if let automationOverrideID {
+            defaults.set(automationOverrideID, forKey: .automationOwnerOverride)
+          } else {
+            defaults.removeObject(forKey: .automationOwnerOverride)
+          }
         }
-      ) { defaults in
-        if let authOwnerID {
-          defaults.set(authOwnerID, forKey: .authUserId)
-        } else {
-          defaults.removeObject(forKey: .authUserId)
-        }
-        if let automationOverrideID {
-          defaults.set(automationOverrideID, forKey: .automationOwnerOverride)
-        } else {
-          defaults.removeObject(forKey: .automationOwnerOverride)
-        }
-      }
+      )
     } catch {
       XCTFail("owner transition failed: \(error)")
     }

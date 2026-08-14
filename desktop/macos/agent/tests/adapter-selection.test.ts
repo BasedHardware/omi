@@ -79,6 +79,10 @@ describe("adapter selection and activation", () => {
       "Codex is not available. Make sure Codex is installed first, then try again."
     );
     expect(adapterActivationError("codex")).not.toContain("OMI_CODEX_ADAPTER_COMMAND");
+    expect(adapterActivationError("pi-mono")).toBe(
+      "Omi AI is not available. Sign in and try again."
+    );
+    expect(adapterActivationError("pi-mono")).not.toContain("OMI_AUTH_TOKEN");
   });
 
   it("source: daemon registers Hermes/OpenClaw/Codex explicitly and does not stamp MCP env as ACP", () => {
@@ -93,6 +97,7 @@ describe("adapter selection and activation", () => {
     expect(indexSource).toContain("ensureRegisteredAdapter(registry, \"codex\"");
     expect(indexSource).toContain('adapterActivationError("openclaw")');
     expect(indexSource).toContain('adapterActivationError("codex")');
+    expect(indexSource).toContain('adapterActivationError("pi-mono")');
     expect(indexSource).toContain("query.ownerId = queryOwnerId");
     expect(indexSource).toContain('{ name: "OMI_ADAPTER_ID", value: context?.adapterId ?? "acp" }');
     expect(indexSource).not.toContain('{ name: "OMI_ADAPTER_ID", value: "acp" }');

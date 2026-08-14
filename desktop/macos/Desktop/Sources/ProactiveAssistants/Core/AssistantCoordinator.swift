@@ -5,6 +5,41 @@ private struct AssistantEventDataBox: @unchecked Sendable {
   init(_ value: [String: Any]) { self.value = value }
 }
 
+/// Serializes persisted context transitions while retaining the latest context
+/// observed during an in-flight write. The queue is intentionally a small value
+/// type so its coalescing behavior is deterministic and directly testable.
+struct ContextTransitionRequest: Equatable, Sendable {
+  let app: String
+  let windowTitle: String?
+}
+
+struct ContextTransitionQueue: Sendable {
+  private(set) var inFlight: ContextTransitionRequest?
+  private var pending: ContextTransitionRequest?
+
+  /// Starts a transition immediately when idle. While a transition is in
+  /// flight, retain only the latest request; callers drain it after completion.
+  @discardableResult
+  mutating func begin(_ request: ContextTransitionRequest) -> Bool {
+    guard inFlight == nil else {
+      pending = request
+      return false
+    }
+    inFlight = request
+    return true
+  }
+
+  /// Completes the current request and returns the latest request observed
+  /// while it was in flight, if any.
+  mutating func finish(_ request: ContextTransitionRequest) -> ContextTransitionRequest? {
+    guard inFlight == request else { return nil }
+    inFlight = nil
+    let next = pending
+    pending = nil
+    return next
+  }
+}
+
 /// Coordinates all proactive assistants, distributing frames and managing lifecycle
 @MainActor
 class AssistantCoordinator {
@@ -20,6 +55,7 @@ class AssistantCoordinator {
   private var lastTrackedApp: String?
   private var lastTrackedWindowTitle: String?
   private var lastTrackedFrame: CapturedFrame?
+  private var contextTransitionQueue = ContextTransitionQueue()
 
   /// Backpressure: track which assistants are currently analyzing a frame.
   /// Prevents Task closures from accumulating CapturedFrame JPEG data when analyze() is slow.
@@ -78,10 +114,31 @@ class AssistantCoordinator {
   /// and window title changes — one unified path with one delay mechanism.
   /// - Returns: `true` if a context switch was detected and fired.
   @discardableResult
-  func checkContextSwitch(newApp: String, newWindowTitle: String?) -> Bool {
+  func checkContextSwitch(newApp: String, newWindowTitle: String?) async -> Bool {
+    let bucketsEnabled = ContextBucketsFeature.isEnabled
+    let transitionRequest = ContextTransitionRequest(app: newApp, windowTitle: newWindowTitle)
     guard lastTrackedApp != nil else {
-      lastTrackedApp = newApp
-      lastTrackedWindowTitle = newWindowTitle
+      if bucketsEnabled {
+        guard contextTransitionQueue.begin(transitionRequest) else { return false }
+        defer { finishContextTransition(transitionRequest) }
+        guard !RewindSettings.shared.isAppExcluded(newApp) else {
+          lastTrackedApp = newApp
+          lastTrackedWindowTitle = newWindowTitle
+          return false
+        }
+        do {
+          let transition = try await ContextVisitCoordinator.shared.transition(
+            toApp: newApp, windowTitle: newWindowTitle, departingFrame: nil)
+          lastTrackedApp = newApp
+          lastTrackedWindowTitle = newWindowTitle
+          Task { await ContextProactivityEngine.shared.contextEntered(transition.arrivingFence) }
+        } catch {
+          logError("Context buckets: failed to persist initial visit", error: error)
+        }
+      } else {
+        lastTrackedApp = newApp
+        lastTrackedWindowTitle = newWindowTitle
+      }
       return false
     }
 
@@ -98,24 +155,78 @@ class AssistantCoordinator {
       "Context switch detected: \(lastTrackedApp ?? "nil") (\(ContextDetection.normalizeWindowTitle(lastTrackedWindowTitle) ?? "nil")) -> \(newApp) (\(ContextDetection.normalizeWindowTitle(newWindowTitle) ?? "nil"))"
     )
 
-    // Update tracking state
-    lastTrackedApp = newApp
-    lastTrackedWindowTitle = newWindowTitle
-
     // Context is an input to canonical re-evaluation, never permission to
     // notify. Privacy-excluded apps do not even produce a normalized hash.
-    if AuthService.shared.isSignedIn,
+    if !bucketsEnabled, AuthService.shared.isSignedIn,
       !RewindSettings.shared.isAppExcluded(newApp),
       let event = TaskLocalContextEvent.appWindow(
         appName: newApp,
         windowTitle: newWindowTitle
       )
     {
-      let matched = TaskContextSubjectMatcher.shared.resolve(event)
+      lastTrackedApp = newApp
+      lastTrackedWindowTitle = newWindowTitle
+      let matched = await ContextSubjectBindingService.shared.resolve(event)
       Task { await TaskContextualResurfacingService.shared.observe(matched) }
     }
+    if !bucketsEnabled {
+      lastTrackedApp = newApp
+      lastTrackedWindowTitle = newWindowTitle
+    }
 
-    // Fire on all assistants
+    if bucketsEnabled {
+      guard contextTransitionQueue.begin(transitionRequest) else { return false }
+      defer { finishContextTransition(transitionRequest) }
+      if RewindSettings.shared.isAppExcluded(newApp) {
+        do {
+          let departure = try await ContextVisitCoordinator.shared.leaveForExcludedContext(
+            departingFrame: departingFrame)
+          lastTrackedApp = newApp
+          lastTrackedWindowTitle = newWindowTitle
+          if departure.qualified, let fence = departure.fence, let departingFrame {
+            Task { await ContextBucketRollupWriter.shared.extract(frame: departingFrame, fence: fence) }
+          }
+          if let taskAssistant = assistants["task-extraction"] {
+            Task {
+              await taskAssistant.onContextSwitch(
+                departingFrame: departingFrame,
+                newApp: newApp,
+                newWindowTitle: newWindowTitle)
+            }
+          }
+        } catch {
+          logError("Context buckets: failed to close visit before excluded context", error: error)
+        }
+        return true
+      }
+      do {
+        let transition = try await ContextVisitCoordinator.shared.transition(
+          toApp: newApp,
+          windowTitle: newWindowTitle,
+          departingFrame: departingFrame)
+        lastTrackedApp = newApp
+        lastTrackedWindowTitle = newWindowTitle
+        if transition.departingQualified, let departingFence = transition.departingFence, let departingFrame {
+          Task { await ContextBucketRollupWriter.shared.extract(frame: departingFrame, fence: departingFence) }
+        }
+        // TaskAssistant keeps its timer fallback and messaging fast path. The
+        // coordinator is the only exit writer while the flag is enabled.
+        if let taskAssistant = assistants["task-extraction"] {
+          Task {
+            await taskAssistant.onContextSwitch(
+              departingFrame: departingFrame,
+              newApp: newApp,
+              newWindowTitle: newWindowTitle)
+          }
+        }
+        Task { await ContextProactivityEngine.shared.contextEntered(transition.arrivingFence) }
+      } catch {
+        logError("Context buckets: context transition failed", error: error)
+      }
+      return true
+    }
+
+    // Flag-off rollback path: fire today's independent assistants unchanged.
     for (_, assistant) in assistants {
       Task {
         await assistant.onContextSwitch(
@@ -129,11 +240,28 @@ class AssistantCoordinator {
     return true
   }
 
+  /// Releases a completed transition and schedules the latest context observed
+  /// during its persistence await. The follow-up runs on the main actor, so it
+  /// cannot race the coordinator's tracked state or start a second write in
+  /// parallel with the completed request.
+  private func finishContextTransition(_ request: ContextTransitionRequest) {
+    guard let next = contextTransitionQueue.finish(request) else { return }
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      _ = await self.checkContextSwitch(newApp: next.app, newWindowTitle: next.windowTitle)
+    }
+  }
+
   // MARK: - Frame Tracking & Distribution
 
   /// Keep the latest frame reference fresh (call on every capture, even during delay).
   func trackFrame(_ frame: CapturedFrame) {
     lastTrackedFrame = frame
+  }
+
+  func trackedFrameForDirector(startedAt: Date) -> CapturedFrame? {
+    guard let frame = lastTrackedFrame, frame.captureTime >= startedAt else { return nil }
+    return frame
   }
 
   /// Distribute a captured frame to all enabled assistants
@@ -257,7 +385,6 @@ class AssistantCoordinator {
   /// Register the default set of assistants
   func registerDefaultAssistants() throws {
     // These will be added as we create the assistants
-    // try register(FocusAssistant())
     // try register(TaskAssistant())
   }
 }

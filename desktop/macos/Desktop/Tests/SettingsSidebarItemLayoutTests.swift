@@ -20,12 +20,25 @@ final class SettingsSidebarItemLayoutTests: XCTestCase {
         .scaledFont(size: OmiType.body, weight: .medium)
         .fixedSize()
     ).fittingSize.width
-    let requiredWidth = labelWidth + 20 + OmiSpacing.md + 2 * OmiSpacing.md
+    // The fixtures the row actually spends around the label, named rather than approximated: the
+    // icon column, the gap after it, and the row's own two side paddings. They are the settings-kit
+    // metrics now, not generic spacing tokens, and this sum is what decides the sidebar's width —
+    // see `SettingsSidebarMetrics.expandedWidth`, which is derived from it.
+    let requiredWidth =
+      labelWidth + 20 + SettingsGlassMetrics.rowContentSpacing
+      + 2 * SettingsGlassMetrics.rowHorizontalPadding
 
     XCTAssertLessThanOrEqual(
-      requiredWidth,
+      requiredWidth + SettingsSidebarMetrics.labelSlack,
       SettingsSidebarMetrics.itemAvailableWidth,
-      "the merged label must fit in the fixed settings-sidebar row"
+      """
+      "\(SettingsContentView.SettingsSection.notifications.displayTitle)" needs \
+      \(String(format: "%.1f", requiredWidth)) pt plus \(SettingsSidebarMetrics.labelSlack) pt of \
+      slack, and the row has \(SettingsSidebarMetrics.itemAvailableWidth). The label does not fail \
+      loudly when it runs out — it truncates to "Notifications & P…". The slack is not padding for \
+      its own sake: a build whose arithmetic cleared the requirement by 4 pt still truncated, so \
+      the fit is asserted with headroom rather than to the last point.
+      """
     )
 
     let unselectedHeight = itemHeight(isSelected: false)
@@ -68,12 +81,30 @@ final class SettingsSidebarItemLayoutTests: XCTestCase {
     )
   }
 
+  func testPermissionsRowWithMissingNoticeStaysOnOneLine() {
+    let plain = itemHeight(section: .permissions, isSelected: false, showsMissingPermissionNotice: false)
+    let noticed = itemHeight(section: .permissions, isSelected: true, showsMissingPermissionNotice: true)
+    XCTAssertEqual(
+      noticed, plain, accuracy: 0.5,
+      "the missing-grant mark beside the label must sit in the row, not wrap it")
+    XCTAssertLessThan(noticed, 60)
+  }
+
   private func itemHeight(isSelected: Bool) -> CGFloat {
+    itemHeight(section: .notifications, isSelected: isSelected, showsMissingPermissionNotice: false)
+  }
+
+  private func itemHeight(
+    section: SettingsContentView.SettingsSection,
+    isSelected: Bool,
+    showsMissingPermissionNotice: Bool
+  ) -> CGFloat {
     let host = NSHostingView(
       rootView: SettingsSidebarItem(
-        section: .notifications,
+        section: section,
         isSelected: isSelected,
         iconWidth: 20,
+        showsMissingPermissionNotice: showsMissingPermissionNotice,
         onTap: {}
       )
       .frame(width: SettingsSidebarMetrics.itemAvailableWidth)
