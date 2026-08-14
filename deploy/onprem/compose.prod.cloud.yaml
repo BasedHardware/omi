@@ -1,0 +1,18 @@
+name: omi-onprem
+# PROD CLOUD posture (ADR-0003/0046): the reference/cloud stack — Firestore + Pinecone + Firebase +
+# GCS — instead of the self-hosted on-prem services. This is NOT the hermetic ADR-0001 proof: the
+# backend needs EGRESS to reach the cloud providers, so the `omi` network stays non-internal (unlike
+# compose.prod.yaml, which sets internal:true). compose.selfhost.yaml is deliberately NOT included, so
+# no Mongo/datastore container is run; the reference backends come from backend.env.prod.cloud
+# (STORAGE_BACKEND=firestore, VECTOR_STORE_BACKEND=pinecone, AUTH_BACKEND=firebase,
+# OBJECT_STORE_BACKEND=gcs). Self-hosted extras (qdrant/rustfs/keycloak/ntfy/inference) are their own
+# opt-in profiles and are irrelevant here. Firestore/GCS/Firebase need Google credentials — mount a
+# service-account JSON and set GOOGLE_APPLICATION_CREDENTIALS in backend.env.prod.cloud.
+#   docker compose -f compose.prod.cloud.yaml up -d
+include:
+  - compose.base.yaml
+services:
+  backend:
+    env_file:
+      - ./backend.env.base
+      - ./backend.env.prod.cloud

@@ -6,6 +6,7 @@ name: omi-onprem
 #   docker compose -f compose.prod.yaml [--profile auth|chat|…] up -d
 include:
   - compose.base.yaml
+  - compose.selfhost.yaml   # on-prem datastore (Mongo, ADR-0046); the cloud posture omits this
 
 services:
   backend:

@@ -21,55 +21,11 @@ services:
     networks: [omi]
     restart: unless-stopped
 
-  firestore-emulator:
-    build:
-      context: ../../
-      dockerfile: deploy/onprem/firestore-emulator/Dockerfile
-    healthcheck:
-      # the Firestore emulator answers 200 on / once it is ready
-      test: ["CMD", "curl", "-fsS", "http://localhost:8085/"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 20s
-    networks: [omi]
-    restart: unless-stopped
-    # Persist emulator state across `down`/`up` (cubic review 4909186286 #3). The entrypoint imports
-    # a prior export on start and exports on graceful shutdown; export runs on SIGTERM, so give it
-    # time to finish before SIGKILL. (Production durability is Mongo, ADR-0002 — the `mongo` profile.)
-    stop_grace_period: 30s
-    volumes:
-      # Mount at /data (not /data/emulator): firebase clears the export dir by rmdir-ing it before
-      # writing, which fails with EBUSY on a mount point — so it exports to the /data/emulator subdir.
-      - firestore-emulator-data:/data
-
-  # Alternate storage backend (ADR-0002/0004). Opt-in via the `mongo` profile so the default
-  # on-prem baseline stays Firestore-only (ADR-0003). To use it:
-  #   STORAGE_BACKEND=mongo + MONGO_URI in backend.env, then:
-  #   docker compose --profile mongo up -d --build
-  # Single-node replica set: transactions (used by the deletion/speech-sample paths) require one.
-  mongo:
-    image: mongo:latest
-    profiles: ["mongo"]
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
-    healthcheck:
-      # Initiate the one-member replica set on first probe, then report healthy once primary.
-      test:
-        - CMD-SHELL
-        - >-
-          mongosh --quiet --eval "try { rs.status() } catch (e) {
-          rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}) }
-          db.hello().isWritablePrimary" | grep -q true
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 10s
-    volumes:
-      # Persist the replica-set data across `down`/`up` (ADR-0002 is the PROD datastore; without a
-      # named volume the seed/user data lives in the container layer and is lost on recreate).
-      - mongo-data:/data/db
-    networks: [omi]
-    restart: unless-stopped
+  # Datastore: NOT here. base holds only what every posture shares (valkey + backend). The durable
+  # on-prem store (Mongo, ADR-0002/0046) lives in the self-hosted overlay compose.selfhost.yaml,
+  # included by compose.prod.yaml (on-prem) and compose.dev.yaml; the cloud posture
+  # (compose.prod.cloud.yaml) does NOT include it and points STORAGE_BACKEND=firestore at a real
+  # Firestore. So base never forces a datastore on a posture that does not use it.
 
   # Alternate object-store backend (ADR-0032/0004). Opt-in via the `objstore` profile so the default
   # on-prem baseline stays GCS-shaped (ADR-0003). RustFS is one S3-compatible product; the S3 adapter
@@ -161,9 +117,10 @@ services:
       - -c
       - mkdir -p _temp _samples _segments _speech_profiles && exec uvicorn main:app --host 0.0.0.0 --port 8080 --loop uvloop
     depends_on:
+      # base depends only on valkey (shared by every posture). The datastore dependency is added by
+      # the posture overlay: compose.selfhost.yaml adds ``mongo`` for on-prem; the cloud posture adds
+      # none (cloud Firestore/Pinecone/etc. are external, nothing to wait on locally).
       valkey:
-        condition: service_healthy
-      firestore-emulator:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/v1/health"]
@@ -447,16 +404,12 @@ networks:
     driver: bridge
 
 volumes:
-  # Default-baseline Firestore/Auth emulator state (ADR-0003), persisted across `down`/`up` so the
-  # datastore is not lost on recreate (cubic review 4909186286 #3). PROD durability is Mongo (below).
-  firestore-emulator-data:
   # Pre-provisioned inference model weights (HF cache + NLLB CTranslate2 dir). Populated
   # out-of-band before first `--profile inference` run — the internal network has no egress.
   inference-models:
   # Qdrant vector-store persistence (self-hosted vector backend, ADR-0033; `chat` profile).
   qdrant-storage:
-  # Mongo replica-set data (ADR-0002 PROD datastore; `mongo` profile).
-  mongo-data:
+  # (mongo-data lives in compose.selfhost.yaml with the mongo service — ADR-0046.)
   # RustFS S3 objects (ADR-0032 PROD object store; `objstore` profile).
   rustfs-data:
   # Keycloak realm/H2 persistence incl. the imported omi-backend-admin client (`auth` profile).

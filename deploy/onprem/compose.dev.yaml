@@ -9,6 +9,7 @@ name: omi-onprem
 #   # backend.env (dev): OMI_EMBEDDINGS_BASE_URL=http://host.docker.internal:11434/v1
 include:
   - compose.base.yaml
+  - compose.selfhost.yaml   # on-prem datastore (Mongo, ADR-0046); dev default is Mongo too
 services:
   backend:
     env_file:
@@ -18,3 +19,31 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "8000:8080"
+
+  # Firestore emulator — DEV-ONLY, opt-in (ADR-0046). The on-prem default is Mongo (base); this exists
+  # only so a dev can exercise the Firestore reference adapter locally without Google:
+  #   docker compose -f compose.dev.yaml --profile firestore up -d --build firestore-emulator
+  #   # then in backend.env.dev: STORAGE_BACKEND=firestore + FIRESTORE_EMULATOR_HOST=firestore-emulator:8085
+  # It is NEVER in base/prod: in prod whoever wants Firestore points the env at a real Firestore.
+  # State persists across down/up (entrypoint imports a prior export, exports on graceful shutdown).
+  firestore-emulator:
+    profiles: ["firestore"]
+    build:
+      context: ../../
+      dockerfile: deploy/onprem/firestore-emulator/Dockerfile
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8085/"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    stop_grace_period: 30s
+    volumes:
+      # Mount at /data (not /data/emulator): firebase clears the export dir by rmdir before writing,
+      # which EBUSYs on a mount point — so it exports to the /data/emulator subdir.
+      - firestore-emulator-data:/data
+    networks: [omi]
+    restart: unless-stopped
+
+volumes:
+  firestore-emulator-data:

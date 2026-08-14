@@ -14,6 +14,7 @@ name: omi-onprem
 # KC_HOSTNAME, default https://localhost:8443/realms/omi).
 include:
   - compose.base.yaml
+  - compose.selfhost.yaml   # seed drives real users against the on-prem Mongo store (ADR-0046)
 services:
   backend:
     env_file:
