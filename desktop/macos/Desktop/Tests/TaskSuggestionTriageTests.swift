@@ -2,10 +2,9 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// `TaskActionItem.isPendingSuggestion` is the single triage rule that keeps
-/// AI-captured tasks out of the due-date categories (TasksPage) and out of the
-/// dashboard/nudge lanes (TasksStore) until the user accepts them. Regression
-/// coverage for the rule that fixed "deleted tasks keep reappearing in Today".
+/// `TaskActionItem.isPendingSuggestion` still names AI-captured action items so
+/// proactive nudges can skip leftover extractor rows. Those rows are ordinary
+/// due-date tasks on the Tasks page; Candidate review is a separate surface.
 final class TaskSuggestionTriageTests: XCTestCase {
 
   private func task(
@@ -31,53 +30,33 @@ final class TaskSuggestionTriageTests: XCTestCase {
 
   func testUserCreatedTasksAreNeverSuggestions() {
     XCTAssertFalse(task(source: "manual").isPendingSuggestion)
-    // Tasks predating the source field are user history, not AI spam.
     XCTAssertFalse(task(source: nil).isPendingSuggestion)
     XCTAssertFalse(task(source: "legacy").isPendingSuggestion)
   }
 
-  func testRecurringSpawnsStayInDueDateCategories() {
-    // TasksStore spawns recurrence instances with source "recurring"; they derive
-    // from a task the user already accepted and must never triage as suggestions.
+  func testRecurringSpawnsAreNotPendingSuggestions() {
     XCTAssertFalse(task(source: "recurring").isPendingSuggestion)
   }
 
-  func testAcceptingRewritesSourceSoTheTaskLeavesSuggestions() {
-    // Accept = source rewritten to "manual" (TasksStore.acceptSuggestedTask);
-    // the same task must then triage out of Suggestions.
-    XCTAssertTrue(task(source: "screenshot").isPendingSuggestion)
-    XCTAssertFalse(task(source: "manual").isPendingSuggestion)
-  }
-
-  func testCompletedOrDeletedCapturesAreNotResurfaced() {
+  func testCompletedOrDeletedCapturesAreNotPendingSuggestions() {
     XCTAssertFalse(task(source: "screenshot", completed: true).isPendingSuggestion)
     XCTAssertFalse(task(source: "screenshot", deleted: true).isPendingSuggestion)
   }
 }
 
-/// Collapsed Suggestions render no rows, so keyboard navigation and select-all
-/// must skip them too — otherwise arrow keys focus an invisible row and bulk
-/// actions silently hit tasks the user cannot see.
+/// Removing the sparkle Suggestions category put leftover AI captures back into
+/// the due-date list, so keyboard nav and select-all must include them.
 @MainActor
-final class TasksPageCollapsedSuggestionsNavigationTests: XCTestCase {
-  private let expandedKey = DefaultsKey.tasksSuggestionsSectionExpanded.rawValue
-  private var savedExpanded: Any?
-
+final class TasksPageAICaptureNavigationTests: XCTestCase {
   override func setUp() async throws {
-    savedExpanded = UserDefaults.standard.object(forKey: expandedKey)
     TasksStore.shared.resetSessionState()
   }
 
   override func tearDown() async throws {
-    if let savedExpanded {
-      UserDefaults.standard.set(savedExpanded, forKey: expandedKey)
-    } else {
-      UserDefaults.standard.removeObject(forKey: expandedKey)
-    }
     TasksStore.shared.resetSessionState()
   }
 
-  private func seedViewModel() -> TasksViewModel {
+  func testAICapturedTasksAreIncludedInKeyboardNavAndSelectAll() {
     let accepted = TaskActionItem(
       id: "accepted", description: "Send the investor update email to Bob",
       completed: false, createdAt: Date(timeIntervalSince1970: 0), source: "manual")
@@ -87,20 +66,9 @@ final class TasksPageCollapsedSuggestionsNavigationTests: XCTestCase {
     TasksStore.shared.incompleteTasks = [accepted, capture]
     let vm = TasksViewModel()
     vm.selectedTags = [.todo]
-    return vm
-  }
-
-  func testCollapsedSuggestionsAreExcludedFromKeyboardNavAndSelectAll() {
-    UserDefaults.standard.set(false, forKey: expandedKey)
-    let vm = seedViewModel()
-    XCTAssertEqual(vm.navigationOrder.map(\.id), ["accepted"])
-    XCTAssertEqual(vm.visibleTaskIDsForSelection, ["accepted"])
-  }
-
-  func testExpandedSuggestionsAreReachableAgain() {
-    UserDefaults.standard.set(true, forKey: expandedKey)
-    let vm = seedViewModel()
-    XCTAssertEqual(vm.navigationOrder.map(\.id), ["accepted", "capture"])
-    XCTAssertEqual(vm.visibleTaskIDsForSelection, ["accepted", "capture"])
+    XCTAssertEqual(Set(vm.navigationOrder.map(\.id)), Set(["accepted", "capture"]))
+    XCTAssertEqual(Set(vm.visibleTaskIDsForSelection), Set(["accepted", "capture"]))
+    XCTAssertEqual(vm.getOrderedTasks(for: .noDeadline).map(\.id).sorted(), ["accepted", "capture"])
+    XCTAssertTrue(TaskCategory.allCases.map(\.rawValue).allSatisfy { $0 != "Suggestions" })
   }
 }

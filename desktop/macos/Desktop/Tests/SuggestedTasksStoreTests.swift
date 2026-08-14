@@ -28,13 +28,15 @@ final class SuggestedTasksStoreTests: XCTestCase {
     RewindDatabase.currentUserId = nil
   }
 
-  func testActionPolicyNeverOffersMoreThanThreeChoices() {
-    for state in [
-      SuggestedCardState.ready, .editing, .busy,
-    ] {
-      XCTAssertLessThanOrEqual(SuggestedActionPolicy.actions(for: state).count, 3)
-    }
-    XCTAssertEqual(SuggestedActionPolicy.actions(for: .ready), [.doNow, .later, .dismiss])
+  func testActionPolicyOffersAcceptAndRejectOnlyWhenReady() {
+    XCTAssertEqual(SuggestedActionPolicy.actions(for: .ready), [.doNow, .dismiss])
+    XCTAssertEqual(SuggestedCardAction.doNow.label, "Accept")
+    XCTAssertEqual(SuggestedCardAction.dismiss.label, "Reject")
+    XCTAssertEqual(
+      SuggestedActionPolicy.actions(for: .ready).map(\.label),
+      ["Accept", "Reject"])
+    XCTAssertEqual(SuggestedActionPolicy.actions(for: .editing), [.saveEdit, .cancelEdit])
+    XCTAssertEqual(SuggestedActionPolicy.actions(for: .busy), [])
   }
 
   func testLoadProjectsOnlyPendingCandidatesWithoutManagedNounLeak() async {

@@ -51,4 +51,36 @@ final class SuggestedTasksPresentationPolicyTests: XCTestCase {
       SuggestedCandidateDismissReasons.choices.map(\.reason),
       [.already_handled, .not_mine, .not_useful])
   }
+
+  func testSuggestedRowsReserveTheSameLeadingHandleWidthAsCategorizedTaskRows() {
+    XCTAssertEqual(TaskRowChrome.leadingHandleWidth, 16)
+  }
+
+  func testCreatedTaskIdentifierMatchesCanonicalTaskIdFromAcceptReceipt() {
+    let task = TaskActionItem(
+      id: "backend-action-item",
+      description: "Follow up with Codemagic",
+      completed: false,
+      createdAt: Date(),
+      taskId: "canonical-task"
+    )
+    XCTAssertTrue(task.matchesTaskIdentifier("backend-action-item"))
+    XCTAssertTrue(task.matchesTaskIdentifier("canonical-task"))
+    XCTAssertFalse(task.matchesTaskIdentifier("other"))
+  }
+
+  func testAcceptAndCompleteSlideWithTheTaskWhileRejectSlidesAway() {
+    XCTAssertEqual(SuggestedRowDismissal.Kind.complete.offset, 50)
+    XCTAssertEqual(SuggestedRowDismissal.Kind.accept.offset, 50)
+    XCTAssertEqual(SuggestedRowDismissal.Kind.reject.offset, -50)
+  }
+
+  func testSuggestedRowExitUsesTheSameHoldThenFadeBudgetAsCheckingATask() {
+    XCTAssertEqual(SuggestedRowDismissal.exitStartNanos, 400_000_000)
+    XCTAssertEqual(SuggestedRowDismissal.exitDurationNanos, 300_000_000)
+    XCTAssertEqual(
+      SuggestedRowDismissal.checkmarkBounceNanos + SuggestedRowDismissal.checkmarkSettleNanos,
+      SuggestedRowDismissal.exitStartNanos
+    )
+  }
 }
