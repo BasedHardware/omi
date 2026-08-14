@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -76,8 +78,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   final AppReviewService _appReviewService = AppReviewService();
   ConversationTab selectedTab = ConversationTab.summary;
 
-  // Callback to seek audio to transcript segment
-  Future<void> Function(double)? _seekToSegmentCallback;
+  // Callback to seek audio to transcript segment (start, end) in wall seconds
+  Future<void> Function(double start, double end)? _seekToSegmentCallback;
   bool _isSharing = false;
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
@@ -199,8 +201,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       provider.setCachedConversation(widget.conversation);
       _providerInitialized = true;
 
-      conversationProvider.groupConversationsByDate();
-
       // Find the proper date and index for this conversation in the grouped conversations
       final result = conversationProvider.getConversationDateAndIndex(widget.conversation);
       if (result != null) {
@@ -208,17 +208,27 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         provider.updateConversation(widget.conversation.id, date);
       } else {
         final effectiveDate = widget.conversation.startedAt ?? widget.conversation.createdAt;
-        provider.selectedDate = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+        provider.selectedDate = conversationLocalDayKey(effectiveDate);
       }
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        final date = provider.selectedDate;
-        final idx = conversationProvider.getConversationIndexById(provider.conversation.id, date);
-        if (idx != -1) {
-          await conversationProvider.updateSearchedConvoDetails(provider.conversation.id, date, idx);
+        final conversationId = provider.conversation.id;
+        if (conversationProvider.getConversationDateAndIndexById(conversationId) != null) {
+          // The initial list payload is enough to render the detail page. Fill
+          // in omitted app results after the first usable frame instead of
+          // holding the destination's startup sequence on this request. The
+          // provider re-locates the conversation by ID after the await because
+          // refreshes can reorder or replace the grouped list meanwhile.
+          unawaited(
+            conversationProvider.updateSearchedConvoDetails(conversationId).then((_) {
+              if (!mounted || provider.conversationOrNull?.id != conversationId) return;
+              provider.updateConversation(conversationId, provider.selectedDate);
+            }),
+          );
+        } else {
+          provider.updateConversation(provider.conversation.id, provider.selectedDate);
         }
-        provider.updateConversation(provider.conversation.id, provider.selectedDate);
       }
 
       // Check if this is the first conversation and show app review prompt
@@ -1058,9 +1068,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       _controller!.animateTo(0);
                                     }
 
-                                    // Seek to segment using callback
+                                    // Seek to segment using callback (start + end for bounded play)
                                     if (_seekToSegmentCallback != null) {
-                                      await _seekToSegmentCallback!(segment.start);
+                                      await _seekToSegmentCallback!(segment.start, segment.end);
                                       HapticFeedback.lightImpact();
                                     }
                                   },
@@ -1435,13 +1445,12 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
         builder: (context, data, child) {
           return Stack(
             children: [
-              ListView(
-                shrinkWrap: true,
+              CustomScrollView(
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-                children: [
-                  const GetSummaryWidgets(),
+                slivers: [
+                  const SliverToBoxAdapter(child: GetSummaryWidgets()),
                   data.item1
-                      ? const ReprocessDiscardedWidget()
+                      ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                       : GetAppsWidgets(
                           searchQuery: widget.searchQuery,
                           currentResultIndex: widget.currentResultIndex,
@@ -1460,8 +1469,8 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                             context.read<ConversationDetailProvider>().saveEditingSummary(appId, newContent);
                           },
                         ),
-                  const GetGeolocationWidgets(),
-                  const SizedBox(height: 150),
+                  const SliverToBoxAdapter(child: GetGeolocationWidgets()),
+                  const SliverToBoxAdapter(child: SizedBox(height: 150)),
                 ],
               ),
             ],

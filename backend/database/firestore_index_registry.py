@@ -129,6 +129,21 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('discarded'), _asc('status'), _asc('structured.category'), _desc('created_at'), _desc('__name__')),
     ),
+    # `GET /v1/conversations?sources=...` retains the legacy
+    # `include_discarded=true` default, so this is distinct from the archive
+    # query below that explicitly excludes discarded captures.
+    FirestoreIndexRequirement(
+        'conversations_source_status_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_discarded_source_status_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'conversations_status_finished',
         'conversations',
@@ -164,12 +179,6 @@ INDEX_ONLY_REQUIREMENTS = (
         'screen_activity',
         'COLLECTION',
         (_asc('appName'), _asc('timestamp'), _asc('__name__')),
-    ),
-    FirestoreIndexRequirement(
-        'candidates_generation_created',
-        'candidates',
-        'COLLECTION',
-        (_asc('account_generation'), _desc('created_at'), _desc('__name__')),
     ),
     FirestoreIndexRequirement(
         'candidates_status_generation_created',
@@ -215,6 +224,22 @@ ACTIVE_ATTENTION_OVERRIDE_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('account_generation'), _asc('expires_at'), _asc('__name__')),
 )
 
+CANDIDATES_COMPATIBILITY_QUERY = FirestoreQuerySpec(
+    identifier='candidates_generation_created',
+    collection_group='candidates',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('account_generation', '==', 'account_generation'),),
+    index_fields=(_asc('account_generation'), _desc('created_at'), _desc('__name__')),
+)
+
+LEGACY_CONVERSATION_RECOVERY_QUERY = FirestoreQuerySpec(
+    identifier='staged_tasks_legacy_conversation_recovery_by_id',
+    collection_group='staged_tasks',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('source', '==', 'source'),),
+    index_fields=(_asc('source'), _asc('__name__')),
+)
+
 REQUIRED_MEMORY_PROCESSING_QUERY = FirestoreQuerySpec(
     identifier='memory_items_required_processing_by_capture',
     collection_group='memory_items',
@@ -257,6 +282,81 @@ CANONICAL_CONSOLIDATION_QUERY = FirestoreQuerySpec(
         _asc('memory_id'),
         _asc('__name__'),
     ),
+)
+
+CANONICAL_GRAPH_READ_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_canonical_graph_read',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('account_generation', '==', 'account_generation'),
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+        FirestoreQueryFilter('graph_ready', '==', 'graph_ready'),
+    ),
+    index_fields=(
+        _asc('account_generation'),
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
+        _asc('graph_ready'),
+        _desc('updated_at'),
+        _desc('__name__'),
+    ),
+)
+
+CANONICAL_MEMORY_ATLAS_READ_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_canonical_atlas_read',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('account_generation', '==', 'account_generation'),
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+    ),
+    index_fields=(
+        _asc('account_generation'),
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
+        _desc('updated_at'),
+        _desc('__name__'),
+    ),
+)
+
+# Collection-scoped newest-first scan for universal mixed list cursor paging.
+# Equality filters are intentionally empty: access/device/pending/archive are
+# applied after each bounded raw page so filtered rows still advance the keyset.
+# Firestore manages the single-field updated_at index (plus automatic __name__
+# tie-break) itself — this spec records the serving query contract only.
+UNIVERSAL_CANONICAL_LIST_SCAN_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_universal_list_scan',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(),
+    index_fields=(_desc('updated_at'), _asc('__name__')),
+)
+
+# Historical dual-stream keysets for effective updated_at-or-created_at order.
+# Docs with updated_at ride the updated stream; created stream skips those
+# duplicates in Python so each document is emitted once. Single-field+__name__
+# indexes stay out of the composite manifest.
+UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY = FirestoreQuerySpec(
+    identifier='memories_universal_list_scan_updated_at',
+    collection_group='memories',
+    query_scope='COLLECTION',
+    filters=(),
+    index_fields=(_desc('updated_at'), _asc('__name__')),
+)
+
+UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY = FirestoreQuerySpec(
+    identifier='memories_universal_list_scan_created_at',
+    collection_group='memories',
+    query_scope='COLLECTION',
+    filters=(),
+    index_fields=(_desc('created_at'), _asc('__name__')),
 )
 
 CONVERSATION_SOURCE_MEMORY_QUERY = FirestoreQuerySpec(
@@ -430,7 +530,39 @@ STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     ),
 )
 
+CHAT_FIRST_DEFERRALS_DUE_QUERY = FirestoreQuerySpec(
+    identifier='chat_first_deferrals_due',
+    collection_group='chat_first_deferrals',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('account_generation', '==', 'account_generation'),
+        FirestoreQueryFilter('state', '==', 'state'),
+        FirestoreQueryFilter('due_at', '<=', 'due_at'),
+    ),
+    index_fields=(_asc('account_generation'), _asc('state'), _asc('due_at'), _asc('__name__')),
+)
+
+CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
+    identifier='chat_first_deferrals_by_subject',
+    collection_group='chat_first_deferrals',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('account_generation', '==', 'account_generation'),
+        FirestoreQueryFilter('state', '==', 'state'),
+        FirestoreQueryFilter('subject.kind', '==', 'subject_kind'),
+        FirestoreQueryFilter('subject.id', '==', 'subject_id'),
+    ),
+    index_fields=(
+        _asc('account_generation'),
+        _asc('state'),
+        _asc('subject.kind'),
+        _asc('subject.id'),
+        _asc('__name__'),
+    ),
+)
+
 QUERY_SPECS = (
+    CANDIDATES_COMPATIBILITY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     REVIEW_QUEUE_BY_FACT_QUERY,
@@ -440,12 +572,20 @@ QUERY_SPECS = (
     REVIEW_QUEUE_BY_STATUS_ID_QUERY,
     REQUIRED_MEMORY_PROCESSING_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
+    CANONICAL_GRAPH_READ_QUERY,
+    CANONICAL_MEMORY_ATLAS_READ_QUERY,
+    UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
+    UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY,
+    UNIVERSAL_HISTORICAL_CREATED_LIST_SCAN_QUERY,
     CONVERSATION_SOURCE_MEMORY_QUERY,
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
+    LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    CHAT_FIRST_DEFERRALS_DUE_QUERY,
+    CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

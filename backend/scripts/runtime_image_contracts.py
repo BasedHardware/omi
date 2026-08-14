@@ -66,7 +66,19 @@ def _repository_relative(path: Path) -> str:
     return path.relative_to(REPOSITORY_ROOT).as_posix()
 
 
-def load_contracts(registry_path: Path = REGISTRY_PATH) -> list[ImageContract]:
+def load_contracts(
+    registry_path: Path = REGISTRY_PATH,
+    *,
+    dockerfile_filter: Path | None = None,
+) -> list[ImageContract]:
+    """Load and validate runtime-image contracts from the registry.
+
+    When ``dockerfile_filter`` is set, entries whose ``dockerfile`` does not
+    resolve to that path are skipped before filesystem validation.  This lets
+    the ``smoke`` command run against a deploy-staged source tree that contains
+    only the requested image's source surface (e.g. ``backend`` and ``.github``)
+    without failing on unrelated absent source roots such as ``plugins``.
+    """
     try:
         payload = json.loads(registry_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -86,6 +98,10 @@ def load_contracts(registry_path: Path = REGISTRY_PATH) -> list[ImageContract]:
         required_strings = ("name", "dockerfile", "build_context", "source_root", "workdir")
         if any(not isinstance(entry.get(key), str) or not entry[key] for key in required_strings):
             raise ContractError(f"runtime-image entry has invalid required fields: {entry!r}")
+        if dockerfile_filter is not None:
+            entry_dockerfile = REPOSITORY_ROOT / entry["dockerfile"]
+            if entry_dockerfile.resolve() != dockerfile_filter.resolve():
+                continue
         entrypoints_raw = entry.get("entrypoints")
         if (
             not isinstance(entrypoints_raw, list)
@@ -378,12 +394,26 @@ def check_source_closures(contracts: Iterable[ImageContract]) -> list[str]:
     return errors
 
 
+def _workflow_contract_text(workflow: Path) -> str:
+    workflow_text = workflow.read_text(encoding="utf-8")
+    scripts_dir = REPOSITORY_ROOT / ".github" / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from workflow_composite_contract import backend_deploy_contract_text
+
+    return backend_deploy_contract_text(
+        workflow_text,
+        REPOSITORY_ROOT,
+        Path(".github/actions/deploy-backend-stack/action.yml"),
+    )
+
+
 def workflow_contract_errors(contracts: Iterable[ImageContract]) -> list[str]:
     errors: list[str] = []
     for contract in contracts:
         dockerfile = _repository_relative(contract.dockerfile)
         for workflow in contract.deployment_workflows:
-            workflow_text = workflow.read_text(encoding="utf-8")
+            workflow_text = _workflow_contract_text(workflow)
             workflow_name = _repository_relative(workflow)
             if not any(
                 marker in workflow_text
@@ -562,7 +592,14 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
-        contracts = load_contracts(args.registry)
+        if args.command == "smoke":
+            dockerfile = args.dockerfile
+            if not dockerfile.is_absolute():
+                dockerfile = REPOSITORY_ROOT / dockerfile
+            contracts = load_contracts(args.registry, dockerfile_filter=dockerfile)
+        else:
+            dockerfile = None
+            contracts = load_contracts(args.registry)
         if args.command in {"check", "check-source", "check-workflows"}:
             errors = []
             if args.command in {"check", "check-source"}:
@@ -581,9 +618,7 @@ def main() -> int:
         if args.command == "pull-request-matrix":
             print(pull_request_smoke_matrix(contracts))
             return 0
-        dockerfile = args.dockerfile
-        if not dockerfile.is_absolute():
-            dockerfile = REPOSITORY_ROOT / dockerfile
+        assert dockerfile is not None  # reached only for the smoke command
         return smoke_image(args.image, contracts_for_dockerfile(contracts, dockerfile))
     except ContractError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)

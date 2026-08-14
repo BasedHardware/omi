@@ -748,11 +748,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Je abonnement wordt verlengd op $date.';
-  }
-
-  @override
   String get basicPlan => 'Gratis abonnement';
 
   @override
@@ -2133,16 +2128,16 @@ class AppLocalizationsNl extends AppLocalizations {
   String get editMemory => '✏️ Geheugen bewerken';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Vastzetten als basis';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Losmaken van basis';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Basisherinnering';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Altijd in context';
 
   @override
   String get memoryContentHint => 'Ik hou van ijs eten...';
@@ -9798,4 +9793,78 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Kan geen verbinding maken met die microfoon. Controleer of deze verbonden is in de iPhone-instellingen.';
+
+  @override
+  String get syncStatusTooOld => 'Te oud om te synchroniseren — Omi kan deze niet accepteren';
+
+  @override
+  String get planSheetChooseYourPlan => 'Kies je abonnement om onbeperkt Omi te ontgrendelen.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Beschikbaar op Mac, mobiel en web';
+
+  @override
+  String get popularBadge => 'POPULAIR';
+
+  @override
+  String get worksOnDesktop => 'Werkt op desktop';
+
+  @override
+  String get noDesktopAccess => 'Werkt niet op desktop';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months maanden / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count maanden gratis',
+      one: '1 maand gratis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi is gratis, maar de gratis versie heeft beperkingen die je ervaring beïnvloeden:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 seconden vertraging (niet realtime)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Overstappen naar de gratis versie';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Krijg gratis onbeperkte toegang';
+
+  @override
+  String get shareDataForTraining => 'Gegevens delen voor training';
+
+  @override
+  String get yourRequestUnderReview => 'Je aanvraag wordt beoordeeld';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Update vereist';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Installeer de nieuwste Omi-app om door te gaan na de accountmigratie.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migratie bezig';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Je account wordt gemigreerd. Productfuncties zijn gepauzeerd tot de migratie klaar is.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Je account is in onderhoud na een migratie-rollback. Nieuwere data kan geïsoleerd zijn.';
+
+  @override
+  String get accountCutoverOpenStore => 'Store openen';
 }

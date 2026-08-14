@@ -48,6 +48,19 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     }
   }
 
+  func testGoogleProbeActionsPassExplicitUserIntentToTheirReaders() throws {
+    // omi-test-quality: source-inspection -- static contract: the bridge action
+    // must pass the user-consent boundary to the concrete reader; exercising it
+    // would require live browser cookies and Keychain state.
+    let source = try bridgeSource()
+    XCTAssertTrue(
+      try actionBody(named: "calendar_read_probe", in: source).contains("userInitiated: true")
+    )
+    XCTAssertTrue(
+      try actionBody(named: "gmail_read_probe", in: source).contains("userInitiated: true")
+    )
+  }
+
   func testConversationListSnapshotIncludesFolderFields() throws {
     let source = try bridgeSource()
     let body = try actionBody(named: "conversation_list_snapshot", in: source)
@@ -209,6 +222,25 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     XCTAssertTrue(body.contains("cloud_sync"))
   }
 
+  func testNotificationBridgeRetiresActivePeriodContract() throws {
+    let source = try bridgeSource()
+    for retiredSurface in [
+      "set_notification_active_period",
+      "notification_active_period_start_minute",
+      "notification_active_period_end_minute",
+      "active_period_start",
+      "active_period_end",
+    ] {
+      XCTAssertFalse(source.contains(retiredSurface), "retired notification surface remains: \(retiredSurface)")
+    }
+
+    let snapshotBody = try actionBody(named: "settings_notifications_snapshot", in: source)
+    for key in ["enabled", "frequency", "frequency_label", "has_permission", "banners_disabled"] {
+      XCTAssertTrue(snapshotBody.contains("\"\(key)\""))
+    }
+    XCTAssertTrue(snapshotBody.contains("\"schema\""))
+  }
+
   func testSubscriptionSnapshotReadsBillingAPI() throws {
     let source = try bridgeSource()
     let body = try actionBody(named: "subscription_snapshot", in: source)
@@ -252,10 +284,11 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
   func testMemoryGraphSnapshotUsesKnowledgeGraphAPI() throws {
     let source = try bridgeSource()
     let body = try actionBody(named: "memory_graph_snapshot", in: source)
-    for key in ["node_count", "edge_count", "is_empty"] {
+    for key in ["node_count", "edge_count", "catalog_memory_count", "atlas_mark_count", "is_empty"] {
       XCTAssertTrue(body.contains("\"\(key)\""), "memory_graph_snapshot should return \(key)")
     }
     XCTAssertTrue(body.contains("getKnowledgeGraph"))
+    XCTAssertTrue(body.contains("MemoryAtlasProjection"))
   }
 
   func testMemoryAtlasHarnessActionsPostBoundedViewportNotifications() throws {
@@ -344,7 +377,8 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     let source = try bridgeSource()
     let body = try actionBody(named: "sign_out", in: source)
     XCTAssertTrue(body.contains("DesktopLocalProfile.isEnabled"))
-    XCTAssertTrue(body.contains("AuthService.shared.signOut()"))
+    XCTAssertTrue(body.contains("boolParam(params[\"accepted_account_deletion\"], default: false)"))
+    XCTAssertTrue(body.contains("AuthService.shared.signOut(acceptedAccountDeletion: acceptedAccountDeletion)"))
   }
 
   func testEditTestMemorySupportsMarkerParam() throws {

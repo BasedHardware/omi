@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-edge-triggered-test-handoff-signal",
+  "violated_contract": "A test probe that hands off between concurrent tasks must latch its signal. When the signal only resumes an already-registered continuation, nothing orders the signalling task before the waiting one, so the interleaving where the signal lands first drops it and suspends the waiter forever. The suite then dies to its per-suite timeout budget rather than failing an assertion, and it does so intermittently, so a rerun looks like a fix.",
+  "canonical_prevention": "Record the signal in probe state and check that state before suspending (`if hasEntered { return }`), so a signal delivered before its waiter is still observed. Cover the probe itself with a test that forces the signal-first ordering.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/AgentRuntimeProcessTests.swift"
+  ],
+  "evidence_prs": [
+    11509
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Tests/**"
+  ],
+  "status": "open"
+}

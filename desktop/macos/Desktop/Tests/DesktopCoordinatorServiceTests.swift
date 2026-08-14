@@ -411,7 +411,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     // omi-test-quality: source-inspection -- static contract: main chat cannot reintroduce deprecated query authority fields
     let source = try sourceFile("Providers/ChatProvider.swift")
 
-    XCTAssertTrue(source.contains("prompt: ChatPromptBuilder.currentTimePrompt(for: trimmedText)"))
+    XCTAssertTrue(source.contains("prompt: ChatPromptBuilder.currentTimePrompt(for: effectivePrompt)"))
     XCTAssertTrue(source.contains("attachments: Self.queryAttachments(attachmentsForMessage)"))
     XCTAssertTrue(source.contains("expectedContext: kernelContext.snapshot.freshness"))
     XCTAssertFalse(source.contains("attachmentMetadataJson:"))

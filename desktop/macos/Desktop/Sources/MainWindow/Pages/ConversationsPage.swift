@@ -16,10 +16,10 @@ struct ConversationsPage: View {
 
   // Listening mode — used only to decide whether the manual "Start Recording"
   // affordance is meaningful (see startRecordingButton gating).
-  @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
-    AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
-  private var listeningCaptureMode: AssistantSettings.SystemAudioCaptureMode {
-    CaptureListeningLogic.listeningCaptureMode(raw: systemAudioCaptureModeRaw)
+  @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) private var audioRecordingModeRaw =
+    AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
+  private var audioRecordingMode: AssistantSettings.AudioRecordingMode {
+    CaptureListeningLogic.audioRecordingMode(raw: audioRecordingModeRaw)
   }
 
   // Search state
@@ -98,7 +98,7 @@ struct ConversationsPage: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Color.clear)
+    .glassContent()
     .onAppear {
       // Load conversations when view appears
       if appState.conversations.isEmpty {
@@ -203,17 +203,39 @@ struct ConversationsPage: View {
   // MARK: - Main View with Recording Header + List
 
   private var mainConversationsView: some View {
+    Group {
+      if isLiveTranscriptExpanded && appState.isLiveCapturing {
+        ConversationsLiveTranscriptFullScreen(
+          onCollapse: {
+            OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+              isLiveTranscriptExpanded = false
+            }
+          }
+        )
+        .transition(.opacity)
+      } else {
+        conversationsListLayout
+      }
+    }
+    // Collapse if capture pauses (meeting ends) or the session stops while expanded.
+    .onChange(of: appState.isLiveCapturing) { _, isLive in
+      if !isLive {
+        isLiveTranscriptExpanded = false
+      }
+    }
+  }
+
+  /// The Conversations list chrome: pinned title row, then the scrolling live card + list.
+  private var conversationsListLayout: some View {
     VStack(spacing: 0) {
       // Fixed page header — title + actions stay pinned; everything below it
       // (live transcript, search, filters, list) scrolls together as one.
       HStack {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text("Conversations")
-            .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .inkStyle(InkType.firstTitle, color: Ink.primary)
           Text("Recordings, notes, and transcripts from your day")
-            .scaledFont(size: OmiType.caption)
-            .foregroundStyle(OmiColors.textTertiary)
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
         }
 
         Spacer()
@@ -229,38 +251,20 @@ struct ConversationsPage: View {
         // nothing is transcribing misleads the user into thinking capture is
         // active — during an actual meeting isTranscribing is already true and
         // the live transcript replaces this button.
-        if !appState.isTranscribing && listeningCaptureMode == .always {
+        if !appState.isTranscribing && audioRecordingMode == .always {
           startRecordingButton
         }
       }
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.top, OmiSpacing.lg)
       .padding(.bottom, OmiSpacing.md)
-      .background(OmiColors.backgroundPrimary)
+      .background(Color.clear)
 
       // The whole page below the header scrolls together. Floating action bars
       // (load-more, merge) stay pinned to the bottom via the ZStack overlay.
       ZStack(alignment: .bottom) {
         scrollingBody
         floatingActionBars
-      }
-    }
-    .overlay {
-      if isLiveTranscriptExpanded {
-        ConversationsLiveTranscriptFullScreen(
-          onCollapse: {
-            OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-              isLiveTranscriptExpanded = false
-            }
-          }
-        )
-        .transition(.opacity)
-      }
-    }
-    // Collapse the full-screen transcript if transcription stops while it's open.
-    .onChange(of: appState.isTranscribing) { _, isTranscribing in
-      if !isTranscribing {
-        isLiveTranscriptExpanded = false
       }
     }
   }
@@ -270,9 +274,9 @@ struct ConversationsPage: View {
   /// together. When `embedded`, the parent owns the scroll and this renders bare.
   @ViewBuilder private var scrollingBody: some View {
     let content = VStack(spacing: 0) {
-      // Live transcript while recording — updates as it's spoken. Click to
-      // expand it full screen.
-      if appState.isTranscribing {
+      // Live transcript while actually capturing. Only Meetings keeps a session
+      // armed with the mic paused (`isAwaitingMeeting`); that is not Live.
+      if appState.isLiveCapturing {
         ConversationsLiveTranscript(
           onExpand: {
             OmiMotion.withGated(.easeInOut(duration: 0.2)) {
@@ -302,6 +306,7 @@ struct ConversationsPage: View {
         .refreshable {
           await appState.refreshConversations()
         }
+        .glassScrollFade()
       }
     }
   }
@@ -314,13 +319,20 @@ struct ConversationsPage: View {
       if searchQuery.isEmpty && appState.canLoadMoreConversations
         && !(isMultiSelectMode && !selectedConversationIds.isEmpty)
       {
-        Button("Load older conversations") {
+        Button {
           Task {
             await appState.loadMoreConversations()
           }
+        } label: {
+          Text("Load older conversations")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(Ink.primary)
+            .padding(.horizontal, OmiSpacing.lg)
+            .frame(height: 34)
+            .glassFloatingBar(cornerRadius: 17)
         }
-        .buttonStyle(.bordered)
-        .padding(.bottom, OmiSpacing.md)
+        .buttonStyle(.plain)
+        .padding(.bottom, OmiSpacing.lg)
         .accessibilityIdentifier("conversations-load-more")
       }
 
@@ -356,11 +368,10 @@ struct ConversationsPage: View {
         Text(isMultiSelectMode ? "Done" : "Select")
           .scaledFont(size: OmiType.body, weight: .medium)
       }
-      .foregroundColor(isMultiSelectMode ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .foregroundColor(isMultiSelectMode ? Ink.primary : Ink.secondary)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .omiControlSurface(
-        fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
+      .glassChip(isActive: isMultiSelectMode)
     }
     .buttonStyle(.plain)
     .help(isMultiSelectMode ? "Exit selection" : "Select conversations to merge")
@@ -377,11 +388,10 @@ struct ConversationsPage: View {
         Text("Quick Note")
           .scaledFont(size: OmiType.body, weight: .medium)
       }
-      .foregroundColor(OmiColors.textSecondary)
+      .foregroundColor(Ink.secondary)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .omiControlSurface(
-        fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
+      .glassChip()
     }
     .buttonStyle(.plain)
   }
@@ -471,17 +481,17 @@ struct ConversationsPage: View {
           ProgressView()
           Text("Searching...")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if searchError != nil {
         VStack(spacing: OmiSpacing.md) {
           Image(systemName: "exclamationmark.triangle")
             .scaledFont(size: 32)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           Text("Couldn't search conversations. Check your connection and try again.")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -490,13 +500,13 @@ struct ConversationsPage: View {
         VStack(spacing: OmiSpacing.md) {
           Image(systemName: "magnifyingglass")
             .scaledFont(size: 32)
-            .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+            .foregroundColor(Ink.secondary)
           Text("No conversations found")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           Text("Try a different search term")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textQuaternary)
+            .foregroundColor(Ink.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
@@ -596,16 +606,10 @@ struct ConversationsPage: View {
           Text("Starred")
             .scaledFont(size: OmiType.caption, weight: .medium)
         }
-        .foregroundColor(appState.showStarredOnly ? OmiColors.amber : OmiColors.textSecondary)
+        .foregroundColor(appState.showStarredOnly ? PageGlass.starred : Ink.secondary)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
-        .omiControlSurface(
-          fill: appState.showStarredOnly
-            ? OmiColors.amber.opacity(0.16) : OmiColors.backgroundSecondary,
-          radius: 16,
-          stroke: appState.showStarredOnly
-            ? OmiColors.amber.opacity(0.36) : OmiColors.border.opacity(0.14)
-        )
+        .glassChip(isActive: appState.showStarredOnly)
       }
       .buttonStyle(.plain)
       .disabled(isFilteringStarred)
@@ -643,16 +647,10 @@ struct ConversationsPage: View {
               .scaledFont(size: OmiType.caption, weight: .medium)
           }
         }
-        .foregroundColor(appState.selectedDateFilter != nil ? .black : OmiColors.textSecondary)
+        .foregroundColor(appState.selectedDateFilter != nil ? Ink.primary : Ink.secondary)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
-        .omiControlSurface(
-          fill: appState.selectedDateFilter != nil
-            ? OmiColors.textPrimary : OmiColors.backgroundSecondary,
-          radius: 16,
-          stroke: appState.selectedDateFilter != nil
-            ? OmiColors.border.opacity(0.28) : OmiColors.border.opacity(0.14)
-        )
+        .glassChip(isActive: appState.selectedDateFilter != nil)
       }
       .buttonStyle(.plain)
       .disabled(isFilteringDate)
@@ -671,7 +669,7 @@ struct ConversationsPage: View {
         }) {
           Image(systemName: "xmark.circle.fill")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
@@ -701,7 +699,7 @@ struct ConversationsPage: View {
     }
     .padding()
     .frame(width: 300)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.surface)
   }
 
   private func formatFilterDate(_ date: Date) -> String {
@@ -717,7 +715,7 @@ struct ConversationsPage: View {
       // Selection count
       Text("\(selectedConversationIds.count) selected")
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Spacer()
 
@@ -738,7 +736,7 @@ struct ConversationsPage: View {
           ) ? "Deselect All" : "Select All"
         )
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
       }
       .buttonStyle(.plain)
 
@@ -759,18 +757,18 @@ struct ConversationsPage: View {
             .scaledFont(size: OmiType.body, weight: .semibold)
         }
         .foregroundColor(
-          selectedConversationIds.count >= 2 ? OmiColors.textPrimary : OmiColors.textTertiary
+          selectedConversationIds.count >= 2 ? Ink.surface : Ink.secondary
         )
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.vertical, OmiSpacing.sm)
         .background(
           Capsule()
-            .fill(selectedConversationIds.count >= 2 ? Color.white : OmiColors.backgroundTertiary)
+            .fill(selectedConversationIds.count >= 2 ? Ink.primary : Ink.rowFillHover)
         )
         .overlay(
           Capsule()
-            .stroke(
-              selectedConversationIds.count >= 2 ? OmiColors.border : Color.clear, lineWidth: 1)
+            .strokeBorder(
+              selectedConversationIds.count >= 2 ? Color.clear : Ink.separator, lineWidth: 1)
         )
       }
       .buttonStyle(.plain)
@@ -778,11 +776,7 @@ struct ConversationsPage: View {
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.md)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(OmiColors.backgroundTertiary)
-        .shadow(color: .black.opacity(0.3), radius: 10, y: -2)
-    )
+    .glassFloatingBar()
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.bottom, OmiSpacing.lg)
     .alert("Merge Conversations", isPresented: $showMergeConfirmation) {
@@ -855,11 +849,10 @@ struct ConversationsPage: View {
         Text("Start Recording")
           .scaledFont(size: OmiType.body, weight: .medium)
       }
-      .foregroundColor(.black)
+      .foregroundColor(Ink.surface)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .omiControlSurface(
-        fill: OmiColors.textPrimary, radius: 18, stroke: OmiColors.border.opacity(0.2))
+      .background(Capsule(style: .continuous).fill(Ink.primary))
     }
     .buttonStyle(.plain)
   }
@@ -905,7 +898,7 @@ private struct TranscriptNotesDivider: View {
 
   var body: some View {
     Rectangle()
-      .fill(isDragging ? OmiColors.textSecondary : OmiColors.border)
+      .fill(isDragging ? Ink.secondary : Ink.separator)
       .frame(width: 1)
       .contentShape(Rectangle().inset(by: -4))  // Larger hit area
       .onHover { hovering in
@@ -933,6 +926,6 @@ private struct TranscriptNotesDivider: View {
   #Preview {
     ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))
       .frame(width: 600, height: 800)
-      .background(OmiColors.backgroundSecondary)
+      .background(Ink.rowFill)
   }
 #endif

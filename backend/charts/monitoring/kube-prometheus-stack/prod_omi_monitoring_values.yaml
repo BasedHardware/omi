@@ -1,3 +1,15 @@
+## GKE manages the Kubernetes control plane; these customer-cluster scrape
+## targets do not exist and their default "down" alerts would page forever.
+## Component `enabled: false` already gates the whole PrometheusRule group in
+## kube-prometheus-stack, so no separate `defaultRules.disabled` entries —
+## flipping enabled back on must restore the alert automatically.
+kubeProxy:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+
 grafana:
   enabled: true
   serviceAccount:

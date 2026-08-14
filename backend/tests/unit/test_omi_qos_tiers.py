@@ -267,6 +267,7 @@ class TestModelQosProfiles:
             'app_generator',
             'persona_clone',
             'persona_chat_premium',
+            'desktop_proactive_reasoning',
         }
         nano_features = {
             'conv_app_select',
@@ -277,6 +278,7 @@ class TestModelQosProfiles:
             'smart_glasses',
             'persona_chat',
             'security_screen',
+            'desktop_proactive_extraction',
         }
         expected_openai = {
             **{feature: ('gpt-5.6-luna', 'openai') for feature in luna_features},
@@ -733,7 +735,7 @@ class TestExpandedCallsiteCoverage:
         calls = re.findall(r"get_llm\('(\w+)'", source)
         for key in ['memories', 'learnings', 'memory_category', 'memory_conflict']:
             assert key in calls, f"Missing get_llm('{key}') in memories.py"
-        assert calls.count('memories') == 2, "memories should appear exactly twice"
+        assert calls.count('memories') == 3, "memories should appear exactly three times"
 
     def test_knowledge_graph_all_keys(self):
         import re
@@ -1099,6 +1101,8 @@ class TestStructuredOutputFeatureTracking:
         expected = {
             'chat_extraction',
             'proactive_notification',
+            'desktop_proactive_extraction',
+            'desktop_proactive_reasoning',
             'translation',
             'conv_app_select',
             'external_structure',

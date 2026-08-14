@@ -268,6 +268,13 @@ class ShortcutSettings: ObservableObject {
     }
   }
 
+  /// PTT is observed system-wide. A bare character would start a voice turn whenever the user types
+  /// that character in another app, so every PTT binding needs at least one modifier. Modifier-only
+  /// presets (Option, Fn, Control, or Right Command) remain valid.
+  static func isSafePushToTalkShortcut(_ shortcut: KeyboardShortcut) -> Bool {
+    !shortcut.modifiers.isEmpty
+  }
+
   static let askOmiCommandOShortcut = KeyboardShortcut(keyCode: 31, keyDisplay: "O", modifiers: .command)
   static let askOmiCommandReturnShortcut = KeyboardShortcut(keyCode: 36, keyDisplay: "↩", modifiers: .command)
   static let askOmiCommandShiftReturnShortcut = KeyboardShortcut(
@@ -276,11 +283,12 @@ class ShortcutSettings: ObservableObject {
     modifiers: [.command, .shift]
   )
   static let askOmiCommandJShortcut = KeyboardShortcut(keyCode: 38, keyDisplay: "J", modifiers: .command)
-  // ⌘O is the default open hotkey again: it registers reliably via the
-  // dedicated Carbon hotkey (GlobalShortcutManager.registerCommandO), so it no
-  // longer collides with the universal "Open" shortcut the way a plain global
-  // registration did. ⌃⌥O stays defined as a conflict-free alternative users can
-  // bind, but is no longer the default or a preset.
+  /// The app's own always-on summon chord (`GlobalShortcutManager.registerSummonHotkey`), also
+  /// offered as an Ask-Omi binding. It is the only offered chord that takes nothing from anywhere
+  /// else: ⌘O is File ▸ Open everywhere, and Option-based combos collide with push-to-talk.
+  static let askOmiControlCommandOShortcut = KeyboardShortcut(
+    keyCode: 31, keyDisplay: "O", modifiers: [.control, .command])
+  // ⌃⌥O stays defined as an alternative users can bind, but is not the default or a preset.
   static let askOmiControlOptionOShortcut = KeyboardShortcut(
     keyCode: 31, keyDisplay: "O", modifiers: [.control, .option])
   static let defaultAskOmiShortcut = askOmiCommandOShortcut
@@ -316,6 +324,13 @@ class ShortcutSettings: ObservableObject {
     didSet {
       UserDefaults.standard.set(askOmiEnabled, forKey: "shortcut_askOmiEnabled")
       postAskOmiShortcutChangedIfNeeded()
+    }
+  }
+
+  @Published var floatingBarNotificationPreviewsEnabled: Bool {
+    didSet {
+      UserDefaults.standard.set(
+        floatingBarNotificationPreviewsEnabled, forKey: .floatingBarNotificationPreviewsEnabled)
     }
   }
 
@@ -359,6 +374,28 @@ class ShortcutSettings: ObservableObject {
 
   /// Empty means Automatic. A non-empty value is a stable CoreAudio device UID
   /// selected specifically for push-to-talk, independent of the macOS default input.
+  /// The one microphone choice, shared by transcription and push-to-talk.
+  ///
+  /// Push-to-talk used to carry its own picker in Shortcuts settings, so a user could
+  /// select a microphone in one place and still be recorded by another. There is one
+  /// physical microphone; there is now one setting, the transcription one.
+  static var unifiedMicrophoneUID: String {
+    migratePTTMicrophoneChoiceIfNeeded()
+    return UserDefaults.standard.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+  }
+
+  /// Carry a PTT-only choice into the shared setting once, so unifying does not silently
+  /// discard a microphone the user deliberately picked.
+  static func migratePTTMicrophoneChoiceIfNeeded() {
+    let defaults = UserDefaults.standard
+    guard !defaults.bool(forKey: .shortcutPTTMicrophoneMergedIntoPreferred) else { return }
+    defaults.set(true, forKey: .shortcutPTTMicrophoneMergedIntoPreferred)
+    let legacy = defaults.string(forKey: DefaultsKey.shortcutPTTInputDeviceUID.rawValue) ?? ""
+    let current = defaults.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+    guard !legacy.isEmpty, current.isEmpty else { return }
+    defaults.set(legacy, forKey: AudioCaptureService.preferredInputUIDDefaultsKey)
+  }
+
   @Published var pttInputDeviceUID: String {
     didSet { UserDefaults.standard.set(pttInputDeviceUID, forKey: .shortcutPTTInputDeviceUID) }
   }
@@ -572,15 +609,18 @@ class ShortcutSettings: ObservableObject {
   private static let pttShortcutDefaultsKey = "shortcut_pttKey"
 
   private init() {
+    let restoredPTT = Self.loadShortcut(
+      forKey: Self.pttShortcutDefaultsKey,
+      legacyMapper: Self.legacyPTTShortcut
+    )
     self.pttShortcut =
-      Self.loadShortcut(
-        forKey: Self.pttShortcutDefaultsKey,
-        legacyMapper: Self.legacyPTTShortcut
-      ) ?? Self.pttPresets[0]
+      restoredPTT.flatMap { Self.isSafePushToTalkShortcut($0) ? $0 : nil }
+      ?? Self.pttPresets[0]
 
-    // ⌘O registers reliably now via the dedicated Carbon hotkey
-    // (GlobalShortcutManager.registerCommandO), so a saved ⌘O binding is honored
-    // as-is — no ⌘O → ⌃⌥O migration.
+    // A saved ⌘O binding is honored as-is — no ⌘O → ⌃⌥O migration. It does register and it does
+    // fire globally; what it also does is consume ⌘O before any other app sees it. That is a cost
+    // to disclose at the point of choosing (see `openShortcutOptions`), not to silently rewrite
+    // out from under someone who deliberately picked it.
     self.askOmiShortcut =
       Self.loadShortcut(
         forKey: Self.askOmiShortcutDefaultsKey,
@@ -588,6 +628,8 @@ class ShortcutSettings: ObservableObject {
       ) ?? Self.defaultAskOmiShortcut
 
     self.askOmiEnabled = UserDefaults.standard.object(forKey: "shortcut_askOmiEnabled") as? Bool ?? true
+    self.floatingBarNotificationPreviewsEnabled =
+      UserDefaults.standard.object(forKey: .floatingBarNotificationPreviewsEnabled) as? Bool ?? true
     self.pttEnabled = UserDefaults.standard.object(forKey: "shortcut_pttEnabled") as? Bool ?? true
     self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
     self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false

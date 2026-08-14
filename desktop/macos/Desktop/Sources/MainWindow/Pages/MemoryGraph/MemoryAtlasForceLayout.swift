@@ -257,18 +257,6 @@ enum MemoryAtlasForceLayout {
   /// 2.1, and on the even fixture it is unchanged at 1.95.
   static let communitySeparation = 0.4
 
-  /// How far past the drawing area the unconnected entities ring the map, as a
-  /// fraction of its half-extent.
-  ///
-  /// Enough to read as "outside", and no more. This used to be 0.07 with a
-  /// further 0.05 per ring on top, which put a lone entity most of a
-  /// canvas-width from anything it could be compared to — the map looked like
-  /// it had shed debris. The floor is the drawing area itself and cannot go
-  /// lower: everything the relaxation placed is fitted inside it, so coming any
-  /// closer would put an entity with no relationships among entities whose
-  /// positions mean something.
-  static let haloClearance = 0.05
-
   /// What share of the map the fit is required to fit.
   ///
   /// Not all of it, and now not almost all of it either. The relaxation leaves a
@@ -1425,62 +1413,63 @@ enum MemoryAtlasForceLayout {
 
   /// Entities with no relationships at all. They carry no spatial information,
   /// so scattering them through the middle would have the map assert structure
-  /// that is not there. A faint outer halo says what is true: present, not
-  /// connected to anything yet.
-  /// Each group takes one place on the rim and its members cluster there.
-  ///
-  /// Stringing every entity along the perimeter one slot at a time produced
-  /// visibly even rows and columns of dots down the edges of the canvas, which
-  /// read as a rendering artefact rather than as content. Placing a
-  /// three-entity island as one small clump says what is true — these three
-  /// know each other and nothing else — and looks deliberate.
+  /// that is not there — and placing them among the communities dilutes the
+  /// neighbourhoods the relaxation just recovered. A peripheral band says what
+  /// is true: present, not connected to anything yet. Each group takes one seat
+  /// in the band and its members cluster there. The band is a circular annulus
+  /// hugging the semantic core rather than a rim following the area's
+  /// silhouette: at real-account isolate counts a silhouette rim wraps into
+  /// nested rectangles clamped into the canvas corners — a drawn border.
   static func haloPositions(groups: [[String]], area: CGRect) -> [String: CGPoint] {
     guard !groups.isEmpty else { return [:] }
 
     var positions: [String: CGPoint] = [:]
-    let perRing = 44
+    let baseRadius = Double(min(area.width, area.height)) * 0.5
+    let clump = Double(min(area.width, area.height)) * 0.016
+    // Positions are normalized, so the unit square is the canvas; the band ends
+    // at the margin the layout has always respected.
+    let canvasReach =
+      min(
+        min(Double(area.midX), 1 - Double(area.midX)),
+        min(Double(area.midY), 1 - Double(area.midY))) - 0.04
+    let innerRadius = baseRadius * 0.92
+    // Seats stop one clump short of the band's edge, so a clustered island can
+    // never poke through the canvas margin.
+    let outerRadius =
+      max(innerRadius + clump, min(baseRadius * 1.27, canvasReach) - clump)
+    let goldenAngle = Double.pi * (3 - sqrt(5))
+    let seatClearance = max(baseRadius * 0.05, clump * 2.8)
+    var occupiedSeats: [CGPoint] = []
     for (offset, group) in groups.enumerated() {
-      let ring = offset / perRing
-      let indexInRing = offset % perRing
-      let occupancy = min(groups.count - ring * perRing, perRing)
-      // Deterministic per-slot jitter, so the rim reads as scattered rather
-      // than as a dotted rule drawn around the map.
-      let wobble = (stableFraction("halo-\(group.first ?? "")") - 0.5) * 0.9
-      let angle = 2 * Double.pi * (Double(indexInRing) + 0.5 + wobble) / Double(max(occupancy, 1))
+      // Golden-angle seats avoid ruled rows; a uniform-area radial sample fills
+      // the band instead of drawing a hollow ring. Re-seed only on collision so
+      // the field stays deterministic.
+      let seed = group.sorted().first ?? ""
+      var seat = CGPoint.zero
+      for attempt in 0..<24 {
+        let sequence = Double(offset + attempt * groups.count)
+        let wobble = (stableFraction("halo-\(seed)-\(attempt)") - 0.5) * 0.11
+        let angle = sequence * goldenAngle + wobble
+        let radialFraction = stableFraction("depth-\(seed)-\(attempt)")
+        let reach = sqrt(
+          innerRadius * innerRadius + (outerRadius * outerRadius - innerRadius * innerRadius) * radialFraction)
+        let candidate = CGPoint(
+          x: area.midX + CGFloat(cos(angle) * reach),
+          y: area.midY + CGFloat(sin(angle) * reach))
+        seat = candidate
+        if !occupiedSeats.contains(where: { hypot($0.x - candidate.x, $0.y - candidate.y) < seatClearance }) {
+          break
+        }
+      }
+      occupiedSeats.append(seat)
 
-      // Seated just outside where the structure actually reaches in *this*
-      // direction, rather than on a fixed rim around everything.
-      //
-      // The map is not a disc and its shape changes with the account. A rim at
-      // a constant multiple of the drawing area strands an unconnected entity
-      // halfway across empty canvas whenever the structure happens to stop
-      // early on that side — which is most sides, since the fit only guarantees
-      // the *furthest* entities reach the edge. Following the silhouette keeps
-      // the same claim (outside everything, connected to nothing) at a distance
-      // that reads as deliberate instead of as debris.
-      //
-      // Depth still varies per seat: the band has to look scattered, or a run
-      // of singletons draws an evenly spaced arc that reads as a rendering
-      // artefact rather than as content.
-      let depth = 0.98 + 0.16 * stableFraction("depth-\(group.first ?? "")")
-      let spread = (1.0 + haloClearance + 0.03 * Double(ring)) * depth
-      let halfWidth = Double(area.width) / 2 * spread
-      let halfHeight = Double(area.height) / 2 * spread
-      let reach = 1 / max(abs(cos(angle)) / halfWidth, abs(sin(angle)) / halfHeight)
-      let seat = CGPoint(
-        x: area.midX + CGFloat(cos(angle) * reach),
-        y: area.midY + CGFloat(sin(angle) * reach))
-
-      let clump = Double(min(area.width, area.height)) * 0.016
       for (memberIndex, id) in group.sorted().enumerated() {
         let memberAngle =
           stableFraction(id) * 2 * .pi + Double(memberIndex) * 2.399_963_229_728_653
         let radius = group.count == 1 ? 0 : clump * (0.6 + 0.4 * stableFraction("r-\(id)"))
-        positions[id] = clamp(
-          CGPoint(
-            x: seat.x + CGFloat(cos(memberAngle) * radius),
-            y: seat.y + CGFloat(sin(memberAngle) * radius)),
-          to: CGRect(x: 0.02, y: 0.04, width: 0.96, height: 0.92))
+        positions[id] = CGPoint(
+          x: seat.x + CGFloat(cos(memberAngle) * radius),
+          y: seat.y + CGFloat(sin(memberAngle) * radius))
       }
     }
     return positions
@@ -1502,6 +1491,7 @@ enum MemoryAtlasForceLayout {
       x: min(max(point.x, rect.minX), rect.maxX),
       y: min(max(point.y, rect.minY), rect.maxY))
   }
+
 }
 
 // MARK: - Barnes–Hut

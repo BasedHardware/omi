@@ -217,7 +217,7 @@ class TestVadHttpxMigration:
     def test_vad_hosted_has_timeout(self):
         """Hosted VAD call must have explicit timeout to prevent hanging."""
         src = _read_source('utils/stt/vad.py')
-        assert 'timeout=300' in src
+        assert 'timeout=_hosted_vad_timeout_seconds()' in src
 
     def test_vad_no_threading_thread(self):
         """No bare threading.Thread usage in VAD module."""

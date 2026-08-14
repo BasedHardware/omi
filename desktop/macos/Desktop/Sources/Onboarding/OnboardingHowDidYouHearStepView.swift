@@ -82,7 +82,7 @@ struct OnboardingHowDidYouHearStepView: View {
 
           if hadSelectionOnAppear {
             Button("Continue", action: onContinue)
-              .buttonStyle(OmiButtonStyle(.primary))
+              .buttonStyle(InkButtonStyle(kind: .primary))
               .keyboardShortcut(.defaultAction)
           }
         }
@@ -98,6 +98,12 @@ struct OnboardingHowDidYouHearStepView: View {
     }
   }
 
+  /// The leading mark on each chip.
+  ///
+  /// The two drawn marks keep their brand fill and their **white** knockout, and that is deliberate
+  /// rather than a missed conversion: the glyph sits on YouTube red and Product Hunt orange, not on
+  /// the glass, so `Ink.primary` here would set a near-black play triangle on saturated red. These
+  /// are the only two `.white`s in this file and neither is on the panel.
   @ViewBuilder
   private func glyphView(_ glyph: SourceGlyph) -> some View {
     switch glyph {

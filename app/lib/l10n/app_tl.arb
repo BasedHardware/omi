@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "Ang iyong plan ay magre-renew sa {date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "Free Plan",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10567,6 +10557,7 @@
     "syncStatusWaiting": "Naghihintay na mag-sync",
     "syncStatusRetrying": "Hindi naproseso — sinusubukang muli",
     "syncStatusFailed": "Nabigo — i-tap ang Subukan Muli",
+    "syncStatusTooOld": "Masyadong luma para i-sync — hindi ito matatanggap ng Omi",
     "syncStatusFileUnavailable": "Hindi available ang file",
     "syncStatusUploaded": "Na-upload · pinoproseso sa Omi",
     "noRecordingsYet": "Wala pang mga recording",
@@ -10766,5 +10757,28 @@
     "whisperModelSizeLarge": "Malaki",
     "whisperModelSizeMedium": "Katamtaman",
     "whisperModelSizeSmall": "Maliit",
-    "whisperModelSizeTiny": "Napakaliit"
+    "whisperModelSizeTiny": "Napakaliit",
+    "planSheetChooseYourPlan": "Piliin ang iyong plano para ma-unlock ang walang limitasyong Omi.",
+    "availableOnMacMobileWeb": "Available sa Mac, mobile, at web",
+    "popularBadge": "SIKAT",
+    "worksOnDesktop": "Gumagana sa desktop",
+    "noDesktopAccess": "Hindi gumagana sa desktop",
+    "annualBillingSummary": "{months} buwan / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 buwang libre} other{{count} buwang libre}}",
+    "freemiumLimitsIntro": "Libre ang Omi, pero may mga limitasyon ang libreng bersyon na nakakaapekto sa iyong karanasan:",
+    "downgradeLimitDelayNotRealTime": "5-7 segundong delay (hindi real-time)",
+    "downgradeToFreemiumAction": "Lumipat sa libreng bersyon",
+    "getFreeUnlimitedAccess": "Kumuha ng libreng walang limitasyong access",
+    "shareDataForTraining": "Magbahagi ng data para sa training",
+    "yourRequestUnderReview": "Sinusuri ang iyong kahilingan",
+    "pinAsBaseline": "I-pin bilang baseline",
+    "unpinAsBaseline": "Alisin sa baseline",
+    "baselineMemory": "Baseline na memorya",
+    "alwaysInContext": "Palaging nasa konteksto",
+    "accountCutoverUpdateRequiredTitle": "Pembaruan diperlukan",
+    "accountCutoverUpdateRequiredMessage": "Instal aplikasi Omi terbaru untuk melanjutkan setelah migrasi akun.",
+    "accountCutoverMigrationInProgressTitle": "Migrasi sedang berlangsung",
+    "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
+    "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
+    "accountCutoverOpenStore": "Buka toko"
 }
