@@ -122,6 +122,39 @@ extension Capability {
     }
 }
 
+// MARK: - The connector line
+
+/// What the popover's Claude line says and offers, as a value.
+///
+/// A value for the reason `AccountPresentation` is one, and for one more: this line is the tallest
+/// thing on the surface. `Connected to Claude Code and Claude Desktop` does not fit the popover's
+/// text column on one line, so the sentence naming *both* surfaces is the state that makes the
+/// connection/account block outgrow whatever room the popover reserves for it — and it is decided by
+/// two booleans read off two config files this process does not own, which nothing hermetic can
+/// arrange on disk. Reducing it to a function of those booleans is what puts the multi-line state,
+/// and the note that can appear under it, inside reach of a measurement.
+struct ClaudeConnectorLine: Equatable {
+    var summary: String
+    /// `ClaudeRegistrar`'s sentence from the last press, when there was one.
+    var note: String?
+    var isConnected: Bool
+    /// The one press, or `nil` once there is nothing left to connect. It carries the in-flight state
+    /// rather than a second control, which is what stops a second press starting a second write.
+    var action: String?
+
+    init(claudeCode: Bool, claudeDesktop: Bool, note: String?, isConnecting: Bool) {
+        switch (claudeCode, claudeDesktop) {
+        case (true, true): summary = "Connected to Claude Code and Claude Desktop"
+        case (true, false): summary = "Connected to Claude Code"
+        case (false, true): summary = "Connected to Claude Desktop"
+        case (false, false): summary = "Not connected to Claude"
+        }
+        isConnected = claudeCode || claudeDesktop
+        self.note = note
+        action = isConnected ? nil : (isConnecting ? "Connecting…" : "Connect")
+    }
+}
+
 // MARK: - The account line
 
 /// Everything the popover's account line says and offers, as a value rather than as four `if`s

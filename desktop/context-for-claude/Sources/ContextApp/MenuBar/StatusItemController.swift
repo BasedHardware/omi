@@ -44,23 +44,7 @@ final class StatusItemController: NSObject {
         item.button?.toolTip = "Context for Claude"
         self.item = item
 
-        let popover = NSPopover()
-        popover.behavior = .transient
-        popover.contentSize = NSSize(width: 320, height: 380)
-        popover.contentViewController = NSHostingController(rootView: StatusView())
-        // Pinned light, like every other surface this app draws.
-        //
-        // This reverses an earlier decision, and the reason is worth keeping: the popover used to
-        // follow the system on the argument that it is a system surface sitting beside other menu
-        // bar extras. That argument loses to a stronger one — the popover is *this app's* panel, and
-        // when the onboarding card, the timeline, settings and the coach marks are all light frosted
-        // glass, a popover that is near-black on a Dark machine is the one surface that does not look
-        // like the product. `.appearance` on the popover reaches its content view controller, so the
-        // vibrancy behind it and `Ink`'s dynamic colours resolve in the same appearance the rest of
-        // the app's glass does — which is also what keeps the label ladder's contrast measurements
-        // true here.
-        popover.appearance = InkGlass.appearance
-        self.popover = popover
+        self.popover = Self.makePopover()
 
         // The icon answers "is it listening?" without a click, so it has to follow the engine
         // rather than be set once at launch — and it follows `health` rather than a boolean, because
@@ -73,6 +57,47 @@ final class StatusItemController: NSObject {
                 self?.item?.button?.toolTip = Self.tooltip(for: health)
             }
             .store(in: &cancellables)
+    }
+
+    /// The popover, built the way it ships.
+    ///
+    /// A factory rather than six lines inside `install()`, because its height is the thing that broke
+    /// and nothing outside this file could see it: a test can build this and measure it, and cannot
+    /// install a status item.
+    ///
+    /// **The height belongs to the content, and must not be pinned again.** This was `320 × 380` over
+    /// a `StatusView` that measures 384 pt in the plainest state and past 470 pt in the reported one —
+    /// both Claude surfaces named in one sentence that wraps to two lines, the account line under it,
+    /// and an upload error under that. SwiftUI answers an under-proposed `VStack` by shrinking the
+    /// children that can shrink, and every line in the connection/account block is
+    /// `.fixedSize(horizontal: false, vertical: true)` exactly so that it will not — so those three
+    /// sentences were laid out on top of one another and the block was unreadable. Nothing clipped,
+    /// nothing logged, and it had to be reported from a screenshot.
+    ///
+    /// `.preferredContentSize` is the size `NSPopover` reads, and it is the only sizing option that
+    /// also grows the panel *while it is open*, which is when this block changes:
+    /// `ConversationUploader` publishes its backlog and its errors into a popover the user is already
+    /// looking at. The width stays `StatusView.popoverWidth`, applied by the view itself; nothing here
+    /// needs to know it.
+    static func makePopover() -> NSPopover {
+        let popover = NSPopover()
+        popover.behavior = .transient
+        let content = NSHostingController(rootView: StatusView())
+        content.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = content
+        // Pinned light, like every other surface this app draws.
+        //
+        // This reverses an earlier decision, and the reason is worth keeping: the popover used to
+        // follow the system on the argument that it is a system surface sitting beside other menu
+        // bar extras. That argument loses to a stronger one — the popover is *this app's* panel, and
+        // when the onboarding card, the timeline, settings and the coach marks are all light frosted
+        // glass, a popover that is near-black on a Dark machine is the one surface that does not look
+        // like the product. `.appearance` on the popover reaches its content view controller, so the
+        // vibrancy behind it and `Ink`'s dynamic colours resolve in the same appearance the rest of
+        // the app's glass does — which is also what keeps the label ladder's contrast measurements
+        // true here.
+        popover.appearance = InkGlass.appearance
+        return popover
     }
 
     /// The glyph for each health state. A pure function so the mapping is assertable without a menu

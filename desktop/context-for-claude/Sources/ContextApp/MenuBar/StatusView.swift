@@ -69,6 +69,10 @@ struct StatusView: View {
     /// The height AppKit gives a menu item, matched by `InkPermissionRow`'s native row.
     private static let rowHeight = InkPermissionRow.menuRowHeight
 
+    /// The panel's width, and the only dimension of it that is fixed. The height is its content's
+    /// own — see `StatusItemController.makePopover()` for what pinning that did.
+    static let popoverWidth: CGFloat = 320
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             statusBlock
@@ -84,7 +88,7 @@ struct StatusView: View {
         // vertically, because the rows carry their own height.
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .frame(width: 320)
+        .frame(width: Self.popoverWidth)
         .onAppear(perform: refresh)
         .onReceive(tick) { _ in engine.refreshCapabilities() }
     }
@@ -127,7 +131,7 @@ struct StatusView: View {
     /// plus the 6 pt gap after it, which is where a menu item's title starts. Lines that sit outside
     /// a row (the transcript line, the Claude line, the account line) are inset by hand to land on
     /// it; a menu whose text has two left margins is the other half of looking counterfeit.
-    private static let rowTextInset: CGFloat = 18
+    static let rowTextInset: CGFloat = 18
 
     /// The single best proof-of-life in the product. A line landing here means the capture stack,
     /// the transcriber and the store are all alive — nothing else in this popover proves that.
@@ -247,23 +251,24 @@ struct StatusView: View {
     // MARK: - Claude
 
     private var claudeLine: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        let line = connector
+        return VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(claudeSummary)
+                Text(line.summary)
                     .font(.system(size: Self.menuFontSize))
                     // Not connected is the state with something to do about it, so it is the state
                     // that gets full contrast. Settled recedes to secondary.
-                    .foregroundStyle(isConnected ? Ink.secondary : Ink.primary)
+                    .foregroundStyle(line.isConnected ? Ink.secondary : Ink.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Spacer(minLength: 8)
 
-                if !isConnected {
+                if let action = line.action {
                     // The label carries the in-flight state rather than a third colour: the popover's
                     // faint rung is spent (`InkGlassTests` counts it), and a word is a better signal
                     // than a shade in any case — the press writes two of Claude's config files, and
                     // saying so is what stops a second press.
-                    Button(isConnecting ? "Connecting…" : "Connect", action: connect)
+                    Button(action, action: connect)
                         .buttonStyle(.plain)
                         .font(.system(size: Self.menuFontSize))
                         .foregroundStyle(Ink.accent)
@@ -272,8 +277,8 @@ struct StatusView: View {
             }
             .frame(minHeight: Self.rowHeight)
 
-            if let claudeNote, !claudeNote.isEmpty {
-                Text(claudeNote)
+            if let note = line.note, !note.isEmpty {
+                Text(note)
                     .font(.system(size: Self.menuSmallFontSize))
                     .foregroundStyle(Ink.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -382,15 +387,14 @@ struct StatusView: View {
         return nil
     }
 
-    private var isConnected: Bool { claude.claudeCode || claude.claudeDesktop }
-
-    private var claudeSummary: String {
-        switch (claude.claudeCode, claude.claudeDesktop) {
-        case (true, true): return "Connected to Claude Code and Claude Desktop"
-        case (true, false): return "Connected to Claude Code"
-        case (false, true): return "Connected to Claude Desktop"
-        case (false, false): return "Not connected to Claude"
-        }
+    /// The Claude line as a value, for the reason `account` is one: this view keeps no judgement of
+    /// its own about a state it cannot be driven through in a test.
+    private var connector: ClaudeConnectorLine {
+        ClaudeConnectorLine(
+            claudeCode: claude.claudeCode,
+            claudeDesktop: claude.claudeDesktop,
+            note: claudeNote,
+            isConnecting: isConnecting)
     }
 
     /// Same shape as `refresh()`, and for the same reason: `register()` reads, decodes and rewrites
