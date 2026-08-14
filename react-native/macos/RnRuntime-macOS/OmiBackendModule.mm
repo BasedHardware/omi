@@ -200,15 +200,26 @@ RCT_REMAP_METHOD(request,
   NSSet<NSString *> *methods = [NSSet setWithArray:@[ @"GET", @"POST", @"PATCH", @"DELETE" ]];
   NSSet<NSString *> *schemes = [NSSet setWithArray:@[ @"http", @"https" ]];
   if (requestId.length == 0 || ![methods containsObject:method] || ![path hasPrefix:@"/"] ||
-      [path hasPrefix:@"//"] || [path containsString:@"://"] || self.baseURL == nil ||
-      ![schemes containsObject:self.baseURL.scheme.lowercaseString] || self.baseURL.host.length == 0 ||
-      self.token.length == 0 || self.clientId.length == 0) {
-    reject(@"OMI_HTTP_INVALID_REQUEST", @"Native HTTP request is unavailable or invalid", nil);
+      [path hasPrefix:@"//"] || [path containsString:@"://"]) {
+    reject(@"OMI_HTTP_INVALID_REQUEST", @"Native HTTP request is invalid", nil);
+    return;
+  }
+  if (self.baseURL == nil || ![schemes containsObject:self.baseURL.scheme.lowercaseString] ||
+      self.baseURL.host.length == 0 || self.token.length == 0 || self.clientId.length == 0) {
+    reject(@"OMI_HTTP_UNCONFIGURED", @"Native HTTP configuration is unavailable", nil);
     return;
   }
   NSURL *url = [NSURL URLWithString:path relativeToURL:self.baseURL].absoluteURL;
-  if (url == nil || ![url.scheme isEqualToString:self.baseURL.scheme] ||
-      ![url.host isEqualToString:self.baseURL.host] || ![url.port isEqual:self.baseURL.port]) {
+  NSInteger basePort = self.baseURL.port != nil
+      ? self.baseURL.port.integerValue
+      : ([self.baseURL.scheme.lowercaseString isEqualToString:@"https"] ? 443 : 80);
+  NSInteger requestPort = url.port != nil
+      ? url.port.integerValue
+      : ([url.scheme.lowercaseString isEqualToString:@"https"] ? 443 : 80);
+  BOOL schemeMatches = url != nil && [url.scheme caseInsensitiveCompare:self.baseURL.scheme] == NSOrderedSame;
+  BOOL hostMatches = url != nil && [url.host caseInsensitiveCompare:self.baseURL.host] == NSOrderedSame;
+  BOOL portMatches = url != nil && requestPort == basePort;
+  if (!schemeMatches || !hostMatches || !portMatches) {
     reject(@"OMI_HTTP_INVALID_REQUEST", @"Native HTTP request is unavailable or invalid", nil);
     return;
   }
