@@ -116,7 +116,7 @@ function main() {
   rmSync(receipt, { force: true });
 
   const query = new URLSearchParams({ qa: manifest.domain, polish: "1", state: manifest.state, theme: manifest.theme, platform: manifest.shell === "macos" ? "desktop" : "mobile", accessibility: manifest.accessibility }).toString();
-  const launcher = manifest.shell === "macos" ? path.join(toolRoot, "shells/macos/scripts/dev-run-macos.sh") : path.join(toolRoot, "shells/ios/scripts/dev-run-ios.sh");
+  const launcher = manifest.shell === "macos" ? path.join(toolRoot, "shells/macos/scripts/dev-capture-macos.sh") : path.join(toolRoot, "shells/ios/scripts/dev-run-ios.sh");
   const launcherArgs = ["--fixture", manifest.domain, "--state", manifest.state, "--theme", manifest.theme, "--accessibility", manifest.accessibility, "--run-id", manifest.run_id, "--capture-out", output];
   if (manifest.shell === "macos") launcherArgs.push("--viewport-width", String(manifest.viewport.width), "--viewport-height", String(manifest.viewport.height));
   const started = isoNow();

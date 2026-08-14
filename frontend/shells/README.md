@@ -30,8 +30,8 @@ called out below:
 | `--api <url>` / `OMI_API_BASE_URL` | Backend base URL. Default `http://127.0.0.1:4851`. |
 | `OMI_API_TOKEN` | Dev credential, held by the **shell**, never given to the page. |
 | `OMI_DEV_TOKEN_ISSUER_URL` | Optional dev-mode issuer; used when no token is set. |
-| `--fixture <name>` | iOS visual-QA **FIXTURE** mode — deterministic in-page data, bridge bypassed; never registered/local-production evidence. |
-| `--route <name>` | Live route to open. Default `home`. |
+| `--fixture <name>` | iOS visual-QA **FIXTURE** mode — deterministic in-page data, bridge bypassed; never registered/local-production evidence. macOS fixture capture is `macos/scripts/dev-capture-macos.sh`, not the live launcher. |
+| `--generation <legacy\|platform>` | Live Memories generation. Default `platform` so a plain launch shows served platform rows; `legacy` keeps the old UI reachable. |
 | `--accept` | Headless acceptance run; exits nonzero on **zero** served traffic. |
 | `--device <udid>` | iOS only. Defaults to the booted simulator. |
 

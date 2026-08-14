@@ -279,7 +279,7 @@ function validateGuardedPreparation(preparation, manifest, inputPath, inputBytes
   const guardedArgs = command.argv.slice(exactGuardPrefix.length + 1);
   if (manifest.shell === "macos") {
     const expected = [
-      path.join(macRoot, "scripts/dev-run-macos.sh"),
+      path.join(macRoot, "scripts/dev-capture-macos.sh"),
       "--fixture", runtimeFixtureName(manifest.domain),
       "--state", manifest.state,
       "--theme", manifest.theme,
@@ -433,7 +433,7 @@ export function requireIosDiskHeadroom(outputDir, minimumFreeBytes = iosMinimumF
 }
 
 function runMac(manifest, outputDir) {
-  const launcher = path.join(macRoot, "scripts/dev-run-macos.sh");
+    const launcher = path.join(macRoot, "scripts/dev-capture-macos.sh");
   const screenshot = path.join(outputDir, "probe.png");
   prepareRuntimeOutputDir(outputDir);
   const env = allowedEnvironment();

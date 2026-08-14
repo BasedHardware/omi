@@ -50,7 +50,7 @@ function writePreparation(file, m, artifactPath, artifactBytes) {
   const guard = path.join(root, "shells/tools/macos-foreground-guard.mjs");
   const outputDir = path.dirname(artifactPath);
   const guarded = m.shell === "macos"
-    ? ["/bin/bash", path.join(root, "shells/macos/scripts/dev-run-macos.sh"), "--fixture", runtimeFixtureName(m.domain), "--state", m.state, "--theme", m.theme, "--accessibility", m.accessibility, "--run-id", m.run_id, "--capture-out", path.join(outputDir, "probe.png"), "--viewport-width", String(m.viewport.width), "--viewport-height", String(m.viewport.height)]
+    ? ["/bin/bash", path.join(root, "shells/macos/scripts/dev-capture-macos.sh"), "--fixture", runtimeFixtureName(m.domain), "--state", m.state, "--theme", m.theme, "--accessibility", m.accessibility, "--run-id", m.run_id, "--capture-out", path.join(outputDir, "probe.png"), "--viewport-width", String(m.viewport.width), "--viewport-height", String(m.viewport.height)]
     : ["xcodebuild", "test", "-project", path.join(root, "shells/ios/app/ios/Runner.xcodeproj"), "-scheme", "Runner", "-destination", `platform=iOS Simulator,id=${m.device.udid}`, "-only-testing", "RunnerUITests/NativeRuntimeEvidenceUITests/testNativeRuntimeEvidence", "-parallel-testing-enabled", "NO", "-derivedDataPath", path.join(outputDir, "DerivedData"), "-resultBundlePath", path.join(outputDir, "Runner.xcresult"), "CODE_SIGNING_ALLOWED=NO", "FLUTTER_ROOT=/opt/flutter"];
   writeFileSync(file, `${JSON.stringify({
     schema: "omi.polish.runtime-preparation/v1",
@@ -102,7 +102,7 @@ test("native shell custody is explicit and browser shortcuts are absent", () => 
   const appDelegate = readFileSync(path.join(root, "shells/ios/app/ios/Runner/AppDelegate.swift"), "utf8");
   const iosTest = readFileSync(path.join(root, "shells/ios/app/ios/RunnerUITests/NativeRuntimeEvidenceUITests.swift"), "utf8");
   const macHost = readFileSync(path.join(root, "shells/macos/shell/Sources/OmiShell/main.swift"), "utf8");
-  assert.match(source, /dev-run-macos\.sh/);
+  assert.match(source, /dev-capture-macos\.sh/);
   assert.match(source, /OMI_PROBE_JS/);
   assert.match(source, /OMI_PROBE_PENDING_VALUE/);
   assert.match(source, /OMI_PROBE_MAX_ATTEMPTS/);
