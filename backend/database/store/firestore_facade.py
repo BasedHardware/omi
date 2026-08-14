@@ -338,55 +338,36 @@ class _Query:
         return self
 
     def _resolve_start_after(self) -> Optional[Dict[str, Any]]:
-        """Translate a Firestore ``start_after`` cursor into the store's ``{value, id}`` keyset.
-
-        The store supports a single order field plus a document-id tiebreak. A snapshot cursor yields
-        its order-field value + id; a ``{'__name__': ref}`` cursor is a document-name keyset. The only
-        multi-field form the domain uses is ``(field, __name__)`` (historical/canonical memory scans),
-        which maps cleanly onto the ``{value, id}`` keyset; any other multi-field order_by cannot be
-        represented, so reject those rather than page incorrectly."""
+        """Translate a Firestore ``start_after`` cursor into the store's composite keyset
+        ``{"values": [<one per REAL order field>], "id": <document id>}``. A trailing ``__name__`` order
+        is the document-id tiebreak (it maps to ``id``, not a ``values`` entry). Accepts a DocumentSnapshot
+        (reads each order field off it) or a Firestore-style ``{field: value, __name__: ref}`` dict."""
         cur = self._start_after
         if cur is None:
             return None
-        if len(self._order_by) == 2 and self._order_by[1][0] == "__name__":
-            # (field, __name__) composite -> {value: field's cursor value, id: document id}
-            order_field = self._order_by[0][0]
-            if hasattr(cur, "to_dict"):  # DocumentSnapshot
-                data = cur.to_dict() or {}
-                return {"value": data.get(order_field), "id": getattr(cur, "id", None)}
-            if isinstance(cur, dict):
-                ref = cur.get("__name__")
-                doc_id = getattr(ref, "id", None) or (str(ref).rsplit("/", 1)[-1] if ref is not None else "")
-                return {"value": cur.get(order_field), "id": doc_id}
-        if len(self._order_by) > 1:
-            raise NotImplementedError("start_after with a multi-field order_by is not representable by the store cursor")
-        order_field = self._order_by[0][0] if self._order_by else None
+        real = [f for f, _ in self._order_by if f != "__name__"]  # payload order fields, in order
         if hasattr(cur, "to_dict"):  # a DocumentSnapshot
             data = cur.to_dict() or {}
-            doc_id = getattr(cur, "id", None)
-            return {"value": data.get(order_field) if order_field else doc_id, "id": doc_id}
-        if isinstance(cur, dict) and "__name__" in cur:  # document-name keyset
-            ref = cur["__name__"]
-            doc_id = getattr(ref, "id", None) or str(ref).rsplit("/", 1)[-1]
-            return {"value": doc_id, "id": doc_id}
-        if isinstance(cur, dict):  # already a {value, id} keyset
-            return cur
+            return {"values": [data.get(f) for f in real], "id": getattr(cur, "id", None)}
+        if isinstance(cur, dict):
+            ref = cur.get("__name__")
+            if ref is not None:
+                doc_id = getattr(ref, "id", None) or str(ref).rsplit("/", 1)[-1]
+            else:
+                doc_id = cur.get("id", "")
+            return {"values": [cur.get(f) for f in real], "id": doc_id}
         # a bare cursor value (single-field): pair it with an empty id lower bound
-        return {"value": cur, "id": ""}
+        return {"values": [cur], "id": ""}
 
     def _run(self) -> List[StoredDocument]:
-        order = None
+        order: Any = None
         direction = "asc"
-        if self._order_by:
-            if len(self._order_by) == 1:
-                order, direction = self._order_by[0]
-            elif len(self._order_by) == 2 and self._order_by[1][0] == "__name__":
-                # (field, __name__): order by the real field only; the store appends the document-id
-                # tiebreak itself (matching Firestore's __name__ secondary sort). Passing __name__ as a
-                # data field would make the Mongo adapter sort on a non-existent ``d.__name__``.
-                order, direction = self._order_by[0]
-            else:
-                order = self._order_by  # multi-field: (field, dir) pairs
+        if len(self._order_by) == 1:
+            order, direction = self._order_by[0]
+        elif self._order_by:
+            # Multi-field (incl. a trailing __name__): pass the pairs through; the store maps __name__ to
+            # its _id tiebreak and builds a composite keyset for the cursor.
+            order = self._order_by
         return self._client._store.query(
             self._collection,
             filters=self._filters or None,

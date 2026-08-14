@@ -215,45 +215,37 @@ class FakeDocumentStore:
         start_after: Optional[Dict[str, Any]] = None,
     ) -> List[StoredDocument]:
         rows = self._matching_rows(collection, filters)
-        reverse = direction == "desc"
-        if order_by is None or isinstance(order_by, str):
-            if order_by is not None:
-                # (value, path) key so the id tiebreak matches the adapters' keyset ordering.
-                rows.sort(key=lambda pd: (pd[1].get(order_by), pd[0]), reverse=reverse)
-            if start_after is not None:
-                cursor_key = (start_after["value"], f"{collection}/{start_after['id']}")
-                rows = [
-                    pd
-                    for pd in rows
-                    if (
-                        (pd[1].get(order_by), pd[0]) < cursor_key
-                        if reverse
-                        else (pd[1].get(order_by), pd[0]) > cursor_key
-                    )
-                ]
-        else:
-            # Multi-field order_by: [(field, direction), ...]. ``__name__`` means the document id
-            # (its full path), matching the adapters. Stable sorts applied most-significant last over
-            # a composite key; the keyset ``start_after`` filters on (primary field value, id).
-            def _sort_val(pd, field):
-                return pd[0] if field == "__name__" else pd[1].get(field)
+        specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
 
-            rows.sort(key=lambda pd: pd[0])
-            for field, fdir in reversed(list(order_by)):
-                rows.sort(key=lambda pd, f=field: _sort_val(pd, f), reverse=(fdir == "desc"))
-            if start_after is not None:
-                primary_field, primary_dir = order_by[0]
-                primary_reverse = primary_dir == "desc"
-                cursor_key = (start_after["value"], f"{collection}/{start_after['id']}")
-                rows = [
-                    pd
-                    for pd in rows
-                    if (
-                        (_sort_val(pd, primary_field), pd[0]) < cursor_key
-                        if primary_reverse
-                        else (_sort_val(pd, primary_field), pd[0]) > cursor_key
-                    )
-                ]
+        # ``__name__`` means the document id (its full path), matching the adapters.
+        def _sort_val(pd: Any, field: str) -> Any:
+            return pd[0] if field == "__name__" else pd[1].get(field)
+
+        # Stable sorts applied most-significant last over the composite key; a base _id sort supplies the
+        # implicit document-name tiebreak (only meaningful when the order does not already end in __name__).
+        rows.sort(key=lambda pd: pd[0])
+        for field, fdir in reversed(specs):
+            rows.sort(key=lambda pd, f=field: _sort_val(pd, f), reverse=(fdir == "desc"))
+        if start_after is not None:
+            # Composite keyset (matches the adapters): ``values`` aligns with the REAL order fields; a
+            # trailing __name__ / no order is the id tiebreak. Handles order_by=None without crashing
+            # (cubic PR 10887 store_fakes #223) since ``real`` is then empty and only id is compared.
+            values = start_after.get("values")
+            if values is None:
+                values = [start_after["value"]] if "value" in start_after else []
+            real = [(f, d) for f, d in specs if f != "__name__"]
+            name_dir = next((d for f, d in specs if f == "__name__"), (real[-1][1] if real else "asc"))
+            cursor_id = f"{collection}/{start_after['id']}"
+
+            def _strictly_after(pd: Any) -> bool:
+                for i, (f, d) in enumerate(real):
+                    v = values[i] if i < len(values) else None
+                    pv = _sort_val(pd, f)
+                    if pv != v:
+                        return (pv > v) if d == "asc" else (pv < v)
+                return (pd[0] > cursor_id) if name_dir == "asc" else (pd[0] < cursor_id)
+
+            rows = [pd for pd in rows if _strictly_after(pd)]
         if offset is not None:
             rows = rows[offset:]
         if limit is not None:

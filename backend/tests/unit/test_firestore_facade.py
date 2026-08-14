@@ -256,3 +256,19 @@ def test_group_query_name_order_with_cursor_does_not_raise():
     assert {s.id for s in q.stream()} == {"s1", "s2"}
     page = list(q.start_after("users/u1/state/s1").stream())  # resume — must page, not raise
     assert [s.id for s in page] == ["s2"]
+
+
+def test_multi_field_order_composite_cursor_paginates():
+    # cubic PR 10887 #4: review_queue orders by impact DESC, created_at DESC, __name__ DESC and paginates
+    # via the facade. The facade must map that to the store's composite keyset, not raise on page 2.
+    c = _client()
+    for doc_id, d in [("c1", {"impact": 3, "created_at": 20}), ("c2", {"impact": 3, "created_at": 10}),
+                      ("c3", {"impact": 2, "created_at": 50})]:
+        c.document(f"users/u1/conflicts/{doc_id}").set(d)
+    q = (
+        c.collection("users/u1/conflicts")
+        .order_by("impact", "DESCENDING").order_by("created_at", "DESCENDING").order_by("__name__", "DESCENDING")
+    )
+    assert [s.id for s in q.stream()] == ["c1", "c2", "c3"]
+    cursor = {"impact": 3, "created_at": 20, "__name__": c.document("users/u1/conflicts/c1")}
+    assert [s.id for s in q.start_after(cursor).stream()] == ["c2", "c3"]  # page 2, no NotImplementedError

@@ -279,6 +279,19 @@ def test_query_sole_name_order_paginates(store, uid):
     assert page2 == ["c", "d"]
 
 
+def test_query_multi_field_composite_cursor_paginates(store, uid):
+    # cubic PR 10887 #4: list_review_conflicts orders by impact DESC, created_at DESC, __name__ DESC and
+    # paginates -> the store must support a composite (multi-field) keyset cursor, not reject page 2.
+    base = f"users/{uid}/conflicts"
+    for doc_id, d in [("c1", {"impact": 3, "created_at": 20}), ("c2", {"impact": 3, "created_at": 10}),
+                      ("c3", {"impact": 2, "created_at": 50}), ("c4", {"impact": 3, "created_at": 20})]:
+        store.set(f"{base}/{doc_id}", d)
+    order = [("impact", "desc"), ("created_at", "desc"), ("__name__", "desc")]
+    assert [d.id for d in store.query(base, order_by=order)] == ["c4", "c1", "c2", "c3"]
+    page2 = [d.id for d in store.query(base, order_by=order, start_after={"values": [3, 20], "id": "c1"})]
+    assert page2 == ["c2", "c3"]  # strictly after (3,20,c1) in the composite order
+
+
 def test_query_group_name_order_with_cursor_paginates(store, uid):
     # cubic PR 10887 #2: a __name__ order on a collection group is the implicit doc-name keyset — it must
     # page, not raise (canonical maintenance cron was stuck at page 1 on Mongo).

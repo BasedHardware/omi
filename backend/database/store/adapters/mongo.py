@@ -349,26 +349,29 @@ class MongoDocumentStore:
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
         if start_after is not None:
             cursor_id = f"{collection}/{start_after['id']}"
-            # ``__name__`` is Firestore's document-name token; in Mongo the document name lives in ``_id``
-            # (the full logical path), NOT a payload field. A no-order cursor OR a sole ``__name__`` order
-            # keys purely by _id (cubic PR 10887 #5/#11 — a d.__name__ predicate matched nothing, so page
-            # 2+ was empty for staged_tasks / review_queue legacy scans).
-            if not specs or (len(specs) == 1 and specs[0][0] == "__name__"):
-                keyset_dir = specs[0][1] if specs else "asc"
-                op = "$gt" if keyset_dir == "asc" else "$lt"
-                keyset = {"_id": {op: cursor_id}}
-            else:
-                # Keyset is single-field. Full-path _id tiebreak mirrors Firestore __name__, so ties on
-                # the order_by field neither skip nor duplicate a row.
-                keyset_field, keyset_dir = specs[0]
-                op = "$gt" if keyset_dir == "asc" else "$lt"
-                field_key = "d." + keyset_field
-                keyset = {
-                    "$or": [
-                        {field_key: {op: start_after["value"]}},
-                        {"$and": [{field_key: start_after["value"]}, {"_id": {op: cursor_id}}]},
-                    ]
-                }
+            # Composite keyset (cubic PR 10887 #4/#5/#10/#11): ``values`` aligns with the REAL (payload)
+            # order fields; a trailing ``__name__`` (Firestore's document-name token) or no order is the
+            # ``_id`` tiebreak — in Mongo the document name lives in ``_id`` (the full path), never a
+            # payload field. Backward-compat with the single-field ``{"value": v}`` shape.
+            values = start_after.get("values")
+            if values is None:
+                values = [start_after["value"]] if "value" in start_after else []
+            real = [(f, d) for f, d in specs if f != "__name__"]
+            name_dir = next((d for f, d in specs if f == "__name__"), (real[-1][1] if real else "asc"))
+            # Strictly-after, lexicographically: OR of (all prior fields equal AND this field strictly
+            # after), ending with the _id tiebreak.
+            ors: List[Dict[str, Any]] = []
+            prefix: List[Dict[str, Any]] = []
+            for i, (f, d) in enumerate(real):
+                op = "$gt" if d == "asc" else "$lt"
+                v = values[i] if i < len(values) else None
+                step = {"d." + f: {op: v}}
+                ors.append({"$and": prefix + [step]} if prefix else step)
+                prefix = prefix + [{"d." + f: v}]
+            id_op = "$gt" if name_dir == "asc" else "$lt"
+            id_step = {"_id": {id_op: cursor_id}}
+            ors.append({"$and": prefix + [id_step]} if prefix else id_step)
+            keyset = ors[0] if len(ors) == 1 else {"$or": ors}
             mongo_filter = {"$and": [mongo_filter, keyset]}
         projection = {"d." + field: 1 for field in fields} if fields is not None else None
         cursor = self._db[_collection_name(collection)].find(mongo_filter, projection, session=None)

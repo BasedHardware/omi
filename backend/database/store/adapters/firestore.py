@@ -259,22 +259,18 @@ class FirestoreDocumentStore:
         for _field, _dir in specs:
             query = query.order_by(_field, direction=_DIRECTION[_dir])
         if start_after is not None:
-            # Keyset cursor. The number of cursor values must equal the number of order fields, so
-            # branch on what ordering is present (cubic PR 10887 A6):
-            #  - no explicit order  -> order by __name__, cursor is the id alone (an empty specs list
-            #    used to IndexError on specs[0]);
-            #  - order already includes __name__ (a sole __name__, or a (field, __name__) composite like
-            #    the canonical graph's ``updated_at DESC, __name__ DESC``) -> one value per field;
-            #  - a single real field -> append the __name__ tiebreak so ties never skip/duplicate.
-            if not specs:
-                query = query.order_by('__name__')
-                query = query.start_after([start_after['id']])
-            elif any(_field == '__name__' for _field, _ in specs):
-                cursor = [start_after['id']] if len(specs) == 1 else [start_after['value'], start_after['id']]
-                query = query.start_after(cursor)
-            else:
-                query = query.order_by('__name__', direction=_DIRECTION[specs[-1][1]])
-                query = query.start_after([start_after['value'], start_after['id']])
+            # Composite keyset cursor (cubic PR 10887 #4): one value per REAL order field followed by the
+            # document id for the __name__ tiebreak, so the cursor arity equals the number of order fields.
+            # Append __name__ when the caller didn't (single/multi real fields) so ties never skip/dup.
+            values = start_after.get("values")
+            if values is None:
+                values = [start_after["value"]] if "value" in start_after else []
+            real = [f for f, _ in specs if f != "__name__"]
+            if not any(_field == "__name__" for _field, _ in specs):
+                query = query.order_by("__name__", direction=_DIRECTION[specs[-1][1]] if specs else _DIRECTION["asc"])
+            # One cursor value per real order field (drop any extra from a legacy single-value cursor on a
+            # no-order query), then the document id for the __name__ tiebreak.
+            query = query.start_after(list(values)[: len(real)] + [start_after["id"]])
         if fields is not None:
             query = query.select(list(fields))
         if offset is not None:
