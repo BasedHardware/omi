@@ -23,14 +23,9 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["monitor", "screenshot", "capture", "audio", "recording", "microphone", "speech"],
       section: .general, icon: "gearshape", settingId: "general.screencapture"),
     SettingsSearchItem(
-      name: "System Audio", subtitle: "When to record audio from other apps",
-      keywords: [
-        "system audio", "meeting", "zoom", "google meet", "teams", "call", "capture", "recording",
-        "speaker",
-      ], section: .general, icon: "speaker.wave.2", settingId: "general.systemaudio"),
-    SettingsSearchItem(
-      name: "Notifications", subtitle: "Proactive alerts and status",
-      keywords: ["alerts", "notify"], section: .general, icon: "gearshape",
+      name: "Notifications", subtitle: "macOS permission and banner status",
+      keywords: ["alerts", "notify", "banners", "system settings", "permission"], section: .general,
+      icon: "gearshape",
       settingId: "general.notifications"),
     SettingsSearchItem(
       name: "Ask omi", subtitle: "Show or hide the floating chat bar",
@@ -59,8 +54,11 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["screen capture", "screenshot", "monitor", "recording", "rewind"],
       section: .general, icon: "rectangle.dashed.badge.record", settingId: "general.screencapture"),
     SettingsSearchItem(
-      name: "Audio Recording", subtitle: "Toggle audio recording and transcription",
-      keywords: ["audio", "microphone", "recording", "transcription", "mic"], section: .general,
+      name: "Audio Recording", subtitle: "Off, Always On, or Only Meetings",
+      keywords: [
+        "audio", "microphone", "recording", "transcription", "mic", "meeting", "zoom", "google meet",
+        "teams", "call", "system audio",
+      ], section: .general,
       icon: "mic.fill", settingId: "general.audiorecording"),
     SettingsSearchItem(
       name: "Storage", subtitle: "View frame count and disk usage",
@@ -133,7 +131,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["daily", "summary", "digest", "end of day"], section: .notifications, icon: "bell",
       settingId: "notifications.dailysummary"),
     SettingsSearchItem(
-      name: "Summary Time", subtitle: "When to send your daily summary",
+      name: "Summary Time", subtitle: "When to send your daily summary (hour only)",
       keywords: ["time", "schedule", "when", "hour"], section: .notifications, icon: "bell",
       settingId: "notifications.summarytime"),
 
@@ -359,30 +357,29 @@ enum SettingsSidebarMetrics {
 
 /// **The rows this list actually shows**, as a value rather than a literal inside a `body`.
 ///
-/// `ShellDestination.unreachable()` reads it: `Permissions` and `Help` are established pages whose
-/// only way in is a row here, so "the row exists" has to be something a test can hold. Delete one
-/// and the reachability check names the page that lost its door instead of leaving it to be
-/// discovered in the app (INV-NAV-1).
+/// `ShellDestination.unreachable()` reads it: `Permissions` is an established page whose only way in
+/// is a row here, so "the row exists" has to be something a test can hold. Delete it and the
+/// reachability check names the page that lost its door instead of leaving it to be discovered in
+/// the app (INV-NAV-1).
 enum SettingsSidebarRoutes {
   /// Merged nav: `.account` hosts Account & Plan (renders `.planUsage` content
   /// too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
   /// content too). The absorbed cases stay routable for deep links/automation
   /// and highlight their merged item via `sidebarItem`.
   ///
-  /// `Permissions` and `Help` sit last, under the settings proper: they are the things you come
-  /// here for when something is wrong, not preferences you scan.
+  /// Capture and account first, then the things you tune, with Permissions beside
+  /// Notifications because both are access. Shortcuts / Advanced / About stay at the foot.
   static let visibleSections: [SettingsContentView.SettingsSection] = [
     .general,
     .account,
     .transcription,
+    .rewind,
     .floatingBar,
     .notifications,
-    .rewind,
+    .permissions,
     .shortcuts,
     .advanced,
     .about,
-    .permissions,
-    .help,
   ]
 }
 
@@ -391,25 +388,14 @@ struct SettingsSidebar: View {
   @Binding var selectedSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
   let onBack: () -> Void
+  @ObservedObject var appState: AppState
 
   @State private var isBackHovered = false
   @State private var searchQuery = ""
   @FocusState private var isSearchFocused: Bool
-  /// The support thread's unread count. This is the only place it is ever drawn: `CrispManager`
-  /// has polled for founder replies and fired notifications about them all along, while the count
-  /// it kept had no consumer anywhere in the app.
-  @ObservedObject private var crispManager = CrispManager.shared
 
   private let iconWidth: CGFloat = 20
   private let visibleSections = SettingsSidebarRoutes.visibleSections
-
-  /// How many unread things a row is standing in front of. Only `Help` has any: it is a live
-  /// support thread, and a founder reply that arrived while you were elsewhere is the one thing on
-  /// this list you would want to see without opening it. Opening the page clears it — `HelpPage`
-  /// already sets `CrispManager.isViewingHelp`.
-  private func badgeCount(for section: SettingsContentView.SettingsSection) -> Int {
-    section == .help ? crispManager.unreadCount : 0
-  }
 
   private var filteredSearchItems: [SettingsSearchItem] {
     guard !searchQuery.isEmpty else { return [] }
@@ -456,7 +442,7 @@ struct SettingsSidebar: View {
                 section: section,
                 isSelected: selectedSection.sidebarItem == section,
                 iconWidth: iconWidth,
-                badgeCount: badgeCount(for: section),
+                showsMissingPermissionNotice: section == .permissions && appState.hasMissingPermissions,
                 onTap: {
                   OmiMotion.withGated(.easeInOut(duration: 0.15)) {
                     selectedSection = section
@@ -581,9 +567,7 @@ struct SettingsSidebarItem: View {
   let section: SettingsContentView.SettingsSection
   let isSelected: Bool
   let iconWidth: CGFloat
-  /// Unread items waiting behind this row. Zero draws nothing at all — an empty badge shape is a
-  /// permanent claim that there is something to read.
-  var badgeCount: Int = 0
+  var showsMissingPermissionNotice: Bool = false
   let onTap: () -> Void
 
   @State private var isHovered = false
@@ -602,10 +586,7 @@ struct SettingsSidebarItem: View {
     case .shortcuts: return "keyboard"
     case .advanced: return "chart.bar"
     case .about: return "info.circle"
-    // The same glyphs these two pages already answer to everywhere else in the app
-    // (`SidebarNavItem`, `ChatFirstMorePage`), so a row and the page it opens are one object.
-    case .permissions: return "exclamationmark.triangle"
-    case .help: return "bubble.left"
+    case .permissions: return PermissionNavSymbol.outline
     }
   }
 
@@ -631,11 +612,14 @@ struct SettingsSidebarItem: View {
               .truncationMode(.tail)
               .layoutPriority(1)
 
-            Spacer(minLength: 0)
-
-            if badgeCount > 0 {
-              SettingsSidebarBadge(count: badgeCount, isOnSelectedRow: isSelected)
+            if showsMissingPermissionNotice {
+              Image(systemName: PermissionNavSymbol.missingNotice)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+                .foregroundColor(SettingsInk.notice)
+                .accessibilityHidden(true)
             }
+
+            Spacer(minLength: 0)
           }
           .padding(.horizontal, SettingsGlassMetrics.rowHorizontalPadding)
           .padding(.vertical, SettingsGlassMetrics.rowVerticalPadding)
@@ -658,39 +642,13 @@ struct SettingsSidebarItem: View {
         }
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
         .accessibilityLabel(
-          badgeCount > 0
-            ? Text("\(section.displayTitle), \(badgeCount) unread")
-            : Text(section.displayTitle))
+          Text(
+            showsMissingPermissionNotice
+              ? "\(section.displayTitle), permissions required"
+              : section.displayTitle)
+        )
       }
     }
-  }
-}
-
-/// The count on a settings row that is standing in front of something unread.
-///
-/// It reads as a count on both grounds a row can have, which is the whole difficulty: an unselected
-/// row sits on the sidebar's wash, a selected one on the accent. Rather than a second colour pair
-/// nobody keeps true, the badge borrows the row's *own* label colour and sets its capsule from the
-/// same value — so it stays legible without introducing a third rung to a ladder that has two on
-/// glass, and without spending a colour on a number.
-private struct SettingsSidebarBadge: View {
-  let count: Int
-  let isOnSelectedRow: Bool
-
-  var body: some View {
-    Text("\(count)")
-      .scaledFont(size: OmiType.micro, weight: .bold)
-      .monospacedDigit()
-      .lineLimit(1)
-      .fixedSize()
-      .foregroundColor(isOnSelectedRow ? Ink.surface : Ink.primary)
-      .padding(.horizontal, 5)
-      .padding(.vertical, 1)
-      .background(
-        Capsule(style: .continuous)
-          .fill(isOnSelectedRow ? Ink.surface.opacity(0.24) : Ink.rowFillHover)
-      )
-      .accessibilityHidden(true)
   }
 }
 
@@ -821,7 +779,8 @@ struct SettingHighlightModifier: ViewModifier {
     SettingsSidebar(
       selectedSection: .constant(.advanced),
       highlightedSettingId: .constant(nil),
-      onBack: {}
+      onBack: {},
+      appState: AppState()
     )
     .preferredColorScheme(.light)
   }

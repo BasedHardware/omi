@@ -38,7 +38,10 @@ Options:
   --keep-stack                On T2+, leave dev-up running after the run
   --fault-suite               Start omi-fault-inject + omi-fault bundle; run chat-fault-5xx flow
   --self-check                Static checks (flow lint + gauntlet self-check; backend contracts locally)
-  --readiness                 Pre-tag readiness: self-check + offline dev-stack probe (no app launch, no E2E flows)
+  --readiness                 Pre-tag readiness: self-check + offline dev-stack probe; if a
+                              launched named bundle is already listening on --port, also verify
+                              automation /health identity + agent protocol readiness
+                              (no app launch required; offline-only unit checks stay possible)
   --skip-backend-contracts    With --self-check, skip backend preflight + pytest contracts (CI desktop gate)
   --help                      Show this help
 USAGE
@@ -145,6 +148,19 @@ run_self_check() {
   echo "=== desktop-core-harness self-check ==="
   python3 "$SCRIPT_DIR/desktop-flow-lint.py"
   python3 "$SCRIPT_DIR/agent-continuity-gauntlet-lib.py" --self-check
+  # Hermetic /health identity+protocol contract. Skip under OMI_TEST_SCENARIO so
+  # readiness teardown fixtures that stub python3 remain offline-only.
+  if [[ -z "${OMI_TEST_SCENARIO:-}" ]]; then
+    evaluate_bridge_health_payload "com.omi.omi-core-e2e" \
+      '{"ok":true,"bundleIdentifier":"com.omi.omi-core-e2e","agentRuntimeRunning":true,"agentRuntimeExpectedProtocolVersion":3,"agentRuntimeProtocolVersion":3,"agentRuntimeVersion":"test"}' \
+      --require-protocol >/dev/null
+    if evaluate_bridge_health_payload "com.omi.omi-core-e2e" \
+      '{"ok":true,"bundleIdentifier":"com.omi.omi-core-e2e","agentRuntimeRunning":true,"agentRuntimeExpectedProtocolVersion":3,"agentRuntimeProtocolVersion":2}' \
+      --require-protocol >/dev/null 2>&1; then
+      echo "desktop-core-harness: protocol mismatch fixture should fail" >&2
+      exit 1
+    fi
+  fi
   if [[ "$SKIP_BACKEND_CONTRACTS" -eq 1 ]]; then
     echo "desktop-core-harness: skipping backend preflight + pytest contracts (--skip-backend-contracts; CI desktop gate)"
     echo "desktop-core-harness self-check passed (desktop static checks only)"
@@ -211,42 +227,95 @@ bridge_health() {
   source "$SCRIPT_DIR/app-config.sh"
   derive_omi_app_config "$BUNDLE"
   expected_bundle_id="$BUNDLE_ID"
-  python3 - "$PORT" "$expected_bundle_id" <<'PY'
+  evaluate_bridge_health_http "$PORT" "$expected_bundle_id" --require-protocol
+}
+
+# Evaluate an unauthenticated /health payload for bundle identity, and optionally
+# negotiated agent-runtime protocol readiness. Shared by readiness + tier paths;
+# hermetic callers can feed fixture JSON through evaluate_bridge_health_payload.
+evaluate_bridge_health_payload() {
+  local expected_bundle_id="$1"
+  local health_json="$2"
+  local require_protocol="${3:-}"
+  python3 - "$expected_bundle_id" "$health_json" "$require_protocol" <<'PY'
 import json
 import sys
-import urllib.request
 
-port, expected = sys.argv[1:3]
-with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as response:
-    payload = json.loads(response.read().decode("utf-8"))
+expected, raw, require_protocol = sys.argv[1:4]
+payload = json.loads(raw)
 if not payload.get("ok"):
     raise SystemExit(f"bridge unhealthy: {payload}")
 actual = payload.get("bundleIdentifier")
 if actual != expected:
-    raise SystemExit(f"wrong bundle on port {port}: expected {expected}, got {actual}")
+    raise SystemExit(f"wrong bundle on port: expected {expected}, got {actual}")
+if require_protocol == "--require-protocol":
+    running = payload.get("agentRuntimeRunning")
+    expected_proto = payload.get("agentRuntimeExpectedProtocolVersion")
+    negotiated = payload.get("agentRuntimeProtocolVersion")
+    if running is not True:
+        raise SystemExit(f"agent runtime not running on bridge: {payload}")
+    if not isinstance(expected_proto, int):
+        raise SystemExit(f"missing agentRuntimeExpectedProtocolVersion: {payload}")
+    if negotiated != expected_proto:
+        raise SystemExit(
+            f"agent protocol not ready: expected {expected_proto}, negotiated {negotiated}"
+        )
+    print(
+        f"bridge health ok: bundleIdentifier={actual} "
+        f"protocol={negotiated} runtime={payload.get('agentRuntimeVersion')}"
+    )
+else:
+    print(f"bridge health ok: bundleIdentifier={actual}")
 PY
 }
 
-# Like bridge_health, but also requires the /health bundleIdentifier to match the
-# expected fault bundle — prevents running fault flows against a stale dev stack
-# already listening on $PORT.
-verify_fault_bundle_health() {
+evaluate_bridge_health_http() {
   local port="$1"
-  local expected_bundle="$2"
-  python3 - "$port" "$expected_bundle" <<'PY'
+  local expected_bundle_id="$2"
+  local require_protocol="${3:-}"
+  local health_json
+  health_json="$(python3 - "$port" <<'PY'
 import json
 import sys
 import urllib.request
 
-port, expected = sys.argv[1], sys.argv[2]
+port = sys.argv[1]
 with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as response:
-    payload = json.loads(response.read().decode("utf-8"))
-if not payload.get("ok"):
-    raise SystemExit(f"bridge unhealthy: {payload}")
-actual = payload.get("bundleIdentifier")
-if actual != expected:
-    raise SystemExit(f"wrong bundle on port {port}: expected {expected}, got {actual}")
+    sys.stdout.write(response.read().decode("utf-8"))
 PY
+)"
+  evaluate_bridge_health_payload "$expected_bundle_id" "$health_json" "$require_protocol"
+}
+
+# Like bridge_health identity check, but against an explicit fault bundle id —
+# prevents running fault flows against a stale listener on $PORT. Fault inject
+# fixtures only advertise ok+bundleIdentifier, so protocol is not required here.
+verify_fault_bundle_health() {
+  local port="$1"
+  local expected_bundle="$2"
+  evaluate_bridge_health_http "$port" "$expected_bundle"
+}
+
+automation_port_listening() {
+  local port="$1"
+  # Prefer bash /dev/tcp so hermetic readiness unit stubs that replace python3
+  # cannot falsely report a listening bundle.
+  if (echo >/dev/tcp/127.0.0.1/"$port") >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+# When --readiness finds a launched named bundle already bound to --port /
+# OMI_AUTOMATION_PORT, verify identity + protocol. Offline-only unit checks leave
+# the port closed and skip this path so they stay hermetic.
+maybe_verify_readiness_bundle_health() {
+  if ! automation_port_listening "$PORT"; then
+    echo "desktop-core-harness: readiness skipping bundle /health (nothing listening on port $PORT)"
+    return 0
+  fi
+  echo "desktop-core-harness: readiness verifying launched bundle /health on port $PORT (bundle=$BUNDLE)"
+  bridge_health
 }
 
 # Probe dev-harness stack health + provider_mode from config-digest.json.
@@ -276,6 +345,7 @@ REQUIRED_SERVICES = (
     "firestore",
     "redis",
     "typesense",
+    "llm-gateway",
     "backend",
     "desktop-backend",
 )
@@ -449,6 +519,7 @@ checks = {
     "firestore": f"http://{cfg.firestore_host}/",
     "auth": f"http://{cfg.auth_host}/",
     "typesense": f"http://127.0.0.1:{cfg.typesense_port}/collections",
+    "llm-gateway": f"{cfg.llm_gateway_url}/health",
     "backend": f"{cfg.backend_url}/docs",
     "desktop-backend": f"{cfg.desktop_backend_url}/health",
 }
@@ -1051,6 +1122,9 @@ if [[ "$READINESS" -eq 1 ]]; then
   # dev stack on the trusted self-hosted M1 BEFORE an immutable tag is created.
   # Distinct from post-tag qualification: no app launch, no E2E flows, no signed
   # artifacts. provider_mode=offline is enforced by ensure_dev_stack (no prod).
+  # If a named bundle is already listening on --port, also verify /health
+  # identity + agent protocol readiness; offline-only unit checks leave the port
+  # closed and skip that probe.
   if [[ "$(uname -s)" != "Darwin" ]]; then
     echo "desktop-core-harness: --readiness requires macOS (trusted self-hosted M1)" >&2
     exit 1
@@ -1063,6 +1137,7 @@ if [[ "$READINESS" -eq 1 ]]; then
   trap maybe_teardown_dev_stack EXIT
   run_self_check
   ensure_dev_stack
+  maybe_verify_readiness_bundle_health
   maybe_teardown_dev_stack
   trap - EXIT
   DURATION=$(( $(date +%s) - START_SEC ))

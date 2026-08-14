@@ -6,7 +6,6 @@ import os
 import importlib
 from datetime import datetime, timezone
 from unittest.mock import patch
-
 import pytest
 
 os.environ.setdefault(
@@ -24,12 +23,10 @@ from utils.memory.canonical_memory_adapter import (
     write_canonical_extraction_memory,
 )
 from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
-from utils.memory.canonical_activation import CanonicalWriteDecision
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem
 from utils.memory.required_promotion import required_processing_payload
 from utils.client_device import DeviceScopeRequest
-from tests.unit.test_ws_i_write_convergence import _FakeDb, _trusted_account_generation
+from tests.unit.fixtures.canonical_memory_fakes import _FakeDb, _trusted_account_generation
 
 
 def _refresh_canonical_runtime() -> None:
@@ -110,11 +107,7 @@ def test_memory_service_write_persists_subject_and_predicate(monkeypatch_trusted
 
     db = _FakeDb(_control_seed(uid))
     service = MemoryService(db_client=db)
-    with patch(
-        "utils.memory.memory_service.canonical_write_decision",
-        return_value=CanonicalWriteDecision(enabled=True, memory_system=MemorySystem.CANONICAL),
-    ):
-        service.write(uid, payload)
+    service.write(uid, payload)
 
     items = read_canonical_memories(uid, db_client=db)
     assert len(items) == 1
@@ -122,6 +115,29 @@ def test_memory_service_write_persists_subject_and_predicate(monkeypatch_trusted
     assert stored["subject_entity_id"] == USER_ENTITY_ID
     assert stored["predicate"] == "resides_in"
     assert stored["arguments"] == {"location": "San Francisco"}
+
+
+def test_memory_service_write_round_trips_locked_state(monkeypatch_trusted_account):
+    uid = "uid-lock-wire"
+    memory_db = MemoryDB.from_memory(
+        Memory(content="Locked canonical secret", category=MemoryCategory.interesting),
+        uid,
+        "conv-lock-wire",
+        False,
+    )
+    memory_db.id = "mem_lock_wire"
+    memory_db.memory_tier = MemoryTier.short_term
+    memory_db.is_locked = True
+    db = _FakeDb(_control_seed(uid))
+    service = MemoryService(db_client=db)
+
+    service.write(uid, memory_db.model_dump(mode="json"))
+
+    stored = db.docs[f"users/{uid}/memory_items/{memory_db.id}"]
+    assert stored["promotion"]["is_locked"] is True
+    canonical = read_canonical_memories(uid, db_client=db)
+    assert len(canonical) == 1
+    assert canonical[0].is_locked is True
 
 
 def test_extraction_memory_id_is_deterministic_and_partitions_non_user_subjects():
@@ -153,14 +169,10 @@ def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_
     db = _FakeDb(_control_seed(uid))
     service = MemoryService(db_client=db)
 
-    with patch(
-        "utils.memory.memory_service.canonical_write_decision",
-        return_value=CanonicalWriteDecision(enabled=True, memory_system=MemorySystem.CANONICAL),
-    ):
-        service.write(
-            uid,
-            required_processing_payload(memory_db.model_dump(mode="json"), source_surface="v3_manual"),
-        )
+    service.write(
+        uid,
+        required_processing_payload(memory_db.model_dump(mode="json"), source_surface="v3_manual"),
+    )
 
     current_device = read_canonical_memories(
         uid,
@@ -193,11 +205,7 @@ def test_write_mode_rollout_doc_does_not_collide_with_apply_control_state(monkey
     db = _FakeDb({f"users/{uid}/memory_control/state": _rollout_control_doc(uid)})
     service = MemoryService(db_client=db)
 
-    with patch(
-        "utils.memory.memory_service.canonical_write_decision",
-        return_value=CanonicalWriteDecision(enabled=True, memory_system=MemorySystem.CANONICAL),
-    ):
-        service.write(uid, payload)
+    service.write(uid, payload)
 
     apply_control = db.docs[f"users/{uid}/memory_state/apply_control"]
     rollout_control = db.docs[f"users/{uid}/memory_control/state"]
@@ -248,7 +256,7 @@ def test_kg_promotion_uses_stored_subject_entity_id(monkeypatch_trusted_account)
         kg_extracted=False,
     )
     with (
-        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.canonical_kg_promotion.ensure_canonical_apply_control_state"),
         patch(
             "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
             return_value={"nodes": [{}], "edges": []},

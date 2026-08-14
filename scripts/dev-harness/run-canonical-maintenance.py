@@ -69,33 +69,19 @@ def _resolve_uid(cfg: config.HarnessConfig, user: str) -> str:
         users = payload.get("users")
         if isinstance(users, dict) and user in users:
             return str(users[user])
-    canonical = os.environ.get("MEMORY_CANONICAL_USERS", "").split(",")
-    if canonical and canonical[0].strip():
-        return canonical[0].strip()
     raise SystemExit(f"Cannot resolve Firebase uid for {user!r}; seed happy_path first.")
 
 
-def _activate_local_canonical_cohort(uid: str) -> None:
-    """Bind one synthetic emulator uid to the production cohort selector locally."""
+def _configure_local_universal_memory(uid: str) -> None:
+    """Validate the synthetic emulator principal before direct maintenance."""
     if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
         raise SystemExit("Canonical maintenance harness requires the Firestore emulator.")
     if os.environ.get("ENVIRONMENT") != "local-dev-harness":
         raise SystemExit("Canonical maintenance harness requires ENVIRONMENT=local-dev-harness.")
 
     os.environ["MEMORY_MODE"] = "read"
-    os.environ["MEMORY_ENABLED_USERS"] = uid
-
-    # Production membership remains code-reviewed. This process-local seam is
-    # guarded by the emulator identity above and exists only so synthetic users
-    # can exercise the real selector and maintenance implementation.
-    from config import canonical_memory_cohort
-    from utils.memory import memory_system
-
-    # `resolve_memory_system` delegates to the code-defined selector directly.
-    # Replace only that selector's process-local data after proving this is the
-    # local emulator; environment flags remain unable to enroll a user.
-    canonical_memory_cohort.CANONICAL_MEMORY_USERS = frozenset({uid})
-    memory_system.CANONICAL_MEMORY_USERS = canonical_memory_cohort.CANONICAL_MEMORY_USERS
+    if not uid.strip():
+        raise SystemExit("Canonical maintenance harness requires a non-empty emulator uid.")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -108,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     _apply_harness_env(cfg)
 
     uid = _resolve_uid(cfg, args.user)
-    _activate_local_canonical_cohort(uid)
+    _configure_local_universal_memory(uid)
 
     from utils.memory.short_term_promotion import run_canonical_short_term_maintenance  # noqa: E402
 

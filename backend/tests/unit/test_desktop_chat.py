@@ -11,7 +11,8 @@ from routers import desktop_chat
 def _authorized_request(body, *, web_search_allowed: bool = True):
     """Translate a body as an authorized principal, so these cases keep asserting
     the non-authorization conditions that gate server-side web search."""
-    return desktop_chat._request(body, web_search_allowed=web_search_allowed)
+    status = 'authorized' if web_search_allowed else 'denied'
+    return desktop_chat._request(body, web_search_authorization=status)
 
 
 def test_request_translates_openai_tool_history_and_alias():
@@ -850,7 +851,7 @@ async def test_stream_schedules_terminal_usage_when_cancelled_after_message_delt
 @pytest.mark.asyncio
 async def test_chat_completions_routes_public_web_search_to_direct_anthropic(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -897,7 +898,7 @@ async def test_chat_completions_routes_public_web_search_to_direct_anthropic(mon
 @pytest.mark.asyncio
 async def test_chat_completions_routes_pi_public_web_policy_to_direct_anthropic(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -948,7 +949,7 @@ async def test_chat_completions_routes_pi_public_web_policy_to_direct_anthropic(
 @pytest.mark.asyncio
 async def test_chat_completions_records_usage_when_pause_turn_limit_is_exhausted(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: False)
@@ -988,7 +989,7 @@ async def test_chat_completions_records_usage_when_pause_turn_limit_is_exhausted
 @pytest.mark.asyncio
 async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1046,7 +1047,7 @@ async def test_chat_completions_gateway_mode_uses_luna_auto_lane(monkeypatch):
 @pytest.mark.asyncio
 async def test_gateway_rejection_does_not_record_quota_question(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
@@ -1084,7 +1085,7 @@ async def test_gateway_rejection_does_not_record_quota_question(monkeypatch):
 
 def _wire_direct_lane(monkeypatch, quota_calls):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: False)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
@@ -1205,7 +1206,7 @@ async def test_direct_json_upstream_error_does_not_record_quota_question(monkeyp
 @pytest.mark.asyncio
 async def test_chat_completions_rejects_unknown_explicit_model_before_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1227,7 +1228,7 @@ async def test_chat_completions_rejects_unknown_explicit_model_before_gateway(mo
 @pytest.mark.asyncio
 async def test_chat_completions_rejects_explicit_null_model_before_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1453,7 +1454,7 @@ async def test_stream_gateway_records_usage_from_sse(monkeypatch):
 @pytest.mark.asyncio
 async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1525,7 +1526,7 @@ async def test_chat_completions_specialist_models_bypass_managed_gateway(
     monkeypatch, requested_model, translated_model
 ):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1757,7 +1758,7 @@ def test_request_treats_unrecognized_tool_output_as_private():
 @pytest.mark.asyncio
 async def test_chat_completions_keeps_private_tool_output_out_of_anthropic_web_search(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
-    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
@@ -1813,19 +1814,19 @@ async def test_chat_completions_keeps_private_tool_output_out_of_anthropic_web_s
 async def test_web_search_authorized_allows_a_principal_that_predates_the_gate(monkeypatch):
     # Legacy principal: no user doc, therefore no stored web_search decision.
     monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', lambda uid: {})
-    assert await desktop_chat._web_search_authorized('legacy-user') is True
+    assert await desktop_chat._web_search_authorized('legacy-user') == 'authorized'
 
     monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', lambda uid: {'focus': {'enabled': True}})
-    assert await desktop_chat._web_search_authorized('legacy-user') is True
+    assert await desktop_chat._web_search_authorized('legacy-user') == 'authorized'
 
 
 @pytest.mark.asyncio
 async def test_web_search_authorized_denies_only_a_stored_decision(monkeypatch):
     monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', lambda uid: {'web_search': {'enabled': False}})
-    assert await desktop_chat._web_search_authorized('opted-out') is False
+    assert await desktop_chat._web_search_authorized('opted-out') == 'denied'
 
     monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', lambda uid: {'web_search': {'enabled': True}})
-    assert await desktop_chat._web_search_authorized('opted-in') is True
+    assert await desktop_chat._web_search_authorized('opted-in') == 'authorized'
 
 
 @pytest.mark.asyncio
@@ -1837,5 +1838,29 @@ async def test_web_search_authorized_fails_closed_when_the_lookup_breaks(monkeyp
         raise RuntimeError('firestore down')
 
     monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', _boom)
-    assert await desktop_chat._web_search_authorized('user') is False
+    assert await desktop_chat._web_search_authorized('user') == 'unavailable'
+    assert [fallback['reason'] for fallback in fallbacks] == ['authorization_unavailable']
+
+
+@pytest.mark.asyncio
+async def test_authorization_lookup_failure_is_not_reported_as_an_explicit_denial(monkeypatch):
+    """A Firestore/settings outage must not also emit ``not_authorized`` for the
+    same request: lookup failures and per-user denials are mutually exclusive
+    reasons so metrics can distinguish infra failure from explicit opt-out."""
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+
+    def _boom(uid):
+        raise RuntimeError('firestore down')
+
+    monkeypatch.setattr(desktop_chat.users_db, 'get_assistant_settings', _boom)
+    _, payload = desktop_chat._request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [{'role': 'user', 'content': 'What is the weather in New York today?'}],
+            'omi_web_search': True,
+        },
+        web_search_authorization=await desktop_chat._web_search_authorized('user'),
+    )
+    assert 'tools' not in payload
     assert [fallback['reason'] for fallback in fallbacks] == ['authorization_unavailable']

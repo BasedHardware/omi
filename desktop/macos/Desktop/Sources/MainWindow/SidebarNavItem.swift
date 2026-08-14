@@ -21,7 +21,6 @@ enum SidebarNavItem: Int, CaseIterable {
     case "apps", "integrations": return .apps
     case "settings": return .settings
     case "permissions": return .permissions
-    case "help": return .help
     default: return nil
     }
   }
@@ -34,7 +33,6 @@ enum SidebarNavItem: Int, CaseIterable {
   case apps = 8
   case settings = 9
   case permissions = 10
-  case help = 12
   var title: String {
     switch self {
     case .dashboard: return "Home"
@@ -45,7 +43,6 @@ enum SidebarNavItem: Int, CaseIterable {
     case .apps: return "Apps"
     case .settings: return "Settings"
     case .permissions: return "Permissions"
-    case .help: return "Help from Founder"
     }
   }
   var icon: String {
@@ -57,8 +54,7 @@ enum SidebarNavItem: Int, CaseIterable {
     case .rewind: return "clock.arrow.circlepath"
     case .apps: return "puzzlepiece.fill"
     case .settings: return "gearshape.fill"
-    case .permissions: return "exclamationmark.triangle.fill"
-    case .help: return "bubble.left.fill"
+    case .permissions: return PermissionNavSymbol.filled
     }
   }
   /// Minimum tier level required to access this item (0 = always available)

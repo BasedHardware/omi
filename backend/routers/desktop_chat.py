@@ -7,13 +7,14 @@ import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.routing import APIRoute
 
+from database._client import get_customer_firestore_client
 from database import llm_usage as llm_usage_db
 from database import redis_db
 from database import users as users_db
@@ -40,7 +41,7 @@ from utils.llm.gateway_serving import is_gateway_transport_failure
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
-from utils.subscription import enforce_chat_quota
+from utils.subscription import enforce_desktop_chat_quota
 
 _MAX_BODY_BYTES = 16 * 1024 * 1024
 _RATE_LIMIT_PER_MINUTE = 120
@@ -546,7 +547,13 @@ def _anthropic_client_tools(tools: object) -> list[dict[str, object]]:
     ]
 
 
-def _request(body: object, *, web_search_allowed: bool = False) -> tuple[str, dict[str, object]]:
+# Web-search authorization outcome. ``denied`` is a stored per-user decision;
+# ``unavailable`` means the lookup failed closed and must not also be reported
+# as an explicit denial. Keeps the two fallback reasons mutually exclusive.
+WebSearchAuthorization = Literal['authorized', 'denied', 'unavailable']
+
+
+def _request(body: object, *, web_search_authorization: WebSearchAuthorization = 'unavailable') -> tuple[str, dict[str, object]]:
     if not isinstance(body, Mapping):
         raise ValueError('request body must be an object')
     model = body.get('model')
@@ -636,7 +643,7 @@ def _request(body: object, *, web_search_allowed: bool = False) -> tuple[str, di
                 reason='private_tool_output_in_context',
                 outcome='degraded',
             )
-        elif not web_search_allowed:
+        elif web_search_authorization == 'denied':
             record_fallback(
                 component='other',
                 from_mode='anthropic_web_search',
@@ -649,7 +656,7 @@ def _request(body: object, *, web_search_allowed: bool = False) -> tuple[str, di
         and body.get('tool_choice') != 'none'
         and not public_web_prohibited
         and web_search_requested
-        and web_search_allowed
+        and web_search_authorization == 'authorized'
         and not private_context_present
     )
     if inject_web_search:
@@ -880,16 +887,39 @@ async def _record_usage(uid: str, usage: object) -> None:
     if get_byok_key('anthropic'):
         return
     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens = _usage_values(usage)
+    total_tokens = input_tokens + output_tokens + cache_read_tokens + cache_write_tokens
+    cost = _web_search_requests(usage) * _WEB_SEARCH_COST_PER_REQUEST
+
+    def _write(
+        record_uid: str,
+        in_tokens: int,
+        out_tokens: int,
+        cache_read: int,
+        cache_write: int,
+        combined_tokens: int,
+        cost_usd: float,
+    ) -> None:
+        llm_usage_db.record_llm_usage_bucket(
+            record_uid,
+            in_tokens,
+            out_tokens,
+            cache_read,
+            cache_write,
+            combined_tokens,
+            cost_usd,
+            firestore_client=get_customer_firestore_client(),
+        )
+
     await run_blocking(
         db_executor,
-        llm_usage_db.record_llm_usage_bucket,
+        _write,
         uid,
         input_tokens,
         output_tokens,
         cache_read_tokens,
         cache_write_tokens,
-        input_tokens + output_tokens + cache_read_tokens + cache_write_tokens,
-        _web_search_requests(usage) * _WEB_SEARCH_COST_PER_REQUEST,
+        total_tokens,
+        cost,
     )
 
 
@@ -1170,14 +1200,16 @@ def _record_gateway_result(
 
 
 async def _record_chat_quota_question(uid: str, request_id: str, platform: str | None) -> None:
-    await run_blocking(
-        db_executor,
-        llm_usage_db.record_chat_quota_question,
-        uid,
-        f'desktop_chat_completions:{request_id}',
-        'desktop_chat_completions',
-        platform=platform,
-    )
+    def _write() -> None:
+        llm_usage_db.record_chat_quota_question(
+            uid,
+            f'desktop_chat_completions:{request_id}',
+            'desktop_chat_completions',
+            platform=platform,
+            firestore_client=get_customer_firestore_client(),
+        )
+
+    await run_blocking(db_executor, _write)
 
 
 async def _stream_gateway(
@@ -1290,7 +1322,7 @@ async def _meter_server_request(uid: str) -> None:
         )
 
 
-async def _web_search_authorized(uid: str) -> bool:
+async def _web_search_authorized(uid: str) -> WebSearchAuthorization:
     try:
         settings = await run_blocking(db_executor, users_db.get_assistant_settings, uid)
     except Exception:
@@ -1301,11 +1333,11 @@ async def _web_search_authorized(uid: str) -> bool:
             reason='authorization_unavailable',
             outcome='degraded',
         )
-        return False
+        return 'unavailable'
     section = cast(Mapping[str, object], settings or {}).get(_WEB_SEARCH_SETTINGS_SECTION)
     if isinstance(section, Mapping) and section.get('enabled') is False:
-        return False
-    return True
+        return 'denied'
+    return 'authorized'
 
 
 @router.post('/v2/chat/completions', response_model=None)
@@ -1355,10 +1387,16 @@ async def chat_completions(
             public_model = _managed_lane_id(body)
             gateway_payload = _gateway_body(body, public_model)
         else:
-            web_search_allowed = _web_search_requested(body) and await _web_search_authorized(uid)
-            public_model, payload = _request(body, web_search_allowed=web_search_allowed)
+            web_search_authorization = (
+                'authorized'
+                if _web_search_requested(body)
+                else 'unavailable'
+            )
+            if web_search_authorization == 'authorized':
+                web_search_authorization = await _web_search_authorized(uid)
+            public_model, payload = _request(body, web_search_authorization=web_search_authorization)
             gateway_payload = {}
-        enforce_chat_quota(uid, platform=x_app_platform)
+        enforce_desktop_chat_quota(uid, platform=x_app_platform)
         await _meter_server_request(uid)
     except HTTPException:
         raise

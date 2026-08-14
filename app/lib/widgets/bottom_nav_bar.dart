@@ -7,15 +7,27 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/home_provider.dart';
 
-class BottomNavBar extends StatelessWidget {
-  const BottomNavBar({super.key, required this.onTabTap});
+class BottomNavBar extends StatefulWidget {
+  const BottomNavBar({super.key, required this.onTabTap, this.onTabWarmup});
 
   final void Function(int index, bool isRepeat) onTabTap;
+  final ValueChanged<int>? onTabWarmup;
 
   @override
-  Widget build(BuildContext context) {
-    return Consumer<HomeProvider>(
-      builder: (context, home, child) {
+  State<BottomNavBar> createState() => _BottomNavBarState();
+}
+
+class _BottomNavBarState extends State<BottomNavBar> {
+  // Keep the provider-dependent subtree stable when HomePage's broad Consumer
+  // rebuilds for unrelated focus or loading changes.
+  late final Widget _navigation;
+
+  @override
+  void initState() {
+    super.initState();
+    _navigation = Selector<HomeProvider, int>(
+      selector: (_, home) => home.selectedIndex,
+      builder: (context, selectedIndex, _) {
         return Align(
           alignment: Alignment.bottomCenter,
           child: Container(
@@ -32,10 +44,10 @@ class BottomNavBar extends StatelessWidget {
             ),
             child: Row(
               children: [
-                _buildTab(context, home, 0, FontAwesomeIcons.house, 'Home'),
-                _buildTab(context, home, 1, FontAwesomeIcons.comments, 'Conversations'),
-                _buildTab(context, home, 2, FontAwesomeIcons.listCheck, 'Tasks'),
-                _buildTab(context, home, 3, FontAwesomeIcons.puzzlePiece, 'Apps'),
+                _buildTab(context, selectedIndex, 0, FontAwesomeIcons.house, 'Home'),
+                _buildTab(context, selectedIndex, 1, FontAwesomeIcons.comments, 'Conversations'),
+                _buildTab(context, selectedIndex, 2, FontAwesomeIcons.listCheck, 'Tasks'),
+                _buildTab(context, selectedIndex, 3, FontAwesomeIcons.puzzlePiece, 'Apps'),
               ],
             ),
           ),
@@ -44,18 +56,27 @@ class BottomNavBar extends StatelessWidget {
     );
   }
 
-  Widget _buildTab(BuildContext context, HomeProvider home, int index, FaIconData icon, String label) {
+  @override
+  Widget build(BuildContext context) => _navigation;
+
+  Widget _buildTab(BuildContext context, int selectedIndex, int index, FaIconData icon, String label) {
     return Expanded(
       child: InkWell(
+        onTapDown: (_) => widget.onTabWarmup?.call(index),
         onTap: () {
-          HapticFeedback.mediumImpact();
-          PlatformManager.instance.analytics.bottomNavigationTabClicked(label);
+          // Switch the visible page before crossing the platform channel for
+          // haptics or analytics. Both can be delayed when the device is busy,
+          // but neither should delay visual acknowledgement of the tap.
+          widget.onTabTap(index, context.read<HomeProvider>().selectedIndex == index);
           primaryFocus?.unfocus();
-          onTabTap(index, home.selectedIndex == index);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            HapticFeedback.selectionClick();
+            PlatformManager.instance.analytics.bottomNavigationTabClicked(label);
+          });
         },
         child: SizedBox(
           height: 90,
-          child: Center(child: FaIcon(icon, color: home.selectedIndex == index ? Colors.white : Colors.grey, size: 26)),
+          child: Center(child: FaIcon(icon, color: selectedIndex == index ? Colors.white : Colors.grey, size: 26)),
         ),
       ),
     );

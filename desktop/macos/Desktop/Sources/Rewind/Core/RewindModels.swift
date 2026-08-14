@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 @preconcurrency import GRDB
 
@@ -374,6 +375,7 @@ class RewindSettings: ObservableObject {
   nonisolated(unsafe) static let shared = RewindSettings()
 
   private let defaults = UserDefaults.standard
+  private var ownerChangeCancellable: AnyCancellable?
   static let batteryCaptureIntervalMultiplier = 3.0
 
   /// Default apps that should be excluded from screen capture for privacy
@@ -441,6 +443,10 @@ class RewindSettings: ObservableObject {
 
   @Published var excludedApps: Set<String> {
     didSet {
+      for appName in oldValue.symmetricDifference(excludedApps) {
+        RewindCaptureExclusionGeneration.setExcluded(
+          appName, excluded: excludedApps.contains(appName))
+      }
       let array = Array(excludedApps)
       defaults.set(array, forKey: "rewindExcludedApps")
     }
@@ -470,6 +476,30 @@ class RewindSettings: ObservableObject {
     } else {
       self.excludedApps = Self.defaultExcludedApps
     }
+    RewindCaptureExclusionGeneration.setInitialExcludedApps(self.excludedApps)
+
+    // A purge is local and deterministic, but file cleanup can fail transiently
+    // (for example while RewindStorage is still initializing).  Retry durable
+    // work from the next launch instead of silently leaving excluded pixels on
+    // disk.  This does not alter capture cadence or retention behavior.
+    // Pending markers are owner-scoped so a failed purge for account A cannot
+    // run against account B's store after an account switch.
+    if let ownerID = RuntimeOwnerIdentity.currentOwnerId() {
+      let pending = RewindPendingContextBucketPurgeJournal.pending(ownerID: ownerID)
+      if !pending.isEmpty {
+        Task { @MainActor in
+          await Self.retryPendingContextBucketPurges(pending, ownerID: ownerID)
+        }
+      }
+    }
+
+    ownerChangeCancellable = NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)
+      .receive(on: DispatchQueue.main)
+      .sink { _ in
+        Task { @MainActor in
+          await Self.rearmPendingContextBucketPurgesForCurrentOwner()
+        }
+      }
   }
 
   /// Check if an app is excluded from screen capture
@@ -482,11 +512,46 @@ class RewindSettings: ObservableObject {
   }
 
   /// Add an app to the exclusion list
+  @MainActor
   func excludeApp(_ appName: String) {
     excludedApps.insert(appName)
     // If re-excluding a default app, stop tracking it as removed
     if Self.defaultExcludedApps.contains(appName) {
       removedDefaults.remove(appName)
+    }
+    guard ContextBucketsFeature.isEnabled else { return }
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+    // Persist the retry marker before scheduling async storage work.
+    RewindPendingContextBucketPurgeJournal.enqueue(appName: appName, ownerID: ownerID)
+    Task { @MainActor in
+      do {
+        _ = try await ContextBucketStore.shared.purgeExcludedApp(appName)
+        RewindPendingContextBucketPurgeJournal.complete(appName: appName, ownerID: ownerID)
+      } catch {
+        logError("RewindSettings: purge-on-exclude failed", error: error)
+      }
+    }
+  }
+
+  @MainActor
+  static func rearmPendingContextBucketPurgesForCurrentOwner() async {
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+    let pending = RewindPendingContextBucketPurgeJournal.pending(ownerID: ownerID)
+    guard !pending.isEmpty else { return }
+    await retryPendingContextBucketPurges(pending, ownerID: ownerID)
+  }
+
+  private static func retryPendingContextBucketPurges(_ pending: Set<String>, ownerID: String) async {
+    guard await MainActor.run(body: { ContextBucketsFeature.isEnabled }) else { return }
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+    for appName in pending {
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+      do {
+        _ = try await ContextBucketStore.shared.purgeExcludedApp(appName)
+        RewindPendingContextBucketPurgeJournal.complete(appName: appName, ownerID: ownerID)
+      } catch {
+        logError("RewindSettings: deferred purge-on-exclude failed", error: error)
+      }
     }
   }
 
@@ -497,12 +562,99 @@ class RewindSettings: ObservableObject {
     if Self.defaultExcludedApps.contains(appName) {
       removedDefaults.insert(appName)
     }
+    // A flag-off caller may have recorded the crash-safe marker before the
+    // asynchronous feature check ran.  Do not leave inert test/legacy markers;
+    // retain a real flag-on marker so a failed purge is still retried.
+    Task { @MainActor in
+      guard !ContextBucketsFeature.isEnabled else { return }
+      if let ownerID = RuntimeOwnerIdentity.currentOwnerId() {
+        RewindPendingContextBucketPurgeJournal.complete(appName: appName, ownerID: ownerID)
+      }
+    }
   }
 
   /// Reset excluded apps to defaults
   func resetToDefaults() {
     excludedApps = Self.defaultExcludedApps
     removedDefaults = []
+  }
+}
+
+/// Owner-scoped retry journal for context-bucket purge-on-exclude. A global
+/// string-array marker would let account A's failed purge run against account B
+/// after an owner switch; this map keeps retries bound to the originating owner.
+enum RewindPendingContextBucketPurgeJournal {
+  private static let defaultsKey = "rewindPendingContextBucketPurges"
+
+  private final class State: @unchecked Sendable {
+    let lock = NSLock()
+  }
+
+  private static let state = State()
+
+  static func enqueue(appName: String, ownerID: String) {
+    let name = appName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty, !ownerID.isEmpty else { return }
+    withLock {
+      var pending = loadOwnerScoped(migratingLegacyTo: ownerID)
+      pending[ownerID, default: []].append(name)
+      pending[ownerID] = Array(Set(pending[ownerID] ?? [])).sorted()
+      save(pending)
+    }
+  }
+
+  static func pending(ownerID: String) -> Set<String> {
+    withLock {
+      Set(loadOwnerScoped(migratingLegacyTo: ownerID)[ownerID] ?? [])
+    }
+  }
+
+  static func complete(appName: String, ownerID: String) {
+    let name = appName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty, !ownerID.isEmpty else { return }
+    withLock {
+      var pending = loadOwnerScoped(migratingLegacyTo: ownerID)
+      guard var ownerPending = pending[ownerID] else { return }
+      ownerPending.removeAll { $0 == name }
+      if ownerPending.isEmpty {
+        pending.removeValue(forKey: ownerID)
+      } else {
+        pending[ownerID] = ownerPending
+      }
+      save(pending)
+    }
+  }
+
+  private static func withLock<T>(_ body: () -> T) -> T {
+    state.lock.lock()
+    defer { state.lock.unlock() }
+    return body()
+  }
+
+  private static func loadOwnerScoped(migratingLegacyTo ownerID: String = "") -> [String: [String]] {
+    let defaults = UserDefaults.standard
+    if let legacy = defaults.stringArray(forKey: defaultsKey) {
+      let names = Set(legacy.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+        .filter { !$0.isEmpty }
+      let migrated = names.isEmpty || ownerID.isEmpty ? [:] : [ownerID: names.sorted()]
+      save(migrated)
+      return migrated
+    }
+    guard let data = defaults.data(forKey: defaultsKey),
+      let pending = try? JSONDecoder().decode([String: [String]].self, from: data)
+    else { return [:] }
+    return pending
+  }
+
+  private static func save(_ pending: [String: [String]]) {
+    let defaults = UserDefaults.standard
+    guard !pending.isEmpty,
+      let data = try? JSONEncoder().encode(pending)
+    else {
+      defaults.removeObject(forKey: defaultsKey)
+      return
+    }
+    defaults.set(data, forKey: defaultsKey)
   }
 }
 

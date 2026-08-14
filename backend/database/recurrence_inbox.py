@@ -6,7 +6,6 @@ from typing import Any
 
 from google.cloud import firestore
 
-from config.canonical_memory_cohort import is_canonical_memory_user
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database._client import db as default_db
@@ -58,8 +57,6 @@ def _control_ref(uid: str, *, firestore_client: Any = None):
 
 
 def _validate_generation(snapshot: Any, *, uid: str, account_generation: int) -> None:
-    if not is_canonical_memory_user(uid):
-        raise RecurrenceGenerationMismatchError('canonical task intelligence is not enabled')
     if not snapshot.exists:
         control = TaskWorkflowControl()
     else:

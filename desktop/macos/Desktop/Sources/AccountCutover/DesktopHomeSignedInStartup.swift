@@ -28,7 +28,8 @@ enum DesktopHomeSignedInStartup {
       AssistantSettings.shared.screenAnalysisEnabled = true
       UserDefaults.standard.set(true, forKey: .screenAnalysisAutoStartFixedV2)
       log("DesktopHomeView: Applied screenAnalysisAutoStart v2 migration — reset to enabled")
-      Task { await SettingsSyncManager.shared.syncToServer() }
+      SettingsSyncManager.shared.pushPartialUpdate(
+        SettingsSyncManager.screenAnalysisEnabledUpdate(true))
     }
 
     if RewindCaptureState.shouldRepairQuietBundleCaptureDefault(
@@ -41,11 +42,6 @@ enum DesktopHomeSignedInStartup {
     }
 
     restorePersistedCaptureServices("launch")
-
-    CrispManager.shared.start(
-      initialPollDelay: StartupWarmupPolicy.crispInitialPollDelay,
-      sessionUserId: UserDefaults.standard.string(forKey: .authUserId)
-    )
 
     FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
     FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)

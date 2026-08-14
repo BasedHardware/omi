@@ -53,6 +53,8 @@ def users_service():
         "utils.other.storage": AutoMockModule("utils.other.storage"),
         "utils.memory": _pkg("utils.memory"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),
+        "utils.memory.memory_service": AutoMockModule("utils.memory.memory_service"),
+        "utils.memory.memory_system": AutoMockModule("utils.memory.memory_system"),
         "utils.twilio_service": AutoMockModule("utils.twilio_service"),
     }
     with stub_modules(fakes):
@@ -67,7 +69,7 @@ def _purge_patches(users_service, **overrides):
     """Patch every purge collaborator on the users service. overrides set return_value/side_effect."""
     enumerators = {
         "get_conversation_ids": ["c1", "c2"],
-        "get_memory_ids": ["m1"],
+        "_historical_memory_ids": ["m1"],
         "get_action_item_ids": ["a1", "a2"],
         "get_screen_activity_ids": ["s1"],
     }

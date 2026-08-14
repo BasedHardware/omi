@@ -2,6 +2,52 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
+enum ChatBubbleMetadataControlMetrics {
+  static let leadingInset = OmiSpacing.xxs
+  static let topInset = leadingInset
+  static let targetSize: CGFloat = 24
+}
+
+enum ChatBubbleMetadataHoverRegion {
+  case row
+  case controls
+}
+
+/// Hover ownership for the message and its metadata controls. AppKit can emit
+/// the row exit before SwiftUI delivers the controls entry; the release token
+/// bridges that event ordering without leaving the controls permanently shown.
+struct ChatBubbleMetadataHoverState {
+  private(set) var isRowHovering = false
+  private(set) var isControlsHovering = false
+  private(set) var holdsPointerTransition = false
+  private var releaseGeneration = 0
+
+  var keepsMetadataVisible: Bool {
+    isRowHovering || isControlsHovering || holdsPointerTransition
+  }
+
+  mutating func update(_ region: ChatBubbleMetadataHoverRegion, hovering: Bool) -> Int? {
+    switch region {
+    case .row: isRowHovering = hovering
+    case .controls: isControlsHovering = hovering
+    }
+
+    releaseGeneration += 1
+    if hovering {
+      holdsPointerTransition = true
+      return nil
+    }
+    guard !isRowHovering, !isControlsHovering else { return nil }
+    holdsPointerTransition = true
+    return releaseGeneration
+  }
+
+  mutating func completeRelease(_ generation: Int) {
+    guard generation == releaseGeneration, !isRowHovering, !isControlsHovering else { return }
+    holdsPointerTransition = false
+  }
+}
+
 // MARK: - Chat Bubble
 
 struct ChatBubble: View {
@@ -10,6 +56,7 @@ struct ChatBubble: View {
   let showsOmiMark: Bool
   let onRate: (Int?) -> Void
   var onCitationTap: ((Citation) -> Void)? = nil
+  var onOpenInlineCitation: ((ChatCitationReference) -> Void)? = nil
   var isDuplicate: Bool = false
   /// Optional cancel action for stalled tool-call banners, threaded
   /// down to `ToolCallsGroup`. Optional so existing callers compile
@@ -20,29 +67,20 @@ struct ChatBubble: View {
   /// Nil for all existing Chat surfaces. Rich blocks are transcript data, but
   /// only the capability-gated main shell is allowed to turn them into controls.
   var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
-  /// Controllable seam for the metadata band's reveal state. Hover is not
-  /// drivable from a test process (it is never the active application), and the
-  /// invariant worth pinning — a revealed band adds no layout height — is only
-  /// observable with the band actually revealed. Nil everywhere in production.
   var metadataRevealOverrideForTesting: Bool? = nil
-
-  @State private var isRowHovering = false
-  /// The band draws outside the row's bounds, so it needs its own hover to stay
-  /// up while the pointer is on the controls.
-  @State private var isMetadataBandHovering = false
+  @State private var metadataHoverState = ChatBubbleMetadataHoverState()
   @State private var isExpanded = false
   @State private var showCopied = false
   @State private var showRatingFeedback = false
   @State private var showInfoPopover = false
   @State private var lastSubmittedRating: Int?
-  // Shared across every metadata control: true while any of them holds
-  // keyboard focus, so Tab / Full Keyboard Access never lands on an
-  // invisible button.
   @FocusState private var isMetadataControlFocused: Bool
 
   init(
     message: ChatMessage, app: OmiApp?, showsOmiMark: Bool, onRate: @escaping (Int?) -> Void,
-    onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false,
+    onCitationTap: ((Citation) -> Void)? = nil,
+    onOpenInlineCitation: ((ChatCitationReference) -> Void)? = nil,
+    isDuplicate: Bool = false,
     onCancelTurn: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
     onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil,
@@ -53,6 +91,7 @@ struct ChatBubble: View {
     self.showsOmiMark = showsOmiMark
     self.onRate = onRate
     self.onCitationTap = onCitationTap
+    self.onOpenInlineCitation = onOpenInlineCitation
     self.isDuplicate = isDuplicate
     self.onCancelTurn = onCancelTurn
     self.onOpenAgent = onOpenAgent
@@ -189,7 +228,7 @@ struct ChatBubble: View {
       }
     }
     .contentShape(Rectangle())
-    .onHover { isRowHovering = $0 }
+    .onHover { updateMetadataHover(.row, hovering: $0) }
   }
 
   @ViewBuilder
@@ -201,6 +240,9 @@ struct ChatBubble: View {
         TypingIndicator()
       }
     } else if message.sender == .ai && !message.contentBlocks.isEmpty {
+      if groupedBlocks.isEmpty, !message.text.isEmpty {
+        messageTextBubble(message.text)
+      }
       ForEach(groupedBlocks) { group in
         groupView(group)
       }
@@ -254,23 +296,7 @@ struct ChatBubble: View {
         if let backgroundAgentSummary {
           BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
         } else if !message.text.isEmpty {
-          if message.sender == .ai, shouldTruncate {
-            // Keep the expansion affordance on the same baseline as the
-            // visible truncation ellipsis. The text gets the remaining width,
-            // so the control cannot fall onto a detached row.
-            HStack(alignment: .lastTextBaseline, spacing: OmiSpacing.xs) {
-              messageTextBubble(displayText)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(0)
-              showMoreButton
-            }
-            .frame(
-              maxWidth: .infinity,
-              alignment: .leading
-            )
-          } else {
-            messageTextBubble(displayText)
-          }
+          messageTextBubble(displayText)
         }
 
         if backgroundAgentSummary == nil, message.text.count > Self.truncationThreshold {
@@ -282,10 +308,7 @@ struct ChatBubble: View {
                 .foregroundColor(Ink.accent)
             }
             .buttonStyle(.plain)
-          } else if message.sender == .user, shouldTruncate {
-            // Keep the pre-existing user-bubble layout. Only assistant replies
-            // need the inline treatment; moving this control beside a user
-            // bubble would pull its trailing edge left by the button width.
+          } else if shouldTruncate {
             showMoreButton
           }
         }
@@ -316,12 +339,13 @@ struct ChatBubble: View {
         .foregroundColor(PageGlass.warning)
     }
 
-    if message.sender == .ai && !message.isStreaming && message.isSynced {
-      messageMetadataRow(includeRatingButtons: true, includeCopyButton: true)
-    } else if message.sender == .ai && !message.isStreaming && !message.copyableText.isEmpty {
-      messageMetadataRow(includeRatingButtons: false, includeCopyButton: true)
-    } else if message.sender == .ai && !message.isStreaming {
+    switch ChatBubbleMetadataBand.of(message) {
+    case .hidden:
+      EmptyView()
+    case .timestampOnly:
       messageMetadataRow(includeRatingButtons: false, includeCopyButton: false)
+    case .actions:
+      messageMetadataRow(includeRatingButtons: true, includeCopyButton: true)
     }
     // **A user turn gets no metadata band.** Its timestamp-only row cost every
     // question a reserved band for a fact the reply underneath already stamps.
@@ -332,10 +356,17 @@ struct ChatBubble: View {
   @ViewBuilder
   private func messageTextBubble(_ text: String) -> some View {
     if presentation == .proactivePush {
-      ChatProactivePushRow(text: text)
+      ChatProactivePushRow(
+        text: text,
+        kind: ChatContinuityInvariants.proactiveNotificationKind(message) ?? .general)
     } else {
-      OmiMarkdown(text: text, sender: message.sender)
-        .chatMessageBlock(filled: presentation.isFilled)
+      OmiMarkdown(
+        text: text,
+        sender: message.sender,
+        citations: citationReferencesForThisSurface,
+        onOpenCitation: onOpenInlineCitation
+      )
+      .chatMessageBlock(filled: presentation.isFilled)
     }
   }
 
@@ -362,7 +393,14 @@ struct ChatBubble: View {
       }
       // The glass is the ground for an assistant block — so no fill, and
       // therefore none of a container's padding either.
-      return AnyView(OmiMarkdown(text: text, sender: .ai).chatMessageBlock(filled: false))
+      return AnyView(
+        OmiMarkdown(
+          text: text,
+          sender: .ai,
+          citations: citationReferencesForThisSurface,
+          onOpenCitation: onOpenInlineCitation
+        )
+        .chatMessageBlock(filled: false))
     case .toolCalls(_, let calls):
       return AnyView(
         ToolCallsGroup(
@@ -438,6 +476,15 @@ struct ChatBubble: View {
           navigation: chatFirstRichBlockContext.navigation
         )
       )
+    case .conversationLink(_, let conversationID, let summary):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        ConversationLinkView(
+          conversationID: conversationID,
+          summary: summary,
+          navigation: chatFirstRichBlockContext.navigation
+        )
+      )
     case .memoryLink(_, let memoryID, let summary):
       guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
       return AnyView(
@@ -475,15 +522,17 @@ struct ChatBubble: View {
     }
   }
 
+  private var citationReferencesForThisSurface: [ChatCitationReference] {
+    guard message.sender == .ai, !message.isStreaming, onOpenInlineCitation != nil else { return [] }
+    return message.inlineCitationReferences
+  }
+
   @ViewBuilder
   private func messageMetadataRow(includeRatingButtons: Bool, includeCopyButton: Bool) -> some View {
     let isVisible =
       metadataRevealOverrideForTesting
-      ?? ChatBubbleMetadataReveal.isVisible(
-        hovering: isRowHovering || isMetadataBandHovering,
-        controlFocused: isMetadataControlFocused,
-        transientFeedback: showRatingFeedback || showCopied || showInfoPopover
-      )
+      ?? (metadataHoverState.keepsMetadataVisible || isMetadataControlFocused || showRatingFeedback
+        || showCopied || showInfoPopover)
     // **One cluster under the message.** Controls far left and timestamp far right
     // of one line is how two halves of a row end up reading as page furniture.
     HStack(alignment: .center, spacing: OmiSpacing.sm) {
@@ -500,35 +549,22 @@ struct ChatBubble: View {
       Spacer(minLength: 0)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    // The zero-height frame proposes zero height; take the band's own instead of
-    // letting the proposal squash it.
-    .fixedSize(horizontal: false, vertical: true)
-    // Hover has to survive the pointer reaching the controls. The band draws
-    // outside the row's bounds, so the row's own `onHover` reports a leave the
-    // moment the pointer moves down onto the buttons. Inside `allowsHitTesting`,
-    // so a hidden band cannot reveal itself — this only keeps a revealed one up.
+    // Keep the strip inside the row's real layout bounds. Drawing it below a
+    // zero-height frame left visible pixels with no AppKit hit-test region.
+    .padding(.top, ChatBubbleMetadataControlMetrics.topInset)
+    .padding(.leading, ChatBubbleMetadataControlMetrics.leadingInset)
     .contentShape(Rectangle())
-    .onHover { isMetadataBandHovering = $0 }
-    // **Costs nothing at rest, and nothing when revealed either.** It was already
-    // invisible at rest, but an `opacity(0)` row still reserves its height, and
-    // ~20 pt on every assistant turn was most of the dead space between two
-    // one-line messages. So the band is *always* zero-height in layout and draws
-    // out of that frame into the 16 pt gap the transcript keeps after an
-    // assistant row (`ChatTranscriptLayout.regularRowSpacing`).
-    //
-    // Sizing it on reveal instead made document height a function of where the
-    // pointer was: a hovered row was ~16 pt taller, so every row below it shifted
-    // down — under the cursor, mid-scroll, since scrolling happens with the
-    // pointer over the transcript. Painting outside the frame was always the
-    // intent; only the layout height was wrong.
-    .frame(height: 0, alignment: .top)
-    // Outside the zero-height frame, or the stack's 4 pt outlives the row it spaced.
-    .padding(.top, -OmiSpacing.xxs)
+    .onHover { updateMetadataHover(.controls, hovering: $0) }
     .opacity(isVisible ? 1 : 0)
     .allowsHitTesting(isVisible)
-    .omiAnimation(.easeInOut(duration: 0.15), value: isRowHovering)
-    .omiAnimation(.easeInOut(duration: 0.15), value: isMetadataBandHovering)
-    .omiAnimation(.easeInOut(duration: 0.15), value: isMetadataControlFocused)
+    .omiAnimation(.easeInOut(duration: 0.15), value: isVisible)
+  }
+
+  private func updateMetadataHover(_ region: ChatBubbleMetadataHoverRegion, hovering: Bool) {
+    guard let release = metadataHoverState.update(region, hovering: hovering) else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+      metadataHoverState.completeRelease(release)
+    }
   }
 
   @ViewBuilder
@@ -545,6 +581,11 @@ struct ChatBubble: View {
         Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
           .scaledFont(size: OmiType.caption)
           .foregroundColor(message.rating == 1 ? Ink.primary : Ink.secondary)
+          .frame(
+            width: ChatBubbleMetadataControlMetrics.targetSize,
+            height: ChatBubbleMetadataControlMetrics.targetSize
+          )
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
       .focused($isMetadataControlFocused)
@@ -561,6 +602,11 @@ struct ChatBubble: View {
         Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
           .scaledFont(size: OmiType.caption)
           .foregroundColor(message.rating == -1 ? Ink.errorRed : Ink.secondary)
+          .frame(
+            width: ChatBubbleMetadataControlMetrics.targetSize,
+            height: ChatBubbleMetadataControlMetrics.targetSize
+          )
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
       .focused($isMetadataControlFocused)
@@ -604,21 +650,31 @@ struct ChatBubble: View {
       Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(showCopied ? Ink.listeningGreen : Ink.secondary)
+        .frame(
+          width: ChatBubbleMetadataControlMetrics.targetSize,
+          height: ChatBubbleMetadataControlMetrics.targetSize
+        )
+        .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .focused($isMetadataControlFocused)
     .help("Copy message")
   }
 
-  /// Response Context popover — same developer info the floating bar shows
-  /// (model, screenshot, prompt context counts, tools). Only fresh responses
-  /// carry metadata; it is in-memory only and not persisted across restarts.
+  /// Response Context popover — observed turn evidence (tools, screenshot,
+  /// admitted kernel sources). Only fresh responses carry metadata; it is
+  /// in-memory only and not persisted across restarts.
   @ViewBuilder
   private var infoButton: some View {
     Button(action: { showInfoPopover.toggle() }) {
       Image(systemName: "info.circle")
         .scaledFont(size: OmiType.caption)
         .foregroundColor(showInfoPopover ? Ink.primary : Ink.secondary)
+        .frame(
+          width: ChatBubbleMetadataControlMetrics.targetSize,
+          height: ChatBubbleMetadataControlMetrics.targetSize
+        )
+        .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .focused($isMetadataControlFocused)
@@ -1049,15 +1105,13 @@ struct AgentCompletionCard: View {
 
 extension ChatBubble: @preconcurrency Equatable {
   static func == (lhs: ChatBubble, rhs: ChatBubble) -> Bool {
-    // Streaming messages always re-render so SwiftUI sees live updates
-    guard !lhs.message.isStreaming && !rhs.message.isStreaming else { return false }
-    // Completed messages are equal when visible content hasn't changed
-    return lhs.message.id == rhs.message.id
-      && lhs.message.text == rhs.message.text
-      && lhs.message.rating == rhs.message.rating
-      && lhs.app?.id == rhs.app?.id
-      && lhs.showsOmiMark == rhs.showsOmiMark
-      && lhs.isDuplicate == rhs.isDuplicate
+    ChatBubbleIdentity.equal(
+      lhs.message,
+      rhs.message,
+      appIDs: (lhs.app?.id, rhs.app?.id),
+      showsOmiMark: (lhs.showsOmiMark, rhs.showsOmiMark),
+      isDuplicate: (lhs.isDuplicate, rhs.isDuplicate)
+    )
   }
 }
 
@@ -1073,6 +1127,7 @@ enum ContentBlockGroup: Identifiable {
   case taskCard(id: String, taskID: String)
   case goalLink(id: String, goalID: String, summary: String)
   case captureLink(id: String, conversationID: String, momentTimestampMs: Int?, summary: String)
+  case conversationLink(id: String, conversationID: String, summary: String)
   case memoryLink(id: String, memoryID: String, summary: String)
   case agentSpawn(
     id: String,
@@ -1104,6 +1159,7 @@ enum ContentBlockGroup: Identifiable {
     case .taskCard(let id, _): return id
     case .goalLink(let id, _, _): return id
     case .captureLink(let id, _, _, _): return id
+    case .conversationLink(let id, _, _): return id
     case .memoryLink(let id, _, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
@@ -1163,10 +1219,17 @@ enum ContentBlockGroup: Identifiable {
             summary: summary
           )
         )
+      case .conversationLink(let id, let conversationID, let summary):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(.conversationLink(id: id, conversationID: conversationID, summary: summary))
       case .memoryLink(let id, let memoryID, let summary):
         flushToolCalls()
         guard richBlockRenderingEnabled else { continue }
         groups.append(.memoryLink(id: id, memoryID: memoryID, summary: summary))
+      case .citation:
+        // Answer-level provenance is rendered by OmiMarkdown at the inline marker.
+        continue
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):
@@ -1238,8 +1301,8 @@ enum ContentBlockGroup: Identifiable {
       switch group {
       case .text(_, let text):
         return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : group
-      case .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink, .agentSpawn,
-        .agentCompletion:
+      case .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
+        .agentSpawn, .agentCompletion:
         return group
       case .thinking:
         return isStreaming ? group : nil
@@ -1482,62 +1545,64 @@ struct ToolCallCard: View {
   }
 
   var body: some View {
-    HStack(alignment: .top, spacing: OmiSpacing.sm) {
-      toolActivityIcon(name: name, status: displayStatus, size: 15)
-        .frame(width: 20, height: 20)
-        .background(Ink.surface.opacity(0.94), in: Circle())
-        .accessibilityHidden(true)
-
-      VStack(alignment: .leading, spacing: 0) {
+    VStack(alignment: .leading, spacing: 0) {
+      ToolCallActivityHeadline(name: name, status: displayStatus) {
         toolHeader
+      }
 
-        if isExpanded || showUnavailable {
-          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-            if let details = input?.details {
-              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-                Text("Input")
-                  .scaledFont(size: OmiType.micro, weight: .semibold)
-                  .foregroundColor(Ink.secondary)
-
-                Text(details)
-                  .scaledFont(size: OmiType.caption, design: .monospaced)
-                  .foregroundColor(Ink.secondary)
-                  .lineLimit(10)
-              }
-            }
-
-            if let output = output, !output.isEmpty {
-              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-                Text("Output")
-                  .scaledFont(size: OmiType.micro, weight: .semibold)
-                  .foregroundColor(Ink.secondary)
-
-                Text(output)
-                  .scaledFont(size: OmiType.caption, design: .monospaced)
-                  .foregroundColor(Ink.secondary)
-                  .lineLimit(15)
-              }
-            }
-
-            if showUnavailable {
-              Text("Agent unavailable — it may have been dismissed.")
-                .scaledFont(size: OmiType.caption)
+      if isExpanded || showUnavailable {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          if let details = input?.details {
+            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+              Text("Input")
+                .scaledFont(size: OmiType.micro, weight: .semibold)
                 .foregroundColor(Ink.secondary)
+
+              Text(details)
+                .scaledFont(size: OmiType.caption, design: .monospaced)
+                .foregroundColor(Ink.secondary)
+                .lineLimit(10)
             }
           }
-          .padding(.vertical, OmiSpacing.xs)
-          .padding(.trailing, OmiSpacing.sm)
+
+          if let output = output, !output.isEmpty {
+            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+              Text("Output")
+                .scaledFont(size: OmiType.micro, weight: .semibold)
+                .foregroundColor(Ink.secondary)
+
+              Text(output)
+                .scaledFont(size: OmiType.caption, design: .monospaced)
+                .foregroundColor(Ink.secondary)
+                .lineLimit(15)
+            }
+          }
+
+          if showUnavailable {
+            Text("Agent unavailable — it may have been dismissed.")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
         }
+        .padding(.vertical, OmiSpacing.xs)
+        .padding(.leading, ToolActivityTimelineLayout.expandedContentLeadingInset)
+        .padding(.trailing, OmiSpacing.sm)
       }
     }
-    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+    .frame(maxWidth: .infinity, minHeight: ToolActivityTimelineLayout.rowMinHeight, alignment: .topLeading)
     .background(alignment: .topLeading) {
       if connectsToNext {
         GeometryReader { proxy in
           Rectangle()
             .fill(Ink.secondary.opacity(0.28))
-            .frame(width: 1, height: max(0, proxy.size.height - 9))
-            .offset(x: 9.5, y: 19)
+            .frame(
+              width: ToolActivityTimelineLayout.connectorWidth,
+              height: max(0, proxy.size.height - ToolActivityTimelineLayout.connectorBottomTrim)
+            )
+            .offset(
+              x: ToolActivityTimelineLayout.connectorOriginX,
+              y: ToolActivityTimelineLayout.connectorTopInset
+            )
             .transition(.scale(scale: 0, anchor: .top).combined(with: .opacity))
         }
         .accessibilityHidden(true)
@@ -1548,7 +1613,7 @@ struct ToolCallCard: View {
 
   @ViewBuilder
   private var toolHeader: some View {
-    HStack(alignment: .top, spacing: OmiSpacing.xxs) {
+    HStack(alignment: .center, spacing: OmiSpacing.xxs) {
       if hasExpandableContent {
         Button(action: {
           OmiMotion.withGated(.easeInOut(duration: 0.2)) {
@@ -1558,9 +1623,11 @@ struct ToolCallCard: View {
           toolHeaderLabel(showsDisclosure: true)
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityHint(isExpanded ? "Collapse tool details" : "Expand tool details")
       } else {
         toolHeaderLabel(showsDisclosure: false)
+          .frame(maxWidth: .infinity, alignment: .leading)
       }
 
       Group {
@@ -1590,30 +1657,12 @@ struct ToolCallCard: View {
   }
 
   private func toolHeaderLabel(showsDisclosure: Bool) -> some View {
-    HStack(spacing: OmiSpacing.xs) {
-      Text(ChatContentBlock.displayName(for: name))
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-
-      if let summary = input?.summary, !summary.isEmpty {
-        Text(summary)
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary.opacity(0.72))
-          .lineLimit(1)
-          .truncationMode(.middle)
-      }
-
-      Spacer(minLength: OmiSpacing.xs)
-
-      if showsDisclosure {
-        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-          .scaledFont(size: OmiType.micro)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 18, height: 18)
-          .accessibilityHidden(true)
-      }
-    }
-    .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+    ToolCallHeaderLabel(
+      title: ChatContentBlock.displayName(for: name),
+      summary: input?.summary,
+      showsDisclosure: showsDisclosure,
+      isExpanded: isExpanded
+    )
     .contentShape(Rectangle())
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(accessibilityTitle)
@@ -1777,53 +1826,6 @@ extension ChatContentBlock {
     guard name.hasPrefix("mcp__") else { return name }
     return String(name.split(separator: "__").last ?? Substring(name))
   }
-}
-
-// MARK: - Tool Activity Icon
-
-@MainActor @ViewBuilder
-private func toolActivityIcon(name: String, status: ToolCallStatus, size: CGFloat) -> some View {
-  switch status {
-  case .running:
-    ProgressView()
-      .controlSize(.mini)
-      .frame(width: size, height: size)
-  case .slow:
-    ProgressView()
-      .controlSize(.mini)
-      .frame(width: size, height: size)
-      .tint(PageGlass.warning)
-  case .stalled:
-    Image(systemName: "exclamationmark.triangle.fill")
-      .scaledFont(size: size)
-      .foregroundColor(PageGlass.warning)
-  case .completed:
-    Image(systemName: toolActivitySymbol(for: name))
-      .scaledFont(size: size)
-      .foregroundColor(Ink.secondary)
-  case .failed:
-    Image(systemName: "xmark.circle")
-      .scaledFont(size: size)
-      .foregroundColor(Ink.errorRed)
-  }
-}
-
-private func toolActivitySymbol(for name: String) -> String {
-  let cleanName = String(name.split(separator: "__").last ?? Substring(name)).lowercased()
-  if cleanName.contains("search") || cleanName.hasPrefix("grep") || cleanName.hasPrefix("glob") {
-    return "magnifyingglass"
-  }
-  if cleanName.contains("read") || cleanName.contains("fetch") { return "doc.text" }
-  if cleanName.contains("write") || cleanName.contains("edit") { return "pencil" }
-  if cleanName.contains("bash") || cleanName.contains("shell") || cleanName.contains("command") {
-    return "terminal"
-  }
-  if cleanName.contains("agent") { return "person.2" }
-  if cleanName.contains("calendar") { return "calendar" }
-  if cleanName.contains("mail") || cleanName.contains("message") { return "envelope" }
-  if cleanName.contains("permission") { return "lock" }
-  if cleanName.contains("screen") || cleanName.contains("capture") { return "rectangle.dashed" }
-  return "sparkles"
 }
 
 // MARK: - Tool Call Stalled Banner

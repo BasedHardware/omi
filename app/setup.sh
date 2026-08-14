@@ -47,6 +47,7 @@ echo "Usages:"
 echo "- bash setup.sh ios"
 echo "- bash setup.sh android"
 echo "- bash setup.sh ios beta   # explicit production-data dogfood build"
+echo "- bash setup.sh android beta   # explicit production-data dogfood build"
 echo ""
 
 LOCAL_DEV_HOST="${OMI_DEV_HOST:-127.0.0.1}"
@@ -90,8 +91,8 @@ function generate_ios_custom_config() {
 ######################################
 function setup_firebase() {
   mkdir -p android/app/src/dev/ android/app/src/prod/ ios/Config/Dev/ ios/Config/Prod/ ios/Runner/
-  cp setup/prebuilt/firebase_options_local.dart lib/firebase_options_dev.dart
-  cp setup/prebuilt/firebase_options_local.dart lib/firebase_options_prod.dart
+  cp lib/firebase_options_local.dart lib/firebase_options_dev.dart
+  cp lib/firebase_options_local.dart lib/firebase_options_prod.dart
   cp setup/prebuilt/google-services-local.json android/app/src/dev/google-services.json
   cp setup/prebuilt/google-services-local.json android/app/src/prod/google-services.json
   cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Dev/GoogleService-Info.plist
@@ -155,7 +156,41 @@ function setup_app_env() {
     env_file='.env'
     api_base_url="$BETA_API_BASE_URL"
   fi
-  printf 'API_BASE_URL=%s\nUSE_WEB_AUTH=true\nUSE_AUTH_CUSTOM_TOKEN=true\n' "$api_base_url" > "$env_file"
+
+  # Keep developer-owned settings and comments intact. These are the only keys
+  # owned by setup, so update them in place and replace the file atomically.
+  local temp_file source_file="/dev/null"
+  if [[ -f "$env_file" ]]; then source_file="$env_file"; fi
+  temp_file=$(mktemp "${env_file}.tmp.XXXXXX")
+  if ! awk \
+    -v api_base_url="$api_base_url" \
+    'BEGIN { api_written = 0; web_auth_written = 0; custom_token_written = 0 }
+     /^[[:space:]]*API_BASE_URL[[:space:]]*=/ {
+       if (!api_written) { print "API_BASE_URL=" api_base_url; api_written = 1 }
+       next
+     }
+     /^[[:space:]]*USE_WEB_AUTH[[:space:]]*=/ {
+       if (!web_auth_written) { print "USE_WEB_AUTH=true"; web_auth_written = 1 }
+       next
+     }
+     /^[[:space:]]*USE_AUTH_CUSTOM_TOKEN[[:space:]]*=/ {
+       if (!custom_token_written) { print "USE_AUTH_CUSTOM_TOKEN=true"; custom_token_written = 1 }
+       next
+     }
+     { print }
+     END {
+       if (!api_written) print "API_BASE_URL=" api_base_url
+       if (!web_auth_written) print "USE_WEB_AUTH=true"
+       if (!custom_token_written) print "USE_AUTH_CUSTOM_TOKEN=true"
+     }' \
+    "$source_file" 2>/dev/null >"$temp_file"; then
+    rm -f "$temp_file"
+    return 1
+  fi
+  if ! mv "$temp_file" "$env_file"; then
+    rm -f "$temp_file"
+    return 1
+  fi
 }
 
 # #######################
@@ -204,6 +239,7 @@ function run_build_ios() {
 }
 
 
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 case "${1}" in
   ios)
     if [[ "${2:-}" == "beta" ]]; then
@@ -250,3 +286,4 @@ case "${1}" in
     exit 1
     ;;
 esac
+fi

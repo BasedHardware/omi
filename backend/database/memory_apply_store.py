@@ -10,6 +10,8 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, TypeVar, Typed
 
 from pydantic import BaseModel
 
+from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
+
 try:
     from google.cloud.firestore_v1 import transactional as _firestore_transactional  # type: ignore[reportAssignmentType,reportUnknownMemberType]  # firebase_admin firestore_v1 untyped
 except ImportError:  # pragma: no cover - local unit tests mock Firestore.
@@ -49,6 +51,21 @@ class MemoryFirestoreApplyError(Exception):
 
 
 MemoryFirestoreApplyError = MemoryFirestoreApplyError
+
+
+class CanonicalMemoryIntakePausedError(MemoryFirestoreApplyError):
+    """The deployment-wide incident fence has paused canonical mutations."""
+
+
+def _require_canonical_intake_enabled() -> None:
+    """Fence every canonical intake boundary with the global deployment mode."""
+
+    try:
+        mode = MemoryRolloutMode(rollout_mode_env_value())
+    except ValueError as exc:
+        raise CanonicalMemoryIntakePausedError("canonical memory intake mode is malformed") from exc
+    if mode not in {MemoryRolloutMode.write, MemoryRolloutMode.read}:
+        raise CanonicalMemoryIntakePausedError("canonical memory intake is globally paused")
 
 
 class MissingMemoryDocument(MemoryFirestoreApplyError):
@@ -279,6 +296,7 @@ def apply_long_term_patch_firestore(
     adapter owns authoritative Firestore reads/writes and never trusts caller
     snapshots for control state, operation state, or evidence/source state.
     """
+    _require_canonical_intake_enabled()
     transaction = db_client.transaction()
     return _apply_long_term_patch_firestore_transaction(
         transaction,
@@ -315,6 +333,7 @@ def replace_conversation_source_firestore(
     canonical write therefore restarts planning instead of committing a partial
     or stale replacement.
     """
+    _require_canonical_intake_enabled()
     transaction = db_client.transaction()
     return _replace_conversation_source_firestore_transaction(
         transaction,
@@ -1894,6 +1913,7 @@ def _firestore_data(value: object) -> Any:
 
 __all__ = [
     "CanonicalApplyWrite",
+    "CanonicalMemoryIntakePausedError",
     "CanonicalMemoryTombstoneConflict",
     "CanonicalMemoryTombstoneLimitError",
     "CanonicalMemoryTombstoneResult",

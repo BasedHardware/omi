@@ -2,22 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
-from config.memory_rollout import MemoryRolloutCapabilities
-from models.product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.product_authorization import ProductAuthorizationContext
-from utils.memory.default_read_rollout import (
-    DefaultReadRolloutDecision,
-    MemoryReadDecision,
-    build_default_read_rollout_observability,
-)
-from utils.memory.default_read_surface import (
-    DefaultReadSearchResult,
-    fetch_default_read_list,
-    fetch_default_read_vector,
-    rollout_decision_from_legacy_args,
-)
-from utils.memory.product_memory_read_service import fetch_default_product_memory_search
-from utils.observability import record_fallback
+from utils.memory.default_read_rollout import MemoryReadDecision
 
 ACTIVITY_TAGS = {
     'activity',
@@ -102,7 +88,7 @@ class McpMemorySearchResult:
 
     @property
     def should_use_legacy_fallback(self) -> bool:
-        return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
+        return False
 
 
 @dataclass(frozen=True)
@@ -113,29 +99,11 @@ class McpMemoryListResult:
 
     @property
     def should_use_legacy_fallback(self) -> bool:
-        return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
+        return False
 
 
 def mcp_legacy_read_authorized(result: 'McpMemorySearchResult | McpMemoryListResult') -> bool:
-    """Whether an MCP memory read may serve the legacy `memories` surface.
-
-    True for an explicit legacy-safe decision, and for a legacy-cohort account
-    whose `memory_control/state` doc was never created (#9892): callers reach
-    this only on the non-canonical branch after `pin_memory_system`, where the
-    absent doc is the expected un-enrolled state and legacy reads are
-    authoritative. Every other deny reason stays fail-closed.
-    """
-    if result.read_decision == MemoryReadDecision.USE_LEGACY_SAFE:
-        return True
-    if result.read_decision == MemoryReadDecision.DENY_MEMORY and result.fallback_reason == 'missing_rollout_state':
-        record_fallback(
-            component='other',
-            from_mode='memory_default_read',
-            to_mode='legacy_memories',
-            reason='policy',
-            outcome='recovered',
-        )
-        return True
+    """Historical storage is never a second MCP product authority."""
     return False
 
 
@@ -152,66 +120,18 @@ def mcp_denied_read_payload(result: 'McpMemorySearchResult | McpMemoryListResult
     the reading most likely to make a user believe their data was deleted. The payload
     mirrors the existing grant-denial shape so both refusals read the same to a client.
 
-    SHADOW_ONLY is the one exception and returns None. It is not a denial: during shadow
-    mode legacy remains authoritative, so reporting it as an authorization error would be
-    wrong in the other direction. It keeps its existing empty result.
-
     Returning the whole payload rather than a bare reason keeps both the classification and
     the wire shape here, so each surface adds only its own raise.
     """
-    if result.read_decision == MemoryReadDecision.SHADOW_ONLY:
-        return None
     reason = result.fallback_reason or MCP_MEMORY_READ_DENIED_FALLBACK_REASON
     return {'enabled': False, 'reason': reason, 'consumer': 'mcp'}
 
 
-def _mcp_search_result(result: DefaultReadSearchResult) -> McpMemorySearchResult:
-    return McpMemorySearchResult(
-        memories=result.items,
-        read_decision=result.read_decision,
-        fallback_reason=result.fallback_reason,
-    )
-
-
-def _mcp_list_result(result: DefaultReadSearchResult) -> McpMemoryListResult:
-    return McpMemoryListResult(
-        memories=result.items,
-        read_decision=result.read_decision,
-        fallback_reason=result.fallback_reason,
-    )
-
-
-def _attach_mcp_vector_score(
-    memory: Dict[str, Any], item: Dict[str, Any], scores_by_memory_id: Dict[str, float]
-) -> Dict[str, Any]:
-    memory['relevance_score'] = round(float(scores_by_memory_id.get(item['memory_id'], 0)), 4)
-    return memory
-
-
-def _format_memory_mcp_default_memory_item(item: Dict[str, Any], policy: MemoryAccessPolicy) -> Dict[str, Any]:
-    return {
-        'id': item['memory_id'],
-        'content': item.get('content') or '',
-        'category': 'other',
-        'category_source': 'mcp_memory_compatibility_default_no_source_category',
-        'reviewed': False,
-        'reviewed_source': 'mcp_memory_compatibility_default_no_review_state',
-        'manually_added': False,
-        'manually_added_source': 'mcp_memory_compatibility_default_no_manual_state',
-        'memory_default_memory': True,
-        'archive_default_visible': False,
-        'policy': {
-            'consumer': policy.consumer.value,
-            'app_has_default_memory_grant': policy.app_has_default_memory_grant,
-            'archive_capability': policy.archive_capability,
-            'raw_provenance_capability': policy.raw_provenance_capability,
-        },
-    }
-
-
 def build_mcp_default_memory_rollout_observability(
-    decision: DefaultReadRolloutDecision,
+    decision: Any,
 ) -> Dict[str, Any]:
+    from utils.memory.default_read_rollout import build_default_read_rollout_observability
+
     observability = build_default_read_rollout_observability(decision)
     return {
         'uid': decision.uid,
@@ -448,7 +368,7 @@ def search_default_mcp_memories(
     query: str,
     limit: int,
     db_client: Any,
-    rollout_capabilities: Optional[MemoryRolloutCapabilities],
+    rollout_capabilities: Optional[Any],
     app_has_default_memory_grant: bool = True,
     now: Optional[datetime] = None,
 ) -> Optional[List[Dict[str, Any]]]:
@@ -462,52 +382,10 @@ def search_default_mcp_memories(
     Returns `None` when the caller should keep using the legacy MCP memory path.
     """
 
-    if not rollout_capabilities or not rollout_capabilities.memory_reads_enabled:
-        return None
-    if not app_has_default_memory_grant:
-        return None
-
     bounded_limit = max(1, min(limit, 20))
-    policy = MemoryAccessPolicy(
-        consumer=MemoryConsumer.mcp,
-        app_has_default_memory_grant=True,
-        archive_capability=False,
-        raw_provenance_capability=False,
-    )
-    response = fetch_default_product_memory_search(
-        uid=uid,
-        query=query,
-        db_client=db_client,
-        policy=policy,
-        now=now,
-        limit=bounded_limit,
-        offset=0,
-    )
+    from utils.memory.memory_service import MemoryService
 
-    formatted: List[Dict[str, Any]] = []
-    for rank, item in enumerate(response['items']):
-        formatted.append(
-            {
-                'id': item['memory_id'],
-                'content': item['content'],
-                'category': 'other',
-                'category_source': 'mcp_memory_compatibility_default_no_source_category',
-                'reviewed': False,
-                'reviewed_source': 'mcp_memory_compatibility_default_no_review_state',
-                'manually_added': False,
-                'manually_added_source': 'mcp_memory_compatibility_default_no_manual_state',
-                'relevance_score': round(1.0 - (rank * 0.0001), 4),
-                'memory_default_memory': True,
-                'archive_default_visible': False,
-                'policy': {
-                    'consumer': policy.consumer.value,
-                    'app_has_default_memory_grant': policy.app_has_default_memory_grant,
-                    'archive_capability': policy.archive_capability,
-                    'raw_provenance_capability': policy.raw_provenance_capability,
-                },
-            }
-        )
-    return formatted
+    return MemoryService(db_client=db_client).search_mcp(uid, query, limit=bounded_limit)
 
 
 def list_default_mcp_memories(
@@ -516,55 +394,46 @@ def list_default_mcp_memories(
     limit: int,
     offset: int,
     db_client: Any,
-    rollout_decision: Optional[DefaultReadRolloutDecision] = None,
-    rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
+    rollout_decision: Optional[Any] = None,
+    rollout_capabilities: Optional[Any] = None,
     app_has_default_memory_grant: bool = True,
     categories: Optional[List[str]] = None,
     reviewed: Optional[bool] = None,
     manually_added: Optional[bool] = None,
     now: Optional[datetime] = None,
 ) -> McpMemoryListResult:
-    """List default-visible memory memories for MCP get/list callers.
+    """List universal MCP memories while retaining the old result envelope."""
+    from utils.memory.memory_service import MemoryService
 
-    This mirrors the MCP search adapter's rollout decision contract: malformed,
-    missing, no-grant, disabled, and shadow states return an explicit decision and
-    touch no `memory_items`; callers may enter legacy only for an explicit
-    USE_LEGACY_SAFE decision. Archive remains unavailable by default.
-    """
+    service = MemoryService(db_client=db_client)
+    bounded_limit = max(1, min(limit, 500))
+    bounded_offset = max(0, offset)
+    target_end = bounded_offset + bounded_limit
+    max_scan = 5000
+    scanned_offset = 0
+    source_rows: List[Dict[str, Any]] = []
+    # Read in universal pages, then apply sparse filters and the requested
+    # offset.  The old adapter fetched only the first 500 rows before slicing,
+    # silently hiding later memories from larger accounts.
+    while scanned_offset < max_scan and len(source_rows) < max_scan:
+        batch_limit = min(500, max_scan - scanned_offset)
+        batch = service.read(uid, limit=batch_limit, offset=scanned_offset)
+        if not batch:
+            break
+        source_rows.extend(memory.model_dump(mode='json') for memory in batch)
+        scanned_offset += len(batch)
+        if len(batch) < batch_limit:
+            break
 
-    decision = rollout_decision_from_legacy_args(
-        uid=uid,
-        consumer='mcp',
-        rollout_decision=rollout_decision,
-        rollout_capabilities=rollout_capabilities,
-        app_has_default_memory_grant=app_has_default_memory_grant,
+    memories = filter_and_sort_memories(
+        source_rows,
+        reviewed=reviewed,
+        manually_added=manually_added,
+        categories=categories,
+        sort='created_desc',
     )
-
-    normalized_categories = {str(category) for category in categories or [] if str(category)}
-
-    def _mcp_list_filter(memory: Dict[str, Any]) -> bool:
-        if normalized_categories and memory['category'] not in normalized_categories:
-            return False
-        if reviewed is not None and memory['reviewed'] != reviewed:
-            return False
-        if manually_added is not None and memory['manually_added'] != manually_added:
-            return False
-        return True
-
-    return _mcp_list_result(
-        fetch_default_read_list(
-            uid=uid,
-            query='',
-            limit=limit,
-            offset=offset,
-            db_client=db_client,
-            decision=decision,
-            consumer=MemoryConsumer.mcp,
-            now=now,
-            item_filter=_mcp_list_filter,
-            item_formatter=_format_memory_mcp_default_memory_item,
-        )
-    )
+    page = memories[bounded_offset:target_end]
+    return McpMemoryListResult(memories=page, read_decision=MemoryReadDecision.USE_MEMORY)
 
 
 def search_default_mcp_memories_vector(
@@ -573,42 +442,16 @@ def search_default_mcp_memories_vector(
     query: str,
     limit: int,
     db_client: Any,
-    rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
+    rollout_capabilities: Optional[Any] = None,
     app_has_default_memory_grant: bool = True,
-    rollout_decision: Optional[DefaultReadRolloutDecision] = None,
+    rollout_decision: Optional[Any] = None,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
     now: Optional[datetime] = None,
 ) -> McpMemorySearchResult:
-    """Search hydrated memory vectors for the concrete MCP memory-search caller.
+    from utils.memory.memory_service import MemoryService
 
-    Returns an explicit read decision before vector lookup or
-    `users/{uid}/memory_items` reads. Missing/malformed/no-grant/disabled rollout
-    states are DENY_MEMORY/SHADOW_ONLY, not implicit legacy fallback; callers may
-    reach legacy only when the decision is explicitly USE_LEGACY_SAFE.
-    Archive is deliberately default-disabled here; explicit Archive routes remain
-    separate and capability-gated.
-    """
-
-    decision = rollout_decision_from_legacy_args(
-        uid=uid,
-        consumer='mcp',
-        rollout_decision=rollout_decision,
-        rollout_capabilities=rollout_capabilities,
-        app_has_default_memory_grant=app_has_default_memory_grant,
-    )
-    return _mcp_search_result(
-        fetch_default_read_vector(
-            uid=uid,
-            query=query,
-            limit=limit,
-            db_client=db_client,
-            decision=decision,
-            consumer=MemoryConsumer.mcp,
-            vector_query=vector_query,
-            required_projection_commit_id=required_projection_commit_id,
-            now=now,
-            item_formatter=_format_memory_mcp_default_memory_item,
-            score_attacher=_attach_mcp_vector_score,
-        )
+    return McpMemorySearchResult(
+        memories=MemoryService(db_client=db_client).search_mcp(uid, query, limit=max(1, min(limit, 20))),
+        read_decision=MemoryReadDecision.USE_MEMORY,
     )

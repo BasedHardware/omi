@@ -16,10 +16,10 @@ struct ConversationsPage: View {
 
   // Listening mode — used only to decide whether the manual "Start Recording"
   // affordance is meaningful (see startRecordingButton gating).
-  @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
-    AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
-  private var listeningCaptureMode: AssistantSettings.SystemAudioCaptureMode {
-    CaptureListeningLogic.listeningCaptureMode(raw: systemAudioCaptureModeRaw)
+  @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) private var audioRecordingModeRaw =
+    AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
+  private var audioRecordingMode: AssistantSettings.AudioRecordingMode {
+    CaptureListeningLogic.audioRecordingMode(raw: audioRecordingModeRaw)
   }
 
   // Search state
@@ -203,6 +203,30 @@ struct ConversationsPage: View {
   // MARK: - Main View with Recording Header + List
 
   private var mainConversationsView: some View {
+    Group {
+      if isLiveTranscriptExpanded && appState.isLiveCapturing {
+        ConversationsLiveTranscriptFullScreen(
+          onCollapse: {
+            OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+              isLiveTranscriptExpanded = false
+            }
+          }
+        )
+        .transition(.opacity)
+      } else {
+        conversationsListLayout
+      }
+    }
+    // Collapse if capture pauses (meeting ends) or the session stops while expanded.
+    .onChange(of: appState.isLiveCapturing) { _, isLive in
+      if !isLive {
+        isLiveTranscriptExpanded = false
+      }
+    }
+  }
+
+  /// The Conversations list chrome: pinned title row, then the scrolling live card + list.
+  private var conversationsListLayout: some View {
     VStack(spacing: 0) {
       // Fixed page header — title + actions stay pinned; everything below it
       // (live transcript, search, filters, list) scrolls together as one.
@@ -227,7 +251,7 @@ struct ConversationsPage: View {
         // nothing is transcribing misleads the user into thinking capture is
         // active — during an actual meeting isTranscribing is already true and
         // the live transcript replaces this button.
-        if !appState.isTranscribing && listeningCaptureMode == .always {
+        if !appState.isTranscribing && audioRecordingMode == .always {
           startRecordingButton
         }
       }
@@ -243,24 +267,6 @@ struct ConversationsPage: View {
         floatingActionBars
       }
     }
-    .overlay {
-      if isLiveTranscriptExpanded {
-        ConversationsLiveTranscriptFullScreen(
-          onCollapse: {
-            OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-              isLiveTranscriptExpanded = false
-            }
-          }
-        )
-        .transition(.opacity)
-      }
-    }
-    // Collapse the full-screen transcript if transcription stops while it's open.
-    .onChange(of: appState.isTranscribing) { _, isTranscribing in
-      if !isTranscribing {
-        isLiveTranscriptExpanded = false
-      }
-    }
   }
 
   /// Everything below the fixed header, rendered inside a single scroll so the
@@ -268,9 +274,9 @@ struct ConversationsPage: View {
   /// together. When `embedded`, the parent owns the scroll and this renders bare.
   @ViewBuilder private var scrollingBody: some View {
     let content = VStack(spacing: 0) {
-      // Live transcript while recording — updates as it's spoken. Click to
-      // expand it full screen.
-      if appState.isTranscribing {
+      // Live transcript while actually capturing. Only Meetings keeps a session
+      // armed with the mic paused (`isAwaitingMeeting`); that is not Live.
+      if appState.isLiveCapturing {
         ConversationsLiveTranscript(
           onExpand: {
             OmiMotion.withGated(.easeInOut(duration: 0.2)) {

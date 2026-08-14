@@ -88,3 +88,77 @@ def test_delete_all_memories_small_count_single_commit():
     memories.delete_all_memories("u1", firestore_client=fake)
 
     assert commit_sink == [3]
+
+
+class _UnlockDoc:
+    def __init__(self, path):
+        self.reference = path
+
+
+class _UnlockQuery:
+    def __init__(self, docs):
+        self._docs = docs
+
+    def stream(self):
+        return iter(self._docs)
+
+
+class _UnlockCollection:
+    def __init__(self, db, path):
+        self._db = db
+        self._path = path
+
+    def document(self, doc_id):
+        return _UnlockDocument(self._db, f"{self._path}/{doc_id}")
+
+    def where(self, *, filter):
+        self._db.filters.append((self._path, filter.field_path, filter.op_string, filter.value))
+        return _UnlockQuery(self._db.docs_by_collection.get(self._path, []))
+
+
+class _UnlockDocument:
+    def __init__(self, db, path):
+        self._db = db
+        self._path = path
+
+    def collection(self, name):
+        return _UnlockCollection(self._db, f"{self._path}/{name}")
+
+
+class _UnlockBatch:
+    def __init__(self, db):
+        self._db = db
+        self._updates = []
+
+    def update(self, reference, payload):
+        self._updates.append((reference, payload))
+
+    def commit(self):
+        self._db.updates.extend(self._updates)
+
+
+class _UnlockDb:
+    def __init__(self):
+        self.docs_by_collection = {
+            "users/u1/memories": [_UnlockDoc("legacy-locked")],
+            "users/u1/memory_items": [_UnlockDoc("canonical-locked")],
+        }
+        self.filters = []
+        self.updates = []
+
+    def collection(self, path):
+        return _UnlockCollection(self, path)
+
+    def batch(self):
+        return _UnlockBatch(self)
+
+
+def test_unlock_all_memories_updates_legacy_and_canonical_lock_fields():
+    fake = _UnlockDb()
+
+    memories.unlock_all_memories("u1", firestore_client=fake)
+
+    assert ("users/u1/memories", "is_locked", "==", True) in fake.filters
+    assert ("users/u1/memory_items", "promotion.is_locked", "==", True) in fake.filters
+    assert ("legacy-locked", {"is_locked": False}) in fake.updates
+    assert ("canonical-locked", {"promotion.is_locked": False}) in fake.updates

@@ -3,12 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
-from config.memory_rollout import (
-    MemoryRolloutMode,
-    MemoryRolloutConfig,
-    MemoryRolloutState,
-    MemoryRolloutStageGate,
-)
+from config.memory_rollout import MemoryRolloutMode, universal_memory_capabilities
 from database.memory_collections import MemoryCollections
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
 from models.product_memory import (
@@ -63,111 +58,14 @@ def _item(**overrides):
     return MemoryItem(**base)
 
 
-def test_rollout_modes_are_explicit_and_read_is_superset_of_write_after_gates_pass():
-    state = MemoryRolloutState(
-        uid="u1",
-        mode=MemoryRolloutMode.read,
-        mode_epoch=2,
-        fallback_projection_ready=True,
-        stage_gates={
-            MemoryRolloutStageGate.shadow: "passed",
-            MemoryRolloutStageGate.write: "passed",
-            MemoryRolloutStageGate.read: "passed",
-        },
-    )
-    non_allowlisted = MemoryRolloutConfig(enabled_users={"u1"}, mode=MemoryRolloutMode.read).for_user("u2")
-    assert non_allowlisted.mode == MemoryRolloutMode.off
-    assert non_allowlisted.legacy_only is True
-    assert non_allowlisted.memory_writes_enabled is False
-    assert non_allowlisted.memory_reads_enabled is False
-
-    shadow = MemoryRolloutConfig(enabled_users={"u1"}, mode=MemoryRolloutMode.shadow).for_user("u1", state)
-    assert shadow.shadow_artifacts_enabled is True
-    assert shadow.memory_writes_enabled is False
-    assert shadow.memory_reads_enabled is False
-
-    write = MemoryRolloutConfig(enabled_users={"u1"}, mode=MemoryRolloutMode.write).for_user("u1", state)
-    assert write.memory_writes_enabled is True
-    assert write.memory_reads_enabled is False
-    assert write.legacy_reads_authoritative is True
-
-    read = MemoryRolloutConfig(enabled_users={"u1"}, mode=MemoryRolloutMode.read).for_user("u1", state)
-    assert read.memory_writes_enabled is True
-    assert read.memory_reads_enabled is True
-    assert read.legacy_reads_authoritative is False
-
-
-def test_rollout_capabilities_fail_closed_without_required_state_and_gates():
-    cfg = MemoryRolloutConfig(enabled_users={"u1"}, mode=MemoryRolloutMode.read)
-
-    no_state = cfg.for_user("u1")
-    assert no_state.memory_writes_enabled is False
-    assert no_state.memory_reads_enabled is False
-    assert no_state.shadow_artifacts_enabled is True
-
-    gates_missing = cfg.for_user(
-        "u1",
-        MemoryRolloutState(uid="u1", mode=MemoryRolloutMode.read, fallback_projection_ready=True, stage_gates={}),
-    )
-    assert gates_missing.memory_writes_enabled is False
-    assert gates_missing.memory_reads_enabled is False
-
-    no_fallback = cfg.for_user(
-        "u1",
-        MemoryRolloutState(
-            uid="u1",
-            mode=MemoryRolloutMode.read,
-            fallback_projection_ready=False,
-            stage_gates={
-                MemoryRolloutStageGate.shadow: "passed",
-                MemoryRolloutStageGate.write: "passed",
-                MemoryRolloutStageGate.read: "passed",
-            },
-        ),
-    )
-    assert no_fallback.memory_writes_enabled is True
-    assert no_fallback.memory_reads_enabled is False
-
-    writes_blocked = cfg.for_user(
-        "u1",
-        MemoryRolloutState(
-            uid="u1",
-            mode=MemoryRolloutMode.read,
-            fallback_projection_ready=True,
-            writes_blocked=True,
-            stage_gates={
-                MemoryRolloutStageGate.shadow: "passed",
-                MemoryRolloutStageGate.write: "passed",
-                MemoryRolloutStageGate.read: "passed",
-            },
-        ),
-    )
-    assert writes_blocked.memory_writes_enabled is False
-    assert writes_blocked.memory_reads_enabled is False
-
-
-def test_rollout_state_transitions_increment_epoch_and_protect_legacy_authoritative_downgrades():
-    state = MemoryRolloutState(
-        uid="u1",
-        mode=MemoryRolloutMode.read,
-        mode_epoch=2,
-        persistent_memory_writes_started=True,
-        fallback_projection_ready=False,
-        decommission_reconciled=False,
-    )
-
-    assert state.can_transition_to(MemoryRolloutMode.write) is False
-    assert state.can_transition_to(MemoryRolloutMode.shadow) is False
-    assert state.can_transition_to(MemoryRolloutMode.off) is False
-
-    state.fallback_projection_ready = True
-    next_state = state.transition_to(MemoryRolloutMode.write)
-    assert next_state.mode == MemoryRolloutMode.write
-    assert next_state.mode_epoch == 3
-
-    assert next_state.can_transition_to(MemoryRolloutMode.off) is False
-    next_state.decommission_reconciled = True
-    assert next_state.can_transition_to(MemoryRolloutMode.off) is True
+def test_memory_capabilities_are_universal_and_preserve_generation():
+    universal = universal_memory_capabilities("u2", account_generation=7)
+    assert universal.mode == MemoryRolloutMode.read
+    assert universal.legacy_only is False
+    assert universal.memory_writes_enabled is True
+    assert universal.memory_reads_enabled is True
+    assert universal.legacy_reads_authoritative is False
+    assert universal.account_generation == 7
 
 
 def test_memory_collections_define_unified_memory_items_and_no_separate_short_term_archive_store():

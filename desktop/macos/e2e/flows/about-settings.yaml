@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+Controls.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopUpdateStatusPresentation.swift
+  - desktop/macos/Desktop/Sources/MainWindow/SupportLinks.swift
 preconditions:
   - automation_bridge_ready
 

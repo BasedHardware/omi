@@ -3,6 +3,7 @@ import CryptoKit
 import Foundation
 import Network
 import OmiSupport
+import OmiTheme
 import VoiceTurnDomain
 
 enum DesktopAutomationLaunchOptions {
@@ -152,9 +153,9 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var homeMode: String?
   /// `loading`, `legacy`, or `chat_first`; never a local rollout preference.
   var shellVariant: String?
-  /// Stable typed route for the cohort shell. Nil for the legacy shell.
+  /// Stable typed route for the Chat-first shell. Nil for the legacy shell.
   var chatFirstRoute: String?
-  /// Set only by the mounted cohort destination after it has appeared. This
+  /// Set only by the mounted Chat-first destination after it has appeared. This
   /// keeps a successful navigation response equivalent to the target being
   /// visible, rather than merely accepted by the root reducer.
   var visibleChatFirstRoute: String?
@@ -735,9 +736,7 @@ final class DesktopAutomationActionRegistry {
       run: handler)
   }
 
-  func unregister(_ name: String) {
-    entries[name] = nil
-  }
+  func unregister(_ name: String) { entries[name] = nil }
 
   func descriptors() -> [DesktopAutomationActionDescriptor] {
     entries.values.map(\.descriptor).sorted { $0.name < $1.name }
@@ -935,8 +934,7 @@ final class DesktopAutomationActionRegistry {
       summary: "Configure the non-production contextual task interruption gate",
       params: [
         "enabled", "shipped_cohorts_enabled", "daily_limit", "minimum_spacing_seconds",
-        "quiet_start_minute", "quiet_end_minute", "notifications_enabled", "frequency",
-        "task_notifications_enabled",
+        "notifications_enabled", "frequency", "task_notifications_enabled",
       ]
     ) { params in
       var configuration = ProactiveTaskInterruptionSettings.load()
@@ -947,12 +945,6 @@ final class DesktopAutomationActionRegistry {
       configuration.minimumSpacing = TimeInterval(
         max(
           0, intParam(params["minimum_spacing_seconds"], default: Int(configuration.minimumSpacing))))
-      configuration.quietHoursStartMinute = min(
-        max(
-          0, intParam(params["quiet_start_minute"], default: configuration.quietHoursStartMinute)), 1439)
-      configuration.quietHoursEndMinute = min(
-        max(
-          0, intParam(params["quiet_end_minute"], default: configuration.quietHoursEndMinute)), 1439)
       ProactiveTaskInterruptionSettings.save(configuration)
       if params["notifications_enabled"] != nil {
         UserDefaults.standard.set(
@@ -1012,7 +1004,12 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "probe_suggestion_nudge",
       summary: "Run the real suggestion grounding/evaluation/delivery path on the latest frame",
-      params: ["app", "window_title"]
+      params: ["app", "window_title"],
+      safety: "network_or_model",
+      sideEffects: [
+        "may call model/backend services",
+        "may deliver a user-visible suggestion when notification controls allow",
+      ]
     ) { params in
       let app = params["app"].flatMap { $0.isEmpty ? nil : $0 }
       let title = params["window_title"].flatMap { $0.isEmpty ? nil : $0 }
@@ -1022,6 +1019,7 @@ final class DesktopAutomationActionRegistry {
       )
     }
 
+    registerContextBucketDirectorProbe()
     register(
       name: "set_contextual_task_focus",
       summary: "Set deterministic focus suppression for contextual task interruptions",
@@ -1068,7 +1066,7 @@ final class DesktopAutomationActionRegistry {
       else {
         throw DesktopAutomationActionError.invalidParams("context event could not be normalized")
       }
-      let matched = TaskContextSubjectMatcher.shared.resolve(event)
+      let matched = await ContextSubjectBindingService.shared.resolve(event)
       let referenceHash = matched.referenceHash
       await TaskContextualResurfacingService.shared.observe(matched)
       let shouldFlush = boolParam(params["flush"], default: true)
@@ -1245,9 +1243,7 @@ final class DesktopAutomationActionRegistry {
       params: ["enabled"]
     ) { params in
       let enabled = boolParam(params["enabled"], default: true)
-      AssistantSettings.shared.transcriptionEnabled = enabled
-      NotificationCenter.default.post(
-        name: .toggleTranscriptionRequested, object: nil, userInfo: ["enabled": enabled])
+      AssistantSettings.shared.audioRecordingMode = enabled ? .onlyMeetings : .off
       return ["enabled": enabled ? "true" : "false"]
     }
 
@@ -1266,6 +1262,8 @@ final class DesktopAutomationActionRegistry {
       case "inject_multi":
         return await appState.automationInjectCaptureTestTranscriptMulti(
           segmentsJSON: params["segments"] ?? params["text"] ?? "")
+      case "meeting_start", "meeting_end":
+        return ["conversation_role": appState.automationObserveMeetingBoundary(active: phase == "meeting_start")]
       case "stop":
         return await appState.automationStopCaptureTestSession()
       case "lifecycle":
@@ -1277,7 +1275,7 @@ final class DesktopAutomationActionRegistry {
         _ = await appState.automationInjectCaptureTestTranscript(text: marker)
         return await appState.automationStopCaptureTestSession()
       default:
-        return ["error": "phase must be start, inject, inject_multi, stop, or lifecycle"]
+        return ["error": "phase must be start, inject, inject_multi, meeting_start, meeting_end, stop, or lifecycle"]
       }
     }
 
@@ -1706,11 +1704,20 @@ final class DesktopAutomationActionRegistry {
         ? "none"
         : containing.map { window in
           var extras = ""
+          let local = NSPoint(
+            x: cocoaPoint.x - window.frame.minX, y: cocoaPoint.y - window.frame.minY)
           if let bar = window as? FloatingControlBarWindow {
-            let local = NSPoint(
-              x: cocoaPoint.x - window.frame.minX, y: cocoaPoint.y - window.frame.minY)
             extras =
               " acceptsHit=\(bar.automationAcceptsMouseHit(inContentPoint: local)) ignores=\(window.ignoresMouseEvents)"
+          } else {
+            // Shell click-through verdict (ShellClickThrough.swift): whether this point owns the
+            // pointer, per the same policy the ignoresMouseEvents sync runs.
+            let accepts = ShellClickThroughPolicy.acceptsMouseHit(
+              localPoint: local,
+              windowSize: window.frame.size,
+              isResizable: window.styleMask.contains(.resizable),
+              contentContains: { InkGlassHitRegions.shared.containsPoint($0, in: window) })
+            extras = " shellAccepts=\(accepts) ignores=\(window.ignoresMouseEvents)"
           }
           return
             "\(String(describing: type(of: window)))(\"\(window.title)\" level=\(window.level.rawValue) key=\(window.isKeyWindow) idx=\(window.orderedIndex)\(extras))"
@@ -3418,6 +3425,7 @@ final class DesktopAutomationActionRegistry {
       let hasPermission = appState?.hasNotificationPermission ?? false
       let bannersDisabled = appState?.isNotificationBannerDisabled ?? false
       return [
+        "schema": "enabled,frequency,frequency_label,has_permission,banners_disabled",
         "enabled": settings.enabled ? "true" : "false",
         "frequency": "\(settings.frequency)",
         "frequency_label": settings.frequencyDescription,
@@ -3437,6 +3445,12 @@ final class DesktopAutomationActionRegistry {
         enabled: enabled,
         frequency: frequency
       )
+      UserDefaults.standard.set(
+        response.enabled,
+        forKey: NotificationService.masterEnabledDefaultsKey)
+      UserDefaults.standard.set(
+        response.frequency,
+        forKey: NotificationService.frequencyDefaultsKey)
       return [
         "saved": "true",
         "enabled": response.enabled ? "true" : "false",
@@ -3510,7 +3524,8 @@ final class DesktopAutomationActionRegistry {
         "insight_enabled": insight.isEnabled ? "true" : "false",
         "memory_enabled": memory.isEnabled ? "true" : "false",
         "screen_analysis_enabled": assistant.screenAnalysisEnabled ? "true" : "false",
-        "transcription_enabled": assistant.transcriptionEnabled ? "true" : "false",
+        "transcription_enabled": assistant.audioRecordingMode != .off ? "true" : "false",
+        "audio_recording_mode": assistant.audioRecordingMode.rawValue,
         "multi_chat_enabled": UserDefaults.standard.bool(forKey: .multiChatEnabled) ? "true" : "false",
       ]
     }

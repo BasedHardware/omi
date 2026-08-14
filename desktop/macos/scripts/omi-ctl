@@ -148,7 +148,7 @@ raise SystemExit(0 if ready else 1)
     # chat-first-only ones, ChatFirstRoute.primaryAutomationDestination. `focus` and `insight` were
     # listed after their pages were deleted, so `omi-ctl navigate insight` posted a target the app
     # answered "ok" to and then did nothing with — the failure mode the bridge exists to avoid.
-    echo "dashboard|home  conversations  chat  memories  tasks  goals(chat-first)  rewind  apps|integrations  settings  permissions  help" ;;
+    echo "dashboard|home  conversations  chat  memories  tasks  goals(chat-first)  rewind  apps|integrations  settings  permissions" ;;
   *)
     cat <<EOF
 omi-ctl — drive the Omi desktop app via the local automation bridge

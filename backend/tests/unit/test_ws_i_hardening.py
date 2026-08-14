@@ -63,7 +63,7 @@ from utils.memory.canonical_memory_adapter import (  # noqa: E402
     write_canonical_extraction_memory,
 )
 
-from tests.unit.test_ws_i_write_convergence import (  # noqa: E402
+from tests.unit.fixtures.canonical_memory_fakes import (  # noqa: E402
     _FakeDb,
     _fresh_short_term_item,
     _install_heavy_import_stubs,

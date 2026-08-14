@@ -1192,8 +1192,12 @@ def _merge_segments(
         if duration <= _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS:
             return [entry]
 
-        chunk_count = ceil(duration / _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS)
         text_words = str(entry['text']).split()
+        if not text_words:
+            return [entry]
+
+        chunk_count = min(ceil(duration / _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS), len(text_words))
+        chunk_duration = duration / chunk_count
         words_per_chunk, remainder = divmod(len(text_words), chunk_count)
         chunks: List[Dict[str, Any]] = []
         text_offset = 0
@@ -1201,8 +1205,8 @@ def _merge_segments(
             chunk_word_count = words_per_chunk + (1 if index < remainder else 0)
             next_text_offset = text_offset + chunk_word_count
             chunk = dict(entry)
-            chunk['start'] = start + index * _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS
-            chunk['end'] = min(start + (index + 1) * _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS, end)
+            chunk['start'] = start + index * chunk_duration
+            chunk['end'] = end if index == chunk_count - 1 else start + (index + 1) * chunk_duration
             chunk['text'] = ' '.join(text_words[text_offset:next_text_offset])
             chunks.append(chunk)
             text_offset = next_text_offset

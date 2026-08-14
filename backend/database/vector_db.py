@@ -70,7 +70,7 @@ class VectorRecordDoc(TypedDict):
 
     All three keys are always populated by every upsert site in this module,
     so the contract is total=True. ``metadata`` stays ``Dict[str, Any]`` so
-    canonical-cohort projection keys (added by ``build_memory_vector_metadata``)
+    canonical memory projection keys (added by ``build_memory_vector_metadata``)
     remain representable without enumerating every metadata field.
     """
 
@@ -558,7 +558,7 @@ def upsert_canonical_memory_vector(
     *,
     projection_commit_id: str | None = None,
 ) -> List[float] | None:
-    """Upsert one canonical-cohort memory vector using a user-scoped provider id."""
+    """Upsert one canonical memory vector using a user-scoped provider id."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping canonical memory vector upsert')
         return None
@@ -1039,7 +1039,9 @@ def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]) -> No
     if not action_item_ids:
         return
     vector_ids = [f'{uid}-ai-{aid}' for aid in action_item_ids]
-    index.delete(ids=vector_ids, namespace=ACTION_ITEMS_NAMESPACE)
+    # Chunk to stay within Pinecone's per-delete id limit (1,000).
+    for i in range(0, len(vector_ids), 1000):
+        index.delete(ids=vector_ids[i : i + 1000], namespace=ACTION_ITEMS_NAMESPACE)
     logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')
 
 

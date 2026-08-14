@@ -162,7 +162,7 @@ def canonical_graph_context():
     with (
         patch(
             "utils.memory.kg_graph_traversal.resolve_memory_system",
-            side_effect=lambda uid, **_: (MemorySystem.CANONICAL if uid == CANONICAL_UID else MemorySystem.LEGACY),
+            return_value=MemorySystem.CANONICAL,
         ),
         patch(
             "utils.memory.kg_graph_traversal.fetch_authoritative_product_memory_items",
@@ -181,15 +181,15 @@ def canonical_graph_context():
         }
 
 
-def test_user_allows_kg_traversal_canonical_only(canonical_graph_context):
+def test_user_allows_kg_traversal_for_every_authenticated_account(canonical_graph_context):
     assert user_allows_kg_traversal(CANONICAL_UID) is True
-    assert user_allows_kg_traversal(LEGACY_UID) is False
+    assert user_allows_kg_traversal(LEGACY_UID) is True
 
 
-def test_legacy_cohort_skips_traversal(canonical_graph_context):
+def test_former_legacy_account_uses_the_same_traversal(canonical_graph_context):
     result = traverse_knowledge_graph(LEGACY_UID, "Alice", hops=1, graph=canonical_graph_context["graph"])
-    assert result.skipped_reason == "not_canonical_cohort"
-    assert result.triples == []
+    assert result.skipped_reason is None
+    assert result.triples
 
 
 def test_one_hop_from_alice_returns_direct_neighbors(canonical_graph_context):
@@ -301,16 +301,15 @@ def test_traverse_knowledge_graph_tool_registered_in_core_tools():
     assert "traverse_knowledge_graph_tool" in tools_init
 
 
-def test_legacy_formatted_message(canonical_graph_context):
+def test_empty_formatted_message(canonical_graph_context):
     result = TraversalResult(
         entity_query="Alice",
         requested_hops=1,
         effective_hops=1,
         hops_capped=False,
-        skipped_reason="not_canonical_cohort",
     )
     output = format_traversal_result(result)
-    assert "unavailable" in output.lower()
+    assert "no knowledge-graph entities matched" in output.lower()
 
 
 def test_canonical_formatted_neighbors(canonical_graph_context):
