@@ -142,6 +142,7 @@ SERVICE_PID=""
 SERVICE_START_IDENTITY=""
 SERVICE_LOGGER_PID=""
 cleanup() {
+  local exit_status=$1
   local stop_rc=0
   if (( LEAVE_RUNNING )); then return; fi
   stop_local_test_gateway
@@ -169,9 +170,11 @@ cleanup() {
   fi
   [[ ! -p "$SERVICE_LOG_PIPE" ]] || rm -f -- "$SERVICE_LOG_PIPE"
   [[ ! -e "$SERVICE_LOG_READY" ]] || rm -f -- "$SERVICE_LOG_READY"
-  if (( stop_rc == 0 )); then rm -rf -- "$RUN_DIR"; fi
+  # Keep failed-run diagnostics. Deleting the run dir on a successful stop used
+  # to erase the sanitized log the error line points at.
+  if (( stop_rc == 0 && exit_status == 0 )); then rm -rf -- "$RUN_DIR"; fi
 }
-trap cleanup EXIT
+trap 'cleanup $?' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
