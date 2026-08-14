@@ -18,6 +18,11 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
     let message: String
   }
 
+  private struct PendingAlert {
+    let request: AlertRequest
+    let completion: (@MainActor () -> Void)?
+  }
+
   typealias BeginSheetModal = (NSAlert, NSWindow, @escaping () -> Void) -> Void
   struct AppKitAlertOperations {
     let beginSheetModal: BeginSheetModal
@@ -34,7 +39,7 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
   private let appKitOperations: AppKitAlertOperations
   private let revealMainWindow: () -> Void
   private let canHostSheet: SheetHostChecker
-  private var pendingAlerts: [AlertRequest] = []
+  private var pendingAlerts: [PendingAlert] = []
   private var activeAlert: AlertRequest?
   private var isPresentingAlert = false
   private var isRevealingMainWindow = false
@@ -80,15 +85,16 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
     NotificationCenter.default.removeObserver(self)
   }
 
-  func present(title: String, message: String) {
+  func present(title: String, message: String, completion: (@MainActor () -> Void)? = nil) {
     let request = AlertRequest(title: title, message: message)
-    guard activeAlert != request, !pendingAlerts.contains(request) else { return }
-    pendingAlerts.append(request)
+    guard activeAlert != request, !pendingAlerts.contains(where: { $0.request == request }) else { return }
+    pendingAlerts.append(.init(request: request, completion: completion))
     presentPendingAlertIfPossible()
   }
 
   @objc private func presentPendingAlertIfPossible() {
-    guard !isPresentingAlert, !isRevealingMainWindow, let request = pendingAlerts.first else { return }
+    guard !isPresentingAlert, !isRevealingMainWindow, !pendingAlerts.isEmpty else { return }
+    let pending = pendingAlerts[0]
     guard let window = shellWindowProvider() else {
       revealMainWindowIfNeeded()
       return
@@ -102,16 +108,17 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
 
     pendingAlerts.removeFirst()
     isPresentingAlert = true
-    activeAlert = request
+    activeAlert = pending.request
     let alert = NSAlert()
-    alert.messageText = request.title
-    alert.informativeText = request.message
+    alert.messageText = pending.request.title
+    alert.informativeText = pending.request.message
     alert.alertStyle = .warning
     alert.addButton(withTitle: "OK")
     appKitOperations.beginSheetModal(alert, window) { [weak self] in
       Task { @MainActor in
         self?.isPresentingAlert = false
         self?.activeAlert = nil
+        pending.completion?()
         self?.presentPendingAlertIfPossible()
       }
     }
@@ -923,8 +930,8 @@ extension AppState {
     alert.runModal()
   }
 
-  func showAlert(title: String, message: String) {
-    alertPresenter.present(title: title, message: message)
+  func showAlert(title: String, message: String, completion: (@MainActor () -> Void)? = nil) {
+    alertPresenter.present(title: title, message: message, completion: completion)
   }
 
   // MARK: - Transcription

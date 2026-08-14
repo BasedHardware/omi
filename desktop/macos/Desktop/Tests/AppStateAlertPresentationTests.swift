@@ -168,6 +168,32 @@ final class AppStateAlertPresentationTests: XCTestCase {
       recorder.presentations,
       [.init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window)])
   }
+
+  func testAppKitPresenterRunsCompletionAfterTheSheetEnds() async {
+    let window = NSWindow()
+    let recorder = SheetPresentationRecorder(deferCompletions: true)
+    let presenter = AppKitSheetAlertPresenter(
+      shellWindowProvider: { window },
+      appKitOperations: .init(beginSheetModal: recorder.present),
+      revealMainWindow: {})
+
+    var completions = 0
+    presenter.present(title: "Omi Needs Microphone Access", message: "Enable Omi under System Settings.") {
+      completions += 1
+    }
+
+    await Task.yield()
+    await Task.yield()
+
+    XCTAssertEqual(recorder.presentations.count, 1)
+    XCTAssertEqual(completions, 0, "completion must not run before the sheet ends")
+
+    recorder.endSheet()
+    await Task.yield()
+    await Task.yield()
+
+    XCTAssertEqual(completions, 1, "completion runs once after the sheet ends")
+  }
 }
 
 @MainActor
@@ -188,9 +214,25 @@ private final class SheetPresentationRecorder {
   }
 
   private(set) var presentations: [Presentation] = []
+  private var deferredCompletions: [() -> Void] = []
+  private let deferCompletions: Bool
+
+  init(deferCompletions: Bool = false) {
+    self.deferCompletions = deferCompletions
+  }
 
   func present(alert: NSAlert, window: NSWindow, completion: @escaping () -> Void) {
     presentations.append(.init(title: alert.messageText, message: alert.informativeText, window: window))
-    completion()
+    if deferCompletions {
+      deferredCompletions.append(completion)
+    } else {
+      completion()
+    }
+  }
+
+  /// Simulate the sheet ending; the presenter's per-alert completion runs now.
+  func endSheet() {
+    guard !deferredCompletions.isEmpty else { return }
+    deferredCompletions.removeFirst()()
   }
 }
