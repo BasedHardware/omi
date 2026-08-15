@@ -1,0 +1,32 @@
+desktop/macos/Desktop/Tests/ShellListeningCycleTests.swift
+  s_3ccc0619ee6841::t_3f73f7147ac0c0 1-182
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
+  s_3ccc0619ee6841::t_4522205ed8cac8 460-461,465-475
+  s_3ccc0619ee6841::t_8caff9075bee87 447-449
+  s_3ccc0619ee6841::t_30ceb4027301cf 251-252,308,313,375-380,393-394,397-404,430,436,441
+  s_3ccc0619ee6841::t_be0cae5dda0cec 207-228,253-258,263,266,268,305-307,309-312,314,347-353,431-435,437-440
+desktop/macos/Desktop/Sources/MainWindow/CaptureListeningLogic.swift
+  s_3ccc0619ee6841::t_b6c8c04e6ed4b0 65-93,96-100,102,104,108,118
+desktop/macos/changelog/unreleased/20260815-listening-mode-cycle.json
+  s_3ccc0619ee6841::t_5780315394aab0 1-3
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_3ccc0619ee6841::t_b880fe9be6e821 1802
+desktop/macos/Desktop/Tests/ShellStatusIconLegibilityTests.swift
+  s_3ccc0619ee6841::t_cf32ce36283d74 599,619,630-632,636
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2d2222ee6cbeb8f86c958a404f2e618c92e075c2",
+  "prompts": {},
+  "sessions": {
+    "s_3ccc0619ee6841": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a651b70-49a8-4b37-aff0-ae9fbe9619cb",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
