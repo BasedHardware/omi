@@ -180,3 +180,76 @@ def test_blank_cursor_falls_back_to_offset_read_when_cursor_secret_missing():
         )
     service.read.assert_called_once()
     service.read_page.assert_called_once()
+
+
+def _get_first_page(service):
+    scope_request = types.SimpleNamespace(device_scope='all', client_device_id=None)
+    with (
+        patch.object(mem_mod, 'MemoryService', return_value=service),
+        patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope_request),
+        patch.object(mem_mod, '_validate_device_scope_request'),
+        patch.object(mem_mod, 'memory_list_response', side_effect=lambda memories, _exposure, headers=None: memories),
+    ):
+        return mem_mod.get_memories(
+            response=MagicMock(),
+            limit=100,
+            offset=0,
+            cursor=None,
+            uid='uid1',
+            device_scope='all',
+            client_device_id=None,
+            x_app_platform=None,
+            x_device_id_hash=None,
+        )
+
+
+def test_first_page_falls_back_to_offset_read_when_canonical_scan_unavailable():
+    """GET 503: canonical keyset scan wraps any failure as this detail.
+
+    The offset ``read`` path does not use the scan, so the first page must be
+    served from ``read`` instead of failing the whole list endpoint.
+    """
+    from fastapi import HTTPException
+
+    service = MagicMock()
+    service.read_page.side_effect = HTTPException(status_code=503, detail="Canonical memory unavailable")
+    service.read.return_value = ['memory-from-offset-read']
+
+    result = _get_first_page(service)
+
+    assert result == ['memory-from-offset-read']
+    service.read_page.assert_called_once()
+    service.read.assert_called_once()
+
+
+def test_first_page_propagates_unrelated_503_detail():
+    from fastapi import HTTPException
+
+    import pytest
+
+    service = MagicMock()
+    service.read_page.side_effect = HTTPException(status_code=503, detail="Some other degradation")
+
+    with pytest.raises(HTTPException) as exc_info:
+        _get_first_page(service)
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Some other degradation"
+    service.read.assert_not_called()
+
+
+def test_first_page_propagates_non_503_errors():
+    from fastapi import HTTPException
+
+    import pytest
+
+    service = MagicMock()
+    service.read_page.side_effect = HTTPException(
+        status_code=402, detail="A paid plan is required to access this memory."
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _get_first_page(service)
+
+    assert exc_info.value.status_code == 402
+    service.read.assert_not_called()
