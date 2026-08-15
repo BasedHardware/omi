@@ -138,6 +138,10 @@ if _conversation_processing_stub is not None and not hasattr(_conversation_proce
 # discard_parser only needs pydantic and langchain_core, so load the real module.
 _load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm" / "discard_parser.py")
 
+# prompt_cache only needs tiktoken, so load the real module rather than stub the
+# cache floor the preflight assertions below depend on.
+_load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" / "prompt_cache.py")
+
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",

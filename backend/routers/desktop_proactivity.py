@@ -23,6 +23,7 @@ from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.desktop_llm_stub import llm_stub_enabled
 from utils.llm.gateway_client import llm_gateway_headers
 from utils.llm.gateway_observability import record_direct_exception_surface
+from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS, has_cacheable_prefix
 from utils.llm.providers import get_openai_api_key
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import get_current_user_uid
@@ -126,9 +127,14 @@ def _proactive_provider_request(request: "ProactiveCompletionRequest", uid: str,
     # budget on hidden reasoning. Extraction then returns an empty message with
     # finish_reason=length instead of the required strict JSON payload.
     payload["reasoning_effort"] = "minimal" if request.operation == ProactiveOperation.EXTRACTION else "medium"
-    # These are gateway cache extensions, not OpenAI request fields.
-    payload["messages"] = request.messages
-    payload.pop("prompt_cache_key", None)
+    # Keep the breakpointed messages built above. The desktop client packs the stable
+    # bucket prompt, the volatile frame metadata and the screenshot into ONE user
+    # message, and the provider only serves a cache read from a prefix that ends on a
+    # message boundary or on an explicit breakpoint. Replacing these with the raw
+    # request messages removes the only readable boundary in the prompt, which charges
+    # a full cache write on every call and lets no read ever hit.
+    # prompt_cache_options and metadata are gateway extensions, not OpenAI request
+    # fields; prompt_cache_key is a real OpenAI field and is kept.
     payload.pop("prompt_cache_options", None)
     payload.pop("metadata", None)
     record_fallback(
@@ -336,11 +342,29 @@ def _gateway_payload(request: ProactiveCompletionRequest) -> dict[str, Any]:
             "parser_version": "desktop_proactive_json.v1",
         },
     }
-    if request.cache_key is not None:
+    if request.cache_key is not None and has_cacheable_prefix(_stable_prefix_text(request.messages)):
         payload["prompt_cache_key"] = request.cache_key
-        payload["prompt_cache_options"] = {"mode": "explicit", "ttl": "30m"}
+        payload["prompt_cache_options"] = dict(EXPLICIT_CACHE_OPTIONS)
         payload["messages"] = _add_explicit_cache_breakpoint(request.messages)
     return payload
+
+
+def _stable_prefix_text(messages: list[dict[str, Any]]) -> str:
+    """Return the text a breakpoint would mark as cacheable, for a size preflight.
+
+    A prefix under the provider minimum is never served back as a read, so marking
+    it buys nothing. Mirrors the message chosen by ``_add_explicit_cache_breakpoint``.
+    """
+    for message in reversed(messages):
+        content = message.get("content")
+        if isinstance(content, list):
+            first = next((part for part in content if isinstance(part, dict)), None)
+            if first is not None and first.get("type") == "text" and isinstance(first.get("text"), str):
+                return first["text"]
+            return ""
+        if isinstance(content, str):
+            return content
+    return ""
 
 
 def _add_explicit_cache_breakpoint(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:

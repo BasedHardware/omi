@@ -11,11 +11,20 @@ from fastapi import Response
 from routers import desktop_proactivity
 from utils.subscription import NEO_DESKTOP_GRANDFATHER_CUTOFF
 
+# The provider ignores a cached prefix under 1024 tokens, so any test that expects
+# explicit caching to engage must carry a stable block that clears that floor.
+CACHEABLE_STABLE_PROMPT = "stable bucket instructions for the proactive director. " * 400
 
-def request(operation: str = "proactive_extraction", *, cache_key: str | None = None):
+
+def request(
+    operation: str = "proactive_extraction",
+    *,
+    cache_key: str | None = None,
+    messages: list[dict] | None = None,
+):
     return desktop_proactivity.ProactiveCompletionRequest(
         operation=operation,
-        messages=[{"role": "user", "content": "screen context"}],
+        messages=messages or [{"role": "user", "content": "screen context"}],
         response_format={
             "type": "json_schema",
             "json_schema": {
@@ -35,7 +44,13 @@ def request(operation: str = "proactive_extraction", *, cache_key: str | None = 
 
 def test_operation_pins_lane_and_only_reasoning_enables_explicit_cache():
     extraction = desktop_proactivity._gateway_payload(request())
-    reasoning = desktop_proactivity._gateway_payload(request("proactive_reasoning", cache_key="bucket-7-version-3"))
+    reasoning = desktop_proactivity._gateway_payload(
+        request(
+            "proactive_reasoning",
+            cache_key="bucket-7-version-3",
+            messages=[{"role": "user", "content": CACHEABLE_STABLE_PROMPT}],
+        )
+    )
 
     assert extraction["model"] == "omi:auto:desktop-proactive-extraction"
     assert "prompt_cache_options" not in extraction
@@ -47,6 +62,34 @@ def test_operation_pins_lane_and_only_reasoning_enables_explicit_cache():
     assert parts[1]["prompt_cache_breakpoint"] == {"mode": "explicit"}
 
 
+def test_stable_block_under_provider_minimum_is_not_marked_for_cache():
+    """A prefix the provider will never serve back must not be marked or keyed.
+
+    The write is billed at a premium over fresh input, so paying for one that can
+    never be read is strictly worse than not caching at all.
+    """
+    payload = desktop_proactivity._gateway_payload(
+        request(
+            "proactive_reasoning",
+            cache_key="bucket-7-version-3",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "short stable block"},
+                        {"type": "text", "text": "captured at: 2026-08-15T16:00:00Z"},
+                    ],
+                }
+            ],
+        )
+    )
+
+    assert "prompt_cache_key" not in payload
+    assert "prompt_cache_options" not in payload
+    parts = payload["messages"][0]["content"]
+    assert not any(isinstance(part, dict) and "prompt_cache_breakpoint" in part for part in parts)
+
+
 def test_reasoning_cache_breakpoint_precedes_volatile_text_and_image():
     def parts_for(captured_at: str):
         request_value = request("proactive_reasoning", cache_key="bucket-7-version-3")
@@ -54,7 +97,7 @@ def test_reasoning_cache_breakpoint_precedes_volatile_text_and_image():
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "stable bucket"},
+                    {"type": "text", "text": CACHEABLE_STABLE_PROMPT},
                     {"type": "text", "text": f"captured at: {captured_at}"},
                     {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,"}},
                 ],
@@ -65,7 +108,7 @@ def test_reasoning_cache_breakpoint_precedes_volatile_text_and_image():
     parts = parts_for("2026-08-13T16:00:00Z")
     later_parts = parts_for("2026-08-13T16:00:01Z")
 
-    assert parts[0] == {"type": "text", "text": "stable bucket"}
+    assert parts[0] == {"type": "text", "text": CACHEABLE_STABLE_PROMPT}
     assert parts[1]["prompt_cache_breakpoint"] == {"mode": "explicit"}
     assert parts[2]["text"].startswith("captured at:")
     assert parts[3]["type"] == "image_url"
@@ -377,6 +420,49 @@ def test_dev_direct_provider_fallback_is_scoped_to_proactivity(monkeypatch):
     )
     assert reasoning_provider.payload["model"] == "gpt-5.6-luna"
     assert reasoning_provider.payload["reasoning_effort"] == "medium"
+
+
+def test_dev_direct_keeps_cache_breakpoint_so_reads_can_hit(monkeypatch):
+    """The direct path must not discard the only readable boundary in the prompt.
+
+    The client packs the stable prompt, the volatile frame metadata and the
+    screenshot into one user message. The provider serves a cache read only from a
+    prefix ending on a message boundary or an explicit breakpoint, so dropping the
+    breakpoint charges a full write per call that no later call can ever read.
+    """
+    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
+    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: None)
+
+    provider = desktop_proactivity._proactive_provider_request(
+        request(
+            "proactive_reasoning",
+            cache_key="bucket-7-version-3",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": CACHEABLE_STABLE_PROMPT},
+                        {"type": "text", "text": "captured at: 2026-08-15T16:00:00Z"},
+                        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,"}},
+                    ],
+                }
+            ],
+        ),
+        "user-1",
+        "request-3",
+    )
+
+    parts = provider.payload["messages"][0]["content"]
+    assert parts[0] == {"type": "text", "text": CACHEABLE_STABLE_PROMPT}
+    assert parts[1]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+    assert parts[2]["text"].startswith("captured at:")
+    # prompt_cache_key is a real OpenAI request field; the options/metadata wrappers
+    # are gateway-only extensions the provider would reject.
+    assert provider.payload["prompt_cache_key"] == "bucket-7-version-3"
+    assert "prompt_cache_options" not in provider.payload
+    assert "metadata" not in provider.payload
 
 
 def test_direct_provider_fallback_fails_closed_outside_dev(monkeypatch):
