@@ -386,6 +386,16 @@ const WIRE_PATH_REGISTRY: readonly WirePathRegistryRow[] = [
       + "the account epoch on, which makes a second, unregistered door a place an epoch "
       + "could reach a caller without authority over the account.",
   },
+  {
+    wirePath: "/v1/stm-notes/ops",
+    servedBy: "apps/service/routes/stm-notes.ts",
+    boundVia: ["routes/stm-notes", "app-facing"],
+    reason:
+      "The HTTP write door for user-asserted STM notes. Memories stays read-only "
+      + "(POST /v1/memories/ops remains 422). A second door answering this path would "
+      + "duplicate the epoch fence, write_id registry, and ledger-write authorization "
+      + "that this route already composes.",
+  },
 ];
 /**
  * Server-construction sites exempted from rule 17. Keyed by (file, 1-indexed
@@ -480,7 +490,10 @@ const storageProvenanceAllowMarker = "storage-provenance-ok(";
 
 const queryEvaluationCompositionRoot = "apps/service/composition/memory-query-evaluation.ts";
 const memoryRecallKernelCompositionRoot = "apps/service/composition/memory-recall-kernel.ts";
-const authorizedLedgerContextCompositionRoot = "apps/service/auth/firebase-application-authorization.ts";
+const authorizedLedgerContextCompositionRoots = new Set([
+  "apps/service/auth/firebase-application-authorization.ts",
+  "apps/service/auth/local-application-authorization.ts",
+]);
 const externallyAuthorizedProjectionOwner = "drivers/postgres/firebase-authorized-graph-snapshot-runtime.ts";
 const memoryExportRuntimeOwner = "drivers/postgres/firebase-authorized-memory-export-runtime.ts";
 const sourceImpactCompositionRoot = "apps/service/composition/source-impact.ts";
@@ -530,7 +543,7 @@ for (const file of files(root, new Set(["frontend"]))) {
   if (/\.tsx?$/.test(shown) && !/\.test\.tsx?$/.test(shown)) {
     const code = withoutComments(text);
     if (shown !== "apps/service/auth/authorized-context-internal.ts"
-      && shown !== authorizedLedgerContextCompositionRoot
+      && !authorizedLedgerContextCompositionRoots.has(shown)
       && /\bcreateAuthorizedLedgerWriteContextIssuer\b/.test(code)) {
       failures.push(
         `${shown}: only the auth authority module may construct an authorized ledger context issuer; `
@@ -538,7 +551,7 @@ for (const file of files(root, new Set(["frontend"]))) {
       );
     }
     if (shown !== "apps/service/auth/authorized-context.ts"
-      && shown !== authorizedLedgerContextCompositionRoot
+      && !authorizedLedgerContextCompositionRoots.has(shown)
       && shown !== "scripts/lint-import-graph.ts"
       && /["'][^"']*authorized-context-internal(?:\.ts)?["']/.test(code)) {
       failures.push(

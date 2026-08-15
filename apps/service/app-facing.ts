@@ -137,6 +137,10 @@ import { registerQaEvidenceRoutes } from "./routes/qa-evidence";
 import { registerQaControlRoutes } from "./routes/qa-control";
 import { registerSettingsRoutes, SETTINGS_PATH } from "./routes/settings";
 import { registerTasksOpsRoutes, TASKS_OPS_PATH } from "./routes/tasks-ops";
+import { registerStmNotesOpsRoutes } from "./routes/stm-notes";
+import { composeLocalMemoryFormation, type LocalMemoryFormation, type LocalMemoryFormationMode } from "./composition/memory-formation";
+
+export type { LocalMemoryFormation, LocalMemoryFormationMode } from "./composition/memory-formation";
 import { registerTasksReadRoutes, TASKS_READ_PATH } from "./routes/tasks-read";
 import { prepareTasksRead } from "./composition/tasks-read";
 import { prepareConversationsRead } from "./composition/conversations-read";
@@ -268,6 +272,12 @@ export interface LocalServiceOptions {
   readonly screenEmbeddings?: ScreenEmbeddingSource;
   /** 0 disables the repeating retention timer; boot sweep still runs. Default 6h. */
   readonly screenRetentionIntervalMs?: number;
+  /**
+   * Local memory-formation wiring. `accept-only` queues work and does not drain
+   * (red-proof). `formation-without-promotion` runs formation but skips the
+   * local visible-promotion step.
+   */
+  readonly memoryFormationMode?: LocalMemoryFormationMode;
   /** Deterministic attachment lifecycle seams for tests. */
   readonly nowEpochMilliseconds?: () => number;
   readonly attachmentId?: () => string;
@@ -423,6 +433,7 @@ export interface LocalService {
   readonly evidence: QaProducerEvidence;
   readonly reseed: () => void;
   readonly seedIdentity: () => Readonly<Record<string, string | number>>;
+  readonly memoryFormation: LocalMemoryFormation;
   /**
    * The write path's stores and arbiters, exposed so a test or a booted stack
    * can drive and read them WITHOUT standing up a second server. The fence
@@ -633,6 +644,15 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   const unitOfWork = stores.unitOfWork;
   const stragglers = stores.stragglers;
   const controlStore = stores.control;
+
+  const memoryFormation = composeLocalMemoryFormation({
+    db: options.db,
+    ownerAccountId: options.ownerAccountId,
+    accountTimezone: options.accountTimezone,
+    control: controlStore,
+    listen: stores.listen,
+    ...(options.memoryFormationMode === undefined ? {} : { mode: options.memoryFormationMode }),
+  });
 
   const readAttribution = createServedReadAttribution();
   const counter = attributeServedReads(createServedCounter(), readAttribution);
@@ -909,6 +929,19 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     createId: () => `qa-folder-created-${String(nextFolderId++).padStart(3, "0")}`,
     prepareRead: prepareFoldersReadFor,
   });
+  registerStmNotesOpsRoutes(app, {
+    resolvePrincipal,
+    registry: writeIdRegistry,
+    stragglers,
+    fence: {
+      store: controlStore,
+      entitlement: stores.settings,
+      counter: fenceCounter,
+    },
+    counter: opsCounter,
+    now: () => anchorEpochSeconds,
+    formation: memoryFormation,
+  });
   registerTasksOpsRoutes(app, {
     resolvePrincipal,
     unitOfWork,
@@ -939,16 +972,25 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     projections: stores.settings,
     counter,
   });
+  const listenConversationFinalizer = createListenConversationFinalizer(
+    conversations,
+    options.conversationProcessorFactory(conversations),
+  );
   registerListenRoutes(app, {
     resolvePrincipal,
     entitlement: stores.settings,
     store: stores.listen,
     segments: stores.listenSegments,
     transcription: options.transcriptionSource,
-    conversations: createListenConversationFinalizer(
-      conversations,
-      options.conversationProcessorFactory(conversations),
-    ),
+    conversations: Object.freeze({
+      finalize(input: Parameters<typeof listenConversationFinalizer.finalize>[0]) {
+        listenConversationFinalizer.finalize(input);
+        memoryFormation.enqueueListenFinalization({
+          accountId: input.accountId,
+          session: input.session,
+        });
+      },
+    }),
     now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
     credentialLeaseMilliseconds: options.listenCredentialLeaseMilliseconds
       ?? LISTEN_MAX_CREDENTIAL_LEASE_MILLISECONDS,
@@ -1063,6 +1105,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     evidence: producerEvidence,
     reseed,
     seedIdentity,
+    memoryFormation,
     writePath: Object.freeze({
       conversations,
       folders,
