@@ -48,8 +48,12 @@ integration/red-proof-assert.sh
 ```
 
 The L3 runner uses a unique temporary run directory and writes the immutable receipt only
-after it has read the exact report. The headed click-through is intentionally outside this
-harness and is never emitted as a result.
+after it has read the exact report. The headed click-through for a human is still
+outside `--assert`. Control clicks for the gate live in
+`integration/control-acceptance/` and run as L3's second step
+(`node integration/control-acceptance/run.mjs`). That sibling of `--accept`
+drives Home, Chat, Listen, Rewind, and every chrome route in the built macOS
+shell. Read `integration/control-acceptance/README.md` before adding a control.
 
 ## Platform companion contract
 

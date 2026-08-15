@@ -16,7 +16,7 @@
 // L2 hermetic      backend suite + integration/ + cross-side wire agreement.
 //    (<25s)        Real loopback HTTP, own ports, no shells, no simulator.
 //                  Safe to run alongside a live stack.
-// L3 real (~90s)   the whole stack, headless and assert-based.
+// L3 real (~90s + control clicks)  the whole stack, then the sibling that clicks.
 //
 // THE RULE THIS ENCODES: **an agent may only claim something works at the lane
 // it actually ran.** L1 green means "the unit holds". It does not mean "the app
@@ -186,12 +186,16 @@ export const LANES = {
   },
   L3: {
     name: "real integration — the whole stack",
-    budgetNote: "~90s headless",
-    reason: "the only lane entitled to the claim 'the app works'; headless and assert-based by default, headed only for a human",
+    budgetNote: "~90s headless + ~2min control clicks",
+    reason: "the only lane entitled to the claim 'the app works'; headless and assert-based by default, headed only for a human. The second step clicks Home, Chat, Listen, Rewind, and every chrome route — a traffic count is not a control test.",
     steps: [
       {
         cwd: CORE_REPO,
         command: "integration/dev-stack.sh --assert",
+      },
+      {
+        cwd: PLATFORM_REPO,
+        command: "node integration/control-acceptance/run.mjs",
       },
     ],
   },
