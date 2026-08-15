@@ -8,6 +8,10 @@
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "dev": "vite --port 4650",
     "dev:lab": "vite --port 4650 --open '/?lab=1'",
+    "harness": "node scripts/ui-harness.mjs",
+    "harness:manifest": "node scripts/ui-harness.mjs manifest",
+    "harness:capture": "node scripts/ui-harness.mjs capture",
+    "harness:diff": "node scripts/ui-harness.mjs diff",
     "test": "node ../../scripts/run-node-test.mjs test/*.test.mjs",
     "lint": "echo surfaces:no-lint-yet"
   },
