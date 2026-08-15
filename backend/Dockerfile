@@ -66,6 +66,10 @@ RUN ldconfig && \
 
 COPY --from=builder /opt/venv /opt/venv
 COPY .github/scripts/desktop_release_manifest.py /app/desktop_release_manifest_contract.py
+# Bundle the index manifest next to the backend tree so the on-prem Mongo index reconcile (run at
+# startup by scripts/reconcile_mongo_indexes.py when STORAGE_BACKEND=mongo) finds it in the image —
+# `COPY backend/ .` does not include this repo-root file (cubic PR 10887 main.py:288).
+COPY firestore.indexes.json /app/firestore.indexes.json
 COPY backend/ .
 
 # Pre-cache tiktoken BPE encodings at build time so runtime stays hermetic. The chat token-budget

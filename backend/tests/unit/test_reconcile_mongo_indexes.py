@@ -119,6 +119,25 @@ def test_create_planned_indexes_defaults_to_the_full_manifest_plan():
     assert len(db.calls) == len(ensured)
 
 
+def test_plan_includes_supplementary_users_time_zone_index():
+    # cubic PR 10887 reconcile_mongo_indexes.py:92: the hourly daily-summary/morning crons query the
+    # top-level ``users`` collection by time_zone. That single-field scoped query is NOT in the composite
+    # firestore.indexes.json, so the manifest-only plan left it collection-scanning on Mongo. The plan
+    # must add a {_parent, d.time_zone} index (and a _parent baseline) for ``users``.
+    plan = planned_indexes(load_manifest())
+    users_keys = {tuple(keys) for c, keys, _ in plan if c == "users"}
+    assert (("_parent", 1), ("d.time_zone", 1)) in users_keys
+    assert (("_parent", 1),) in users_keys
+
+
+def test_manifest_path_resolves_to_an_existing_file():
+    # In the source tree the manifest sits at the repo root; the resolver must find it (and, in the
+    # image, the Dockerfile-bundled copy at the WORKDIR) so load_manifest never fails at startup.
+    from scripts.reconcile_mongo_indexes import MANIFEST_PATH
+
+    assert MANIFEST_PATH.exists(), MANIFEST_PATH
+
+
 def test_reconcile_mongo_indexes_requires_mongo_uri(monkeypatch):
     # The startup entry fails loud when MONGO_URI is unset; the boot hook (main) catches this so a
     # misconfigured/unavailable Mongo logs instead of blocking startup.

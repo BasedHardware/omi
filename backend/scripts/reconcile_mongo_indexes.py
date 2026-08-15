@@ -31,7 +31,31 @@ import os
 from pathlib import Path
 from typing import Any, List, Mapping, Optional, Tuple
 
-MANIFEST_PATH = Path(__file__).resolve().parents[2] / "firestore.indexes.json"
+def _resolve_manifest_path() -> Path:
+    """Locate ``firestore.indexes.json``. Running from the source tree it sits at the repo root
+    (``parents[2]``). In the backend image the Dockerfile bundles it next to the copied ``backend/``
+    tree at the WORKDIR (``parents[1]`` == ``/app``), because ``COPY backend/ .`` does not include a
+    repo-root file. Without this the startup hook (main.startup_event, STORAGE_BACKEND=mongo) logged a
+    manifest error and created ZERO indexes in the shipped image (cubic PR 10887 main.py:288)."""
+    here = Path(__file__).resolve()
+    for candidate in (here.parents[2] / "firestore.indexes.json", here.parents[1] / "firestore.indexes.json"):
+        if candidate.exists():
+            return candidate
+    return here.parents[2] / "firestore.indexes.json"  # canonical path; load_manifest surfaces a clear error
+
+
+MANIFEST_PATH = _resolve_manifest_path()
+
+# Indexes for scoped queries that Firestore auto-serves via single-field indexes but Mongo does not, and
+# that firestore.indexes.json (composite-only) never declares — so the reconcile would otherwise leave
+# them collection-scanning on the Mongo backend (cubic PR 10887 reconcile_mongo_indexes.py:92). Each
+# entry is (collection, compound-keys). The hourly daily-summary / morning-notification crons query the
+# top-level ``users`` collection by ``time_zone`` (get_users_for_daily_summary /
+# get_users_{id,token,endpoints}_in_timezones); every doc there shares _parent="users", so a bare _parent
+# index has no selectivity — the time_zone key is what turns the full scan into an index hit.
+_SUPPLEMENTARY_INDEXES: List[Tuple[str, "MongoIndexKeys"]] = [
+    ("users", [("_parent", 1), ("d.time_zone", 1)]),
+]
 
 # A Mongo index spec: an ordered list of (key, direction) with direction in {1, -1}.
 MongoIndexKeys = List[Tuple[str, int]]
@@ -95,6 +119,14 @@ def planned_indexes(manifest: Mapping[str, Any]) -> List[Tuple[str, MongoIndexKe
         if signature not in seen:
             seen.add(signature)
             plan.append((collection, keys, _index_name(keys)))
+    # Supplementary scoped-query indexes not derivable from the composite manifest (e.g. users by
+    # time_zone), plus a _parent baseline for each such collection when the manifest didn't already add one.
+    for collection, keys in _SUPPLEMENTARY_INDEXES:
+        for spec in (keys, [("_parent", 1)]):
+            signature = (collection, tuple(spec))
+            if signature not in seen:
+                seen.add(signature)
+                plan.append((collection, spec, _index_name(spec)))
     return plan
 
 
