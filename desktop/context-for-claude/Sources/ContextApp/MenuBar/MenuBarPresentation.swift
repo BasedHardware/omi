@@ -122,6 +122,65 @@ extension Capability {
     }
 }
 
+// MARK: - The repair the popover can offer and must not perform
+
+/// **The one screen state whose remedy the app can hand over but must not carry out.**
+///
+/// `Permissions.ScreenBlock.recordUnusable` is the state where this process started *holding* the
+/// Screen Recording grant and macOS refused it anyway. Window-server capture rights are settled when
+/// a process connects, so the next process starts from exactly the same place: reopening cannot fix
+/// it, and by the time a user reaches this state the app has already told them to reopen. Proven
+/// live across two consecutive processes, against a `tccd` requirement pinning an ad-hoc build's
+/// certificate leaf while this build carries a Developer ID signature.
+///
+/// What actually works is deleting the record, and only the user can be allowed to do that:
+///
+/// - **The detection is an inference, not a reading of TCC's stored requirement.** A false positive
+///   would silently destroy a working consent record — an outcome strictly worse than the state it
+///   was trying to repair.
+/// - **An app that resets its own TCC records to re-prompt is indistinguishable from consent-fatigue
+///   farming**, and a screen-and-microphone recorder is the last piece of software that should
+///   normalise the pattern.
+///
+/// So the app goes exactly as far as it honestly can: it puts the command on the clipboard. That
+/// removes the one failure this instruction is most likely to meet — a bundle id mistyped out of a
+/// popover — while the destructive step stays in the user's own Terminal, where they can read it
+/// before they run it.
+///
+/// A value rather than three `if`s inside the popover, for the reason `AccountPresentation` is one:
+/// "which states offer this" has a wrong answer available in four directions and every input is a
+/// live TCC answer.
+struct ScreenRepairControl: Equatable {
+    /// The command, read from the one place that spells it. `Permissions` owns it because the sentence
+    /// that tells the user to run it is rendered there; this control only copies it, and a clipboard
+    /// that disagrees with the instruction on screen is worse than no button at all.
+    static let resetCommand = Permissions.screenRecordResetCommand
+
+    /// The short line above the control. Deliberately not `ScreenBlock.reason` — that sentence is
+    /// already on this surface as the paused line, and the popover is 320 pt wide.
+    var note: String
+    /// The control's label, which is also its confirmation. The popover's own idiom: the connector
+    /// line's button says "Connecting…" rather than growing a second colour or a toast, because on a
+    /// surface this small a word is a better signal than a shade.
+    var action: String
+    /// What the press puts on the clipboard.
+    var command: String { Self.resetCommand }
+
+    /// - Parameters:
+    ///   - block: the live screen state. **Only `.recordUnusable` gets this control**: `.notGranted`
+    ///     wants the switch, `.grantLost` wants it off and back on, and `.needsRelaunch` wants a
+    ///     reopen — all three are remedies that work, and replacing one with a Terminal command
+    ///     would be the app sending somebody to a shell over a click.
+    ///   - copied: whether the last press has landed and not yet faded.
+    static func of(_ block: Permissions.ScreenBlock?, copied: Bool) -> ScreenRepairControl? {
+        guard block == .recordUnusable else { return nil }
+        return ScreenRepairControl(
+            note: "Reopening can’t replace this permission. Run the reset command in Terminal, then "
+                + "grant Screen Recording once more.",
+            action: copied ? "Copied" : "Copy fix command")
+    }
+}
+
 // MARK: - The connector line
 
 /// What the popover's Claude line says and offers, as a value.

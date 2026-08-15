@@ -95,9 +95,17 @@ final class PermissionInvitations: ObservableObject {
     /// row promising a dialog that will never appear.
     @Published private(set) var offered: Set<Capability> = []
 
+    /// The capability the user pressed last, and the only one the card may report a dead end about.
+    ///
+    /// Published because the sentence is drawn from it: without this the card would keep rendering
+    /// the frame the press landed on.
+    @Published private(set) var lastAsked: Capability?
+
     private let gates: [Capability: PermissionGate]
     private let granted: @MainActor (Capability) -> Bool
     private let openSettings: @MainActor (Capability) -> Void
+    private let ledger: PermissionAskLedger
+    private let screenRecordIsUnusable: @MainActor () -> Bool
     private var runs: [Capability: Task<Void, Never>] = [:]
     private var relays: [AnyCancellable] = []
 
@@ -113,12 +121,18 @@ final class PermissionInvitations: ObservableObject {
         required: [Capability] = [.microphone, .systemAudio, .screen],
         granted: @escaping @MainActor (Capability) -> Bool = { Permissions.check($0) },
         openSettings: @escaping @MainActor (Capability) -> Void = { Permissions.openSettings(for: $0) },
+        ledger: PermissionAskLedger = PermissionAskLedger(),
+        screenRecordIsUnusable: @escaping @MainActor () -> Bool = {
+            Permissions.screenRecordIsUnusable
+        },
         gate: @MainActor (Capability) -> PermissionGate = { PermissionGate(required: [$0]) }
     ) {
         self.listed = listed
         self.required = required
         self.granted = granted
         self.openSettings = openSettings
+        self.ledger = ledger
+        self.screenRecordIsUnusable = screenRecordIsUnusable
 
         var built: [Capability: PermissionGate] = [:]
         for capability in listed { built[capability] = gate(capability) }
@@ -156,9 +170,32 @@ final class PermissionInvitations: ObservableObject {
 
     /// The gate's own sentence for the phase it is in. `nil` when nothing is in flight, and the card
     /// says its own opening line instead.
+    ///
+    /// **The dead end outranks the gate**, and that is the whole of the loop fix on this card. The
+    /// gate's `waitingInSettings` caption — "System Settings is open on the right row. Switch it on
+    /// and I'll notice" — is correct the first time and a lie the third, because the user has
+    /// switched it on and this app was not given it. See `PermissionDeadEnd`.
     var caption: String? {
+        if let deadEnd { return deadEnd }
         guard let inFlight else { return nil }
         return gates[inFlight]?.caption
+    }
+
+    /// **The sentence for a capability the card has sent the user at twice with nothing to show.**
+    ///
+    /// Non-nil outside an episode as well as inside one, and that matters: a second click on a row
+    /// the user already postponed takes `invite`'s open-the-pane branch, which sets nothing in
+    /// flight — so before this the card answered a press by silently reopening a pane and saying
+    /// exactly what it said before the press.
+    /// **An unusable screen record reports itself on the first spent ask, not the second**, because
+    /// there is nothing to wait for: `Permissions` already knows the record cannot be repaired from
+    /// the pane at all, so the switch-it-off-and-on sentence would be one more dead instruction.
+    var deadEnd: String? {
+        guard let capability = lastAsked, !granted(capability) else { return nil }
+        let unusable = capability == .screen && screenRecordIsUnusable()
+        guard unusable || PermissionDeadEnd.asksAreSpent(ledger.asks(capability)) else { return nil }
+        return PermissionDeadEnd.sentence(
+            for: capability, reopened: false, screenRecordIsUnusable: unusable)
     }
 
     /// True while an episode owns the screen — the rows must not be a second entrance to it.
@@ -242,6 +279,12 @@ final class PermissionInvitations: ObservableObject {
         guard inFlight == nil else { return false }
 
         offered.insert(capability)
+        // Counted here rather than where the pane is actually opened, because both branches below
+        // end up at the same switch and the tally is about *asks the user was sent on*, not about
+        // which of the two routes carried them. `PermissionGate.waitInSettings` opens the pane on
+        // the episode branch; this call opens it directly on the other.
+        lastAsked = capability
+        ledger.noteAsked(capability)
 
         guard gate.answers[capability] == nil else {
             openSettings(capability)
@@ -265,6 +308,11 @@ final class PermissionInvitations: ObservableObject {
     func postpone(_ capability: Capability) {
         gates[capability]?.postpone(capability)
         runs[capability]?.cancel()
+        // A postponement is an answer, so there is no longer an unmet ask to report a dead end
+        // about; the card goes back to its resting line. Clicking the row again re-arms it, which is
+        // the case that most needs the sentence — a second click on an answered row only reopens the
+        // pane, and used to do so under copy that had not changed since the first.
+        if lastAsked == capability { lastAsked = nil }
     }
 
     /// **The escape from the card.**
@@ -281,6 +329,7 @@ final class PermissionInvitations: ObservableObject {
         for capability in unanswered {
             gates[capability]?.postpone(capability)
         }
+        lastAsked = nil
     }
 
     /// Ends every watch. The card owns this: `waitInSettings` is unbounded by design, so leaving the

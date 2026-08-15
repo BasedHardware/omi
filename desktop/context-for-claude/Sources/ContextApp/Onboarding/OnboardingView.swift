@@ -141,22 +141,52 @@ struct OnboardingFinale: Equatable {
     /// belongs on this arrival. It does whenever the run is genuinely over, which a deliberate
     /// deferral is and a run still waiting on a switch is not.
     var ringsTheMenuBar: Bool
+    /// **Whether this card has already said its piece and been ignored by the machine.**
+    ///
+    /// The second stranding, and the one the postponed fix did not reach: an undecided run is sent
+    /// to the pane with *no other button on the card*, so a user whose grant does not take — the
+    /// stale-code-requirement state `PermissionDeadEnd` documents — presses "Open Screen Recording",
+    /// flips a switch that is already on, comes back to the identical card, and presses it again.
+    /// Nothing about the flow bounds that, and there is no door.
+    ///
+    /// When it is set the card stops asking: the action becomes the door, the pane is not reopened,
+    /// and the copy says what the app actually knows instead of repeating the instruction.
+    var askIsSpent: Bool = false
 
+    /// - Parameters:
+    ///   - askIsSpent: the pane has been opened for the screen grant `PermissionDeadEnd.askLimit`
+    ///     times and it still has not landed.
+    ///   - relaunchIsSpent: the app has already been reopened for this grant and is still refused,
+    ///     so "Restart to finish" is an instruction that has demonstrably failed for this user.
+    ///   - screenRecordIsUnusable: `Permissions.ScreenBlock.recordUnusable` — this process started
+    ///     holding the grant and macOS refused it anyway. Reopening is known *in advance* not to
+    ///     help, so the restart is withheld on the first press rather than the second: window-server
+    ///     capture rights are settled at connection time, and the successor connects the same way.
     static func of(
-        screenGranted: Bool, needsRelaunch: Bool, screenWasPostponed: Bool
+        screenGranted: Bool, needsRelaunch: Bool, screenWasPostponed: Bool,
+        askIsSpent: Bool = false, relaunchIsSpent: Bool = false,
+        screenRecordIsUnusable: Bool = false
     ) -> OnboardingFinale {
         guard screenGranted else {
+            // Two different reasons the card is done asking, and they want the same card: an answer
+            // the user gave on purpose, and an ask this app has spent. Both leave the watch armed —
+            // a switch flipped by hand still has to reach the card — and neither reopens the pane.
+            let settled = screenWasPostponed || askIsSpent
             return OnboardingFinale(
-                action: screenWasPostponed ? .close : .openScreenRecording,
+                action: settled ? .close : .openScreenRecording,
                 watchesForTheGrant: true,
-                opensThePane: !screenWasPostponed,
-                ringsTheMenuBar: screenWasPostponed)
+                opensThePane: !settled,
+                ringsTheMenuBar: settled,
+                askIsSpent: askIsSpent)
         }
+        let restartCannotHelp = relaunchIsSpent || screenRecordIsUnusable
+        let restartWouldRepeat = needsRelaunch && restartCannotHelp
         return OnboardingFinale(
-            action: needsRelaunch ? .restart : .close,
+            action: needsRelaunch && !restartCannotHelp ? .restart : .close,
             watchesForTheGrant: false,
             opensThePane: false,
-            ringsTheMenuBar: true)
+            ringsTheMenuBar: true,
+            askIsSpent: restartWouldRepeat)
     }
 }
 
@@ -242,6 +272,15 @@ struct OnboardingView: View {
     @State private var warmingModels = false
 
     @State private var openedScreenSettings = false
+    /// How many times this install has been sent at the Screen Recording switch, and how many times
+    /// it has been told to reopen the app for it. Read from `PermissionAskLedger`; see
+    /// `readAskLedger()` for why the card keeps a copy.
+    @State private var screenAsks = 0
+    @State private var screenReopens = 0
+    /// `Permissions.ScreenBlock.recordUnusable`: the grant is on, this process started holding it,
+    /// and macOS refused it anyway. Read on the same poll as the grants — it is a fact about *this*
+    /// process, so it can only become true while the app is running.
+    @State private var screenRecordIsUnusable = false
     /// The finale's grant watch. Held so it can be ended: it is an unbounded poll and the card
     /// closing is what owns its end.
     @State private var screenWatch: Task<Void, Never>?
@@ -837,6 +876,10 @@ struct OnboardingView: View {
                     InkButton("Done") { closeOnboarding() }
                 case .openScreenRecording:
                     InkButton("Open Screen Recording", kind: .secondary) {
+                        // Counted, because this is the card's whole affordance and pressing it
+                        // twice for nothing is what turns the last screen of the flow into a room
+                        // with no door. The second press flips `lastCard` to the state above.
+                        noteScreenAsked()
                         Permissions.openSettings(for: .screen)
                     }
                 }
@@ -854,13 +897,46 @@ struct OnboardingView: View {
 
     /// What this card does and offers, given the state the run finished in.
     private var lastCard: OnboardingFinale {
+        finale(asks: screenAsks, reopens: screenReopens)
+    }
+
+    /// The same decision over explicit counts, so a caller holding fresher ones than `@State` has
+    /// published can use them. `finish()` is that caller: it reads the tally and decides on the same
+    /// turn, and a card that opened the pane off a stale count would be the loop arriving by the one
+    /// route the tally was added to close.
+    private func finale(asks: Int, reopens: Int) -> OnboardingFinale {
         OnboardingFinale.of(
             screenGranted: isGranted(.screen),
             needsRelaunch: needsRelaunch,
-            screenWasPostponed: screenWasPostponed)
+            screenWasPostponed: screenWasPostponed,
+            askIsSpent: PermissionDeadEnd.asksAreSpent(asks),
+            relaunchIsSpent: !PermissionDeadEnd.mayRelaunch(after: reopens),
+            screenRecordIsUnusable: screenRecordIsUnusable)
+    }
+
+    /// Re-reads the persisted tally into the card.
+    ///
+    /// The authority is `UserDefaults` — one of the instructions being bounded is *reopen me*, which
+    /// ends this process — and this is the copy the card draws from. It has to be `@State` because
+    /// the closing card has no poll of its own: nothing else on `.done` changes when the tally does,
+    /// so a press that adds to it would otherwise redraw nothing at all.
+    private func readAskLedger() {
+        let ledger = PermissionAskLedger()
+        screenAsks = ledger.asks(.screen)
+        screenReopens = ledger.relaunches(.screen)
+    }
+
+    /// One more fruitless trip to the pane, recorded and reflected back into the card.
+    private func noteScreenAsked() {
+        PermissionAskLedger().noteAsked(.screen)
+        readAskLedger()
     }
 
     private var doneHeadline: String {
+        // The card has run out of true things to ask for. Saying "One more thing" over an
+        // instruction this user has already followed is the sentence that reads as the app being
+        // broken rather than the permission being stuck.
+        if lastCard.askIsSpent { return "That isn’t taking." }
         guard isGranted(.screen) else {
             return screenWasPostponed ? "Whenever you’re ready." : "One more thing."
         }
@@ -868,6 +944,14 @@ struct OnboardingView: View {
     }
 
     private var doneAside: String {
+        if lastCard.askIsSpent {
+            // `reopened` is the distinction between the two dead ends this card can reach: a pane
+            // that was opened twice for nothing, and a restart that was spent and did not help.
+            let reopened = !PermissionDeadEnd.mayRelaunch(after: screenReopens)
+            return PermissionDeadEnd.sentence(
+                for: .screen, reopened: reopened, screenRecordIsUnusable: screenRecordIsUnusable)
+                + " " + homeLine
+        }
         if !isGranted(.screen) {
             // A card that closes is a card that has to say where the app went, the same as the
             // granted one — and it must not ask again for something already answered.
@@ -1147,8 +1231,21 @@ struct OnboardingView: View {
         let landed = capabilities.filter { next[$0] == true && granted[$0] != true }
         granted = next
         needsRelaunch = Permissions.screenNeedsRelaunch
+        screenRecordIsUnusable = Permissions.screenRecordIsUnusable
         if reported, !landed.isEmpty { Sound.effect(.chime) }
         reported = true
+
+        // **A capability that is genuinely working ends its tally**, so a later, honest ask starts
+        // from zero rather than inheriting a dead end somebody else's session reached. Genuinely
+        // working, and not merely present in TCC: the screen's record reads granted for a process
+        // the window server is refusing, and clearing on that would rearm the restart loop.
+        let ledger = PermissionAskLedger()
+        for capability in capabilities
+        where PermissionDeadEnd.isWorking(
+            capability, granted: next[capability] ?? false, screenNeedsRelaunch: needsRelaunch)
+        {
+            ledger.noteWorking(capability)
+        }
 
         // Deliberately does not advance. This poll used to be a second exit from the card, and a
         // poll cannot tell a grant the user made from a question they never answered. The button
@@ -1241,8 +1338,15 @@ struct OnboardingView: View {
         // stays, opens the right pane itself, and waits.
         //
         // **The watch and the pane are separate decisions**, and conflating them is what stranded a
-        // postponed run — see `OnboardingFinale`.
-        let lastCard = self.lastCard
+        // postponed run — see `OnboardingFinale`. **And neither is offered unconditionally**: a run
+        // that has already spent its asks reaches this card with nothing left to ask for, so it gets
+        // the watch and the door rather than the pane and the same sentence again.
+        let ledger = PermissionAskLedger()
+        let asks = ledger.asks(.screen)
+        let reopens = ledger.relaunches(.screen)
+        let lastCard = finale(asks: asks, reopens: reopens)
+        screenAsks = asks
+        screenReopens = reopens
         if lastCard.watchesForTheGrant { watchForScreenGrant(openingPane: lastCard.opensThePane) }
         // "I live up here" is only useful if the user can find "here". Ring the real status item
         // and walk the pointer to it while the line is still on screen. The ring comes down when the
@@ -1277,6 +1381,10 @@ struct OnboardingView: View {
     /// is not.
     private func restartForScreenGrant() {
         Sound.effect(.click)
+        // Written down *before* the process ends, because the process ending is the whole point of
+        // this button and an in-memory tally would come back at zero. A successor that finds itself
+        // still refused reads this and offers the door instead of the same restart.
+        PermissionAskLedger().noteRelaunched(.screen)
         endScreenWatch()
         MenuBarSpotlight.hide()
         Permissions.relaunchApp()
@@ -1301,7 +1409,10 @@ struct OnboardingView: View {
     private func watchForScreenGrant(openingPane: Bool) {
         guard !openedScreenSettings else { return }
         openedScreenSettings = true
-        if openingPane { Permissions.openSettings(for: .screen) }
+        if openingPane {
+            noteScreenAsked()
+            Permissions.openSettings(for: .screen)
+        }
 
         screenWatch = Task { @MainActor in
             if openingPane {

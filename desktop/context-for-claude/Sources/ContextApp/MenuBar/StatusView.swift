@@ -90,7 +90,10 @@ struct StatusView: View {
         .padding(.vertical, 8)
         .frame(width: Self.popoverWidth)
         .onAppear(perform: refresh)
-        .onReceive(tick) { _ in engine.refreshCapabilities() }
+        .onReceive(tick) { _ in
+            engine.refreshCapabilities()
+            readAskLedger()
+        }
     }
 
     // MARK: - Status
@@ -190,6 +193,22 @@ struct StatusView: View {
 
     // MARK: - Capabilities
 
+    /// **The line that appears once tapping a row has stopped being worth anything.**
+    ///
+    /// The rows are imperatives and their vocabulary is four words wide, so none of them can say
+    /// "you have done this and macOS did not give it to me" — and without somewhere to say it, the
+    /// only honest response to the fourth tap would be to do nothing, which is worse. See
+    /// `PermissionDeadEnd`.
+    ///
+    /// `@State` rather than computed in `body`, because the press that spends the last ask has to
+    /// redraw the surface it was pressed on rather than wait out the one-second tick.
+    @State private var deadEndNote: String?
+
+    /// The repair control for the one screen state no click of ours can fix, and whether its last
+    /// press has landed. See `ScreenRepairControl`.
+    @State private var screenRepair: ScreenRepairControl?
+    @State private var copiedRepairCommand = false
+
     private var capabilityRows: some View {
         // No spacing: menu rows abut, and each row already carries its own 22 pt height.
         VStack(spacing: 0) {
@@ -207,7 +226,88 @@ struct StatusView: View {
                 )
                 .frame(maxWidth: .infinity)
             }
+
+            if let screenRepair {
+                repairRow(screenRepair)
+            } else if let deadEndNote {
+                Text(deadEndNote)
+                    .font(.system(size: Self.menuSmallFontSize))
+                    .foregroundStyle(Ink.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, Self.rowTextInset)
+                    .padding(.trailing, 4)
+                    .padding(.top, 2)
+            }
         }
+    }
+
+    /// The note and the one press: an accented word under the sentence, which is the same affordance
+    /// the connector line offers and the same colour it uses for it.
+    ///
+    /// Stacked rather than trailing, unlike that line: this sentence takes the popover's whole text
+    /// column, so a control beside it would be a control on its own line anyway — with the width of
+    /// the sentence taken out of it.
+    private func repairRow(_ repair: ScreenRepairControl) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(repair.note)
+                .font(.system(size: Self.menuSmallFontSize))
+                .foregroundStyle(Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button(repair.action) { copyRepairCommand(repair) }
+                .buttonStyle(.plain)
+                .font(.system(size: Self.menuSmallFontSize))
+                .foregroundStyle(Ink.accent)
+                .disabled(copiedRepairCommand)
+        }
+        .padding(.leading, Self.rowTextInset)
+        .padding(.trailing, 4)
+        .padding(.top, 2)
+    }
+
+    /// **The clipboard and nothing else.** The app never runs this: see `ScreenRepairControl`.
+    private func copyRepairCommand(_ repair: ScreenRepairControl) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(repair.command, forType: .string)
+        copiedRepairCommand = true
+        readAskLedger()
+        // The label *is* the confirmation, so it has to go back to being an offer or the control
+        // reads as spent. The popover is transient and may be gone before this fires, which is
+        // harmless — `@State` on a destroyed view is discarded.
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            copiedRepairCommand = false
+            readAskLedger()
+        }
+    }
+
+    /// Clears the tally for anything genuinely working, then re-reads the line.
+    ///
+    /// The clearing is not `Permissions.check` alone, and that is the load-bearing half: the screen's
+    /// TCC record reads granted for a process the window server is refusing, so a tally cleared on
+    /// the record would be cleared on every tick of exactly the state it exists to bound — and the
+    /// row would go back to offering a restart that has already been spent.
+    private func readAskLedger() {
+        let ledger = PermissionAskLedger()
+        let needsRelaunch = Permissions.screenNeedsRelaunch
+        let recordIsUnusable = Permissions.screenRecordIsUnusable
+        for capability in Capability.allCases
+        where PermissionDeadEnd.isWorking(
+            capability, granted: Permissions.check(capability), screenNeedsRelaunch: needsRelaunch)
+        {
+            ledger.noteWorking(capability)
+        }
+        // **The repair control owns the screen's line when it is showing**, which is why it is read
+        // first and why `note` is told about the same state: two sentences about one row, one of them
+        // recommending a reopen that provably cannot work, is the loop arriving in a new costume.
+        screenRepair = ScreenRepairControl.of(Permissions.screenBlock(), copied: copiedRepairCommand)
+        deadEndNote = PermissionDeadEnd.note(
+            for: Capability.allCases,
+            granted: { Permissions.check($0) },
+            screenNeedsRelaunch: needsRelaunch,
+            screenRecordIsUnusable: recordIsUnusable,
+            asks: { ledger.asks($0) },
+            relaunches: { ledger.relaunches($0) })
     }
 
     /// The Engine republishes these on every poll; the direct call only covers the first frame after
@@ -227,11 +327,31 @@ struct StatusView: View {
         // was pointing at.
         let missing = group.firstMissing { Permissions.check($0) }
         let capability = missing ?? group.namesake
+        let ledger = PermissionAskLedger()
 
         // A granted Screen Recording checkbox over a dead capture is the one row that lies, and the
         // only cure is a relaunch — so that is what tapping it does.
+        //
+        // **Once.** `screenNeedsRelaunch` is latched by `noteScreenCaptureDeclined()`, which fires
+        // again on the successor's first refused capture — so on a Mac whose TCC record no longer
+        // matches this build's code requirement, the row came back saying "Action required" and
+        // every subsequent tap killed and reopened the app for a remedy that had already failed.
+        // After one spent reopen the tap falls through to the pane, and `deadEndNote` says why.
         if capability == .screen, Permissions.screenNeedsRelaunch {
-            Permissions.relaunchApp()
+            // **`.recordUnusable` never gets a relaunch, not even a first one.** Both flags are true
+            // at once in that state — an unusable record is also a stale grant — and reopening is
+            // known in advance not to help, so offering it is a dead instruction the app can see is
+            // dead before it gives it. `ScreenRepairControl` is the row's real remedy there.
+            if !Permissions.screenRecordIsUnusable,
+                PermissionDeadEnd.mayRelaunch(after: ledger.relaunches(.screen))
+            {
+                ledger.noteRelaunched(.screen)
+                Permissions.relaunchApp()
+            }
+            ledger.noteAsked(.screen)
+            Permissions.openSettings(for: .screen)
+            readAskLedger()
+            return
         }
 
         // A granted row is still worth a tap: the pane is the only route to revoking it.
@@ -240,6 +360,8 @@ struct StatusView: View {
             return
         }
 
+        ledger.noteAsked(capability)
+        readAskLedger()
         // `Permissions.request` is itself two-stage — it raises the system prompt the first time and
         // opens the Settings pane on every ask after a denial, because TCC never re-prompts.
         Task { @MainActor in
@@ -526,6 +648,7 @@ struct StatusView: View {
     /// not a second opinion.
     private func refresh() {
         engine.refreshCapabilities()
+        readAskLedger()
         claudeNote = nil
         Task {
             claude = await Task.detached(priority: .userInitiated) { ClaudeRegistrar.status() }.value
