@@ -132,8 +132,6 @@ export type DateSection = {
   rows: ConversationRow[]
 }
 
-const DAY_MS = 86_400_000
-
 /** Local-midnight epoch ms of the day containing `ms`. */
 export function startOfLocalDay(ms: number): number {
   const d = new Date(ms)
@@ -150,7 +148,14 @@ export function endOfLocalDay(ms: number): number {
 
 function sectionLabel(dayStart: number, todayStart: number): string {
   if (dayStart === todayStart) return 'Today'
-  if (dayStart === todayStart - DAY_MS) return 'Yesterday'
+  // Yesterday is a calendar-day relationship, not `todayStart - 24h`: on the two
+  // DST-transition days a local day is 23h/25h long, so the fixed offset lands
+  // an hour off the neighbor day's midnight and the label silently degrades to a
+  // date. Pinned by contracts/parity/section_labels.json.
+  const yesterday = new Date(todayStart)
+  yesterday.setDate(yesterday.getDate() - 1)
+  yesterday.setHours(0, 0, 0, 0)
+  if (dayStart === yesterday.getTime()) return 'Yesterday'
   return new Date(dayStart).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
