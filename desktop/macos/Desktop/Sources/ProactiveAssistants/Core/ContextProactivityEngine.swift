@@ -86,7 +86,7 @@ actor ContextProactivityEngine {
   init(
     client: ProactiveLaneClient,
     store: ContextBucketStore,
-    dwellNanoseconds: UInt64 = 8_000_000_000,
+    dwellNanoseconds: UInt64 = 2_000_000_000,
     presentationPreflight: @escaping @Sendable (String) async -> OwnerBoundNotificationPresentationResult = {
       ownerID in
       await NotificationService.shared.contextDirectorPresentationPreflight(ownerID: ownerID)
@@ -109,8 +109,7 @@ actor ContextProactivityEngine {
     guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
     guard dwellAdmission.begin(visitID: fence.visitID) else { return }
     defer { dwellAdmission.finish(visitID: fence.visitID) }
-    let dwell = await resolvedDwellNanoseconds(for: fence)
-    do { try await Task.sleep(nanoseconds: dwell) } catch { return }
+    do { try await Task.sleep(nanoseconds: dwellNanoseconds) } catch { return }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     do { try await store.markVisitSettled(fence) } catch { return }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
@@ -198,16 +197,6 @@ actor ContextProactivityEngine {
       authorizationSnapshot: authorizationSnapshot)
   }
 
-  /// A bucket the user keeps returning to has already proven engagement, so the
-  /// settle wait shrinks (never disappears) once recent completed-visit time in
-  /// this bucket crosses the policy threshold.
-  private func resolvedDwellNanoseconds(for fence: ContextVisitFence) async -> UInt64 {
-    guard let bucketID = fence.bucketID else { return dwellNanoseconds }
-    let engagement = await store.recentEngagementSeconds(bucketID: bucketID)
-    return ContextDwellPolicy.dwellNanoseconds(
-      base: dwellNanoseconds, cumulativeEngagementSeconds: engagement)
-  }
-
   /// The shared post-settle tail of the director pipeline: presentation
   /// preflight, gate rebuilds, budget reservation, the model call (plus the
   /// bounded retrieval hop), grounding validation, and the presentation
@@ -257,18 +246,54 @@ actor ContextProactivityEngine {
         from: TasksStore.shared.incompleteTasks,
         now: currentFrame.captureTime)
     }
-    let recentDeliveries = await store.recentDeliveredForBucket(
+    var recentDeliveries = await store.recentDeliveredForBucket(
       bucketID: snapshot.bucketID, now: currentFrame.captureTime)
+    // The related-workstream section: validated facts from sibling buckets of
+    // the visit's live workstream, quality-gated and quoted as non-citable
+    // context. Read the flag once so section, dedup, and provenance agree; with
+    // the flag off (or no live tag) the prompt is byte-identical to today.
+    let workstreamPoolingEnabled = await MainActor.run {
+      ContextBucketsFeature.isWorkstreamPoolingEnabled
+    }
+    var workstreamSection: String? = nil
+    var workstreamProvenance: [String: Any]? = nil
+    if workstreamPoolingEnabled,
+      let liveTag = await store.liveWorkstreamTag(for: fence, now: currentFrame.captureTime)
+    {
+      let selected = ContextWorkstreamPooling.select(
+        await store.workstreamPool(
+          tag: liveTag, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime),
+        now: currentFrame.captureTime)
+      if !selected.isEmpty {
+        workstreamSection = ContextWorkstreamPooling.promptSection(
+          tag: liveTag, items: selected, now: currentFrame.captureTime)
+        workstreamProvenance = [
+          "tag": liveTag,
+          "pooled_fact_ids": selected.map(\.factID),
+        ]
+      }
+      // Tag-aware dedup: with pooling, the same cross-app point is reachable
+      // from every bucket carrying this tag, so sibling deliveries join the
+      // bucket's own under the same prompt cap.
+      let workstreamDeliveries = await store.recentDeliveredForWorkstream(
+        tag: liveTag, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime)
+      recentDeliveries = Array(
+        (recentDeliveries + workstreamDeliveries)
+          .sorted { $0.deliveredAt > $1.deliveredAt }
+          .prefix(ContextBucketRecentDelivery.promptCap))
+    }
     // Read once and use for the whole visit: schema, prompt, and hop admission
     // must agree, and a mid-visit flag flip must not desynchronize them. With
     // the flag off, schema and prompt are byte-identical to the pre-hop build.
     let retrievalHopEnabled = await MainActor.run { ContextBucketsFeature.isRetrievalHopEnabled }
     let prompt = ContextProactivityPromptBuilder.directorStablePrompt(
       snapshot: snapshot, allowLookup: retrievalHopEnabled)
-    let uncachedPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
-      tasks: taskContext,
-      frame: currentFrame,
-      recentDeliveries: recentDeliveries)
+    let uncachedPrompt =
+      ContextProactivityPromptBuilder.directorVolatilePrompt(
+        tasks: taskContext,
+        frame: currentFrame,
+        recentDeliveries: recentDeliveries)
+      + (workstreamSection.map { "\n\n" + $0 } ?? "")
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.fenceFreshness(fence).fresh
@@ -395,6 +420,9 @@ actor ContextProactivityEngine {
       if var hopProvenance = retrievalProvenance {
         hopProvenance["cited_refs"] = retrievedRefs
         provenance["retrieval"] = hopProvenance
+      }
+      if let workstreamProvenance {
+        provenance["workstream"] = workstreamProvenance
       }
       let provenanceData = try JSONSerialization.data(withJSONObject: provenance, options: [.sortedKeys])
       let provenanceJSON = String(data: provenanceData, encoding: .utf8) ?? "{}"
@@ -753,40 +781,6 @@ actor ContextProactivityEngine {
       "required": required,
       "additionalProperties": false,
     ]
-  }
-}
-
-/// Shortens (never skips) the dwell settle for a bucket the user demonstrably
-/// keeps returning to. A run of short revisits proves engagement that a single
-/// 8-second dwell was designed to establish, so the wait shrinks once recent
-/// per-bucket engagement crosses a threshold. Settle semantics are untouched:
-/// the visit still settles after the (shorter) sleep, on the same path.
-enum ContextDwellPolicy {
-  /// Rolling window over which completed-visit engagement accumulates.
-  static let engagementLookbackSeconds: TimeInterval = 180
-  /// Cumulative engaged seconds at which the dwell shortens.
-  static let engagedCumulativeSeconds: TimeInterval = 20
-  static let shortenedDwellNanoseconds: UInt64 = 2_000_000_000
-
-  static func dwellNanoseconds(base: UInt64, cumulativeEngagementSeconds: TimeInterval) -> UInt64 {
-    guard cumulativeEngagementSeconds >= engagedCumulativeSeconds else { return base }
-    // min: a caller-configured dwell shorter than the shortened value (tests
-    // use zero) must never be lengthened by an engagement bonus.
-    return min(base, shortenedDwellNanoseconds)
-  }
-
-  /// Sum of completed-visit durations clipped to the lookback window ending at
-  /// `now`. Computable from `context_visits` alone — no new table.
-  static func cumulativeEngagementSeconds(
-    visitIntervals: [(startedAt: Date, endedAt: Date)], now: Date
-  ) -> TimeInterval {
-    let lookbackStart = now.addingTimeInterval(-engagementLookbackSeconds)
-    return visitIntervals.reduce(0.0) { total, interval in
-      let start = max(interval.startedAt, lookbackStart)
-      let end = min(interval.endedAt, now)
-      guard end > start else { return total }
-      return total + end.timeIntervalSince(start)
-    }
   }
 }
 

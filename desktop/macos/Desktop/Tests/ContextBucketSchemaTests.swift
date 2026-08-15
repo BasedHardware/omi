@@ -53,6 +53,26 @@ final class ContextBucketSchemaTests: XCTestCase {
     XCTAssertNil(defaults.data(forKey: ContextBucketSchema.legacyDefaultsKey(ownerID: ownerID)))
   }
 
+  func testMigrationAddsWorkstreamTagColumnToBucketFacts() throws {
+    let suiteName = "ContextBucketSchemaTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let queue = try DatabaseQueue()
+    try createBaseScreenshotsTable(in: queue)
+    var migrator = DatabaseMigrator()
+    ContextBucketSchema.registerMigration(on: &migrator, defaults: defaults, ownerID: "owner-1")
+    try migrator.migrate(queue)
+    let columns = try queue.read { db in
+      try db.columns(in: "bucket_facts").map(\.name)
+    }
+    XCTAssertTrue(columns.contains("workstreamTag"))
+    let indexes = try queue.read { db in
+      try String.fetchAll(
+        db, sql: "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'bucket_facts'")
+    }
+    XCTAssertTrue(indexes.contains("idx_bucket_facts_workstream"))
+  }
+
   func testAnonymousDatabaseUsesSignedOutLegacyOwnerNamespace() throws {
     let suiteName = "ContextBucketSchemaTests.anonymous.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
