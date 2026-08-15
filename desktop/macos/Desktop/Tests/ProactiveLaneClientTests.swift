@@ -275,6 +275,18 @@ final class ProactiveLaneClientTests: XCTestCase {
     try await complete(operation: ModelQoS.Proactivity.reasoningOperation, prompt: "reason", on: client)
   }
 
+  /// Two 429s that were already in flight together must leave the *longer* window armed.
+  ///
+  /// Both attempts have to reach the network for the shorter window to be able to shorten
+  /// anything, and once a cooldown is armed the client refuses the next attempt before it sends —
+  /// so a second *sequential* attempt could never carry a competing Retry-After. Overlapping calls
+  /// are the only way the two windows race, which is exactly the reentrancy `armQuotaCooldown`
+  /// guards: `complete` suspends at the request, letting a second call past the cooldown check
+  /// before the first has armed anything.
+  ///
+  /// Held open deterministically rather than by hoping the two calls interleave: the stub parks
+  /// every request until both are in flight, so both are guaranteed past the cooldown check before
+  /// either response — and therefore either `armQuotaCooldown` — is delivered.
   func testLaterShorterRetryWindowDoesNotShortenActiveCooldown() async throws {
     ProactiveLaneURLStub.reset()
     let clock = ManualDateClock(Date(timeIntervalSince1970: 1_800_000_000))
@@ -284,30 +296,54 @@ final class ProactiveLaneClientTests: XCTestCase {
       authorization: { "Bearer test" },
       now: { clock.now })
 
-    // First 429 arms a long cooldown (300s).
+    // A long window (300s) and a much shorter one (60s), racing on the same operation.
     ProactiveLaneURLStub.enqueue(
       statusCode: 429, body: Data(), headers: ["Retry-After": "300"])
-    do {
-      _ = try await completeExtraction(on: client)
-      XCTFail("expected 429")
-    } catch ProactiveLaneClientError.http(_, _) {}
-
-    // A second overlapping 429 with a much shorter window must not shorten it.
     ProactiveLaneURLStub.enqueue(
       statusCode: 429, body: Data(), headers: ["Retry-After": "60"])
-    do {
-      _ = try await completeExtraction(on: client)
-      XCTFail("expected quota cooldown")
-    } catch ProactiveLaneClientError.quotaCooldown(_) {}
+    let bothInFlight = expectation(description: "both extraction attempts reached the network")
+    ProactiveLaneURLStub.holdRequests(until: 2, reaching: bothInFlight)
 
-    XCTAssertEqual(ProactiveLaneURLStub.requestCount, 2)
+    // Captures only the client, never the test case: an `async let` may not send a non-Sendable
+    // XCTestCase across the concurrency boundary, so the outcomes come back as values.
+    @Sendable func attemptExtraction() async -> Error? {
+      do {
+        _ = try await client.complete(
+          operation: ModelQoS.Proactivity.extractionOperation,
+          prompt: "extract",
+          jsonSchema: ["type": "object"])
+        return nil
+      } catch {
+        return error
+      }
+    }
+
+    async let first = attemptExtraction()
+    async let second = attemptExtraction()
+    await fulfillment(of: [bothInFlight], timeout: 5)
+    ProactiveLaneURLStub.releaseHeldRequests()
+    for outcome in await [first, second] {
+      guard case ProactiveLaneClientError.http(let status, _)? = outcome else {
+        XCTFail("expected both overlapping attempts to see the server's 429, got \(String(describing: outcome))")
+        continue
+      }
+      XCTAssertEqual(status, 429)
+    }
+
+    XCTAssertEqual(
+      ProactiveLaneURLStub.requestCount, 2,
+      "both overlapping attempts must have reached the network, or nothing raced")
 
     // Advance 70s — past the short window but inside the long one.
     clock.advance(by: 70)
     do {
       _ = try await completeExtraction(on: client)
       XCTFail("expected quota cooldown — longer deadline must be preserved")
-    } catch ProactiveLaneClientError.quotaCooldown(_) {}
+    } catch ProactiveLaneClientError.quotaCooldown(_) {
+      // Still inside the 300s window the first response asked for.
+    } catch {
+      XCTFail("the shorter window won: extraction left cooldown early with \(error)")
+    }
 
     XCTAssertEqual(
       ProactiveLaneURLStub.requestCount, 2,
@@ -377,6 +413,11 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
   private nonisolated(unsafe) static var responses: [StubResponse] = []
   private nonisolated(unsafe) static var served = 0
   private nonisolated(unsafe) static var operations: [String] = []
+  /// How many requests must be in flight before any of them is answered, if the caller asked for
+  /// that. Nil is the ordinary case: answer each request as it arrives.
+  private nonisolated(unsafe) static var holdThreshold: Int?
+  private nonisolated(unsafe) static var holdReached: XCTestExpectation?
+  private nonisolated(unsafe) static var held: [() -> Void] = []
 
   static var requestCount: Int {
     lock.lock()
@@ -395,7 +436,32 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
     responses = []
     served = 0
     operations = []
+    holdThreshold = nil
+    holdReached = nil
+    held = []
     lock.unlock()
+  }
+
+  /// Park every request instead of answering it until `count` of them have been issued, then
+  /// fulfill `expectation`. This is a synchronisation point, not a wait: it makes "these calls
+  /// overlapped" a fact the test establishes rather than one it hopes for.
+  static func holdRequests(until count: Int, reaching expectation: XCTestExpectation) {
+    lock.lock()
+    holdThreshold = count
+    holdReached = expectation
+    held = []
+    lock.unlock()
+  }
+
+  /// Answer everything parked by `holdRequests`, and stop parking.
+  static func releaseHeldRequests() {
+    lock.lock()
+    let pending = held
+    held = []
+    holdThreshold = nil
+    holdReached = nil
+    lock.unlock()
+    for deliver in pending { deliver() }
   }
 
   static func enqueue(statusCode: Int, body: Data, headers: [String: String] = [:]) {
@@ -417,7 +483,19 @@ private final class ProactiveLaneURLStub: URLProtocol, @unchecked Sendable {
     Self.operations.append(operation)
     let stub = Self.responses.isEmpty ? nil : Self.responses.removeFirst()
     Self.served += 1
+    let deliver = { self.deliver(stub, for: url) }
+    let isHeld = Self.holdThreshold != nil
+    if isHeld { Self.held.append(deliver) }
+    let reached = Self.holdThreshold.map { Self.served >= $0 } ?? false
+    let holdReached = reached ? Self.holdReached : nil
+    if reached { Self.holdReached = nil }
     Self.lock.unlock()
+
+    holdReached?.fulfill()
+    if !isHeld { deliver() }
+  }
+
+  private func deliver(_ stub: StubResponse?, for url: URL) {
     guard let stub else {
       client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
       return
