@@ -47,17 +47,21 @@ package final class InkGlassHitRegions {
   /// Registered, visible surfaces for `window`. Exposed so the `debug_hit_probe` bridge action can
   /// say whether a pass-through verdict came from the geometry or from the empty-registry fallback.
   package func surfaceCount(in window: NSWindow) -> Int {
-    views.allObjects.filter { $0.window === window && !$0.isHiddenOrHasHiddenAncestor }.count
+    views.allObjects.filter { isVisibleSurface($0, in: window) }.count
+  }
+
+  /// The one visibility rule, shared by the count and the point test. A faded-out panel that
+  /// answered the count but owned no points would send the window down the geometry path with
+  /// nothing in it, turning the whole shell click-through.
+  private func isVisibleSurface(_ view: NSView, in window: NSWindow) -> Bool {
+    view.window === window && !view.isHiddenOrHasHiddenAncestor && view.alphaValue > 0
   }
 
   /// Whether `pointInWindow` (window base coordinates, bottom-left origin) lies on any visible
   /// registered surface belonging to `window`.
   package func containsPoint(_ pointInWindow: NSPoint, in window: NSWindow) -> Bool {
     for view in views.allObjects {
-      guard view.window === window,
-        !view.isHiddenOrHasHiddenAncestor,
-        view.alphaValue > 0
-      else { continue }
+      guard isVisibleSurface(view, in: window) else { continue }
       if view.convert(view.bounds, to: nil).contains(pointInWindow) {
         return true
       }
