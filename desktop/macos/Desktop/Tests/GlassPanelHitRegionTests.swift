@@ -41,6 +41,33 @@ final class GlassPanelHitRegionTests: XCTestCase {
     }
   }
 
+  /// A panel is a squircle. Testing its bare bounds made each rounded corner a small dead zone over
+  /// whatever sits behind the window.
+  func testCornerCutOutsAreAirNotSurface() {
+    let bounds = NSRect(x: 0, y: 0, width: 200, height: 120)
+    let radius: CGFloat = 20
+
+    let contains: (CGFloat, CGFloat) -> Bool = { x, y in
+      InkGlassHitRegions.roundedRectContains(
+        point: NSPoint(x: x, y: y), bounds: bounds, cornerRadius: radius)
+    }
+
+    XCTAssertTrue(contains(100, 60), "the panel's middle is surface")
+    XCTAssertTrue(contains(1, 60), "a straight edge between the corners is surface")
+    XCTAssertTrue(contains(100, 1), "the flat bottom edge is surface")
+    XCTAssertFalse(contains(1, 1), "the bottom-left corner cut-out is air")
+    XCTAssertFalse(contains(199, 119), "the top-right corner cut-out is air")
+    XCTAssertTrue(
+      contains(radius - radius / 4, radius - radius / 4),
+      "inside the corner arc is still surface")
+    XCTAssertFalse(contains(-1, 60), "outside the bounds is air")
+
+    XCTAssertTrue(
+      InkGlassHitRegions.roundedRectContains(
+        point: NSPoint(x: 1, y: 1), bounds: bounds, cornerRadius: 0),
+      "a square surface keeps its corners")
+  }
+
   /// The whole point of the registry: the shell policy answers the same way the registry does, so
   /// air stays click-through while the panel stays interactive.
   func testShellPolicyPassesAirThroughAndKeepsThePanelInteractive() throws {

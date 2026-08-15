@@ -773,7 +773,7 @@ package struct InkGlassPanelModifier: ViewModifier {
           // representable, and it is mounted in every mode — Reduce Transparency removes the
           // material, not the surface, and a panel that registers nothing would let clicks fall
           // through to the desktop.
-          InkGlassHitRegionReporter()
+          InkGlassHitRegionReporter(cornerRadius: cornerRadius)
           if InkGlass.showsMaterial(reduceTransparency: reduceTransparency) {
             InkGlassBackdrop()
           }

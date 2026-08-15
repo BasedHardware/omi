@@ -62,17 +62,43 @@ package final class InkGlassHitRegions {
   package func containsPoint(_ pointInWindow: NSPoint, in window: NSWindow) -> Bool {
     for view in views.allObjects {
       guard isVisibleSurface(view, in: window) else { continue }
-      if view.convert(view.bounds, to: nil).contains(pointInWindow) {
+      let local = view.convert(pointInWindow, from: nil)
+      if InkGlassHitRegions.roundedRectContains(
+        point: local,
+        bounds: view.bounds,
+        cornerRadius: (view as? InkGlassHitRegionView)?.cornerRadius ?? 0)
+      {
         return true
       }
     }
     return false
+  }
+
+  /// A panel is a squircle, not a rectangle, so its corner cut-outs are desktop like any other air.
+  /// Testing the bare bounds let each corner swallow clicks aimed at whatever is behind the window.
+  package static func roundedRectContains(point: NSPoint, bounds: NSRect, cornerRadius: CGFloat)
+    -> Bool
+  {
+    guard bounds.contains(point) else { return false }
+    let radius = min(cornerRadius, min(bounds.width, bounds.height) / 2)
+    guard radius > 0 else { return true }
+
+    let insetX = min(max(point.x, bounds.minX + radius), bounds.maxX - radius)
+    let insetY = min(max(point.y, bounds.minY + radius), bounds.maxY - radius)
+    // Only corner points differ from their clamped position on both axes.
+    let dx = point.x - insetX
+    let dy = point.y - insetY
+    guard dx != 0, dy != 0 else { return true }
+    return (dx * dx + dy * dy) <= radius * radius
   }
 }
 
 /// Zero-drawing marker view: its own extent is reported as interactive content. Never intercepts
 /// events itself — it exists only so `InkGlassHitRegions` can read its live frame.
 package final class InkGlassHitRegionView: NSView {
+  /// The panel's corner radius, so the registry can exclude the squircle's corner cut-outs.
+  package var cornerRadius: CGFloat = 0
+
   package override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
     if window == nil {
@@ -85,14 +111,22 @@ package final class InkGlassHitRegionView: NSView {
   package override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-/// SwiftUI mount for the marker. Attach as a `.background` so it spans exactly the surface that
-/// should own the pointer.
+/// SwiftUI mount for the marker. Mount it inside the surface's own background stack so it spans
+/// exactly the surface that should own the pointer.
 package struct InkGlassHitRegionReporter: NSViewRepresentable {
-  package init() {}
+  package var cornerRadius: CGFloat
 
-  package func makeNSView(context: Context) -> InkGlassHitRegionView {
-    InkGlassHitRegionView(frame: .zero)
+  package init(cornerRadius: CGFloat = 0) {
+    self.cornerRadius = cornerRadius
   }
 
-  package func updateNSView(_ view: InkGlassHitRegionView, context: Context) {}
+  package func makeNSView(context: Context) -> InkGlassHitRegionView {
+    let view = InkGlassHitRegionView(frame: .zero)
+    view.cornerRadius = cornerRadius
+    return view
+  }
+
+  package func updateNSView(_ view: InkGlassHitRegionView, context: Context) {
+    view.cornerRadius = cornerRadius
+  }
 }
