@@ -169,6 +169,50 @@ final class ContextProactivityRetrievalHopTests: XCTestCase {
       ContextDirectorRetrievalHop.perSourceResultLimit)
   }
 
+  // MARK: - Summary + verbatim-chunk merge
+
+  func testMergePrefersTheVerbatimChunkItemOnRefCollision() {
+    let summaries = ContextDirectorRetrievalHop.items(
+      fromSources: [
+        source(id: "conv-1", preview: "Talked about the beta release"),
+        source(id: "conv-2", preview: "Summary only"),
+      ],
+      kind: "conversation")
+    let chunks = ContextDirectorRetrievalHop.items(
+      fromSources: [source(id: "conv-1", preview: "User: the beta shipped on 12 Aug at 0.12.171")],
+      kind: "conversation")
+    let merged = ContextDirectorRetrievalHop.mergeConversationItems(
+      summaries: summaries, chunks: chunks)
+    XCTAssertEqual(
+      merged.map(\.ref), ["conversation:conv-1", "conversation:conv-2"],
+      "one item per ref; the summary-only conversation survives")
+    XCTAssertEqual(
+      merged[0].preview, "User: the beta shipped on 12 Aug at 0.12.171",
+      "on a ref collision the verbatim chunk item wins over the summary")
+  }
+
+  func testMergeCapsCombinedConversationItemsAtTwiceThePerSourceLimit() {
+    // Constructed directly: `items(fromSources:)` already caps each side, so the
+    // combined cap is the safety bound for any future caller.
+    let chunks = (0..<4).map {
+      ContextRetrievedItem(
+        ref: "conversation:chunk-\($0)", title: "t", preview: "p", createdAt: nil)
+    }
+    let summaries = (0..<4).map {
+      ContextRetrievedItem(
+        ref: "conversation:summary-\($0)", title: "t", preview: "p", createdAt: nil)
+    }
+    let merged = ContextDirectorRetrievalHop.mergeConversationItems(
+      summaries: summaries, chunks: chunks)
+    XCTAssertEqual(merged.count, ContextDirectorRetrievalHop.conversationKindCombinedLimit)
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.conversationKindCombinedLimit,
+      ContextDirectorRetrievalHop.perSourceResultLimit * 2)
+    XCTAssertEqual(
+      merged.first?.ref, "conversation:chunk-0",
+      "verbatim items lead the merged order")
+  }
+
   // MARK: - Prompt section
 
   func testPromptSectionIsAbsentWithoutResultsAndQuotesBelowStaticFraming() throws {
@@ -209,6 +253,26 @@ final class ContextProactivityRetrievalHopTests: XCTestCase {
     let section = try XCTUnwrap(
       ContextDirectorRetrievalHop.promptSection(query: "q", items: items, timeZone: timeZone))
     XCTAssertTrue(section.contains("(yesterday afternoon)"))
+  }
+
+  func testPromptSectionKeepsMemoryItemsBehindAFullConversationMerge() throws {
+    // A full merge (6 conversation items) plus a full memory source (3) must all
+    // be quoted: the old two-source cap of 6 would silently drop every memory.
+    let conversations = (0..<ContextDirectorRetrievalHop.conversationKindCombinedLimit).map {
+      ContextRetrievedItem(
+        ref: "conversation:conv-\($0)", title: "t", preview: "p", createdAt: nil)
+    }
+    let memories = (0..<ContextDirectorRetrievalHop.perSourceResultLimit).map {
+      ContextRetrievedItem(ref: "memory:mem-\($0)", title: "t", preview: "p", createdAt: nil)
+    }
+    let section = try XCTUnwrap(
+      ContextDirectorRetrievalHop.promptSection(query: "q", items: conversations + memories))
+    for item in conversations + memories {
+      XCTAssertTrue(section.contains("- \(item.ref)"), "missing \(item.ref)")
+    }
+    XCTAssertEqual(
+      conversations.count + memories.count, ContextDirectorRetrievalHop.maximumPromptItems,
+      "the prompt cap is exactly a full three-source hop; anything beyond it truncates")
   }
 
   func testRetrievedSectionStaysBelowTheUntrustedPreambleAndOutOfTheCachedPrefix() throws {

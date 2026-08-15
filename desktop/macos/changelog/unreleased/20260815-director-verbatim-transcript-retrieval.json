@@ -1,0 +1,3 @@
+{
+  "change": "Improved proactive notifications on detail questions: the context director's lookup now also searches verbatim transcript excerpts with dates, not just conversation summaries"
+}
