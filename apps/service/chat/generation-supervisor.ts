@@ -26,6 +26,7 @@ import {
   type ChatGenerationSourceRun,
   type ChatGenerationUsage,
 } from "./generation-source";
+import { chatLog } from "./dev-stack-log";
 import {
   createAgentRunEventSupervisor,
   type AgentRunEventStore,
@@ -560,10 +561,13 @@ export const createChatGenerationSupervisor = (
     if (liveness?.heartbeatIntervalMs === 0 || state.terminal || state.cancelRequested) return;
     const startedAt = state.providerStartedAt;
     if (startedAt === null) return;
-    append(state, {
-      kind: "heartbeat",
+    const elapsedMs = Math.max(0, deps.nowEpochMilliseconds() - startedAt);
+    // Named heartbeat/progress frames are not in the ratified generation SSE
+    // grammar the surface observer accepts. Log them; do not append them.
+    chatLog("info", "heartbeat", {
+      generationId: state.generationId,
       attemptId: state.attemptId,
-      elapsedMs: Math.max(0, deps.nowEpochMilliseconds() - startedAt),
+      elapsedMs,
     });
   };
 
@@ -691,6 +695,12 @@ export const createChatGenerationSupervisor = (
             : { kind: "cancelled", message },
       });
       const canonicalKind = finalized.frame.kind;
+      chatLog(canonicalKind === "failed" ? "error" : "info", "generation_terminal", {
+        generationId: state.generationId,
+        attemptId: state.attemptId,
+        outcome: canonicalKind,
+        failureCode: finalized.frame.kind === "failed" ? finalized.frame.error.code : null,
+      });
       if (state.recovered) {
         recordRecoveredAgentTerminal(state.accountId, state.generationId, finalized.frame);
       } else {
@@ -803,6 +813,11 @@ export const createChatGenerationSupervisor = (
         usage: null,
       };
       active.set(key, state);
+      chatLog("info", "generation_admitted", {
+        generationId,
+        attemptId: state.attemptId,
+        admissionId: state.admissionId,
+      });
       recordAgentAccepted(state);
       recordAgentCapability(state);
       recordAgentStatus(state, "queued", 0);
@@ -894,13 +909,6 @@ export const createChatGenerationSupervisor = (
                 if (safe.usage !== null) state.usage = safe.usage;
                 recordAgentStatus(state, "generating", state.progressPct);
                 if (safe.usage !== null) recordAgentUsage(state, safe.usage);
-                append(state, {
-                  kind: "progress",
-                  attemptId: state.attemptId,
-                  progressPct: state.progressPct,
-                  elapsedMs: Math.max(0, deps.nowEpochMilliseconds() - (state.providerStartedAt ?? deps.nowEpochMilliseconds())),
-                  usage: state.usage,
-                });
               } catch {
                 void finalize(state, "failed", "", defaultFailure("callback"));
               }
@@ -917,13 +925,6 @@ export const createChatGenerationSupervisor = (
                 state.usage = safe;
                 recordAgentStatus(state, "generating", state.progressPct);
                 recordAgentUsage(state, safe);
-                append(state, {
-                  kind: "progress",
-                  attemptId: state.attemptId,
-                  progressPct: state.progressPct,
-                  elapsedMs: Math.max(0, deps.nowEpochMilliseconds() - (state.providerStartedAt ?? deps.nowEpochMilliseconds())),
-                  usage: safe,
-                });
               } catch {
                 void finalize(state, "failed", "", defaultFailure("callback"));
               }

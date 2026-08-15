@@ -185,8 +185,16 @@ describe("declarative gateway agent scenario", () => {
         contextSources: [source("fault-source")],
       }],
       availableTools: [],
-      providerScript: [{ kind: "answer", deltas: ["must not render"] }],
-      scheduledFaults: [{ exchange: 1, kind: "http_503" }],
+      providerScript: [
+        { kind: "answer", deltas: ["must not render"] },
+        { kind: "answer", deltas: ["must not render"] },
+        { kind: "answer", deltas: ["must not render"] },
+      ],
+      scheduledFaults: [
+        { exchange: 1, kind: "http_503" },
+        { exchange: 2, kind: "http_503" },
+        { exchange: 3, kind: "http_503" },
+      ],
     });
     expect(result.renderedObservations).toEqual([{
       generationId: "fault-turn",
@@ -195,7 +203,7 @@ describe("declarative gateway agent scenario", () => {
       errorCode: "generation_provider_failed",
     }]);
     expect(result.durableRows[0]?.terminalKind).toBe("failed");
-    expect(result.gatewayRequests).toHaveLength(1);
+    expect(result.gatewayRequests).toHaveLength(3);
   });
 
   test("fails closed on mismatched executable expectations and invalid multi-tool expansion", async () => {

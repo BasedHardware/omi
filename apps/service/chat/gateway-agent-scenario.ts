@@ -420,6 +420,7 @@ export const runGatewayAgentScenario = async (
     laneId: "omi:auto:chat-agent-scenario",
     serviceToken: "scenario-only-token",
     fetch: fetchScript as typeof fetch,
+    retrySleep: async () => {},
     ...(loop === undefined ? {} : { readOnlyToolLoop: loop }),
   });
   const observations: GatewayAgentScenarioObservation[] = [];

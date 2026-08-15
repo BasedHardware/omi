@@ -159,6 +159,7 @@ test("loopback model gateway authenticates, rewrites the lane, and pipes SSE inc
     OMI_LOCAL_MODEL_GATEWAY_PORT: "0",
     OMI_LOCAL_MODEL_GATEWAY_TOKEN: GATEWAY_TOKEN,
     OMI_LOCAL_MODEL_GATEWAY_READY: readyPath,
+    OMI_DEV_STACK_RUNDIR: scratch,
   }));
   try {
     const ready = await waitForReady(readyPath);
@@ -215,6 +216,14 @@ test("loopback model gateway authenticates, rewrites the lane, and pipes SSE inc
     const logs = spawned.text();
     expect(logs).not.toContain(MOCK_KEY);
     expect(logs).not.toContain(GATEWAY_TOKEN);
+    await Bun.sleep(25);
+    const jsonl = readFileSync(join(scratch, "logs", "gateway.jsonl"), "utf8");
+    expect(jsonl).toContain("\"proc\":\"gateway\"");
+    expect(jsonl).toContain("upstream_request_started");
+    expect(jsonl).toContain("upstream_status");
+    expect(jsonl).not.toContain(MOCK_KEY);
+    expect(jsonl).not.toContain(GATEWAY_TOKEN);
+    expect(jsonl).not.toContain("hi");
   } finally {
     spawned.child.kill("SIGTERM");
     provider.stop(true);
@@ -241,6 +250,7 @@ test("provider 4xx/5xx are surfaced as errors, not fake streams", async () => {
     OMI_LOCAL_MODEL_GATEWAY_PORT: "0",
     OMI_LOCAL_MODEL_GATEWAY_TOKEN: GATEWAY_TOKEN,
     OMI_LOCAL_MODEL_GATEWAY_READY: readyPath,
+    OMI_DEV_STACK_RUNDIR: scratch,
   }));
   try {
     const ready = await waitForReady(readyPath);
@@ -356,6 +366,7 @@ test("real service accepts a streamed completion and a tool-call round trip thro
     OMI_LOCAL_MODEL_GATEWAY_PORT: "0",
     OMI_LOCAL_MODEL_GATEWAY_TOKEN: GATEWAY_TOKEN,
     OMI_LOCAL_MODEL_GATEWAY_READY: readyPath,
+    OMI_DEV_STACK_RUNDIR: scratch,
   }));
   const db = new Database(":memory:");
   try {
