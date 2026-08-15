@@ -28,12 +28,12 @@ start a full run while 8791 is bound unless `OMI_CHAT_MODEL=real`. It refuses
 `api.omi.me` and never launches `?rig=dev`.
 
 It is **held out of L3** (`integration/lanes.mjs`): currently red on
-`CONTROL home=failure-notice`, a true positive. Home blends memories and
-conversations; the new UI may use only the new backend; and no platform
-conversations adapter exists yet. Keep it as a real step or an explained hold,
-never a silent absence. Measured `--screen-proof` wall-clock on 2026-08-15 was
+`CONTROL screen=frame-unavailable`, a true positive about Rewind. Home's
+former red is closed (`CONTROL home=ready`). Keep it as a real step or an
+explained hold, never a silent absence; wire it in when the harness prints
+`screen=frame-rendered`. Measured `--screen-proof` wall-clock on 2026-08-15 was
 `141827ms` (~2.4 min), including the signed-app build. A measured full run on
-2026-08-15 was `control-acceptance wall-clock=198122ms` (~3.3 min), one shell
+2026-08-15 was `control-acceptance wall-clock=196163ms` (~3.3 min), one shell
 launch with a 180s probe bound; the in-page driver is capped at 100 probe
 attempts by the macOS hook. The runner prints
 `control-acceptance wall-clock=…ms`.

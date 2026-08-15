@@ -54,9 +54,9 @@ after it has read the exact report. The headed click-through for a human is stil
 outside `--assert`. Control clicks for the gate live in
 `integration/control-acceptance/` (`node integration/control-acceptance/run.mjs`).
 That sibling of `--accept` drives Home, Chat, Listen, Rewind, and every chrome
-route in the built macOS shell. It is held out of L3 while Home is red on
-`CONTROL home=failure-notice` — a true positive, because no platform
-conversations adapter exists yet. Read `integration/control-acceptance/README.md`
+route in the built macOS shell. It is held out of L3 while Rewind is red on
+`CONTROL screen=frame-unavailable`. Wire it in when the harness prints
+`screen=frame-rendered`. Read `integration/control-acceptance/README.md`
 before adding a control.
 
 ## Platform companion contract
