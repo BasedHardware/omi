@@ -69,7 +69,7 @@ def _source_has_memories_to_retract():
     See test_merge_skips_retraction_without_canonical_memories.py.
     """
     with patch(
-        "utils.conversations.merge_conversations._source_retraction_is_a_noop",
+        "utils.conversations.merge_conversations.retraction_can_be_skipped",
         return_value=False,
     ):
         yield
