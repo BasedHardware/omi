@@ -36,6 +36,7 @@ import 'package:omi/env/prod_env.dart';
 import 'package:omi/firebase_options_local.dart' as local;
 import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
+import 'package:omi/startup_auth.dart';
 import 'package:omi/startup_failure_app.dart';
 import 'package:omi/startup_routing.dart';
 import 'package:omi/l10n/app_localizations.dart';
@@ -175,7 +176,7 @@ Future _init() async {
     Env.isTestFlight = await EnvironmentDetector.isTestFlight();
   }
 
-  bool isAuth = (await AuthService.instance.getIdToken()) != null;
+  bool isAuth = await resolveStartupAuth(() => AuthService.instance.getIdToken());
   if (isAuth) {
     PlatformManager.instance.analytics.identify();
     // Restore onboarding state from server if not already set locally
