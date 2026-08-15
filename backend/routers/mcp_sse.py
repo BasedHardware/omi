@@ -733,9 +733,17 @@ MCP_TOOLS: List[Dict[str, Any]] = [
 @router.get("/.well-known/oauth-protected-resource", tags=["mcp"])
 @router.get("/.well-known/oauth-protected-resource/v1/mcp/sse", tags=["mcp"])
 def oauth_protected_resource_metadata():
+    if auth_backend_name() == "firebase":
+        authorization_servers = [MCP_AUTHORIZATION_SERVER_URL]
+    else:
+        # Non-firebase (OIDC): the built-in authorization server (authorize/consent/token) is unavailable,
+        # so point clients at the configured OIDC issuer — they discover the real IdP's own metadata
+        # instead of the built-in /authorize that 501s (cubic PR 10887 mcp_sse.py:1584).
+        issuer = (os.getenv("OIDC_ISSUER") or "").strip().rstrip("/")
+        authorization_servers = [issuer] if issuer else [MCP_AUTHORIZATION_SERVER_URL]
     return {
         "resource": MCP_RESOURCE_URL,
-        "authorization_servers": [MCP_AUTHORIZATION_SERVER_URL],
+        "authorization_servers": authorization_servers,
         "scopes_supported": MCP_SCOPES_SUPPORTED,
         "bearer_methods_supported": ["header"],
         "resource_documentation": "https://docs.omi.me/doc/developer/mcp/setup",
@@ -748,8 +756,21 @@ def oauth_protected_resource_metadata_head():
     return Response(status_code=200)
 
 
+def _guard_builtin_oauth_server() -> None:
+    # The built-in OAuth authorization server (authorize/consent/token) loads the Firebase JS SDK and
+    # mints tokens against the Firebase project, so it only works under AUTH_BACKEND=firebase. Under OIDC
+    # a client must use its IdP's own /.well-known/oauth-authorization-server; advertising the built-in
+    # one here would point it at an authorization_endpoint that then 501s (cubic PR 10887 mcp_sse.py:1584).
+    if auth_backend_name() != "firebase":
+        raise HTTPException(
+            status_code=404,
+            detail="Built-in MCP OAuth server is only available with AUTH_BACKEND=firebase; use the OIDC issuer",
+        )
+
+
 @router.get("/.well-known/oauth-authorization-server", tags=["mcp"])
 def oauth_authorization_server_metadata():
+    _guard_builtin_oauth_server()
     return {
         "issuer": MCP_AUTHORIZATION_SERVER_URL,
         "authorization_endpoint": MCP_AUTHORIZATION_ENDPOINT,
@@ -764,6 +785,7 @@ def oauth_authorization_server_metadata():
 
 @router.head("/.well-known/oauth-authorization-server", tags=["mcp"])
 def oauth_authorization_server_metadata_head():
+    _guard_builtin_oauth_server()
     return Response(status_code=200)
 
 
