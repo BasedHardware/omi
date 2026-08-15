@@ -14,8 +14,12 @@ that tells the app the merge finished — was never reached, which is why the UI
 sat on "merging".
 
 The fence closes *intake*, so a conversation ingested while it was closed has no
-canonical memories to retract. Reading the source cohort first (an unfenced
-read) distinguishes "nothing to retract" from "retraction is broken".
+canonical memories to retract. Reading the retraction scope first (unfenced
+reads) distinguishes "nothing to retract" from "retraction is broken".
+
+The skip is deliberately narrow: it applies only while the fence is closed, and
+only when the *full* retraction scope is empty — the canonical source cohort and
+the historical live records that `retract_conversation_memories` also tombstones.
 """
 
 from __future__ import annotations
@@ -88,10 +92,12 @@ def test_source_with_no_canonical_memories_is_deleted_despite_the_closed_fence()
     delete_conversation = sys.modules["database.conversations"].delete_conversation
     delete_conversation.reset_mock()
 
-    with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+    with patch("utils.conversations.merge_conversations._canonical_intake_is_fenced", return_value=True), patch(
+        "utils.conversations.merge_conversations.MemoryService", return_value=service
+    ):
         with patch(
-            "utils.conversations.merge_conversations._source_has_canonical_memories",
-            return_value=False,
+            "utils.conversations.merge_conversations._source_retraction_is_a_noop",
+            return_value=True,
         ):
             _delete_conversation_and_related_data("uid-any", "conv-1")
 
@@ -109,10 +115,12 @@ def test_the_fence_is_still_advanced_so_failure_handling_keeps_the_merged_target
         nonlocal advanced
         advanced = True
 
-    with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+    with patch("utils.conversations.merge_conversations._canonical_intake_is_fenced", return_value=True), patch(
+        "utils.conversations.merge_conversations.MemoryService", return_value=service
+    ):
         with patch(
-            "utils.conversations.merge_conversations._source_has_canonical_memories",
-            return_value=False,
+            "utils.conversations.merge_conversations._source_retraction_is_a_noop",
+            return_value=True,
         ):
             _delete_conversation_and_related_data("uid-any", "conv-1", on_authoritative_retraction=mark_started)
 
@@ -126,10 +134,12 @@ def test_a_source_that_does_have_memories_still_aborts_when_retraction_fails():
     delete_conversation = sys.modules["database.conversations"].delete_conversation
     delete_conversation.reset_mock()
 
-    with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+    with patch("utils.conversations.merge_conversations._canonical_intake_is_fenced", return_value=True), patch(
+        "utils.conversations.merge_conversations.MemoryService", return_value=service
+    ):
         with patch(
-            "utils.conversations.merge_conversations._source_has_canonical_memories",
-            return_value=True,
+            "utils.conversations.merge_conversations._source_retraction_is_a_noop",
+            return_value=False,
         ):
             with pytest.raises(RuntimeError, match="globally paused"):
                 _delete_conversation_and_related_data("uid-any", "conv-1")
@@ -143,12 +153,83 @@ def test_a_failing_cohort_read_aborts_rather_than_assuming_there_is_nothing_to_r
     delete_conversation = sys.modules["database.conversations"].delete_conversation
     delete_conversation.reset_mock()
 
-    with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+    with patch("utils.conversations.merge_conversations._canonical_intake_is_fenced", return_value=True), patch(
+        "utils.conversations.merge_conversations.MemoryService", return_value=service
+    ):
         with patch(
-            "utils.conversations.merge_conversations._source_has_canonical_memories",
+            "utils.conversations.merge_conversations._source_retraction_is_a_noop",
             side_effect=RuntimeError("firestore unavailable"),
         ):
             with pytest.raises(RuntimeError, match="firestore unavailable"):
                 _delete_conversation_and_related_data("uid-any", "conv-1")
 
     delete_conversation.assert_not_called()
+
+
+def test_intake_enabled_always_retracts_even_for_an_apparently_empty_source():
+    # With the fence open, retraction works and a source write can land between
+    # the check and the delete. Skipping there would race; always retract.
+    service = MagicMock()
+    noop_probe = MagicMock(return_value=True)
+
+    with patch("utils.conversations.merge_conversations._canonical_intake_is_fenced", return_value=False), patch(
+        "utils.conversations.merge_conversations.MemoryService", return_value=service
+    ):
+        with patch("utils.conversations.merge_conversations._source_retraction_is_a_noop", noop_probe):
+            _delete_conversation_and_related_data("uid-any", "conv-1")
+
+    service.retract_conversation_memories.assert_called_once_with("uid-any", "conv-1")
+    noop_probe.assert_not_called()
+
+
+def _record(conversation_id=None, evidence=()):
+    memory = MagicMock()
+    memory.conversation_id = conversation_id
+    memory.evidence = list(evidence)
+    record = MagicMock()
+    record.memory = memory
+    return record
+
+
+def _evidence(source_type, source_id):
+    item = MagicMock()
+    item.source_type = source_type
+    item.source_id = source_id
+    return item
+
+
+@pytest.mark.parametrize(
+    "records,expected_noop",
+    [
+        ([], True),
+        ([_record(conversation_id="other")], True),
+        ([_record(conversation_id="conv-1")], False),
+        ([_record(evidence=[_evidence("conversation", "conv-1")])], False),
+        ([_record(evidence=[_evidence("conversation", "other")])], True),
+        ([_record(evidence=[_evidence("screen", "conv-1")])], True),
+    ],
+)
+def test_historical_records_referencing_the_source_are_not_a_noop(records, expected_noop):
+    # retract_conversation_memories also tombstones historical live rows, so a
+    # source with those still has evidence that would be left dangling.
+    from utils.conversations import merge_conversations as mc
+
+    service = MagicMock()
+    service.history.all_live.return_value = records
+
+    with patch.object(mc, "fetch_authoritative_product_memory_items_for_source", return_value=[]):
+        with patch.object(mc, "MemoryService", return_value=service):
+            assert mc._source_retraction_is_a_noop("uid-any", "conv-1") is expected_noop
+
+
+def test_an_active_canonical_item_is_never_a_noop():
+    from utils.conversations import merge_conversations as mc
+
+    item = MagicMock()
+    item.status = "active"
+    service = MagicMock()
+    service.history.all_live.return_value = []
+
+    with patch.object(mc, "fetch_authoritative_product_memory_items_for_source", return_value=[item]):
+        with patch.object(mc, "MemoryService", return_value=service):
+            assert mc._source_retraction_is_a_noop("uid-any", "conv-1") is False

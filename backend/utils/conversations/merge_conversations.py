@@ -21,6 +21,7 @@ from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from models.structured import Structured
+from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from models.product_memory import MemoryItemStatus
 from utils.memory.memory_service import MemoryService
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items_for_source
@@ -572,27 +573,43 @@ def _shared_client_device_provenance(
     return client_device_id, client_platform
 
 
-def _source_has_canonical_memories(uid: str, conversation_id: str) -> bool:
-    """Whether this conversation still has canonical memory evidence to retract.
+def _canonical_intake_is_fenced() -> bool:
+    """Whether the deployment-wide fence currently blocks canonical mutations."""
+    try:
+        return MemoryRolloutMode(rollout_mode_env_value()) not in {MemoryRolloutMode.write, MemoryRolloutMode.read}
+    except ValueError:
+        # A malformed mode fences intake too, so treat it as closed.
+        return True
 
-    Retraction runs through the canonical replace boundary, which is fenced by
-    `_require_canonical_intake_enabled()`. When the deployment fence is closed
-    that call raises, source deletion aborts, and the merge unwinds after the
-    merged conversation has already been built — the user is left with the merge
-    *and* both originals.
 
-    The fence closes intake, so a conversation ingested while it was closed has
-    no canonical memories in the first place. Reading the source cohort first
-    (an unfenced read) tells us whether there is any evidence that could be left
-    dangling. If there is none, there is nothing to retract and nothing to
-    protect, so deletion may proceed. If there is, the original abort stands.
+def _source_retraction_is_a_noop(uid: str, conversation_id: str) -> bool:
+    """Whether retracting this source would tombstone nothing at all.
+
+    Must cover everything `MemoryService.retract_conversation_memories` would
+    touch, not just the canonical cohort: it also tombstones historical live
+    records whose `conversation_id` or evidence names the source. A source with
+    historical rows but no canonical items still has evidence that would be left
+    pointing at a deleted conversation, so it is not a no-op.
     """
-    items = fetch_authoritative_product_memory_items_for_source(
+    canonical_items = fetch_authoritative_product_memory_items_for_source(
         uid,
         conversation_id,
         db_client=firestore_db,
     )
-    return any(item.status != MemoryItemStatus.tombstoned for item in items)
+    if any(item.status != MemoryItemStatus.tombstoned for item in canonical_items):
+        return False
+
+    history = MemoryService(db_client=firestore_db).history
+    for record in history.all_live(uid):
+        memory = record.memory
+        if memory.conversation_id == conversation_id:
+            return False
+        if any(
+            evidence.source_type == "conversation" and evidence.source_id == conversation_id
+            for evidence in memory.evidence
+        ):
+            return False
+    return True
 
 
 def _delete_conversation_and_related_data(
@@ -616,7 +633,11 @@ def _delete_conversation_and_related_data(
     import database.action_items as action_items_db
 
     try:
-        if _source_has_canonical_memories(uid, conversation_id):
+        # The skip only applies while the fence is closed. With intake enabled,
+        # retraction works and a source write can land between this check and
+        # the delete below, so always retract and let it abort on failure.
+        skip_retraction = _canonical_intake_is_fenced() and _source_retraction_is_a_noop(uid, conversation_id)
+        if not skip_retraction:
             memory_service = MemoryService(db_client=firestore_db)
             if on_authoritative_retraction is None:
                 memory_service.retract_conversation_memories(uid, conversation_id)
