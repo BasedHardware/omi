@@ -1797,8 +1797,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       isResizingProgrammatically = false
       return
     }
-    if alreadyAnimatingToTarget, wasResizable == makeResizable {
+    // "Already animating there" is only a reason to skip while an animation is actually running.
+    // Core Animation does not always deliver its completion — a display asleep through the
+    // animation is the reproducible case — and the dropped completion leaves this target set
+    // forever, so every later request for the same size returns here and the window never grows.
+    // That is how a suggestion card ends up drawn at collapsed pill width. Trust the pending
+    // target only while the window is still on its way there.
+    if alreadyAnimatingToTarget, wasResizable == makeResizable, isResizingProgrammatically {
       return
+    }
+    if alreadyAnimatingToTarget, !isResizingProgrammatically {
+      pendingFrameAnimationTarget = nil
     }
 
     log(

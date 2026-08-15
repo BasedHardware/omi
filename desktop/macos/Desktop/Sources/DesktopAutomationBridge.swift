@@ -1699,7 +1699,13 @@ final class DesktopAutomationActionRegistry {
           assistantId: "suggestion"
         )
       )
-      return ["shown": "true", "frame": NSStringFromRect(window.frame)]
+      return [
+        "shown": "true",
+        "frame": NSStringFromRect(window.frame),
+        "hasNotification": window.state.currentNotification == nil ? "false" : "true",
+        "showingAIConversation": window.state.showingAIConversation ? "true" : "false",
+        "isVisible": window.isVisible ? "true" : "false",
+      ]
     }
 
     // Cursor-free click diagnosis: report which window (any app's) is topmost at a screen point,
