@@ -26,18 +26,33 @@ export function computeLayout(graph: KnowledgeGraph, opts: LayoutOptions = {}): 
   const degree: Record<string, number> = {}
   for (const n of graph.nodes) degree[n.id] = 0
   for (const e of graph.edges) {
-    if (e.sourceId in degree) degree[e.sourceId]++
-    if (e.targetId in degree && e.targetId !== e.sourceId) degree[e.targetId]++
+    if (Object.hasOwn(degree, e.sourceId)) degree[e.sourceId]++
+    if (Object.hasOwn(degree, e.targetId) && e.targetId !== e.sourceId) degree[e.targetId]++
   }
 
   const simNodes: SimNode[] = graph.nodes.map((n) => ({ ...n, degree: degree[n.id] ?? 0 }))
-  const simLinks: SimLink[] = graph.edges.map((e) => ({ source: e.sourceId, target: e.targetId }))
+  // Skip edges whose endpoints are not both present. forceLink throws
+  // "missing: <id>" on a dangling reference, and merge/onboarding can emit an
+  // edge before its node exists. Use Object.hasOwn rather than the `in` operator
+  // so an endpoint id equal to an inherited property name (__proto__, constructor,
+  // toString, ...) is not treated as a present node.
+  const simLinks: SimLink[] = graph.edges
+    .filter((e) => Object.hasOwn(degree, e.sourceId) && Object.hasOwn(degree, e.targetId))
+    .map((e) => ({ source: e.sourceId, target: e.targetId }))
 
   const sim = forceSimulation<SimNode>(simNodes)
     .force('charge', forceManyBody().strength(-180))
-    .force('link', forceLink<SimNode, SimLink>(simLinks).id((d) => d.id).distance(70))
+    .force(
+      'link',
+      forceLink<SimNode, SimLink>(simLinks)
+        .id((d) => d.id)
+        .distance(70)
+    )
     .force('center', forceCenter(width / 2, height / 2))
-    .force('collide', forceCollide<SimNode>().radius((d) => 6 + Math.sqrt(d.degree) * 4))
+    .force(
+      'collide',
+      forceCollide<SimNode>().radius((d) => 6 + Math.sqrt(d.degree) * 4)
+    )
     .stop()
 
   sim.tick(iterations)
