@@ -164,7 +164,7 @@ enum ContextProactivityPromptBuilder {
       Produce a 150-400 token ambient narrative and discrete factual records. Facts are
       proposals; include an identifier, surviving evidence text, and evidence ref for each.
       App: \(appName)
-      Window: \(windowTitle ?? "")
+      Window: \(ContextDestinationKey.singleLine(windowTitle ?? "", limit: 160))
       Evidence ref: \(evidenceRef)
       """
     // Browser-scoped by design. Unscoped destination labelling was measured at 6%

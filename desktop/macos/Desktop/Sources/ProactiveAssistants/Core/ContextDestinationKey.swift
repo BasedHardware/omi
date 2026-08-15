@@ -50,6 +50,14 @@ enum ContextDestinationKey {
   private static let genericDomainParts: Set<String> = [
     "com", "org", "io", "net", "co", "www", "app", "apps", "google", "web", "html",
   ]
+  /// Section words that name a generic area of *any* site. These cannot be the sole
+  /// evidence for a domain claim: otherwise `x.com/feed` grounds against any title
+  /// containing "feed", and every site with a feed collapses into the X bucket.
+  private static let genericSectionWords: Set<String> = [
+    "feed", "inbox", "home", "mail", "builds", "build", "search", "news", "chat",
+    "threads", "posts", "notifications", "dashboard", "settings", "profile", "explore",
+    "timeline", "messages", "main", "index", "overview", "start",
+  ]
 
   static func isBrowser(appName: String) -> Bool {
     browserAppNames.contains(appName.lowercased().trimmingCharacters(in: .whitespaces))
@@ -91,12 +99,19 @@ enum ContextDestinationKey {
     // site. That is an abstention, not a key.
     guard !key.hasPrefix("unknown") else { return nil }
 
-    let domain = key.split(separator: "/", maxSplits: 1).first.map(String.init) ?? key
-    guard !domain.isEmpty else { return nil }
-    // Check the first label, not the whole string: `chrome.com/tabs` names the
-    // browser just as effectively as `chrome/tabs`.
+    let split = key.split(separator: "/", maxSplits: 1).map(String.init)
+    let domain = split.first ?? key
+    // A bare domain is too coarse an identity: `github.com` with no section would
+    // collapse every repository into one bucket. The prompt always asks for
+    // `<domain>/<section>`, so enforce that contract.
+    let section = split.count > 1 ? split[1] : ""
+    guard !domain.isEmpty, !section.trimmingCharacters(in: .whitespaces).isEmpty else {
+      return nil
+    }
+    // Every label, not just the first: `google-chrome/tabs` names the browser in its
+    // second label, and `chrome.com/tabs` does so just as effectively as `chrome/tabs`.
     let labels = domain.split(whereSeparator: { $0 == "." || $0 == "-" }).map(String.init)
-    guard let firstLabel = labels.first, !forbiddenDomainLabels.contains(firstLabel) else {
+    guard !labels.isEmpty, !labels.contains(where: { forbiddenDomainLabels.contains($0) }) else {
       return nil
     }
     guard !labels.contains(where: { messengerHosts.contains($0) }) else { return nil }
@@ -132,6 +147,9 @@ enum ContextDestinationKey {
     let domainParts = domain.split(whereSeparator: { $0 == "." || $0 == "-" })
       .map(String.init)
       .filter { !genericDomainParts.contains($0) }
+    // A domain of nothing but generic parts carries no identity: `com/feed` would
+    // otherwise become one shared key for every site with "feed" in its title.
+    guard !domainParts.isEmpty else { return false }
 
     // Short labels must match a *whole* title token; only longer ones may match a
     // substring. A plain substring test with no length floor let `x.com` ground
@@ -145,10 +163,15 @@ enum ContextDestinationKey {
       return true
     }
 
+    // Section evidence is kept, because browser titles are truncated from the left:
+    // `fix: thing #11 · acme/omi` never contains "github", and dropping this
+    // fallback measurably regressed exactly the repository grouping this feature
+    // exists to provide. But a *generic* section word cannot stand in for domain
+    // evidence, or `x.com/feed` grounds on any page that mentions a feed.
     let section = key.split(separator: "/", maxSplits: 1).dropFirst().joined(separator: "/")
     let sectionParts = section.split(whereSeparator: { "/-_ ".contains($0) })
       .map(String.init)
-      .filter { $0.count > 3 }
+      .filter { $0.count > 3 && !genericSectionWords.contains($0) }
     return sectionParts.contains(where: { haystack.contains($0) })
   }
 
@@ -189,13 +212,13 @@ enum ContextDestinationKey {
 
   /// Collapses newlines and control characters so untrusted text cannot forge
   /// prompt structure, and clamps length.
-  private static func singleLine(_ value: String) -> String {
+  static func singleLine(_ value: String, limit: Int = 60) -> String {
     let flattened = value.unicodeScalars
       .map { CharacterSet.newlines.contains($0) || CharacterSet.controlCharacters.contains($0) ? " " : Character($0) }
       .reduce(into: "") { $0.append($1) }
     let collapsed = flattened.replacingOccurrences(
       of: #"\s+"#, with: " ", options: .regularExpression)
-    return String(collapsed.trimmingCharacters(in: .whitespaces).prefix(60))
+    return String(collapsed.trimmingCharacters(in: .whitespaces).prefix(limit))
   }
 
   /// Non-browser contexts still receive the field because OpenAI strict structured
@@ -228,7 +251,12 @@ enum ContextDestinationBinder {
     // Explicit user or automation intent always outranks a derived key, and a
     // destination already applied needs no second decision.
     let source: String = binding["source"] ?? ""
-    guard source != "explicit_open", !source.hasPrefix("derived_destination:") else { return nil }
+    // Both explicit sources: the one-time UserDefaults import records a user's own
+    // prior binding as `legacy_explicit_open`, and a derived key must not overwrite
+    // that any more than it may overwrite a fresh `explicit_open`.
+    guard !source.hasSuffix("explicit_open"), !source.hasPrefix("derived_destination:") else {
+      return nil
+    }
     let currentSubjectID: String? = binding["subjectID"]
     guard currentSubjectID != subjectID else { return nil }
 
