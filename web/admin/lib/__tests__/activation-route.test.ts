@@ -31,29 +31,46 @@ function fakeDb(users: UserSeed[]) {
   }));
   docs.sort((a, b) => a.signupAt.getTime() - b.signupAt.getTime());
 
+  // The route's own predicates decide the count. If it filtered the wrong
+  // field, or shifted either bound, the returned count changes -- so the
+  // 7-day window is a real contract here rather than something the fake
+  // re-implements and always agrees with.
   const conversationsFor = (uid: string) => {
     const seed = users.find((u) => u.uid === uid)!;
-    return {
+    const signupAt = new Date(now - seed.signupDaysAgo * DAY);
+    const timestamps = (seed.conversationOffsetsDays ?? []).map(
+      (off) => signupAt.getTime() + off * DAY,
+    );
+    const bounds: { field: string; op: string; value: Date }[] = [];
+    const api = {
       where(field: string, op: string, value: Date) {
-        const self: any = this;
-        self._bounds = self._bounds ?? [];
-        self._bounds.push({ op, value });
-        return self;
+        bounds.push({ field, op, value });
+        return api;
       },
       count() {
         return {
           async get() {
             if (seed.throwOnRead) throw new Error("permission denied");
-            const signupAt = new Date(now - seed.signupDaysAgo * DAY);
-            const n = (seed.conversationOffsetsDays ?? []).filter((off) => {
-              const t = signupAt.getTime() + off * DAY;
-              return t >= signupAt.getTime() && t <= signupAt.getTime() + 7 * DAY;
-            }).length;
+            for (const b of bounds) {
+              if (b.field !== "created_at") {
+                throw new Error(`unexpected filter field: ${b.field}`);
+              }
+            }
+            const n = timestamps.filter((t) =>
+              bounds.every((b) =>
+                b.op === ">="
+                  ? t >= b.value.getTime()
+                  : b.op === "<="
+                    ? t <= b.value.getTime()
+                    : true,
+              ),
+            ).length;
             return { data: () => ({ count: n }) };
           },
         };
       },
     };
+    return api;
   };
 
   // Honours the caller's limit(), so the route's own PAGE size drives paging.
@@ -118,6 +135,23 @@ describe("computeActivation", () => {
     expect(result.signups).toBe(3);
     expect(result.activated).toBe(1);
     expect(result.rate).toBe(33.3);
+  });
+
+  it("treats the 7-day window as closed at both ends", async () => {
+    getDb.mockReturnValue(
+      fakeDb([
+        { uid: "at-signup", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [0] },
+        { uid: "at-day-seven", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [7] },
+        { uid: "just-after", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [7.001] },
+        { uid: "just-before", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [-0.001] },
+      ]),
+    );
+
+    const result = await computeActivation(60);
+
+    // Inclusive at signup and at signup+7d; anything outside is not activation.
+    expect(result.signups).toBe(4);
+    expect(result.activated).toBe(2);
   });
 
   it("excludes non-macOS signups", async () => {

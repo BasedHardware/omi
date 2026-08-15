@@ -1713,7 +1713,7 @@ export default function AnalyticsPage() {
         id: "viral-activation",
         title: "New Activated Users / Week",
         periodChange: latestPeriodChange(weeklyActivationData, (point) => point.activated, "vs previous mature cohort week"),
-        subtitle: "Memory created within 7 days of signup · fully matured cohorts only",
+        subtitle: "Conversation created within 7 days of signup · fully matured cohorts only",
         icon: <Target className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
         render: () => (
