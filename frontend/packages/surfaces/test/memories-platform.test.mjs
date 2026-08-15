@@ -256,27 +256,25 @@ test("absent citations and zero citations are different answers", () => {
 // Fixture versus live must be unmistakable.
 // ---------------------------------------------------------------------------
 
-test("every production surface declares where its rows came from, and never hides it", async () => {
+test("fixture provenance stays visible; live account data does not wear a pill", async () => {
   // RETAINED-SOURCE-ASSERTION: badge export/wiring plus platform CSS visibility are cross-surface structural inventory.
   const primitives = await read("src/production/ProductionPrimitives.tsx");
   const styles = await read("src/production/styles.css");
 
-  // One implementation, shared by all four surfaces.
   assert.match(primitives, /export function ProductionDataSourceBadge/);
-  assert.match(primitives, /live\s*\?\s*t\(locale, "dataSource\.live"\)/);
-  assert.match(primitives, /data-source-origin=\{live \? source\.origin : undefined\}/);
+  assert.match(primitives, /if \(source\.kind === "live"\) return null/);
+  assert.match(primitives, /t\(locale, "dataSource\.fixture"\)/);
   assert.match(EN_MESSAGES["dataSource.fixture"], /not from your account/);
   assert.match(EN_MESSAGES["dataSource.live"], /your account/i);
   assert.doesNotMatch(EN_MESSAGES["dataSource.live"], /backend|bridge/i);
   assert.notEqual(EN_MESSAGES["dataSource.fixture"], EN_MESSAGES["dataSource.live"]);
 
-  // The badge must never be hidden the way .qa-label is. The first assertion pins that
-  // .qa-label really is hidden on desktop, so this test fails loudly if someone "fixes"
-  // the badge by styling it like the label.
+  // Fixture warning must never be hidden the way .qa-label is. The first assertion
+  // pins that .qa-label really is hidden on desktop.
   assert.match(styles, /html\[data-platform="desktop"\] \.qa-label \{ display: none; \}/);
   assert.ok(
     !/\.data-source-badge[^{]*\{[^}]*display:\s*none/.test(styles),
-    "the data-source badge must not be hidden at any width",
+    "the fixture data-source badge must not be hidden at any width",
   );
   assert.match(styles, /html\[data-platform="desktop"\] \.data-source-badge/);
 

@@ -1,9 +1,10 @@
 import AppKit
 import WebKit
 
-/// The shell has two compositions. Home owns a query island in addition to
-/// the persistent navigation and result islands; every other route owns one
-/// page island below navigation.
+/// The shell has two compositions. Home owns a query island, a Chat-entry
+/// island, and a result island; every other route owns one page island below
+/// navigation. Geometry matches `home.css` desktop rows (64 / 50 / remainder)
+/// so the Chat chip is its own glass, not a CSS card painted onto results.
 enum GlassHostLayout: Equatable {
   case home
   case page
@@ -39,6 +40,7 @@ private final class WindowDragRegionView: NSView {
 final class GlassHostView: NSView {
   private let topGlass = GlassPanelView(cornerRadius: 26)
   private let heroGlass = GlassPanelView(cornerRadius: 22)
+  private let chatGlass = GlassPanelView(cornerRadius: 22)
   private let contentGlass = GlassPanelView(cornerRadius: 22)
   private let topBarDragRegion = WindowDragRegionView(frame: .zero)
   let webView: WKWebView
@@ -58,6 +60,7 @@ final class GlassHostView: NSView {
     layer?.backgroundColor = NSColor.clear.cgColor
     addSubview(topGlass)
     addSubview(heroGlass)
+    addSubview(chatGlass)
     addSubview(contentGlass)
     addSubview(webView)
     addSubview(topBarDragRegion, positioned: .above, relativeTo: webView)
@@ -105,13 +108,23 @@ final class GlassHostView: NSView {
     case .home:
       let navToHeroGap: CGFloat = 8
       let heroHeight: CGFloat = 64
-      let heroToResultsGap: CGFloat = 12
+      let heroToChatGap: CGFloat = 12
+      let chatHeight: CGFloat = 50
+      let chatToResultsGap: CGFloat = 12
+      let chatWidth: CGFloat = min(420, max(0, bounds.width - gutter * 2))
       heroGlass.isHidden = false
+      chatGlass.isHidden = false
       heroGlass.frame = NSRect(
         x: gutter,
         y: bounds.height - top - navHeight - navToHeroGap - heroHeight,
         width: max(0, bounds.width - gutter * 2),
         height: heroHeight)
+      chatGlass.frame = NSRect(
+        x: gutter + max(0, bounds.width - gutter * 2 - chatWidth),
+        y: bounds.height - top - navHeight - navToHeroGap - heroHeight
+          - heroToChatGap - chatHeight,
+        width: chatWidth,
+        height: chatHeight)
       contentGlass.frame = NSRect(
         x: gutter,
         y: bottom,
@@ -119,11 +132,13 @@ final class GlassHostView: NSView {
         height: max(
           0,
           bounds.height - top - navHeight - navToHeroGap - heroHeight
-            - heroToResultsGap - bottom))
+            - heroToChatGap - chatHeight - chatToResultsGap - bottom))
     case .page:
       let gap: CGFloat = 16
       heroGlass.isHidden = true
+      chatGlass.isHidden = true
       heroGlass.frame = .zero
+      chatGlass.frame = .zero
       contentGlass.frame = NSRect(
         x: gutter,
         y: bottom,
@@ -131,7 +146,7 @@ final class GlassHostView: NSView {
         height: max(0, bounds.height - top - navHeight - gap - bottom))
     }
 
-    let visiblePanels = [topGlass, heroGlass, contentGlass].filter { !$0.isHidden }
+    let visiblePanels = [topGlass, heroGlass, chatGlass, contentGlass].filter { !$0.isHidden }
     interactiveIslands = visiblePanels.map {
       NSBezierPath(roundedRect: $0.frame, xRadius: $0.cornerRadius, yRadius: $0.cornerRadius)
     }

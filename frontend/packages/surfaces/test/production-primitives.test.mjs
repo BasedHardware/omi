@@ -57,19 +57,21 @@ test("shared lifecycle primitive gives every phase one truthful semantic region"
   }
 });
 
-test("data-source badge exposes the exact visible provenance at every source kind", async () => {
+test("data-source badge labels fixture data and stays quiet for live", async () => {
   const ProductionDataSourceBadge = await loadProductionExport("ProductionPrimitives.tsx", "ProductionDataSourceBadge");
-  for (const source of [{ kind: "fixture", fixture: "normal" }, { kind: "live", origin: "bridge" }]) {
-    const rendered = await renderComponent(ProductionDataSourceBadge, { source, locale: "en" });
-    try {
-      const badge = rendered.container.querySelector(".data-source-badge");
-      assert.ok(badge);
-      assert.equal(badge.getAttribute("data-source-kind"), source.kind);
-      assert.equal(badge.getAttribute("aria-label"), badge.textContent?.trim());
-      assert.notEqual(badge.textContent?.trim(), "");
-    } finally {
-      await rendered.cleanup();
-    }
+  const fixture = await renderComponent(ProductionDataSourceBadge, {
+    source: { kind: "fixture", fixture: "normal" },
+    locale: "en",
+  });
+  try {
+    const badge = fixture.container.querySelector(".data-source-badge");
+    assert.ok(badge);
+    assert.equal(badge.getAttribute("data-source-kind"), "fixture");
+    assert.equal(badge.getAttribute("aria-label"), badge.textContent?.trim());
+    assert.match(badge.textContent ?? "", /not from your account/i);
+    assert.equal(badge.className.includes("tone-fixture"), true);
+  } finally {
+    await fixture.cleanup();
   }
 
   const live = await renderComponent(ProductionDataSourceBadge, {
@@ -77,11 +79,8 @@ test("data-source badge exposes the exact visible provenance at every source kin
     locale: "en",
   });
   try {
-    const badge = live.container.querySelector(".data-source-badge");
-    assert.equal(badge?.textContent, "Your account data");
-    assert.equal(badge?.getAttribute("aria-label"), "Your account data");
-    assert.equal(badge?.getAttribute("data-source-origin"), "bridge");
-    assert.doesNotMatch(badge?.textContent ?? "", /backend|bridge/i);
+    assert.equal(live.container.querySelector(".data-source-badge"), null);
+    assert.doesNotMatch(live.container.textContent ?? "", /your account data/i);
   } finally {
     await live.cleanup();
   }
@@ -263,7 +262,7 @@ test("production dates keep a localized date primary and exact time in secondary
 test("shared primitive/static CSS contract covers provenance, focus, motion, transparency, and non-live lists", async () => {
   const primitives = await read("src/production/ProductionPrimitives.tsx");
   const styles = await read("src/production/styles.css");
-  assert.match(primitives, /data-source-kind=\{source\.kind\}/);
+  assert.match(primitives, /data-source-kind="fixture"/);
   assert.match(primitives, /aria-label=\{detail\}/);
   assert.match(primitives, /aria-busy=\{loading \? "true" : undefined\}/);
   assert.match(primitives, /data-live-region="true"/);
@@ -274,6 +273,16 @@ test("shared primitive/static CSS contract covers provenance, focus, motion, tra
   assert.match(styles, /prefers-reduced-transparency/);
   assert.match(styles, /data-source-badge/);
   assert.doesNotMatch(styles, /\.data-source-badge\s*\{[^}]*display:\s*none/i);
+  assert.doesNotMatch(styles, /\.data-source-badge\s*\{[^}]*text-transform:\s*uppercase/);
+  assert.match(styles, /--native-glass-fill:/);
+  assert.match(styles, /html\[data-platform="desktop"\]\[data-native-glass="true"\][\s\S]*?\.home-chat-entry/);
+  assert.doesNotMatch(
+    styles,
+    /html\[data-platform="desktop"\]\[data-native-glass="true"\][\s\S]*?\.home-results-panel \{[^}]*background:\s*transparent/,
+  );
+  const chatStyles = await read("src/production/chat.css");
+  assert.match(chatStyles, /\.chat-history-start \{[^}]*text-transform:\s*none/);
+  assert.doesNotMatch(chatStyles, /\.chat-history-start \{[^}]*text-transform:\s*uppercase/);
   assert.match(styles, /\.production-page-heading h1 \{[^}]*max-width: var\(--measure-title\)/);
   assert.match(styles, /\.production-page-description \{[^}]*max-width: var\(--measure-body\)/);
   assert.match(styles, /\.memory-meta \{[^}]*font-family: var\(--type-meta-family\)/);

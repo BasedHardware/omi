@@ -25,8 +25,7 @@ test("Folders exposes source, lifecycle, result semantics, and system-folder fil
     const main = rendered.container.querySelector('main[data-route="folders"]');
     assert.ok(main);
     const badge = main.querySelector(".data-source-badge");
-    assert.equal(badge?.dataset.sourceKind, "live");
-    assert.equal(badge?.getAttribute("aria-label"), badge?.textContent);
+    assert.equal(badge, null, "live folders do not stamp a provenance pill");
     const lifecycle = main.querySelector(".production-lifecycle-region");
     assert.equal(lifecycle?.getAttribute("aria-label"), EN_MESSAGES["lifecycle.region"]);
     assert.equal(lifecycle?.getAttribute("data-phase"), "ready");

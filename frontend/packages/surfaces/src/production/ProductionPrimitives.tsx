@@ -8,13 +8,13 @@ import { ProductionIcon, type ProductionIconName } from "./ProductionIcon.js";
 /**
  * Where the rows on this surface came from.
  *
- * Deliberately NOT `.qa-label`, which `styles.css` sets to `display: none` at desktop
- * width — that is exactly how a fixture render gets mistaken for a real signed-in one, and
- * that confusion has cost this project before. This badge is visible at every width, in
- * both colour modes, and its fixture copy says the data is not the reader's account.
+ * Live account data is the product default, not news — a green "YOUR ACCOUNT DATA"
+ * pill on every route reads as debug chrome. Fixture/sample data is the surprising
+ * source, and that warning stays visible at every width in both colour modes.
+ * Deliberately NOT `.qa-label`, which `styles.css` sets to `display: none` at desktop.
  *
- * `source` is required wherever this is used, so no surface can render rows without
- * declaring their origin.
+ * `source` is still required wherever this is used, so no surface can render rows
+ * without declaring their origin. Live simply does not paint a pill.
  */
 export type SurfaceDataSource =
   | { readonly kind: "fixture"; readonly fixture: string }
@@ -23,16 +23,13 @@ export type SurfaceDataSource =
 export function ProductionDataSourceBadge({ source, locale }: {
   source: SurfaceDataSource;
   locale: string;
-}): React.JSX.Element {
-  const live = source.kind === "live";
-  const detail = live
-    ? t(locale, "dataSource.live")
-    : t(locale, "dataSource.fixture");
+}): React.JSX.Element | null {
+  if (source.kind === "live") return null;
+  const detail = t(locale, "dataSource.fixture");
   return (
     <p
-      className={`data-source-badge tone-${live ? "live" : "fixture"}`}
-      data-source-kind={source.kind}
-      data-source-origin={live ? source.origin : undefined}
+      className="data-source-badge tone-fixture"
+      data-source-kind="fixture"
       aria-label={detail}
       role="status"
     >

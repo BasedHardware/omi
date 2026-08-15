@@ -35,8 +35,9 @@
   color: var(--content-tertiary);
   font-family: var(--type-label-family);
   font-size: var(--type-label-size);
-  letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .chat-message-list {
