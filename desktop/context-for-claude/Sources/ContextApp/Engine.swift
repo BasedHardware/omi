@@ -340,7 +340,12 @@ final class Engine: ObservableObject {
         // 6. The account, last of all.
         startAccountServices()
 
-        ContextLog.info("Engine started", "engine")
+        // `milestone`, not `info`: this is the opening bracket of a run. Errors read back from
+        // `log show` hours later are a scatter of sentences with no way to tell which process they
+        // belong to, or whether capture ever came up at all — measured, on a report where the only
+        // surviving line for a whole run was the one `applicationWillTerminate` writes. `info` is
+        // gone within minutes, so the bracket has to be a level that is not.
+        ContextLog.milestone("Engine started", "engine")
     }
 
     /// Everything that touches the user's Omi account: the stored session, the MCP credential, and
@@ -509,7 +514,11 @@ final class Engine: ObservableObject {
         // Ends the conversation, not just the capture. The app delegate also routes quit through
         // here, and a session left open reports a recording that stopped hours ago.
         store.closeOpenSession()
-        ContextLog.info("Capture paused", "engine")
+        // `milestone` for the reason `ContextLog` gives: the app has stopped recording on the
+        // user's behalf and cannot ask them about it later. "It quietly stopped capturing" is the
+        // report this line answers, and answering it requires the line to still be there when the
+        // report arrives — which, at `info`, it is not.
+        ContextLog.milestone("Capture paused", "engine")
         publishState(synchronously: true)
     }
 
@@ -525,7 +534,10 @@ final class Engine: ObservableObject {
         }
         capabilities = Permissions.groupedReport()
         startPermittedSources()
-        ContextLog.info("Capture resumed", "engine")
+        // The other half of the pause. A gap in the recording is only legible as deliberate when
+        // both ends of it survive; a persisted "paused" with an evicted "resumed" is worse than
+        // neither, because it reads as capture that never came back.
+        ContextLog.milestone("Capture resumed", "engine")
         startCloudTranscription()
         publishState()
     }
@@ -669,8 +681,16 @@ final class Engine: ObservableObject {
             } catch {
                 guard let self, self.audioRunIDs[component] == runID, !Task.isCancelled else { return }
                 self.teardownAudio(component)
+                // A start that failed because the capability is gone is a permission story, not a
+                // device error, and the boundary that saw the refusal has already lowered the grant
+                // by the time the throw arrives here. Without this the state carried an opaque HAL
+                // status — "System audio tap could not be created (1852797029)" — with no route to
+                // the switch, until the maintenance loop got round to the same conclusion 30 s later.
                 self.setState(
-                    component, .blocked("\(component.label) stopped — \(error.localizedDescription)"))
+                    component,
+                    Permissions.check(capability)
+                        ? .blocked("\(component.label) stopped — \(error.localizedDescription)")
+                        : self.missingPermissionState(component, capability))
                 self.publishState()
             }
         }
@@ -789,12 +809,22 @@ final class Engine: ObservableObject {
     private func missingPermissionState(
         _ component: CaptureComponent, _ capability: Capability
     ) -> ComponentState {
-        guard Permissions.hasEverCaptured(capability) else {
-            return .off("\(component.label) off — permission not granted")
-        }
-        return .blocked(
-            "\(component.label) has stopped working — macOS dropped this app's permission, which "
-                + "happens when it is updated or re-signed. Switch it back on in System Settings.")
+        Self.missingPermissionState(
+            label: component.label,
+            capability: capability,
+            hasEverCaptured: Permissions.hasEverCaptured(capability))
+    }
+
+    /// The rule on its own, because the distinction above is the part with a wrong answer available
+    /// and every input to it is something only this Mac can answer. The sentence is
+    /// `Permissions.staleGrantReason`, shared with the screen half rather than written twice: all
+    /// three capabilities lose their grant to the same `tccd` code-requirement mismatch, and the
+    /// remedy for it — off and back on, not "back on" — has to be the same words wherever it is said.
+    nonisolated static func missingPermissionState(
+        label: String, capability: Capability, hasEverCaptured: Bool
+    ) -> ComponentState {
+        guard hasEverCaptured else { return .off("\(label) off — permission not granted") }
+        return .blocked(Permissions.staleGrantReason(subject: label, for: capability))
     }
 
     private func stopAudio(_ component: CaptureComponent, reason: String) {
@@ -1234,7 +1264,11 @@ final class Engine: ObservableObject {
         // top of it.
         heartbeat.set(final)
         heartbeatQueue.sync { Self.writeHeartbeat(final) }
-        ContextLog.info("Engine stopped", "engine")
+        // The closing bracket, and the only proof this teardown actually ran. Everything above it
+        // is what stops `status()` reporting a recording that ended hours ago; a run whose last
+        // line is the delegate's termination milestone and *not* this one is a run where the
+        // session was left open, which is a different bug from the one that ended the process.
+        ContextLog.milestone("Engine stopped", "engine")
     }
 }
 

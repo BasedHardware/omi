@@ -133,6 +133,9 @@ final class SystemAudioCapture: AudioSource, @unchecked Sendable {
 
         var status = AudioHardwareCreateProcessTap(tapDescription, &tapID)
         guard status == noErr else {
+            // The one HAL call the consent governs, so the only one whose refusal is a permission
+            // answer. Everything below this line needs a tap that already exists.
+            if Self.tapCreationWasRefused(status) { Permissions.noteSystemAudioTapRefused() }
             throw AudioCaptureError.tapFailed(status)
         }
         ContextLog.info("Created process tap \(tapID)", Self.logCategory)
@@ -440,6 +443,37 @@ final class SystemAudioCapture: AudioSource, @unchecked Sendable {
     }
 
     // MARK: - Permission
+
+    /// **Tells macOS refusing this process a tap apart from CoreAudio having a bad moment.**
+    ///
+    /// The system-audio counterpart of `ScreenPipeline.noteIfDeclined`, and it has to be as narrow as
+    /// that one for the same reason: what it records lowers the cached grant, which sends the user to
+    /// System Settings. Doing that over an ordinary hiccup would be the same lie as the one this whole
+    /// area exists to stop, pointing the other way.
+    ///
+    /// Two things keep it narrow.
+    ///
+    /// **Only tap creation is judged.** `AudioHardwareCreateProcessTap` is the single call the tap
+    /// consent governs; the aggregate device, the stream format, the converter and
+    /// `AudioDeviceStart` all come after a tap macOS has already allowed, so their failures are about
+    /// devices and formats and are left to the ordinary retry — a display or output-device change, a
+    /// renegotiated rate, an IOProc that would not start.
+    ///
+    /// **And a HAL that cannot answer anything is not a refusal.** `coreaudiod` is synchronous IPC
+    /// and this file already documents it blocking for seconds after a wake from sleep, which is
+    /// exactly when the engine restarts capture; `kAudioHardwareNotRunningError` and
+    /// `kAudioHardwareNotReadyError` name that state, and the right response to it is the next
+    /// attempt rather than a sentence about System Settings.
+    ///
+    /// Everything else from that one call is treated as the refusal, which is the same reading
+    /// `primePermission` has always taken of it ("consent likely denied"). The alternative — an
+    /// allowlist of the statuses a denial is *believed* to produce — fails silently in the direction
+    /// that matters most: a denial answered with an unlisted status would leave the cache vouching for
+    /// a dead tap, which is the defect.
+    static func tapCreationWasRefused(_ status: OSStatus) -> Bool {
+        guard status != noErr else { return false }
+        return status != kAudioHardwareNotRunningError && status != kAudioHardwareNotReadyError
+    }
 
     /// Fires the CoreAudio process-tap consent prompt during onboarding instead of mid-call.
     ///

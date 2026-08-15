@@ -3,6 +3,7 @@ import ContextCore
 import AppKit
 import CoreGraphics
 import Foundation
+import Security
 
 /// The three things Context for Claude has to be allowed to do. Nothing else is ever asked for.
 enum Capability: String, CaseIterable {
@@ -54,6 +55,26 @@ extension Capability {
             return "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
         case .accessibility:
             return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        }
+    }
+
+    /// **Where the switch is, in the words System Settings uses for it.**
+    ///
+    /// `settingsPane` is for `NSWorkspace`; this is for a sentence the user reads when nothing is
+    /// opening the pane for them. System audio names the *list* as well as the pane, because that
+    /// pane carries two and the app appears in both — sending someone to the top of it is how the
+    /// last round of this bug had people switching on the row they had already switched on.
+    var settingsLocation: String {
+        switch self {
+        case .microphone:
+            return "Privacy & Security ▸ Microphone"
+        case .systemAudio:
+            return "Privacy & Security ▸ Screen & System Audio Recording, under "
+                + "“System Audio Recording Only”"
+        case .screen:
+            return "Privacy & Security ▸ Screen & System Audio Recording"
+        case .accessibility:
+            return "Privacy & Security ▸ Accessibility"
         }
     }
 }
@@ -364,6 +385,36 @@ enum Permissions {
         hasEverCaptured(c) && !check(c)
     }
 
+    /// **What to do about a grant macOS has dropped and is still drawing as switched on.**
+    ///
+    /// One sentence, shared by every surface that meets this state, because the previous three
+    /// spellings of it were all wrong in the same way: they said *switch it back on*, and there is
+    /// nothing to switch back on. Observed on this machine on 15 August 2026, on the shipped
+    /// notarized 1.0.4 — the app reported `screen: not granted — Action required`, and the row in
+    /// Privacy & Security ▸ Screen & System Audio Recording was **already on**. The system log says
+    /// why:
+    ///
+    /// ```
+    /// tccd: Failed to match existing code requirement for subject com.omi.context-for-claude and
+    ///       service kTCCServiceMicrophone
+    /// ```
+    ///
+    /// A TCC record carries the code requirement of the binary that earned it. After a re-sign the
+    /// requirement no longer matches, so the daemon refuses the app while System Settings goes on
+    /// rendering the row from the record it still has. The switch is not the state; it is a picture
+    /// of a record that no longer applies to us.
+    ///
+    /// So the remedy is the only thing that actually rewrites the record against the new signature:
+    /// turn it **off** and back on. Telling a user to switch on a switch they can see is already on
+    /// is what turned this into *"the app is broken"* rather than *"the app needs a click"* — and it
+    /// is the same sentence for microphone, system audio and screen, because all three are one
+    /// `tccd` requirement mismatch wearing three different pane names.
+    nonisolated static func staleGrantReason(subject: String, for c: Capability) -> String {
+        "\(subject) has stopped working — an update or a re-sign made macOS drop the grant. The "
+            + "switch may still look on: turn it off and back on in \(c.settingsLocation), then "
+            + "reopen me."
+    }
+
     /// **Why the screen half cannot run right now, or nil when nothing is in its way.**
     ///
     /// Three distinct situations wear the same checkbox, and telling them apart is most of what a
@@ -388,9 +439,7 @@ enum Permissions {
             case .notGranted:
                 return "Screen off — Screen Recording permission not granted"
             case .grantLost:
-                return "Screen Recording has stopped working — macOS dropped this app's grant, "
-                    + "which happens when it is updated or re-signed. Switch it back on in System "
-                    + "Settings ▸ Privacy & Security ▸ Screen & System Audio Recording."
+                return staleGrantReason(subject: "Screen Recording", for: .screen)
             case .needsRelaunch:
                 return "Screen Recording is on, but I have to be reopened before I can actually "
                     + "see the screen — click the Screen row to restart me."
@@ -675,6 +724,78 @@ enum Permissions {
         return secondsSinceProbe > systemAudioProbeInterval
     }
 
+    /// **Whether a *read* may spend a CoreAudio tap of its own** — the rule the background poll
+    /// actually runs on, and the one `systemAudioProbeIsDue` above is only half of.
+    ///
+    /// `prompted` was being answered from `context.permission.systemAudio.prompted`, a `UserDefaults`
+    /// flag, and that is the whole defect. The flag is durable; the thing it claims — that macOS has
+    /// already spent this app's audio-capture consent dialog — is a fact about a TCC record keyed to a
+    /// code signature, and TCC drops that record without a word whenever the signature changes or the
+    /// grant is reset (`tccutil reset AudioCapture`, measured; and an approval that lapses on its own
+    /// on macOS 26). The flag then vouches for a prompt that has *not* been spent, so the poll builds
+    /// a global process tap, and macOS answers a tap with no record by putting the consent dialog on
+    /// screen. Every 30 seconds. Forever. Started by nothing the user did — `Permissions.check` is a
+    /// read, and the onboarding card and the menu bar both call it on a timer.
+    ///
+    /// That is the same shape as the Screen Recording loop and the keychain loop: a refusal no retry
+    /// can satisfy, retried on a clock. The fix is the same shape too — the only evidence that this
+    /// process cannot raise a dialog is that this process has *already* had a tap answered, which is
+    /// a fact about the run rather than a record that outlives it.
+    ///
+    /// So an unattended probe stays behind a latch signalled by `probeSystemAudio()`, and every
+    /// caller of that is a click: the row's ask, the pane-opening that materialises the row, and the
+    /// gate's own fast refresh while the user stands in System Settings. Before the user has clicked
+    /// anything, a read is a read.
+    ///
+    /// What this costs is a launch in which the user granted system audio elsewhere and never touches
+    /// the row: the cached answer is served until they click it once. That is a stale word next to a
+    /// switch, against an unrequested system dialog on a loop, and it is not a close call.
+    nonisolated static func unattendedProbeIsDue(
+        cached: Bool?, tapAnsweredInThisProcess: Bool, secondsSinceProbe: Double
+    ) -> Bool {
+        guard tapAnsweredInThisProcess else { return false }
+        return systemAudioProbeIsDue(cached: cached, prompted: true, secondsSinceProbe: secondsSinceProbe)
+    }
+
+    /// **A tap macOS has refused outranks the record that says we may have one.**
+    ///
+    /// The system-audio mirror of `screenIsGranted(preflight:capturedRecently:)`, and it points the
+    /// other way for the same reason that one points the way it does: evidence beats a record. There
+    /// is no preflight for a process tap, so `check(.systemAudio)` answers from `UserDefaults`, and
+    /// `reconcileSystemAudioRecords` only falsifies that cache **at launch**, per signature. Nothing
+    /// falsified it *within* a run — so a grant revoked while the app was capturing left the menu bar
+    /// reading "Granted" and the onboarding card counting the row answered, over a tap CoreAudio was
+    /// refusing, until the next launch.
+    ///
+    /// `nil` is preserved rather than collapsed to `false`: never-probed is the state the row reports
+    /// as "Open", and a refusal is not a reason to claim we asked.
+    nonisolated static func systemAudioIsGranted(cached: Bool?, tapRefused: Bool) -> Bool? {
+        tapRefused ? false : cached
+    }
+
+    /// **Records that CoreAudio refused this process a tap, in so many words.**
+    ///
+    /// The system-audio counterpart of `noteScreenCaptureDeclined`, called from the one boundary that
+    /// can know — `SystemAudioCapture`, on a tap creation the HAL turned down — and deliberately in
+    /// memory only. What it holds is a fact about *this* run: a tap is built fresh every time, so a
+    /// refusal carried into the next launch would condemn a process that may well get one, and the
+    /// persisted answer is already reconciled per signature at launch.
+    ///
+    /// `milestone` rather than `info`, because `info` is evicted from the unified log within minutes
+    /// and this is the line that explains why the call half went quiet mid-session.
+    static func noteSystemAudioTapRefused() {
+        guard !systemAudioTapRefused.isSignalled else { return }
+        systemAudioTapRefused.signal()
+        ContextLog.milestone(
+            "CoreAudio refused this process a system-audio tap while the recorded answer still said "
+                + "granted — the consent has to be re-given before calls can be heard",
+            "permissions")
+    }
+
+    /// Whether a tap has been refused in this run and not yet succeeded since. Read by
+    /// `cachedSystemAudioGrant`, which is what every other read comes through.
+    static var systemAudioTapWasRefused: Bool { systemAudioTapRefused.isSignalled }
+
     /// The last answer we got from an actual tap, and the schedule that stops it going stale.
     ///
     /// **The condition for re-probing is "we do not have a grant", not "we have a recorded denial".**
@@ -693,10 +814,21 @@ enum Permissions {
     /// poll would be exactly the surprise `PermissionInvitations` exists to remove; after the user
     /// has clicked the row once, macOS has spent that prompt and a probe is silent.
     private static func cachedSystemAudioGrant() -> Bool {
-        let cached = defaults.object(forKey: Key.systemAudioGranted) as? Bool
-        if systemAudioProbeIsDue(
+        // Before the cache is read, not after: a cached answer written under a signature this build
+        // no longer has is not an answer about this build. Once per process, like
+        // `screenGrantedAtLaunch`, and forced from the first read for the same reason.
+        _ = systemAudioRecordsReconciled
+
+        // Every other read of the grant — `check`, the three ask paths' first guard, the status word
+        // — comes through here, so this is the one place the refusal has to be applied. Applied to
+        // the value the probe schedule sees as well: a refused answer is a `false` answer, and the
+        // recovery it licenses is the click-driven probe that notices the switch being re-flipped.
+        let cached = systemAudioIsGranted(
+            cached: defaults.object(forKey: Key.systemAudioGranted) as? Bool,
+            tapRefused: systemAudioTapRefused.isSignalled)
+        if unattendedProbeIsDue(
             cached: cached,
-            prompted: hasPrompted(.systemAudio),
+            tapAnsweredInThisProcess: systemAudioTapAnswered.isSignalled,
             secondsSinceProbe: ContextTime.now - defaults.double(forKey: Key.systemAudioProbedAt))
         {
             scheduleSystemAudioProbe()
@@ -777,9 +909,99 @@ enum Permissions {
     private static func probeSystemAudio() async -> Bool {
         defaults.set(ContextTime.now, forKey: Key.systemAudioProbedAt)
         let granted = await offMain { primeSystemAudioTap() }
+        // **The one thing that licenses a background probe.** Every caller of this function is a
+        // click, so a tap has now been attempted with the user present and macOS has an answer on
+        // record for *this* process — which is the only state in which a later, unattended tap is
+        // guaranteed not to raise a dialog nobody asked for.
+        systemAudioTapAnswered.signal()
         recordSystemAudio(granted)
         return granted
     }
+
+    // MARK: - System audio: records that must not outlive the signature that earned them
+
+    /// **Whether persisted system-audio answers written under `stored` still describe a build
+    /// signed as `current`.**
+    ///
+    /// System audio is the one capability with no preflight, so `check` answers it from
+    /// `UserDefaults` — and that cache is the only capability answer in the app that nothing can
+    /// falsify. `refreshSystemAudioGrant`, `materialiseSettingsRow` and `requestSystemAudio` all
+    /// return at their first guard once it reads `true`, so a `true` written by a previous build is
+    /// permanent: `check(.systemAudio)` says granted, the menu bar's Microphone row ANDs it in and
+    /// reads "Granted", the onboarding card counts it answered and never offers it, and the capture
+    /// path is the only thing that ever finds out — as an opaque device error, with no route to the
+    /// switch.
+    ///
+    /// That is not a hypothetical. Measured on this machine on 15 August 2026, having just installed
+    /// the notarized 1.0.4 over an ad-hoc-signed build: `context.permission.systemAudio.granted = 1`,
+    /// written under a signature macOS has since dropped the TCC record for. Every existing install
+    /// that updates across a signing-identity change arrives in exactly this state.
+    ///
+    /// TCC keys its records to the code signature, so this scopes ours the same way. Two deliberate
+    /// asymmetries, both toward keeping less:
+    ///
+    /// - **An absent stamp does not survive.** A build that predates this reconciliation wrote
+    ///   answers under an unknown signature, and 1.0.4 is precisely that build. Costing a user one
+    ///   click on a row is the whole downside; the alternative is the paragraph above.
+    /// - **An unknown *current* signature changes nothing.** If `SecCode` cannot answer, the honest
+    ///   move is to leave the records alone rather than to spend them on a guess.
+    nonisolated static func systemAudioRecordsSurvive(stored: String?, current: String?) -> Bool {
+        guard current != nil else { return true }
+        guard let stored else { return false }
+        return stored == current
+    }
+
+    /// Spends every persisted system-audio answer that a different build wrote, and stamps this one.
+    ///
+    /// Takes its `defaults` and its `signature` rather than reading both, because the interesting
+    /// behaviour is the mutation — which keys go, which stay, and that a second call with the same
+    /// signature is a no-op — and none of that is assertable against a live keychain-signed bundle
+    /// and the real standard domain.
+    ///
+    /// - Returns: whether records were spent.
+    @discardableResult
+    nonisolated static func reconcileSystemAudioRecords(defaults: UserDefaults, signature: String?) -> Bool {
+        let stored = defaults.string(forKey: Key.systemAudioSignature)
+        guard !systemAudioRecordsSurvive(stored: stored, current: signature) else { return false }
+        guard let signature else { return false }
+        // The prompt record goes with the grant. It claims macOS has spent this app's consent
+        // dialog, which is the same claim about the same dropped TCC record — and left behind it
+        // would send the row's first click down the "the prompt is spent, open the pane" branch for
+        // a prompt that is about to appear.
+        defaults.removeObject(forKey: Key.systemAudioGranted)
+        defaults.removeObject(forKey: Key.systemAudioProbedAt)
+        defaults.removeObject(forKey: Key.prompted(.systemAudio))
+        defaults.set(signature, forKey: Key.systemAudioSignature)
+        // `milestone`: this is the line that explains why a user who had system audio working was
+        // asked for it again, and `info` is evicted from the unified log within minutes.
+        ContextLog.milestone(
+            "System audio consent was recorded under a different code signature — the answer has "
+                + "been dropped and will be asked for again",
+            "permissions")
+        return true
+    }
+
+    /// Runs the reconciliation once, on the live records.
+    private static let systemAudioRecordsReconciled: Void = {
+        reconcileSystemAudioRecords(defaults: .standard, signature: codeSignature)
+    }()
+
+    /// **This bundle's code signature, in the same terms TCC keys a grant to.**
+    ///
+    /// The cdhash rather than the team identifier, because an ad-hoc-signed build has no team and
+    /// two consecutive ad-hoc builds are exactly the pair between which a grant disappears. It is
+    /// stable across launches of a shipped build, so nothing in the field pays for it twice.
+    private static let codeSignature: String? = {
+        var code: SecCode?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return nil }
+        var information: CFDictionary?
+        guard SecCodeCopySigningInformation(staticCode, [], &information) == errSecSuccess,
+            let unique = (information as? [String: Any])?[kSecCodeInfoUnique as String] as? Data
+        else { return nil }
+        return unique.map { String(format: "%02x", $0) }.joined()
+    }()
 
     private static let systemAudioProbeLock = NSLock()
 
@@ -794,6 +1016,10 @@ enum Permissions {
     private static func recordSystemAudio(_ granted: Bool) {
         let previous = defaults.object(forKey: Key.systemAudioGranted) as? Bool
         defaults.set(granted, forKey: Key.systemAudioGranted)
+        // A tap that came back is the end of the refusal, and the only thing that can be: the latch
+        // is what makes `check` disagree with the record, so nothing else could ever clear it and the
+        // row would stay dead for the life of the process after one refusal.
+        if granted { systemAudioTapRefused.clear() }
         if previous != granted {
             ContextLog.info("System audio consent is now \(granted ? "granted" : "denied")", "permissions")
         }
@@ -857,6 +1083,9 @@ enum Permissions {
     private enum Key {
         static let systemAudioGranted = "context.permission.systemAudio.granted"
         static let systemAudioProbedAt = "context.permission.systemAudio.probedAt"
+        /// The code signature the two records above were written under. See
+        /// `Permissions.systemAudioRecordsSurvive(stored:current:)`.
+        static let systemAudioSignature = "context.permission.systemAudio.signature"
         static let screenPendingRelaunch = "context.permission.screen.pendingRelaunch"
 
         static func prompted(_ c: Capability) -> String {
@@ -896,6 +1125,18 @@ enum Permissions {
     /// process. Carried into the next launch it would condemn a process that may capture perfectly
     /// well — and the next launch is precisely the one the nudge is asking for.
     private static let screenCaptureDeclined = Latch()
+
+    /// Whether *this process* has already had a CoreAudio tap answered, and therefore whether an
+    /// unattended one can still surprise the user with a consent dialog. In memory and never
+    /// persisted, for the reason the persisted version of this claim was the bug — see
+    /// `unattendedProbeIsDue`.
+    private static let systemAudioTapAnswered = Latch()
+
+    /// Whether CoreAudio has refused this process a tap since the last one succeeded. In memory and
+    /// never persisted, for the reason `screenCaptureDeclined` is not: a tap is built fresh on every
+    /// attempt, so a refusal describes this run and nothing beyond it. The one latch here that is
+    /// cleared, and `recordSystemAudio` is the only thing that may — see `noteSystemAudioTapRefused`.
+    private static let systemAudioTapRefused = Latch()
 
     private static func offMain<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
         await withCheckedContinuation { continuation in
@@ -1435,6 +1676,15 @@ private final class Latch: @unchecked Sendable {
     func signal() {
         lock.lock()
         signalled = true
+        lock.unlock()
+    }
+
+    /// Only `systemAudioTapRefused` clears, and only on a tap that succeeded. The other two hold
+    /// facts a later success cannot undo inside one process: window-server capture rights are settled
+    /// when the process connects, and a consent dialog macOS has spent stays spent.
+    func clear() {
+        lock.lock()
+        signalled = false
         lock.unlock()
     }
 
