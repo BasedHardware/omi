@@ -331,11 +331,18 @@ describe("gateway chat generation source", () => {
     expect(terminals).toBe(0);
 
     const timeoutStore = seedAgentLedger();
-    const timeoutResponses = [toolCallStream("provider-timeout"), stream("[DONE]")];
+    const timeoutResponses = [
+      toolCallStream("provider-timeout"),
+      stream(
+        JSON.stringify({ choices: [{ delta: { content: "Recovered after tool timeout." } }] }),
+        "[DONE]",
+      ),
+    ];
     const timeoutSource = createGatewayChatGenerationSource({
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
+      retrySleep: async () => {},
       readOnlyToolLoop: {
         registry: createAgentToolRegistry([safeReadTool(() => new Promise(() => {}), { timeoutMs: 5, retryable: true })]),
         tool: readOnlyToolSchema,
@@ -379,7 +386,7 @@ describe("gateway chat generation source", () => {
       onComplete: () => { completed += 1; },
       onError: (error) => { failed = error; },
     }));
-    for (let turn = 0; turn < 10 && completed === 0 && failed === null; turn += 1) await Promise.resolve();
+    for (let turn = 0; turn < 100 && completed === 0 && failed === null; turn += 1) await Promise.resolve();
 
     expect(readChatGenerationSourceCapability(source)).toEqual({
       tier: "unknown",
@@ -472,21 +479,45 @@ describe("gateway chat generation source", () => {
     }
   });
 
-  test("fails closed when the gateway stream ends without its terminal marker", async () => {
+  test("completes when the gateway stream ends after content without its terminal marker", async () => {
+    let failed: unknown = null;
+    const source = createGatewayChatGenerationSource({
+      gatewayUrl: "https://gateway.internal",
+      laneId: "omi:auto:chat-agent",
+      serviceToken: "service-secret",
+      retrySleep: async () => {},
+      fetch: async () => stream(JSON.stringify({ choices: [{ delta: { content: "partial" } }] })),
+    });
+
+    const text = await new Promise<string>((resolve, reject) => {
+      const deltas: string[] = [];
+      source.start(input({
+        onDelta: (delta) => deltas.push(delta),
+        onComplete: () => resolve(deltas.join("")),
+        onError: (error) => { failed = error; reject(error); },
+      }));
+    });
+
+    expect(text).toBe("partial");
+    expect(failed).toBeNull();
+  });
+
+  test("fails closed when the gateway stream ends with neither content nor a terminal marker", async () => {
     let completed = 0;
     let failed: unknown = null;
     const source = createGatewayChatGenerationSource({
       gatewayUrl: "https://gateway.internal",
       laneId: "omi:auto:chat-agent",
       serviceToken: "service-secret",
-      fetch: async () => stream(JSON.stringify({ choices: [{ delta: { content: "partial" } }] })),
+      retrySleep: async () => {},
+      fetch: async () => stream(),
     });
 
     source.start(input({
       onComplete: () => { completed += 1; },
       onError: (error) => { failed = error; },
     }));
-    for (let turn = 0; turn < 10 && failed === null; turn += 1) await Promise.resolve();
+    for (let turn = 0; turn < 100 && failed === null && completed === 0; turn += 1) await Promise.resolve();
 
     expect(completed).toBe(0);
     expect(failed).toEqual({ code: "generation_provider_failed", retryable: true });
@@ -577,7 +608,7 @@ describe("gateway chat generation source", () => {
     options.serviceToken = "changed-token";
 
     source.start(input());
-    for (let turn = 0; turn < 10 && request === undefined; turn += 1) await Promise.resolve();
+    for (let turn = 0; turn < 100 && request === undefined; turn += 1) await Promise.resolve();
     expect(JSON.parse(String(request?.body)).model).toBe("omi:auto:chat-agent");
     expect(request?.headers).toMatchObject({ authorization: "Bearer original-token" });
 

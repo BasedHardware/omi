@@ -340,7 +340,7 @@ describe("deterministic Chat generation scenarios", () => {
     expect(cancelled.trace.filter((entry) => ["done", "failed", "cancelled"].includes(entry.kind))).toHaveLength(1);
   });
 
-  test("safe progress, usage, heartbeat, and attempt identity are durable and replay-stable", async () => {
+  test("safe usage still completes, and heartbeat/progress stay off the generation wire", async () => {
     const scenario = {
       generationId: "liveness-trace",
       prompt: "trace",
@@ -367,8 +367,9 @@ describe("deterministic Chat generation scenarios", () => {
     const first = await runChatGenerationScenario(scenario);
     const second = await runChatGenerationScenario(scenario);
     expect(first).toEqual(second);
-    expect(first.trace).toContainEqual({ atMs: 2, kind: "heartbeat", attemptId: "liveness-trace:attempt:1" });
-    expect(first.trace).toContainEqual({ atMs: 4, kind: "progress", attemptId: "liveness-trace:attempt:1", usageId: "usage:one" });
+    expect(first.trace.filter((entry) => entry.kind === "heartbeat")).toHaveLength(0);
+    expect(first.trace.filter((entry) => entry.kind === "progress")).toHaveLength(0);
+    expect(first.trace.map((entry) => entry.kind)).toContain("delta");
     expect(first.terminal).toBe("done");
   });
 

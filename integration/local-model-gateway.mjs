@@ -15,8 +15,8 @@
  * OMI_BENCH_OPENAI_MODEL, OMI_LOCAL_MODEL_GATEWAY_TOKEN,
  * OMI_LOCAL_MODEL_GATEWAY_PORT (default 8791).
  */
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 const DISCLOSURE = "local real-model proxy";
 const DEFAULT_PORT = 8791;
@@ -70,6 +70,112 @@ if ((providerBase.protocol !== "http:" && providerBase.protocol !== "https:")
 }
 const providerHost = providerBase.hostname;
 const providerEndpoint = `${providerBase.toString().replace(/\/$/u, "")}/chat/completions`;
+const logDir = join((process.env.OMI_DEV_STACK_RUNDIR || "/tmp/omi-dev-stack").trim() || "/tmp/omi-dev-stack", "logs");
+
+const gatewayLog = (level, event, fields = {}) => {
+  try {
+    mkdirSync(logDir, { recursive: true });
+    appendFileSync(join(logDir, "gateway.jsonl"), `${JSON.stringify({
+      ts: new Date().toISOString(),
+      proc: "gateway",
+      level,
+      event,
+      ...fields,
+    })}\n`, "utf8");
+  } catch {
+    // Observability must never change the proxied generation.
+  }
+};
+
+const sseDataPayloads = (event) => event
+  .split(/\r?\n/)
+  .filter((line) => line.startsWith("data:"))
+  .map((line) => line.slice(5).trimStart());
+
+const observeUpstreamSse = (body, startedAt) => {
+  if (body === null) return { stream: null, done: Promise.resolve(null) };
+  let byteCount = 0;
+  let frameCount = 0;
+  let buffer = "";
+  let sawDone = false;
+  let firstContentMs = null;
+  let firstReasoningMs = null;
+  let finishReason = null;
+  const decoder = new TextDecoder();
+  const note = (record) => {
+    const choices = Array.isArray(record.choices) ? record.choices[0] : null;
+    if (choices === null || typeof choices !== "object") return;
+    const elapsed = Date.now() - startedAt;
+    if (typeof choices.finish_reason === "string" && /^[a-z_]{1,32}$/u.test(choices.finish_reason)) {
+      finishReason = choices.finish_reason;
+    }
+    const delta = choices.delta;
+    if (delta === null || typeof delta !== "object") return;
+    const reasoning = typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0
+      ? delta.reasoning_content
+      : (typeof delta.reasoning === "string" && delta.reasoning.length > 0 ? delta.reasoning : null);
+    if (reasoning !== null && firstReasoningMs === null) firstReasoningMs = elapsed;
+    if (typeof delta.content === "string" && delta.content.length > 0 && firstContentMs === null) {
+      firstContentMs = elapsed;
+    }
+  };
+  const dispatch = (event) => {
+    const data = sseDataPayloads(event).join("\n");
+    if (data.length === 0) return;
+    frameCount += 1;
+    if (data === "[DONE]") {
+      sawDone = true;
+      return;
+    }
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) note(parsed);
+    } catch {
+      // Count the frame; never inspect payload text beyond the JSON shape.
+    }
+  };
+  let finished;
+  const done = new Promise((resolve) => { finished = resolve; });
+  const stream = new ReadableStream({
+    async start(controller) {
+      const reader = body.getReader();
+      try {
+        while (true) {
+          const next = await reader.read();
+          if (next.value !== undefined) {
+            byteCount += next.value.byteLength;
+            controller.enqueue(next.value);
+            buffer += decoder.decode(next.value, { stream: !next.done });
+            const events = buffer.split(/\r?\n\r?\n/);
+            buffer = events.pop() ?? "";
+            for (const event of events) dispatch(event);
+          }
+          if (next.done) {
+            if (buffer.trim().length > 0) dispatch(buffer);
+            controller.close();
+            break;
+          }
+        }
+      } catch (error) {
+        controller.error(error);
+      } finally {
+        finished({
+          byteCount,
+          frameCount,
+          sawDone,
+          firstContentMs,
+          firstReasoningMs,
+          finishReason,
+          reasoningPreambleMs: firstContentMs === null || firstReasoningMs === null
+            ? null
+            : Math.max(0, firstContentMs - firstReasoningMs),
+          durationMs: Date.now() - startedAt,
+        });
+      }
+    },
+  });
+  return { stream, done };
+};
 
 const readinessBody = () => ({
   schema: "omi.local-model-gateway.v1",
@@ -119,6 +225,8 @@ const server = Bun.serve({
     if (Object.hasOwn(inbound, "tools")) forward.tools = inbound.tools;
     if (Object.hasOwn(inbound, "tool_choice")) forward.tool_choice = inbound.tool_choice;
     let upstream;
+    const startedAt = Date.now();
+    gatewayLog("info", "upstream_request_started", { providerHost, attempt: 1 });
     try {
       upstream = await fetch(providerEndpoint, {
         method: "POST",
@@ -130,12 +238,30 @@ const server = Bun.serve({
         signal: request.signal,
       });
     } catch {
+      gatewayLog("error", "upstream_error", {
+        kind: "unreachable",
+        elapsedMs: Date.now() - startedAt,
+        providerHost,
+      });
       return new Response("provider unreachable", { status: 502 });
     }
+    gatewayLog(upstream.ok ? "info" : "warn", "upstream_status", {
+      status: upstream.status,
+      elapsedMs: Date.now() - startedAt,
+      providerHost,
+    });
     const headers = new Headers();
     const contentType = upstream.headers.get("content-type");
     if (contentType) headers.set("content-type", contentType);
-    return new Response(upstream.body, { status: upstream.status, headers });
+    const observed = observeUpstreamSse(upstream.body, startedAt);
+    void observed.done.then((stats) => {
+      if (stats === null) return;
+      gatewayLog("info", "upstream_stream", {
+        status: upstream.status,
+        ...stats,
+      });
+    });
+    return new Response(observed.stream, { status: upstream.status, headers });
   },
 });
 

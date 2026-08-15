@@ -1,5 +1,13 @@
 import type { ChatGenerationAttachmentDescriptor } from "./attachment-content";
 import type { ChatGenerationContextPacket } from "./generation-context";
+import { chatLog } from "./dev-stack-log";
+import {
+  gatewayDeltaContent,
+  gatewayDeltaReasoning,
+  gatewayFailure,
+  gatewayUsage,
+  runGatewaySseRequest,
+} from "./gateway-sse";
 import {
   startGatewayReadOnlyToolLoop,
   validateGatewayReadOnlyToolLoop,
@@ -195,15 +203,13 @@ export interface GatewayChatGenerationSourceOptions {
    */
   readonly readOnlyToolLoopForInput?:
     (input: ChatGenerationSourceInput) => GatewayReadOnlyToolLoopOptions | undefined;
+  /** Test seam: skip wall-clock backoff while keeping the retry budget. */
+  readonly retrySleep?: (ms: number) => Promise<void>;
 }
 
 const SAFE_GATEWAY_LANE = /^omi:auto:[a-z0-9][a-z0-9-]{0,95}$/u;
 const SAFE_SERVICE_CALLER = /^[a-z][a-z0-9_-]{0,63}$/u;
 const SAFE_USAGE_FEATURE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/u;
-const MAX_GATEWAY_EVENT_BYTES = 1_048_576;
-
-const gatewayFailure = (code: "generation_provider_failed" | "generation_timeout") =>
-  Object.freeze({ code, retryable: true });
 
 const gatewayEndpoint = (value: string): string => {
   let parsed: URL;
@@ -261,10 +267,43 @@ const gatewayMessages = (input: ChatGenerationSourceInput): readonly Readonly<{
   return Object.freeze(messages);
 };
 
-const sseDataPayloads = (event: string): readonly string[] => Object.freeze(event
-  .split(/\r?\n/u)
-  .filter((line) => line.startsWith("data:"))
-  .map((line) => line.slice(5).trimStart()));
+const logGatewayTerminal = (
+  input: ChatGenerationSourceInput,
+  outcome: "done" | "failed" | "cancelled",
+  extras: Readonly<Record<string, number | string | boolean | null>> = {},
+): void => {
+  chatLog(outcome === "failed" ? "error" : "info", "generation_terminal", {
+    generationId: input.generationId,
+    attemptId: input.attemptId ?? input.generationId,
+    outcome,
+    ...extras,
+  });
+};
+
+const applyGatewayRecord = (
+  input: ChatGenerationSourceInput,
+  record: Record<string, unknown>,
+  usageId: string,
+  liveness: { signaledReasoning: boolean },
+): void => {
+  if (gatewayDeltaReasoning(record) !== null && !liveness.signaledReasoning) {
+    liveness.signaledReasoning = true;
+    input.onDelta("");
+  }
+  const content = gatewayDeltaContent(record);
+  if (content !== null) input.onDelta(content);
+  const usage = gatewayUsage(record, usageId);
+  if (usage !== null) {
+    chatLog("info", "usage", {
+      generationId: input.generationId,
+      attemptId: input.attemptId ?? input.generationId,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens,
+    });
+    input.onUsage?.(usage);
+  }
+};
 
 /**
  * Production adapter for the internal LLM gateway. The product supplies only
@@ -301,13 +340,22 @@ export const createGatewayChatGenerationSource = (
       const fail = (error: unknown): void => {
         if (cancelled || terminal) return;
         terminal = true;
+        const failure = error !== null && typeof error === "object" && "code" in error
+          ? String((error as { code: unknown }).code)
+          : "generation_provider_failed";
+        logGatewayTerminal(input, "failed", { failureCode: failure });
         input.onError(error);
       };
       const complete = (): void => {
         if (cancelled || terminal) return;
         terminal = true;
+        logGatewayTerminal(input, "done");
         input.onComplete();
       };
+      chatLog("info", "generation_admitted", {
+        generationId: input.generationId,
+        attemptId: input.attemptId ?? input.generationId,
+      });
       if (input.attachments.length > 0) {
         // Bind/admission already fail-closed unless scanState is clean; the gateway
         // attachment slice still rejects all attachments until a later product pass.
@@ -340,6 +388,7 @@ export const createGatewayChatGenerationSource = (
           fail,
           complete,
           isCancelled: () => cancelled,
+          retrySleep: options.retrySleep,
         });
         return Object.freeze({
           cancel(): void {
@@ -350,9 +399,12 @@ export const createGatewayChatGenerationSource = (
         });
       }
       void (async (): Promise<void> => {
-        let response: Response;
-        try {
-          response = await fetchImpl(endpoint, {
+        const liveness = { signaledReasoning: false };
+        const attemptId = input.attemptId ?? input.generationId;
+        const outcome = await runGatewaySseRequest({
+          fetch: fetchImpl,
+          url: endpoint,
+          init: {
             method: "POST",
             headers: {
               "authorization": `Bearer ${serviceToken}`,
@@ -368,85 +420,33 @@ export const createGatewayChatGenerationSource = (
               stream_options: { include_usage: true },
             }),
             signal: controller.signal,
+          },
+          isCancelled: () => cancelled,
+          onRecord: (record) => applyGatewayRecord(input, record, `${attemptId}:usage`, liveness),
+          generationId: input.generationId,
+          attemptId,
+          sleep: options.retrySleep,
+          allowDataAfterDone: true,
+          retryEmptyDone: true,
+        });
+        if (outcome.kind === "cancelled") return;
+        if (outcome.kind === "failed") {
+          fail(outcome.error);
+          return;
+        }
+        if (!outcome.stats.sawDone) {
+          chatLog("warn", "stream_ended_without_done", {
+            generationId: input.generationId,
+            attemptId,
+            attempt: outcome.attempt,
+            sawContent: outcome.stats.sawContent,
           });
-        } catch {
-          if (!cancelled) fail(gatewayFailure("generation_provider_failed"));
+        }
+        if (outcome.stats.sawContent) {
+          complete();
           return;
         }
-        if (!response.ok || response.body === null) {
-          fail(gatewayFailure(response.status === 408 || response.status === 504
-            ? "generation_timeout"
-            : "generation_provider_failed"));
-          return;
-        }
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        let sawDone = false;
-        try {
-          while (!cancelled) {
-            const next = await reader.read();
-            buffer += decoder.decode(next.value, { stream: !next.done });
-            if (buffer.length > MAX_GATEWAY_EVENT_BYTES) {
-              fail(gatewayFailure("generation_provider_failed"));
-              await reader.cancel();
-              return;
-            }
-            const events = buffer.split(/\r?\n\r?\n/u);
-            buffer = events.pop() ?? "";
-            for (const event of events) {
-              const data = sseDataPayloads(event).join("\n");
-              if (data.length === 0) continue;
-              if (data === "[DONE]") {
-                sawDone = true;
-                complete();
-                await reader.cancel();
-                return;
-              }
-              const parsed = JSON.parse(data) as unknown;
-              if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-                throw new TypeError("invalid gateway SSE payload");
-              }
-              const record = parsed as Record<string, unknown>;
-              const choices = record.choices;
-              if (Array.isArray(choices) && choices.length > 0) {
-                const first = choices[0];
-                if (first !== null && typeof first === "object" && !Array.isArray(first)) {
-                  const delta = (first as Record<string, unknown>).delta;
-                  if (delta !== null && typeof delta === "object" && !Array.isArray(delta)) {
-                    const content = (delta as Record<string, unknown>).content;
-                    if (typeof content === "string" && content.length > 0) input.onDelta(content);
-                  }
-                }
-              }
-              const usage = record.usage;
-              if (usage !== null && typeof usage === "object" && !Array.isArray(usage)) {
-                const values = usage as Record<string, unknown>;
-                const inputTokens = values.prompt_tokens;
-                const outputTokens = values.completion_tokens;
-                const totalTokens = values.total_tokens;
-                if (Number.isSafeInteger(inputTokens) && (inputTokens as number) >= 0
-                  && Number.isSafeInteger(outputTokens) && (outputTokens as number) >= 0
-                  && Number.isSafeInteger(totalTokens)
-                  && totalTokens === (inputTokens as number) + (outputTokens as number)) {
-                  input.onUsage?.(Object.freeze({
-                    usageId: `${input.attemptId ?? input.generationId}:usage`,
-                    provider: "omi-llm-gateway",
-                    model: "semantic-lane",
-                    inputTokens: inputTokens as number,
-                    outputTokens: outputTokens as number,
-                    totalTokens: totalTokens as number,
-                  }));
-                }
-              }
-            }
-            if (next.done) break;
-          }
-        } catch {
-          if (!cancelled) fail(gatewayFailure("generation_provider_failed"));
-          return;
-        }
-        if (!cancelled && !sawDone) fail(gatewayFailure("generation_provider_failed"));
+        fail(gatewayFailure("generation_provider_failed"));
       })();
       return Object.freeze({
         cancel(): void {

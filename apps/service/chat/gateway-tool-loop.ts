@@ -16,10 +16,18 @@ import {
 } from "./agent-tools";
 import type { AgentApprovalCoordinator } from "./agent-approval-coordinator";
 import type { ChatGenerationSourceInput } from "./generation-source";
+import { chatLog } from "./dev-stack-log";
+import {
+  gatewayDelta,
+  gatewayDeltaContent,
+  gatewayDeltaReasoning,
+  gatewayFailure,
+  gatewayUsage,
+  runGatewaySseRequest,
+} from "./gateway-sse";
 
 const SAFE_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u;
 const SAFE_TEXT = /^[^\u0000-\u001f\u007f]{1,240}$/u;
-const MAX_GATEWAY_EVENT_BYTES = 1_048_576;
 const MAX_TOOL_ARGUMENT_BYTES = 16_384;
 
 export interface GatewayReadOnlyToolSchema {
@@ -65,6 +73,7 @@ export interface GatewayToolLoopStartOptions {
   readonly fail: (error: unknown) => void;
   readonly complete: () => void;
   readonly isCancelled: () => boolean;
+  readonly retrySleep?: (ms: number) => Promise<void>;
 }
 
 export interface GatewayToolLoopRun {
@@ -198,14 +207,6 @@ const stableCallId = (input: ChatGenerationSourceInput): string => {
   return `toolcall:${createHash("sha256").update(seed, "utf8").digest("hex").slice(0, 32)}`;
 };
 
-const sseDataPayloads = (event: string): readonly string[] => event
-  .split(/\r?\n/u)
-  .filter((line) => line.startsWith("data:"))
-  .map((line) => line.slice(5).trimStart());
-
-const gatewayFailure = (code: "generation_provider_failed" | "generation_timeout") =>
-  Object.freeze({ code, retryable: true });
-
 const appendSyntheticFailure = (
   events: AgentRunEventSupervisor,
   input: ChatGenerationSourceInput,
@@ -299,9 +300,16 @@ export const startGatewayReadOnlyToolLoop = (
     });
     let messages: readonly Readonly<Record<string, unknown>>[] = options.baseMessages;
     for (let round = 0; round < 2 && !options.isCancelled(); round += 1) {
-      let response: Response;
-      try {
-        response = await options.fetch(options.endpoint, {
+      let callId = "";
+      let toolName = "";
+      let argumentsJson = "";
+      let sawToolCallFragment = false;
+      let invalidToolCall = false;
+      const liveness = { signaledReasoning: false };
+      const stream = await runGatewaySseRequest({
+        fetch: options.fetch,
+        url: options.endpoint,
+        init: {
           method: "POST",
           headers: {
             "authorization": `Bearer ${options.serviceToken}`,
@@ -319,99 +327,82 @@ export const startGatewayReadOnlyToolLoop = (
             stream_options: { include_usage: true },
           }),
           signal: controller.signal,
-        });
-      } catch {
-        if (!options.isCancelled()) options.fail(gatewayFailure("generation_provider_failed"));
-        return;
-      }
-      if (!response.ok || response.body === null) {
-        options.fail(gatewayFailure(response.status === 408 || response.status === 504
-          ? "generation_timeout" : "generation_provider_failed"));
-        return;
-      }
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let sawDone = false;
-      let callId = "";
-      let toolName = "";
-      let argumentsJson = "";
-      let sawToolCallFragment = false;
-      try {
-        while (!options.isCancelled()) {
-          const next = await reader.read();
-          buffer += decoder.decode(next.value, { stream: !next.done });
-          if (buffer.length > MAX_GATEWAY_EVENT_BYTES) throw new TypeError("gateway event too large");
-          const events = buffer.split(/\r?\n\r?\n/u);
-          buffer = events.pop() ?? "";
-          for (const event of events) {
-            const data = sseDataPayloads(event).join("\n");
-            if (data.length === 0) continue;
-            if (sawDone) throw new TypeError("gateway data followed terminal marker");
-            if (data === "[DONE]") { sawDone = true; continue; }
-            const record = ownPlainObject(JSON.parse(data));
-            if (record === null) throw new TypeError("invalid gateway SSE payload");
-            const choices = record.choices;
-            if (Array.isArray(choices) && choices.length > 0) {
-              const choice = ownPlainObject(choices[0]);
-              const delta = ownPlainObject(choice?.delta);
-              const content = delta?.content;
-              if (typeof content === "string" && content.length > 0) input.onDelta(content);
-              const calls = delta?.tool_calls;
-              if (calls !== undefined) {
-                sawToolCallFragment = true;
-                if (!Array.isArray(calls) || calls.length !== 1 || round !== 0) {
-                  throw new TypeError("invalid bounded gateway tool call");
-                }
-                const fragment = ownPlainObject(calls[0]);
-                const fn = ownPlainObject(fragment?.function);
-                if (fragment === null || fn === null
-                  || (fragment.index !== undefined && fragment.index !== 0)
-                  || (fragment.id !== undefined && typeof fragment.id !== "string")
-                  || (fn.name !== undefined && typeof fn.name !== "string")
-                  || (fn.arguments !== undefined && typeof fn.arguments !== "string")) {
-                  throw new TypeError("invalid bounded gateway tool call");
-                }
-                if (typeof fragment.id === "string") callId += fragment.id;
-                if (typeof fn.name === "string") toolName += fn.name;
-                if (typeof fn.arguments === "string") argumentsJson += fn.arguments;
-                if (argumentsJson.length > MAX_TOOL_ARGUMENT_BYTES) throw new TypeError("tool arguments too large");
-              }
-            }
-            const usage = ownPlainObject(record.usage);
-            const promptTokens = usage?.prompt_tokens;
-            const completionTokens = usage?.completion_tokens;
-            const totalTokens = usage?.total_tokens;
-            if (Number.isSafeInteger(promptTokens) && (promptTokens as number) >= 0
-              && Number.isSafeInteger(completionTokens) && (completionTokens as number) >= 0
-              && Number.isSafeInteger(totalTokens)
-              && totalTokens === (promptTokens as number) + (completionTokens as number)) {
-              input.onUsage?.(Object.freeze({
-                usageId: `${attemptId}:usage:${round + 1}`,
-                provider: "omi-llm-gateway",
-                model: "semantic-lane",
-                inputTokens: promptTokens as number,
-                outputTokens: completionTokens as number,
-                totalTokens: totalTokens as number,
-              }));
-            }
+        },
+        isCancelled: options.isCancelled,
+        onRecord: (record) => {
+          if (invalidToolCall) return;
+          if (gatewayDeltaReasoning(record) !== null && !liveness.signaledReasoning) {
+            liveness.signaledReasoning = true;
+            input.onDelta("");
           }
-          if (next.done) break;
-        }
-      } catch {
-        if (!options.isCancelled()) options.fail(gatewayFailure("generation_provider_failed"));
+          const content = gatewayDeltaContent(record);
+          if (content !== null) input.onDelta(content);
+          const delta = gatewayDelta(record);
+          const calls = delta?.tool_calls;
+          if (calls !== undefined) {
+            sawToolCallFragment = true;
+            if (!Array.isArray(calls) || calls.length !== 1 || round !== 0) {
+              invalidToolCall = true;
+              return;
+            }
+            const fragment = ownPlainObject(calls[0]);
+            const fn = ownPlainObject(fragment?.function);
+            if (fragment === null || fn === null
+              || (fragment.index !== undefined && fragment.index !== 0)
+              || (fragment.id !== undefined && typeof fragment.id !== "string")
+              || (fn.name !== undefined && typeof fn.name !== "string")
+              || (fn.arguments !== undefined && typeof fn.arguments !== "string")) {
+              invalidToolCall = true;
+              return;
+            }
+            if (typeof fragment.id === "string") callId += fragment.id;
+            if (typeof fn.name === "string") toolName += fn.name;
+            if (typeof fn.arguments === "string") argumentsJson += fn.arguments;
+            if (argumentsJson.length > MAX_TOOL_ARGUMENT_BYTES) invalidToolCall = true;
+          }
+          const usage = gatewayUsage(record, `${attemptId}:usage:${round + 1}`);
+          if (usage !== null) {
+            chatLog("info", "usage", {
+              generationId: input.generationId,
+              attemptId,
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              totalTokens: usage.totalTokens,
+            });
+            input.onUsage?.(usage);
+          }
+        },
+        generationId: input.generationId,
+        attemptId,
+        sleep: options.retrySleep,
+        retryEmptyDone: true,
+      });
+      if (options.isCancelled() || stream.kind === "cancelled") return;
+      if (stream.kind === "failed" || invalidToolCall) {
+        options.fail(stream.kind === "failed" ? stream.error : gatewayFailure("generation_provider_failed"));
         return;
       }
-      if (options.isCancelled()) return;
-      if (!sawDone || buffer.trim().length > 0) {
+      if (!stream.stats.sawDone && !stream.stats.sawContent && !sawToolCallFragment) {
         options.fail(gatewayFailure("generation_provider_failed"));
         return;
+      }
+      if (!stream.stats.sawDone) {
+        chatLog("warn", "stream_ended_without_done", {
+          generationId: input.generationId,
+          attemptId,
+          attempt: stream.attempt,
+          sawContent: stream.stats.sawContent,
+        });
       }
       if (sawToolCallFragment && callId.length === 0 && toolName.length === 0 && argumentsJson.length === 0) {
         options.fail(gatewayFailure("generation_provider_failed"));
         return;
       }
       if (callId.length === 0 && toolName.length === 0 && argumentsJson.length === 0) {
+        if (!stream.stats.sawContent) {
+          options.fail(gatewayFailure("generation_provider_failed"));
+          return;
+        }
         options.complete();
         return;
       }
