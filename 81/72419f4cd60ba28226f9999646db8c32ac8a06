@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  s_3ccc0619ee6841::t_717e9846326aff 619-627,1746-1769
+desktop/macos/Desktop/Sources/AppState/MeetingConversationBoundaryPolicy.swift
+  s_3ccc0619ee6841::t_6601f01930e911 3-17
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
+  s_3ccc0619ee6841::t_5de740b16fa96e 257-258,266-270,455-456
+desktop/macos/Desktop/Tests/ShellListeningCycleTests.swift
+  s_3ccc0619ee6841::t_c81db22ee062d0 167-207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "8172419f4cd60ba28226f9999646db8c32ac8a06",
+  "prompts": {},
+  "sessions": {
+    "s_3ccc0619ee6841": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a651b70-49a8-4b37-aff0-ae9fbe9619cb",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
