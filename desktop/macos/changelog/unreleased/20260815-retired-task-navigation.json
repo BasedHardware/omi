@@ -1,3 +1,0 @@
-{
-  "change": "Opening a task from the dashboard that was already cancelled or deleted now says it is no longer available, instead of switching to Tasks and selecting nothing"
-}
