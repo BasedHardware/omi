@@ -125,29 +125,23 @@ struct ConversationRowView: View {
   private func copyLink() async {
     guard !isCopyingLink else { return }
     isCopyingLink = true
+    defer { isCopyingLink = false }
 
-    do {
-      // First, make the conversation public/shared so the link works
-      try await APIClient.shared.setConversationVisibility(
-        id: conversation.id, visibility: "shared")
-
-      // Then copy the link
-      let link = DesktopBackendEnvironment.conversationShareURL(id: conversation.id)
-      let pasteboard = NSPasteboard.general
-      pasteboard.clearContents()
-      pasteboard.setString(link, forType: .string)
-      log("Copied conversation link to clipboard (visibility set to shared)")
-    } catch {
-      log("Failed to set conversation visibility: \(error)")
-      // Still copy the link even if visibility fails - user might have shared it before
-      let link = DesktopBackendEnvironment.conversationShareURL(id: conversation.id)
-      let pasteboard = NSPasteboard.general
-      pasteboard.clearContents()
-      pasteboard.setString(link, forType: .string)
-      log("Copied conversation link to clipboard (visibility API failed)")
+    // Same contract as the detail view and the meeting-notes card: the
+    // visibility mutation is what makes the URL resolve, so a failed mint
+    // copies nothing instead of handing out a link that may 404.
+    let feedback = await ConversationShareLinkAction.run(
+      mintLink: { try await APIClient.shared.getConversationShareLink(id: conversation.id) },
+      copyToPasteboard: { link in
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        return pasteboard.setString(link, forType: .string)
+      },
+      onFailure: { log("Failed to get share link: \($0)") }
+    )
+    if feedback == .copied {
+      log("Copied conversation share link to clipboard (visibility set to shared)")
     }
-
-    isCopyingLink = false
   }
 
   private func deleteConversation() async {
@@ -199,7 +193,7 @@ struct ConversationRowView: View {
       }
       .buttonStyle(.plain)
       .disabled(isCopyingLink)
-      .help("Copy link")
+      .help("Copy share link — anyone with the link can view")
 
       // Move to folder (if folders exist)
       if !folders.isEmpty {
@@ -433,10 +427,11 @@ struct ConversationRowView: View {
 
       Button(action: { Task { await copyLink() } }) {
         Label(
-          isCopyingLink ? "Generating Link..." : "Copy Link",
+          isCopyingLink ? "Generating Link..." : "Copy Share Link",
           systemImage: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
       }
       .disabled(isCopyingLink)
+      .help("Anyone with the link can view")
 
       Divider()
 

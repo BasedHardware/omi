@@ -42,6 +42,7 @@ enum ChatFirstAnalyticsEvent: Equatable, Sendable {
     case open
     case toggle
     case select
+    case copyLink = "copy_link"
   }
 
   enum QuestionLifecycle: String, CaseIterable, Sendable {
