@@ -29,9 +29,6 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 PARITY_DIR = ROOT_DIR / 'contracts' / 'parity'
 
 BUCKET_VOCABULARY = {'today', 'tomorrow', 'later', 'no_deadline', 'overdue'}
-# The parseable due_at forms in the wire fixture; the remaining cases exist to
-# pin CLIENT-side tolerance for junk the backend itself refuses to emit.
-CLIENT_ONLY_WIRE_CASES = {'due_empty_string', 'due_unparseable_string'}
 
 
 def _fixture(name: str) -> dict:
@@ -97,10 +94,10 @@ def test_wire_fixture_field_names_exist_on_backend_model():
             assert key in known_fields, f"{case['name']}: payload key {key} is not an ActionItemResponse field"
 
 
-def test_backend_round_trips_the_parseable_wire_cases():
+def test_backend_round_trips_the_agreement_set_wire_cases():
     for case in _fixture('wire_action_item.json')['cases']:
-        if case['name'] in CLIENT_ONLY_WIRE_CASES:
-            continue
+        if 'expected_by_model' in case:
+            continue  # strict-vs-tolerant divergence cases, covered below
         item = ActionItemResponse.model_validate(case['payload'])
         dumped = item.model_dump(mode='json')
         expected = case['expected']
@@ -114,13 +111,18 @@ def test_backend_round_trips_the_parseable_wire_cases():
             assert emitted == target, case['name']
 
 
-def test_backend_rejects_the_client_only_junk_forms():
-    """Clients tolerate junk due_at strings defensively; the backend must never
-    accept (and therefore never re-emit) them."""
-    cases = {c['name']: c for c in _fixture('wire_action_item.json')['cases']}
-    for name in CLIENT_ONLY_WIRE_CASES:
+def test_backend_rejects_the_divergence_case_junk_forms():
+    """The expected_by_model cases pin the strict-vs-tolerant client split on
+    unparseable due_at strings (Dart wire rejects the item, Windows maps it to
+    no-due-date). The backend sits on the strict side: it must never accept,
+    and therefore never re-emit, these forms."""
+    divergence_cases = [c for c in _fixture('wire_action_item.json')['cases'] if 'expected_by_model' in c]
+    assert divergence_cases, 'expected the strict-vs-tolerant wire cases to exist'
+    for case in divergence_cases:
+        assert case['expected_by_model']['strict_decode']['parses'] is False, case['name']
+        assert case['expected_by_model']['tolerant_decode']['parses'] is True, case['name']
         with pytest.raises(Exception):
-            ActionItemResponse.model_validate(cases[name]['payload'])
+            ActionItemResponse.model_validate(case['payload'])
 
 
 @pytest.mark.parametrize('field', ['due_at', 'created_at', 'updated_at', 'completed_at'])

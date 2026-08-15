@@ -59,6 +59,15 @@ in the same PR.
 3. Completed view overdue. The Flutter overdue branches are skipped when viewing
    completed tasks (a completed past-due task shows under Today, a completed stale
    dateless task under No deadline). Bucket fixtures therefore model the open-tasks view.
+4. Junk due_at strings (strict vs tolerant decode). A present-but-unparseable
+   due_at ("", "not-a-date") makes the Dart generated wire reject the WHOLE item
+   with a FormatException (its field reader treats a non-null field that reads to
+   null as invalid), while the Windows sync mapper maps it to no-due-date and keeps
+   the item. Found by this fixture set's first CI run: one corrupt timestamp in a
+   list response breaks the app's decode path but not Windows sync. The backend
+   sits on the strict side (it refuses to accept these forms, so it can never
+   re-emit them); the `expected_by_model` cases in `wire_action_item.json` pin
+   both client behaviors until the platforms converge.
 
 ## Adding or changing a case
 

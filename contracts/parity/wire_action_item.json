@@ -1,5 +1,5 @@
 {
-  "$comment": "Action item wire-decode vectors: the exact JSON a backend ActionItemResponse serializes, and what every first-party client must recover from it. Pins the shared agreement set: an ISO-8601 due_at with an explicit offset decodes to the same instant everywhere; null, missing, empty and unparseable due_at all decode to no-due-date rather than an error (Dart DateTime.tryParse returns null, Windows Date.parse returns NaN which maps to null). due_utc in expectations is the canonical instant; adapters compare instants, not string forms. Every payload carries the full required field set of the strictest client (Dart generated wire: id, description, completed). Known asymmetry documented in README.md: the Windows sync mapper fills a missing created_at with sync time because its local store requires one; the Dart wire keeps it null.",
+  "$comment": "Action item wire-decode vectors: the exact JSON a backend ActionItemResponse serializes, and what every first-party client must recover from it. Cases with a flat `expected` are the shared agreement set: an ISO-8601 due_at with an explicit offset decodes to the same instant everywhere, and null or missing due_at decodes to no-due-date. Cases with `expected_by_model` pin a REAL client divergence on present-but-unparseable due_at strings: strict_decode (the Dart generated wire) rejects the whole item with a FormatException because a non-null field that reads to null is invalid, while tolerant_decode (the Windows sync mapper) maps it to no-due-date; the backend refuses to accept these forms at all (strict side, asserted in test_parity_contracts.py). due_utc in expectations is the canonical instant; adapters compare instants, not string forms. Every payload carries the full required field set of the strictest client (Dart generated wire: id, description, completed). Known asymmetry documented in README.md: the Windows sync mapper fills a missing created_at with sync time because its local store requires one; the Dart wire keeps it null.",
   "cases": [
     {
       "name": "due_utc_zulu",
@@ -53,7 +53,10 @@
         "created_at": "2026-08-01T10:00:00Z",
         "due_at": ""
       },
-      "expected": { "parses": true, "description": "Empty string due date", "completed": false, "due_utc": null }
+      "expected_by_model": {
+        "strict_decode": { "parses": false },
+        "tolerant_decode": { "parses": true, "description": "Empty string due date", "completed": false, "due_utc": null }
+      }
     },
     {
       "name": "due_unparseable_string",
@@ -64,7 +67,10 @@
         "created_at": "2026-08-01T10:00:00Z",
         "due_at": "not-a-date"
       },
-      "expected": { "parses": true, "description": "Garbage due date", "completed": false, "due_utc": null }
+      "expected_by_model": {
+        "strict_decode": { "parses": false },
+        "tolerant_decode": { "parses": true, "description": "Garbage due date", "completed": false, "due_utc": null }
+      }
     },
     {
       "name": "completed_with_due",

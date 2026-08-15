@@ -63,6 +63,18 @@ void main() {
     for (final raw in fixture['cases'] as List<dynamic>) {
       final c = raw as Map<String, dynamic>;
       test(c['name'] as String, () {
+        final byModel = c['expected_by_model'] as Map<String, dynamic>?;
+        if (byModel != null) {
+          // This client is the strict_decode model: a present-but-unparseable
+          // due_at rejects the whole item (see the README divergence register).
+          final strict = byModel['strict_decode'] as Map<String, dynamic>;
+          expect(strict['parses'], isFalse);
+          expect(
+            () => GeneratedActionItemResponse.fromJson(c['payload'] as Map<String, dynamic>),
+            throwsFormatException,
+          );
+          return;
+        }
         final expected = c['expected'] as Map<String, dynamic>;
         final item = GeneratedActionItemResponse.fromJson(c['payload'] as Map<String, dynamic>);
 

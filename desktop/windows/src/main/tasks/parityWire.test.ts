@@ -41,10 +41,15 @@ vi.mock('../observability/backendDegraded', () => ({
 
 import { mapBackendItem } from './taskSyncEngine'
 
+type WireExpectation = { parses: boolean; description?: string; completed?: boolean; due_utc?: string | null }
 type WireCase = {
   name: string
   payload: Record<string, unknown>
-  expected: { parses: boolean; description: string; completed: boolean; due_utc: string | null }
+  // Flat `expected` = the cross-client agreement set. `expected_by_model` pins
+  // the strict-vs-tolerant divergence on unparseable due_at strings; this
+  // client is the tolerant_decode model (see the README divergence register).
+  expected?: WireExpectation
+  expected_by_model?: { strict_decode: WireExpectation; tolerant_decode: WireExpectation }
 }
 
 // Fixed sync timestamp: the mapper fills a missing created_at with sync time
@@ -56,10 +61,12 @@ describe('action item wire decode (parity contract)', () => {
   const path = fileURLToPath(new URL('../../../../../contracts/parity/wire_action_item.json', import.meta.url))
   const { cases } = JSON.parse(readFileSync(path, 'utf8')) as { cases: WireCase[] }
   it.each(cases)('$name', (c) => {
+    const expected = c.expected_by_model ? c.expected_by_model.tolerant_decode : c.expected
+    if (!expected) throw new Error(`${c.name}: fixture case has neither expected nor expected_by_model`)
     const mapped = mapBackendItem(c.payload as never, SYNC_NOW)
-    expect(c.expected.parses).toBe(true)
-    expect(mapped.description).toBe(c.expected.description)
-    expect(mapped.completed).toBe(c.expected.completed)
-    expect(mapped.dueAt).toBe(c.expected.due_utc === null ? null : Date.parse(c.expected.due_utc))
+    expect(expected.parses).toBe(true)
+    expect(mapped.description).toBe(expected.description)
+    expect(mapped.completed).toBe(expected.completed)
+    expect(mapped.dueAt).toBe(expected.due_utc == null ? null : Date.parse(expected.due_utc))
   })
 })
