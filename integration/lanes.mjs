@@ -193,22 +193,33 @@ export const LANES = {
         cwd: CORE_REPO,
         command: "integration/dev-stack.sh --assert",
       },
-      // NOT YET A GATE, and deliberately not softened into one.
+      // NOW A GATE. Held out until 2026-08-15, and wired in the moment the
+      // written condition was met rather than by anyone's judgement call.
       //
-      // `node integration/control-acceptance/run.mjs` works and is the real
-      // control test — it reports mic, screen, chat and every chrome route.
-      // It is held out of L3 because it is currently RED on one true positive:
+      // The hold named its current red and the fork test forbade naming a
+      // passing token, so the hold could not go stale silently: it was
+      // `CONTROL home=failure-notice`, then `CONTROL screen=frame-unavailable`
+      // when Home went green, and now nothing — the run at 98df57dd9e printed
       //
-      //     CONTROL screen=frame-unavailable
+      //     CONTROL home=ready
+      //     CONTROL chat=streamed-and-persisted
+      //     CONTROL mic=transcript-rendered
+      //     CONTROL screen=frame-rendered
+      //     CONTROL-ACCEPTANCE skips: (none)
+      //     CONTROL-ACCEPTANCE status=PASS passed=15 failed=0 skipped=0
       //
-      // Rewind's capture control did not draw a decoded frame. That is a
-      // sibling lane. Home is no longer why this is held: the same harness
-      // quoted home ready against this tree. Naming Home's old failure-notice
-      // here would be a stale reason, and a stale hold is how a temporary
-      // hold becomes permanent.
+      // This is the only step in any lane that clicks the real controls in the
+      // built macOS shell. A traffic count is not a control test: every prior
+      // "the app works" claim in this program was a request count, and each of
+      // the three defects it missed was visible here first.
       //
-      // Wire it in as a second step here the moment the harness prints
-      // screen=frame-rendered.
+      // It costs ~200s. If that becomes intolerable, move it to a named tier
+      // above L3 — do not delete it and do not soften an assertion to keep it
+      // fast.
+      {
+        cwd: PLATFORM_REPO,
+        command: "node integration/control-acceptance/run.mjs",
+      },
     ],
   },
 };
