@@ -151,11 +151,16 @@ if (existsSync(productionRoot)) {
       true,
       /\.tsx?$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.JSX,
     );
+    // `icon` is a ProductionIconName glyph selector, not copy. The compensating
+    // control is the closed union on ProductionEmptyState / ProductionIconButton:
+    // `icon="Some visible sentence"` fails to typecheck, so this exemption cannot
+    // smuggle a user-visible string into a production surface.
     const isSafeAttribute = (name) =>
       name === "className" || name === "class" || name === "id" || name === "role" || name === "aria-current" ||
       name === "aria-hidden" || name === "aria-disabled" || name === "aria-live" ||
       name === "name" || name === "type" || name === "value" || name === "href" ||
       name === "src" || name === "style" || name === "key" || name === "active" || name === "placement" ||
+      name === "icon" ||
       name === "aria-labelledby" || name === "d" || name === "viewBox" || name === "focusable" ||
       name === "x" || name === "y" || name === "cx" || name === "cy" || name === "r" || name === "rx" ||
       name === "width" || name === "height" || name.startsWith("data-");

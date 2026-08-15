@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -358,6 +359,10 @@ test("production icon vocabulary is explicit and chrome/search do not draw one-o
   const chrome = await read("src/production/ProductionChrome.tsx");
   const primitives = await read("src/production/ProductionPrimitives.tsx");
   const styles = await read("src/production/styles.css");
+  assert.match(icons, /export type ProductionIconName =/);
+  assert.doesNotMatch(icons, /export type ProductionIconName = string/);
+  assert.match(primitives, /icon\?: ProductionIconName/);
+  assert.doesNotMatch(primitives, /icon\?: string/);
   assert.match(icons, /Readonly<Record<ProductionIconName, LucideIcon>>/);
   assert.match(chrome, /<ProductionIcon className="nav-icon"/);
   assert.doesNotMatch(chrome, /<svg|<path|<circle|<rect/);
@@ -415,4 +420,20 @@ test("every titled production route uses the shared page-header hierarchy", asyn
     assert.match(source, /<ProductionPageHeader/, `${file} adopts the shared header`);
     assert.doesNotMatch(source, /<header className="(?:production-header|tasks-header|settings-header)/, `${file} has no parallel header implementation`);
   }
+});
+
+test("empty-state icon is a glyph union so a visible sentence cannot typecheck", () => {
+  const result = spawnSync(
+    "pnpm",
+    ["exec", "tsc", "--pretty", "false", "-p", "test/typecheck/tsconfig.must-fail.json"],
+    { encoding: "utf8", cwd: root },
+  );
+  const output = `${result.stdout}\n${result.stderr}`;
+  assert.notEqual(result.status, 0, output);
+  assert.match(
+    output,
+    /error TS2322: Type '"Some visible sentence"' is not assignable to type 'ProductionIconName'\./,
+  );
+  // red-proof: widening icon to string makes this compile, which would turn the
+  // i18n `icon` allow-list into an unguarded hole for visible copy.
 });

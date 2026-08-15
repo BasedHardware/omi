@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["../empty-state-icon-copy-must-fail.tsx"],
+  "exclude": []
+}
