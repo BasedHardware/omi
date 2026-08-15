@@ -403,6 +403,31 @@ final class FloatingBarGeometryTests: XCTestCase {
   /// The hover surface used to collapse to nothing without subagents. It now always
   /// carries the shortcut legend and capture controls, so hovering the notch is never a
   /// no-op — but it must still be tall enough for the agent rows when there are any.
+  /// Regression: the notification surface was computed at four call sites, two of which added the
+  /// hover-expanded bar height. The same suggestion therefore arrived at different heights
+  /// depending on where the pointer was, and the shorter frame squeezed the card when the bar
+  /// expanded under it. One authority, and no pointer state in its inputs.
+  func testNotificationSurfaceIsOneSizePerDisplayMode() {
+    let chrome: CGFloat = 34
+
+    let notch = FloatingControlBarWindow.notificationSurfaceSize(usesNotchIsland: true, chromeHeight: chrome)
+    let pill = FloatingControlBarWindow.notificationSurfaceSize(usesNotchIsland: false, chromeHeight: chrome)
+
+    XCTAssertEqual(notch.width, pill.width, "a suggestion is the same width on every display")
+    XCTAssertEqual(notch.height, chrome + 8 + 128, accuracy: 0.5)
+    // The pill card stacks under the hover-expanded bar so an expanding bar cannot squeeze it.
+    XCTAssertEqual(pill.height, FloatingControlBarWindow.expandedBarSize.height + 8 + 128, accuracy: 0.5)
+
+    // A second call with the same inputs is the same size — the only thing that may move it is the
+    // display's own chrome height.
+    XCTAssertEqual(
+      FloatingControlBarWindow.notificationSurfaceSize(usesNotchIsland: true, chromeHeight: chrome),
+      notch)
+    XCTAssertNotEqual(
+      FloatingControlBarWindow.notificationSurfaceSize(usesNotchIsland: true, chromeHeight: chrome + 9).height,
+      notch.height)
+  }
+
   func testNotchHoverMenuAlwaysReservesRoomForTheControlPanel() {
     XCTAssertEqual(
       FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 0),

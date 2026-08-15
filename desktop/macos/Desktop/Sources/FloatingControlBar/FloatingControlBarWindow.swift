@@ -163,6 +163,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   private static let notificationWidth: CGFloat = 508
   private static let notificationHeight: CGFloat = 128
   private static let notificationSpacing: CGFloat = 8
+  /// Bar height a notification card stacks under on a non-notch display.
+  ///
+  /// Fixed at the hover-expanded height rather than read from `isHoveringBar`:
+  /// the pointer's position is transient, so sizing from it gave one suggestion
+  /// two different heights, and the smaller of the two squeezed the card when
+  /// the bar expanded underneath it.
+  private static let notificationPillBarHeight: CGFloat = expandedBarSize.height
   /// Vertical room for the readable PTT status banner under chrome/pill.
   static var pttStatusBannerBudget: CGFloat { notificationSpacing + pttHintRowHeight }
   private static let askOmiAnimationDuration: TimeInterval = 0.14
@@ -353,6 +360,31 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       height: Self.notchChromeHeight(for: screen) + Self.notchHoverMenuHeight(agentCount: agentCount)
     )
   }
+  /// The one size a notification card is ever presented at, per display mode.
+  ///
+  /// Four call sites used to compute this independently — `showNotification`,
+  /// both `currentSurfaceSize` overloads, and `frameForCurrentState` — and they
+  /// disagreed: some added the hover-expanded bar height, one always added the
+  /// notch chrome height even on a pill display. Whichever path last resized
+  /// the window decided how tall the card was, so the same suggestion appeared
+  /// at different sizes and, mid-transition, at a size its content could not
+  /// fill. One authority, no transient inputs.
+  static func notificationSurfaceSize(usesNotchIsland: Bool, chromeHeight: CGFloat) -> NSSize {
+    let barHeight = usesNotchIsland ? chromeHeight : notificationPillBarHeight
+    return NSSize(
+      width: notificationWidth,
+      height: barHeight + notificationSpacing + notificationHeight
+    )
+  }
+
+  private func notificationSurfaceSizeForCurrentScreen(usesNotchIsland: Bool? = nil) -> NSSize {
+    let island = usesNotchIsland ?? notchModeEnabled
+    return Self.notificationSurfaceSize(
+      usesNotchIsland: island,
+      chromeHeight: notchChromeHeightForCurrentScreen
+    )
+  }
+
   private func notchIdleOrHoverSurfaceSize() -> NSSize {
     state.isNotchHoverMenuVisible
       ? notchHoverMenuSurfaceSize(agentCount: AgentPillsManager.shared.pills.count)
@@ -885,10 +917,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     } else if state.isVoiceListening {
       size = notchModeEnabled ? notchSize(active: true) : Self.voiceBarSize
     } else if state.currentNotification != nil {
-      size = NSSize(
-        width: Self.notificationWidth,
-        height: notchChromeHeightForCurrentScreen + Self.notificationSpacing + Self.notificationHeight
-      )
+      size = notificationSurfaceSizeForCurrentScreen()
     } else {
       size = notchModeEnabled ? notchIdleOrHoverSurfaceSize() : collapsedBarSize
     }
@@ -920,14 +949,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       return usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
     }
     if state.currentNotification != nil {
-      let barHeight =
-        usesNotchIsland
-        ? notchChromeHeightForCurrentScreen
-        : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
-      return NSSize(
-        width: Self.notificationWidth,
-        height: barHeight + Self.notificationSpacing + Self.notificationHeight
-      )
+      return notificationSurfaceSizeForCurrentScreen(usesNotchIsland: usesNotchIsland)
     }
     return usesNotchIsland ? notchIdleOrHoverSurfaceSize() : Self.minBarSize
   }
@@ -953,13 +975,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     } else if state.isVoiceListening {
       size = usesNotchIsland ? notchSize(sideWidth: Self.notchActiveSideWidth, for: screen) : Self.voiceBarSize
     } else if state.currentNotification != nil {
-      let barHeight =
-        usesNotchIsland
-        ? Self.notchChromeHeight(for: screen)
-        : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
-      size = NSSize(
-        width: Self.notificationWidth,
-        height: barHeight + Self.notificationSpacing + Self.notificationHeight
+      size = Self.notificationSurfaceSize(
+        usesNotchIsland: usesNotchIsland,
+        chromeHeight: Self.notchChromeHeight(for: screen)
       )
     } else {
       size = usesNotchIsland ? notchIdleOrHoverSurfaceSize(for: screen) : Self.minBarSize
@@ -2220,15 +2238,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     guard !state.showingAIConversation else { return }
     cancelPendingRetraction()
     state.currentNotification = notification
-    let barHeight =
-      notchModeEnabled
-      ? notchChromeHeightForCurrentScreen
-      : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
-    let targetSize = NSSize(
-      width: Self.notificationWidth,
-      height: barHeight + Self.notificationSpacing + Self.notificationHeight
+    resizeAnchored(
+      to: notificationSurfaceSizeForCurrentScreen(),
+      makeResizable: false,
+      animated: animated,
+      anchorTop: true
     )
-    resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)
   }
 
   func dismissNotification(animated: Bool = true) {
