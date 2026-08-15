@@ -4841,8 +4841,9 @@ struct TaskCategorySection: View {
           }
       }
 
-      // Standing composer: first row of the section, so what you type here
-      // belongs to the section you typed it in.
+      // Composer: first row of the section, so what you type here belongs to the
+      // section you typed it in. The Today button states that outcome rather
+      // than making the user infer it from the section header.
       if showsSectionComposer, !isCollapsed,
         let text = sectionComposerText, let focused = sectionComposerFocused
       {
@@ -4850,7 +4851,8 @@ struct TaskCategorySection: View {
           text: text,
           isFocused: focused,
           onCommit: { _ in onSectionComposerCommit?() },
-          onCancel: { onSectionComposerCancel?() }
+          onCancel: { onSectionComposerCancel?() },
+          onCommitToday: { _ in onSectionComposerCommit?() }
         )
         .id("section-composer-\(category.rawValue)")
       }
