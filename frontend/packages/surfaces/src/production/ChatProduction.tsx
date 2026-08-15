@@ -103,16 +103,32 @@ function agentRunStateLabel(state: NonNullable<ChatMessage["agentRun"]>["state"]
   return t(locale, "chat.agentRunObserving");
 }
 
+function namedModelFromAdapter(adapter: string): string | null {
+  const slash = adapter.indexOf("/");
+  if (slash <= 0 || slash === adapter.length - 1) return null;
+  const model = adapter.slice(slash + 1);
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/u.test(model) ? model : null;
+}
+
+function isLocalTestGatewayAdapter(adapter: string): boolean {
+  return adapter === "omi-llm-gateway"
+    || adapter === "omi-llm-gateway-injected-transport"
+    || adapter === "omi.local-test-gateway.v1"
+    || adapter.startsWith("omi.local-test-gateway.v1/");
+}
+
 function agentCapabilityLabel(message: ChatMessage, locale: Locale): string {
   const capability = [...(message.agentRun?.events ?? [])].reverse()
     .find((event) => event.kind === "capability_receipt");
   if (capability?.kind !== "capability_receipt") return t(locale, "chat.agentUnknown");
   if (capability.details.tier === "deterministic-scripted") return t(locale, "chat.agentScripted");
-  if (capability.details.tier === "real-provider") return t(locale, "chat.agentProvider");
-  if (
-    capability.details.adapter === "omi-llm-gateway" ||
-    capability.details.adapter === "omi-llm-gateway-injected-transport"
-  ) {
+  if (capability.details.tier === "real-provider") {
+    const model = namedModelFromAdapter(String(capability.details.adapter ?? ""));
+    return model === null
+      ? t(locale, "chat.agentProvider")
+      : t(locale, "chat.agentProviderNamed", { model });
+  }
+  if (isLocalTestGatewayAdapter(String(capability.details.adapter ?? ""))) {
     return t(locale, "chat.agentLocalTestGateway");
   }
   return t(locale, "chat.agentUnknown");

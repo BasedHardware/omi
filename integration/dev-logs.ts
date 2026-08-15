@@ -124,7 +124,7 @@ export const formatRuntimeLogLine = (record: RuntimeLogRecord): string => {
     const duration = fieldText(record, "duration_ms");
     if (duration !== null) parts.push(`${duration}ms`);
   } else {
-    for (const key of ["reason", "persona", "stt_engine", "gateway_kind", "port"]) {
+    for (const key of ["reason", "persona", "stt_engine", "gateway_kind", "gateway_model", "port"]) {
       const value = fieldText(record, key);
       if (value !== null) parts.push(`${key}=${value}`);
     }

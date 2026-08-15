@@ -566,6 +566,34 @@ describe("gateway chat generation source", () => {
       adapter: "omi-llm-gateway",
       deterministic: false,
     });
+    expect(readChatGenerationSourceCapability(createGatewayChatGenerationSource({
+      gatewayUrl: "https://gateway.internal",
+      laneId: "omi:auto:chat-agent",
+      serviceToken: "service-secret",
+      engineIdentity: {
+        schema: "omi.local-test-gateway.v1",
+        realModelProxy: false,
+        model: null,
+      },
+    }))).toEqual({
+      tier: "unknown",
+      adapter: "omi.local-test-gateway.v1",
+      deterministic: false,
+    });
+    expect(readChatGenerationSourceCapability(createGatewayChatGenerationSource({
+      gatewayUrl: "https://gateway.internal",
+      laneId: "omi:auto:chat-agent",
+      serviceToken: "service-secret",
+      engineIdentity: {
+        schema: "omi.local-model-gateway.v1",
+        realModelProxy: true,
+        model: "glm-4.7",
+      },
+    }))).toEqual({
+      tier: "real-provider",
+      adapter: "omi.local-model-gateway.v1/glm-4.7",
+      deterministic: false,
+    });
   });
 
   test("the app-facing no-gateway source fails instead of emitting a fake answer", async () => {

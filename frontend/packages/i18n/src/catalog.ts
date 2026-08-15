@@ -293,6 +293,7 @@ export const EN_MESSAGES = {
   "chat.agentRunFailed": "Updates unavailable",
   "chat.agentScripted": "Local scripted response",
   "chat.agentProvider": "External model response",
+  "chat.agentProviderNamed": "External model response ({model})",
   "chat.agentUnknown": "Response source not verified",
   "chat.agentLocalTestGateway": "Local test gateway",
   "chat.agentContext": "Context: {preview}",

@@ -4,8 +4,8 @@
  *
  * Opt-in only: integration/dev-stack.sh launches this instead of the canned
  * local test gateway when OMI_CHAT_MODEL=real. It is a real-model proxy
- * (GLM / Z.ai by default). It does not change Chat's UI label — that surface
- * still says "Local test gateway" until separate evidence plumbing exists.
+ * (GLM / Z.ai by default). Chat's UI label follows the `/ready` self-description
+ * (`real_model_proxy` plus the model id) through the service capability receipt.
  * Attachments still fail closed in the service generation source.
  *
  * Enable:
@@ -182,6 +182,7 @@ const readinessBody = () => ({
   disclosure: DISCLOSURE,
   real_model_proxy: true,
   provider_host: providerHost,
+  model: modelId,
 });
 
 const server = Bun.serve({

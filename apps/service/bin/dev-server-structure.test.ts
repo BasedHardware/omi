@@ -25,6 +25,9 @@ test("dev-server keeps the producer endpoint inside the registered local composi
 test("dev-server routes generation through the gateway or fails closed without one", () => {
   expect(source).toContain("createGatewayChatGenerationSource");
   expect(source).toContain("createGatewayRequiredChatGenerationSource");
+  expect(source).toContain("probeGatewayEngineIdentity");
+  expect(source).toContain("bootGatewayKind(engineIdentity)");
+  expect(source).not.toMatch(/gateway_kind: config\.llmGateway === null \? "none" : "configured"/);
   expect(source).not.toContain("createScriptedChatGenerationSource");
   expect(appFacingSource).toContain(
     "generationSource: options.generationSource ?? createGatewayRequiredChatGenerationSource()",
