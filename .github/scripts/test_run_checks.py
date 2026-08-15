@@ -577,11 +577,22 @@ esac
         self.assertNotIn("failure-class-protocol", selected)
         self.assertIn("diff-hygiene", selected)
 
+    def test_every_pr_body_consuming_check_is_excluded_from_post_merge_runs(self) -> None:
+        # Post-merge runs have no PR body, so a check whose escape hatch lives
+        # there would fail on main forever.
+        manifest = load_manifest(MANIFEST_PATH)
+        for check in manifest.checks:
+            if "{pr_body_file}" in check.command:
+                self.assertTrue(
+                    check.requires_pr_body,
+                    f"{check.id} consumes the PR body, so it must declare requires_pr_body: true",
+                )
+
     def test_line_count_ratchet_receives_pr_body_metadata(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         check = next(check for check in manifest.checks if check.id == "product-file-line-count-ratchet")
 
-        self.assertFalse(check.requires_pr_body)
+        self.assertTrue(check.requires_pr_body)
         self.assertIn("{pr_body_file}", check.command)
         self.assertIn("{target_base}", check.command)
         self.assertIn("{head}", check.command)
@@ -591,7 +602,8 @@ esac
             "ci",
             include_pr_body_checks=False,
         )
-        self.assertIn(check, selected)
+        self.assertNotIn(check, selected)
+        self.assertIn(check, resolve_checks(manifest, ["backend/routers/example.py"], "ci"))
 
         command = command_for_check(
             check,

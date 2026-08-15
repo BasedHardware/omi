@@ -100,6 +100,7 @@ checks:
     command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py"]
     lanes: ["local", "ci"]
+    requires_pr_body: true
     reason: "#9838 freezes oversized product files against the target branch without a shared metadata ledger; exact PR-body exceptions preserve reviewability without unrelated merge conflicts"
   - id: product-file-line-count-ratchet-tests
     command: ["python3", ".github/scripts/test_check_product_file_line_count_ratchet.py"]
@@ -209,6 +210,7 @@ checks:
     command: ["python3", ".github/scripts/check_failure_class_guard_ratchet.py", "--pr-body-file", "{pr_body_file}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
+    requires_pr_body: true
     reason: "FC-split-mutation-authority was declared on 30 first-parent integration changes in the 90 days to Jul 24 2026 while its definition still listed evidence_prs [9365, 9597] and named no guard artifact; a recurring class must produce a reusable guard surface, not more paperwork"
   - id: failure-class-guard-artifact-ratchet-tests
     command: ["python3", ".github/scripts/test_check_failure_class_guard_ratchet.py"]
