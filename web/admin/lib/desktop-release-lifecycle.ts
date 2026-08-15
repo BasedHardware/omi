@@ -74,13 +74,15 @@ export function tagBuildNumber(tag: string): number | null {
 
 export function newestSparkleVersion(appcast: string): number | null {
   const versions: number[] = [];
-  const element = /<sparkle:version>(\d+)<\/sparkle:version>/g;
-  const attribute = /sparkle:version="(\d+)"/g;
-  for (const match of appcast.matchAll(element)) {
-    versions.push(Number.parseInt(match[1], 10));
-  }
-  for (const match of appcast.matchAll(attribute)) {
-    versions.push(Number.parseInt(match[1], 10));
+  // `exec` loops rather than `for...of matchAll()`: this package targets es5,
+  // where iterating an IterableIterator is a compile error (TS2802).
+  const patterns = [/<sparkle:version>(\d+)<\/sparkle:version>/g, /sparkle:version="(\d+)"/g];
+  for (const pattern of patterns) {
+    let match = pattern.exec(appcast);
+    while (match !== null) {
+      versions.push(Number.parseInt(match[1], 10));
+      match = pattern.exec(appcast);
+    }
   }
   return versions.length ? Math.max(...versions) : null;
 }
