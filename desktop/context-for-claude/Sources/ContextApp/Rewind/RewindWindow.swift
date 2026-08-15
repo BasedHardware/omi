@@ -55,12 +55,18 @@ enum RewindWindow {
             // it the track stops at whatever hour the first open happened to fall on, for the rest
             // of the process. Nothing the user left in place moves; see `RewindModel.refresh`.
             model?.refresh()
-            window.makeKeyAndOrderFront(nil)
             // Activation stays, on this branch and the two below. The timeline is secondary now, but
             // every route into it is an explicit ask — a result card, a menu row, the chord — and an
             // app that answers one by ordering a window in behind whatever is frontmost has not
             // answered it.
-            NSApp.activate(ignoringOtherApps: true)
+            //
+            // **Ahead of the key-status ask, not after it**, which is the order the whole raise path
+            // had backwards. `makeKeyWindow` is documented as a no-op while the application is
+            // inactive — the window is ordered in and simply is not key — so asking for key status
+            // first and activation second is asking in the one order that cannot work. Key status no
+            // longer *depends* on activation landing (see `RewindWindowFrame`), but nothing is served
+            // by asking in the wrong order either.
+            raise(window)
             return
         }
 
@@ -142,8 +148,18 @@ enum RewindWindow {
 
         current = window
         startLiveRefresh()
-        window.makeKeyAndOrderFront(nil)
+        raise(window)
+    }
+
+    /// Brings the timeline forward **and makes it the key window**, in the order that works.
+    ///
+    /// One function rather than the same two lines at three call sites, because the two lines are
+    /// order-sensitive and the order is the part that was wrong: `NSApp.activate` first, then the key
+    /// ask. It is not a formality — see `RewindWindowFrame` for what a timeline that never becomes
+    /// key costs, and `TimelineKeyStatusTests` for the assertion that it does.
+    private static func raise(_ window: NSWindow) {
         NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
     }
 
     /// Keeps an open timeline level with what capture is writing.
@@ -208,8 +224,7 @@ enum RewindWindow {
         model.focus(on: instant)
         // A timeline behind the surface that just handed it a moment is a timeline the user has to
         // go looking for, so bringing it forward is part of aiming it.
-        current?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        if let window = current { raise(window) }
         return true
     }
 
@@ -248,11 +263,12 @@ enum RewindWindow {
 /// all. The panel this window opens *from* has taken Escape since it shipped (`SearchPanel`), so a user
 /// is taught the key on one surface and then finds it dead on the next one.
 ///
-/// **In `sendEvent`, matching `SearchPanel` and `TutorialOverlayWindow`.** The content is an
-/// `NSHostingView`: SwiftUI's own key handling sits between this window and every control in it, and a
-/// `cancelOperation:` that only runs if nothing in that tree claims Escape first is a promise this file
-/// cannot keep. A window only receives key events while it is key, which bounds the whole of this to the
-/// window the user is actually looking at.
+/// **In `cancelOperation(_:)`, and no longer in `sendEvent`.** It was in `sendEvent` on the argument
+/// that the content is an `NSHostingView`, so a `cancelOperation:` reached only if nothing in the SwiftUI
+/// tree claimed Escape first was a promise this file could not keep. Measured, that argument was
+/// backwards twice over: nothing in this window's tree claims Escape, and the guard the interception
+/// needed in order to stay polite to text is what took the exit away — see `cancelOperation(_:)` below.
+/// A window only receives key events while it is key either way, which is why the fix has two halves.
 ///
 /// **The date pill's popover is the one thing this could have taken a key from, and it does not need a
 /// case.** `NSPopover` puts its content in a child window; while that window is key, Escape is dispatched
@@ -260,10 +276,35 @@ enum RewindWindow {
 /// timeline closes instead — and takes the popover with it, because `orderOut` carries child windows —
 /// which is the same thing ⌘W has always done and leaves nothing stranded either way.
 ///
+/// **An `NSPanel` with `.nonactivatingPanel`, and that is the fix rather than a detail of it.**
+///
+/// The Escape route above shipped in 1.0.4 and did not work, for a reason no test in the package could
+/// see: *the window never became key*, so `sendEvent` never received a `keyDown` to intercept. Measured
+/// on the real class — `canBecomeKey` was already `true` and always had been, `.titled` gives that for
+/// free, and `WindowGlass.wear`, the style mask and this subclass are all innocent. What failed is the
+/// *assignment*: `makeKeyWindow` is documented as a no-op while the application is inactive, and the
+/// `NSApp.activate(ignoringOtherApps:)` that was supposed to make it active is deprecated as of macOS 14
+/// and simply does not always activate. Measured in `TimelineKeyStatusTests`: an ordinary titled window
+/// of an inactive process orders in visible, reports `canBecomeKey == true`, and is not key — which is
+/// grey traffic lights and a dead Escape, exactly as reported.
+///
+/// `.nonactivatingPanel` is what takes key status **without** waiting on activation, and it is the same
+/// answer this app already measured its way to for the search surface — see `SearchBarWindow`, where a
+/// plain window "orders in but does not become key while the app is not frontmost" and every keystroke
+/// went to whatever was already in front. The timeline is the second surface to be bitten by it. The
+/// window is otherwise unchanged: still `.titled`, still resizable, still carrying all three traffic
+/// lights (asserted), still `.normal` level.
+///
+/// The three panel defaults that would be wrong here are set in `init` rather than left to the call
+/// site, for the reason `onEscape` is an init parameter: a timeline built without them is not a window
+/// to be fixed later, it is a defect with no runtime signal. `hidesOnDeactivate` is the loud one —
+/// `NSPanel` defaults it to `true`, which would order the timeline off screen every time the user
+/// switched apps.
+///
 /// Module-internal rather than file-private only so `TimelineEscapeTests` can press Escape on a real
 /// one, for the reason `TutorialOverlayWindow` is: the one way out of a window is exactly the rule that
 /// has to be executed rather than read, since reading it is what let its absence ship.
-final class RewindWindowFrame: NSWindow {
+final class RewindWindowFrame: NSPanel {
 
     /// What Escape runs. Handed in by whoever builds the window rather than reached for from here — the
     /// window has no business knowing which type owns it.
@@ -276,28 +317,68 @@ final class RewindWindowFrame: NSWindow {
 
     init(contentRect: NSRect, styleMask: NSWindow.StyleMask, onEscape: @escaping () -> Void) {
         self.onEscape = onEscape
-        super.init(contentRect: contentRect, styleMask: styleMask, backing: .buffered, defer: false)
+        // Unioned here rather than asked of the caller. The caller's mask says what the window *is* —
+        // titled, closable, resizable — and this bit says how it takes key status, which is this
+        // type's own business and the one thing it must not be possible to construct one without.
+        super.init(
+            contentRect: contentRect, styleMask: styleMask.union(.nonactivatingPanel),
+            backing: .buffered, defer: false)
+        // A panel that only takes key status "if needed" leaves it with whatever held it before, which
+        // is the state this class exists to end.
+        becomesKeyOnlyIfNeeded = false
+        // Not a floating panel: `isFloatingPanel` is `true` by default on `NSPanel` and puts the window
+        // at `.floating`, and the timeline is worked *in* — see `present`, which says so at length.
+        // Setting it also returns the level to `.normal`.
+        isFloatingPanel = false
+        // **The default that would hurt.** `NSPanel` hides on deactivation; a timeline that vanished
+        // every time the user looked at another app would be a worse dead end than the one being fixed.
+        hidesOnDeactivate = false
     }
 
-    override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown, event.keyCode == Self.escapeKeyCode, !aFieldEditorIsActive {
-            MainActor.assumeIsolated { onEscape() }
-            return
-        }
-        super.sendEvent(event)
-    }
+    /// Already `true` for a `.titled` window and stated anyway, because it is the claim the reported
+    /// failure was mistaken for and the one every other window in this app has to override — those are
+    /// all `.borderless`, which is what actually defaults to `false`.
+    override var canBecomeKey: Bool { true }
 
-    /// Whether text is being edited right now.
+    /// **`true`, unlike every other panel here.** `NSPanel` refuses main status by default and the
+    /// search surface keeps that refusal deliberately, because a non-activating panel that claims main
+    /// drags the app forward. This window is *asking* to be the thing in front — and a titled window
+    /// that is key but not main draws its traffic lights grey, which is the symptom that started this.
+    override var canBecomeMain: Bool { true }
+
+    /// **Escape, on the responder chain rather than ahead of it.**
     ///
-    /// Escape means *abandon this edit* before it means *close this window* — that ordering is macOS's,
-    /// not ours, and a window that swallowed the key ahead of a field editor would take the only way
-    /// out of a half-typed value. Nothing in the timeline is editable today; the guard is here because
-    /// `sendEvent` intercepts before the responder chain runs, so the first editable control added to
-    /// this window would otherwise lose Escape silently.
-    private var aFieldEditorIsActive: Bool {
-        (firstResponder as? NSTextView)?.isFieldEditor == true
+    /// This replaces a `sendEvent` override that matched key code 53 before the responder chain ran and
+    /// then tried to hand the key back to text with a guard — `(firstResponder as? NSTextView)?
+    /// .isFieldEditor == true`. That guard is the reason this route is now here instead:
+    ///
+    /// - **It could not tell a focused field from an edited one.** A field editor is installed and made
+    ///   first responder the moment anything editable takes focus, with nothing typed into it. Measured
+    ///   (`TimelineEscapeTests`): an idle, empty field editor made the guard true, so `sendEvent`
+    ///   declined the key — and on a plain `NSWindow` nothing downstream closed the window either. The
+    ///   only keyboard way out was disabled for the life of the window by a control nobody had touched.
+    ///   The old comment called the timeline "not editable today" and kept the guard for the first
+    ///   control that would be; that control is exactly the one that would have bricked the exit.
+    /// - **It had started to disagree with AppKit.** `NSPanel` closes a closable panel on Escape through
+    ///   `cancelOperation:` itself, so once this became a panel the window went away *anyway* while the
+    ///   guard believed it had declined — two Escape rules, contradicting each other, one of them
+    ///   invisible.
+    ///
+    /// `cancelOperation(_:)` is the key travelling the way macOS routes it, and it lets AppKit decide
+    /// what "abandon this edit" means instead of this file guessing. Measured, on the three states that
+    /// matter: with no text view at all the key reaches this window (first responder is the window
+    /// itself, and it still arrives); with an idle field editor focused it reaches this window; with a
+    /// field editor holding uncommitted text it *also* reaches this window, because `NSTextView` claims
+    /// Escape only when it has something of its own to cancel, such as an open completion list.
+    ///
+    /// So the rule this window now keeps is the one the report actually asked for: **there is no state
+    /// in which Escape does not leave the timeline.** Where something upstream does claim the key, it
+    /// has ended its own state by claiming it, so the next press arrives here.
+    ///
+    /// Deliberately no `super` call. `NSPanel`'s implementation closes the panel, and this window is put
+    /// away with `orderOut` rather than closed so the loaded day survives exactly as the X leaves it —
+    /// see `RewindWindow.dismiss`.
+    override func cancelOperation(_ sender: Any?) {
+        onEscape()
     }
-
-    /// Named rather than `53` at the point of use, like every other reading of this key in the package.
-    private static let escapeKeyCode: UInt16 = 53
 }
