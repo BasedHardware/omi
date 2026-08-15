@@ -78,6 +78,15 @@ function generate_ios_custom_config() {
     local suffix
     suffix=$(generate_device_suffix)
     echo "APP_BUNDLE_IDENTIFIER=com.friend-app-with-wearable.ios12-${suffix}" >> ios/Flutter/Custom.xcconfig
+    # The prebuilt/placeholder GoogleService-Info.plist (setup_firebase) carries the
+    # stock unsuffixed BUNDLE_ID. Firebase's native SDK validates that field against
+    # the running app's actual bundle identifier at Firebase.initializeApp() and
+    # refuses to start if they don't match. Runner/GoogleService-Info.plist is what
+    # Xcode actually bundles (project.pbxproj references that path directly, not
+    # Config/Dev/); patch both so on-disk copies stay consistent.
+    local suffixed_bundle_id="com.friend-app-with-wearable.ios12-${suffix}"
+    /usr/libexec/PlistBuddy -c "Set :BUNDLE_ID ${suffixed_bundle_id}" "ios/Config/${config_name}/GoogleService-Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :BUNDLE_ID ${suffixed_bundle_id}" ios/Runner/GoogleService-Info.plist
   else
     # Beta uses a distinct bundle/callback identity and must be provisioned
     # explicitly by the developer's Apple team.
