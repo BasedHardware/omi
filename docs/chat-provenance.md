@@ -60,4 +60,7 @@ model's exact words; they are nondeterministic.
 The pair of tests is `apps/service/chat/chat-provenance.test.ts` (boot +
 persisted text + receipt) and the ChatProduction cases in
 `frontend/packages/surfaces/test/chat-live-rendering.test.mjs` (the label the
-user reads).
+user reads). The headed control-acceptance harness (`integration/control-acceptance/`)
+joins all three witnesses before it will print `CONTROL chat=streamed-and-persisted`:
+the chip from the page, `service.boot` from the telemetry JSONL, and
+`OMI_CHAT_MODEL`. Canned-while-declaring-real is `provenance-mismatch`.

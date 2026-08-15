@@ -5,6 +5,9 @@
   const HOME_FAILURE_NOTICE = "Showing saved data. Couldn't refresh.";
   const CHAT_STREAMING = "Omi is responding";
   const PHASE_TICK_LIMIT = 50;
+  // Stated outcome deadline. The macOS probe hook caps attempts at 100, so a
+  // longer wait here starves Chat/Rewind/nav when Listen does not transcribe.
+  const OUTCOME_TICK_LIMIT = 40;
   const MODE = window.__omiCAMode === "screen" ? "screen" : "full";
 
   const NAV_ROUTES = [
@@ -46,6 +49,7 @@
     listenPermissionBefore: null,
     screenClicked: false,
     statusId: null,
+    witnesses: null,
   });
 
   const shell = () => document.querySelector("main[data-production-shell='true']");
@@ -63,7 +67,70 @@
   const finish = (state) => {
     state.phase = "done";
     save(state);
-    return JSON.stringify({ schema: SCHEMA, steps: state.steps });
+    const payload = { schema: SCHEMA, steps: state.steps };
+    if (state.witnesses) payload.witnesses = state.witnesses;
+    return JSON.stringify(payload);
+  };
+
+  const onRoute = (root, route) => {
+    const current = routeOf(root);
+    if (route === "rewind") return current === "rewind" || current === "screen";
+    return current === route;
+  };
+
+  const phaseLimit = (phase) => {
+    if (
+      phase === "listen-wait-transcript"
+      || phase === "screen-wait-outcome"
+    ) return OUTCOME_TICK_LIMIT;
+    return PHASE_TICK_LIMIT;
+  };
+
+  const listenTranscript = (root) => {
+    const semantic = root?.getAttribute("data-consumer-semantic") || "";
+    const match = semantic.match(/^listen:capture:[^:]+:segments:(\d+)$/);
+    const segments = match ? Number(match[1]) : 0;
+    const transcript = (root?.getAttribute("data-consumer-transcript") || "").trim();
+    const rows = root?.querySelectorAll(".listen-transcript-row") ?? [];
+    let rowText = "";
+    for (const row of rows) {
+      const text = (row.querySelector(".listen-transcript-text")?.textContent || row.textContent || "").trim();
+      if (text) rowText += (rowText ? " " : "") + text;
+    }
+    if (segments > 0 && transcript.length > 0 && rows.length > 0 && rowText.length > 0) {
+      return "transcript-rendered";
+    }
+    return "empty-transcript";
+  };
+
+  const screenFrame = (root) => {
+    if (root?.querySelector(".screen-frame-unavailable")) return "frame-unavailable";
+    const img = root?.querySelector("img.screen-frame-image");
+    if (!img) {
+      if (root?.querySelector(".screen-frame-loading")) return "frame-loading";
+      return "frame-missing";
+    }
+    const src = img.getAttribute("src") || "";
+    if (!src.startsWith("data:image/png;base64,")) return "frame-not-png";
+    if (src.slice("data:image/png;base64,".length).trim().length === 0) return "frame-empty-bytes";
+    if (!Number.isFinite(img.naturalWidth) || img.naturalWidth <= 0) return "frame-undecoded";
+    return "frame-rendered";
+  };
+
+  const selectTimelineFrame = () => {
+    const timeline = document.querySelector(".screen-timeline input[type='range']");
+    if (!timeline) return false;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    if (!setter) return false;
+    setter.call(timeline, timeline.max || "0");
+    timeline.dispatchEvent(new Event("input", { bubbles: true }));
+    timeline.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  };
+
+  const lastCanonicalAssistant = () => {
+    const nodes = document.querySelectorAll('.chat-message.is-assistant[data-delivery="canonical"]');
+    return nodes.length > 0 ? nodes[nodes.length - 1] : null;
   };
 
   const timeout = (state, slug, verdict) => {
@@ -175,7 +242,11 @@
   };
 
   let state = load() || fresh();
-  if (state.phase === "done") return JSON.stringify({ schema: SCHEMA, steps: state.steps });
+  if (state.phase === "done") {
+    const payload = { schema: SCHEMA, steps: state.steps };
+    if (state.witnesses) payload.witnesses = state.witnesses;
+    return JSON.stringify(payload);
+  }
 
   const previousPhase = state.phase;
   state.ticks += 1;
@@ -205,8 +276,13 @@
     return PENDING;
   }
 
-  if (state.phaseTicks > PHASE_TICK_LIMIT) {
-    if (state.phase.startsWith("home")) timeout(state, "home", "timeout");
+  if (state.phaseTicks > phaseLimit(state.phase)) {
+    if (state.phase === "listen-wait-transcript") timeout(state, "mic", listenTranscript(root));
+    else if (state.phase === "listen-act") timeout(state, "mic", "no-control");
+    else if (state.phase === "screen-wait-outcome" || state.phase === "screen-assert-frame") {
+      timeout(state, "screen", screenFrame(root));
+    }
+    else if (state.phase.startsWith("home")) timeout(state, "home", "timeout");
     else if (state.phase.startsWith("chat")) timeout(state, "chat", "timeout");
     else if (state.phase.startsWith("listen")) timeout(state, "mic", "timeout");
     else if (state.phase.startsWith("rewind") || state.phase.startsWith("screen")) {
@@ -350,6 +426,17 @@
       save(state);
       return PENDING;
     }
+    const assistant = lastCanonicalAssistant();
+    const capabilityLabel = (assistant?.querySelector(".chat-agent-capability")?.textContent || "").trim();
+    const assistantText = (assistant?.querySelector(".chat-message-text")?.textContent || "").trim();
+    if (!capabilityLabel) {
+      save(state);
+      return PENDING;
+    }
+    state.witnesses = {
+      ...(state.witnesses || {}),
+      chat: { capabilityLabel, assistantText },
+    };
     if (!state.sawStreaming) {
       record(state, "chat", "no-stream");
     } else {
@@ -417,16 +504,25 @@
       /Allow microphone|Open Settings/i.test(button.textContent || ""),
     );
     const start = document.querySelector("[data-consumer-action='start-listen']");
+    const capturing = root?.getAttribute("data-capture-kind") === "capturing";
     if (permission === "denied" || /Open Settings/i.test(allow?.textContent || "")) {
       record(state, "mic", "skipped-tcc-denied");
       state.phase = "rewind-nav";
       save(state);
       return PENDING;
     }
-    if (permission === "granted" && start && !start.disabled) {
+    if (capturing) {
+      state.phase = "listen-wait-transcript";
+      save(state);
+      return PENDING;
+    }
+    if (start && start.disabled) {
+      save(state);
+      return PENDING;
+    }
+    if (permission === "granted" && start) {
       click(start);
-      record(state, "mic", "skipped-already-granted");
-      state.phase = "rewind-nav";
+      state.phase = "listen-wait-transcript";
       save(state);
       return PENDING;
     }
@@ -439,40 +535,51 @@
     }
     if (start) {
       click(start);
-      if (start.disabled) record(state, "mic", "no-control");
-      else record(state, "mic", "skipped-already-granted");
-      state.phase = "rewind-nav";
+      state.phase = "listen-wait-transcript";
       save(state);
       return PENDING;
     }
-    record(state, "mic", "no-control");
-    state.phase = "rewind-nav";
     save(state);
     return PENDING;
   }
 
   if (state.phase === "listen-wait-os") {
     const permission = document.querySelector("[data-permission-state]")?.getAttribute("data-permission-state");
-    // "checking" means the shell asked the OS. Do not wait for grant/deny —
-    // the TCC prompt is host state this harness cannot click.
-    if (permission === "checking") {
-      record(state, "mic", "reached-os");
+    // "checking" means the shell asked the OS. Do not treat that as a pass,
+    // and do not wait for a grant the harness cannot click. Denied is the
+    // only skip; anything else either proceeds to capture or times out.
+    if (permission === "denied" || /Open Settings/i.test(
+      [...document.querySelectorAll("button.listen-recovery-control")].find((button) =>
+        /Open Settings/i.test(button.textContent || ""),
+      )?.textContent || "",
+    )) {
+      record(state, "mic", "skipped-tcc-denied");
       state.phase = "rewind-nav";
       save(state);
       return PENDING;
     }
-    if (permission === state.listenPermissionBefore) {
+    if (permission === "granted") {
+      state.phase = "listen-act";
       save(state);
       return PENDING;
     }
-    record(state, "mic", "reached-os");
-    state.phase = "rewind-nav";
+    save(state);
+    return PENDING;
+  }
+
+  if (state.phase === "listen-wait-transcript") {
+    if (listenTranscript(root) === "transcript-rendered") {
+      record(state, "mic", "transcript-rendered");
+      state.phase = "rewind-nav";
+      save(state);
+      return PENDING;
+    }
     save(state);
     return PENDING;
   }
 
   if (state.phase === "rewind-nav") {
-    if (routeOf(root) === "rewind") {
+    if (onRoute(root, "rewind")) {
       state.phase = "rewind-wait";
       save(state);
       return PENDING;
@@ -499,7 +606,7 @@
   }
 
   if (state.phase === "rewind-wait") {
-    if (!root || routeOf(root) !== "rewind") {
+    if (!root || !onRoute(root, "rewind")) {
       save(state);
       return PENDING;
     }
@@ -555,9 +662,34 @@
       return PENDING;
     }
     const permission = root?.getAttribute("data-permission");
-    if (permission === "denied") record(state, "screen", "skipped-tcc-denied");
-    else record(state, "screen", "reached-os");
-    state.phase = "nav-next";
+    if (permission === "denied") {
+      record(state, "screen", "skipped-tcc-denied");
+      state.phase = "nav-next";
+      save(state);
+      return PENDING;
+    }
+    state.phase = "screen-wait-outcome";
+    save(state);
+    return PENDING;
+  }
+
+  if (state.phase === "screen-wait-outcome") {
+    const permission = root?.getAttribute("data-permission");
+    if (permission === "denied") {
+      record(state, "screen", "skipped-tcc-denied");
+      state.phase = "nav-next";
+      save(state);
+      return PENDING;
+    }
+    const total = Number(root?.getAttribute("data-frame-total") || "0");
+    if (Number.isFinite(total) && total > 0) selectTimelineFrame();
+    const verdict = screenFrame(root);
+    if (verdict === "frame-rendered") {
+      record(state, "screen", "frame-rendered");
+      state.phase = "nav-next";
+      save(state);
+      return PENDING;
+    }
     save(state);
     return PENDING;
   }
@@ -570,7 +702,7 @@
         state.navIndex += 1;
         continue;
       }
-      if (routeOf(root) === route && visibleText(root).length > 0) {
+      if (onRoute(root, route) && visibleText(root).length > 0) {
         record(state, slug, "rendered");
         state.navIndex += 1;
         continue;
@@ -599,7 +731,7 @@
       save(state);
       return PENDING;
     }
-    if (routeOf(root) !== route) {
+    if (!onRoute(root, route)) {
       save(state);
       return PENDING;
     }

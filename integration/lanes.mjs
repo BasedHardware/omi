@@ -201,20 +201,25 @@ export const LANES = {
       //
       //     CONTROL home=failure-notice
       //
-      // Home sources memories through `openMemories()`, which is the legacy
-      // editable store by design, and the legacy memory wire is `/v3/memories`
-      // — a path this service does not serve (it serves `/v1/memories`, the
-      // platform read path). Every other legacy domain lines up: conversations
-      // are `/v1/conversations` on both sides.
+      // Home blends memories and conversations. David has ruled that the new
+      // UI may use only the new backend, and no platform conversations adapter
+      // exists yet (`frontend/packages/adapters-platform/src/` has no
+      // conversations module). Home cannot go green until that adapter is
+      // built.
       //
-      // Closing it is David's parked memories-generation ruling: either serve
-      // the legacy `/v3` memory wire locally, or move Home to the platform read
-      // model and map its records. Both are product decisions, not landing-time
-      // fixes, so the step is held out rather than have its Home assertion
-      // weakened to make a broken surface look green — which is the exact
-      // failure this harness was built to end.
+      // The memories half is the same parked ruling as before: Home sources
+      // memories through `openMemories()`, the legacy editable store, and the
+      // legacy memory wire is `/v3/memories` — a path this service does not
+      // serve (it serves `/v1/memories`). Conversations on the legacy side are
+      // `/v1/conversations` on both sides, but the platform client has nothing
+      // to consume them with.
       //
-      // Wire it in as a second step here the moment that ruling lands.
+      // Closing it is a product build, not a landing-time fix, so the step is
+      // held out rather than have its Home assertion weakened to make a broken
+      // surface look green — which is the exact failure this harness was built
+      // to end.
+      //
+      // Wire it in as a second step here the moment that adapter lands.
     ],
   },
 };

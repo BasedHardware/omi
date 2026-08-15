@@ -38,10 +38,12 @@ integration/dev-stack.sh --stop
 That launches `integration/local-model-gateway.mjs` on 8791, rewrites the
 service's semantic lane (`omi:auto:…`) to the configured model id, and pipes
 the provider SSE through. `--stop` stops whichever gateway this harness
-started. The Chat UI label stays **Local test gateway** — capability reporting
-does not mint a real-provider claim from reachability. Attachments still fail
-closed in the generation source. Do not treat this opt-in as production, and
-do not point it at `api.omi.me`.
+started. The Chat UI label names the engine `/ready` declared — canned stays
+**Local test gateway**; `real_model_proxy: true` renders **External model
+response (`<model>`)**. Reachability alone does not mint `tier: "real-provider"`.
+See `docs/chat-provenance.md`. Attachments still fail closed in the generation
+source. Do not treat this opt-in as production, and do not point it at
+`api.omi.me`.
 
 # Applied negative controls; each full run must finish red at its named assertion
 integration/red-proof-assert.sh
@@ -50,10 +52,12 @@ integration/red-proof-assert.sh
 The L3 runner uses a unique temporary run directory and writes the immutable receipt only
 after it has read the exact report. The headed click-through for a human is still
 outside `--assert`. Control clicks for the gate live in
-`integration/control-acceptance/` and run as L3's second step
-(`node integration/control-acceptance/run.mjs`). That sibling of `--accept`
-drives Home, Chat, Listen, Rewind, and every chrome route in the built macOS
-shell. Read `integration/control-acceptance/README.md` before adding a control.
+`integration/control-acceptance/` (`node integration/control-acceptance/run.mjs`).
+That sibling of `--accept` drives Home, Chat, Listen, Rewind, and every chrome
+route in the built macOS shell. It is held out of L3 while Home is red on
+`CONTROL home=failure-notice` — a true positive, because no platform
+conversations adapter exists yet. Read `integration/control-acceptance/README.md`
+before adding a control.
 
 ## Platform companion contract
 

@@ -15,7 +15,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildDriverSource } from "./driver-source.mjs";
-import { PENDING_VALUE, reportFromProbeText } from "./verdict.mjs";
+import {
+  aggregate,
+  applyChatProvenance,
+  PENDING_VALUE,
+  readServiceBoot,
+  reportFromProbeText,
+} from "./verdict.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PLATFORM_ROOT = join(HERE, "..", "..");
@@ -156,11 +162,12 @@ const childEnv = {
   OMI_PROBE_JS: driver,
   OMI_PROBE_EXIT: "1",
   OMI_PROBE_PENDING_VALUE: PENDING_VALUE,
+  // The macOS probe hook clamps this at 100 (`min(..., 100)` in main.swift).
   OMI_PROBE_MAX_ATTEMPTS: "100",
   OMI_PROBE_RETRY_INTERVAL: "0.4",
   OMI_PROBE_DELAY: "5",
   OMI_PROBE_SETTLE: "2",
-  OMI_ACCEPTANCE_WAIT_SECONDS: "120",
+  OMI_ACCEPTANCE_WAIT_SECONDS: "180",
   OMI_READY_TIMEOUT_SECONDS: "30",
 };
 delete childEnv.OMI_ACCEPTANCE;
@@ -196,7 +203,23 @@ if (/api\.omi\.me|\?rig=dev/.test(logText)) {
   fail("ERROR: control-acceptance observed a production origin or ?rig=dev. Stopping.");
 }
 
-const report = reportFromProbeText(logText);
+const report = (() => {
+  const parsed = reportFromProbeText(logText);
+  if (!parsed.parse?.ok || SCREEN_PROOF) return parsed;
+  let boot = null;
+  try {
+    boot = readServiceBoot(readFileSync(join(dirname(ownerPath), "logs", "service.jsonl"), "utf8"));
+  } catch {
+    boot = null;
+  }
+  const steps = applyChatProvenance(parsed.parse.result.steps, {
+    intent: process.env.OMI_CHAT_MODEL === "real" ? "real" : "test",
+    boot,
+    rendered: parsed.parse.result.witnesses?.chat ?? null,
+  });
+  const next = aggregate(steps);
+  return { ...next, parse: parsed.parse };
+})();
 process.stdout.write(`control-acceptance wall-clock=${elapsedMs}ms launcher-status=${launched.status ?? "none"}\n`);
 printReport(report);
 

@@ -31,12 +31,26 @@ export const STEP_SLUGS = Object.freeze([
   "nav.listen",
 ]);
 
+export const CANNED_CHAT_LABEL = "Local test gateway";
+export const CANNED_CHAT_ANSWER = "Local test gateway answered.";
+export const REAL_CHAT_LABEL_PREFIX = "External model response";
+export const CANNED_GATEWAY_KIND = "omi.local-test-gateway.v1";
+export const REAL_GATEWAY_KIND = "omi.local-model-gateway.v1";
+
+/** Skips this harness may emit. Prefix-matching `skipped-*` is how a real
+ *  failure was laundered into a pass (`skipped-already-granted`). Add slugs;
+ *  never treat an unknown skip as legitimate. */
+export const SKIP_VERDICTS = Object.freeze([
+  "skipped-tcc-denied",
+  "skipped-not-requested",
+]);
+
 /** Verdicts that count as a pass for that slug. Anything else is fail or skip. */
 export const PASS_VERDICTS = Object.freeze({
   home: Object.freeze(["ready"]),
   chat: Object.freeze(["streamed-and-persisted"]),
-  mic: Object.freeze(["reached-os"]),
-  screen: Object.freeze(["reached-os"]),
+  mic: Object.freeze(["transcript-rendered"]),
+  screen: Object.freeze(["frame-rendered"]),
   "nav.home": Object.freeze(["rendered"]),
   "nav.conversations": Object.freeze(["rendered"]),
   "nav.memories": Object.freeze(["rendered"]),
@@ -53,7 +67,7 @@ export const PASS_VERDICTS = Object.freeze({
 export const HOME_FAILURE_NOTICE = "Showing saved data. Couldn't refresh.";
 
 export function isSkip(verdict) {
-  return typeof verdict === "string" && verdict.startsWith("skipped-");
+  return SKIP_VERDICTS.includes(verdict);
 }
 
 export function isPass(slug, verdict) {
@@ -88,6 +102,139 @@ export function inspectListenChannel(host = globalThis) {
     return "channel-unreachable";
   }
   return "present";
+}
+
+function attr(node, name) {
+  if (node == null) return "";
+  if (typeof node.getAttribute === "function") return node.getAttribute(name) ?? "";
+  return "";
+}
+
+function nodesOf(root, selector) {
+  if (root == null || typeof root.querySelectorAll !== "function") return [];
+  return [...root.querySelectorAll(selector)];
+}
+
+/**
+ * Outcome of the Listen control: a rendered transcript, not an OS permission
+ * request. Pass requires the published segment count, the transcript attribute,
+ * and visible `.listen-transcript` rows — the data attributes without the rows
+ * is the helper-vs-JSX miss this harness exists to catch.
+ *
+ * red-proof: stub `data-consumer-semantic` at segments:0 with no transcript
+ * rows. That is `empty-transcript`, never a pass.
+ */
+export function inspectListenTranscript(root) {
+  const semantic = attr(root, "data-consumer-semantic");
+  const match = /^listen:capture:[^:]+:segments:(\d+)$/.exec(semantic);
+  const segments = match ? Number(match[1]) : 0;
+  const transcript = attr(root, "data-consumer-transcript").trim();
+  const rows = nodesOf(root, ".listen-transcript-row");
+  const rowText = rows
+    .map((row) => {
+      const textNode = typeof row.querySelector === "function"
+        ? row.querySelector(".listen-transcript-text")
+        : null;
+      return String(textNode?.textContent ?? row.textContent ?? "").trim();
+    })
+    .filter((text) => text.length > 0)
+    .join(" ");
+  if (segments > 0 && transcript.length > 0 && rows.length > 0 && rowText.length > 0) {
+    return "transcript-rendered";
+  }
+  return "empty-transcript";
+}
+
+/**
+ * Outcome of the Rewind control: a decoded picture, not an OS permission
+ * request. The `.screen-frame-unavailable` paragraph is the defect this token
+ * exists to catch — a timeline row can exist while the stage shows no image.
+ *
+ * red-proof: point the stage at that paragraph, or at an `img` whose src is
+ * `data:image/png;base64,` with no payload / `naturalWidth` 0. Never a pass.
+ */
+export function inspectScreenFrame(root) {
+  if (root?.querySelector?.(".screen-frame-unavailable")) return "frame-unavailable";
+  const img = root?.querySelector?.("img.screen-frame-image");
+  if (img == null) {
+    if (root?.querySelector?.(".screen-frame-loading")) return "frame-loading";
+    return "frame-missing";
+  }
+  const src = String(img.getAttribute?.("src") ?? img.src ?? "");
+  if (!src.startsWith("data:image/png;base64,")) return "frame-not-png";
+  const payload = src.slice("data:image/png;base64,".length).trim();
+  if (payload.length === 0) return "frame-empty-bytes";
+  const width = Number(img.naturalWidth);
+  if (!Number.isFinite(width) || width <= 0) return "frame-undecoded";
+  return "frame-rendered";
+}
+
+/**
+ * Chat provenance is a conjunction of three witnesses. Any two agreeing
+ * without the third is how a stub ships for a week.
+ *
+ * red-proof: boot the canned gateway (`omi.local-test-gateway.v1`) while
+ * declaring `OMI_CHAT_MODEL=real`. Label and boot agree canned; intent does
+ * not. That is `provenance-mismatch`, never `streamed-and-persisted`.
+ */
+export function inspectChatProvenance({ intent, boot, label, assistantText } = {}) {
+  const rendered = String(label ?? "").trim();
+  const text = String(assistantText ?? "");
+  const kind = typeof boot?.gateway_kind === "string" ? boot.gateway_kind : null;
+  const model = typeof boot?.gateway_model === "string" && boot.gateway_model.length > 0
+    ? boot.gateway_model
+    : null;
+  const wantReal = intent === "real";
+
+  if (kind == null) return "boot-missing";
+
+  const bootIsCanned = kind === CANNED_GATEWAY_KIND;
+  const bootIsReal = kind === REAL_GATEWAY_KIND;
+  const labelIsCanned = rendered === CANNED_CHAT_LABEL;
+  const labelIsReal = rendered.startsWith(REAL_CHAT_LABEL_PREFIX) && !labelIsCanned;
+
+  if (wantReal) {
+    if (!bootIsReal || !labelIsReal || labelIsCanned) return "provenance-mismatch";
+    if (model != null && !rendered.includes(`(${model})`)) return "provenance-mismatch";
+    if (text === CANNED_CHAT_ANSWER) return "canned-answer";
+    return "agree";
+  }
+
+  if (!bootIsCanned || !labelIsCanned || labelIsReal) return "provenance-mismatch";
+  if (text !== CANNED_CHAT_ANSWER) return "answer-mismatch";
+  return "agree";
+}
+
+export function applyChatProvenance(steps, { intent, boot, rendered } = {}) {
+  const next = [];
+  for (const step of steps ?? []) {
+    if (!step || step.slug !== "chat" || isSkip(step.verdict) || step.verdict !== "streamed-and-persisted") {
+      next.push(step);
+      continue;
+    }
+    const clause = inspectChatProvenance({
+      intent,
+      boot,
+      label: rendered?.capabilityLabel,
+      assistantText: rendered?.assistantText,
+    });
+    next.push(clause === "agree" ? step : { ...step, verdict: clause });
+  }
+  return next;
+}
+
+export function readServiceBoot(text) {
+  let boot = null;
+  for (const line of String(text ?? "").split(/\r?\n/)) {
+    if (line.trim().length === 0) continue;
+    try {
+      const record = JSON.parse(line);
+      if (record && record.event === "service.boot") boot = record;
+    } catch {
+      // JSONL skip
+    }
+  }
+  return boot;
 }
 
 export function aggregate(steps) {
