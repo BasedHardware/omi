@@ -235,6 +235,37 @@ class RecoveryTests(unittest.TestCase):
         self.assertIn("Failed-step log tail", summary)
         self.assertIn("noise 249 token=<redacted>", summary)
 
+    def test_log_tail_redacts_query_tokens_github_pats_and_fence_breakers(self) -> None:
+        log = (
+            b"GET https://example.test/callback?token=supersecret&mode=test\n"
+            b"exchange https://example.test/oidc?foo=1&SOME_OIDC_TOKEN=oidc-secret-value\n"
+            b"redirect https://example.test/app#code=oauth-code-secret&state=xyz\n"
+            b"artifacts https://example.test/artifacts?build=42&arch=arm64&flavor=release\n"
+            b"auth github_pat_11ABCDEFG0123456789abcdefghijklmnopqrstuv\n"
+            b"jwt eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0In0.signature\n"
+            b"``` rm -rf / ```\n"
+        )
+        capsule = RECOVERY.build_capsule(
+            build_id=BUILD_ID,
+            token="not-recorded",
+            profiles=self.profiles(),
+            opener=self.opener(build_payload("Unknown Codemagic step"), log),
+        )
+        dumped = json.dumps(capsule)
+        self.assertNotIn("supersecret", dumped)
+        self.assertNotIn("oidc-secret-value", dumped)
+        self.assertNotIn("oauth-code-secret", dumped)
+        self.assertNotIn("github_pat_11ABCDEFG0123456789abcdefghijklmnopqrstuv", dumped)
+        self.assertNotIn("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", dumped)
+        self.assertIn("token=<redacted>", dumped)
+        self.assertIn("SOME_OIDC_TOKEN=<redacted>", dumped)
+        self.assertIn("code=<redacted>", dumped)
+        self.assertIn("&mode=test", dumped)
+        self.assertIn("?build=42&arch=arm64&flavor=release", dumped)
+        summary = RECOVERY.markdown_summary(capsule)
+        self.assertNotIn("``` rm -rf / ```", summary)
+        self.assertIn("''' rm -rf / '''", summary)
+
 
 if __name__ == "__main__":
     unittest.main()

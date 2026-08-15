@@ -8,9 +8,11 @@ on:
 permissions:
   contents: read
   issues: write
+  actions: read
+  checks: read
 
 concurrency:
-  group: desktop-release-doctor-${{ github.event_name }}
+  group: desktop-release-doctor
   cancel-in-progress: false
 
 jobs:
@@ -171,7 +173,7 @@ jobs:
 
           {
             printf 'The desktop beta freshness monitor is **unhealthy**.\n\n'
-            cat /tmp/desktop-beta-freshness.txt
+            cat /tmp/desktop-beta-freshness.txt 2>/dev/null || printf 'Freshness checker produced no summary; inspect the workflow run.\n'
             printf '\nWorkflow evidence: %s\n' "$RUN_URL"
           } > /tmp/desktop-beta-freshness-issue.md
           if [[ -n "$issue_number" ]]; then
