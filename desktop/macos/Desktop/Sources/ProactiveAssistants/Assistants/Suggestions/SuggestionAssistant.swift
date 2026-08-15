@@ -429,7 +429,8 @@ actor SuggestionAssistant: ProactiveAssistant {
         AnalyticsManager.shared.suggestionAssistantEvaluationFailed(
           identity: identity,
           shape: shape,
-          latency: Date().timeIntervalSince(startedAt)
+          latency: Date().timeIntervalSince(startedAt),
+          reason: SuggestionAssistantTelemetry.EvaluationFailureReason(error)
         )
       }
       throw error

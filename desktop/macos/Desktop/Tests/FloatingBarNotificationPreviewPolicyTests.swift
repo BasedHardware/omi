@@ -2,18 +2,15 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// Regression coverage for `FloatingBarNotificationPreviewPolicy` (issue #6765).
+/// Regression coverage for `FloatingBarNotificationPreviewPolicy` (issue #6765
+/// plus the bar-disabled temp-show contract).
 ///
-/// Proactive notifications default to `deliverSystemBanner: false`, so the
-/// Floating Bar in-app preview is their only delivery path today. Muting that
-/// preview without a fallback would silence those notifications entirely.
-/// These tests pin the policy that keeps a notification delivered via the
-/// native system banner only when the user *explicitly* muted in-bar previews
-/// while the Floating Bar stayed enabled. Merely disabling the Floating Bar
-/// must not force a banner: `NotificationService.sendNotification` documents
-/// that a contentless system banner (no conversation context) was previously
-/// reported as confusing, which is why floating-bar-only notifications stay
-/// silent when the bar itself is off — same as before this policy existed.
+/// Only the Notifications master toggle (and frequency gate in
+/// `NotificationService`) decide whether a notification is owed. The Ask Omi
+/// enable toggle controls persistent bar UI only: a disabled bar still presents
+/// via temp-show, then re-hides. Muting in-bar previews while the bar stays
+/// enabled is the one case that falls back to a native system banner so the
+/// notification is never fully silenced.
 final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   func testPreviewsAndBarEnabledShowsPreviewWithNoForcedBanner() {
     XCTAssertTrue(
@@ -24,13 +21,15 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
         previewsEnabled: true, floatingBarEnabled: true, deliverSystemBanner: false))
   }
 
-  func testFloatingBarDisabledSkipsPreviewWithNoForcedBanner() {
-    XCTAssertFalse(
+  func testFloatingBarDisabledPresentsViaTempShowWithNoForcedBanner() {
+    XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-        previewsEnabled: true, floatingBarEnabled: false))
+        previewsEnabled: true, floatingBarEnabled: false),
+      "bar disabled + notifications owed must still present the in-bar card via temp-show")
     XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
-        previewsEnabled: true, floatingBarEnabled: false, deliverSystemBanner: false))
+        previewsEnabled: true, floatingBarEnabled: false, deliverSystemBanner: false),
+      "disabling the bar must not force a contentless system banner")
   }
 
   func testPreviewsMutedSkipsPreviewAndFallsBackToBanner() {
@@ -42,13 +41,25 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
         previewsEnabled: false, floatingBarEnabled: true, deliverSystemBanner: false))
   }
 
-  func testFloatingBarDisabledStillNoForcedBannerEvenWithPreviewsMuted() {
-    XCTAssertFalse(
+  func testFloatingBarDisabledAndPreviewsMutedStillTempShowsTheCard() {
+    XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-        previewsEnabled: false, floatingBarEnabled: false))
+        previewsEnabled: false, floatingBarEnabled: false),
+      "previews muted + bar disabled must still temp-show the card; only the notification toggle silences")
     XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
-        previewsEnabled: false, floatingBarEnabled: false, deliverSystemBanner: false))
+        previewsEnabled: false, floatingBarEnabled: false, deliverSystemBanner: false),
+      "the combined muted+disabled case uses the card, not a system banner")
+  }
+
+  func testBarDisabledDoesNotSilenceWhenMasterNotificationsAreOffTheMasterGateDoes() {
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: true, floatingBarEnabled: false))
+    XCTAssertEqual(
+      InsightAssistantTelemetry.Reason.masterNotificationsDisabled.rawValue,
+      "master_notifications_disabled",
+      "bar disabled + notifications off is suppressed by NotificationService's master toggle, not by preview policy")
   }
 
   func testExplicitSystemBannerAlwaysDeliversRegardlessOfPreviewState() {

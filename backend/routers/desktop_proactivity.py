@@ -10,7 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from jsonschema import Draft202012Validator, SchemaError, ValidationError
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -62,6 +62,36 @@ class _ProviderRequest:
     headers: dict[str, str]
     payload: dict[str, Any]
     fallback_class: str
+
+
+@dataclass(frozen=True)
+class ProactiveQuotaState:
+    limit: int
+    remaining: int
+    reset_seconds: int
+
+
+_QUOTA_LIMIT_HEADER = "X-Proactive-Quota-Limit"
+_QUOTA_REMAINING_HEADER = "X-Proactive-Quota-Remaining"
+_QUOTA_RESET_HEADER = "X-Proactive-Quota-Reset"
+
+
+def _quota_headers(state: ProactiveQuotaState, *, include_retry_after: bool = False) -> dict[str, str]:
+    headers = {
+        _QUOTA_LIMIT_HEADER: str(state.limit),
+        _QUOTA_REMAINING_HEADER: str(state.remaining),
+        _QUOTA_RESET_HEADER: str(state.reset_seconds),
+    }
+    if include_retry_after:
+        headers["Retry-After"] = str(state.reset_seconds)
+    return headers
+
+
+def _apply_quota_headers(response: Response | None, state: ProactiveQuotaState | None) -> None:
+    if response is None or state is None:
+        return
+    for name, value in _quota_headers(state).items():
+        response.headers[name] = value
 
 
 def _dev_direct_provider_allowed() -> bool:
@@ -197,7 +227,7 @@ def _customer_subscription(uid: str) -> Subscription | None:
     )
 
 
-async def _consume_quota(uid: str, operation: ProactiveOperation) -> None:
+async def _consume_quota(uid: str, operation: ProactiveOperation) -> ProactiveQuotaState:
     operation_value = operation.value
     try:
         subscription = await run_blocking(
@@ -206,7 +236,7 @@ async def _consume_quota(uid: str, operation: ProactiveOperation) -> None:
             uid,
         )
         limit = _quota_limit_for_subscription(operation, subscription)
-        allowed, _, retry_after = await run_blocking(
+        allowed, remaining, reset_seconds = await run_blocking(
             critical_executor,
             redis_db.reserve_rate_limit,
             uid,
@@ -216,12 +246,14 @@ async def _consume_quota(uid: str, operation: ProactiveOperation) -> None:
         )
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Proactive metering is temporarily unavailable") from exc
+    state = ProactiveQuotaState(limit=limit, remaining=remaining, reset_seconds=reset_seconds)
     if not allowed:
         raise HTTPException(
             status_code=429,
             detail="Proactive request limit exceeded",
-            headers={"Retry-After": str(retry_after)},
+            headers=_quota_headers(state, include_retry_after=True),
         )
+    return state
 
 
 async def _release_quota(uid: str, operation: ProactiveOperation) -> None:
@@ -450,6 +482,7 @@ async def _post_provider_completion(
 @router.post("/v1/desktop/proactivity/completions", response_model=ProactiveCompletionEnvelope)
 async def proactive_completion(
     request: ProactiveCompletionRequest,
+    response: Response,
     uid: str = Depends(_authorized_desktop_user),
 ) -> ProactiveCompletionEnvelope:
     operation = request.operation.value
@@ -466,7 +499,8 @@ async def proactive_completion(
             response=response_body,
         )
 
-    await _consume_quota(uid, request.operation)
+    quota = await _consume_quota(uid, request.operation)
+    _apply_quota_headers(response, quota)
     request_id = str(uuid4())
     provider_request: _ProviderRequest | None = None
     direct_extraction_retry_attempted = False
