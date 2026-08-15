@@ -13,12 +13,32 @@ import OSLog
 /// # Reading it back
 ///
 /// ```sh
-/// log show --last 30m --predicate 'subsystem == "com.omi.context-for-claude"'
+/// /usr/bin/log show --info --last 30m --predicate 'subsystem == "com.omi.context-for-claude"'
 /// ```
+///
+/// Two things in that line are the difference between a diagnosis and "the app produces no log
+/// output at all", which is how a real investigation on 2026-08-15 spent its first hour:
+///
+/// - **`/usr/bin/log`, not `log`.** `log` is a **zsh builtin** (it prints the `watch` list), and it
+///   is the one that wins in an interactive zsh. `log show --predicate …` there does not reach the
+///   unified log at all — it fails with `log: too many arguments` and writes nothing to stdout,
+///   which reads as an app that logs nothing. Every invocation in this file is absolute for that
+///   reason, and so should every one anybody pastes into a bug report.
+/// - **`--info`, or two thirds of this file is invisible.** `info` is `OS_LOG_TYPE_INFO`, which
+///   `log show` does not print unless asked; see the level table below. Without the flag the query
+///   is not empty — it is correctly showing you the `milestone` and `error` lines only, and a quiet
+///   app can genuinely have none of those in a five-minute window.
 ///
 /// **Not `process == "Context for Claude"`.** That matches, but it also drags in every framework
 /// this process links — CoreAudio, CFNetwork, boringssl — and buries the app's own lines in
 /// thousands of them. The subsystem is the app's, and only the app's.
+///
+/// To hand a whole run to somebody, the same query over a window that contains it:
+///
+/// ```sh
+/// /usr/bin/log show --info --predicate 'subsystem == "com.omi.context-for-claude"' \
+///   --start "2026-08-15 11:39:00" --end "2026-08-15 11:45:00" --style compact
+/// ```
 ///
 /// # Which level survives long enough to debug with
 ///
