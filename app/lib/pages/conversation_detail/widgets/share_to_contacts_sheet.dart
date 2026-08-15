@@ -75,7 +75,8 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
     });
 
     // Request contacts permission using flutter_contacts' own method
-    final permissionGranted = await FlutterContacts.requestPermission();
+    final status = await FlutterContacts.permissions.request(PermissionType.readWrite);
+    final permissionGranted = status == PermissionStatus.granted || status == PermissionStatus.limited;
 
     if (!permissionGranted) {
       if (!mounted) return;
@@ -89,17 +90,18 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
 
     try {
       // Fetch contacts with phone numbers
-      final contacts = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
+      final contacts = await FlutterContacts.getAll(properties: {ContactProperty.phone});
 
       // Filter contacts that have phone numbers and create ShareableContact list
       final shareableContacts = <ShareableContact>[];
       for (final contact in contacts) {
         for (final phone in contact.phones) {
           if (phone.number.isNotEmpty) {
+            final displayName = contact.displayName;
             shareableContacts.add(
               ShareableContact(
                 id: '${contact.id}_${phone.number}',
-                displayName: contact.displayName.isNotEmpty ? contact.displayName : phone.number,
+                displayName: displayName != null && displayName.isNotEmpty ? displayName : phone.number,
                 phoneNumber: _cleanPhoneNumber(phone.number),
               ),
             );
