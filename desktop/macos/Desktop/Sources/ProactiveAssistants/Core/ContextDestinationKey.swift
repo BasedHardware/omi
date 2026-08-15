@@ -23,13 +23,28 @@ enum ContextDestinationKey {
   /// cohort be purged and lazily re-derived after a prompt or model change.
   static let derivationSource = "derived_destination:v1"
 
-  private static let browserTokens = [
-    "chrome", "safari", "firefox", "arc", "edge", "brave", "vivaldi", "opera",
+  /// Exact application names. Substring matching was wrong here: "Ledger Live"
+  /// contains "edge" and "Archive Utility" contains "arc", which would hand native
+  /// apps a browser-only code path.
+  private static let browserAppNames: Set<String> = [
+    "google chrome", "google chrome canary", "google chrome beta", "chromium", "safari",
+    "safari technology preview", "firefox", "firefox developer edition", "arc",
+    "microsoft edge", "brave browser", "vivaldi", "opera", "opera gx", "orion", "zen browser",
   ]
-  /// Domains the model must never emit: naming the browser would merge every tab.
-  private static let forbiddenDomains: Set<String> = [
-    "chrome", "google-chrome", "googlechrome", "browser", "safari", "firefox", "arc", "edge",
-    "brave", "vivaldi", "opera", "unknown", "localhost",
+  /// First domain labels the model must never emit: naming the browser would merge
+  /// every open tab into one bucket.
+  private static let forbiddenDomainLabels: Set<String> = [
+    "chrome", "chromium", "browser", "safari", "firefox", "arc", "edge", "brave", "vivaldi",
+    "opera", "orion", "unknown", "localhost", "newtab", "about", "file",
+  ]
+  /// Web messengers. A browser tab on one of these carries a single conversation in
+  /// its title, exactly like the native clients, so destination grouping would merge
+  /// distinct private threads — the worst outcome measured (6% precision) and the
+  /// reason routing is browser-scoped at all. Excluding them keeps that guarantee
+  /// from being reachable through the browser path.
+  private static let messengerHosts: Set<String> = [
+    "slack", "discord", "telegram", "whatsapp", "messenger", "teams", "signal", "matrix",
+    "element", "chat", "imessage", "zulip", "mattermost",
   ]
   /// Too generic to evidence a domain claim against a title.
   private static let genericDomainParts: Set<String> = [
@@ -37,8 +52,7 @@ enum ContextDestinationKey {
   ]
 
   static func isBrowser(appName: String) -> Bool {
-    let lowered = appName.lowercased()
-    return browserTokens.contains { lowered.contains($0) }
+    browserAppNames.contains(appName.lowercased().trimmingCharacters(in: .whitespaces))
   }
 
   /// The trailing site token of a window title (`… · acme/repo` → `acme/repo`).
@@ -78,9 +92,32 @@ enum ContextDestinationKey {
     guard !key.hasPrefix("unknown") else { return nil }
 
     let domain = key.split(separator: "/", maxSplits: 1).first.map(String.init) ?? key
-    guard !domain.isEmpty, !forbiddenDomains.contains(domain) else { return nil }
+    guard !domain.isEmpty else { return nil }
+    // Check the first label, not the whole string: `chrome.com/tabs` names the
+    // browser just as effectively as `chrome/tabs`.
+    let labels = domain.split(whereSeparator: { $0 == "." || $0 == "-" }).map(String.init)
+    guard let firstLabel = labels.first, !forbiddenDomainLabels.contains(firstLabel) else {
+      return nil
+    }
+    guard !labels.contains(where: { messengerHosts.contains($0) }) else { return nil }
+    // A web messenger reached through the browser must also stay per-title even when
+    // the model names a different domain, because the *title* is the conversation.
+    guard !titleLooksLikeMessenger(title) else { return nil }
     guard isGrounded(key: key, domain: domain, title: title) else { return nil }
     return subjectPrefix + key
+  }
+
+  private static func titleLooksLikeMessenger(_ title: String) -> Bool {
+    let tokens = tokenize(title)
+    return tokens.contains(where: { messengerHosts.contains($0) })
+  }
+
+  /// Word tokens of a title, lowercased.
+  private static func tokenize(_ value: String) -> Set<String> {
+    Set(
+      value.lowercased()
+        .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+        .map(String.init))
   }
 
   /// Requires the claimed domain to be evidenced by the title itself.
@@ -91,14 +128,22 @@ enum ContextDestinationKey {
   /// of recall, because every key it rejected belonged to a single-visit context.
   private static func isGrounded(key: String, domain: String, title: String) -> Bool {
     let haystack = title.lowercased()
-    // No minimum length here on purpose. `x.com` reduces to just "x" once the
-    // generic TLD is dropped, and X was ten of the fragmented buckets — a length
-    // floor silently made the single most fragmented site ineligible to merge.
-    // This matches the implementation the 89%-precision measurement was taken on.
+    let tokens = tokenize(title)
     let domainParts = domain.split(whereSeparator: { $0 == "." || $0 == "-" })
       .map(String.init)
       .filter { !genericDomainParts.contains($0) }
-    if domainParts.contains(where: { haystack.contains($0) }) { return true }
+
+    // Short labels must match a *whole* title token; only longer ones may match a
+    // substring. A plain substring test with no length floor let `x.com` ground
+    // against any title containing the letter x — "fix: thing #11 · acme/omi"
+    // grounded `x.com/feed`, permanently parking a GitHub tab in the X bucket.
+    // A length floor alone was also wrong: it dropped `x.com` entirely and made X,
+    // the single most fragmented site, ineligible to merge.
+    if domainParts.contains(where: { part in
+      part.count >= 4 ? haystack.contains(part) : tokens.contains(part)
+    }) {
+      return true
+    }
 
     let section = key.split(separator: "/", maxSplits: 1).dropFirst().joined(separator: "/")
     let sectionParts = section.split(whereSeparator: { "/-_ ".contains($0) })
@@ -129,13 +174,28 @@ enum ContextDestinationKey {
          path — never the individual post, message, issue or document currently open.
       4. Different websites, repositories, mailboxes and chat workspaces are ALWAYS
          different keys.
-      5. If you cannot confidently identify the website, answer exactly
-         "unknown/\(title)". Never guess a domain you are unsure of.
+      5. If you cannot confidently identify the website, answer exactly "unknown/".
+         Never guess a domain you are unsure of.
       """
+    // The title reaches the model through the `Window:` line above, which sits under
+    // `untrustedPreamble`. It must not be interpolated into the rules themselves:
+    // a page controls its own title, and a newline inside one would let it append
+    // instructions that read as rule text rather than as quoted data.
     if let hint = siteHint(title: title) {
-      fragment += "\n\nTrailing site token: \(hint)"
+      fragment += "\n\nTrailing site token: \(singleLine(hint))"
     }
     return fragment
+  }
+
+  /// Collapses newlines and control characters so untrusted text cannot forge
+  /// prompt structure, and clamps length.
+  private static func singleLine(_ value: String) -> String {
+    let flattened = value.unicodeScalars
+      .map { CharacterSet.newlines.contains($0) || CharacterSet.controlCharacters.contains($0) ? " " : Character($0) }
+      .reduce(into: "") { $0.append($1) }
+    let collapsed = flattened.replacingOccurrences(
+      of: #"\s+"#, with: " ", options: .regularExpression)
+    return String(collapsed.trimmingCharacters(in: .whitespaces).prefix(60))
   }
 
   /// Non-browser contexts still receive the field because OpenAI strict structured
@@ -186,6 +246,20 @@ enum ContextDestinationBinder {
       // Another title already owns this destination: point future visits there.
       // Entries already written stay put — re-parenting historical facts is the
       // one operation that could retroactively poison an accumulated bucket.
+      //
+      // Freshness must still move. `finalizeVisit` credits the visit to the
+      // per-title bucket, and `context_visits.bucketID` keeps pointing there, so
+      // without this the destination looks untouched: stale GC (30-day
+      // `lastVisitedAt`) and overflow GC (keep newest 250) would both prefer
+      // deleting the destination over the orphans feeding it. That is worst for
+      // exactly the visit-once-and-never-return titles this feature exists to join.
+      try db.execute(
+        sql: """
+          UPDATE context_buckets
+          SET visitCount = visitCount + 1, lastVisitedAt = ?, updatedAt = ?
+          WHERE id = ?
+          """,
+        arguments: [now, now, existing])
       resolved = existing
     } else {
       // Claim the destination for this bucket. Safe against the
