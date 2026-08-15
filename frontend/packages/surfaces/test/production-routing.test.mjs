@@ -179,21 +179,24 @@ test("what actually rendered is observable from outside the bundle", async () =>
   // A script or shell must be able to tell these three apart. Before this, it could not.
   assert.match(main, /__OMI_RUNTIME_STATE__/);
   assert.match(main, /dataset\["generationMemories"\]/);
-  assert.match(main, /dataset\["renderedMemoriesGeneration"\]/);
+  assert.match(main, /"renderedMemoriesGeneration"/);
+  assert.match(main, /"renderedConversationsGeneration"/);
+  assert.match(main, /"renderedFoldersGeneration"/);
   assert.match(main, /OMI_GENERATION_MISMATCH/);
   assert.match(main, /OMI_GENERATION_REJECTED/);
   // The ready line carries the same facts for log scrapers.
   assert.match(main, /OMI_PRODUCTION_READY route=\$\{route\} state=\$\{state\}/);
   assert.match(main, /rendered\?\.memoriesGeneration/);
+  assert.match(main, /rendered\?\.conversationsGeneration/);
+  assert.match(main, /rendered\?\.foldersGeneration/);
 
   // Every live render records what it rendered — otherwise `rendered` stays null and the
-  // mismatch alarm can never fire.
+  // mismatch alarm can never fire. Conversations and Folders must record the generation
+  // they actually opened, not a hardcoded string.
   for (const marker of [
     'markRendered("memories-platform", "platform")',
-    'markRendered("home", memoriesGeneration)',
+    'markRendered("home", memoriesGeneration, { conversations: conversationsGeneration })',
     'markRendered("tasks", null)',
-    'markRendered("conversations", null)',
-    'markRendered("folders", null)',
     'markRendered(route, null)',
     'markRendered("listen", null)',
     'markRendered("chat", null)',
@@ -202,6 +205,11 @@ test("what actually rendered is observable from outside the bundle", async () =>
   ]) {
     assert.ok(main.includes(marker), `bootstrap does not record ${marker}`);
   }
+  assert.match(main, /markRendered\("conversations", null, \{/);
+  assert.match(main, /conversations: conversationsGeneration/);
+  assert.match(main, /markRendered\("folders", null, \{ folders: foldersGeneration \}/);
+  assert.doesNotMatch(main, /markRendered\("conversations", "(?:legacy|platform)"/);
+  assert.doesNotMatch(main, /markRendered\("folders", "(?:legacy|platform)"/);
   assert.match(main, /createProductionListenHostSocketFactory/);
   assert.doesNotMatch(
     main,

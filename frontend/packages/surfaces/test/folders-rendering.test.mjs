@@ -77,6 +77,10 @@ test("Folders keeps saved rows visible when a later list read fails", async () =
     await settle(rendered);
     const main = rendered.container.querySelector('main[data-route="folders"]');
     assert.equal(main?.querySelector(".production-lifecycle-region")?.getAttribute("data-phase"), "saved-but-refresh-failed");
+    assert.equal(
+      main?.querySelector(".status-notice")?.textContent,
+      EN_MESSAGES["lifecycle.savedFailed"],
+    );
     assert.ok(main?.querySelector(".folders-list")?.textContent?.includes("Work"));
     assert.ok(main?.querySelector(".lifecycle-retry"), "saved failure leaves an actionable retry");
     assert.equal(main?.querySelector('[data-empty-kind]'), null, "saved rows are not replaced by an empty claim");
@@ -102,4 +106,40 @@ test("Folders empty state leads to the complete conversation list", async () => 
   } finally {
     await rendered.cleanup();
   }
+});
+
+function folderStub(name) {
+  return {
+    async list() { return []; },
+    status() { return { refresh: { phase: "ready", hasSavedData: false }, queue: { phase: "idle", pendingCount: 0 } }; },
+    subscribe() { return () => {}; },
+    async refresh() {},
+    label: name,
+  };
+}
+
+test("openFolderRouteSource on a platform selection never opens the legacy store", async () => {
+  const openFolderRouteSource = await loadProductionExport("folder-sources.ts", "openFolderRouteSource");
+  const calls = { folders: 0, platformFolders: 0 };
+  const { foldersGeneration } = await openFolderRouteSource({
+    selection: { memories: "platform", conversations: "platform", folders: "platform", tasks: "legacy" },
+    async openFolders() { calls.folders += 1; return folderStub("legacy-folders"); },
+    async openPlatformFolders() { calls.platformFolders += 1; return folderStub("platform-folders"); },
+  });
+  assert.equal(foldersGeneration, "platform");
+  assert.deepEqual(calls, { folders: 0, platformFolders: 1 });
+  // red-proof: routing Folders through openFolders() under a platform selection
+  // hits the unpaginated legacy array this service dual-serves.
+});
+
+test("openFolderRouteSource on a legacy selection stays on the legacy store", async () => {
+  const openFolderRouteSource = await loadProductionExport("folder-sources.ts", "openFolderRouteSource");
+  const calls = { folders: 0, platformFolders: 0 };
+  const { foldersGeneration } = await openFolderRouteSource({
+    selection: { memories: "legacy", conversations: "legacy", folders: "legacy", tasks: "legacy" },
+    async openFolders() { calls.folders += 1; return folderStub("legacy-folders"); },
+    async openPlatformFolders() { calls.platformFolders += 1; return folderStub("platform-folders"); },
+  });
+  assert.equal(foldersGeneration, "legacy");
+  assert.deepEqual(calls, { folders: 1, platformFolders: 0 });
 });

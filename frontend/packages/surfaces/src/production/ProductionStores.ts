@@ -238,13 +238,14 @@ export type PlatformProductionStoreFactory = ProductionStoreFactory & {
   openPlatformTasks(): Promise<ProductionPlatformTaskStore>;
   /**
    * Named platform conversations store. `openConversations()` stays on the
-   * legacy adapter. Home asks for this port by name; it does not repoint
-   * `openConversations()`.
+   * legacy adapter. Routes that want the platform read model ask for this
+   * port by name; they do not repoint `openConversations()`.
    */
   openPlatformConversations(): Promise<ProductionPlatformConversationStore>;
   /**
-   * Named platform folders store. `openFolders()` stays on the legacy adapter
-   * until the next lane repoints Home.
+   * Named platform folders store. `openFolders()` stays on the legacy adapter.
+   * Routes that want the platform read model ask for this port by name; they
+   * do not repoint `openFolders()`.
    */
   openPlatformFolders(): Promise<ProductionPlatformFolderStore>;
   /** Named live Chat seam. C3b3 owns routing a production surface to it. */

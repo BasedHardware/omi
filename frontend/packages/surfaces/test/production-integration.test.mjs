@@ -85,8 +85,9 @@ test("bootstrap chooses backend generation through one production factory", asyn
   const main = await read("src/production/main.tsx");
   const stores = await read("src/production/ProductionStores.ts");
   // The bootstrap now builds the PLATFORM factory for every route. It extends the legacy
-  // factory, so legacy domains are unchanged — which is exactly what lets Memories move
-  // generation while Tasks/Conversations/Folders stay put (board ruling PR-1).
+  // factory, so `openConversations()` / `openFolders()` / `openTasks()` stay the legacy
+  // writable ports. Conversations and Folders routes branch to the named platform
+  // ports the same way Home does.
   // The factory receives the ALREADY-RESOLVED selection, not the raw host input: the route
   // is computed from that same selection, so resolving twice risks the two disagreeing.
   assert.match(main, /createPlatformProductionStoreFactory\(/);
@@ -101,7 +102,7 @@ test("bootstrap chooses backend generation through one production factory", asyn
   assert.match(main, /OMI_GENERATION_SELECTION/);
 
   assert.match(main, /openHomeSearchSources\(platform\)/);
-  assert.match(main, /markRendered\("home", memoriesGeneration\)/);
+  assert.match(main, /markRendered\("home", memoriesGeneration/);
   assert.doesNotMatch(main, /markRendered\("home", "legacy"\)/);
   assert.doesNotMatch(main, /route === "home"[\s\S]{0,400}openMemories\(\)/);
 
@@ -117,11 +118,39 @@ test("bootstrap chooses backend generation through one production factory", asyn
   assert.match(homeSources, /stores\.selection\.conversations === "platform"/);
   assert.match(homeSources, /openMemories\(\)/);
   assert.match(homeSources, /openConversations\(\)/);
+
+  const conversationSources = await read("src/production/conversation-sources.ts");
+  const folderSources = await read("src/production/folder-sources.ts");
+  assert.match(main, /openConversationRouteSources\(platform\)/);
+  assert.match(main, /openFolderRouteSource\(platform\)/);
+  assert.match(conversationSources, /openPlatformConversations\(\)/);
+  assert.match(conversationSources, /openPlatformFolders\(\)/);
+  assert.match(conversationSources, /conversationsGeneration === "platform"/);
+  assert.match(conversationSources, /foldersGeneration === "platform"/);
+  assert.match(folderSources, /openPlatformFolders\(\)/);
+  assert.match(folderSources, /foldersGeneration === "platform"/);
+  assert.doesNotMatch(main, /route === "conversations"[\s\S]{0,400}stores\.openConversations\(\)/);
+  assert.doesNotMatch(main, /route === "folders"[\s\S]{0,200}stores\.openFolders\(\)/);
+  // Completeness is the server's envelope, never derived at the route. The
+  // platform adapters already carry `page.completeness.status`; these sources
+  // must not invent a complete flag of their own.
+  assert.match(
+    await read("../adapters-platform/src/conversations.ts"),
+    /complete: page\.completeness\.status === "complete"/,
+  );
+  assert.match(
+    await read("../adapters-platform/src/folders.ts"),
+    /complete: page\.completeness\.status === "complete"/,
+  );
+  assert.doesNotMatch(conversationSources, /complete:\s*(true|false|items\.length)/);
+  assert.doesNotMatch(folderSources, /complete:\s*(true|false|items\.length)/);
   // red-proof: dropping the `route === "memories"` conjunct makes `?generation=platform`
   // render propositions on every route, including Tasks. Dropping the REJECTED log lets a
   // client believe it is on the new backend while reading the legacy wire — the single
   // worst outcome available here.
   // Home calling openMemories() under a platform selection is the other form of that lie.
+  // Conversations/Folders calling openConversations()/openFolders() under a platform
+  // selection is the same lie on those routes.
 
   assert.match(stores, /export type ProductionStoreFactory/);
   assert.match(stores, /openMemories\(\)/);
