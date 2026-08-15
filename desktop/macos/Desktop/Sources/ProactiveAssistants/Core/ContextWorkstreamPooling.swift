@@ -66,7 +66,7 @@ enum ContextWorkstreamPooling {
 
   private static let scaffoldingPrefixes = [
     "identifier", "ambient narrative", "evidence fragment", "evidence record",
-    "proposed record", "proposal ",
+    "proposed record", "proposed fact", "proposal ", "proposal:",
   ]
 
   /// Extraction-model scaffolding re-copied into `statement` reads as prose but

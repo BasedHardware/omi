@@ -427,26 +427,6 @@ actor ContextBucketStore {
     }
   }
 
-  /// Active workstream labels for the extraction prompt's closed vocabulary,
-  /// most recently used first. Read-only and advisory: failure means an empty
-  /// vocabulary, which only weakens label reuse for one extraction.
-  func activeWorkstreamTags(now: Date = Date(), limit: Int = 12) async -> [String] {
-    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let pool else { return [] }
-    return
-      (try? await pool.read { db in
-        try String.fetchAll(
-          db,
-          sql: """
-            SELECT workstreamTag FROM bucket_facts
-            WHERE workstreamTag IS NOT NULL AND validityState = 'validated'
-              AND (expiresAt IS NULL OR expiresAt > ?)
-            GROUP BY workstreamTag ORDER BY MAX(createdAt) DESC LIMIT ?
-            """,
-          arguments: [now, max(0, limit)])
-      }) ?? []
-  }
-
   /// The workstream to pool for this evaluation: the visit's own validated fact
   /// tags first, else the bucket's overwhelming-majority tag. Nil (no pooling)
   /// on any failure or ambiguity — the safe direction.

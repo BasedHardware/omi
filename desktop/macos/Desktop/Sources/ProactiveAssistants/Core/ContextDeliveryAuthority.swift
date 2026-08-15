@@ -40,8 +40,11 @@ struct ContextDeliveryAttempt: Equatable, Sendable {
 /// A successfully presented director notification for one bucket, used only as
 /// bounded prompt context. This is a signal to the model, not a delivery gate.
 struct ContextBucketRecentDelivery: Equatable, Sendable, Decodable, FetchableRecord {
-  static let promptCap = 3
-  static let summaryCharacterLimit = 120
+  static let promptCap = 6
+  static let summaryCharacterLimit = 320
+  /// Delivery memory outlives notification expiry so the director cannot
+  /// forget, and re-send, a point it already delivered earlier in the day.
+  static let memoryLookback: TimeInterval = 6 * 60 * 60
 
   let decisionType: String
   let message: String?
@@ -304,9 +307,12 @@ extension ContextBucketStore {
     }
   }
 
-  /// Newest successfully presented notifications for this bucket. Bounded so
-  /// the director prompt cannot grow without limit. Failed/suppressed rows are
-  /// excluded: the model should see what the user actually received.
+  /// Newest successfully presented notifications for this bucket within the
+  /// delivery-memory lookback. Bounded so the director prompt cannot grow
+  /// without limit. Failed/suppressed rows are excluded: the model should see
+  /// what the user actually received. Lookback is on `deliveredAt`, not
+  /// notification expiry, so a delivered point cannot be forgotten and re-sent
+  /// once its banner expires.
   func recentDeliveredForBucket(
     bucketID: String,
     now: Date = Date(),
@@ -325,11 +331,13 @@ extension ContextBucketStore {
             WHERE bucketID = ?
               AND lifecycleState = 'delivered'
               AND deliveredAt IS NOT NULL
-              AND expiresAt > ?
+              AND deliveredAt >= ?
             ORDER BY deliveredAt DESC
             LIMIT ?
             """,
-          arguments: [bucketID, now, cap])
+          arguments: [
+            bucketID, now.addingTimeInterval(-ContextBucketRecentDelivery.memoryLookback), cap,
+          ])
       }) ?? []
   }
 

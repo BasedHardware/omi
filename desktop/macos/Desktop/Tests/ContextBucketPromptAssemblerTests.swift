@@ -21,26 +21,22 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     let expected =
       [
         ScreenDerivedContent.untrustedPreamble,
-        "Produce a 150-400 token ambient narrative and discrete factual records. Facts are",
-        "proposals; include an identifier, surviving evidence text, and evidence ref for each.",
-        "Also set each fact's \"workstream\": the durable project or activity its content belongs",
-        "to, judged by the content itself rather than by which app is open. Strongly prefer one",
-        "of the active labels: none yet. Only when none fits, coin one new short",
-        "kebab-case label for a durable project, or answer \"unknown\" for generic activity you",
-        "cannot place.",
+        "Write a 150-400 token summary of what is happening, then discrete factual records.",
+        "Each statement must be a plain declarative sentence a colleague could act on. Do not",
+        "label, number, or prefix statements.",
+        "Good: Nik asked for the demo recording before tomorrow's launch video.",
+        "Bad: Ambient narrative: the user appears to be coordinating a recording workflow.",
+        "Fill identifiers with names, ticket numbers, or other handles copied from the quoted",
+        "on-screen text. Fill evidence_text with that supporting on-screen wording. Put this",
+        "ref in every evidence_refs list: screenshot:42",
         "App: Xcode",
         "Window: PR-123",
-        "Evidence ref: screenshot:42",
       ].joined(separator: "\n")
       // Xcode is not a browser, so destination routing must not be offered here —
       // only the abstention that satisfies the strict-schema required field.
       + "\n\nSet \"destination\" to \"\(ContextDestinationKey.abstention)\"."
 
     XCTAssertEqual(prompt, expected)
-
-    let withVocabulary = ContextProactivityPromptBuilder.extractionPrompt(
-      frame: frame, fence: fence, workstreamVocabulary: ["omi", "spudpay"])
-    XCTAssertTrue(withVocabulary.contains("of the active labels: omi, spudpay."))
   }
 
   func testExtractionPromptFallsBackToVisitEvidenceRefWithoutScreenshot() {
@@ -52,7 +48,8 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
 
     // Safari is a browser, but a blank window title carries no destination signal,
     // so this must still fall through to abstention rather than inviting a guess.
-    XCTAssertTrue(prompt.contains("App: Safari\nWindow: \nEvidence ref: visit:123"))
+    XCTAssertTrue(prompt.contains("App: Safari\nWindow: "))
+    XCTAssertTrue(prompt.contains("ref in every evidence_refs list: visit:123"))
     XCTAssertTrue(prompt.hasSuffix("Set \"destination\" to \"\(ContextDestinationKey.abstention)\"."))
     XCTAssertFalse(prompt.contains("page-group"))
   }
@@ -96,8 +93,11 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       "update, recommendation, or useful follow-up without an explicit commitment, promise, or",
       "request is insight or suggest; never infer an owner or due date and never create a task",
       "candidate from actionability alone.",
-      "Do not re-deliver a point already delivered for this bucket unless the validated facts",
-      "add something materially new. Prefer silence over restating.",
+      "Do not restate what is already visible on the user's screen. Speak only when you add",
+      "something they cannot currently see: a commitment, a deadline, a conflict, or a",
+      "connection to other work.",
+      "The recently-delivered list is a prohibition, not background. Do not re-send a point",
+      "already delivered, even reworded.",
       "Timestamps supplied below are already in the user's local time zone. When a message",
       "mentions a date or time, use that local form as written; never convert to or mention UTC.",
       "",
@@ -161,8 +161,11 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       "update, recommendation, or useful follow-up without an explicit commitment, promise, or",
       "request is insight or suggest; never infer an owner or due date and never create a task",
       "candidate from actionability alone.",
-      "Do not re-deliver a point already delivered for this bucket unless the validated facts",
-      "add something materially new. Prefer silence over restating.",
+      "Do not restate what is already visible on the user's screen. Speak only when you add",
+      "something they cannot currently see: a commitment, a deadline, a conflict, or a",
+      "connection to other work.",
+      "The recently-delivered list is a prohibition, not background. Do not re-send a point",
+      "already delivered, even reworded.",
       "Timestamps supplied below are already in the user's local time zone. When a message",
       "mentions a date or time, use that local form as written; never convert to or mention UTC.",
       "",
@@ -177,6 +180,7 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       "Captured at: 2023-11-14 17:13 EST",
       "",
       "== RECENTLY DELIVERED FOR THIS BUCKET ==",
+      "Do not re-send any of these points, even reworded.",
       "- resurface (1m ago): Keep the investigation open",
       "- insight (26m ago): Status changed",
     ].joined(separator: "\n")
@@ -211,7 +215,7 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       snapshot: snapshot, tasks: [], frame: frame, recentDeliveries: [])
     XCTAssertFalse(empty.contains("== RECENTLY DELIVERED FOR THIS BUCKET =="))
 
-    let overflow = (0..<5).map { index in
+    let overflow = (0..<8).map { index in
       ContextBucketRecentDelivery(
         decisionType: "resurface",
         message: "nudge-\(index)",
@@ -223,14 +227,32 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       ContextProactivityPromptBuilder.recentDeliveriesSection(overflow, now: capturedAt),
       """
       == RECENTLY DELIVERED FOR THIS BUCKET ==
+      Do not re-send any of these points, even reworded.
       - resurface (1m ago): nudge-0
       - resurface (2m ago): nudge-1
       - resurface (3m ago): nudge-2
+      - resurface (4m ago): nudge-3
+      - resurface (5m ago): nudge-4
+      - resurface (6m ago): nudge-5
       """)
     XCTAssertTrue(capped.contains("- resurface (1m ago): nudge-0"))
-    XCTAssertTrue(capped.contains("- resurface (3m ago): nudge-2"))
-    XCTAssertFalse(capped.contains("nudge-3"))
-    XCTAssertFalse(capped.contains("nudge-4"))
+    XCTAssertTrue(capped.contains("- resurface (6m ago): nudge-5"))
+    XCTAssertFalse(capped.contains("nudge-6"))
+    XCTAssertFalse(capped.contains("nudge-7"))
+  }
+
+  func testBoundedSummaryKeepsDistinguishingContentPastTheOldTruncatePoint() {
+    let distinguishing = "the beta rollout is still incomplete because the legacy PostHog path is live"
+    let shortEnough = String(repeating: "x", count: 120) + distinguishing
+    XCTAssertTrue(shortEnough.count > 120)
+    XCTAssertTrue(shortEnough.count < ContextBucketRecentDelivery.summaryCharacterLimit)
+    XCTAssertEqual(
+      ContextProactivityPromptBuilder.boundedSummary(shortEnough),
+      shortEnough)
+    let overLimit = String(repeating: "y", count: ContextBucketRecentDelivery.summaryCharacterLimit + 40)
+    XCTAssertEqual(
+      ContextProactivityPromptBuilder.boundedSummary(overLimit).count,
+      ContextBucketRecentDelivery.summaryCharacterLimit)
   }
 
   func testDirectorTaskContextBoundsDescription() {
@@ -297,6 +319,34 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       BucketFactValidator.validity(
         identifiers: ["PR-123"], evidenceText: "same", evidenceRefs: ["visit:1"], duplicate: true),
       .superseded)
+  }
+
+  func testAcceptedIdentifiersDropBookkeepingAndHandlesAbsentFromQuotedText() {
+    XCTAssertEqual(
+      BucketFactValidator.acceptedIdentifiers(
+        ["fact-001", "f-002", "FTN-003", "visit:327", "screenshot:42", "PR-123", "Nik"],
+        evidenceText: "Nik asked for the demo recording. PR-123 is the launch blocker."),
+      ["PR-123", "Nik"])
+    XCTAssertEqual(
+      BucketFactValidator.acceptedIdentifiers(["Acme"], evidenceText: "the board was lying"),
+      [])
+  }
+
+  func testExtractionSchemaOmitsWorkstream() throws {
+    let properties = try XCTUnwrap(
+      ContextBucketRollupWriter.schema["properties"] as? [String: Any])
+    let facts = try XCTUnwrap(properties["facts"] as? [String: Any])
+    let items = try XCTUnwrap(facts["items"] as? [String: Any])
+    let factProperties = try XCTUnwrap(items["properties"] as? [String: Any])
+    let required = try XCTUnwrap(items["required"] as? [String])
+    XCTAssertNil(factProperties["workstream"])
+    XCTAssertFalse(required.contains("workstream"))
+    XCTAssertEqual(
+      Set(required),
+      [
+        "statement", "identifiers", "evidence_text", "evidence_refs", "confidence",
+        "notify_worthiness",
+      ])
   }
 
   func testCanonicalIdentifierSetKeyIsNormalizationOnlyAndKeepsDistinctSetsSeparate() {

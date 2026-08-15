@@ -9,15 +9,9 @@ struct BucketExtraction: Codable, Equatable, Sendable {
     let evidenceRefs: [String]
     let confidence: Double
     let notifyWorthiness: Double
-    /// Proposed workstream label, `unknown` when the model abstains.
-    ///
-    /// Optional so a response predating this field still decodes (same
-    /// `decodeIfPresent` reasoning as `destination` below); `var` with a
-    /// default keeps the memberwise initializer source-compatible.
-    var workstream: String? = nil
 
     enum CodingKeys: String, CodingKey {
-      case statement, identifiers, confidence, workstream
+      case statement, identifiers, confidence
       case evidenceText = "evidence_text"
       case evidenceRefs = "evidence_refs"
       case notifyWorthiness = "notify_worthiness"
@@ -103,6 +97,18 @@ enum BucketFactValidator {
       && !evidenceRefs.isEmpty
     return hasIdentifier && evidenceResolves ? .validated : .needsReview
   }
+
+  /// Model bookkeeping (`fact-001`, `f-002`, `visit:3`) and handles that never
+  /// appear in the quoted on-screen wording are not identifiers.
+  static let bookkeepingIdentifierPattern = #"^(fact|f|ftn|visit|screenshot)[-:_ ]?\d+$"#
+
+  static func acceptedIdentifiers(_ identifiers: [String], evidenceText: String) -> [String] {
+    identifiers.filter { identifier in
+      identifier.range(
+        of: bookkeepingIdentifierPattern, options: [.regularExpression, .caseInsensitive]
+      ) == nil && evidenceText.contains(identifier)
+    }
+  }
 }
 
 enum ContextBucketPromptAssembler {
@@ -160,38 +166,28 @@ struct ContextDirectorTaskContext: Equatable, Sendable {
 
 enum ContextProactivityPromptBuilder {
   static func extractionPrompt(
-    frame: CapturedFrame, fence: ContextVisitFence, workstreamVocabulary: [String] = []
+    frame: CapturedFrame, fence: ContextVisitFence
   ) -> String {
     let evidenceRef = frame.screenshotId.map { "screenshot:\($0)" } ?? "visit:\(fence.visitID)"
     return extractionPrompt(
-      appName: frame.appName, windowTitle: frame.windowTitle, evidenceRef: evidenceRef,
-      workstreamVocabulary: workstreamVocabulary)
+      appName: frame.appName, windowTitle: frame.windowTitle, evidenceRef: evidenceRef)
   }
 
   static func extractionPrompt(
-    appName: String, windowTitle: String?, evidenceRef: String,
-    workstreamVocabulary: [String] = []
+    appName: String, windowTitle: String?, evidenceRef: String
   ) -> String {
-    // Closed-vocabulary bias: reusing an active label is what makes context from
-    // different apps collide in one workstream, so existing labels are quoted and
-    // coining a new one is framed as the exception.
-    let activeLabels =
-      workstreamVocabulary.isEmpty
-      ? "none yet"
-      : workstreamVocabulary.map { ContextDestinationKey.singleLine($0, limit: 40) }
-        .joined(separator: ", ")
     let base = """
       \(ScreenDerivedContent.untrustedPreamble)
-      Produce a 150-400 token ambient narrative and discrete factual records. Facts are
-      proposals; include an identifier, surviving evidence text, and evidence ref for each.
-      Also set each fact's "workstream": the durable project or activity its content belongs
-      to, judged by the content itself rather than by which app is open. Strongly prefer one
-      of the active labels: \(activeLabels). Only when none fits, coin one new short
-      kebab-case label for a durable project, or answer "unknown" for generic activity you
-      cannot place.
+      Write a 150-400 token summary of what is happening, then discrete factual records.
+      Each statement must be a plain declarative sentence a colleague could act on. Do not
+      label, number, or prefix statements.
+      Good: Nik asked for the demo recording before tomorrow's launch video.
+      Bad: Ambient narrative: the user appears to be coordinating a recording workflow.
+      Fill identifiers with names, ticket numbers, or other handles copied from the quoted
+      on-screen text. Fill evidence_text with that supporting on-screen wording. Put this
+      ref in every evidence_refs list: \(evidenceRef)
       App: \(appName)
       Window: \(ContextDestinationKey.singleLine(windowTitle ?? "", limit: 160))
-      Evidence ref: \(evidenceRef)
       """
     // Browser-scoped by design. Unscoped destination labelling was measured at 6%
     // precision: the model answers `telegram` for every thread and collapses
@@ -271,8 +267,11 @@ enum ContextProactivityPromptBuilder {
       update, recommendation, or useful follow-up without an explicit commitment, promise, or
       request is insight or suggest; never infer an owner or due date and never create a task
       candidate from actionability alone.
-      Do not re-deliver a point already delivered for this bucket unless the validated facts
-      add something materially new. Prefer silence over restating.
+      Do not restate what is already visible on the user's screen. Speak only when you add
+      something they cannot currently see: a commitment, a deadline, a conflict, or a
+      connection to other work.
+      The recently-delivered list is a prohibition, not background. Do not re-send a point
+      already delivered, even reworded.
       Timestamps supplied below are already in the user's local time zone. When a message
       mentions a date or time, use that local form as written; never convert to or mention UTC.\(lookup)
 
@@ -329,6 +328,7 @@ enum ContextProactivityPromptBuilder {
     }
     return """
       == RECENTLY DELIVERED FOR THIS BUCKET ==
+      Do not re-send any of these points, even reworded.
       \(lines.joined(separator: "\n"))
       """
   }
@@ -457,13 +457,17 @@ extension ContextBucketStore {
         }
         for fact in extraction.facts.prefix(20) {
           let statement = String(fact.statement.prefix(500))
+          if ContextWorkstreamPooling.isScaffolding(statement) { continue }
           let evidenceText = String(fact.evidenceText.prefix(1_000))
           let evidenceRefs = BucketFactValidator.resolvableEvidenceRefs(
             Array(fact.evidenceRefs.prefix(10)), allowed: allowedEvidenceRefs)
-          let identifiers = fact.identifiers.prefix(8).map {
-            String($0.prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
-          }
-          .filter { !$0.isEmpty }
+          let identifiers = BucketFactValidator.acceptedIdentifiers(
+            Array(
+              fact.identifiers.prefix(8).map {
+                String($0.prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
+              }
+              .filter { !$0.isEmpty }),
+            evidenceText: evidenceText)
           paraphraseObserved =
             paraphraseObserved
             || BucketFactValidator.hasParaphraseMatch(
@@ -494,7 +498,7 @@ extension ContextBucketStore {
               evidenceText,
               String(data: try evidenceEncoder.encode(evidenceRefs), encoding: .utf8) ?? "[]",
               validity.rawValue, min(max(fact.confidence, 0), 1), worthiness,
-              ContextWorkstreamTag.sanitize(fact.workstream), now, now,
+              nil as String?, now, now,
             ])
           if validity == .validated {
             existingFactIdentities.append(
@@ -774,8 +778,7 @@ actor ContextBucketRollupWriter {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.fenceIsValid(fence)
     else { return }
-    let prompt = ContextProactivityPromptBuilder.extractionPrompt(
-      frame: frame, fence: fence, workstreamVocabulary: await store.activeWorkstreamTags())
+    let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
     do {
       let result = try await client.complete(
         operation: ModelQoS.Proactivity.extractionOperation,
@@ -866,14 +869,10 @@ actor ContextBucketRollupWriter {
               "evidence_refs": ["type": "array", "items": ["type": "string"]],
               "confidence": ["type": "number"],
               "notify_worthiness": ["type": "number"],
-              "workstream": ["type": "string"],
             ],
-            // Strict structured output requires every declared property listed as
-            // required, so the prompt tells the model to answer "unknown" when it
-            // cannot place a fact in a workstream.
             "required": [
               "statement", "identifiers", "evidence_text", "evidence_refs", "confidence",
-              "notify_worthiness", "workstream",
+              "notify_worthiness",
             ],
             "additionalProperties": false,
           ],

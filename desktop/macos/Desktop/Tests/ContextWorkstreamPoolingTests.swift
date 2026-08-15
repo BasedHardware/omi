@@ -57,6 +57,7 @@ final class ContextWorkstreamPoolingTests: XCTestCase {
       item("below-floor", worthiness: 0.2),
       item("scaffold", statement: "Identifier proposal: visit:18"),
       item("narrative", statement: "Ambient narrative: a quiet scene unfolds"),
+      item("proposed-fact", statement: "Proposed fact 1 — The board was lying"),
     ]
     // Four eligible facts in one bucket: the per-bucket cap keeps three.
     for index in 0..<4 {
@@ -72,6 +73,7 @@ final class ContextWorkstreamPoolingTests: XCTestCase {
     XCTAssertFalse(selected.contains { $0.factID == "below-floor" })
     XCTAssertFalse(selected.contains { $0.factID == "scaffold" })
     XCTAssertFalse(selected.contains { $0.factID == "narrative" })
+    XCTAssertFalse(selected.contains { $0.factID == "proposed-fact" })
     XCTAssertEqual(
       selected.filter { $0.bucketID == "chatty" }.count, ContextWorkstreamPooling.maximumPerBucket)
   }
