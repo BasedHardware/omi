@@ -194,8 +194,23 @@ enum ContextProactivityPromptBuilder {
     """
   }
 
-  static func directorStablePrompt(snapshot: ContextBucketSnapshot) -> String {
+  /// The lookup instruction is static text: it must be identical for the first
+  /// and second director calls of a visit so both share one cached prefix, and
+  /// it therefore describes both states ("when that section is present…"). It is
+  /// gated on `allowLookup` so the flag-off prompt stays byte-identical to today.
+  static let directorLookupInstruction = """
+    If a question that is actually part of this context needs information absent from
+    everything supplied here, set lookup_query to one short search phrase naming the missing
+    thing; otherwise set lookup_query to "". Still return your best decision alongside it:
+    the lookup buys at most one re-evaluation with a RETRIEVED CONTEXT section appended, and
+    when that section is already present below, any further lookup_query is ignored. Refs
+    from that section (conversation:…, memory:…) may be cited in bucket_entry_refs only when
+    the section supplies them.
+    """
+
+  static func directorStablePrompt(snapshot: ContextBucketSnapshot, allowLookup: Bool = false) -> String {
     let stableBucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
+    let lookup = allowLookup ? "\n" + directorLookupInstruction : ""
     return """
       \(ScreenDerivedContent.untrustedPreamble)
       Decide whether interrupting now adds concrete value. Return silence unless the validated
@@ -214,7 +229,7 @@ enum ContextProactivityPromptBuilder {
       request is insight or suggest; never infer an owner or due date and never create a task
       candidate from actionability alone.
       Do not re-deliver a point already delivered for this bucket unless the validated facts
-      add something materially new. Prefer silence over restating.
+      add something materially new. Prefer silence over restating.\(lookup)
 
       \(stableBucket)
       """
