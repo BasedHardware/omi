@@ -22,7 +22,12 @@ import type { ChatGenerationLivenessPolicy } from "../chat/generation-supervisor
 import { createGetActionItemsToolLoop } from "../chat/action-items-tool";
 import { createProductionGatewayToolLoop } from "../chat/gateway-tool-composition";
 import { resolveDevGenerationLiveness } from "../chat/real-model-liveness";
-import { LOOPBACK_HOST, assertPortInRange } from "../net/loopback";
+import { LOOPBACK_HOST, loopbackServeOptions } from "../net/loopback";
+import {
+  loadAppFacingTestLease,
+  loopbackServeOptionsForTestLease,
+  type AppFacingTestLease,
+} from "../net/test-allocation";
 import { isQaEvidenceRunId } from "../observability/producer-evidence";
 import { QA_FIXTURE_TIME_ANCHOR_UTC } from "../qa/seed";
 import {
@@ -84,8 +89,21 @@ const fail = (message: string, reason: string): never => {
   process.exit(1);
 };
 
+const TEST_LEASE_FLAG = "--app-facing-test-lease";
+
+const readTestLeasePath = (argv: readonly string[]): string | null => {
+  const index = argv.indexOf(TEST_LEASE_FLAG);
+  if (index === -1) return null;
+  const path = argv[index + 1];
+  if (path === undefined || path.length === 0 || path.startsWith("-")) {
+    fail(`${TEST_LEASE_FLAG} needs a lease file path.`, "missing_test_lease");
+  }
+  return path;
+};
+
 interface BootConfig {
   readonly port: number;
+  readonly testLease: AppFacingTestLease | null;
   readonly ownerAccountId: string;
   readonly memoryCount: number;
   readonly accountTimezone: string;
@@ -104,19 +122,40 @@ interface BootConfig {
 }
 
 const readConfig = (): BootConfig => {
+  const testLeasePath = readTestLeasePath(process.argv);
+  let testLease: AppFacingTestLease | null = null;
+  if (testLeasePath !== null) {
+    try {
+      testLease = loadAppFacingTestLease(testLeasePath);
+    } catch (error) {
+      fail(
+        error instanceof Error ? error.message : "app-facing test lease could not be loaded.",
+        "test_lease_invalid",
+      );
+    }
+  }
+
   const rawPort = process.env.OMI_PORT;
-  let port = DEFAULT_PORT;
+  let port = testLease === null ? DEFAULT_PORT : testLease.port;
   if (rawPort !== undefined && rawPort.length > 0) {
     if (!/^[0-9]{2,5}$/.test(rawPort)) fail(`OMI_PORT must be a number, got "${rawPort}".`, "invalid_port");
     port = Number(rawPort);
   }
-  try {
-    assertPortInRange(port);
-  } catch {
+  if (testLease !== null && port !== testLease.port) {
     fail(
-      `port ${port} is not allocated to this service. Use one bounded app-facing port.`,
-      "port_unallocated",
+      `OMI_PORT ${port} does not match the app-facing test lease port ${testLease.port}.`,
+      "test_lease_port_mismatch",
     );
+  }
+  if (testLease === null) {
+    try {
+      loopbackServeOptions(port);
+    } catch {
+      fail(
+        `port ${port} is not allocated to this service. Use one bounded app-facing port.`,
+        "port_unallocated",
+      );
+    }
   }
 
   const rawCount = process.env.OMI_SEED_MEMORIES;
@@ -193,6 +232,7 @@ const readConfig = (): BootConfig => {
 
   return Object.freeze({
     port,
+    testLease,
     ownerAccountId: process.env.OMI_SEED_OWNER || DEFAULT_OWNER,
     memoryCount,
     accountTimezone,
@@ -297,13 +337,16 @@ const main = async (): Promise<void> => {
 
   let server: { stop: (closeActive?: boolean) => void };
   try {
+    const bind = config.testLease === null
+      ? loopbackServeOptions(config.port)
+      : loopbackServeOptionsForTestLease(config.testLease);
     server = Bun.serve({
       // Loopback ONLY. Omitting hostname makes Bun bind 0.0.0.0, which publishes
       // this service to the LAN. That exact bug shipped silently in an earlier
       // wave and a loopback curl did not catch it, because a loopback curl
-      // succeeds either way.
-      hostname: LOOPBACK_HOST,
-      port: config.port,
+      // succeeds either way. Test allocation uses the named lease seam, never a
+      // widened default, and still returns hostname 127.0.0.1.
+      ...bind,
       fetch: service.app.fetch,
       websocket: service.websocket,
     });

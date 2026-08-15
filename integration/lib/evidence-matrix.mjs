@@ -25,6 +25,12 @@ export const MATRIX_SIZE = SHELLS.length * DOMAINS.length;
 export const SERVICE_EXECUTABLE = "apps/service/bin/dev-server.ts";
 export const SERVICE_BASE_URL = "http://127.0.0.1:4851";
 export const PRODUCER_EVIDENCE_PATH = "/v1/qa/evidence";
+/** Keep in lockstep with APP_FACING_TEST_PORT_MIN/MAX in apps/service/net/port-lease.ts. */
+const APP_FACING_TEST_SERVICE_URL = /^http:\/\/127\.0\.0\.1:148(?:5[1-9]|6[0-9]|70)$/;
+
+export function isAllowedServiceBaseUrl(url) {
+  return url === SERVICE_BASE_URL || APP_FACING_TEST_SERVICE_URL.test(url);
+}
 
 const HASH = /^[0-9a-f]{40}$/;
 export const RAW_RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/u;
@@ -172,7 +178,7 @@ export function validateServiceReadiness(record, {
   databasePath,
   pid,
   executable = SERVICE_EXECUTABLE,
-  baseUrl = SERVICE_BASE_URL,
+  baseUrl,
 } = {}) {
   const failures = [];
   if (!isObject(record)) return { ok: false, failures: ["service readiness record must be an object"] };
@@ -194,7 +200,11 @@ export function validateServiceReadiness(record, {
   if (recordRunIdFailure) failures.push(`service readiness ${recordRunIdFailure}`);
   if (record.runId !== runId) failures.push(`service readiness has wrong runId ${JSON.stringify(record.runId)}`);
   if (record.executable !== executable) failures.push(`unknown launcher executable ${JSON.stringify(record.executable)}; expected ${executable}`);
-  if (record.baseUrl !== baseUrl) failures.push(`service readiness baseUrl must be ${baseUrl}`);
+  if (baseUrl !== undefined) {
+    if (record.baseUrl !== baseUrl) failures.push(`service readiness baseUrl must be ${baseUrl}`);
+  } else if (!isAllowedServiceBaseUrl(record.baseUrl)) {
+    failures.push("service readiness baseUrl must be the production 4851 origin or a live app-facing test lease");
+  }
   if (record.databasePath !== databasePath) failures.push("service readiness names a different SQLite path");
   if (!Number.isSafeInteger(pid) || pid <= 0) failures.push("expected service pid must be a positive integer");
   if (record.pid !== pid) failures.push(`service readiness pid ${JSON.stringify(record.pid)} does not match launched pid ${JSON.stringify(pid)}`);
