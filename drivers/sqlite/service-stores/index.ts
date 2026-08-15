@@ -11,6 +11,7 @@ import { SqliteStragglerTable } from "./straggler-table";
 import { SqliteSettingsProjectionStore } from "./settings-projection";
 import { SqliteListenStore } from "./listen-store";
 import { createSqliteListenSegmentUnitOfWork } from "./listen-segment-unit-of-work";
+import { SqliteScreenStore } from "./screen-store";
 import { SqliteTasksStore } from "./tasks-store";
 import { SqliteWriteIdRegistry } from "./write-id-registry";
 import { createSqliteWriteUnitOfWork } from "./write-unit-of-work";
@@ -26,6 +27,7 @@ export { SqliteCurrentSessionPort } from "./current-session";
 export { SqliteSettingsProjectionStore } from "./settings-projection";
 export { SqliteListenStore } from "./listen-store";
 export { createSqliteListenSegmentUnitOfWork } from "./listen-segment-unit-of-work";
+export { SqliteScreenStore } from "./screen-store";
 
 export { SqliteAccountControlProjectionStore } from "./projection-store";
 export { SqliteConversationsStore } from "./conversations-store";
@@ -70,6 +72,7 @@ export const createSqliteLocalServiceStores = (
     accountLifecycle: new SqliteAccountLifecycleStore(db),
     listen: new SqliteListenStore(db),
     listenSegments: createSqliteListenSegmentUnitOfWork(db),
+    screen: new SqliteScreenStore(db),
     chatMessages,
     chatAttachments,
     chatEvents,

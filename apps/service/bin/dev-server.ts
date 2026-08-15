@@ -23,6 +23,7 @@ import {
   parseSeedPersona,
 } from "../qa/demo-persona";
 import { QA_EVIDENCE_PATH } from "../routes/qa-evidence";
+import { SCREEN_RETENTION_INTERVAL_MS } from "../screen/retention-worker";
 import { createSqliteLocalServiceStores } from "../../../drivers/sqlite/service-stores";
 
 /**
@@ -247,6 +248,7 @@ const main = (): void => {
       listenDefaultUnmetered: true,
       generationSource,
       ...(transcriptionSource === null ? {} : { transcriptionSource }),
+      screenRetentionIntervalMs: SCREEN_RETENTION_INTERVAL_MS,
       ...(config.seedPersona === "demo"
         ? { seedPersona: "demo" as const, overlaySeed: applyDemoPersonaSeed }
         : {}),

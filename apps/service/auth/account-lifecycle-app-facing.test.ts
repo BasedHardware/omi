@@ -81,6 +81,16 @@ const appFacingRequests = (authorization: string): ReadonlyArray<{
       },
     },
     { name: "settings", path: "/v1/settings", init: { headers: auth } },
+    { name: "screen days", path: "/v1/screen/days", init: { headers: auth } },
+    { name: "screen timeline", path: "/v1/screen/timeline?day=2026-08-07", init: { headers: auth } },
+    { name: "screen search", path: "/v1/screen/search?q=Harborline", init: { headers: auth } },
+    { name: "screen retention", path: "/v1/screen/retention", init: { headers: auth } },
+    { name: "screen retired", path: "/v1/screen/retired", init: { headers: auth } },
+    {
+      name: "screen ingest",
+      path: "/v1/screen/frames",
+      init: { method: "POST", headers: jsonAuth, body: "{}" },
+    },
     { name: "QA reset", path: "/v1/qa/reset", init: { method: "POST", headers: auth } },
     {
       name: "QA control reset",

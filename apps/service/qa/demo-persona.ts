@@ -1,4 +1,5 @@
 // domain-pending(DIV-DOMAPPS-001)
+// domain-pending(DIV-DOMAPPS-007)
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMCORE-007)
 // domain-pending(DIV-DOMCORE-008)
@@ -310,6 +311,93 @@ export const DEMO_CHAT_SEED: readonly {
 
 const DEMO_CHAT_GENERATION_ID = "generation_demo_saturday";
 
+const screenBlock = (
+  id: string,
+  text: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  confidence: number,
+) => Object.freeze({ id, text, x, y, w, h, confidence });
+
+const demoFrame = (
+  id: string,
+  dayIndex: number,
+  offsetMs: number,
+  appBundleId: string,
+  appName: string,
+  windowTitle: string,
+  fullText: string,
+  blocks: readonly ReturnType<typeof screenBlock>[],
+  chunkOffset: number,
+) => Object.freeze({
+  id,
+  captured_at: new Date(instantMs(dayIndex, offsetMs)).toISOString(),
+  app_bundle_id: appBundleId,
+  app_name: appName,
+  window_title: windowTitle,
+  device_name: "Demo Mac",
+  client_device_id: "demo-mac-1",
+  frame_ref: Object.freeze({
+    kind: "chunk" as const,
+    path: `chunks/demo/${id}.hevc`,
+    offset: chunkOffset,
+  }),
+  dhash: `demo-dhash-${id}`,
+  ocr: Object.freeze({
+    full_text: fullText,
+    blocks,
+  }),
+});
+
+export const DEMO_SCREEN_CAPTURE_SESSION_ID = "harborline-weekend-demo";
+
+export const DEMO_SCREEN_FRAME_SEED = Object.freeze([
+  demoFrame(
+    "demo-screen-harborline-reservation",
+    0,
+    -30 * 60_000,
+    "com.apple.Safari",
+    "Safari",
+    "Harborline Cafe — Saturday table",
+    "Harborline Cafe Saturday noon table for Mira Vale and Jordan Hale.",
+    Object.freeze([
+      screenBlock("0", "Harborline Cafe", 0.08, 0.12, 0.4, 0.08, 0.98),
+      screenBlock("1", "Saturday noon table for Mira Vale and Jordan Hale.", 0.08, 0.22, 0.7, 0.1, 0.94),
+    ]),
+    0,
+  ),
+  demoFrame(
+    "demo-screen-cedar-packing",
+    0,
+    -10 * 60_000,
+    "com.apple.Notes",
+    "Notes",
+    "Cedar Loop packing",
+    "Pack rain shells, two water bottles, and the Northbridge Library field guide.",
+    Object.freeze([
+      screenBlock("0", "Pack rain shells", 0.1, 0.18, 0.5, 0.08, 0.96),
+      screenBlock("1", "two water bottles, and the Northbridge Library field guide.", 0.1, 0.28, 0.72, 0.12, 0.91),
+    ]),
+    12_000,
+  ),
+  demoFrame(
+    "demo-screen-fable-wick-sketch",
+    3,
+    -2 * 60_000,
+    "com.apple.Preview",
+    "Preview",
+    "Fable and Wick window sketch",
+    "Sable Wren pinned the Fable and Wick window sketch next to the Wickwater crate list.",
+    Object.freeze([
+      screenBlock("0", "Fable and Wick window sketch", 0.15, 0.2, 0.6, 0.1, 0.97),
+      screenBlock("1", "Wickwater crate list", 0.15, 0.4, 0.45, 0.08, 0.93),
+    ]),
+    4_000,
+  ),
+]);
+
 export interface DemoPersonaSeedInput {
   readonly db: Database;
   readonly stores: LocalServiceStores;
@@ -392,5 +480,10 @@ export const applyDemoPersonaSeed = (input: DemoPersonaSeedInput): void => {
   input.stores.settings.putIdentity(input.ownerAccountId, {
     displayName: DEMO_PERSONA_DISPLAY_NAME,
     email: DEMO_PERSONA_EMAIL,
+  });
+  input.stores.screen.ingest({
+    accountId: input.ownerAccountId,
+    captureSessionId: DEMO_SCREEN_CAPTURE_SESSION_ID,
+    frames: DEMO_SCREEN_FRAME_SEED,
   });
 };
