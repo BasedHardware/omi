@@ -69,26 +69,103 @@ final class TimelineEscapeTests: XCTestCase {
             "a control the user never touched disabled the timeline's only keyboard exit")
     }
 
-    /// **…and a field the user *is* typing in cannot produce a dead end either.**
+    /// **No text state owns Escape for good — including the one the guard deliberately steps aside for.**
     ///
-    /// Whatever claims Escape has ended its own state by claiming it, so the next press reaches the
-    /// window. Asserted as "at most two presses", not as a particular first-press behaviour, because
-    /// which of the two consumes it is AppKit's to decide and this window must be correct either way.
-    func testATimelineIsNeverMoreThanTwoEscapesFromClosing() throws {
+    /// The rule the report is actually about, asserted over every text state this window can be in: an
+    /// untouched focused field, a half-typed value, and an input-method composition, which is the single
+    /// case `RewindWindowFrame.midEditText` declines to take the key for. Two presses is the budget.
+    ///
+    /// **What this cannot exercise, stated rather than implied.** The composition case's *other* half —
+    /// the text view consuming the first Escape to cancel its own marked text — needs a live input
+    /// method, and a test process has none: `setMarkedText` sets the flag but there is no composition
+    /// session for AppKit to cancel, so the key travels on and the window closes on the first press here.
+    /// Measured, not assumed. So this asserts the property that survives either outcome — the window is
+    /// always gone within two Escapes — and deliberately does not assert which press did it.
+    func testNoTextStateCanHoldEscapeForever() throws {
+        for state in TextState.allCases {
+            var closes = 0
+            let window = presentWindow { closes += 1 }
+            let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 80, height: 22))
+            window.contentView?.addSubview(field)
+            XCTAssertTrue(window.makeFirstResponder(field), "\(state): the field never took focus")
+            let editor = try XCTUnwrap(window.firstResponder as? NSTextView, "\(state): no field editor")
+
+            switch state {
+            case .idle:
+                break
+            case .typed:
+                editor.insertText("half typed", replacementRange: NSRange(location: 0, length: 0))
+            case .composing:
+                editor.setMarkedText(
+                    "にほ", selectedRange: NSRange(location: 2, length: 0),
+                    replacementRange: NSRange(location: 0, length: 0))
+                XCTAssertTrue(editor.hasMarkedText(), "\(state): no composition, so this case is not exercised")
+            }
+
+            NSApp.sendEvent(try key(53))
+            NSApp.sendEvent(try key(53))
+            XCTAssertGreaterThanOrEqual(
+                closes, 1,
+                "\(state): no number of Escapes left the timeline — the dead end in the report")
+        }
+    }
+
+    /// **Content that swallows Escape does not take the window's exit with it.**
+    ///
+    /// This is the 1.0.5 failure, modelled — and it is a *model*, which has to be said out loud because
+    /// the previous two rounds both shipped green tests over a broken app. On the live 1.0.5 the timeline
+    /// was key (traffic lights full colour) and **⌘W closed it while Escape did nothing**, which places
+    /// the loss inside the window: ⌘W arrives as a main-menu key equivalent, Escape as a responder-chain
+    /// command. The suspect is the SwiftUI hosting view claiming the key first.
+    ///
+    /// **What could not be reproduced.** Presented for real, with the shipped `RewindView` installed and
+    /// laid out, `NSHostingView<RewindView>.performKeyEquivalent(esc)` returns `false` in this process and
+    /// Escape reaches the window — so the live consumption does not happen here and this test cannot
+    /// summon it. What it can do is pin the *property* the fix depends on: a content view that does claim
+    /// Escape, exactly as the hypothesis says SwiftUI's does, must not be able to keep it. `sendEvent` is
+    /// the only layer above `performKeyEquivalent:`, so this passes there and fails on any route below it.
+    func testContentThatClaimsEscapeCannotKeepTheWindowsExit() throws {
         var closes = 0
         let window = presentWindow { closes += 1 }
-
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 80, height: 22))
-        window.contentView?.addSubview(field)
-        XCTAssertTrue(window.makeFirstResponder(field))
-        let editor = try XCTUnwrap(window.firstResponder as? NSTextView)
-        editor.insertText("half typed", replacementRange: NSRange(location: 0, length: 0))
-        XCTAssertEqual(editor.string, "half typed", "the edit did not land, so this case is not exercised")
+        let greedy = EscapeEatingView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
+        window.contentView = greedy
 
         NSApp.sendEvent(try key(53))
-        NSApp.sendEvent(try key(53))
-        XCTAssertGreaterThanOrEqual(
-            closes, 1, "no number of Escapes left the timeline — the dead end in the report")
+
+        XCTAssertTrue(
+            greedy.wasOffered || closes == 1,
+            "neither the content nor the window saw Escape, so this case is not being exercised")
+        XCTAssertEqual(
+            closes, 1,
+            """
+            content that claims Escape kept the window's only keyboard exit — the 1.0.5 report, where \
+            ⌘W closed the timeline and Escape did nothing. The route must sit above performKeyEquivalent:.
+            """)
+    }
+
+    /// Stands in for whatever claims Escape inside the hosting view. `performKeyEquivalent:` is the hook
+    /// AppKit offers content *before* the responder chain runs, which is precisely the gap a window-level
+    /// `cancelOperation` sits below.
+    private final class EscapeEatingView: NSView {
+        var wasOffered = false
+        override func performKeyEquivalent(with event: NSEvent) -> Bool {
+            if event.type == .keyDown, event.keyCode == 53 {
+                wasOffered = true
+                return true
+            }
+            return super.performKeyEquivalent(with: event)
+        }
+    }
+
+    private enum TextState: CaseIterable, CustomStringConvertible {
+        case idle, typed, composing
+        var description: String {
+            switch self {
+            case .idle: return "an untouched focused field"
+            case .typed: return "a half-typed value"
+            case .composing: return "an input-method composition"
+            }
+        }
     }
 
     /// There is deliberately no case for a window with no Escape route: `onEscape` is an init parameter,

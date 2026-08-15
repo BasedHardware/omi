@@ -263,12 +263,12 @@ enum RewindWindow {
 /// all. The panel this window opens *from* has taken Escape since it shipped (`SearchPanel`), so a user
 /// is taught the key on one surface and then finds it dead on the next one.
 ///
-/// **In `cancelOperation(_:)`, and no longer in `sendEvent`.** It was in `sendEvent` on the argument
-/// that the content is an `NSHostingView`, so a `cancelOperation:` reached only if nothing in the SwiftUI
-/// tree claimed Escape first was a promise this file could not keep. Measured, that argument was
-/// backwards twice over: nothing in this window's tree claims Escape, and the guard the interception
-/// needed in order to stay polite to text is what took the exit away — see `cancelOperation(_:)` below.
-/// A window only receives key events while it is key either way, which is why the fix has two halves.
+/// **In `sendEvent`, and the original comment here had the reason right.** It said a `cancelOperation:`
+/// that runs only if nothing in the SwiftUI tree claims Escape first is a promise this file cannot keep —
+/// and 1.0.5 shipped exactly that promise and broke exactly that way. What the comment could not say was
+/// the other half: a window only receives key events while it is key, and this one never was, so the
+/// intercept it defended was never reached either. Both halves are fixed below, and neither alone is
+/// enough — which is why this window went out wrong twice.
 ///
 /// **The date pill's popover is the one thing this could have taken a key from, and it does not need a
 /// case.** `NSPopover` puts its content in a child window; while that window is key, Escape is dispatched
@@ -346,39 +346,78 @@ final class RewindWindowFrame: NSPanel {
     /// that is key but not main draws its traffic lights grey, which is the symptom that started this.
     override var canBecomeMain: Bool { true }
 
-    /// **Escape, on the responder chain rather than ahead of it.**
+    /// **Escape is taken in `sendEvent`, which is the earliest layer this window owns.**
     ///
-    /// This replaces a `sendEvent` override that matched key code 53 before the responder chain ran and
-    /// then tried to hand the key back to text with a guard — `(firstResponder as? NSTextView)?
-    /// .isFieldEditor == true`. That guard is the reason this route is now here instead:
+    /// Three shipped attempts converge here, and each one narrowed the problem:
     ///
-    /// - **It could not tell a focused field from an edited one.** A field editor is installed and made
-    ///   first responder the moment anything editable takes focus, with nothing typed into it. Measured
-    ///   (`TimelineEscapeTests`): an idle, empty field editor made the guard true, so `sendEvent`
-    ///   declined the key — and on a plain `NSWindow` nothing downstream closed the window either. The
-    ///   only keyboard way out was disabled for the life of the window by a control nobody had touched.
-    ///   The old comment called the timeline "not editable today" and kept the guard for the first
-    ///   control that would be; that control is exactly the one that would have bricked the exit.
-    /// - **It had started to disagree with AppKit.** `NSPanel` closes a closable panel on Escape through
-    ///   `cancelOperation:` itself, so once this became a panel the window went away *anyway* while the
-    ///   guard believed it had declined — two Escape rules, contradicting each other, one of them
-    ///   invisible.
+    /// 1. **1.0.4 — `sendEvent`, window never key.** The intercept was right and unreachable: AppKit
+    ///    delivers key events only to the key window, and this one never became key. Fixed by the panel
+    ///    change above; proven on the real build, where the traffic lights now come up full colour.
+    /// 2. **1.0.5 — `cancelOperation(_:)`, never invoked.** With key status fixed, Escape still did
+    ///    nothing on the shipped app while **⌘W closed the window immediately**. That pair is the
+    ///    measurement: ⌘W dispatches through the main menu's key equivalent, so the keyboard was live and
+    ///    the window was key — and `cancelOperation:` specifically never ran. It arrives only via
+    ///    `interpretKeyEvents` → `doCommandBySelector:`, at the *end* of a chain that `performKeyEquivalent:`
+    ///    and the SwiftUI hosting view both sit in front of, so anything in that content claiming the key
+    ///    first makes a window-level `cancelOperation` unreachable.
+    /// 3. **Here.** `sendEvent` is the one layer above all of it: `NSWindow.sendEvent` is what *calls*
+    ///    `performKeyEquivalent:` and what feeds the responder chain, so taking the key here cannot be
+    ///    swallowed by anything inside the window.
     ///
-    /// `cancelOperation(_:)` is the key travelling the way macOS routes it, and it lets AppKit decide
-    /// what "abandon this edit" means instead of this file guessing. Measured, on the three states that
-    /// matter: with no text view at all the key reaches this window (first responder is the window
-    /// itself, and it still arrives); with an idle field editor focused it reaches this window; with a
-    /// field editor holding uncommitted text it *also* reaches this window, because `NSTextView` claims
-    /// Escape only when it has something of its own to cancel, such as an open completion list.
+    /// **This is not the 1.0.4 code restored.** The guard that came with it is gone, because it was a
+    /// second defect: `(firstResponder as? NSTextView)?.isFieldEditor == true` cannot tell a field that is
+    /// merely focused from one being edited — AppKit installs and focuses a field editor the moment
+    /// anything editable appears — so one untouched control disabled the only keyboard exit for the life
+    /// of the window. See `midEditText` for what replaced it and how narrow it now is.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, event.keyCode == Self.escapeKeyCode, midEditText == nil {
+            // **The one line that makes the next live test a measurement rather than a guess.** Every
+            // round of this bug so far has been argued from a window that logs nothing, so a repro could
+            // never separate "the key never arrived" from "it arrived and the dismissal failed". If this
+            // appears in `log show` and the window is still up, the fault is downstream of here; if the
+            // window is up and this is absent, the key never reached the window at all.
+            ContextLog.info("Escape taken at the timeline window; dismissing", "rewind")
+            MainActor.assumeIsolated { onEscape() }
+            return
+        }
+        super.sendEvent(event)
+    }
+
+    /// Text that genuinely owns Escape right now — **an in-progress input-method composition, and
+    /// nothing else.**
     ///
-    /// So the rule this window now keeps is the one the report actually asked for: **there is no state
-    /// in which Escape does not leave the timeline.** Where something upstream does claim the key, it
-    /// has ended its own state by claiming it, so the next press arrives here.
+    /// The guard this replaced asked "is a field editor focused", which is true from the instant any
+    /// editable control appears and stays true with nothing typed in it. Measured against real AppKit
+    /// (`TimelineEscapeTests`): an `NSTextView` does not claim `cancelOperation:` when it is idle, and it
+    /// does not claim it with uncommitted text either — it claims Escape only when it has something of
+    /// its own to cancel. Marked text is that state, and it is the one where taking the key would destroy
+    /// work: cancelling a half-composed CJK or accented character is what Escape means mid-composition,
+    /// and closing the window instead would throw the composition away with it.
     ///
-    /// Deliberately no `super` call. `NSPanel`'s implementation closes the panel, and this window is put
-    /// away with `orderOut` rather than closed so the loaded day survives exactly as the X leaves it —
-    /// see `RewindWindow.dismiss`.
+    /// **It cannot become a dead end**, and that is the half worth asserting: passing the key on clears
+    /// the composition, so the marked range is empty by the next press and that one leaves the window.
+    /// Two Escapes at the very worst.
+    ///
+    /// **The half a hermetic test cannot reach**, said plainly rather than implied by a green suite: a
+    /// test process has no input method, so `setMarkedText` raises the flag but leaves no composition for
+    /// AppKit to cancel, and the key travels on instead of being consumed. `TimelineEscapeTests` therefore
+    /// exercises this state and asserts only the dead-end rule, not which press closed the window. If this
+    /// guard is ever suspected of holding Escape on a real Mac, the composition case is the one place it
+    /// could, and it needs a live IME to reproduce.
+    private var midEditText: NSTextView? {
+        guard let editor = firstResponder as? NSTextView, editor.hasMarkedText() else { return nil }
+        return editor
+    }
+
+    /// **Kept even though `sendEvent` now takes Escape first**, and not as a second route to the same
+    /// place. `NSPanel` closes a closable panel on Escape by itself, and its `close()` is not this app's
+    /// dismissal: `RewindWindow.dismiss` orders the window out so the loaded day survives exactly as the
+    /// X leaves it. Overriding this is what stops AppKit stepping over that contract on any path that
+    /// still reaches the responder chain — the composition case above, most obviously.
     override func cancelOperation(_ sender: Any?) {
         onEscape()
     }
+
+    /// Named rather than `53` at the point of use, like every other reading of this key in the package.
+    private static let escapeKeyCode: UInt16 = 53
 }
