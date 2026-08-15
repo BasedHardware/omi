@@ -60,7 +60,7 @@ actor SuggestionAssistant: ProactiveAssistant {
   private var pendingWindowTitle: String?
 
   private var lastEvaluationAt: Date?
-  private var recentSuggestions: [String] = []
+  private var recentSuggestions: [SuggestionDeduplication.Remembered] = []
 
   /// The commitments handed to the evaluation currently in flight, kept so delivery can
   /// hold a `commitment` nudge to what the model was actually shown.
@@ -456,7 +456,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     if !recentSuggestions.isEmpty {
       sections.append(
         "== RECENT SUGGESTIONS (do not repeat these) ==\n"
-          + recentSuggestions.joined(separator: "\n")
+          + recentSuggestions.map(\.text).joined(separator: "\n")
       )
     }
 
@@ -524,7 +524,8 @@ actor SuggestionAssistant: ProactiveAssistant {
       hasOwner: ownerID != nil,
       confidence: suggestion.confidence,
       threshold: threshold,
-      isDuplicate: SuggestionDeduplication.isDuplicate(suggestion.suggestion, of: recentSuggestions),
+      isDuplicate: SuggestionDeduplication.isDuplicate(
+        suggestion.suggestion, of: recentSuggestions.map(\.text)),
       isGroundedCommitment: SuggestionCommitmentGuard.isGrounded(
         suggestion: suggestion.suggestion,
         category: suggestion.category,
@@ -563,11 +564,11 @@ actor SuggestionAssistant: ProactiveAssistant {
       return .rejectedOwner
     }
 
-    recentSuggestions.append(suggestion.suggestion)
-    let dedupMemory = SuggestionPacing.dedupMemory(frequencyLevel: cachedFrequencyLevel)
-    if recentSuggestions.count > dedupMemory {
-      recentSuggestions.removeFirst(recentSuggestions.count - dedupMemory)
-    }
+    recentSuggestions = SuggestionDeduplication.remembering(
+      .init(text: suggestion.suggestion, category: suggestion.category),
+      in: recentSuggestions,
+      frequencyLevel: cachedFrequencyLevel
+    )
 
     await deliver(
       suggestion,
