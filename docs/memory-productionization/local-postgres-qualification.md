@@ -53,9 +53,13 @@ bun run prod-local
 ```
 
 The script refuses if the managed PostgreSQL runtime is absent or not accepting
-connections. It does not mint Firebase identity, MCP credentials, or production
-codec/synthesizer key material; the script header lists what works locally and
-what David has not granted. See `scripts/prod-local.ts`.
+connections. The default path does not mint Firebase identity, MCP credentials,
+or production codec/synthesizer key material. An explicit opt-in,
+`bun run prod-local --local-identity` (or `OMI_PROD_LOCAL_IDENTITY=emulator`),
+composes the official Admin verifier against a locally owned Auth emulator
+after you mint and seed. See
+`docs/memory-productionization/prod-local-identity.md`. The script header lists
+what works locally and what David has not granted. See `scripts/prod-local.ts`.
 
 For the normal hermetic one-shot gate, run:
 

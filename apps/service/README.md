@@ -320,7 +320,17 @@ Passing `assert-loopback` output looks like:
 
 If any non-loopback IPv4 address on the host can reach `/health`, `lanProbe.status` is `"fail"` with reason `"LAN address reached /health"`.
 
+## Production-composition local identity (`bun run prod-local`)
+
+The SQLite QA server above is not the production Firebase/PostgreSQL memory
+process. To exercise that composition locally, including an authorized
+`memories.read`, see `docs/memory-productionization/prod-local-identity.md`.
+
+Default `bun run prod-local` still cannot mint identity. `--local-identity` is
+an explicit emulator opt-in and does not weaken deployed mode.
+
 ## Known limitations
+
 
 - **The local binary deliberately remains SQLite QA.** The separately injected
   `createPostgresFirebaseAuthorizedMemoryServiceApp` composition now binds the
