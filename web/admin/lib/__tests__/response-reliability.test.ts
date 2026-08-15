@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { numberValue } from "../response-reliability";
 
 import {
   buildChannelReliabilityPayloads,
@@ -477,5 +478,40 @@ describe("response reliability", () => {
       voiceRows: [],
     });
     expect(trimDailyToCoverage(excludedOnly.daily)[0]?.date).toBe("2026-07-18");
+  });
+});
+
+describe("numberValue", () => {
+  it("returns the number for a valid number", () => {
+    expect(numberValue(42)).toBe(42);
+    expect(numberValue(-42)).toBe(-42);
+    expect(numberValue(0)).toBe(0);
+    expect(numberValue(1.5)).toBe(1.5);
+  });
+
+  it("parses valid number strings", () => {
+    expect(numberValue("42")).toBe(42);
+    expect(numberValue("-42")).toBe(-42);
+    expect(numberValue("1.5")).toBe(1.5);
+    expect(numberValue("0")).toBe(0);
+  });
+
+  it("returns 0 for undefined and null", () => {
+    expect(numberValue(undefined)).toBe(0);
+    expect(numberValue(null)).toBe(0);
+  });
+
+  it("returns 0 for non-finite values and unparseable strings", () => {
+    expect(numberValue(NaN)).toBe(0);
+    expect(numberValue(Infinity)).toBe(0);
+    expect(numberValue(-Infinity)).toBe(0);
+    expect(numberValue("not a number")).toBe(0);
+    expect(numberValue({})).toBe(0);
+  });
+
+  it("returns 0 for boolean values (unless we expect otherwise, Number(true) is 1)", () => {
+    // Number(true) is 1, Number(false) is 0
+    expect(numberValue(true)).toBe(1);
+    expect(numberValue(false)).toBe(0);
   });
 });

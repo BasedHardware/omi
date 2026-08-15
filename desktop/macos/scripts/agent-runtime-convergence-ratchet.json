@@ -1,7 +1,10 @@
 {
   "limits": {
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6556,
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4396
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 7372,
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4404
   },
-  "raise_justifications": {}
+  "raise_justifications": {
+    "INV-CHAT-1": "Chat-first rich-block handling, answer submission, and task completion stay in the existing provider while its shared lifecycle extraction remains bounded.",
+    "INV-CHAT-1-runtime-payload": "+8 for the bundled-runtime start refusal. A build shipped without Contents/Resources/pi-mono-extension accepted every chat turn and died four seconds later with \"pi-mono process exited (code 1)\"; the refusal has to sit beside the other start-refusal preconditions this file already owns, because a second observer would give one failure two owners. The reason and its wording were moved out to AgentRuntimePayload.StartRefusal, which is why this is +8 rather than +13 — the coordinator keeps only the decision to stop, not the explanation."
+  }
 }

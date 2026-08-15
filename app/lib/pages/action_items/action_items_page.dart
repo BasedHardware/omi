@@ -15,6 +15,7 @@ import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'widgets/action_item_form_sheet.dart';
+import 'widgets/action_item_shimmer_widget.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
@@ -589,7 +590,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildLoadingState() {
-    return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
+    return CustomScrollView(
+      controller: _scrollController,
+      physics: const NeverScrollableScrollPhysics(),
+      slivers: const [
+        SliverPadding(padding: EdgeInsets.only(top: 16)),
+        ActionItemsShimmerList(itemCount: 7),
+        SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
+    );
   }
 
   Widget _buildEmptyTasksList() {

@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-offline-merge-clock-offset-dup",
+  "violated_contract": "Offline sync merge must not append transcript lines that already exist on the conversation when the same spoken audio arrives on a different absolute time base (live stream started_at vs WAL filename timestamp / mild RTC drift).",
+  "canonical_prevention": "Dedupe merge candidates with exact absolute ranges, exact conversation-relative ranges, then batch-gated text+slop for clock-offset re-uploads; skip private-cloud chunk upload when any lines were dropped so full-source WAV cannot reintroduce duplicate audio.",
+  "evidence_prs": [11165],
+  "scope_hints": ["backend/utils/sync/**"],
+  "status": "open"
+}

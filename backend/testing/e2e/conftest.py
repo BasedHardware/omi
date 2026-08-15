@@ -68,6 +68,7 @@ def _set_e2e_env():
     os.environ["GOOGLE_CLOUD_PROJECT"] = "test-e2e-project"
     os.environ.pop("SERVICE_ACCOUNT_JSON", None)
     os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+    os.environ.pop("FIREBASE_AUTH_CREDENTIALS_PATH", None)
     os.environ["REDIS_DB_HOST"] = "localhost"
     os.environ["REDIS_DB_PORT"] = "6379"
     os.environ["REDIS_DB_PASSWORD"] = ""

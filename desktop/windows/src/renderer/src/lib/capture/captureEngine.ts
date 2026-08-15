@@ -5,7 +5,7 @@
 // feed BOTH the WebSocket AND the Silero detector — no second getUserMedia, no
 // second AudioContext. The mic is released the moment the pipeline stops (privacy),
 // while the InferenceSession persists for the whole process.
-import { makePipelineHandle } from './pipelineHandle'
+import { makePipelineHandle, type PipelineHandle } from './pipelineHandle'
 import { createPcmPipeline as createWorkletPipeline } from './pcmPipeline'
 import { VadGate as PureVadGate, type VadGateMode } from './vadGate'
 import { createSileroDetector, SILERO_FRAME_SAMPLES, type SileroDetector } from './vadModel'
@@ -14,7 +14,7 @@ import { classifyVadFailure } from './vadFallback'
 import { trackEvent } from '../analytics'
 
 // ── Contract shared with the capture hosts ────────────────────────────────────────
-export type PcmPipeline = { stop: () => void }
+export type PcmPipeline = PipelineHandle
 export type VadMode = 'gated' | 'fallback'
 export type VadGateConfig = {
   /** Audio that passed the gate (or ALL audio while falling open) — forward to WS. */

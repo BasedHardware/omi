@@ -1,0 +1,3 @@
+{
+  "change": "Proactive notifications no longer go quiet after a busy day: silent background evaluations stopped counting against the daily notification budget"
+}

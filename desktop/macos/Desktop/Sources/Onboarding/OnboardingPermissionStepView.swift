@@ -45,25 +45,31 @@ struct OnboardingPermissionStepView: View {
     ) {
       VStack(alignment: .leading, spacing: OmiSpacing.xl) {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          // Not `InkPermissionRow`: this step is one capability filling a whole card — a 58 pt
+          // glyph, the ask, the live status, and the grant button pinned in the footer beside
+          // Back. That row is a compact list item whose whole surface is the action, so dropping
+          // it in here would move the button and change what the click does.
           HStack(spacing: OmiSpacing.md) {
             ZStack {
-              RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
-                .fill(OmiColors.backgroundSecondary)
+              RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+                .fill(Ink.rowFill)
                 .frame(width: 58, height: 58)
 
               Image(systemName: icon)
                 .font(.system(size: 24, weight: .semibold))
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
             }
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text(reasonTitle)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
+                .fixedSize(horizontal: false, vertical: true)
 
+              // Granted is the one state that earns a colour; everything else is the reading rung,
+              // because glass carries two.
               Text(statusText)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(isGranted ? OmiColors.success : OmiColors.textTertiary)
+                .inkStyle(InkType.statusLabel, color: isGranted ? Ink.listeningGreen : Ink.secondary)
             }
 
             Spacer()
@@ -74,20 +80,21 @@ struct OnboardingPermissionStepView: View {
               "macOS still isn’t granting screen capture to this build. In Screen & System Audio Recording, toggle Omi Dev off, then on again, then quit and reopen the app."
             )
             .font(.system(size: 13, weight: .medium))
-            .foregroundColor(OmiColors.warning)
+            .foregroundColor(PageGlass.warning)
             .fixedSize(horizontal: false, vertical: true)
           }
 
           if permissionType == "full_disk_access", let email = coordinator.userEmail() {
             Text(email)
-              .font(.system(size: 13, weight: .medium))
-              .foregroundColor(OmiColors.textTertiary)
+              .inkStyle(InkType.statusLabel, color: Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
           }
 
           if let error = coordinator.lastActionError, !isGranted {
             Text(error)
               .font(.system(size: 12, weight: .medium))
-              .foregroundColor(OmiColors.warning)
+              .foregroundColor(PageGlass.warning)
+              .fixedSize(horizontal: false, vertical: true)
           }
         }
         .frame(maxWidth: 540, alignment: .leading)
@@ -106,7 +113,7 @@ struct OnboardingPermissionStepView: View {
                 onContinue()
               }
             }
-            .buttonStyle(OmiButtonStyle(.primary))
+            .buttonStyle(InkButtonStyle(kind: .primary))
             .keyboardShortcut(.defaultAction)
           } else {
             Button(isRequesting ? "Waiting for macOS…" : primaryActionLabel) {
@@ -117,7 +124,7 @@ struct OnboardingPermissionStepView: View {
                 refreshPermissionState()
               }
             }
-            .buttonStyle(OmiButtonStyle(.primary))
+            .buttonStyle(InkButtonStyle(kind: .primary))
             .disabled(isRequesting)
           }
         }

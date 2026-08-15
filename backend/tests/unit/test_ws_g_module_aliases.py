@@ -191,84 +191,43 @@ def test_memory_collections_frozen_path_strings_unchanged():
     assert paths.memory_commits == "users/uid-test/memory_commits"
     assert paths.memory_state == "users/uid-test/memory_state"
     assert paths.memory_state_head == "users/uid-test/memory_state/head"
-    assert paths.v3_compatibility_projection_state == "users/uid-test/v3_compatibility_projection/state"
-    assert paths.v3_compatibility_projection_items == "users/uid-test/v3_compatibility_projection_items"
 
 
-def test_memory_rollout_neutral_symbols_are_canonical():
+def test_memory_global_safety_symbols_are_canonical():
     from config import memory_rollout
 
     assert memory_rollout.MemoryRolloutMode is memory_rollout.MemoryRolloutMode
-    assert memory_rollout.MemoryRolloutConfig is memory_rollout.MemoryRolloutConfig
-    assert memory_rollout.MemoryRolloutState is memory_rollout.MemoryRolloutState
     assert memory_rollout.MemoryRolloutCapabilities is memory_rollout.MemoryRolloutCapabilities
-    assert memory_rollout.MemoryRolloutStageGate is memory_rollout.MemoryRolloutStageGate
+    assert callable(memory_rollout.universal_memory_capabilities)
 
 
-def test_rollout_mode_env_dual_read_legacy_only():
-    from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
+def test_global_memory_mode_env_read():
+    from config.memory_rollout import MemoryRolloutMode, memory_enabled_env_value, rollout_mode_env_value
 
     assert rollout_mode_env_value({"MEMORY_MODE": "read"}) == "read"
     assert MemoryRolloutMode(rollout_mode_env_value({"MEMORY_MODE": "read"})) == MemoryRolloutMode.read
+    assert memory_enabled_env_value({"MEMORY_ENABLED": "on"}) is True
+    assert rollout_mode_env_value({"MEMORY_ENABLED": "on"}) == "write"
 
 
-def test_rollout_mode_env_dual_read_neutral_precedence(monkeypatch):
-    from config.memory_rollout import MemoryRolloutMode, MemoryRolloutConfig, rollout_mode_env_value
+def test_global_memory_mode_env_reads_process_environment(monkeypatch):
+    from config.memory_rollout import rollout_mode_env_value
 
     monkeypatch.setenv("MEMORY_MODE", "shadow")
     monkeypatch.setenv("MEMORY_MODE", "read")
     assert rollout_mode_env_value() == "read"
-    assert MemoryRolloutConfig.from_env().mode == MemoryRolloutMode.read
 
 
-@pytest.mark.parametrize(
-    ("set_sequence", "expected_raw", "expected_enabled_users"),
-    [
-        (["uid-a,uid-b"], "uid-a,uid-b", {"uid-a", "uid-b"}),
-        (["legacy-only", "neutral-only"], "neutral-only", {"neutral-only"}),
-    ],
-)
-def test_rollout_enabled_users_env_dual_read(monkeypatch, set_sequence, expected_raw, expected_enabled_users):
-    from config.memory_rollout import MemoryRolloutConfig, rollout_enabled_users_env_raw
-
-    monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
-    for value in set_sequence:
-        monkeypatch.setenv("MEMORY_ENABLED_USERS", value)
-    assert rollout_enabled_users_env_raw() == expected_raw
-    assert MemoryRolloutConfig.from_env().enabled_users == expected_enabled_users
-
-
-def test_rollout_env_dual_read_does_not_use_canonical_cohort(monkeypatch):
-    from config.memory_rollout import MemoryRolloutConfig
-    from utils.memory.memory_system import resolve_memory_system, MemorySystem
-
-    from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
-
-    monkeypatch.delenv("MEMORY_MODE", raising=False)
-    monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
-    monkeypatch.delenv("MEMORY_MODE", raising=False)
-    monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
-    set_canonical_cohort(monkeypatch, "cohort-user")
-    monkeypatch.setenv("MEMORY_MODE", "read")
-    monkeypatch.setenv("MEMORY_ENABLED_USERS", "rollout-user")
-
-    assert MemoryRolloutConfig.from_env().enabled_users == {"rollout-user"}
-    assert resolve_memory_system("cohort-user") == MemorySystem.LEGACY
-    assert resolve_memory_system("rollout-user") == MemorySystem.LEGACY
-
-
-def test_rollout_mode_does_not_flip_cohort_membership(monkeypatch):
-    from config.memory_rollout import MemoryRolloutMode, MemoryRolloutConfig
+def test_retired_user_inventory_cannot_select_memory_authority(monkeypatch):
+    from config.memory_rollout import MemoryRolloutMode, universal_memory_capabilities
     from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
-    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
-
-    clear_canonical_cohort(monkeypatch)
     monkeypatch.setenv("MEMORY_MODE", MemoryRolloutMode.read.value)
     monkeypatch.setenv("MEMORY_ENABLED_USERS", "rollout-only-user")
 
-    assert MemoryRolloutConfig.from_env().mode == MemoryRolloutMode.read
-    assert resolve_memory_system("rollout-only-user") == MemorySystem.LEGACY
+    assert universal_memory_capabilities("rollout-only-user").memory_reads_enabled is True
+    assert resolve_memory_system("rollout-only-user") == MemorySystem.CANONICAL
+    assert resolve_memory_system("arbitrary-user") == MemorySystem.CANONICAL
 
 
 @pytest.mark.parametrize(
@@ -380,7 +339,6 @@ def test_main_registers_memory_product_and_admin_routes():
             "/memory/archive/search",
         }
         assert set(path for _method, path in admin_routes) == {
-            "/memory/admin/users/{uid}/read-rollout-decision",
             "/memory/admin/users/{uid}/non-active-route-report",
             "/memory/admin/users/{uid}/short-term-lifecycle/run",
         }

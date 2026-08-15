@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import CoreGraphics
 import SwiftUI
@@ -45,12 +46,16 @@ final class ChatTranscriptGeometry: ObservableObject {
   /// Width available outside the readable column, on one side.
   @Published private(set) var gutter: CGFloat = 0
 
-  /// The exact condition shared by the rail and native-scroller suppression.
-  /// Narrow transcript surfaces keep their ordinary AppKit scrollbar.
+  /// The rail is an overlay on the trailing edge, not a reserved column. It
+  /// appears once there are enough prompts to navigate; the native scroller
+  /// stays `.never` so the two never sit side by side.
   var showsPromptTimeline: Bool {
     marks.count >= ChatPromptTimelineModel.minimumMarks
-      && gutter >= ChatPromptTimelineMetrics.minimumGutter
   }
+
+  /// The NSScrollView the detector last resolved. Used to restore clip origin
+  /// after older rows are prepended.
+  weak var scrollView: NSScrollView?
 
   private var sources: [ChatPromptSource] = []
   private var offsets: [String: CGFloat] = [:]
@@ -92,6 +97,11 @@ final class ChatTranscriptGeometry: ObservableObject {
     }
   }
 
+  func prependSnapshot() -> ChatTranscriptPrependPreservation.Snapshot? {
+    guard documentHeight > 0 else { return nil }
+    return .init(documentHeight: documentHeight, scrollTop: scrollTop)
+  }
+
   func setViewport(_ size: CGSize, columnWidth: CGFloat?) {
     let column = min(columnWidth ?? size.width, size.width)
     let measured = max(0, (size.width - column) / 2)
@@ -106,9 +116,14 @@ final class ChatTranscriptGeometry: ObservableObject {
   /// Follows the scroll controller's explicit intent rather than waiting for a
   /// layout pass to prove the bottom position. That prevents the final prompt
   /// from briefly lighting the penultimate mark after initial restore or a new
-  /// message.
+  /// message. Entering live-follow also drops a rail pin: Jump to latest is an
+  /// outright choice of the newest turn, even if the follow flag was already true.
   func setFollowingLiveEdge(_ isFollowing: Bool) {
-    guard isFollowingLiveEdge != isFollowing else { return }
+    let pinCleared = isFollowing && pinnedMarkID != nil
+    if isFollowing {
+      pinnedMarkID = nil
+    }
+    guard isFollowingLiveEdge != isFollowing || pinCleared else { return }
     isFollowingLiveEdge = isFollowing
     refreshActiveMark()
   }

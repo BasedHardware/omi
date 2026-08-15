@@ -36,12 +36,25 @@ class MemoryCollections:
         return f"{self.user_root}/memory_control/state"
 
     @property
+    def legacy_canonical_backfill_checkpoint(self) -> str:
+        return f"{self.user_root}/memory_control/legacy_canonical_backfill"
+
+    @property
+    def historical_graph_enrichment_cursor(self) -> str:
+        return f"{self.user_root}/memory_control/historical_graph_enrichment"
+
+    @property
     def memory_apply_control_state(self) -> str:
         return f"{self.user_root}/memory_state/apply_control"
 
     @property
     def memory_lineage(self) -> str:
         return f"{self.user_root}/memory_lineage"
+
+    @property
+    def memory_historical_overrides(self) -> str:
+        """Canonical suppression records for legacy public memory identities."""
+        return f"{self.user_root}/memory_historical_overrides"
 
     @property
     def memory_evidence(self) -> str:
@@ -95,14 +108,6 @@ class MemoryCollections:
     def memory_state_head(self) -> str:
         return f"{self.user_root}/memory_state/head"
 
-    @property
-    def v3_compatibility_projection_state(self) -> str:
-        return f"{self.user_root}/v3_compatibility_projection/state"
-
-    @property
-    def v3_compatibility_projection_items(self) -> str:
-        return f"{self.user_root}/v3_compatibility_projection_items"
-
     def all_collection_paths(self) -> list[str]:
         return [
             self.memory_items,
@@ -110,6 +115,7 @@ class MemoryCollections:
             self.memory_source_replacements,
             self.memory_outbox,
             self.memory_lineage,
+            self.memory_historical_overrides,
             self.memory_evidence,
             self.memory_graph_assertions,
             self.memory_review_queue,
@@ -122,7 +128,6 @@ class MemoryCollections:
             self.legacy_fallback,
             self.memory_commits,
             self.memory_state,
-            self.v3_compatibility_projection_items,
         ]
 
 

@@ -55,6 +55,18 @@ final class ChatErrorStateMappingTests: XCTestCase {
 
 final class ChatErrorStateTests: XCTestCase {
 
+  @MainActor
+  func testRuntimeOwnerChangeClearsStaleAuthRecoveryCard() {
+    let provider = ChatProvider()
+    provider.currentError = .authRequired
+    provider.errorMessage = "Previous account error"
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+
+    XCTAssertNil(provider.currentError, "the next account must not inherit a sign-in CTA")
+    XCTAssertNil(provider.errorMessage, "the next account must not inherit an error banner")
+  }
+
   // MARK: - Exhaustive recovery coverage
 
   /// Every `ChatErrorState` case must have a `primaryRecovery`. Implemented
@@ -258,6 +270,21 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertTrue(snippet.contains("guard isUserClaudeMode else { return }"))
   }
 
+  func testClaudeOAuthSuccessKeepsKeychainBackedConnectionState() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    let start = try XCTUnwrap(source.range(of: "private func handleClaudeAuthSuccess()"))
+    let tail = source[start.lowerBound...]
+    let end = try XCTUnwrap(tail.range(of: "\n  }\n"))
+    let snippet = String(tail[..<end.lowerBound])
+
+    XCTAssertTrue(snippet.contains("markClaudeAuthSucceeded()"))
+    XCTAssertFalse(snippet.contains("checkClaudeConnectionStatus()"))
+
+    let marker = try XCTUnwrap(source.range(of: "func markClaudeAuthSucceeded()"))
+    let stateUpdate = String(source[marker.lowerBound...]).prefix(260)
+    XCTAssertTrue(stateUpdate.contains("isClaudeConnected = true"))
+  }
+
   func testEnsureBridgeStartedMapsAuthMissingToAuthRequired() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
     XCTAssertTrue(source.contains("ChatErrorState.from(bridgeError)"))
@@ -272,7 +299,10 @@ final class ChatErrorStateTests: XCTestCase {
     let source = try sourceFile("Providers/ChatProvider.swift")
     XCTAssertTrue(source.contains("onAccepted: (@MainActor () -> Void)? = nil"))
     XCTAssertTrue(source.contains("onAccepted?()"))
-    XCTAssertTrue(source.contains("self.draftRevision == submittedRevision"))
+    // Static tripwire. The revision now lives on `composerDraft` (the draft is no
+    // longer published on the provider); the guard it pins is unchanged, and
+    // `ChatComposerDraftTests` covers the revision semantics behaviorally.
+    XCTAssertTrue(source.contains("self.composerDraft.revision == submittedRevision"))
     XCTAssertTrue(source.contains("self.draftText == text\n        else { return }"))
     XCTAssertFalse(source.contains("draftText = trimmedText"))
   }

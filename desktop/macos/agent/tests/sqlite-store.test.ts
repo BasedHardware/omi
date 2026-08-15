@@ -21,13 +21,19 @@ describe("SqliteAgentStore", () => {
     store.migrate();
     store.migrate();
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(28);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(33);
+    expect(store.allRows("SELECT version FROM schema_migrations ORDER BY version")).toEqual(
+      Array.from({ length: 33 }, (_, index) => ({ version: index + 1 })),
+    );
     expect(tableNames(store)).toEqual([
       "adapter_bindings",
       "artifacts",
       "backend_conversation_delete_outbox",
       "backend_reconcile_state",
       "backend_turn_outbox",
+      "chat_first_cold_start_sequence_receipts",
+      "chat_first_deferral_outbox",
+      "chat_first_materialization_receipts",
       "cleared_backend_turn_claims",
       "completion_delta_checkpoints",
       "context_owner_snapshot_state",
@@ -60,6 +66,88 @@ describe("SqliteAgentStore", () => {
     ]);
     expect(tableNames(store)).not.toContain("desktop_action_queue");
 
+    store.close();
+  });
+
+  it("scopes cold-start terminal receipts by owner", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const insert = `INSERT INTO chat_first_cold_start_sequence_receipts(
+      sequence_id, owner_id, conversation_id, control_generation,
+      receipt_id, terminal_state, created_at_ms
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+    store.execute(insert, ["cold-start:1", "owner-a", "conversation-a", 1, "receipt-a", "completed", 1]);
+    store.execute(insert, ["cold-start:1", "owner-b", "conversation-b", 1, "receipt-b", "completed", 2]);
+
+    expect(store.getRow("SELECT COUNT(*) AS count FROM chat_first_cold_start_sequence_receipts").count).toBe(2);
+    store.close();
+  });
+
+  it("upgrades an origin/main v28 local-only database without skipping Chat-first migrations", () => {
+    const databasePath = newDatabasePath();
+    let store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "onboarding",
+      defaultAdapterId: "acp",
+    });
+    store.insertSurfaceConversation({
+      ownerId: "owner",
+      surfaceKind: "onboarding",
+      externalRefKind: "onboarding",
+      externalRefId: "legacy-local-only",
+      conversationId: "conv-legacy-local-only",
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    store.execute(`
+      INSERT INTO conversation_turns(
+        turn_id, conversation_id, role, surface_kind, origin, status,
+        content, content_blocks_json, resources_json, metadata_json, created_at_ms,
+        updated_at_ms, turn_seq
+      ) VALUES (
+        'turn-legacy-local-only', 'conv-legacy-local-only', 'user',
+        'onboarding', 'typed_chat', 'completed', 'legacy transcript', '[]', '[]',
+        '{}', 2, 2, 1
+      )
+    `);
+    store.execute(`
+      INSERT INTO backend_turn_outbox(
+        turn_id, conversation_id, owner_id, client_message_id, status, attempt_count,
+        delivery_generation, conversation_generation, payload_hash,
+        available_at_ms, created_at_ms, updated_at_ms
+      ) VALUES (
+        'turn-legacy-local-only', 'conv-legacy-local-only', 'owner',
+        'turn-legacy-local-only', 'pending',
+        0, 0, 1, 'sha256:legacy-local-only', 2, 2, 2
+      )
+    `);
+
+    // Origin/main used migration v28 for local-only delivery and did not have
+    // any Chat-first tables or the later migration rows.
+    store.execute("DROP TABLE chat_first_deferral_outbox");
+    store.execute("DROP TABLE chat_first_materialization_receipts");
+    store.execute("DROP TABLE chat_first_cold_start_sequence_receipts");
+    store.execute("DELETE FROM schema_migrations WHERE version IN (28, 29, 30, 31)");
+    store.execute("INSERT INTO schema_migrations(version, applied_at_ms) VALUES (28, 4_000)");
+    store.close();
+
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    expect(tableNames(store)).toEqual(expect.arrayContaining([
+      "chat_first_deferral_outbox",
+      "chat_first_materialization_receipts",
+      "chat_first_cold_start_sequence_receipts",
+    ]));
+    expect(store.allRows("SELECT version FROM schema_migrations WHERE version BETWEEN 28 AND 32 ORDER BY version")).toEqual([
+      { version: 28 },
+      { version: 29 },
+      { version: 30 },
+      { version: 31 },
+      { version: 32 },
+    ]);
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM backend_turn_outbox WHERE conversation_id = 'conv-legacy-local-only'",
+    ).count).toBe(0);
     store.close();
   });
 
@@ -252,7 +340,7 @@ describe("SqliteAgentStore", () => {
        SET surface_kind = 'onboarding'
        WHERE conversation_id = 'conv-upgrade-local-only' AND owner_id = 'owner'`,
     );
-    store.execute("DELETE FROM schema_migrations WHERE version = 28");
+    store.execute("DELETE FROM schema_migrations WHERE version = 31");
     store.close();
 
     const upgraded = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
@@ -263,7 +351,7 @@ describe("SqliteAgentStore", () => {
       "SELECT COUNT(*) AS count FROM conversation_turns WHERE conversation_id = 'conv-upgrade-local-only'",
     ).count).toBe(1);
     expect(upgraded.getRow(
-      "SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 28",
+      "SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 31",
     ).count).toBe(1);
     upgraded.close();
   });
@@ -1264,6 +1352,15 @@ describe("SqliteAgentStore", () => {
     expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_memory_candidates"))).toBe(true);
     expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_context_access_log"))).toBe(true);
     expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_attention_overrides"))).toBe(true);
+    expect(execStatements.some((statement) => statement.includes("CREATE TABLE chat_first_deferral_outbox"))).toBe(
+      true,
+    );
+    expect(
+      execStatements.some((statement) => statement.includes("CREATE TABLE chat_first_materialization_receipts")),
+    ).toBe(true);
+    expect(
+      execStatements.some((statement) => statement.includes("CREATE TABLE chat_first_cold_start_sequence_receipts")),
+    ).toBe(true);
   });
 
   it("stores no legacy_default grant rows in a fresh database", () => {

@@ -20,6 +20,8 @@ from routers.conversation_finalization import _parse_task_payload
 import routers.conversation_finalization as finalization_router
 import routers.pusher as pusher_router
 from services import conversation_finalization as finalization_service
+import utils.pusher_finalization as pusher_finalization
+import utils.pusher_protocol as pusher_protocol
 from utils.conversations import lifecycle as lifecycle_service
 from utils import app_integrations
 from utils import cloud_tasks
@@ -836,7 +838,7 @@ async def test_worker_requeues_an_unexpected_failure_after_claim(monkeypatch):
 async def test_pusher_rejects_legacy_finalization_without_a_durable_job():
     websocket = _PusherWebSocket()
 
-    await pusher_router._process_conversation_task('uid-1', 'conversation-1', 'en', websocket)
+    await pusher_finalization.process_conversation_task('uid-1', 'conversation-1', 'en', websocket)
 
     frame_type = int.from_bytes(websocket.sent[0][:4], 'little')
     result = json.loads(websocket.sent[0][4:])
@@ -855,7 +857,7 @@ async def test_pusher_rejects_legacy_finalization_without_a_durable_job():
     ],
 )
 def test_pusher_session_outcome_keeps_normal_disconnects_out_of_failures(close_code, application_failed, outcome):
-    assert pusher_router.pusher_session_outcome(close_code, application_failed=application_failed) == outcome
+    assert pusher_protocol.pusher_session_outcome(close_code, application_failed=application_failed) == outcome
 
 
 @pytest.mark.anyio
@@ -922,12 +924,12 @@ async def test_pusher_claims_the_durable_job_before_finalizing(monkeypatch):
     claim = MagicMock(return_value={'status': 'claimed', 'lease_epoch': 7, 'attempt_count': 1})
     completed = MagicMock(return_value=True)
     finalizer = AsyncMock()
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(jobs_db, 'claim_finalization_job', claim)
     monkeypatch.setattr(jobs_db, 'mark_finalization_completed', completed)
-    monkeypatch.setattr(pusher_router, 'finalize_persisted_conversation', finalizer)
+    monkeypatch.setattr(pusher_finalization, 'finalize_persisted_conversation', finalizer)
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -961,7 +963,7 @@ async def test_pusher_keeps_a_completed_job_terminal_when_source_result_delivery
     websocket.send_bytes = closed_send
     completed = MagicMock(return_value=True)
     retryable = MagicMock()
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
@@ -969,9 +971,9 @@ async def test_pusher_keeps_a_completed_job_terminal_when_source_result_delivery
     )
     monkeypatch.setattr(jobs_db, 'mark_finalization_completed', completed)
     monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
-    monkeypatch.setattr(pusher_router, 'finalize_persisted_conversation', AsyncMock())
+    monkeypatch.setattr(pusher_finalization, 'finalize_persisted_conversation', AsyncMock())
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -982,23 +984,23 @@ async def test_pusher_keeps_a_completed_job_terminal_when_source_result_delivery
 @pytest.mark.anyio
 async def test_pusher_closes_a_fenced_finalization_without_fanout(monkeypatch):
     websocket = _PusherWebSocket()
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
         lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 7, 'attempt_count': 1},
     )
     monkeypatch.setattr(
-        pusher_router,
+        pusher_finalization,
         'finalize_persisted_conversation',
         AsyncMock(return_value=ConversationFinalizationDisposition.fenced),
     )
     normal_completion = MagicMock()
     fenced_completion = MagicMock(return_value=True)
     monkeypatch.setattr(jobs_db, 'mark_finalization_completed', normal_completion)
-    monkeypatch.setattr(pusher_router.lifecycle_service, 'complete_fenced_finalization', fenced_completion)
+    monkeypatch.setattr(pusher_finalization.lifecycle_service, 'complete_fenced_finalization', fenced_completion)
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1011,13 +1013,13 @@ async def test_pusher_closes_a_fenced_finalization_without_fanout(monkeypatch):
 async def test_pusher_replays_a_terminal_fenced_job_without_completed_signal(monkeypatch):
     websocket = _PusherWebSocket()
     finalizer = AsyncMock()
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db, 'claim_finalization_job', lambda *args, **kwargs: {'status': 'fenced', 'lease_epoch': None}
     )
-    monkeypatch.setattr(pusher_router, 'finalize_persisted_conversation', finalizer)
+    monkeypatch.setattr(pusher_finalization, 'finalize_persisted_conversation', finalizer)
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1029,19 +1031,19 @@ async def test_pusher_replays_a_terminal_fenced_job_without_completed_signal(mon
 async def test_pusher_requeues_an_unexpected_failure_after_claim(monkeypatch):
     websocket = _PusherWebSocket()
     retryable = MagicMock(return_value=True)
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
         lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 1},
     )
     monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
-    monkeypatch.setattr(pusher_router, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
+    monkeypatch.setattr(pusher_finalization, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
     monkeypatch.setattr(
-        pusher_router, 'finalize_persisted_conversation', AsyncMock(side_effect=RuntimeError('raw transcript'))
+        pusher_finalization, 'finalize_persisted_conversation', AsyncMock(side_effect=RuntimeError('raw transcript'))
     )
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1063,7 +1065,7 @@ async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monke
     websocket = _PusherWebSocket()
     retryable = MagicMock(return_value=True)
     dead_letter = MagicMock(return_value=True)
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
@@ -1075,15 +1077,15 @@ async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monke
         lambda *args, **kwargs: {'status': 'leased', 'dispatch_generation': 3, 'lease_epoch': 4},
     )
     monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
-    monkeypatch.setattr(pusher_router, 'final_attempt_failed', dead_letter)
-    monkeypatch.setattr(pusher_router, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
+    monkeypatch.setattr(pusher_finalization, 'final_attempt_failed', dead_letter)
+    monkeypatch.setattr(pusher_finalization, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
     monkeypatch.setattr(
-        pusher_router,
+        pusher_finalization,
         'finalize_persisted_conversation',
         AsyncMock(side_effect=ConversationFinalizationError('processing_failed')),
     )
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1100,21 +1102,21 @@ async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monke
 async def test_pusher_lease_loss_never_terminalizes_a_newer_finalization_owner(monkeypatch):
     websocket = _PusherWebSocket()
     dead_letter = MagicMock(return_value=False)
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
         lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 5},
     )
-    monkeypatch.setattr(pusher_router, 'final_attempt_failed', dead_letter)
-    monkeypatch.setattr(pusher_router, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
+    monkeypatch.setattr(pusher_finalization, 'final_attempt_failed', dead_letter)
+    monkeypatch.setattr(pusher_finalization, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
     monkeypatch.setattr(
-        pusher_router,
+        pusher_finalization,
         'finalize_persisted_conversation',
         AsyncMock(side_effect=ConversationFinalizationError('processing_failed')),
     )
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1129,14 +1131,14 @@ async def test_pusher_lease_loss_never_terminalizes_a_newer_finalization_owner(m
 @pytest.mark.anyio
 async def test_pusher_tells_the_live_session_a_dead_lettered_job_is_terminal(monkeypatch):
     websocket = _PusherWebSocket()
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
         lambda *args, **kwargs: {'status': 'dead_letter', 'lease_epoch': None, 'attempt_count': 0},
     )
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1178,7 +1180,29 @@ async def test_finalizer_never_logs_a_provider_exception_body(monkeypatch, caplo
 
 
 @pytest.mark.anyio
-async def test_completed_conversation_replays_required_plan_without_best_effort_bundle(monkeypatch):
+@pytest.mark.parametrize(
+    ('source', 'external_data', 'discarded', 'expected_intent_kwargs'),
+    [
+        ('omi', None, False, {'conversation_id': 'conversation-1', 'summary': 'Captured title'}),
+        (
+            'desktop',
+            {'conversation_role': 'meeting'},
+            False,
+            {'conversation_id': 'conversation-1', 'summary': 'Captured title', 'is_desktop_meeting': True},
+        ),
+        ('desktop', {'conversation_role': 'ambient'}, False, None),
+        (
+            'desktop',
+            {'conversation_role': 'meeting', 'conversation_finalization_reason': 'max_duration_rotation'},
+            False,
+            None,
+        ),
+        ('desktop', {'conversation_role': 'meeting'}, True, None),
+    ],
+)
+async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
+    monkeypatch, source, external_data, discarded, expected_intent_kwargs
+):
     async def inline_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
@@ -1186,7 +1210,10 @@ async def test_completed_conversation_replays_required_plan_without_best_effort_
         id='conversation-1',
         status=ConversationStatus.completed,
         language='en',
-        discarded=False,
+        source=SimpleNamespace(value=source),
+        external_data=external_data,
+        discarded=discarded,
+        structured=SimpleNamespace(title='Captured title', overview='Captured overview'),
         geolocation=None,
     )
     integrations = AsyncMock(return_value=[])
@@ -1220,6 +1247,8 @@ async def test_completed_conversation_replays_required_plan_without_best_effort_
     completed = MagicMock(return_value=True)
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', completed)
     monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', integrations)
+    capture_arrival = MagicMock()
+    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', capture_arrival)
 
     disposition = await persisted_finalizer.finalize_persisted_conversation(
         'uid-1',
@@ -1236,9 +1265,14 @@ async def test_completed_conversation_replays_required_plan_without_best_effort_
         require_delivery=True,
     )
     replayed_memory.assert_not_called()
-    assert all(effect.execute.call_count == 1 for effect in required_effects)
+    if not discarded:
+        assert all(effect.execute.call_count == 1 for effect in required_effects)
     assert disposition == ConversationFinalizationDisposition.completed
     completed.assert_called_once_with('job-1', 2, 3)
+    if expected_intent_kwargs is None:
+        capture_arrival.assert_not_called()
+    else:
+        capture_arrival.assert_called_once_with('uid-1', **expected_intent_kwargs)
 
 
 @pytest.mark.anyio

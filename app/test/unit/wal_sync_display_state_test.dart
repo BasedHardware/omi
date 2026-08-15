@@ -19,8 +19,10 @@ void main() {
   }
 
   group('Wal.syncDisplayState', () {
+    const terminalStatuses = {WalStatus.corrupted, WalStatus.outsideRecoveryWindow};
+
     test('isSyncing wins over every non-terminal status', () {
-      for (final s in WalStatus.values.where((status) => status != WalStatus.corrupted)) {
+      for (final s in WalStatus.values.where((status) => !terminalStatuses.contains(status))) {
         final w = makeWal(status: s, isSyncing: true);
         expect(w.syncDisplayState, WalSyncDisplayState.syncing, reason: 'status=$s');
       }
@@ -28,6 +30,24 @@ void main() {
 
     test('corrupted wins over a stale syncing flag', () {
       expect(makeWal(status: WalStatus.corrupted, isSyncing: true).syncDisplayState, WalSyncDisplayState.corrupted);
+    });
+
+    test('outsideRecoveryWindow wins over a stale syncing flag', () {
+      expect(
+        makeWal(status: WalStatus.outsideRecoveryWindow, isSyncing: true).syncDisplayState,
+        WalSyncDisplayState.outsideRecoveryWindow,
+        reason: 'a recording the server refused for good must never render as an active upload',
+      );
+    });
+
+    test('outsideRecoveryWindow -> outsideRecoveryWindow regardless of retry count', () {
+      for (final r in [0, 1, walMaxAutoRetries]) {
+        expect(
+          makeWal(status: WalStatus.outsideRecoveryWindow, retryCount: r).syncDisplayState,
+          WalSyncDisplayState.outsideRecoveryWindow,
+          reason: 'retryCount=$r must not downgrade it to waiting/retrying/failed',
+        );
+      }
     });
 
     test('uploaded -> uploaded (processing on server)', () {
@@ -80,6 +100,11 @@ void main() {
       expect(back.status, WalStatus.uploaded);
       expect(back.jobId, 'job-xyz');
       expect(back.uploadedAt, 1700000123);
+    });
+
+    test('outsideRecoveryWindow survives a restart', () {
+      final w = makeWal(status: WalStatus.outsideRecoveryWindow);
+      expect(Wal.fromJson(w.toJson()).status, WalStatus.outsideRecoveryWindow);
     });
 
     test('legacy json without job fields defaults safely', () {

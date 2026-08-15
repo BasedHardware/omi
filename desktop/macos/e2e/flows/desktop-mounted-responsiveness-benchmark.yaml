@@ -1,0 +1,105 @@
+version: 2
+name: desktop-mounted-responsiveness-benchmark
+tier: 3
+description: Pairs the fast typed navigation acknowledgement with an independent mounted-state wait; use test-mounted-navigation-latency.sh for the corresponding one-second timing gate.
+app: non-prod
+covers:
+  # The named-bundle resource guard runs with this mounted-shell benchmark so
+  # the shared Second Brain mark cannot silently regress to a generic ring.
+  - desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBComponents.swift
+preconditions:
+  - automation_bridge_ready
+  - chat_first_cohort_named_bundle
+
+steps:
+  - id: S1
+    name: Home mounts within one second
+    bridge.navigate:
+      target: chat
+      activateApp: false
+      waitForVisibility: false
+    wait:
+      state.chatFirstRoute: chat
+  - id: S1a
+    name: Home mounted-render budget
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
+
+  - id: S2
+    name: Memory mounts within one second
+    bridge.navigate:
+      target: memories
+      activateApp: false
+      waitForVisibility: false
+    wait:
+      state.chatFirstRoute: memories
+  - id: S2a
+    name: Memory mounted-render budget
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
+
+  - id: S3
+    name: Tasks mounts within one second
+    bridge.navigate:
+      target: tasks
+      activateApp: false
+      waitForVisibility: false
+    wait:
+      state.chatFirstRoute: tasks
+  - id: S3a
+    name: Tasks mounted-render budget
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
+
+  - id: S4
+    name: Apps mounts within one second
+    bridge.navigate:
+      target: apps
+      activateApp: false
+      waitForVisibility: false
+    wait:
+      state.chatFirstRoute: more.apps
+  - id: S4a
+    name: Apps mounted-render budget
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
+
+  - id: S5
+    name: Settings mounts through the typed More route
+    bridge.navigate:
+      target: settings
+      activateApp: false
+      waitForVisibility: false
+    wait:
+      state.chatFirstRoute: more.settings
+  - id: S5a
+    name: Settings mounted-render budget
+    trace.expect:
+      latest: true
+      trace.path: /navigate
+      trace.statusCode: 200
+      trace.durationMs:
+        max: 100
+
+  - id: S6
+    name: Assert logs are clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+        - "navigation_target_not_visible"

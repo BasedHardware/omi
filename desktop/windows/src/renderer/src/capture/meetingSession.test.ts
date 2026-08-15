@@ -19,11 +19,24 @@ vi.mock('../lib/transcriptionClient', () => ({
   })
 }))
 
-// The meeting session defers its mic lane to the continuous mic session (C6);
-// mock the signal so each test controls whether the mic is already owned.
-let continuousMicActive = false
+// The meeting session defers its mic lane only to a healthy continuous mic (C6).
+const live = vi.hoisted(() => ({
+  health: 'inactive' as 'inactive' | 'connecting' | 'ready' | 'failed',
+  waitForReady: vi.fn(async () => true),
+  listeners: [] as Array<(health: 'inactive' | 'connecting' | 'ready' | 'failed') => void>
+}))
 vi.mock('./liveMicSession', () => ({
-  isLiveMicSessionActive: () => continuousMicActive
+  getLiveMicSessionHealth: () => live.health,
+  waitForLiveMicSessionReady: live.waitForReady,
+  onLiveMicSessionHealth: (
+    listener: (health: 'inactive' | 'connecting' | 'ready' | 'failed') => void
+  ) => {
+    live.listeners.push(listener)
+    listener(live.health)
+    return () => {
+      live.listeners = live.listeners.filter((candidate) => candidate !== listener)
+    }
+  }
 }))
 
 import { startMeetingSession, formatMeetingTranscript } from './meetingSession'
@@ -39,7 +52,13 @@ beforeEach(() => {
   laneModes.mic = undefined
   laneModes.system = undefined
   systemShouldFail = false
-  continuousMicActive = false
+  live.health = 'inactive'
+  live.waitForReady.mockReset()
+  live.waitForReady.mockImplementation(async () => {
+    live.health = 'ready'
+    return true
+  })
+  live.listeners = []
   insertLocalConversation.mockClear()
   notifyConversationsChanged.mockClear()
   // meetingSession reads window.omi.* and the global crypto.randomUUID.
@@ -86,7 +105,7 @@ describe('startMeetingSession', () => {
   })
 
   it('does NOT open a second mic lane when a continuous mic session is already active (C6)', async () => {
-    continuousMicActive = true
+    live.health = 'ready'
     const session = await startMeetingSession({ appName: 'Zoom', onError: vi.fn() })
     // Only the system lane runs; the mic is left to the continuous session so no
     // duplicate /v4/listen mic socket is opened for the same audio.
@@ -98,6 +117,39 @@ describe('startMeetingSession', () => {
     expect(stops.mic).not.toHaveBeenCalled()
     expect(stops.system).toHaveBeenCalledOnce()
     expect(insertLocalConversation).toHaveBeenCalledOnce()
+  })
+
+  it('includes a connecting continuous mic in the startup readiness barrier', async () => {
+    live.health = 'connecting'
+    const session = await startMeetingSession({ appName: 'Zoom', onError: vi.fn() })
+
+    expect(live.waitForReady).toHaveBeenCalledOnce()
+    expect(laneCbs.mic).toBeUndefined()
+    await session.stop()
+  })
+
+  it('reports a delegated continuous mic that fails after startup', async () => {
+    live.health = 'ready'
+    const onError = vi.fn()
+    const session = await startMeetingSession({ appName: 'Zoom', onError })
+
+    live.health = 'failed'
+    for (const listener of live.listeners) listener(live.health)
+
+    expect(onError).toHaveBeenCalledWith('microphone: continuous transcription stopped')
+    await session.stop()
+    expect(live.listeners).toHaveLength(0)
+  })
+
+  it('fails startup and stops system audio when the delegated mic never becomes ready', async () => {
+    live.health = 'connecting'
+    live.waitForReady.mockResolvedValue(false)
+
+    await expect(startMeetingSession({ appName: 'Zoom', onError: vi.fn() })).rejects.toThrow(
+      'continuous microphone transcription did not become ready'
+    )
+    expect(stops.system).toHaveBeenCalledOnce()
+    expect(laneCbs.mic).toBeUndefined()
   })
 
   it('skips the save when the system lane produced nothing', async () => {

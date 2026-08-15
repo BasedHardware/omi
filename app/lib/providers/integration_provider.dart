@@ -5,54 +5,102 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/utils/logger.dart';
 
+typedef IntegrationStatusFetcher = Future<IntegrationResponse?> Function(String appKey);
+typedef IntegrationSaver = Future<bool> Function(String appKey, Map<String, dynamic> details);
+typedef IntegrationDeleter = Future<bool> Function(String appKey);
+typedef IntegrationPrefWriter = Future<void> Function(String key, bool value);
+
 class IntegrationProvider extends ChangeNotifier {
+  IntegrationProvider({
+    IntegrationStatusFetcher? fetchStatus,
+    IntegrationSaver? saveStatus,
+    IntegrationDeleter? deleteStatus,
+    IntegrationPrefWriter? persistPref,
+  })  : _fetchStatus = fetchStatus ?? getIntegration,
+        _saveStatus = saveStatus ?? saveIntegration,
+        _deleteStatus = deleteStatus ?? deleteIntegration,
+        _persistPref = persistPref ?? _defaultPersistPref;
+
+  final IntegrationStatusFetcher _fetchStatus;
+  final IntegrationSaver _saveStatus;
+  final IntegrationDeleter _deleteStatus;
+  final IntegrationPrefWriter _persistPref;
+
   final Map<String, bool> _integrations = {};
   bool _isLoading = false;
   bool _hasLoaded = false;
   int _sessionGeneration = 0;
+  Future<void>? _inFlightLoad;
 
   Map<String, bool> get integrations => _integrations;
   bool get isLoading => _isLoading;
   bool get hasLoaded => _hasLoaded;
 
-  Future<void> loadFromBackend() async {
+  static List<String> get trackedAppKeys => IntegrationApp.values.map((app) => app.key).toList(growable: false);
+
+  static Future<void> _defaultPersistPref(String key, bool value) {
+    return SharedPreferencesUtil().saveBool(key, value);
+  }
+
+  static String prefKeyFor(String appKey) => '${appKey}_connected';
+
+  bool _isCurrent(int generation) => generation == _sessionGeneration;
+
+  Future<void> loadFromBackend() {
+    final existing = _inFlightLoad;
+    if (existing != null) return existing;
+    late final Future<void> started;
+    started = _loadFromBackendBody().whenComplete(() {
+      if (identical(_inFlightLoad, started)) _inFlightLoad = null;
+    });
+    _inFlightLoad = started;
+    return started;
+  }
+
+  Future<void> _loadFromBackendBody() async {
     final generation = _sessionGeneration;
     _isLoading = true;
     notifyListeners();
 
     try {
-      final responses = await Future.wait([getIntegration('google_calendar'), getIntegration('gmail')]);
-      if (generation != _sessionGeneration) return;
+      final keys = trackedAppKeys;
+      final responses = await Future.wait(keys.map(_fetchStatus));
+      if (!_isCurrent(generation)) return;
 
-      _integrations['google_calendar'] = responses[0]?.connected ?? false;
-      // Gmail shares the Google grant; the backend reports it connected only when
-      // that grant carries the Gmail scope.
-      _integrations['gmail'] = responses[1]?.connected ?? false;
+      for (var i = 0; i < keys.length; i++) {
+        final connected = responses[i]?.connected ?? false;
+        _integrations[keys[i]] = connected;
+        await _persistPref(prefKeyFor(keys[i]), connected);
+        if (!_isCurrent(generation)) return;
+      }
 
-      // Sync SharedPreferences for backward compatibility with services
-      // This ensures services that read from SharedPreferences stay in sync
-      await SharedPreferencesUtil().saveBool('google_calendar_connected', _integrations['google_calendar'] ?? false);
-      await SharedPreferencesUtil().saveBool('gmail_connected', _integrations['gmail'] ?? false);
-
+      if (!_isCurrent(generation)) return;
       _hasLoaded = true;
     } catch (e) {
-      if (generation != _sessionGeneration) return;
+      if (!_isCurrent(generation)) return;
       Logger.debug('Error loading integrations from backend: $e');
     } finally {
-      if (generation == _sessionGeneration) {
+      if (_isCurrent(generation)) {
         _isLoading = false;
         notifyListeners();
       }
     }
   }
 
+  Future<void> ensureLoaded() async {
+    if (_hasLoaded) return;
+    await loadFromBackend();
+  }
+
   Future<bool> saveConnection(String appKey, Map<String, dynamic> details) async {
     final generation = _sessionGeneration;
     try {
-      final success = await saveIntegration(appKey, details);
-      if (generation != _sessionGeneration) return false;
+      final success = await _saveStatus(appKey, details);
+      if (!_isCurrent(generation)) return false;
       if (success) {
         _integrations[appKey] = true;
+        await _persistPref(prefKeyFor(appKey), true);
+        if (!_isCurrent(generation)) return false;
         notifyListeners();
       }
       return success;
@@ -65,10 +113,12 @@ class IntegrationProvider extends ChangeNotifier {
   Future<bool> deleteConnection(String appKey) async {
     final generation = _sessionGeneration;
     try {
-      final success = await deleteIntegration(appKey);
-      if (generation != _sessionGeneration) return false;
+      final success = await _deleteStatus(appKey);
+      if (!_isCurrent(generation)) return false;
       if (success) {
         _integrations[appKey] = false;
+        await _persistPref(prefKeyFor(appKey), false);
+        if (!_isCurrent(generation)) return false;
         notifyListeners();
       }
       return success;
@@ -78,24 +128,17 @@ class IntegrationProvider extends ChangeNotifier {
     }
   }
 
-  bool isAppConnected(IntegrationApp app) {
-    switch (app) {
-      case IntegrationApp.googleCalendar:
-        return _integrations['google_calendar'] ?? false;
-      case IntegrationApp.appleHealth:
-        return _integrations['apple_health'] ?? false;
-      case IntegrationApp.gmail:
-        return _integrations['gmail'] ?? false;
-    }
-  }
+  bool isAppConnected(IntegrationApp app) => _integrations[app.key] ?? false;
 
   void clearUserData() {
     _sessionGeneration++;
+    _inFlightLoad = null;
     _integrations.clear();
     _isLoading = false;
     _hasLoaded = false;
-    SharedPreferencesUtil().saveBool('google_calendar_connected', false);
-    SharedPreferencesUtil().saveBool('gmail_connected', false);
+    for (final key in trackedAppKeys) {
+      _persistPref(prefKeyFor(key), false);
+    }
     notifyListeners();
   }
 }

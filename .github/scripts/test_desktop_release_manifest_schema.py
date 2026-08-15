@@ -76,6 +76,17 @@ class ArtifactUrlDefinitions(unittest.TestCase):
 
 
 class BetaFieldsStayOutOfTheStableSchema(unittest.TestCase):
+    def test_t2_evidence_asset_rule_matches_the_executable_contract(self):
+        schema = _load_schema()
+        t2_rule = next(
+            rule
+            for rule in schema["allOf"]
+            if rule.get("if", {}).get("properties", {}).get("qualification_tier") == {"const": "T2"}
+        )
+        evidence = t2_rule["then"]["properties"]["qualification_evidence_asset"]
+        self.assertTrue(re.fullmatch(evidence["pattern"], "qualification-evidence-0.12.159+12159.json"))
+        self.assertIsNone(re.fullmatch(evidence["pattern"], "desktop-smoke-result-beta.json"))
+
     def test_no_beta_artifact_properties(self):
         schema = _load_schema()
         self.assertNotIn("beta_zip_url", schema["properties"])

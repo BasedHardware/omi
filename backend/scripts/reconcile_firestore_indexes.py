@@ -107,25 +107,6 @@ def verify_manifest_source(manifest_path: Path) -> dict[str, Any]:
     return generated
 
 
-def deploy_indexes(*, project: str, manifest_path: Path, runner: CommandRunner = subprocess.run) -> None:
-    command = [
-        'npx',
-        '--no-install',
-        'firebase',
-        'deploy',
-        '--only',
-        'firestore:indexes',
-        '--project',
-        project,
-        '--config',
-        str(ROOT / 'firebase.json'),
-        '--non-interactive',
-    ]
-    result = runner(command, cwd=ROOT, check=False)
-    if result.returncode != 0:
-        raise RuntimeError('Firebase index deployment failed')
-
-
 def gcloud_create_index_command(*, project: str, database: str, signature: IndexSignature) -> list[str]:
     """Build the Firestore Admin API create command for one manifest signature."""
 
@@ -683,9 +664,9 @@ def reconcile(
     manifest_path: Path,
     timeout_seconds: float,
     poll_interval_seconds: float,
-    provision_missing: bool = False,
     check_only: bool = False,
     dry_run: bool = False,
+    provision_missing: bool = False,
     proposal_output: Path | None = None,
     source_commit: str | None = None,
     proposal_ttl_seconds: int = DEFAULT_PROPOSAL_TTL_SECONDS,
@@ -694,8 +675,8 @@ def reconcile(
     monotonic: Callable[[], float] = time.monotonic,
     clock: Clock = lambda: datetime.now(timezone.utc),
 ) -> None:
-    if check_only and dry_run:
-        raise ValueError('--check-only cannot be combined with --dry-run')
+    if sum((check_only, dry_run, provision_missing)) > 1:
+        raise ValueError('--check-only, --dry-run, and --provision-missing cannot be combined')
     if check_only:
         if proposal_output is None or not source_commit:
             raise ValueError('--check-only requires --proposal-output and --source-commit')
@@ -717,11 +698,8 @@ def reconcile(
             project=project,
             database=database,
         )
-        if provision_missing:
-            for signature in sorted(missing):
-                print(f'Firestore index provisioning dry run: would create {format_signature(signature)}')
-        else:
-            print('Firestore index deployment dry run: would deploy the generated Firebase manifest')
+        for signature in sorted(missing):
+            print(f'Firestore index provisioning dry run: would create {format_signature(signature)}')
         return
     if check_only:
         assert proposal_output is not None and source_commit is not None
@@ -739,8 +717,6 @@ def reconcile(
         return
     if provision_missing:
         provision_missing_indexes(expected=expected, project=project, database=database, runner=runner)
-    else:
-        deploy_indexes(project=project, manifest_path=manifest_path, runner=runner)
     wait_for_indexes(
         expected=expected,
         project=project,
@@ -795,15 +771,17 @@ def main() -> int:
             )
             print('Firestore schema proposal validation passed')
             return 0
+        if not (args.check_only or args.dry_run or args.provision_missing):
+            raise ValueError('choose one reconciliation mode: --check-only, --dry-run, or --provision-missing')
         reconcile(
             project=args.project,
             database=args.database,
             manifest_path=args.manifest.resolve(),
             timeout_seconds=args.timeout_seconds,
             poll_interval_seconds=args.poll_interval_seconds,
-            provision_missing=args.provision_missing,
             check_only=args.check_only,
             dry_run=args.dry_run,
+            provision_missing=args.provision_missing,
             proposal_output=args.proposal_output.resolve() if args.proposal_output else None,
             source_commit=args.source_commit,
             proposal_ttl_seconds=args.proposal_ttl_seconds,

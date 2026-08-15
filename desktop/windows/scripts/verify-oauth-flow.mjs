@@ -1,18 +1,18 @@
-// Live end-to-end verification of Google sign-in in the REAL built app.
+// Live end-to-end verification of Google or Apple sign-in in the REAL built app.
 // Launches out/main/index.js via Playwright _electron with a THROWAWAY
 // --user-data-dir (fresh renderer origin → starts signed OUT), clicks the
-// "Sign in with Google" button, prints the authorize URL the app opened in the
+// selected provider button, prints the authorize URL the app opened in the
 // system browser, then waits (≤5 min) for the loopback callback + Firebase
 // custom-token sign-in and asserts the renderer really has a signed-in user.
 //
-// The Google account click-through in the system browser is the HUMAN /
+// The provider account click-through in the system browser is the HUMAN /
 // orchestrator step — this script is self-checking around it:
 //   exit 0  sign-in completed end to end (prints uid/email)
 //   exit 2  the flow reached "waiting for the browser" but nobody finished the
-//           Google consent (or it was cancelled) — needs the human step
+//           provider consent (or it was cancelled) — needs the human step
 //   exit 1  harness/app failure before the browser step
 //
-// Usage: node scripts/verify-oauth-flow.mjs [--no-build]
+// Usage: node scripts/verify-oauth-flow.mjs [--no-build] [--provider google|apple]
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -23,6 +23,11 @@ import { _electron as electron } from 'playwright'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const mainEntry = path.join(root, 'out', 'main', 'index.js')
 const WAIT_MS = 5 * 60_000 + 30_000 // app flow times out at 5 min; small margin
+const providerFlag = process.argv.indexOf('--provider')
+const provider = providerFlag === -1 ? 'google' : process.argv[providerFlag + 1]
+if (provider !== 'google' && provider !== 'apple') {
+  throw new Error(`Unsupported provider: ${provider || '(missing)'}`)
+}
 
 if (!process.argv.includes('--no-build')) {
   console.log('[verify-oauth] building (electron-vite build)…')
@@ -39,12 +44,12 @@ try {
   })
 
   // Relay main-process output; the sign-in flow logs a stable
-  // "[google-signin] … authorize-url <url>" marker we surface prominently.
+  // "[sign-in] … authorize-url <url>" marker we surface prominently.
   const surfaced = { authorizeUrl: null }
   const onChunk = (chunk) => {
     const text = String(chunk)
     for (const line of text.split(/\r?\n/)) {
-      if (!line.includes('[google-signin]')) continue
+      if (!line.includes('[sign-in]')) continue
       console.log(line)
       const m = line.match(/authorize-url (\S+)/)
       if (m) {
@@ -58,13 +63,15 @@ try {
   app.process().stderr?.on('data', onChunk)
 
   const page = await app.firstWindow()
-  const signInButton = page.getByRole('button', { name: /sign in with google/i })
+  const signInButton = page.getByRole('button', {
+    name: new RegExp(`continue with ${provider}`, 'i')
+  })
   await signInButton.waitFor({ state: 'visible', timeout: 60_000 })
-  console.log('[verify-oauth] app is up and signed out — clicking "Sign in with Google"')
+  console.log(`[verify-oauth] app is up and signed out — clicking "Continue with ${provider}"`)
   await signInButton.click()
 
   console.log(
-    '[verify-oauth] waiting for the browser round-trip (finish the Google consent in the opened browser; up to 5 min)…'
+    `[verify-oauth] waiting for the browser round-trip (finish the ${provider} consent in the opened browser; up to 5 min)…`
   )
 
   // Success signal: Firebase browserLocalPersistence writes the signed-in user
@@ -95,7 +102,9 @@ try {
   }
 
   if (user?.uid) {
-    console.log(`[verify-oauth] SUCCESS — signed in as uid=${user.uid} email=${user.email ?? '(none)'}`)
+    console.log(
+      `[verify-oauth] SUCCESS — signed in as uid=${user.uid} email=${user.email ?? '(none)'}`
+    )
     exitCode = 0
   } else {
     console.error(
@@ -106,7 +115,7 @@ try {
       }.`
     )
     console.error(
-      '[verify-oauth] This step needs a human/orchestrator: run again and complete the Google '
+      `[verify-oauth] This step needs a human/orchestrator: run again and complete the ${provider} `
     )
     console.error(
       '[verify-oauth] consent in the system browser (the authorize URL is printed above).'

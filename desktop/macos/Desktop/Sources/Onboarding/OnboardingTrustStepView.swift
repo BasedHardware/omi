@@ -44,7 +44,7 @@ struct OnboardingTrustStepView: View {
             coordinator.clearLastActionError()
             onContinue()
           }
-          .buttonStyle(OmiButtonStyle(.primary))
+          .buttonStyle(InkButtonStyle(kind: .primary))
           .keyboardShortcut(.defaultAction)
         }
       }
@@ -67,16 +67,15 @@ struct OnboardingTrustStepView: View {
           .font(.system(size: 13, weight: .semibold))
         Text("Open source & private by design")
           .font(.system(size: 14, weight: .semibold))
+        // `secondary` and not a fainter step: glass carries two rungs, so the arrow sits on the
+        // same one as the words it belongs to.
         Text("↗")
           .font(.system(size: 12))
-          .foregroundColor(OmiColors.textTertiary)
       }
-      .foregroundColor(OmiColors.textSecondary)
+      .foregroundColor(Ink.secondary)
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, 9)
-      .background(Capsule().fill(OmiColors.backgroundSecondary))
-      .overlay(Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1))
-      .contentShape(Capsule())
+      .glassChip()
     }
     .buttonStyle(.plain)
     .onHover { inside in
@@ -85,34 +84,38 @@ struct OnboardingTrustStepView: View {
     .accessibilityLabel("Open source and private by design — view the code on GitHub")
   }
 
+  /// One capability, described rather than requested — this step only introduces them.
+  ///
+  /// Not `InkPermissionRow`: that row is a *control* (a checkbox, a live status word, a whole-row
+  /// button that opens System Settings), and nothing here is grantable yet. The card metrics are
+  /// shared instead, so this row and the real one read as the same object.
   private func permissionRow(icon: String, title: String, detail: String) -> some View {
     HStack(alignment: .top, spacing: OmiSpacing.md) {
       Image(systemName: icon)
         .font(.system(size: 14, weight: .semibold))
-        .foregroundColor(.white.opacity(0.85))
+        .foregroundColor(Ink.primary)
         .frame(width: 28, height: 28)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-            .fill(OmiColors.backgroundSecondary)
+            .fill(Ink.rowFill)
         )
 
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(title)
-          .font(.system(size: 14, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
+          .inkStyle(InkType.rowCopy, color: Ink.primary)
+          // The row wraps; it never truncates. A `Text` given less height than it needs ends in
+          // "…", and a capability the user is being asked to trust must not disappear.
+          .fixedSize(horizontal: false, vertical: true)
         if !detail.isEmpty {
           Text(detail)
-            .font(.system(size: 13))
-            .foregroundColor(OmiColors.textSecondary)
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
       }
 
       Spacer()
     }
     .padding(OmiSpacing.md)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-        .fill(OmiColors.backgroundTertiary.opacity(0.55))
-    )
+    .glassCard(cornerRadius: PageGlass.rowRadius)
   }
 }

@@ -91,6 +91,26 @@ tag with no `latest.yml`. Before every check, the app asks
 `/v2/desktop/update-feed/windows` for the selected Windows channel and points the
 generic provider at that immutable release directory.
 
+**Deploy before ship.** That backend route must be live on `api.omi.me` before
+any Windows build that contains the client change is published. The client fails
+closed when the route is missing (intentional — it must not fall back to the
+broken repository-wide provider). `desktop_windows_release.yml` runs
+`.github/scripts/probe_windows_update_feed.py` against production **before**
+tagging so a missing deploy cannot mint another broken cohort. The probe covers
+both channels that real clients can request (`beta` and `stable`), because the
+backend deliberately does not fall stable through to beta. If the probe
+fails with "missing /v2/desktop/update-feed/windows", deploy backend `main` via
+`gcp_backend.yml` (`environment=prod`, `deploy_targets=cloud-run-only`, and a
+release-eligible main SHA) and re-run the release.
+
+**Break-glass.** If the probe itself is broken or the GitHub runner cannot reach
+`api.omi.me`, supply a `bypass_update_feed_probe_reason` that contains a
+tracking-issue URL or short rationale **and** the literal phrase
+`I ACKNOWLEDGE THE ROUTE IS REQUIRED` when dispatching the workflow. The
+sentinel must be present or the probe runs regardless. That skips the probe for
+that one release while leaving the reason in the run log for audit. Do not use
+this to ship when the route is genuinely absent.
+
 The workflow marks new Windows builds **prerelease**. Stable users receive only
 releases that have been promoted by clearing that flag; beta users receive the
 beta release and safely fall back to stable while the beta slot is empty after a

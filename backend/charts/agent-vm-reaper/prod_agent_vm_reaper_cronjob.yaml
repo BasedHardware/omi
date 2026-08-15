@@ -1,13 +1,10 @@
 ---
 # Reaper for leaked `omi-agent-*` GCE VMs (desktop agent sandboxes).
 #
-# Why this exists: the desktop agent feature provisions one e2-small VM per user
-# (backend/routers/desktop_agent_vm.py `create_gce_vm`) but NOTHING ever
-# deletes them. `delete_agent_vm` only clears the Firestore `agentVm` field
-# (services/firestore.rs) — it never calls the GCE delete API, and there is no
-# deprovision route. VMs auto-stop when idle (→ TERMINATED) but linger forever,
-# so every user who ever opened the feature left a permanent ~50 GB pd-balanced
-# boot disk (~$5/mo each). `autoDelete: true` only fires on instance *delete*.
+# Why this exists: the Agent VM reconciler owns release convergence, safe
+# idle-stop, and owner-fenced lifecycle repair.  This CronJob remains the
+# terminal cleanup backstop for TERMINATED instances whose Firestore owner is
+# already gone or whose grace period has elapsed.
 #
 # This CronJob bounds the fleet hourly (see backend/scripts/agent_vm_reaper.py):
 #   - delete TERMINATED omi-agent VMs whose lastStopTimestamp is older than
@@ -15,18 +12,16 @@
 #     start_stopped_vm; after grace the status NOT_FOUND path clears Firestore
 #     and AgentVMService re-provisions + re-uploads the DB).
 #
-# RUNNING VMs are intentionally NOT reaped: agent-proxy keeps active sessions
-# RUNNING via /ping keep-alive, and the reaper has no heartbeat signal to
-# safely distinguish a long-lived session from an abandoned one.
+# RUNNING VMs are intentionally NOT reaped: agent-proxy session leases and the
+# reconciler's drain state are the authority for active work.
 #
 # Install / IAM / ConfigMap sync (refuse-by-default):
 #   AGENT_VM_REAPER_APPLY=1 bash backend/scripts/apply-agent-vm-reaper.sh
 # Enable deletes after reviewing dry-run job logs:
 #   AGENT_VM_REAPER_APPLY=1 AGENT_VM_REAPER_LIVE=1 bash backend/scripts/apply-agent-vm-reaper.sh
 #
-# Permanent source fix (separate, larger change): make `delete_agent_vm` issue a
-# real GCE delete + add a `/v2/agent/deprovision` route the desktop client calls
-# on sign-out/quit. This reaper is the backstop that also catches crashes.
+# The reconciler is deployed as a Cloud Run Job and triggered every five
+# minutes; see backend/scripts/apply-agent-vm-reconciler-scheduler.sh.
 #
 # Checked-in default is DRY_RUN=true so a bare `kubectl apply -f` is log-only.
 apiVersion: batch/v1

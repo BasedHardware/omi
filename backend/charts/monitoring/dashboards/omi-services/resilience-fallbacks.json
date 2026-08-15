@@ -480,7 +480,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(llm_gateway_requests_total{fallback_used=\"true\"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total[30m])), 1e-9)",
+          "expr": "sum(rate(llm_gateway_requests_total{route_serving_class=\"actual_fallback\",fallback_used=\"true\",fallback_reason!=\"none\",outcome=\"success\"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total{outcome=~\"success|error\"}[30m])), 1e-9)",
           "legendFormat": "fallback_used share",
           "range": true,
           "refId": "A"
@@ -750,6 +750,55 @@
         }
       ],
       "title": "Live STT attempt failure rate (failure / accepted)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(llm_gateway_requests_total{route_serving_class=\"lkg\",outcome=\"success\"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total{outcome=\"success\"}[30m])), 1e-9)",
+          "legendFormat": "ordinary LKG serving share",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "LLM gateway LKG serving share (rollout exposure)",
       "type": "timeseries"
     }
   ],

@@ -79,31 +79,65 @@ async function startAudioSession(
     return
   }
 
-  const feed = (pcm: Int16Array): void =>
-    window.omi?.listenFeed(sessionId, pcm.buffer as ArrayBuffer)
-  // Loopback lane: classify VAD-gated windows (YAMNet) so a confident music
-  // verdict closes the lane — ambient/meeting capture never transcribes a
-  // movie. The mic lane never classifies (the user's own voice always counts).
-  let onVoiced = feed
-  if (source !== 'mic') {
-    const filter = createLoopbackMusicFilter(feed)
-    session.musicFilter = filter
-    onVoiced = filter.push
+  try {
+    const feed = (pcm: Int16Array): void =>
+      window.omi?.listenFeed(sessionId, pcm.buffer as ArrayBuffer)
+    // Loopback lane: classify VAD-gated windows (YAMNet) so a confident music
+    // verdict closes the lane — ambient/meeting capture never transcribes a
+    // movie. The mic lane never classifies (the user's own voice always counts).
+    let onVoiced = feed
+    if (source !== 'mic') {
+      const filter = createLoopbackMusicFilter(feed)
+      session.musicFilter = filter
+      onVoiced = filter.push
+    }
+    // Read the local-VAD-gate preference at session start (Settings → Transcription).
+    // Disabled → passthrough, so every frame reaches the backend ungated.
+    const gate = createVadGate({
+      onVoiced,
+      mode: resolveVadGateMode(getPreferences().vadGateEnabled)
+    })
+    session.gate = gate
+    // Echo gate (Phase 6): while Omi's voice plays, drop frames BEFORE the VAD
+    // gate so Omi's speech never enters the pre-roll ring either. Applies to both
+    // lanes — mic (acoustic echo) and system audio (Omi's voice IS system output).
+    session.pipeline = createPcmPipeline(
+      stream,
+      wrapFeed((pcm) => gate.push(pcm))
+    )
+  } catch (e) {
+    session.pipeline?.stop()
+    if (!session.pipeline) stream.getTracks().forEach((t) => t.stop())
+    session.gate?.stop()
+    session.musicFilter?.stop()
+    sessions.delete(sessionId)
+    const err = e instanceof Error ? e : new Error(String(e))
+    window.omi?.captureEmit(
+      { type: 'audio-source-error', sessionId, name: err.name, message: err.message },
+      ownerId
+    )
+    return
   }
-  // Read the local-VAD-gate preference at session start (Settings → Transcription).
-  // Disabled → passthrough, so every frame reaches the backend ungated.
-  const gate = createVadGate({
-    onVoiced,
-    mode: resolveVadGateMode(getPreferences().vadGateEnabled)
-  })
-  session.gate = gate
-  // Echo gate (Phase 6): while Omi's voice plays, drop frames BEFORE the VAD
-  // gate so Omi's speech never enters the pre-roll ring either. Applies to both
-  // lanes — mic (acoustic echo) and system audio (Omi's voice IS system output).
-  session.pipeline = createPcmPipeline(
-    stream,
-    wrapFeed((pcm) => gate.push(pcm))
-  )
+
+  const setup = await session.pipeline.ready
+  if (session.stopped) return
+  if (!setup.ok) {
+    session.pipeline.stop()
+    session.gate?.stop()
+    session.musicFilter?.stop()
+    sessions.delete(sessionId)
+    window.omi?.captureEmit(
+      {
+        type: 'audio-source-error',
+        sessionId,
+        name: setup.error.name,
+        message: setup.error.message
+      },
+      ownerId
+    )
+    return
+  }
+  window.omi?.captureEmit({ type: 'audio-source-ready', sessionId }, ownerId)
 }
 
 /** Test-only (read via the OMI_E2E-gated capture hook): current music-gate

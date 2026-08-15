@@ -38,7 +38,7 @@ struct AudioSourceSelector: View {
 
           Text(AudioCaptureService.getCurrentMicrophoneName() ?? "Default")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .lineLimit(1)
         }
 
@@ -46,20 +46,20 @@ struct AudioSourceSelector: View {
 
         if isSelected {
           Image(systemName: "checkmark.circle.fill")
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.accent)
         }
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .fill(isSelected ? OmiColors.accent.opacity(0.15) : OmiColors.backgroundTertiary.opacity(0.5))
+          .fill(isSelected ? Ink.accent.opacity(0.15) : Ink.rowFillHover.opacity(0.5))
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(isSelected ? OmiColors.accent : Color.clear, lineWidth: 1.5)
+              .stroke(isSelected ? Ink.accent : Color.clear, lineWidth: 1.5)
           )
       )
-      .foregroundColor(isAvailable ? OmiColors.textPrimary : OmiColors.textTertiary)
+      .foregroundColor(isAvailable ? Ink.primary : Ink.secondary)
       .opacity(isAvailable ? 1.0 : 0.5)
     }
     .buttonStyle(.plain)
@@ -75,17 +75,17 @@ struct AudioSourceIndicator: View {
     HStack(spacing: OmiSpacing.xs) {
       Image(systemName: AudioSource.microphone.iconName)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.accent)
+        .foregroundColor(Ink.accent)
 
       Text("Mic")
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
     }
     .padding(.horizontal, OmiSpacing.sm)
     .padding(.vertical, OmiSpacing.xxs)
     .background(
       Capsule()
-        .fill(OmiColors.backgroundTertiary.opacity(0.5))
+        .fill(Ink.rowFillHover.opacity(0.5))
     )
   }
 }
@@ -99,6 +99,6 @@ struct AudioSourceIndicator: View {
       AudioSourceIndicator(appState: AppState())
     }
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 #endif

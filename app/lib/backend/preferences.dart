@@ -474,6 +474,11 @@ class SharedPreferencesUtil {
 
   set userPrimaryLanguage(String value) => saveString('userPrimaryLanguage', value);
 
+  // Last served picker options, JSON name -> code.
+  String get cachedAvailableLanguages => getString('cachedAvailableLanguages');
+
+  set cachedAvailableLanguages(String value) => saveString('cachedAvailableLanguages', value);
+
   bool get hasSetPrimaryLanguage => getBool('hasSetPrimaryLanguage');
 
   set hasSetPrimaryLanguage(bool value) => saveBool('hasSetPrimaryLanguage', value);

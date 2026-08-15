@@ -99,6 +99,7 @@ class GeneratedActionItem {
   final String description;
   final DateTime? dueAt;
   final double? ownershipConfidence;
+  final List<String>? sourceSegmentIds;
   final String? targetTaskId;
   final DateTime? updatedAt;
 
@@ -115,6 +116,7 @@ class GeneratedActionItem {
     required this.description,
     this.dueAt,
     this.ownershipConfidence,
+    this.sourceSegmentIds,
     this.targetTaskId,
     this.updatedAt,
   });
@@ -133,6 +135,7 @@ class GeneratedActionItem {
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
       dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
       ownershipConfidence: _readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: false, nullable: true),
+      sourceSegmentIds: _readFieldValue<List<String>>(_readField(json, const ["source_segment_ids"]), "source_segment_ids", _readStringList, requiredField: false, nullable: true),
       targetTaskId: _readFieldValue<String>(_readField(json, const ["target_task_id"]), "target_task_id", _readString, requiredField: false, nullable: true),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
     );
@@ -152,6 +155,7 @@ class GeneratedActionItem {
       'description': description,
       'due_at': dueAt?.toUtc().toIso8601String(),
       'ownership_confidence': ownershipConfidence,
+      'source_segment_ids': sourceSegmentIds,
       'target_task_id': targetTaskId,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
     };
@@ -826,6 +830,34 @@ class GeneratedSyncJobStartResponse {
       'status': status,
       'total_files': totalFiles,
       'total_segments': totalSegments,
+    };
+  }
+}
+
+class GeneratedSyncRecoveryWindowExceededResponse {
+  final String code;
+  final String detail;
+  final String? lane;
+
+  const GeneratedSyncRecoveryWindowExceededResponse({
+    required this.code,
+    required this.detail,
+    this.lane,
+  });
+
+  factory GeneratedSyncRecoveryWindowExceededResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedSyncRecoveryWindowExceededResponse(
+      code: _required(_readFieldValue<String>(_readField(json, const ["code"]), "code", _readString, requiredField: true, nullable: false), "code"),
+      detail: _required(_readFieldValue<String>(_readField(json, const ["detail"]), "detail", _readString, requiredField: true, nullable: false), "detail"),
+      lane: _readFieldValue<String>(_readField(json, const ["lane"]), "lane", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'code': code,
+      'detail': detail,
+      'lane': lane,
     };
   }
 }

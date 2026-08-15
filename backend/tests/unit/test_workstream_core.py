@@ -278,18 +278,21 @@ def test_focus_cap_requires_explicit_replacement_and_keeps_all_goals(fake_db):
     assert goals_db.get_goal_by_id('u1', 'g0', firestore_client=fake_db)['status'] == 'background'
 
 
-def test_canonical_goal_mutations_are_mode_and_generation_fenced(fake_db):
+def test_goal_mutations_are_universal_and_generation_fenced(fake_db):
     create_goal(fake_db, 'g1')
-    seed_control(fake_db, mode='shadow')
-    with pytest.raises(goals_db.GoalConflictError):
-        goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=3, firestore_client=fake_db)
-
+    seed_control(fake_db)
+    first = goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=3, firestore_client=fake_db)
+    assert first['status'] == 'focused'
     seed_control(fake_db, generation=4, mode='read')
     with pytest.raises(goals_db.GoalConflictError):
         goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=3, firestore_client=fake_db)
-    first = goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=4, firestore_client=fake_db)
-    replay = goals_db.focus_goal('u1', 'g1', idempotency_key='focus-g1', account_generation=4, firestore_client=fake_db)
-    assert replay == first
+    next_result = goals_db.focus_goal(
+        'u1', 'g1', idempotency_key='focus-g1-generation-4', account_generation=4, firestore_client=fake_db
+    )
+    replay = goals_db.focus_goal(
+        'u1', 'g1', idempotency_key='focus-g1-generation-4', account_generation=4, firestore_client=fake_db
+    )
+    assert replay == next_result
 
 
 def test_goal_lifecycle_disposition_detaches_without_deleting_dependents(fake_db):
@@ -912,19 +915,18 @@ def test_concurrent_journal_appends_allocate_stable_unique_sequences(fake_db):
     assert workstreams_db.get_workstream('u1', 'w1', firestore_client=fake_db).latest_event_sequence == 20
 
 
-def test_workstream_mutations_are_generation_fenced_and_receipt_idempotent(fake_db):
-    seed_control(fake_db, mode='shadow')
+def test_workstream_mutations_are_universal_generation_fenced_and_receipt_idempotent(fake_db):
+    seed_control(fake_db)
     seed_workstream(fake_db)
-    with pytest.raises(workstreams_db.WorkstreamConflictError):
-        workstreams_db.update_workstream(
-            'u1',
-            'w1',
-            WorkstreamUpdate(current_state_summary='Blocked in shadow'),
-            idempotency_key='update-1',
-            account_generation=3,
-            firestore_client=fake_db,
-        )
-
+    first_generation = workstreams_db.update_workstream(
+        'u1',
+        'w1',
+        WorkstreamUpdate(current_state_summary='Ready in universal mode'),
+        idempotency_key='update-1',
+        account_generation=3,
+        firestore_client=fake_db,
+    )
+    assert first_generation.current_state_summary == 'Ready in universal mode'
     seed_control(fake_db, generation=4, mode='read')
     with pytest.raises(workstreams_db.WorkstreamGenerationMismatchError):
         workstreams_db.update_workstream(

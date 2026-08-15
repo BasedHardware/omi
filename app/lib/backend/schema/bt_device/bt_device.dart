@@ -186,6 +186,30 @@ int mapCodecToBitDepth(BleAudioCodec codec) {
 
 enum DeviceType { omi, openglass, appleWatch, plaud, bee, fieldy, friendPendant, limitless, raybanMeta }
 
+extension DeviceTypeAnalytics on DeviceType {
+  String get analyticsVendor {
+    switch (this) {
+      case DeviceType.omi:
+      case DeviceType.openglass:
+        return 'omi';
+      case DeviceType.appleWatch:
+        return 'apple';
+      case DeviceType.plaud:
+        return 'plaud';
+      case DeviceType.bee:
+        return 'bee';
+      case DeviceType.fieldy:
+        return 'fieldlabs';
+      case DeviceType.friendPendant:
+        return 'friend';
+      case DeviceType.limitless:
+        return 'limitless';
+      case DeviceType.raybanMeta:
+        return 'meta';
+    }
+  }
+}
+
 // Legacy index order (before Frame was removed) — keep for backward-compatible deserialization.
 const List<String> _legacyDeviceTypeNames = [
   'omi',

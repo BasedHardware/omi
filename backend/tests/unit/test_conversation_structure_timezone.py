@@ -123,6 +123,10 @@ conversation_folder_stub.FolderAssignment = MagicMock()
 conversation_folder_stub.assign_conversation_to_folder = MagicMock(return_value=(None, 0.0, "test stub"))
 conversation_folder_stub.build_folders_context = MagicMock(return_value="")
 
+# Stub utils.llm.gateway_error_contract (conversation_processing imports from it)
+gateway_error_contract_stub = _stub_module("utils.llm.gateway_error_contract")
+gateway_error_contract_stub.is_byok_rate_limit_gateway_error = MagicMock(return_value=False)
+
 # Real models (pure pydantic) resolve from the models package directory.
 _stub_package("models")
 sys.modules["models"].__path__ = [str(BACKEND_DIR / "models")]
@@ -287,10 +291,23 @@ class TestStructureFunctionsTimezone:
             started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc),
             language_code="en",
             tz="Pacific/Honolulu",
-            title="Lunch",
         )
         assert result["invoke"]["started_at"] == "2025-01-01T13:48:00"
         assert result["invoke"]["tz"] == "Pacific/Honolulu"
+
+    def test_reprocess_regenerates_title_and_emoji_from_current_content(self):
+        result = _capture_structure(
+            conv_proc.get_reprocess_transcript_structure,
+            transcript="The corrected transcript is about a product launch",
+            started_at=datetime(2025, 1, 1, 12, 0, tzinfo=timezone.utc),
+            language_code="en",
+            tz="UTC",
+        )
+
+        assert "generate a concise title from the current content" in result["system_text"]
+        assert "select a single emoji" in result["system_text"]
+        assert "For the title, use" not in result["system_text"]
+        assert "title" not in result["invoke"]
 
     def test_both_prompts_state_local_and_drop_convert_instruction(self):
         # The semantic core of the fix is the prompt wording; pin it so a revert can't pass silently.
@@ -301,7 +318,7 @@ class TestStructureFunctionsTimezone:
             ),
             (
                 conv_proc.get_reprocess_transcript_structure,
-                dict(transcript="x", language_code="en", tz="Pacific/Honolulu", title="t"),
+                dict(transcript="x", language_code="en", tz="Pacific/Honolulu"),
             ),
         ]:
             result = _capture_structure(fn, started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc), **kwargs)

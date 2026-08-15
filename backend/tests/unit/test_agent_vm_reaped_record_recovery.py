@@ -1,15 +1,4 @@
-"""A reaped agent VM must clear its Firestore record instead of stranding the user.
-
-``scripts/agent_vm_reaper.py`` deletes aged TERMINATED ``omi-agent-*`` instances but leaves
-``users/{uid}.agentVm`` saying ``ready`` with the deleted VM's IP. Both Python readers folded
-the GCE ``404`` into ``UNKNOWN``: ``_ensure_vm_running`` returned the stale record ("STAGING,
-etc. — let it be") so ``agent-proxy`` dialed a dead address and waited out the full 120s
-health timeout before answering "Agent VM is not responding", and ``POST /v1/agent/vm-ensure``
-reported ``ready``. Nothing repaired the record and the desktop provision endpoint reports
-``exists`` while it is present, so the user's agent chat stayed broken on every later attempt
-(20 distinct users in prod over 2026-07-25..26). Only a 404 may clear the record — ``UNKNOWN``
-means "could not tell" and must leave a live VM's record alone.
-"""
+"""Unavailable Agent VMs are fenced and handed to the fleet reconciler."""
 
 import asyncio
 import importlib
@@ -51,90 +40,22 @@ def agent_proxy(monkeypatch) -> ModuleType:
     return module
 
 
-class _FakeUserDoc:
-    def __init__(self):
-        self.updates = []
+class TestAgentProxyRequestsReconciliation:
+    async def test_unavailable_vm_is_fenced_and_deferred_to_the_reconciler(self, agent_proxy, monkeypatch):
+        requests = []
 
-    def update(self, payload):
-        self.updates.append(payload)
+        async def direct_run_blocking(_executor, function, *args, **kwargs):
+            return function(*args, **kwargs)
 
+        monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+        monkeypatch.setattr(agent_proxy, "request_vm_start", lambda *args: requests.append(args) or True)
 
-def _stub_gce(agent_proxy, monkeypatch, instance_status_code: int, user_doc: _FakeUserDoc):
-    """Point the module's GCE + Firestore seams at a fake instance and user document."""
+        result = await agent_proxy._ensure_vm_running(
+            "uid-reaped", {**READY_VM, "authToken": "token"}, health_failed=True
+        )
 
-    class Response:
-        status_code = instance_status_code
-
-        def json(self):
-            return {"status": "RUNNING", "networkInterfaces": [{"accessConfigs": [{"natIP": "34.9.9.9"}]}]}
-
-    class Client:
-        def __init__(self):
-            self.post_calls = 0
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, _exc_type, _exc, _traceback):
-            return False
-
-        async def get(self, _url, *, headers=None):
-            return Response()
-
-        async def post(self, *_args, **_kwargs):
-            self.post_calls += 1
-            return Response()
-
-    client = Client()
-
-    async def direct_run_blocking(_executor, func, *args, **kwargs):
-        return func(*args, **kwargs)
-
-    db = MagicMock()
-    db.collection.return_value.document.return_value = user_doc
-
-    monkeypatch.setattr(agent_proxy, "_get_gce_access_token", lambda: "test-token")
-    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
-    monkeypatch.setattr(agent_proxy, "httpx", types.SimpleNamespace(AsyncClient=lambda **_kwargs: client))
-    monkeypatch.setattr(agent_proxy, "_get_firestore_db", lambda: db)
-    return client
-
-
-class TestAgentProxyClearsReapedRecord:
-    async def test_deleted_instance_clears_the_record_and_fails_fast(self, agent_proxy, monkeypatch):
-        user_doc = _FakeUserDoc()
-        client = _stub_gce(agent_proxy, monkeypatch, 404, user_doc)
-
-        result = await agent_proxy._ensure_vm_running("uid-reaped", dict(READY_VM), health_failed=True)
-
-        assert result is None, "a deleted instance must not be reported as usable"
-        assert user_doc.updates == [{"agentVm": agent_proxy.DELETE_FIELD}]
-        assert client.post_calls == 0, "no reset/start may be attempted against a deleted instance"
-
-    async def test_unknown_status_leaves_the_record_alone(self, agent_proxy, monkeypatch):
-        user_doc = _FakeUserDoc()
-        _stub_gce(agent_proxy, monkeypatch, 500, user_doc)
-
-        result = await agent_proxy._ensure_vm_running("uid-transient", dict(READY_VM), health_failed=False)
-
-        assert result == READY_VM, "an unreadable GCE status must leave the record untouched"
-        assert user_doc.updates == []
-
-    async def test_restart_path_clears_the_record_when_the_instance_is_gone(self, agent_proxy, monkeypatch):
-        user_doc = _FakeUserDoc()
-        _stub_gce(agent_proxy, monkeypatch, 404, user_doc)
-        errored_vm = dict(READY_VM, status="error")
-
-        result = await agent_proxy._ensure_vm_running("uid-errored", errored_vm)
-
-        assert result is None
-        assert {"agentVm": agent_proxy.DELETE_FIELD} in user_doc.updates
-
-    async def test_start_vm_and_wait_raises_vm_not_found_on_404(self, agent_proxy, monkeypatch):
-        _stub_gce(agent_proxy, monkeypatch, 404, _FakeUserDoc())
-
-        with pytest.raises(agent_proxy.VmNotFoundError):
-            await agent_proxy._start_vm_and_wait("omi-agent-reaped", "us-central1-a")
+        assert result == {**READY_VM, "authToken": "token", "status": "updating", "ip": None}
+        assert requests == [("uid-reaped", "omi-agent-reaped", "token")]
 
 
 @pytest.fixture
@@ -148,39 +69,60 @@ def agent_tools(monkeypatch):
     return importlib.import_module('routers.agent_tools')
 
 
-class TestVmEnsureClearsReapedRecord:
-    def test_deleted_instance_reports_no_vm_and_clears_the_record(self, agent_tools, monkeypatch):
-        from database.users import get_agent_vm
-
-        get_agent_vm.return_value = dict(READY_VM)
-        cleared = []
-
-        async def not_found(_vm_name, _zone):
-            return "NOT_FOUND"
-
-        monkeypatch.setattr(agent_tools, "_check_gce_status", not_found)
-        monkeypatch.setattr(agent_tools, "_clear_agent_vm", cleared.append)
+class TestVmEnsureRequestsReconciliation:
+    def test_stopped_vm_queues_a_fenced_reconciler_request(self, agent_tools, monkeypatch):
+        requests = []
+        monkeypatch.setattr(
+            agent_tools, "get_agent_vm", lambda _uid: {**READY_VM, "status": "stopped", "authToken": "token"}
+        )
+        monkeypatch.setattr(agent_tools, "request_vm_start", lambda *args: requests.append(args) or True)
         background = MagicMock()
 
         response = asyncio.run(agent_tools.ensure_vm(background, uid="uid-reaped"))
 
-        assert response == {"has_vm": False}
-        assert cleared == ["uid-reaped"]
+        assert response == {"has_vm": True, "status": "updating"}
+        assert requests == [("uid-reaped", "omi-agent-reaped", "token")]
         background.add_task.assert_not_called()
 
-    def test_unknown_status_keeps_the_record(self, agent_tools, monkeypatch):
-        from database.users import get_agent_vm
-
-        get_agent_vm.return_value = dict(READY_VM)
-        cleared = []
-
-        async def unknown(_vm_name, _zone):
-            return "UNKNOWN"
-
-        monkeypatch.setattr(agent_tools, "_check_gce_status", unknown)
-        monkeypatch.setattr(agent_tools, "_clear_agent_vm", cleared.append)
+    def test_ready_vm_with_a_cached_ip_queues_reconciliation_demand(self, agent_tools, monkeypatch):
+        requests = []
+        monkeypatch.setattr(agent_tools, "get_agent_vm", lambda _uid: {**READY_VM, "authToken": "token"})
+        monkeypatch.setattr(agent_tools, "request_vm_start", lambda *args: requests.append(args) or True)
 
         response = asyncio.run(agent_tools.ensure_vm(MagicMock(), uid="uid-transient"))
 
+        assert response == {"has_vm": True, "status": "updating"}
+        assert requests == [("uid-transient", "omi-agent-reaped", "token")]
+
+    def test_vm_status_demotes_ready_while_reconciler_marks_missing(self, agent_tools, monkeypatch):
+        monkeypatch.setattr(
+            agent_tools,
+            "get_agent_vm",
+            lambda _uid: {
+                **READY_VM,
+                "authToken": "token",
+                "reconcile": {"state": "missing", "missingSince": 1.0},
+            },
+        )
+
+        response = agent_tools.get_vm_status(uid="uid-missing")
+
+        assert response == {"has_vm": True, "status": "updating"}
+
+    def test_vm_status_reports_ready_only_when_cache_is_uncontested(self, agent_tools, monkeypatch):
+        monkeypatch.setattr(agent_tools, "get_agent_vm", lambda _uid: {**READY_VM, "authToken": "token"})
+
+        response = agent_tools.get_vm_status(uid="uid-ready")
+
         assert response == {"has_vm": True, "status": "ready"}
-        assert cleared == []
+
+    def test_vm_status_demotes_ready_with_unknown_placeholder_ip(self, agent_tools, monkeypatch):
+        monkeypatch.setattr(
+            agent_tools,
+            "get_agent_vm",
+            lambda _uid: {**READY_VM, "authToken": "token", "ip": "unknown"},
+        )
+
+        response = agent_tools.get_vm_status(uid="uid-poisoned")
+
+        assert response == {"has_vm": True, "status": "updating"}

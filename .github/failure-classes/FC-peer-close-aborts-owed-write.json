@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-peer-close-aborts-owed-write",
+  "violated_contract": "A peer that has already closed its connection is an expected condition, not a fault of the task delivering to it: a send refused because the socket is closed must end delivery to that peer and leave the session's own owed work intact, never abort a loop before the durable write it still has to perform.",
+  "canonical_prevention": "Deliver to a client connection through one seam that classifies peer-gone conditions (disconnect and the ASGI post-close RuntimeError alike) as end-of-delivery: mark the connection inactive, return the delivery outcome to the caller so success-only bookkeeping stays truthful, and let the owning loop run to its final flush. Cover it with a regression test that drives the real loop against a socket that refuses the send.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_listen_runtime_regressions.py"
+  ],
+  "evidence_prs": [
+    10840
+  ],
+  "scope_hints": [
+    "backend/routers/listen/**",
+    "backend/utils/async_tasks.py"
+  ],
+  "status": "open"
+}

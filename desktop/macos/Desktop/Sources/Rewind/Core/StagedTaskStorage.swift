@@ -7,6 +7,33 @@ struct CanonicalCaptureReceipt: Equatable {
   let taskID: String?
 }
 
+/// Single atomic decision for whether a local outbox row may call backend create.
+/// Closes the first-writer dual-create window and the dismiss-vs-reuse race in one
+/// DB transaction immediately before delivery.
+enum CanonicalCaptureDeliveryDecision: Equatable {
+  /// Adopted a reusable pending/accepted synced receipt and retired this outbox row.
+  case adoptedExistingReceipt(CanonicalCaptureReceipt)
+  /// A newer equivalent observation: retired/coalesced into the elected oldest
+  /// unsynced delivery leader. Caller must return without backend create.
+  case coalescedIntoDeliveryLeader
+  /// This row is the sole delivery leader (oldest recent equivalent unsynced, or
+  /// no equivalent). Caller proceeds to backend create; on failure/crash the row
+  /// remains in the outbox for retry.
+  case proceedAsDeliveryLeader
+}
+
+enum CanonicalReceiptInvalidationError: Error, Equatable, LocalizedError {
+  case ownerMismatch(expected: String, actual: String?)
+
+  var errorDescription: String? {
+    switch self {
+    case .ownerMismatch(let expected, let actual):
+      return
+        "Canonical receipt invalidation refused: Rewind owner \(actual ?? "nil") != initiating owner \(expected)"
+    }
+  }
+}
+
 /// Actor-based storage manager for staged tasks awaiting promotion to action_items.
 /// Mirrors a subset of ActionItemStorage methods but operates on the staged_tasks table.
 actor StagedTaskStorage {
@@ -182,21 +209,316 @@ actor StagedTaskStorage {
 
   func markCanonicalReceipt(id: Int64, candidateID: String, status: String, taskID: String?) async throws {
     let db = try await ensureInitialized()
-    try await db.write { database in
+
+    enum MarkReceiptResult {
+      case updated
+      case mergedDuplicate(existingId: Int64)
+    }
+
+    let result: MarkReceiptResult = try await db.write { database in
       guard var record = try StagedTaskRecord.fetchOne(database, key: id) else {
         throw ActionItemStorageError.recordNotFound
       }
+
+      // Paraphrase reuse stamps the same candidateID onto a second local outbox
+      // row. staged_tasks.backendId is UNIQUE (same as markSynced), so treat an
+      // existing receipt row as the canonical identity and retire this duplicate
+      // transactionally instead of throwing into a retry loop.
+      if let existing =
+        try StagedTaskRecord
+        .filter(Column("backendId") == candidateID)
+        .filter(Column("id") != id)
+        .fetchOne(database),
+        let existingId = existing.id
+      {
+        var existingRecord = existing
+        var metadata = existingRecord.metadata ?? [:]
+        let resolved = Self.resolvedCanonicalReceiptFields(
+          existingMetadata: metadata,
+          candidateID: candidateID,
+          incomingStatus: status,
+          incomingTaskID: taskID
+        )
+        metadata["canonical_candidate_id"] = resolved.candidateID
+        metadata["canonical_candidate_status"] = resolved.status
+        if let resolvedTaskID = resolved.taskID {
+          metadata["canonical_task_id"] = resolvedTaskID
+        } else {
+          metadata.removeValue(forKey: "canonical_task_id")
+        }
+        existingRecord.setMetadata(metadata)
+        existingRecord.backendSynced = true
+        existingRecord.completed = true
+        existingRecord.source = "candidate_outbox"
+        existingRecord.updatedAt = Date()
+        try existingRecord.update(database)
+        try database.execute(sql: "DELETE FROM staged_tasks WHERE id = ?", arguments: [id])
+        return .mergedDuplicate(existingId: existingId)
+      }
+
       var metadata = record.metadata ?? [:]
-      metadata["canonical_candidate_id"] = candidateID
-      metadata["canonical_candidate_status"] = status
-      if let taskID { metadata["canonical_task_id"] = taskID }
+      let resolved = Self.resolvedCanonicalReceiptFields(
+        existingMetadata: metadata,
+        candidateID: candidateID,
+        incomingStatus: status,
+        incomingTaskID: taskID
+      )
+      metadata["canonical_candidate_id"] = resolved.candidateID
+      metadata["canonical_candidate_status"] = resolved.status
+      if let resolvedTaskID = resolved.taskID {
+        metadata["canonical_task_id"] = resolvedTaskID
+      } else {
+        metadata.removeValue(forKey: "canonical_task_id")
+      }
       record.setMetadata(metadata)
       record.backendId = candidateID
       record.backendSynced = true
       record.completed = true
       record.source = "candidate_outbox"
       record.updatedAt = Date()
-      try record.update(database)
+      do {
+        try record.update(database)
+        return .updated
+      } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
+        guard
+          let existingId = try StagedTaskRecord
+            .filter(Column("backendId") == candidateID)
+            .filter(Column("id") != id)
+            .fetchOne(database)?
+            .id
+        else {
+          // Do not turn an unrelated schema/constraint violation into a
+          // successful merge that silently deletes the only local outbox row.
+          throw dbError
+        }
+        try database.execute(sql: "DELETE FROM staged_tasks WHERE id = ?", arguments: [id])
+        return .mergedDuplicate(existingId: existingId)
+      }
+    }
+
+    switch result {
+    case .updated:
+      log("StagedTaskStorage: Marked canonical receipt \(id) (candidateID: \(candidateID))")
+    case .mergedDuplicate(let existingId):
+      log(
+        "StagedTaskStorage: Marked canonical receipt idempotent by merging local duplicate \(id) into existing row \(existingId)"
+      )
+    }
+  }
+
+  /// Atomically decide whether local outbox row `localOutboxID` may deliver a
+  /// backend create. One transaction covers:
+  /// 1. Adopt a reusable pending/accepted synced receipt and retire this row
+  /// 2. Else elect the oldest recent equivalent unsynced outbox row as sole
+  ///    delivery leader — older leader proceeds; newer equivalents are
+  ///    retired/coalesced without create
+  /// 3. Else proceed as leader (no equivalent)
+  ///
+  /// Rejected/expired synced receipts are never reusable. Source-app / target /
+  /// due / polarity fences stay in `ScreenCandidateReconciliation.isEquivalent`.
+  /// On leader failure or crash the leader row remains unsynced for retry.
+  func resolveCanonicalCaptureDelivery(
+    for record: StagedTaskRecord,
+    localOutboxID: Int64,
+    now: Date = Date()
+  ) async throws -> CanonicalCaptureDeliveryDecision {
+    let db = try await ensureInitialized()
+    let cutoff = now.addingTimeInterval(-ScreenCandidateReconciliation.reuseWindow)
+
+    let decision: CanonicalCaptureDeliveryDecision = try await db.write { database in
+      guard let localRow = try StagedTaskRecord.fetchOne(database, key: localOutboxID),
+        localRow.deleted == false
+      else {
+        throw ActionItemStorageError.recordNotFound
+      }
+      // Equivalence uses the caller's observation (R2). Existence/deleted is
+      // checked against the live outbox row so a concurrent discard cannot adopt.
+      let probe = record
+
+      let recentSynced =
+        try StagedTaskRecord
+        .filter(Column("source") == "candidate_outbox")
+        .filter(Column("backendSynced") == true)
+        .filter(Column("deleted") == false)
+        .filter(Column("id") != localOutboxID)
+        .filter(Column("createdAt") >= cutoff)
+        .order(Column("createdAt").desc)
+        .fetchAll(database)
+
+      if let match = recentSynced.first(where: { candidate in
+        guard ScreenCandidateReconciliation.isEquivalent(probe, candidate) else { return false }
+        guard let status = candidate.metadata?["canonical_candidate_status"] as? String else {
+          return false
+        }
+        return Self.isReusableCanonicalReceiptStatus(status)
+      }),
+        let metadata = match.metadata,
+        let candidateID = metadata["canonical_candidate_id"] as? String,
+        let status = metadata["canonical_candidate_status"] as? String,
+        Self.isReusableCanonicalReceiptStatus(status)
+      {
+        // Keep the existing receipt's live status/taskID — never stamp a stale
+        // pending onto a row that flipped to rejected/expired mid-flight.
+        var existingRecord = match
+        var updatedMetadata = metadata
+        updatedMetadata["canonical_candidate_id"] = candidateID
+        updatedMetadata["canonical_candidate_status"] = status
+        if let taskID = metadata["canonical_task_id"] as? String {
+          updatedMetadata["canonical_task_id"] = taskID
+        } else {
+          updatedMetadata.removeValue(forKey: "canonical_task_id")
+        }
+        existingRecord.setMetadata(updatedMetadata)
+        existingRecord.backendId = candidateID
+        existingRecord.backendSynced = true
+        existingRecord.completed = true
+        existingRecord.source = "candidate_outbox"
+        existingRecord.updatedAt = Date()
+        try existingRecord.update(database)
+        try database.execute(sql: "DELETE FROM staged_tasks WHERE id = ?", arguments: [localOutboxID])
+
+        return .adoptedExistingReceipt(
+          CanonicalCaptureReceipt(
+            candidateID: candidateID,
+            status: status,
+            taskID: metadata["canonical_task_id"] as? String
+          )
+        )
+      }
+
+      // No reusable synced receipt: elect the oldest recent equivalent unsynced
+      // candidate_outbox row as the sole delivery leader.
+      let recentUnsynced =
+        try StagedTaskRecord
+        .filter(Column("source") == "candidate_outbox")
+        .filter(Column("backendSynced") == false)
+        .filter(Column("deleted") == false)
+        .filter(Column("createdAt") >= cutoff)
+        .order(Column("createdAt").asc, Column("id").asc)
+        .fetchAll(database)
+
+      let equivalentUnsynced = recentUnsynced.filter { candidate in
+        guard candidate.id != localOutboxID else { return true }
+        return ScreenCandidateReconciliation.isEquivalent(probe, candidate)
+      }
+      guard let leader = equivalentUnsynced.first, let leaderID = leader.id else {
+        return .proceedAsDeliveryLeader
+      }
+
+      if leaderID == localOutboxID {
+        return .proceedAsDeliveryLeader
+      }
+
+      // Newer equivalent: coalesce into the elected leader and refuse create.
+      try database.execute(sql: "DELETE FROM staged_tasks WHERE id = ?", arguments: [localOutboxID])
+      return .coalescedIntoDeliveryLeader
+    }
+
+    switch decision {
+    case .adoptedExistingReceipt(let adopted):
+      log(
+        "StagedTaskStorage: Adopted equivalent canonical receipt \(adopted.candidateID) and retired outbox \(localOutboxID)"
+      )
+    case .coalescedIntoDeliveryLeader:
+      log(
+        "StagedTaskStorage: Coalesced outbox \(localOutboxID) into older equivalent delivery leader"
+      )
+    case .proceedAsDeliveryLeader:
+      break
+    }
+    return decision
+  }
+
+  private static func isReusableCanonicalReceiptStatus(_ status: String) -> Bool {
+    status == OmiAPI.CandidateStatus.pending.rawValue
+      || status == OmiAPI.CandidateStatus.accepted.rawValue
+  }
+
+  private static func isTerminalCanonicalReceiptStatus(_ status: String) -> Bool {
+    status == OmiAPI.CandidateStatus.rejected.rawValue
+      || status == OmiAPI.CandidateStatus.expired.rawValue
+  }
+
+  /// Preserve rejected/expired once written — never demote terminal → pending/accepted.
+  private static func resolvedCanonicalReceiptFields(
+    existingMetadata: [String: Any],
+    candidateID: String,
+    incomingStatus: String,
+    incomingTaskID: String?
+  ) -> (candidateID: String, status: String, taskID: String?) {
+    let existingStatus = existingMetadata["canonical_candidate_status"] as? String
+    let existingTaskID = existingMetadata["canonical_task_id"] as? String
+    if let existingStatus, isTerminalCanonicalReceiptStatus(existingStatus) {
+      return (candidateID, existingStatus, existingTaskID ?? incomingTaskID)
+    }
+    return (candidateID, incomingStatus, incomingTaskID)
+  }
+
+  /// Mark matching local outbox receipts as rejected (or another terminal status)
+  /// so an equivalent observation can create a new Candidate immediately after
+  /// Suggested dismiss/reject. Matched by candidate id on `backendId` or
+  /// metadata — never by title.
+  ///
+  /// Returns `true` when at least one matching receipt was terminalized.
+  /// Returns `false` on zero match without throwing — callers must retain the
+  /// durable pending invalidation so a later create→mark can still be cleaned up.
+  ///
+  /// Owner-scoped: refuses before `ensureInitialized` and again before/inside the
+  /// write when `RewindDatabase.currentUserId` is not `ownerID`, so a mid-flight
+  /// retarget cannot terminalize receipts in another account's pool. A closed
+  /// stale pool (or any other write failure) throws and is retryable by the caller.
+  @discardableResult
+  func invalidateCanonicalReceipt(
+    candidateID: String,
+    ownerID: String,
+    status: String = OmiAPI.CandidateStatus.rejected.rawValue
+  ) async throws -> Bool {
+    try Self.requireRewindOwner(ownerID)
+    let db = try await ensureInitialized()
+    try Self.requireRewindOwner(ownerID)
+    let updatedCount: Int = try await db.write { database in
+      try Self.requireRewindOwner(ownerID)
+      let candidates =
+        try StagedTaskRecord
+        .filter(Column("source") == "candidate_outbox")
+        .filter(Column("deleted") == false)
+        .fetchAll(database)
+
+      var count = 0
+      let now = Date()
+      for var record in candidates {
+        let metadataCandidateID = record.metadata?["canonical_candidate_id"] as? String
+        let matches =
+          record.backendId == candidateID
+          || metadataCandidateID == candidateID
+        guard matches else { continue }
+        // Re-check immediately before each mutation so a retarget that races the
+        // write cannot stamp owner B's rows for an owner-A invalidation.
+        try Self.requireRewindOwner(ownerID)
+        var metadata = record.metadata ?? [:]
+        metadata["canonical_candidate_id"] = candidateID
+        metadata["canonical_candidate_status"] = status
+        record.setMetadata(metadata)
+        record.backendSynced = true
+        record.completed = true
+        record.updatedAt = now
+        try record.update(database)
+        count += 1
+      }
+      return count
+    }
+    if updatedCount > 0 {
+      log(
+        "StagedTaskStorage: Invalidated \(updatedCount) canonical receipt(s) for candidate \(candidateID) as \(status)"
+      )
+    }
+    return updatedCount > 0
+  }
+
+  private nonisolated static func requireRewindOwner(_ ownerID: String) throws {
+    let current = RewindDatabase.currentUserId
+    guard current == ownerID else {
+      throw CanonicalReceiptInvalidationError.ownerMismatch(expected: ownerID, actual: current)
     }
   }
 
@@ -210,16 +532,56 @@ actor StagedTaskStorage {
     }
   }
 
-  func getUnsyncedCanonicalOutbox(limit: Int = 50) async throws -> [StagedTaskRecord] {
+  enum CanonicalOutboxRejectionOutcome: Equatable {
+    case willRetry(rejections: Int)
+    case poisoned(rejections: Int)
+  }
+
+  /// Records one permanent (validation-class) delivery rejection for an outbox
+  /// row. The count is persisted in the row's metadata so it survives restarts.
+  /// Once the count reaches `limit`, the row is poisoned: marked deleted so
+  /// `getUnsyncedCanonicalOutbox` stops returning it, with a metadata marker
+  /// distinguishing this terminal state from a user delete. A permanently
+  /// rejected payload can never succeed, so retrying it forever only wedges the
+  /// outbox and burns quota on deterministic 4xx responses.
+  func recordCanonicalOutboxRejection(
+    id: Int64,
+    limit: Int = CandidateOutboxRetryPolicy.maxPermanentRejections
+  ) async throws -> CanonicalOutboxRejectionOutcome {
+    let db = try await ensureInitialized()
+    return try await db.write { database in
+      guard var record = try StagedTaskRecord.fetchOne(database, key: id) else {
+        throw ActionItemStorageError.recordNotFound
+      }
+      var metadata = record.metadata ?? [:]
+      let rejections = ((metadata["outbox_permanent_rejections"] as? Int) ?? 0) + 1
+      metadata["outbox_permanent_rejections"] = rejections
+      let poisoned = rejections >= limit
+      if poisoned {
+        metadata["outbox_poisoned"] = true
+        record.completed = true
+        record.deleted = true
+      }
+      record.setMetadata(metadata)
+      record.updatedAt = Date()
+      try record.update(database)
+      return poisoned ? .poisoned(rejections: rejections) : .willRetry(rejections: rejections)
+    }
+  }
+
+  func getUnsyncedCanonicalOutbox(limit: Int? = nil) async throws -> [StagedTaskRecord] {
     let db = try await ensureInitialized()
     return try await db.read { database in
-      try StagedTaskRecord
+      var request =
+        StagedTaskRecord
         .filter(Column("backendSynced") == false)
         .filter(Column("deleted") == false)
         .filter(Column("source") == "candidate_outbox")
         .order(Column("createdAt").asc)
-        .limit(limit)
-        .fetchAll(database)
+      if let limit {
+        request = request.limit(limit)
+      }
+      return try request.fetchAll(database)
     }
   }
 
@@ -238,6 +600,73 @@ actor StagedTaskStorage {
         status: status,
         taskID: metadata["canonical_task_id"] as? String
       )
+    }
+  }
+
+  /// Find a recently reconciled screen capture that represents the same task.
+  /// Canonical create already coalesces exact descriptions, but repeated visual
+  /// observations often paraphrase the same request (for example "reply ... to
+  /// approve" versus "approve ..."). Reusing its receipt prevents each
+  /// paraphrase from becoming another Suggested Candidate.
+  func recentEquivalentCanonicalReceipt(
+    for record: StagedTaskRecord,
+    excludingID: Int64,
+    now: Date = Date()
+  ) async throws -> CanonicalCaptureReceipt? {
+    let db = try await ensureInitialized()
+    let cutoff = now.addingTimeInterval(-ScreenCandidateReconciliation.reuseWindow)
+    return try await db.read { database in
+      let recent =
+        try StagedTaskRecord
+        .filter(Column("source") == "candidate_outbox")
+        .filter(Column("backendSynced") == true)
+        .filter(Column("deleted") == false)
+        .filter(Column("id") != excludingID)
+        .filter(Column("createdAt") >= cutoff)
+        .order(Column("createdAt").desc)
+        .limit(100)
+        .fetchAll(database)
+
+      for candidate in recent where ScreenCandidateReconciliation.isEquivalent(record, candidate) {
+        guard let metadata = candidate.metadata,
+          let candidateID = metadata["canonical_candidate_id"] as? String,
+          let status = metadata["canonical_candidate_status"] as? String,
+          Self.isReusableCanonicalReceiptStatus(status)
+        else { continue }
+        return CanonicalCaptureReceipt(
+          candidateID: candidateID,
+          status: status,
+          taskID: metadata["canonical_task_id"] as? String
+        )
+      }
+      return nil
+    }
+  }
+
+  /// Pending canonical Candidates are represented locally by completed outbox
+  /// rows: `completed` means delivery processing finished, not that the user's
+  /// task is complete. Surface their descriptions as already-captured evidence
+  /// so extraction does not mistake them for finished work or omit them.
+  func getRecentCanonicalCandidateDescriptions(limit: Int = 30) async throws -> [String] {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      let records =
+        try StagedTaskRecord
+        .filter(Column("source") == "candidate_outbox")
+        .filter(Column("backendSynced") == true)
+        .filter(Column("deleted") == false)
+        .order(Column("createdAt").desc)
+        .limit(limit * 3)
+        .fetchAll(database)
+
+      let descriptions: [String] = records.compactMap { record -> String? in
+        guard let status = record.metadata?["canonical_candidate_status"] as? String,
+          status == OmiAPI.CandidateStatus.pending.rawValue
+            || status == OmiAPI.CandidateStatus.accepted.rawValue
+        else { return nil }
+        return record.description
+      }
+      return Array(descriptions.prefix(limit))
     }
   }
 

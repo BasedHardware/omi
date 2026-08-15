@@ -31,13 +31,13 @@ def test_malformed_control_is_treated_as_generation_mismatch_without_fail_open()
 
     with patch.object(read_boundary, 'record_fallback') as fallback:
         with pytest.raises(RecurrenceGenerationMismatchError, match='malformed'):
-            _validate_generation(snapshot, account_generation=1)
+            _validate_generation(snapshot, account_generation=1, uid='u1')
     fallback.assert_not_called()
 
 
 def test_valid_matching_control_passes():
     snapshot = _FakeSnapshot(exists=True, data={'workflow_mode': 'write', 'account_generation': 1})
-    assert _validate_generation(snapshot, account_generation=1) is None
+    assert _validate_generation(snapshot, account_generation=1, uid='u1') is None
 
 
 def test_unexpected_error_propagates(monkeypatch):
@@ -50,4 +50,4 @@ def test_unexpected_error_propagates(monkeypatch):
     monkeypatch.setattr(recurrence_inbox_db.TaskWorkflowControl, 'model_validate', _boom)
 
     with pytest.raises(RuntimeError, match='unexpected non-validation failure'):
-        _validate_generation(snapshot, account_generation=1)
+        _validate_generation(snapshot, account_generation=1, uid='u1')

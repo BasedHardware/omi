@@ -13,7 +13,8 @@ from database.screen_activity import upsert_screen_activity
 from database.vector_db import upsert_screen_activity_vectors
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid, get_user
-from utils.subscription import is_trial_paywalled
+from utils.subscription import is_desktop_trial_paywalled
+from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -43,13 +44,26 @@ class ScreenActivitySyncRequest(BaseModel):
 
 
 async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
+    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop"):
         raise HTTPException(status_code=402, detail="trial_expired")
     return uid
 
 
 def _empty_unread_response() -> dict[str, Any]:
     return {"unread_count": 0, "messages": []}
+
+
+def _parity_screen_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep screen capture text-only and bounded; never retain embeddings/video."""
+    return [
+        {
+            "timestamp": str(row.get("timestamp") or ""),
+            "app_name": str(row.get("appName") or "")[:512],
+            "window_title": str(row.get("windowTitle") or "")[:2048],
+            "ocr_text": str(row.get("ocrText") or "")[:8192],
+        }
+        for row in rows[:100]
+    ]
 
 
 def _cached_session(email: str) -> str | None:
@@ -104,18 +118,33 @@ async def sync_screen_activity(
     if not request.rows:
         return {"synced": 0, "last_id": 0}
     rows = [{**row.model_dump(by_alias=True), "storageId": row.storage_id()} for row in request.rows]
+    parity_capture = SurfaceParityCapture.from_environ(
+        principal_id=uid,
+        session_id=f"{rows[0]['storageId']}:{rows[-1]['storageId']}",
+        surface="screen",
+        source="desktop_screen_activity_sync",
+        provider_lane="screen",
+        route_or_model="screen-activity-sync",
+        request={"row_count": len(rows), "has_embeddings": any(row.get("embedding") for row in rows)},
+    )
+    parity_capture.observe("client", {"type": "screen_activity_rows", "rows": _parity_screen_rows(rows)})
     try:
-        written = await run_blocking(db_executor, upsert_screen_activity, uid, rows)
-    except Exception as exc:
-        logger.exception("Screen activity Firestore write failed for uid=%s", uid)
-        raise HTTPException(status_code=500, detail="Firestore write failed") from exc
-    embedded_rows = [row for row in rows if row.get("embedding")]
-    if embedded_rows:
         try:
-            await run_blocking(db_executor, upsert_screen_activity_vectors, uid, embedded_rows)
-        except Exception:
-            logger.exception("Screen activity vector write failed for uid=%s", uid)
-    return {"synced": written, "last_id": max(row.id for row in request.rows)}
+            written = await run_blocking(db_executor, upsert_screen_activity, uid, rows)
+        except Exception as exc:
+            logger.exception("Screen activity Firestore write failed for uid=%s", uid)
+            raise HTTPException(status_code=500, detail="Firestore write failed") from exc
+        embedded_rows = [row for row in rows if row.get("embedding")]
+        if embedded_rows:
+            try:
+                await run_blocking(db_executor, upsert_screen_activity_vectors, uid, embedded_rows)
+            except Exception:
+                logger.exception("Screen activity vector write failed for uid=%s", uid)
+        response = {"synced": written, "last_id": max(row.id for row in request.rows)}
+        parity_capture.observe("inbound", {"type": "screen_activity_sync_result", **response})
+        return response
+    finally:
+        parity_capture.persist()
 
 
 @router.get("/v1/crisp/unread")

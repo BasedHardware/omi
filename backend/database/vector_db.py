@@ -71,7 +71,7 @@ class VectorRecordDoc(TypedDict):
 
     All three keys are always populated by every upsert site in this module,
     so the contract is total=True. ``metadata`` stays ``Dict[str, Any]`` so
-    canonical-cohort projection keys (added by ``build_memory_vector_metadata``)
+    canonical memory projection keys (added by ``build_memory_vector_metadata``)
     remain representable without enumerating every metadata field.
     """
 
@@ -205,6 +205,7 @@ def query_vectors(
     starts_at: Optional[int] = None,
     ends_at: Optional[int] = None,
     k: int = 5,
+    query_vector: Optional[List[float]] = None,
 ) -> List[str]:
     if index is None or k <= 0:
         return []
@@ -217,7 +218,7 @@ def query_vectors(
     if created_at is not None:
         filter_data['created_at'] = created_at
 
-    xq = embeddings.embed_query(query)
+    xq = query_vector if query_vector is not None else embeddings.embed_query(query)
     # During the rollout a logical conversation can have one legacy and one
     # generation-scoped record. Oversample so those physical duplicates do
     # not consume the caller's logical result budget.
@@ -629,7 +630,7 @@ def upsert_canonical_memory_vector(
     *,
     projection_commit_id: str | None = None,
 ) -> List[float] | None:
-    """Upsert one canonical-cohort memory vector using a user-scoped provider id."""
+    """Upsert one canonical memory vector using a user-scoped provider id."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping canonical memory vector upsert')
         return None
@@ -952,26 +953,44 @@ ACTION_ITEMS_NAMESPACE = "ns4"
 
 
 def upsert_action_item_vector(uid: str, action_item_id: str, description: str) -> List[float] | None:
+    """Index one action item for semantic search.
+
+    Every caller runs this *after* the Firestore write has already committed, so an
+    embedding/Pinecone failure must not propagate: it would turn a successful
+    create/update into an HTTP 500 (and make clients retry a write that landed).
+    Degrades to ``None`` — the task is simply absent from semantic search until it
+    is next indexed, matching ``find_similar_action_items``.
+    """
     if index is None:
         logger.warning('Pinecone index not initialized, skipping action item vector upsert')
         return None
 
-    vector = embeddings.embed_query(description)
-    data: VectorRecordDoc = {
-        "id": f'{uid}-ai-{action_item_id}',
-        "values": vector,
-        "metadata": {
-            "uid": uid,
-            "action_item_id": action_item_id,
-            "created_at": int(datetime.now(timezone.utc).timestamp()),
-        },
-    }
-    res = index.upsert(vectors=[data], namespace=ACTION_ITEMS_NAMESPACE)
-    logger.info(f'upsert_action_item_vector {action_item_id} {res}')
-    return vector
+    try:
+        vector = embeddings.embed_query(description)
+        data: VectorRecordDoc = {
+            "id": f'{uid}-ai-{action_item_id}',
+            "values": vector,
+            "metadata": {
+                "uid": uid,
+                "action_item_id": action_item_id,
+                "created_at": int(datetime.now(timezone.utc).timestamp()),
+            },
+        }
+        res = index.upsert(vectors=[data], namespace=ACTION_ITEMS_NAMESPACE)
+        logger.info(f'upsert_action_item_vector {action_item_id} {res}')
+        return vector
+    except Exception as e:
+        logger.exception(
+            f'upsert_action_item_vector failed uid={uid} action_item_id={action_item_id} '
+            f'(task saved, vector missing): {e}'
+        )
+        return None
 
 
 def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
+    """Index a batch of action items. Best-effort, for the same reason as
+    ``upsert_action_item_vector``: returns 0 instead of raising into a caller
+    whose Firestore writes already succeeded."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping action item vector batch upsert')
         return 0
@@ -979,25 +998,32 @@ def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> i
     if not items:
         return 0
 
-    descriptions: List[str] = [item['description'] for item in items]
-    vectors: List[List[float]] = embeddings.embed_documents(descriptions)
+    try:
+        descriptions: List[str] = [item['description'] for item in items]
+        vectors: List[List[float]] = embeddings.embed_documents(descriptions)
 
-    now_ts = int(datetime.now(timezone.utc).timestamp())
-    payload: List[VectorRecordDoc] = [
-        {
-            "id": f"{uid}-ai-{item['action_item_id']}",
-            "values": vectors[i],
-            "metadata": {
-                "uid": uid,
-                "action_item_id": item['action_item_id'],
-                "created_at": now_ts,
-            },
-        }
-        for i, item in enumerate(items)
-    ]
-    res = index.upsert(vectors=payload, namespace=ACTION_ITEMS_NAMESPACE)
-    logger.info(f'upsert_action_item_vectors_batch count={len(payload)} {res}')
-    return len(payload)
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        payload: List[VectorRecordDoc] = [
+            {
+                "id": f"{uid}-ai-{item['action_item_id']}",
+                "values": vectors[i],
+                "metadata": {
+                    "uid": uid,
+                    "action_item_id": item['action_item_id'],
+                    "created_at": now_ts,
+                },
+            }
+            for i, item in enumerate(items)
+        ]
+        res = index.upsert(vectors=payload, namespace=ACTION_ITEMS_NAMESPACE)
+        logger.info(f'upsert_action_item_vectors_batch count={len(payload)} {res}')
+        return len(payload)
+    except Exception as e:
+        logger.exception(
+            f'upsert_action_item_vectors_batch failed uid={uid} count={len(items)} '
+            f'(tasks saved, vectors missing): {e}'
+        )
+        return 0
 
 
 def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_score: float = 0.3) -> List[str]:
@@ -1085,7 +1111,9 @@ def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]) -> No
     if not action_item_ids:
         return
     vector_ids = [f'{uid}-ai-{aid}' for aid in action_item_ids]
-    index.delete(ids=vector_ids, namespace=ACTION_ITEMS_NAMESPACE)
+    # Chunk to stay within Pinecone's per-delete id limit (1,000).
+    for i in range(0, len(vector_ids), 1000):
+        index.delete(ids=vector_ids[i : i + 1000], namespace=ACTION_ITEMS_NAMESPACE)
     logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')
 
 
@@ -1258,18 +1286,22 @@ def search_transcript_chunks(
     limit: int = 20,
     starts_at: Optional[int] = None,
     ends_at: Optional[int] = None,
+    query_vector: Optional[List[float]] = None,
 ) -> List[Dict[str, Any]]:
     """Semantic search over transcript chunks. Returns chunk references
     [{conversation_id, chunk_index, created_at, score}] — hydrate text from
     Firestore (utils.conversations.transcript_chunks.hydrate_chunk_texts)."""
     if index is None:
         return []
-    vector = embeddings.embed_query(query)
     filter_data: Dict[str, Any] = {'uid': uid}
-    if starts_at is not None and ends_at is not None:
-        filter_data['created_at'] = {'$gte': int(starts_at), '$lte': int(ends_at)}
-    if limit <= 0:
+    # Same one-sided / invalid-range rules as summary vector search (_created_at_filter).
+    created_at = _created_at_filter(starts_at, ends_at)
+    if (starts_at is not None or ends_at is not None) and created_at is None:
+        logger.warning('Skipping transcript chunk search with invalid date filter')
         return []
+    if created_at is not None:
+        filter_data['created_at'] = created_at
+    vector = query_vector if query_vector is not None else embeddings.embed_query(query)
     xc = index.query(
         vector=vector,
         top_k=limit * 2,

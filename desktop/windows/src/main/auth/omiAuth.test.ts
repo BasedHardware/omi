@@ -29,6 +29,7 @@ describe('buildAuthorizeUrl', () => {
   it('matches the /v1/auth/authorize contract', () => {
     const url = buildAuthorizeUrl({
       apiBase: 'https://api.omi.me',
+      provider: 'google',
       redirectUri: 'http://127.0.0.1:51000/callback',
       state: 'flow|nonce',
       codeChallenge: 'CHAL'
@@ -46,6 +47,7 @@ describe('buildAuthorizeUrl', () => {
   it('tolerates a trailing slash on the api base', () => {
     const url = buildAuthorizeUrl({
       apiBase: 'https://api.omi.me/',
+      provider: 'google',
       redirectUri: 'http://127.0.0.1:1/callback',
       state: 's',
       codeChallenge: 'c'
@@ -101,6 +103,16 @@ describe('parseLoopbackCallback', () => {
       state
     )
     expect(out).toEqual({ kind: 'error', message: 'Google authorization failed: access_denied' })
+  })
+
+  it('uses the selected provider in provider error messages', () => {
+    expect(
+      parseLoopbackCallback(
+        `/callback?error=access_denied&state=${encodeURIComponent(state)}`,
+        state,
+        'apple'
+      )
+    ).toEqual({ kind: 'error', message: 'Apple authorization failed: access_denied' })
   })
 
   it('ignores error injections without the matching state (local-DoS guard)', () => {

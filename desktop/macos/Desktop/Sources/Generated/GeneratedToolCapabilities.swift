@@ -374,16 +374,15 @@ enum GeneratedToolCapabilities {
     Capability(
       toolName: "save_knowledge_graph",
       title: "Save Knowledge Graph",
-      latency: .fastLocal,
+      latency: .fastNetwork,
       surfaces: Set([.desktopChat]),
       summary: "Save a knowledge graph of entities and relationships extracted from the user's data.",
       bullets: [
-      "Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label}).",
+      "Prefer discovery_text (raw notes/findings). Backend extract via knowledge_graph SSOT builds nodes/edges; nodes/edges remain accepted for compatibility.",
       "node_type must be one of: person, organization, place, thing, concept.",
       "Use when exploring the user's files during onboarding to build their knowledge graph.",
       "Deduplication is handled automatically; provide all entities you find.",
-      "Use when exploring the user's files during onboarding or knowledge-graph building.",
-      "Deduplication is handled automatically; include all meaningful entities and relationships you found."
+      "Use when exploring the user's files during onboarding or knowledge-graph building."
     ]
     ),
     Capability(
@@ -402,9 +401,10 @@ enum GeneratedToolCapabilities {
       title: "Search Conversations",
       latency: .fastNetwork,
       surfaces: Set([.desktopChat, .realtimeHub]),
-      summary: "Semantic search across the user's past conversations.",
+      summary: "Search the user's past conversations by topic or exact canonical ID/share link.",
       bullets: [
-      "Use for specific topics, decisions, or events discussed in conversations."
+      "Use for specific topics, decisions, or events discussed in conversations.",
+      "For a canonical conversation UUID or https://h.omi.me/conversations/<uuid> link, pass it unchanged for an exact lookup."
     ]
     ),
     Capability(
@@ -425,6 +425,25 @@ enum GeneratedToolCapabilities {
       summary: "Semantic search across user memories.",
       bullets: [
       "Use for a specific personal fact that is not already in the visible user context."
+    ]
+    ),
+    Capability(
+      toolName: "create_memory",
+      title: "Create Memory",
+      latency: .fastNetwork,
+      surfaces: Set([.desktopChat]),
+      summary: "Save one explicitly requested fact or preference to short-term memory.",
+      bullets: [
+      "Use only when the user explicitly and affirmatively asks you to remember or save something.",
+      "Pass a clean standalone fact: strip the command and lightly clean pronouns. Do not invent names, dates, or facts the user did not ask to persist, and do not infer from the rest of the chat.",
+      "Do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
+      "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
+      "When the current user message explicitly and affirmatively asks Omi to remember or save something, call this tool with a clean standalone fact.",
+      "Strip the command (for example, 'Please remember that I prefer tea' → 'I prefer tea'). Light rewrite and pronoun cleanup are OK; do not invent names, dates, or facts the user did not ask to persist.",
+      "Do not infer from the rest of the chat, and do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
+      "Confirm the save in one line. Never tell the user about validators or internal save rules.",
+      "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
+      "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory."
     ]
     ),
     Capability(

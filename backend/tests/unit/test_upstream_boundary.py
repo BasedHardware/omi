@@ -9,13 +9,14 @@ import importlib
 import os
 import sys
 import types
-from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+
+from models.memories import Memory, MemoryCategory
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -23,6 +24,8 @@ os.environ.setdefault(
 )
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+PROCESS_CONVERSATION_PATH = BACKEND_DIR / "utils" / "conversations" / "process_conversation.py"
+_PROCESS_CONVERSATION_MODULE = None
 
 
 class _AutoMockModule(ModuleType):
@@ -51,6 +54,10 @@ def _collection_constant(relative_module: str, constant_name: str) -> str:
 
 def _ensure_process_conversation_importable():
     """Stub heavy deps so process_conversation can be imported in unit tests."""
+    global _PROCESS_CONVERSATION_MODULE
+    if _PROCESS_CONVERSATION_MODULE is not None:
+        return _PROCESS_CONVERSATION_MODULE
+
     stubs = [
         "anthropic",
         "av",
@@ -152,8 +159,8 @@ def _ensure_process_conversation_importable():
     )
     sys.modules["utils.task_intelligence.workstream_association"].associate_canonical_evidence = MagicMock()
 
-    sys.modules.pop("utils.conversations.process_conversation", None)
-    return importlib.import_module("utils.conversations.process_conversation")
+    _PROCESS_CONVERSATION_MODULE = importlib.import_module("utils.conversations.process_conversation")
+    return _PROCESS_CONVERSATION_MODULE
 
 
 class TestStoreSeparation:
@@ -177,14 +184,29 @@ class TestStoreSeparation:
 class TestExtractionSeamFanOut:
     """process_conversation must fan out to separate downstream writers."""
 
-    @pytest.fixture
-    def deferred_effect_bundle(self):
+    def test_process_conversation_keeps_memory_fail_closed_and_task_goal_postprocess_separate(self):
+        source = PROCESS_CONVERSATION_PATH.read_text(encoding="utf-8")
+        # Memory source replacement is synchronous/fail-closed; task and goal
+        # projections remain independent postprocess destinations.
+        assert "_extract_memories(uid, conversation)" in source
+        assert "submit_with_context(postprocess_executor, _extract_memories" not in source
+        assert "submit_with_context(postprocess_executor, _save_action_items" in source
+        assert "submit_with_context(postprocess_executor, _update_goal_progress" in source
+
+    def test_fan_out_invokes_memory_action_item_and_goal_paths_separately(self):
+        """Functional: mocked postprocess submits must hit three different callables."""
         pc = _ensure_process_conversation_importable()
 
         from models.conversation import Conversation
         from models.conversation_enums import CategoryEnum, ConversationSource
         from models.structured import Structured
         from models.transcript_segment import TranscriptSegment
+
+        submitted = []
+        extract_memories = MagicMock()
+
+        def _capture_submit(_executor, fn, *args, **kwargs):
+            submitted.append((fn, args))
 
         conversation = Conversation(
             id="conv-fanout-1",
@@ -210,76 +232,26 @@ class TestExtractionSeamFanOut:
             ],
         )
 
-        observed_effects = []
-        extract_memories = MagicMock()
-        save_action_items = MagicMock()
-        update_goal_progress = MagicMock()
-        submit_with_context = MagicMock()
-        complete = MagicMock()
+        structured = conversation.structured
 
         with (
             patch.object(pc, "is_trial_paywalled", return_value=False),
             patch.object(pc.redis_db, "get_conversation_meeting_id", return_value=None),
-            patch.object(
-                pc,
-                "persist_generation",
-                return_value=(conversation, False, None, True),
-            ),
-            patch.object(pc, "_calendar_auto_link_enabled", return_value=False),
+            patch.object(pc, "_get_structured", return_value=(structured, False)),
+            patch.object(pc, "_get_conversation_obj", return_value=conversation),
             patch.object(pc, "_trigger_apps"),
-            patch.object(pc, "record_usage"),
-            patch.object(pc, "memory_system_request_scope", return_value=nullcontext(pc.MemorySystem.LEGACY)),
             patch.object(pc, "_extract_memories", extract_memories),
-            patch.object(pc, "_save_action_items", save_action_items),
-            patch.object(pc, "_update_goal_progress", update_goal_progress),
-            patch.object(pc, "submit_with_context", submit_with_context),
-            patch.object(pc.lifecycle_service, "complete", complete),
+            patch.object(pc.conversations_db, "upsert_conversation"),
+            patch.object(pc, "submit_with_context", side_effect=_capture_submit),
             patch.object(pc, "TRANSCRIPT_CHUNK_INDEXING_ENABLED", False),
         ):
-            result = pc.process_conversation(
-                "uid-boundary",
-                "en",
-                conversation,
-                is_reprocess=True,
-                defer_derived_effects=True,
-                derived_effects_observer=observed_effects.append,
-            )
-            yield types.SimpleNamespace(
-                conversation=conversation,
-                result=result,
-                observed_effects=observed_effects,
-                extract_memories=extract_memories,
-                save_action_items=save_action_items,
-                update_goal_progress=update_goal_progress,
-                submit_with_context=submit_with_context,
-                complete=complete,
-            )
+            pc.process_conversation("uid-boundary", "en", conversation, is_reprocess=True)
 
-    def test_process_conversation_defers_effect_bundle_to_owner(self, deferred_effect_bundle):
-        deferred = deferred_effect_bundle
-
-        assert deferred.result is deferred.conversation
-        assert len(deferred.observed_effects) == 1
-        assert callable(deferred.observed_effects[0])
-        deferred.extract_memories.assert_not_called()
-        deferred.save_action_items.assert_not_called()
-        deferred.update_goal_progress.assert_not_called()
-        deferred.submit_with_context.assert_not_called()
-        deferred.complete.assert_not_called()
-
-    def test_owner_invokes_memory_action_item_and_goal_paths_separately(self, deferred_effect_bundle):
-        deferred = deferred_effect_bundle
-
-        deferred.observed_effects[0]()
-
-        deferred.extract_memories.assert_called_once_with("uid-boundary", deferred.conversation)
-        deferred.save_action_items.assert_called_once_with(
-            "uid-boundary",
-            deferred.conversation,
-            True,
-        )
-        deferred.update_goal_progress.assert_called_once_with("uid-boundary", deferred.conversation)
-        deferred.submit_with_context.assert_not_called()
+        submitted_fns = {fn.__name__ for fn, _ in submitted if callable(fn) and hasattr(fn, "__name__")}
+        extract_memories.assert_called_once_with("uid-boundary", conversation)
+        assert "_save_action_items" in submitted_fns
+        assert "_update_goal_progress" in submitted_fns
+        assert "_extract_memories" not in submitted_fns
 
 
 class TestNoConversationAsMemory:
@@ -290,7 +262,6 @@ class TestNoConversationAsMemory:
 
         from models.conversation import Conversation
         from models.conversation_enums import CategoryEnum, ConversationSource
-        from models.memories import Memory, MemoryCategory
         from models.structured import Structured
         from models.transcript_segment import TranscriptSegment
 
@@ -316,37 +287,41 @@ class TestNoConversationAsMemory:
                 )
             ],
         )
-        extracted = Memory(content="User loves hiking on weekends.", category=MemoryCategory.interesting)
-
-        saved_payloads = []
+        memory_service = MagicMock()
+        candidate = types.SimpleNamespace(
+            content="User loves hiking on weekends.",
+            evidence_quotes=["I love hiking on weekends."],
+            speaker_label="SPEAKER_00",
+            speaker_scope="session-local",
+            about="the user",
+            risk_flags=[],
+            archive_class="general",
+        )
 
         with (
-            patch.object(pc.memories_db, "delete_memories_for_conversation") as mock_delete,
-            patch.object(pc, "delete_memory_vector"),
             patch.object(pc.users_db, "get_user_language_preference", return_value="en"),
-            patch.object(pc, "new_memories_extractor", return_value=[extracted]) as mock_extractor,
-            patch.object(pc, "find_similar_memories", return_value=[]),
-            patch.object(pc, "infer_subject_from_segments", return_value=(None, "unknown")),
-            patch.object(
-                pc.memories_db,
-                "save_memories",
-                side_effect=lambda _uid, rows: saved_payloads.extend(rows),
-            ),
+            patch.object(pc, "get_user_name", return_value="User"),
+            patch.object(pc, "MemoryService", return_value=memory_service),
+            patch.object(pc, "extract_canonical_l1_memory_candidates", return_value=[candidate]) as mock_extractor,
+            patch.object(pc, "infer_subject_from_segments", return_value=(None, pc.SubjectAttribution.unknown)),
+            patch.object(pc, "associate_canonical_evidence"),
             patch.object(pc, "record_usage"),
         ):
-            mock_delete.return_value = {"vector_delete_ids": []}
-            pc._extract_memories_inner("uid-extract", conversation)
+            pc._extract_memories_canonical("uid-extract", conversation, db_client=MagicMock())
 
         mock_extractor.assert_called_once()
         extractor_args = mock_extractor.call_args[0]
         assert extractor_args[0] == "uid-extract"
-        assert extractor_args[1] is conversation.transcript_segments
-        assert extractor_args[1] is not conversation
-        assert not isinstance(extractor_args[1], dict)
+        assert extractor_args[1] == conversation.id
+        assert extractor_args[2] is conversation.transcript_segments
+        assert extractor_args[2] is not conversation
+        assert not isinstance(extractor_args[2], dict)
 
-        assert len(saved_payloads) == 1
-        row = saved_payloads[0]
-        assert row["content"] == extracted.content
+        replacement = memory_service.replace_conversation_memories.call_args.args
+        assert replacement[:2] == ("uid-extract", conversation.id)
+        assert len(replacement[2]) == 1
+        row = replacement[2][0]
+        assert row["content"] == candidate.content
         assert row["conversation_id"] == conversation.id
         assert row["evidence"][0]["source_id"] == conversation.id
         # Must not be a verbatim Conversation document.
@@ -359,7 +334,6 @@ class TestNoConversationAsMemory:
 
         from models.conversation import Conversation
         from models.conversation_enums import CategoryEnum, ConversationSource
-        from models.memories import Memory, MemoryCategory
         from models.structured import Structured
 
         integration_text = "Imported email: user prefers morning meetings on Tuesdays."
@@ -376,40 +350,37 @@ class TestNoConversationAsMemory:
                 category=CategoryEnum.personal,
             ),
         )
+        memory_service = MagicMock()
         extracted = Memory(content="User prefers morning meetings on Tuesdays.", category=MemoryCategory.interesting)
 
-        saved_payloads = []
-
         with (
-            patch.object(pc.memories_db, "delete_memories_for_conversation") as mock_delete,
-            patch.object(pc, "delete_memory_vector"),
             patch.object(pc.users_db, "get_user_language_preference", return_value="en"),
+            patch.object(pc, "MemoryService", return_value=memory_service),
             patch.object(pc, "extract_memories_from_text", return_value=[extracted]) as mock_text_extractor,
-            patch.object(pc, "new_memories_extractor") as mock_segment_extractor,
-            patch.object(pc, "find_similar_memories", return_value=[]),
             patch.object(pc, "infer_subject_from_segments", return_value=(None, "unknown")),
-            patch.object(
-                pc.memories_db,
-                "save_memories",
-                side_effect=lambda _uid, rows: saved_payloads.extend(rows),
-            ),
+            patch.object(pc, "associate_canonical_evidence"),
             patch.object(pc, "record_usage"),
         ):
-            mock_delete.return_value = {"vector_delete_ids": []}
-            pc._extract_memories_inner("uid-ext", conversation)
+            pc._extract_memories_canonical("uid-ext", conversation, db_client=MagicMock())
 
         mock_text_extractor.assert_called_once_with(
-            "uid-ext", integration_text, "email", language="en", content_date=ANY
+            "uid-ext",
+            integration_text,
+            "email",
+            language="en",
+            content_date="2026-06-01",
+            strict=True,
         )
-        mock_segment_extractor.assert_not_called()
 
         text_arg = mock_text_extractor.call_args[0][1]
         assert text_arg == integration_text
         assert text_arg is not conversation
         assert not isinstance(text_arg, dict)
 
-        assert len(saved_payloads) == 1
-        row = saved_payloads[0]
+        replacement = memory_service.replace_conversation_memories.call_args.args
+        assert replacement[:2] == ("uid-ext", conversation.id)
+        assert len(replacement[2]) == 1
+        row = replacement[2][0]
         assert row["content"] == extracted.content
         assert row["conversation_id"] == conversation.id
         assert "transcript_segments" not in row

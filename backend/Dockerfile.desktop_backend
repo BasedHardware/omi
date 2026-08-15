@@ -7,6 +7,8 @@ ARG UV_VERSION
 
 RUN python -m venv /opt/venv
 RUN python3 -m pip install --no-cache-dir "uv==${UV_VERSION}"
+# pyogg is locked from a Git source, so uv needs git available while syncing.
+RUN apt-get update && apt-get install -y --no-install-recommends git build-essential && rm -rf /var/lib/apt/lists/*
 COPY backend/pylock.runtime.toml /tmp/pylock.runtime.toml
 RUN uv pip sync /tmp/pylock.runtime.toml --python /opt/venv/bin/python --compile-bytecode
 
@@ -14,6 +16,9 @@ FROM ${PYTHON_BASE_IMAGE}
 
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
+
+# Patch OS packages in this layer (#7136). No extra apt packages in the final image.
+RUN apt-get update && apt-get -y dist-upgrade && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/ .

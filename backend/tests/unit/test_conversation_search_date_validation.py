@@ -184,10 +184,6 @@ _canonical_activation_stub = ModuleType('utils.memory.canonical_activation')
 setattr(_canonical_activation_stub, 'canonical_write_enabled', MagicMock(return_value=False))
 _register_module('utils.memory.canonical_activation', _canonical_activation_stub)
 
-_surface_routing_stub = ModuleType('utils.memory.surface_routing')
-setattr(_surface_routing_stub, 'pin_memory_system', MagicMock())
-_register_module('utils.memory.surface_routing', _surface_routing_stub)
-
 _apps_stub = ModuleType('utils.apps')
 setattr(_apps_stub, 'get_available_app_by_id_with_reviews', MagicMock())
 setattr(_apps_stub, 'get_is_user_paid_app', MagicMock(return_value=False))
@@ -207,6 +203,12 @@ try:
     from routers import conversations as conv  # noqa: E402
 finally:
     _restore_stubbed_modules()
+
+# The router imports these helpers from a lightweight module stub in this test file. Keep the default
+# parser on the natural-language path; individual exact-reference tests override it explicitly.
+conv.parse_exact_conversation_reference = MagicMock(return_value=None)
+conv.clamp_conversation_search_pagination = MagicMock(return_value=(1, 10))
+conv.conversation_matches_date_range = MagicMock(return_value=True)
 
 
 def _client():
@@ -298,6 +300,40 @@ def test_user_speaker_does_not_require_person_record():
     assert mock_search.call_args.kwargs['speaker_id'] == 'user'
 
 
+def test_exact_reference_uses_owner_scoped_hydration_without_semantic_search():
+    conversation_id = 'e8c05000-52f0-4a95-951c-ccd715523429'
+    hydrated = [_conversation_dict(conversation_id, [])]
+    with (
+        patch.object(conv, 'parse_exact_conversation_reference', return_value=conversation_id),
+        patch.object(conv, 'search_conversations') as mock_search,
+        patch.object(
+            conv.conversations_db,
+            'get_conversations_by_id_without_photos',
+            return_value=hydrated,
+        ) as get_by_id,
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': conversation_id})
+
+    assert resp.status_code == 200
+    assert [item['id'] for item in resp.json()['items']] == [conversation_id]
+    get_by_id.assert_called_once_with('test-uid', [conversation_id], include_discarded=True)
+    mock_search.assert_not_called()
+
+
+def test_exact_reference_missing_conversation_is_generic_empty_result():
+    conversation_id = 'e8c05000-52f0-4a95-951c-ccd715523429'
+    with (
+        patch.object(conv, 'parse_exact_conversation_reference', return_value=conversation_id),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=[]),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': conversation_id})
+
+    assert resp.status_code == 200
+    assert resp.json()['items'] == []
+
+
 def _conversation(conversation_id='conv-1', status=ConversationStatus.in_progress):
     return Conversation(
         id=conversation_id,
@@ -309,6 +345,92 @@ def _conversation(conversation_id='conv-1', status=ConversationStatus.in_progres
         transcript_segments=[],
         status=status,
     )
+
+
+def _conversation_dict(conversation_id, segments):
+    data = _conversation(conversation_id=conversation_id).model_dump(mode='json')
+    data['transcript_segments'] = segments
+    return data
+
+
+def _segment(*, is_user=False, person_id=None):
+    return {
+        'id': 'seg-1',
+        'text': 'hello',
+        'speaker': 'SPEAKER_00',
+        'is_user': is_user,
+        'person_id': person_id,
+        'start': 0.0,
+        'end': 1.0,
+    }
+
+
+@pytest.mark.parametrize(
+    'speaker_id,matching_segments',
+    [
+        ('user', [_segment(is_user=True)]),
+        ('person-1', [_segment(person_id='person-1')]),
+    ],
+)
+def test_speaker_filter_is_applied_after_hydration(speaker_id, matching_segments):
+    # The speaker filter used to be pushed to Typesense as transcript_segments.is_user / .person_id,
+    # which are not in the `conversations` schema -- Typesense answered 400 "Could not find a filter
+    # field named ... in the schema" and every speaker-filtered search 500'd. The filter now runs over
+    # the hydrated Firestore documents, which do carry transcript_segments.
+    from utils.conversations.search import conversation_matches_speaker as real_matcher
+
+    hydrated = [
+        _conversation_dict('conv-match', matching_segments),
+        _conversation_dict('conv-other', [_segment(person_id='someone-else')]),
+    ]
+    with (
+        patch.object(conv, 'conversation_matches_speaker', real_matcher),
+        patch.object(conv.users_db, 'get_person', return_value={'id': speaker_id}),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={
+                'items': [{'id': 'conv-match'}, {'id': 'conv-other'}],
+                'total_pages': 1,
+                'current_page': 1,
+                'per_page': 10,
+            },
+        ),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'hi', 'speaker_id': speaker_id})
+
+    assert resp.status_code == 200
+    assert [item['id'] for item in resp.json()['items']] == ['conv-match']
+
+
+def test_search_without_speaker_keeps_every_hydrated_conversation():
+    from utils.conversations.search import conversation_matches_speaker as real_matcher
+
+    hydrated = [
+        _conversation_dict('conv-1', [_segment(person_id='person-1')]),
+        _conversation_dict('conv-2', []),
+    ]
+    with (
+        patch.object(conv, 'conversation_matches_speaker', real_matcher),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={
+                'items': [{'id': 'conv-1'}, {'id': 'conv-2'}],
+                'total_pages': 1,
+                'current_page': 1,
+                'per_page': 10,
+            },
+        ),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'hi'})
+
+    assert resp.status_code == 200
+    assert [item['id'] for item in resp.json()['items']] == ['conv-1', 'conv-2']
 
 
 def _process_result(result, *, persisted: bool):

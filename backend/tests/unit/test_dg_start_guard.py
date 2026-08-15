@@ -3,11 +3,11 @@
 Verifies that connect_to_deepgram returns None when dg_connection.start()
 returns False, preventing dead connections from being passed to callers.
 
-Hosted Deepgram serving is disabled; connect_to_deepgram is only reachable
-when self-hosted Deepgram is configured, so these tests enable that gate.
+The client is selected lazily per request, so these tests isolate the start
+guard by replacing that selector with a deterministic client.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -17,13 +17,12 @@ from utils.stt.streaming import connect_to_deepgram
 class TestConnectToDeepgramStartGuard:
     """Verify connect_to_deepgram returns None when start() returns False."""
 
-    @patch('utils.stt.streaming.is_dg_self_hosted', True)
-    @patch('utils.stt.streaming.deepgram')
-    def test_returns_none_when_start_fails(self, mock_dg):
+    @patch('utils.stt.streaming._deepgram_client_for_request')
+    def test_returns_none_when_start_fails(self, mock_client_for_request):
         """If dg_connection.start() returns False, must return None (#6302)."""
         mock_dg_conn = MagicMock()
         mock_dg_conn.start.return_value = False
-        mock_dg.listen.websocket.v.return_value = mock_dg_conn
+        mock_client_for_request.return_value.listen.websocket.v.return_value = mock_dg_conn
 
         result = connect_to_deepgram(
             on_message=MagicMock(),
@@ -35,13 +34,12 @@ class TestConnectToDeepgramStartGuard:
         )
         assert result is None
 
-    @patch('utils.stt.streaming.is_dg_self_hosted', True)
-    @patch('utils.stt.streaming.deepgram')
-    def test_returns_connection_when_start_succeeds(self, mock_dg):
+    @patch('utils.stt.streaming._deepgram_client_for_request')
+    def test_returns_connection_when_start_succeeds(self, mock_client_for_request):
         """If dg_connection.start() returns True, returns the connection."""
         mock_dg_conn = MagicMock()
         mock_dg_conn.start.return_value = True
-        mock_dg.listen.websocket.v.return_value = mock_dg_conn
+        mock_client_for_request.return_value.listen.websocket.v.return_value = mock_dg_conn
 
         result = connect_to_deepgram(
             on_message=MagicMock(),

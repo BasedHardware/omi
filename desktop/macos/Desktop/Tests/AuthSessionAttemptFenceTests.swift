@@ -102,6 +102,43 @@ final class AuthSessionAttemptFenceTests: XCTestCase {
     AuthState.shared.transition(to: originalPhase)
   }
 
+  /// **Fence reads never wait on an in-flight commit.** The shipped deadlock: a background auth
+  /// commit held the fence while its defaults write synchronously waited on a main-queue
+  /// notification observer — and the main thread was itself inside `current()` waiting for the
+  /// fence (every `APIClient.buildHeaders` reads it). Frozen sign-in screen, no clickable
+  /// buttons (#11374 follow-up). Reads are lock-free; only begin/commit serialize.
+  func testReadersCompleteWhileACommitHoldsTheFence() {
+    let fence = AuthSessionAttemptFence()
+    let attempt = fence.begin()
+    let commitEntered = DispatchSemaphore(value: 0)
+    let releaseCommit = DispatchSemaphore(value: 0)
+    let commitDone = expectation(description: "commit finished")
+
+    DispatchQueue.global().async {
+      _ = fence.commitIfCurrent(attempt) {
+        commitEntered.signal()
+        releaseCommit.wait()
+        return true
+      }
+      commitDone.fulfill()
+    }
+    commitEntered.wait()
+
+    // Pre-fix these two calls hang forever; the test's own timeout is the tripwire.
+    XCTAssertEqual(fence.current(), attempt)
+    XCTAssertTrue(fence.isCurrent(attempt))
+
+    releaseCommit.signal()
+    wait(for: [commitDone], timeout: 5)
+
+    // Serialisation between begin and commit is intact: nothing newer began mid-commit,
+    // and a subsequent begin still supersedes.
+    XCTAssertTrue(fence.isCurrent(attempt))
+    let newer = fence.begin()
+    XCTAssertFalse(fence.isCurrent(attempt))
+    XCTAssertTrue(fence.isCurrent(newer))
+  }
+
   func testNewSignInTokensSurviveSupersededSignOutWaitingOnOwnerTransition() async throws {
     let ownerA = makeOwnerID("signout-a")
     let ownerB = makeOwnerID("signin-b")

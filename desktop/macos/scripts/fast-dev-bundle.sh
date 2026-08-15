@@ -4,6 +4,9 @@
 # later launch may reuse that bundle only when every packaged input and launch
 # configuration still matches.
 
+# shellcheck source=scripts/agent-runtime-payload.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/agent-runtime-payload.sh"
+
 omi_fast_bundle_fingerprint() {
   local macos_dir="$1"
   shift
@@ -126,6 +129,14 @@ omi_fast_bundle_stamp_matches() {
 
 # Emit one stable eligibility reason. Callers can safely surface this to agents
 # without attempting a full package build merely to discover why reuse failed.
+#
+# The fingerprint answers "are the packaged *inputs* unchanged"; it says nothing
+# about whether the installed bundle still *contains* what those inputs produced.
+# An interrupted install (`rm -rf "$APP_PATH"` then `ditto`), a hand-edited
+# bundle, or any partial write leaves a stale stamp pointing at a bundle whose
+# agent runtime is gone — which the fast lane would happily patch and relaunch,
+# producing an app that accepts every chat turn and fails all of them. Verify the
+# installed payload, not just the source fingerprint.
 omi_fast_bundle_eligibility_reason() {
   local app_path="$1"
   local stamp="$2"
@@ -137,6 +148,8 @@ omi_fast_bundle_eligibility_reason() {
     printf '%s\n' "missing_fast_fingerprint"
   elif ! omi_fast_bundle_stamp_matches "$stamp" "$expected_fingerprint"; then
     printf '%s\n' "fast_fingerprint_mismatch"
+  elif ! omi_agent_runtime_payload_complete "$app_path"; then
+    printf '%s\n' "incomplete_runtime_payload"
   else
     printf '%s\n' "reusable"
   fi

@@ -896,17 +896,20 @@ function UsageSectionContent({
   const [isCanceling, setIsCanceling] = useState(false);
   const [showUpgradeOptions, setShowUpgradeOptions] = useState(false);
 
-  // Set initial selected price when plans load
+  // Set initial selected price when plans load, and keep it in sync when the
+  // subscription's current price changes (e.g. after a plan change or
+  // cancellation) so a pending-cancellation user isn't left on a stale option.
+  const currentPriceId = subscription?.current_price_id;
   useEffect(() => {
-    if (cachedPlans && cachedPlans.length > 0 && !selectedPriceId) {
-      const activePlan = cachedPlans.find((p) => p.is_active);
+    if (cachedPlans && cachedPlans.length > 0) {
+      const activePlan = cachedPlans.find((p) => p.is_active || p.id === currentPriceId);
       if (activePlan) {
         setSelectedPriceId(activePlan.id);
-      } else {
+      } else if (!selectedPriceId) {
         setSelectedPriceId(cachedPlans[0].id);
       }
     }
-  }, [cachedPlans, selectedPriceId]);
+  }, [cachedPlans, currentPriceId]);
 
   const formatDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -991,7 +994,14 @@ function UsageSectionContent({
     setError(null);
 
     try {
-      const isCurrentPlan = selectedOption?.is_active;
+      const isCurrentPlan =
+        selectedOption?.is_active ||
+        selectedOption?.id === subscription?.current_price_id;
+
+      if (isCancelingSubscription && selectedPriceId !== subscription?.current_price_id) {
+        setError('Plan changes are available after your current subscription ends.');
+        return;
+      }
 
       if (isUnlimited && !isCancelingSubscription && !isCurrentPlan) {
         const result = await upgradeSubscription(selectedPriceId);
@@ -1028,6 +1038,11 @@ function UsageSectionContent({
       const result = await getCustomerPortal();
       if (result?.url) {
         window.open(result.url, '_blank');
+        const handleFocus = () => {
+          onSubscriptionUpdate();
+          window.removeEventListener('focus', handleFocus);
+        };
+        window.addEventListener('focus', handleFocus);
       } else {
         setError('Failed to open payment portal');
       }
@@ -1105,12 +1120,23 @@ function UsageSectionContent({
                       <p className="text-sm text-text-tertiary">Free tier</p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setShowUpgradeOptions(true)}
-                    className="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-purple-500/20"
-                  >
-                    Upgrade to Unlimited
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowUpgradeOptions(true)}
+                      className="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-purple-500/20"
+                    >
+                      Upgrade to Unlimited
+                    </button>
+                    {subscription?.stripe_subscription_id && (
+                      <button
+                        onClick={handleManagePayment}
+                        disabled={isLoading}
+                        className="px-4 py-2.5 border border-bg-quaternary text-text-secondary hover:text-text-primary text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
+                      >
+                        Billing &amp; Invoices
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Monthly Listening Usage */}
@@ -1196,6 +1222,14 @@ function UsageSectionContent({
                 </div>
               </Card>
 
+              {/* Billing error surfaced in the Basic view (not only the upgrade panel) */}
+              {error && !showUpgradeOptions && (
+                <div className="flex items-center gap-2 p-3 bg-red-500/10 rounded-xl border border-red-500/20">
+                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <p className="text-sm text-red-400">{error}</p>
+                </div>
+              )}
+
               {/* Upgrade Options (shown when clicked) */}
               {showUpgradeOptions && (
                 <Card className="border-purple-500/20">
@@ -1248,7 +1282,7 @@ function UsageSectionContent({
                               {option.price_string}
                             </p>
                             {option.description && (
-                              <p className="text-xs text-purple-400 mt-2 font-medium">
+                              <p className="text-xs text-text-secondary mt-2 font-medium">
                                 {option.description}
                               </p>
                             )}
@@ -1367,7 +1401,8 @@ function UsageSectionContent({
                 <div className="grid grid-cols-2 gap-3">
                   {sortedOptions.map((option) => {
                     const isSelected = selectedPriceId === option.id;
-                    const isCurrent = option.is_active;
+                    const isCurrent =
+                      option.is_active || option.id === subscription?.current_price_id;
                     const isAnnual =
                       option.interval === 'year' ||
                       option.title?.toLowerCase().includes('annual');
@@ -1376,11 +1411,15 @@ function UsageSectionContent({
                       <button
                         key={option.id}
                         onClick={() => setSelectedPriceId(option.id)}
+                        disabled={isCancelingSubscription && !isCurrent}
                         className={cn(
                           'relative p-4 rounded-xl border-2 text-left transition-all',
                           isSelected
                             ? 'border-purple-500 bg-purple-500/5'
                             : 'border-bg-tertiary hover:border-bg-quaternary bg-bg-tertiary/50',
+                          isCancelingSubscription &&
+                            !isCurrent &&
+                            'cursor-not-allowed opacity-50',
                         )}
                       >
                         {isAnnual && (
@@ -1396,7 +1435,7 @@ function UsageSectionContent({
                           {option.price_string}
                         </p>
                         {option.description && (
-                          <p className="text-xs text-purple-400 mt-1">
+                          <p className="text-xs text-text-secondary mt-1">
                             {option.description}
                           </p>
                         )}
@@ -1415,6 +1454,13 @@ function UsageSectionContent({
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
                 </div>
+              )}
+
+              {isCancelingSubscription && subscription?.current_period_end && (
+                <p className="text-sm text-text-tertiary">
+                  You can reactivate your current plan now. Plan changes are available
+                  after {formatDate(subscription.current_period_end)}.
+                </p>
               )}
 
               {/* Features List */}
@@ -1444,7 +1490,11 @@ function UsageSectionContent({
                 disabled={
                   isLoading ||
                   !selectedPriceId ||
-                  (!isCancelingSubscription && selectedOption?.is_active)
+                  (!isCancelingSubscription &&
+                    (selectedOption?.is_active ||
+                      selectedOption?.id === subscription?.current_price_id)) ||
+                  (isCancelingSubscription &&
+                    selectedPriceId !== subscription?.current_price_id)
                 }
                 className={cn(
                   'w-full py-3 rounded-xl font-medium transition-colors',
@@ -1460,7 +1510,8 @@ function UsageSectionContent({
                   </span>
                 ) : isCancelingSubscription ? (
                   'Reactivate Subscription'
-                ) : selectedOption?.is_active ? (
+                ) : selectedOption?.is_active ||
+                  selectedOption?.id === subscription?.current_price_id ? (
                   'Current Plan'
                 ) : (
                   'Change Plan'
@@ -1475,7 +1526,7 @@ function UsageSectionContent({
                   className="w-full flex items-center justify-center gap-2 py-2.5 text-text-secondary hover:text-text-primary transition-colors"
                 >
                   <CreditCard className="w-4 h-4" />
-                  <span className="text-sm">Manage Payment Method</span>
+                  <span className="text-sm">Manage Billing &amp; Invoices</span>
                 </button>
 
                 {!isCancelingSubscription && (
@@ -2157,15 +2208,13 @@ function DeveloperSection({
   const [copiedClaudeName, setCopiedClaudeName] = useState(false);
   const [copiedClaudeUrl, setCopiedClaudeUrl] = useState(false);
   const [copiedClaudeClientId, setCopiedClaudeClientId] = useState(false);
-  const [copiedClaudeSecret, setCopiedClaudeSecret] = useState(false);
 
   const mcpServerUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me'}/v1/mcp/sse`;
 
   // Claude connector values — mirror the 4 fields in Claude's "Add custom connector" form
   const claudeConnectorName = 'Omi Memory';
   const claudeConnectorUrl = mcpServerUrl;
-  const claudeConnectorClientId = 'omi';
-  const claudeConnectorSecret = mcpKeys.find((k) => k.key)?.key ?? '';
+  const claudeConnectorClientId = 'omi-claude-prod';
 
   // Experimental features (stored in localStorage)
   const [experimentalFeatures, setExperimentalFeatures] = useState({
@@ -2488,20 +2537,12 @@ function DeveloperSection({
 
             <div className="border-t border-white/[0.06] pt-4">
               <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
-                OAuth
+                Cloud OAuth
               </p>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-4">
-                  <span className="text-text-tertiary w-24">Client ID</span>
-                  <code className="text-text-primary font-mono">omi</code>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-text-tertiary w-24">Client Secret</span>
-                  <span className="text-text-quaternary italic text-xs">
-                    Use your MCP API key
-                  </span>
-                </div>
-              </div>
+              <p className="text-sm text-text-tertiary">
+                Cloud connector OAuth is provider-specific. Use the Claude setup card
+                below; do not use an MCP API key as an OAuth client secret.
+              </p>
             </div>
           </div>
         </Card>
@@ -2607,7 +2648,7 @@ function DeveloperSection({
               </button>
             </div>
 
-            {/* Field 4: OAuth Client Secret → pastes into Claude's Advanced "OAuth Client Secret" */}
+            {/* Field 4: OAuth Client Secret must be blank for Claude's public PKCE client. */}
             <div>
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 4. OAuth Client Secret{' '}
@@ -2615,33 +2656,9 @@ function DeveloperSection({
                   → Claude Advanced "OAuth Client Secret"
                 </span>
               </p>
-              {claudeConnectorSecret ? (
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(claudeConnectorSecret);
-                    setCopiedClaudeSecret(true);
-                    setTimeout(() => setCopiedClaudeSecret(false), 2000);
-                  }}
-                  className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-purple-500/50 transition-colors group"
-                >
-                  <code className="text-sm text-text-primary font-mono truncate mr-2">
-                    {claudeConnectorSecret.slice(0, 8)}…{claudeConnectorSecret.slice(-4)}
-                  </code>
-                  {copiedClaudeSecret ? (
-                    <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
-                  ) : (
-                    <Copy className="w-4 h-4 text-text-quaternary group-hover:text-text-secondary transition-colors flex-shrink-0" />
-                  )}
-                </button>
-              ) : (
-                <div className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] opacity-60">
-                  <span className="text-sm text-text-quaternary italic">
-                    {mcpKeys.length > 0
-                      ? 'Create a new MCP key above — existing keys cannot be retrieved'
-                      : 'Create an MCP key first (above)'}
-                  </span>
-                </div>
-              )}
+              <div className="w-full flex items-center p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06]">
+                <span className="text-sm text-text-quaternary italic">Leave blank</span>
+              </div>
             </div>
           </div>
 
@@ -2659,7 +2676,7 @@ function DeveloperSection({
               </li>
               <li>
                 Under <span className="text-text-secondary">Advanced settings</span>,
-                paste OAuth Client ID + Secret
+                paste the OAuth Client ID and leave OAuth Client Secret blank
               </li>
               <li>
                 Click <span className="text-text-secondary">Add</span>, then{' '}

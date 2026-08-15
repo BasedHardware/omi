@@ -1,0 +1,10 @@
+{
+  "version": "0.12.153",
+  "date": "2026-08-08",
+  "changes": [
+    "Show Checking/Downloading/restart-ready update progress in the top bar and Settings → About (chat-first no longer hid Sparkle status in the unused sidebar)",
+    "Fixed Rewind privacy exclusions so the installed Omi app is not captured",
+    "Improved reliability of signed macOS Beta startup verification",
+    "Fixed dead zones that prevented dragging the window and opening Chat, Rewind, and Apps"
+  ]
+}

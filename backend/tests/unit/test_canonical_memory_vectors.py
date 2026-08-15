@@ -225,7 +225,7 @@ def _install_recording_vector_db(monkeypatch):
 
 @pytest.fixture
 def canonical_write_support(monkeypatch, _vector_db_stub_isolation):
-    from tests.unit.test_ws_i_write_convergence import (
+    from tests.unit.fixtures.canonical_memory_fakes import (
         _FakeDb,
         _fresh_short_term_item,
         _sample_memory_payload,
@@ -624,7 +624,7 @@ def test_write_path_does_not_fast_sync_vector_on_idempotent_skip(canonical_write
 
 
 def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
-    from tests.unit.test_ws_i_write_convergence import _install_heavy_import_stubs
+    from tests.unit.fixtures.canonical_memory_fakes import _install_heavy_import_stubs
 
     _install_heavy_import_stubs()
     vector_db, fake_index = _install_recording_vector_db(monkeypatch)

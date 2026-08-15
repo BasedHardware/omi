@@ -90,6 +90,10 @@ def _loaded_oauth_router() -> Iterator[tuple[ModuleType, ModuleType, ModuleType]
         safe_request_target=lambda url: (url, {'headers': {}, 'extensions': {}}),
         UnsafeWebhookURLError=_UnsafeWebhookURLError,
     )
+    endpoints = _module(
+        'utils.other.endpoints',
+        enforce_account_deletion_http_access=lambda _uid: None,
+    )
 
     with stub_modules(
         {
@@ -99,6 +103,7 @@ def _loaded_oauth_router() -> Iterator[tuple[ModuleType, ModuleType, ModuleType]
             'database.redis_db': redis_db,
             'utils.apps': apps,
             'utils.http_client': http_client,
+            'utils.other.endpoints': endpoints,
             'models.app': app_model,
         }
     ):
@@ -133,6 +138,7 @@ def test_oauth_token_routes_auth_and_app_reads_to_owned_executors() -> None:
         }
         assert [(executor, func) for executor, func, _args in calls] == [
             (oauth.critical_executor, firebase_auth.verify_id_token),
+            (oauth.db_executor, oauth.enforce_account_deletion_http_access),
             (oauth.db_executor, apps_db.get_app_by_id_db),
             (oauth.db_executor, oauth.is_user_app_enabled),
         ]

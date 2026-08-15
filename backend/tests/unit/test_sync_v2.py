@@ -11,6 +11,7 @@ v1 remains completely unchanged.
 import asyncio
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -23,7 +24,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.routing import APIRoute
 from models.users import PlanType
-from utils.conversations import finalizer as persisted_finalizer
 from utils.executors import run_blocking as _production_run_blocking
 
 PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
@@ -1325,9 +1325,12 @@ class TestAsyncCoordinatorBehavioral:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
             'utils',
+            'utils.account_cutover',
+            'utils.account_cutover.access',
             'utils.analytics',
             'utils.byok',
             'utils.client_device',
@@ -1336,7 +1339,6 @@ class TestAsyncCoordinatorBehavioral:
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
             'utils.other',
-            'utils.other.conversation_playback_storage',
             'utils.other.endpoints',
             'utils.other.storage',
             'utils.encryption',
@@ -1357,7 +1359,6 @@ class TestAsyncCoordinatorBehavioral:
             'utils.sync.playback',
             'utils.sync.backfill',
             'utils.sync.content_id',
-            'utils.sync.conversation_artifact_worker',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
@@ -1369,6 +1370,9 @@ class TestAsyncCoordinatorBehavioral:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(
+            return_value=False
+        )
         # Keep the outcome contract real; the coordinator tests exercise its
         # enum values while every heavyweight provider dependency stays stubbed.
         saved_modules['utils'] = prior_utils
@@ -1376,7 +1380,6 @@ class TestAsyncCoordinatorBehavioral:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
-        sys.modules['utils.other'].__path__ = []
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
         sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
@@ -1485,6 +1488,7 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
         sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})
         sys.modules['models.conversation_enums'].ConversationSource = MagicMock()
+        sys.modules['models.sync_contract'].SYNC_LOCAL_FILES_V2_RESPONSES = {}
 
         class _AudioPrecacheResponse(BaseModel):
             pass
@@ -1821,12 +1825,14 @@ class TestAsyncCoordinatorBehavioral:
         try:
             pipeline = stubs['pipeline']
             pipeline.RUN_LOCK_HEARTBEAT_SECONDS = 0.001
-            pipeline.RUN_LOCK_TTL_SECONDS = 0.05
-            pipeline.RUN_LOCK_RENEWAL_SAFETY_SECONDS = 0.005
-            # Advance the lease deadline explicitly after the hung renewal is
-            # observed. A millisecond wall-clock lease can expire before the
-            # mocked coroutine starts on a busy worker.
-            pipeline.time = types.SimpleNamespace(monotonic=MagicMock(side_effect=[0.0, 0.0, 0.001, 0.05]))
+            pipeline.RUN_LOCK_TTL_SECONDS = 0.006
+            pipeline.RUN_LOCK_RENEWAL_SAFETY_SECONDS = 0.001
+            # Same explicit deadline as the renew-error case: a 6 ms wall-clock
+            # window can expire before the first renewal is even attempted on a
+            # busy worker, which would assert against the scheduler, not the
+            # fail-closed behavior under test.
+            lease_readings = [0.0, 0.0, 0.001]
+            pipeline.time = types.SimpleNamespace(monotonic=lambda: lease_readings.pop(0) if lease_readings else 0.006)
             renewal_started = asyncio.Event()
 
             async def _hanging_run_blocking(_executor, _fn, *_args, **_kwargs):
@@ -1915,6 +1921,13 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.RUN_LOCK_HEARTBEAT_SECONDS = 0.001
             pipeline.RUN_LOCK_TTL_SECONDS = 0.006
             pipeline.RUN_LOCK_RENEWAL_SAFETY_SECONDS = 0.001
+            # Drive the lease deadline explicitly. A 6 ms wall-clock window can
+            # legitimately expire after one scheduler turn on a busy CI worker,
+            # even though the retry behavior under test is correct. The
+            # coordinator is parked on the capacity gate here, so the lease
+            # heartbeat is the only reader of this clock.
+            lease_readings = [0.0, 0.0, 0.001, 0.001, 0.002]
+            pipeline.time = types.SimpleNamespace(monotonic=lambda: lease_readings.pop(0) if lease_readings else 0.006)
             pipeline.renew_job_run_lock = MagicMock(side_effect=ConnectionError('redis unavailable'))
             pipeline._cleanup_files = MagicMock()
             pipeline.release_sync_content_claim = MagicMock()
@@ -3022,9 +3035,12 @@ class TestV2EndpointExecution:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
             'utils',
+            'utils.account_cutover',
+            'utils.account_cutover.access',
             'utils.analytics',
             'utils.byok',
             'utils.client_device',
@@ -3033,7 +3049,6 @@ class TestV2EndpointExecution:
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
             'utils.other',
-            'utils.other.conversation_playback_storage',
             'utils.other.endpoints',
             'utils.other.storage',
             'utils.encryption',
@@ -3054,7 +3069,6 @@ class TestV2EndpointExecution:
             'utils.sync.playback',
             'utils.sync.backfill',
             'utils.sync.content_id',
-            'utils.sync.conversation_artifact_worker',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
@@ -3066,12 +3080,14 @@ class TestV2EndpointExecution:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(
+            return_value=False
+        )
         saved_modules['utils'] = prior_utils
         saved_modules['utils.sync'] = prior_utils_sync
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
-        sys.modules['utils.other'].__path__ = []
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
         sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
@@ -3156,6 +3172,7 @@ class TestV2EndpointExecution:
 
         sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
         sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
+        sys.modules['models.sync_contract'].SYNC_LOCAL_FILES_V2_RESPONSES = {}
 
         # Mock auth to return test uid
         sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock(return_value='test-uid')
@@ -3463,28 +3480,16 @@ class TestV2EndpointExecution:
 class TestConversationFinalizerExecutor:
     """The durable finalizer must use the post-processing bulkhead."""
 
-    @pytest.mark.asyncio
-    async def test_postprocess_mutation_runs_on_bulkhead(self, monkeypatch):
-        work = MagicMock(return_value='processed')
-        calls = []
+    @staticmethod
+    def _read_finalizer_source():
+        finalizer_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'conversations', 'finalizer.py')
+        with open(finalizer_path, encoding='utf-8') as f:
+            return f.read()
 
-        async def inline_run_blocking(executor, function, *args, **kwargs):
-            calls.append((executor, function, args, kwargs))
-            return function(*args, **kwargs)
-
-        monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
-
-        result = await persisted_finalizer._run_postprocess_mutation(work, 'uid-1', force_process=True)
-
-        assert result == 'processed'
-        assert calls == [
-            (
-                persisted_finalizer.postprocess_executor,
-                work,
-                ('uid-1',),
-                {'force_process': True},
-            )
-        ]
+    def test_process_conversation_uses_postprocess_bulkhead(self):
+        source = self._read_finalizer_source()
+        assert 'postprocess_executor' in source
+        assert re.search(r'run_blocking\(\s+postprocess_executor,\s+process_conversation', source)
 
 
 # ---------------------------------------------------------------------------

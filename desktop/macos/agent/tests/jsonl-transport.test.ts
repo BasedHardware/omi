@@ -58,6 +58,7 @@ function query(sessionId: string, overrides: Partial<QueryMessage> = {}): QueryM
     clientId: "client-1",
     ownerId: "owner",
     sessionId,
+    surfaceKind: "main_chat",
     prompt: "hello",
     mode: "act",
     ...overrides,
@@ -565,13 +566,60 @@ describe("JsonlTransport kernel-owned query contract", () => {
     expect(adapter.executed).toHaveLength(0);
 
     for (const field of [
-      "runId", "attemptId", "eventId", "surfaceKind", "surfaceContextJson", "systemPrompt", "cwd", "model",
+      "runId", "attemptId", "eventId", "surfaceContextJson", "systemPrompt", "cwd", "model",
     ] as const) {
       await expect(transport.handleQuery({
         ...query(session.sessionId),
         [field]: "forged",
       } as unknown as QueryMessage)).rejects.toThrow(`query_wire_field_not_allowed:${field}`);
     }
+    store.close();
+  });
+
+  it("projects an authorized aliased surface instead of the session's legacy surface", async () => {
+    const { store, adapter, kernel, session, transport } = fixture();
+    store.execute("UPDATE sessions SET surface_kind = ? WHERE session_id = ?", ["floating_chat", session.sessionId]);
+    store.insertSurfaceConversation({
+      ownerId: session.ownerId,
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "main-default",
+      conversationId: "conv-aliased-main",
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    const admitted = kernel.contextSnapshot(session.sessionId, session.ownerId, "main_chat");
+
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "aliased-main-query",
+      surfaceKind: "main_chat",
+      expectedContextSnapshotVersion: admitted.version,
+      expectedContextSnapshotGeneration: admitted.snapshotGeneration,
+      expectedContextRendererFingerprint: admitted.rendererFingerprint,
+      expectedCapabilityVersion: admitted.capabilityVersion,
+    }));
+
+    expect(adapter.executed).toHaveLength(1);
+    const input = JSON.parse(String(store.getRow(
+      "SELECT input_json FROM runs WHERE request_id = ?",
+      ["aliased-main-query"],
+    ).input_json));
+    expect(store.getRow(
+      "SELECT surface_kind FROM sessions WHERE session_id = ?",
+      [session.sessionId],
+    ).surface_kind).toBe("floating_chat");
+    expect(input.contextRendererFingerprint).toBe(admitted.rendererFingerprint);
+    expect(input.admittedContextSnapshot.rendererFingerprint).toBe(admitted.rendererFingerprint);
+    store.close();
+  });
+
+  it("rejects a query surface that is not bound to the canonical session", async () => {
+    const { store, adapter, session, transport } = fixture();
+    await expect(transport.handleQuery(query(session.sessionId, {
+      surfaceKind: "task_chat",
+    }))).rejects.toThrow("Context projection surface is not bound to the canonical session");
+    expect(adapter.executed).toHaveLength(0);
     store.close();
   });
 

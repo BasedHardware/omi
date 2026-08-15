@@ -10,7 +10,7 @@ extension FloatingControlBarView {
     HStack(spacing: 10) {
       Text(notification.title)
         .scaledFont(size: 12.5)
-        .foregroundColor(.white)
+        .foregroundColor(NotchGlass.primary)
         .lineLimit(1)
       Spacer(minLength: 8)
       Button {
@@ -19,7 +19,7 @@ extension FloatingControlBarView {
       } label: {
         Text("Review")
           .scaledFont(size: 11.5)
-          .foregroundColor(.white)
+          .foregroundColor(NotchGlass.primary)
           .underline()
       }
       .buttonStyle(.plain)
@@ -29,7 +29,7 @@ extension FloatingControlBarView {
       } label: {
         Text("Undo")
           .scaledFont(size: 11.5)
-          .foregroundColor(.white.opacity(0.55))
+          .foregroundColor(NotchGlass.ink(.w55))
           .underline()
       }
       .buttonStyle(.plain)

@@ -51,16 +51,16 @@ def test_granted_scope_check_ignores_merely_requested_scopes():
     assert google_integration_has_scope(None, GMAIL_READONLY_SCOPE) is False
 
 
-def test_connecting_google_requests_the_gmail_scope():
-    # The consent request is built by the integration registry (the inline
-    # AUTH_PROVIDERS table this used to read no longer exists). Assert against the
-    # query actually sent, so a scope that is gated at runtime is provably one the
-    # user was asked for.
+def test_connecting_google_withholds_the_unverified_gmail_scope():
+    # gmail.readonly is a Google restricted scope pending verification, so it is
+    # withheld from the consent request — requesting it shows users the "unverified
+    # app" screen. Calendar is verified and stays requested.
     _, provider = resolve_integration_provider('google_calendar')
     requested = oauth_authorization_query(provider)['scope'].split()
 
-    assert GMAIL_READONLY_SCOPE in GOOGLE_OAUTH_SCOPES
-    assert GMAIL_READONLY_SCOPE in requested
+    assert GMAIL_READONLY_SCOPE not in GOOGLE_OAUTH_SCOPES
+    assert GMAIL_READONLY_SCOPE not in requested
+    assert CALENDAR_SCOPE in requested
 
 
 def test_gmail_is_disconnected_without_a_google_grant(stored_grants):
@@ -111,7 +111,10 @@ def test_gmail_oauth_url_runs_the_google_flow(monkeypatch):
     auth_url = integrations_router.get_oauth_url('gmail', uid='u1').auth_url
 
     params = parse_qs(urlparse(auth_url).query)
-    assert GMAIL_READONLY_SCOPE in params['scope'][0]
+    # Gmail routes through the Google flow, but the unverified gmail.readonly scope is
+    # withheld from the consent request; Calendar is still asked for.
+    assert GMAIL_READONLY_SCOPE not in params['scope'][0]
+    assert CALENDAR_SCOPE in params['scope'][0]
     assert params['redirect_uri'] == ['https://api.example.com/v2/integrations/google-calendar/callback']
     # The callback validates state against the source key, so state must carry it.
     assert '"app_key": "google_calendar"' in next(iter(stored_state.values()))

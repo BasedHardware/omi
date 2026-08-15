@@ -14,10 +14,13 @@ struct GoalCelebrationView: View {
   var body: some View {
     ZStack {
       if showCelebration {
-        // Dim overlay
-        Color.black.opacity(phase == .dim ? 0.4 : (phase == .confetti || phase == .text ? 0.5 : 0))
-          .ignoresSafeArea()
-          .allowsHitTesting(false)
+        // The dim behind the confetti. Bounded to the shell's surface (`ShellModalScrim`): this view
+        // is an overlay on the whole transparent main window, so full-bleed it painted a dark
+        // rectangle over the desktop around the app. It takes no clicks — a celebration must not
+        // steal the pointer — and it ramps from nothing rather than between two near-equal values.
+        ShellModalScrim(
+          opacity: phase == .idle || phase == .fadeOut ? 0 : ShellModalScrimLayout.dim,
+          blocksInteraction: false)
 
         // Confetti burst
         if phase == .confetti || phase == .text {
@@ -42,13 +45,13 @@ struct GoalCelebrationView: View {
 
             Text(goal.title)
               .scaledFont(size: OmiType.heading, weight: .medium)
-              .foregroundColor(.white)
+              .foregroundColor(Ink.primary)
               .multilineTextAlignment(.center)
               .padding(.horizontal, OmiSpacing.page)
 
             Text("\(Int(goal.targetValue)) \(goal.unit ?? "") reached")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(.white.opacity(0.7))
+              .foregroundColor(Ink.secondary)
           }
           .transition(.scale(scale: 0.7).combined(with: .opacity))
         }
@@ -114,7 +117,7 @@ struct GoalConfettiView: View {
         Color(red: 0.133, green: 0.773, blue: 0.369),  // Green
         Color(red: 0.2, green: 0.6, blue: 1.0),  // Blue
         .pink, .orange, .cyan, .mint,
-        OmiColors.accent, OmiColors.accent.opacity(0.7),
+        Ink.accent, Ink.accent.opacity(0.7),
       ]
       return (0..<40).map { _ in
         (

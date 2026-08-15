@@ -356,8 +356,11 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
     final isSignedIn = context.read<AuthenticationProvider>().isSignedIn();
     if (isSignedIn) {
-      context.read<HomeProvider>().setupHasSpeakerProfile();
-      context.read<HomeProvider>().setupUserPrimaryLanguage();
+      final homeProvider = context.read<HomeProvider>();
+      homeProvider.setupHasSpeakerProfile();
+      // Not awaited: the picker must not open on the bundled list while the
+      // served one is in flight, but the rest of startup should not wait.
+      homeProvider.loadLanguagesThenSetupPrimary();
       context.read<UserProvider>().initialize();
       context.read<PeopleProvider>().initialize();
       try {
@@ -372,6 +375,9 @@ class _AppShellState extends State<AppShell> {
       context.read<MessageProvider>().refreshMessages();
       context.read<UsageProvider>().fetchSubscription();
       context.read<TaskIntegrationProvider>().loadFromBackend();
+      // Same fire-and-forget as task integrations: chat/settings must not
+      // treat an empty in-memory map as "not connected" after process death.
+      context.read<IntegrationProvider>().loadFromBackend();
 
       NotificationService.instance.saveNotificationToken();
     } else {

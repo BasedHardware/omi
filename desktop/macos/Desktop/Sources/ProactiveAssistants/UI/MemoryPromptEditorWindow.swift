@@ -21,7 +21,7 @@ class MemoryPromptEditorWindow: NSWindow {
   init() {
     super.init(
       contentRect: NSRect(x: 0, y: 0, width: 700, height: 600),
-      styleMask: [.titled, .closable, .resizable, .miniaturizable],
+      styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
       backing: .buffered,
       defer: false
     )
@@ -29,6 +29,10 @@ class MemoryPromptEditorWindow: NSWindow {
     title = "Memory Extraction Prompt"
     minSize = NSSize(width: 500, height: 400)
     isReleasedWhenClosed = false
+    // The inside of a titled window is glass: transparent, light-pinned, and shadowed by its own
+    // frame (`WindowGlass.Kind.titled`). Without the pin the title bar and the traffic lights stay in
+    // the machine's appearance — a dark title bar on a white sheet on a Dark Mac.
+    WindowGlass.wear(self, as: .titled)
 
     contentView = NSHostingView(
       rootView: MemoryPromptEditorView(onClose: { [weak self] in
@@ -123,6 +127,7 @@ struct MemoryPromptEditorView: View {
       .padding()
     }
     .frame(minWidth: 500, minHeight: 400)
+    .inkGlassPanel(cornerRadius: 0, shadow: nil)
   }
 }
 

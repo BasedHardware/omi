@@ -182,8 +182,14 @@ def _walk_body(node: FunctionNode) -> Iterator[ast.AST]:
 
 
 def has_await(node: ast.AsyncFunctionDef) -> bool:
+    """True when the coroutine actually suspends.
+
+    ``async for`` and ``async with`` suspend without an ``ast.Await`` node, and a
+    function using either cannot be rewritten as a plain ``def``. Counting only
+    ``await`` reported those endpoints as structurally-sync.
+    """
     for child in _walk_body(node):
-        if isinstance(child, ast.Await):
+        if isinstance(child, (ast.Await, ast.AsyncFor, ast.AsyncWith)):
             return True
     return False
 
@@ -496,7 +502,7 @@ def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
     files_scanned = 0
 
     for fpath in collect_py_files(dirs):
-        with open(fpath) as f:
+        with open(fpath, encoding="utf-8") as f:
             source = f.read()
         try:
             tree = ast.parse(source, filename=fpath)

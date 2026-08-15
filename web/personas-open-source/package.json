@@ -23,7 +23,7 @@
     "ioredis": "^5.6.1",
     "lucide-react": "^0.515.0",
     "mixpanel-browser": "^2.56.0",
-    "next": "15.5.18",
+    "next": "~15.5.21",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-icons": "^5.5.0",
@@ -52,7 +52,7 @@
     "eslint-plugin-react": "^7.35.0",
     "eslint-plugin-react-refresh": "^0.3.4",
     "eslint-plugin-simple-import-sort": "^10.0.0",
-    "postcss": "^8.5.10",
+    "postcss": "~8.5.18",
     "prettier": "^2.8.8",
     "prettier-plugin-tailwindcss": "^0.3.0",
     "tailwindcss": "^3.4.1",
@@ -60,10 +60,11 @@
   },
   "overrides": {
     "postcss": "$postcss",
+    "sharp": "~0.35.0",
+    "js-yaml": "~5.2.2",
     "@grpc/grpc-js": ">=1.9.16",
     "protobufjs": ">=7.6.3",
     "form-data": ">=4.0.4",
-    "js-yaml": ">=4.1.1",
     "websocket-driver": ">=0.5.8"
   }
 }

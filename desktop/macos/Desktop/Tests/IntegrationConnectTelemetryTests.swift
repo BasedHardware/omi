@@ -318,34 +318,48 @@ final class IntegrationConnectTelemetryTests: XCTestCase {
     XCTAssertEqual(attempted.count, 1)
   }
 
-  // MARK: - Behavioral: onboarding verify-probe outcome mapping
+  // MARK: - Behavioral: onboarding uses the shared import terminal
 
-  func testOnboardingVerifyOutcomeForConnectedEmitsSucceeded() {
-    SBOnboardingModel.emitConnectVerifyOutcome(
-      connectorID: "calendar", connected: true, needsSignIn: false, durationMs: 800)
-    XCTAssertEqual(captured.count, 1)
-    XCTAssertEqual(captured[0].name, "Integration Connect Succeeded")
+  func testOnboardingImportRetainsItsSurfaceAtAttemptAndSuccess() async {
+    let runner = ConnectorImportRunner()
+    let task = runner.start(
+      connectorID: "calendar",
+      progressTitle: "Connecting",
+      progressDetail: "Calendar",
+      surface: .onboarding
+    ) { _ in
+      .success(message: "done")
+    }
+
+    await task?.value
+
+    XCTAssertEqual(captured.map(\.name), ["Integration Connect Attempted", "Integration Connect Succeeded"])
     XCTAssertEqual(captured[0].properties["surface"] as? String, "onboarding")
-    XCTAssertEqual(captured[0].properties["stage"] as? String, "verify")
-    XCTAssertEqual(captured[0].properties["duration_bucket"] as? String, "0_1s")
+    XCTAssertEqual(captured[0].properties["stage"] as? String, "import")
+    XCTAssertEqual(captured[1].properties["surface"] as? String, "onboarding")
+    XCTAssertEqual(captured[1].properties["stage"] as? String, "import")
   }
 
-  func testOnboardingVerifyOutcomeForNeedsSignInEmitsFailedReconnectRequired() {
-    SBOnboardingModel.emitConnectVerifyOutcome(
-      connectorID: "gmail", connected: false, needsSignIn: true, durationMs: 1_200)
-    XCTAssertEqual(captured.count, 1)
-    XCTAssertEqual(captured[0].name, "Integration Connect Failed")
-    XCTAssertEqual(captured[0].properties["error_class"] as? String, "not_signed_in")
-    XCTAssertEqual(captured[0].properties["reconnect_required"] as? Bool, true)
-  }
+  func testOnboardingImportFailureRetainsReconnectClassification() async {
+    let runner = ConnectorImportRunner()
+    let task = runner.start(
+      connectorID: "email",
+      progressTitle: "Connecting",
+      progressDetail: "Gmail",
+      surface: .onboarding
+    ) { _ in
+      .failure(
+        message: "Sign in",
+        metrics: ConnectorImportRunner.RunMetrics(failureClass: .notSignedIn)
+      )
+    }
 
-  func testOnboardingVerifyOutcomeForErrorEmitsFailedUnknown() {
-    SBOnboardingModel.emitConnectVerifyOutcome(
-      connectorID: "gmail", connected: false, needsSignIn: false, durationMs: 1_200)
-    XCTAssertEqual(captured.count, 1)
-    XCTAssertEqual(captured[0].name, "Integration Connect Failed")
-    XCTAssertEqual(captured[0].properties["error_class"] as? String, "unknown")
-    XCTAssertEqual(captured[0].properties["reconnect_required"] as? Bool, false)
+    await task?.value
+
+    XCTAssertEqual(captured[1].name, "Integration Connect Failed")
+    XCTAssertEqual(captured[1].properties["surface"] as? String, "onboarding")
+    XCTAssertEqual(captured[1].properties["error_class"] as? String, "not_signed_in")
+    XCTAssertEqual(captured[1].properties["reconnect_required"] as? Bool, true)
   }
 }
 

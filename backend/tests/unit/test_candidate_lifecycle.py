@@ -76,6 +76,37 @@ def create_record(fake_db, **overrides):
     )
 
 
+def test_staged_compatibility_score_is_pending_only(fake_db):
+    proposal = task_create_proposal(
+        source_surface='legacy_staged',
+        evidence_refs=[{'kind': 'external', 'id': 'legacy-staged-row-1', 'scope': 'canonical'}],
+    )
+    candidate = candidates_db.create_candidate(
+        'user-1',
+        proposal,
+        idempotency_key='legacy-staged:row-1',
+        account_generation=3,
+    )
+
+    updated = candidates_db.update_candidate_compatibility_score(
+        'user-1',
+        candidate.candidate_id,
+        relevance_score=42,
+        account_generation=3,
+    )
+    assert updated.compatibility is not None
+    assert updated.compatibility.relevance_score == 42
+
+    candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3)
+    with pytest.raises(candidates_db.CandidateConflictError, match='not an active staged-task'):
+        candidates_db.update_candidate_compatibility_score(
+            'user-1',
+            candidate.candidate_id,
+            relevance_score=99,
+            account_generation=3,
+        )
+
+
 def evidence_refs(start, stop):
     return [
         {'kind': 'conversation', 'id': f'conversation-{index}', 'scope': 'canonical'} for index in range(start, stop)
@@ -313,6 +344,24 @@ def test_exact_pending_task_creates_coalesce_across_sources_and_alias_each_reque
         idempotency_key='screen:request-2',
         account_generation=3,
     )
+    weaker = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(
+            task_change={
+                'description': 'Send the budget',
+                'owner': 'user',
+                'due_at': due_utc,
+                'due_confidence': 0.4,
+                'priority': 'low',
+            },
+            capture_confidence=0.5,
+            ownership_confidence=0.5,
+            evidence_refs=evidence_refs(2, 3),
+            source_surface='agent',
+        ),
+        idempotency_key='agent:request-3',
+        account_generation=3,
+    )
     replay = candidates_db.create_candidate(
         'user-1',
         first_proposal,
@@ -325,10 +374,22 @@ def test_exact_pending_task_creates_coalesce_across_sources_and_alias_each_reque
     assert second.capture_confidence == 0.96
     assert replay.capture_confidence == 0.96
     assert second.ownership_confidence == 0.98
+    assert second.task_change is not None
+    assert second.task_change.due_confidence == 1
+    assert second.task_change.priority is not None
+    assert second.task_change.priority.value == 'high'
+    assert weaker.task_change is not None
+    assert weaker.task_change.due_confidence == 1
+    assert weaker.task_change.priority is not None
+    assert weaker.task_change.priority.value == 'high'
+    assert replay.task_change is not None
+    assert replay.task_change.due_confidence == 1
+    assert replay.task_change.priority is not None
+    assert replay.task_change.priority.value == 'high'
     assert [evidence.id for evidence in second.evidence_refs] == ['conversation-0', 'conversation-1']
-    assert [evidence.id for evidence in replay.evidence_refs] == ['conversation-0', 'conversation-1']
+    assert [evidence.id for evidence in replay.evidence_refs] == ['conversation-0', 'conversation-1', 'conversation-2']
     assert len(candidate_paths(fake_db)) == 1
-    assert len(alias_paths(fake_db)) == 2
+    assert len(alias_paths(fake_db)) == 3
     assert len(pending_claim_paths(fake_db)) == 1
 
 
@@ -468,6 +529,12 @@ def test_accepted_active_task_coalesces_exact_cross_source_capture_until_work_cl
     receipt = candidates_db.resolve_task_candidate('user-1', first.candidate_id, account_generation=3)
     task_path = ('users', 'user-1', 'action_items', receipt.task_id)
     second_proposal = task_create_proposal(
+        task_change={
+            'description': 'Send the budget',
+            'owner': 'user',
+            'due_confidence': 1,
+            'priority': 'high',
+        },
         capture_confidence=0.99,
         source_surface='screen',
         evidence_refs=[{'kind': 'local_screen', 'id': 'screen-2', 'scope': 'device_local', 'device_id': 'macos_2'}],
@@ -491,6 +558,37 @@ def test_accepted_active_task_coalesces_exact_cross_source_capture_until_work_cl
         'screen-2',
     }
     assert fake_db.rows[task_path]['capture_confidence'] == 0.99
+    assert second.task_change is not None
+    assert second.task_change.due_confidence == 1
+    assert second.task_change.priority is not None
+    assert second.task_change.priority.value == 'high'
+    assert fake_db.rows[task_path]['due_confidence'] == 1
+    assert fake_db.rows[task_path]['priority'] == 'high'
+
+    weaker = candidates_db.create_candidate(
+        'user-1',
+        task_create_proposal(
+            task_change={
+                'description': 'Send the budget',
+                'owner': 'user',
+                'due_confidence': 0.3,
+                'priority': 'low',
+            },
+            capture_confidence=0.5,
+            ownership_confidence=0.5,
+            source_surface='agent',
+            evidence_refs=evidence_refs(3, 4),
+        ),
+        idempotency_key='agent:weaker',
+        account_generation=3,
+    )
+
+    assert weaker.task_change is not None
+    assert weaker.task_change.due_confidence == 1
+    assert weaker.task_change.priority is not None
+    assert weaker.task_change.priority.value == 'high'
+    assert fake_db.rows[task_path]['due_confidence'] == 1
+    assert fake_db.rows[task_path]['priority'] == 'high'
 
     fake_db.rows[task_path].update(status='completed', completed=True)
     recurrence = candidates_db.create_candidate(
@@ -825,14 +923,11 @@ def test_expired_legacy_promotion_claim_gets_new_owner(fake_db):
         )
 
 
-@pytest.mark.parametrize('mode', ['off', 'shadow'])
-def test_authoritative_control_blocks_candidate_writes_in_nonvisible_modes(fake_db, mode):
-    fake_db.rows[('users', 'user-1', 'task_intelligence_control', 'state')]['workflow_mode'] = mode
-
-    with pytest.raises(candidates_db.CandidateConflictError):
-        create_record(fake_db)
-
-    assert not [path for path in fake_db.rows if 'candidates' in path]
+@pytest.mark.parametrize('workflow_mode', ['off', 'shadow', 'write', 'read'])
+def test_candidate_writes_are_universal_and_ignore_retired_workflow_mode(fake_db, workflow_mode):
+    fake_db.rows[('users', 'user-1', 'task_intelligence_control', 'state')]['workflow_mode'] = workflow_mode
+    record = create_record(fake_db)
+    assert record.candidate_id is not None
 
 
 def test_generation_rollover_fences_acceptance_inside_transaction(fake_db):

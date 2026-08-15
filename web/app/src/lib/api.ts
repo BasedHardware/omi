@@ -266,6 +266,33 @@ export async function processInProgressConversation(): Promise<CreateConversatio
   }
 }
 
+/**
+ * Finalize exactly one conversation by ID (desktop-style).
+ * Prefer this over processInProgressConversation when a socket owns a
+ * conversation_id — the Redis in_progress pointer is shared across device +
+ * web and must not steal a pendant session (#5388).
+ */
+export async function finalizeConversationById(
+  conversationId: string,
+): Promise<CreateConversationResponse | null> {
+  try {
+    const result = await fetchWithAuth<CreateConversationResponse>(
+      `/v1/conversations/${encodeURIComponent(conversationId)}/finalize`,
+      {
+        method: 'POST',
+        body: JSON.stringify({}),
+      },
+    );
+    invalidateCache(invalidationPatterns.conversations);
+    return result;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('404')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 // ============================================================================
 // Action Items (Tasks) API
 // ============================================================================
@@ -1418,6 +1445,7 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
       status: response.subscription?.status || 'active',
       is_unlimited: paidPlans.includes(response.subscription?.plan ?? ''),
       current_period_end: response.subscription?.current_period_end,
+      stripe_subscription_id: response.subscription?.stripe_subscription_id,
       cancel_at_period_end: response.subscription?.cancel_at_period_end,
       current_price_id: response.subscription?.current_price_id,
       features: response.subscription?.features || [],

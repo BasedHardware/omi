@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Creating, renaming or picking a chat from the chat-history popover no longer drops you back on the home screen — the action now goes through and the chat stays open."
+  ]
+}

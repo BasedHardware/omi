@@ -2,11 +2,14 @@ import importlib.util
 import base64
 import io
 import json
+import os
 import stat
 import subprocess
 import sys
 import urllib.error
 from pathlib import Path
+
+import pytest
 
 
 def _load_module():
@@ -116,6 +119,41 @@ def test_firebase_auth_exchange_failure_is_redacted(monkeypatch):
         raise AssertionError('expected a redacted Firebase exchange failure')
 
 
+def test_write_token_fails_closed_when_owner_only_permissions_are_unavailable(monkeypatch, tmp_path, capsys):
+    module = _load_module()
+    output = tmp_path / 'probe-token'
+    monkeypatch.setattr(
+        module,
+        'mint_probe_token',
+        lambda _secret_project, _firebase_project, **_kwargs: 'firebase-id-token-that-must-not-leak',
+    )
+    monkeypatch.delattr(module.os, 'fchmod', raising=False)
+
+    exit_code = module.main(
+        [
+            '--secret-project',
+            'omi-deploy',
+            '--firebase-project',
+            'omi-prod',
+            '--token-output',
+            str(output),
+        ]
+    )
+
+    report = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert report == {
+        'suite': 'omi_firebase_release_probe_token',
+        'stage': 'token_output',
+        'error_class': 'operation_failed',
+        'status': 'FAIL',
+    }
+    assert not output.exists()
+
+
+@pytest.mark.skipif(
+    not callable(getattr(os, 'fchmod', None)), reason='owner-only descriptor modes require POSIX fchmod'
+)
 def test_write_token_uses_owner_only_permissions(tmp_path):
     module = _load_module()
     output = tmp_path / 'probe-token'
@@ -142,6 +180,9 @@ def test_mint_probe_token_rejects_a_token_for_a_different_firebase_auth_project(
         raise AssertionError('expected Firebase auth-project mismatch')
 
 
+@pytest.mark.skipif(
+    not callable(getattr(os, 'fchmod', None)), reason='owner-only descriptor modes require POSIX fchmod'
+)
 def test_local_signer_uses_matching_service_account_without_remote_iam(monkeypatch, tmp_path):
     module = _load_module()
     credentials = tmp_path / 'firebase-signer.json'
@@ -179,6 +220,34 @@ def test_local_signer_uses_matching_service_account_without_remote_iam(monkeypat
     assert base64.urlsafe_b64decode(signature_part + '=' * (-len(signature_part) % 4)) == b'signature'
 
 
+def test_local_signer_fails_before_creating_a_key_file_when_private_modes_are_unavailable(monkeypatch, tmp_path):
+    module = _load_module()
+    monkeypatch.setattr(
+        module,
+        '_read_signer_credentials',
+        lambda _path, _project: (
+            'firebase-probe@based-hardware.iam.gserviceaccount.com',
+            'fixed-key-id',
+            '-----BEGIN PRIVATE KEY-----\nnot-a-real-key\n-----END PRIVATE KEY-----\n',
+        ),
+    )
+    monkeypatch.delattr(module.os, 'fchmod', raising=False)
+    monkeypatch.setattr(
+        module.tempfile,
+        'mkstemp',
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError('temporary key file must not be created')),
+    )
+
+    with pytest.raises(module.ProbeTokenError) as error:
+        module._signed_custom_token_locally(tmp_path / 'firebase-signer.json', 'based-hardware')
+
+    assert error.value.stage == 'custom_token_signing'
+    assert error.value.error_class == 'credential_unavailable'
+
+
+@pytest.mark.skipif(
+    not callable(getattr(os, 'fchmod', None)), reason='owner-only descriptor modes require POSIX fchmod'
+)
 def test_local_signer_rejects_cross_project_credentials_before_signing(monkeypatch, tmp_path):
     module = _load_module()
     credentials = tmp_path / 'firebase-signer.json'

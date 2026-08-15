@@ -578,7 +578,9 @@ struct ChatLabView: View {
       .padding(OmiSpacing.xxl)
     }
     .frame(minWidth: 900, minHeight: 600)
-    .background(OmiColors.backgroundPrimary)
+    // No ground of its own: the glass window owns it. `glassContent()` also pins the panel's light
+    // appearance, without which `Ink`'s ladder resolves up on a Dark Mac and the page goes blank.
+    .glassContent()
   }
 
   // MARK: - Production Prompt History
@@ -588,7 +590,7 @@ struct ChatLabView: View {
       HStack {
         Text("Prompt Version History")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
@@ -603,7 +605,7 @@ struct ChatLabView: View {
             }
             Text("Refresh").scaledFont(size: OmiType.caption, weight: .medium)
           }
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
@@ -614,14 +616,14 @@ struct ChatLabView: View {
           ProgressView()
           Text("Loading git history & ratings...")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           Spacer()
         }
         .padding(.vertical, OmiSpacing.page)
       } else if vm.promptHistory.isEmpty {
         Text("No prompt history found")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textQuaternary)
+          .foregroundColor(Ink.secondary)
           .frame(maxWidth: .infinity)
           .padding(.vertical, OmiSpacing.page)
       } else {
@@ -641,52 +643,54 @@ struct ChatLabView: View {
             .frame(width: 60, alignment: .center)
         }
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.xs)
 
-        Divider()
+        GlassSeparator()
 
         ForEach(vm.promptHistory) { entry in
           VStack(spacing: 0) {
             Button(action: {
-              OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+              // Every animation in the glass system goes through `InkReduceMotion`, and the duration
+              // comes off the motion table rather than being typed here.
+              InkReduceMotion.perform(.easeInOut(duration: InkMotion.stepTransition)) {
                 vm.expandedHistoryVersion = vm.expandedHistoryVersion == entry.version ? nil : entry.version
               }
             }) {
               HStack(spacing: 0) {
                 Text("v\(entry.version)")
                   .scaledFont(size: OmiType.body, weight: .semibold)
-                  .foregroundColor(OmiColors.accent)
+                  .foregroundColor(Ink.accent)
                   .frame(width: 30, alignment: .center)
 
                 Text(formatHistoryDate(entry.date))
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .foregroundColor(Ink.secondary)
                   .frame(width: 70, alignment: .leading)
 
                 Text(entry.commitMsg)
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textPrimary)
+                  .foregroundColor(Ink.primary)
                   .lineLimit(1)
                   .frame(maxWidth: .infinity, alignment: .leading)
 
                 let total = entry.thumbsUp + entry.thumbsDown
                 Text("\(entry.thumbsUp)")
                   .scaledFont(size: OmiType.body, weight: .medium)
-                  .foregroundColor(.green)
+                  .foregroundColor(Ink.listeningGreen)
                   .frame(width: 40, alignment: .center)
 
                 Text("\(entry.thumbsDown)")
                   .scaledFont(size: OmiType.body, weight: .medium)
-                  .foregroundColor(.red)
+                  .foregroundColor(Ink.errorRed)
                   .frame(width: 40, alignment: .center)
 
                 // Satisfaction score: single number
                 Group {
                   if total == 0 {
                     Text("—")
-                      .foregroundColor(OmiColors.textQuaternary)
+                      .foregroundColor(Ink.secondary)
                   } else {
                     Text(entry.satisfactionPct)
                       .foregroundColor(satisfactionColor(entry.satisfactionRatio))
@@ -697,7 +701,7 @@ struct ChatLabView: View {
 
                 Image(systemName: vm.expandedHistoryVersion == entry.version ? "chevron.up" : "chevron.down")
                   .scaledFont(size: OmiType.micro)
-                  .foregroundColor(OmiColors.textQuaternary)
+                  .foregroundColor(Ink.secondary)
                   .frame(width: 20)
               }
               .padding(.horizontal, OmiSpacing.md)
@@ -711,19 +715,18 @@ struct ChatLabView: View {
               VStack(alignment: .leading, spacing: OmiSpacing.sm) {
                 Text("Commit: \(entry.commitHash)")
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
 
                 ScrollView {
                   Text(entry.fullPrompt.isEmpty ? "Prompt not available" : entry.fullPrompt)
                     .scaledFont(size: OmiType.caption)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(Ink.secondary)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 300)
                 .padding(OmiSpacing.md)
-                .background(OmiColors.backgroundTertiary)
-                .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
+                .glassField()
               }
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.bottom, OmiSpacing.md)
@@ -731,14 +734,14 @@ struct ChatLabView: View {
             }
 
             if entry.version < vm.promptHistory.last?.version ?? 0 {
-              Divider().padding(.horizontal, OmiSpacing.md)
+              GlassSeparator().padding(.horizontal, OmiSpacing.md)
             }
           }
         }
       }
     }
     .padding(OmiSpacing.xl)
-    .omiPanel(fill: OmiColors.backgroundSecondary)
+    .glassCard()
   }
 
   private func formatHistoryDate(_ dateStr: String) -> String {
@@ -751,9 +754,9 @@ struct ChatLabView: View {
   }
 
   private func satisfactionColor(_ ratio: Double) -> Color {
-    if ratio >= 0.75 { return .green }
-    if ratio >= 0.50 { return .yellow }
-    return .red
+    if ratio >= 0.75 { return Ink.listeningGreen }
+    if ratio >= 0.50 { return PageGlass.warning }
+    return Ink.errorRed
   }
 
   // MARK: - Prompt Editor
@@ -763,7 +766,7 @@ struct ChatLabView: View {
       HStack {
         Text("Prompt Editor")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
@@ -787,19 +790,19 @@ struct ChatLabView: View {
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         Text("Anthropic API Key")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
 
         SecureField("sk-ant-...", text: $vm.userApiKey)
           .textFieldStyle(.plain)
           .font(.system(size: 12, design: .monospaced))
+          .foregroundColor(Ink.primary)
           .padding(OmiSpacing.sm)
-          .background(OmiColors.backgroundTertiary)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
+          .glassField()
 
         if vm.userApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
           Text("Enter your own Anthropic API key to use ChatLab evaluation features.")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(.orange)
+            .foregroundColor(PageGlass.warning)
         }
       }
 
@@ -807,28 +810,32 @@ struct ChatLabView: View {
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         Text("Floating Bar Prefix")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
 
         TextEditor(text: $vm.editingFloatingPrefix)
           .font(.system(size: 12, design: .monospaced))
+          .foregroundColor(Ink.primary)
+          // A `TextEditor` paints an opaque ground of its own, which on glass is a grey slab.
+          .scrollContentBackground(.hidden)
           .frame(height: 100)
           .padding(OmiSpacing.sm)
-          .background(OmiColors.backgroundTertiary)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
+          .glassField()
       }
 
       // Main prompt
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         Text("Main Prompt")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
 
         TextEditor(text: $vm.editingMainPrompt)
           .font(.system(size: 12, design: .monospaced))
+          .foregroundColor(Ink.primary)
+          // A `TextEditor` paints an opaque ground of its own, which on glass is a grey slab.
+          .scrollContentBackground(.hidden)
           .frame(height: 200)
           .padding(OmiSpacing.sm)
-          .background(OmiColors.backgroundTertiary)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
+          .glassField()
       }
 
       HStack(spacing: OmiSpacing.md) {
@@ -837,15 +844,9 @@ struct ChatLabView: View {
             Image(systemName: "square.and.arrow.down")
               .scaledFont(size: OmiType.caption)
             Text("Save as New Version")
-              .scaledFont(size: OmiType.body, weight: .medium)
           }
-          .foregroundColor(OmiColors.backgroundPrimary)
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.sm)
-          .background(OmiColors.accent)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
         Button(action: {
           Task { await vm.generateNextVersion() }
@@ -860,20 +861,14 @@ struct ChatLabView: View {
                 .scaledFont(size: OmiType.caption)
             }
             Text("Generate Next Version")
-              .scaledFont(size: OmiType.body, weight: .medium)
           }
-          .foregroundColor(OmiColors.textPrimary)
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.sm)
-          .background(OmiColors.backgroundTertiary)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
         .disabled(vm.isGenerating)
       }
     }
     .padding(OmiSpacing.xl)
-    .omiPanel(fill: OmiColors.backgroundSecondary)
+    .glassCard()
     .alert("Save as New Version", isPresented: $showSaveDialog) {
       TextField("Version name", text: $newVersionName)
       Button("Save") {
@@ -893,7 +888,7 @@ struct ChatLabView: View {
       HStack {
         Text("Evaluation")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
@@ -910,15 +905,11 @@ struct ChatLabView: View {
                 .scaledFont(size: OmiType.caption)
             }
             Text("Run All Questions")
-              .scaledFont(size: OmiType.body, weight: .medium)
           }
-          .foregroundColor(OmiColors.backgroundPrimary)
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.sm)
-          .background(vm.isRunningAll ? OmiColors.textTertiary : OmiColors.accent)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
         }
-        .buttonStyle(.plain)
+        // `disabled` is the whole "running" treatment now: the style dims a disabled button, so a
+        // second grey fill for the same state was two ways of saying it and one of them could rot.
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         .disabled(vm.isRunningAll)
       }
 
@@ -928,33 +919,33 @@ struct ChatLabView: View {
         HStack {
           Text("Question")
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .frame(width: 200, alignment: .leading)
 
           Text("Context")
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .frame(width: 80)
 
           Text("Response")
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
 
           Text("AI")
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .frame(width: 40)
 
           Text("You")
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .frame(width: 80)
         }
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
 
-        Divider()
+        GlassSeparator()
 
         // Rows
         let evals =
@@ -969,7 +960,7 @@ struct ChatLabView: View {
           HStack(alignment: .top) {
             Text(q.text)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .frame(width: 200, alignment: .leading)
               .lineLimit(3)
 
@@ -982,18 +973,18 @@ struct ChatLabView: View {
                   ProgressView().scaleEffect(0.6)
                   Text("Running...")
                     .scaledFont(size: OmiType.caption)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(Ink.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
               } else if eval.response.isEmpty {
                 Text("Not evaluated")
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textQuaternary)
+                  .foregroundColor(Ink.secondary)
                   .frame(maxWidth: .infinity, alignment: .leading)
               } else {
                 Text(eval.response)
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .foregroundColor(Ink.secondary)
                   .frame(maxWidth: .infinity, alignment: .leading)
                   .textSelection(.enabled)
               }
@@ -1019,7 +1010,7 @@ struct ChatLabView: View {
             } else {
               Text("—")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textQuaternary)
+                .foregroundColor(Ink.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
               Text("—").frame(width: 40)
               Text("—").frame(width: 80)
@@ -1029,11 +1020,11 @@ struct ChatLabView: View {
           .padding(.vertical, OmiSpacing.sm)
 
           if qi < vm.questions.count - 1 {
-            Divider().padding(.horizontal, OmiSpacing.md)
+            GlassSeparator().padding(.horizontal, OmiSpacing.md)
           }
         }
       }
-      .omiPanel(fill: OmiColors.backgroundSecondary)
+      .glassCard()
     }
   }
 
@@ -1045,7 +1036,7 @@ struct ChatLabView: View {
         VStack(alignment: .leading, spacing: OmiSpacing.md) {
           Text("Version Comparison")
             .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           HStack(spacing: OmiSpacing.xxl) {
             ForEach(vm.versions.indices, id: \.self) { i in
@@ -1053,12 +1044,12 @@ struct ChatLabView: View {
               VStack(spacing: OmiSpacing.xs) {
                 Text(v.name)
                   .scaledFont(size: OmiType.body, weight: .semibold)
-                  .foregroundColor(OmiColors.textPrimary)
+                  .foregroundColor(Ink.primary)
                 HStack(spacing: OmiSpacing.md) {
                   VStack(spacing: OmiSpacing.hairline) {
                     Text("AI")
                       .scaledFont(size: OmiType.micro)
-                      .foregroundColor(OmiColors.textTertiary)
+                      .foregroundColor(Ink.secondary)
                     Text(String(format: "%.1f", v.avgAIScore))
                       .scaledFont(size: OmiType.heading, weight: .bold)
                       .foregroundColor(scoreColor(Int(v.avgAIScore)))
@@ -1066,7 +1057,7 @@ struct ChatLabView: View {
                   VStack(spacing: OmiSpacing.hairline) {
                     Text("Human")
                       .scaledFont(size: OmiType.micro)
-                      .foregroundColor(OmiColors.textTertiary)
+                      .foregroundColor(Ink.secondary)
                     Text(String(format: "%.1f", v.avgHumanScore))
                       .scaledFont(size: OmiType.heading, weight: .bold)
                       .foregroundColor(scoreColor(Int(v.avgHumanScore)))
@@ -1075,10 +1066,7 @@ struct ChatLabView: View {
               }
               .padding(OmiSpacing.lg)
               .frame(maxWidth: .infinity)
-              .omiPanel(
-                fill: i == vm.selectedVersionIndex
-                  ? OmiColors.accent.opacity(0.1)
-                  : OmiColors.backgroundSecondary)
+              .glassCard(emphasized: i == vm.selectedVersionIndex)
             }
           }
         }
@@ -1088,33 +1076,36 @@ struct ChatLabView: View {
 
   // MARK: - Helpers
 
+  /// The badge's tint is a *wash* with an `Ink.primary` label on it, the way `PageGlass.speakerTints`
+  /// works — a saturated label on a pale glass panel is the least legible thing on the page, and the
+  /// hue is only there to group rows anyway. Named system colours, never hand-mixed hues (INV-UI-1).
   private func contextBadge(_ type: String) -> some View {
-    let colors: [String: (Color, Color)] = [
-      "memories": (Color.blue.opacity(0.2), Color.blue),
-      "conversations": (Color.green.opacity(0.2), Color.green),
-      "screen": (Color.orange.opacity(0.2), Color.orange),
-      "search": (Color.teal.opacity(0.2), Color.teal),
-      "tasks": (Color.yellow.opacity(0.2), Color.yellow),
+    let tints: [String: Color] = [
+      "memories": Color(nsColor: .systemBlue),
+      "conversations": Color(nsColor: .systemGreen),
+      "screen": Color(nsColor: .systemOrange),
+      "search": Color(nsColor: .systemTeal),
+      "tasks": Color(nsColor: .systemBrown),
     ]
-    let (bg, fg) = colors[type] ?? (OmiColors.backgroundTertiary, OmiColors.textTertiary)
+    let tint = tints[type] ?? Color(nsColor: .systemGray)
 
     return Text(type)
       .scaledFont(size: OmiType.micro, weight: .medium)
-      .foregroundColor(fg)
+      .foregroundColor(Ink.primary)
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.hairline)
-      .background(bg)
-      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.badgeRadius))
+      .background(Capsule(style: .continuous).fill(tint.opacity(0.16)))
+      .overlay(Capsule(style: .continuous).strokeBorder(Ink.separator, lineWidth: 1))
   }
 
+  /// Three states rather than five colours: good, needs a look, bad. The old ladder spent a
+  /// translucent green and a yellow on the two middle steps, both of which are invisible on glass.
   private func scoreColor(_ score: Int) -> Color {
     switch score {
-    case 5: return .green
-    case 4: return Color.green.opacity(0.7)
-    case 3: return .yellow
-    case 2: return .orange
-    case 1: return .red
-    default: return OmiColors.textQuaternary
+    case 4...: return Ink.listeningGreen
+    case 2...3: return PageGlass.warning
+    case 1: return Ink.errorRed
+    default: return Ink.secondary
     }
   }
 
@@ -1123,7 +1114,8 @@ struct ChatLabView: View {
       ForEach(1...5, id: \.self) { star in
         Image(systemName: star <= score.wrappedValue ? "star.fill" : "star")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(star <= score.wrappedValue ? .yellow : OmiColors.textQuaternary)
+          // `PageGlass.starred` is the app's one "starred" colour; a bare `.yellow` is a second one.
+          .foregroundColor(star <= score.wrappedValue ? PageGlass.starred : Ink.secondary)
           .onTapGesture {
             score.wrappedValue = score.wrappedValue == star ? 0 : star
           }
@@ -1156,12 +1148,15 @@ class ChatLabWindowManager {
 
     let w = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 1100, height: 750),
-      styleMask: [.titled, .closable, .resizable, .miniaturizable],
+      styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
       backing: .buffered,
       defer: false
     )
     w.title = "Chat Lab — Prompt Iteration"
     w.contentView = hostingView
+    // Transparent + light-pinned, or there is no glass: a window still painting its own
+    // `backgroundColor` slips an opaque sheet between the desktop and the blur.
+    WindowGlass.wear(w, as: .titled)
     w.center()
     w.isReleasedWhenClosed = false
     w.makeKeyAndOrderFront(nil)

@@ -8,7 +8,6 @@ import base64
 from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
-
 from utils.executors import critical_executor, db_executor, llm_executor, storage_executor, sync_executor, run_blocking
 
 from fastapi import (
@@ -28,7 +27,6 @@ from multipart.multipart import shutil
 from pydantic import BaseModel
 
 import database.chat as chat_db
-import database.conversations as conversations_db
 import database.llm_usage as llm_usage_db
 from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
@@ -49,7 +47,6 @@ from utils.chat import (
     acquire_chat_session,
     emit_stream_error_fallback,
     initial_message_util,
-    process_voice_message_segment,
     process_voice_message_segment_stream,
     resolve_voice_message_language,
     transcribe_voice_message_segment,
@@ -68,6 +65,7 @@ from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit
 from database.users import set_chat_message_rating_score
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
+from utils import share_links
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.multipart import (
@@ -77,11 +75,12 @@ from utils.multipart import (
     max_part_size,
     parse_multipart_form,
 )
-from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execute_persona_chat_stream
+from utils.retrieval.graph import execute_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
 from utils.observability import submit_langsmith_feedback
+from utils.observability.fallback import record_fallback
 from utils.observability.journeys import JourneyAttempt
 from utils.voice_duration_limiter import (
     compute_pcm_duration_ms,
@@ -90,6 +89,7 @@ from utils.voice_duration_limiter import (
     check_budget,
     record_actual_duration,
 )
+from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 import logging
 
 logger = logging.getLogger(__name__)
@@ -420,7 +420,16 @@ def send_message(
         chat_db.add_message(uid, ai_message.model_dump())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
-            record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+            try:
+                record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+            except Exception as analytics_exc:
+                # Message is already durable; analytics must not change the client-visible id.
+                logger.error(
+                    'chat stream app usage recording failed for uid=%s message_id=%s: %s',
+                    uid,
+                    ai_message.id,
+                    type(analytics_exc).__name__,
+                )
 
         return ai_message, ask_for_nps
 
@@ -430,8 +439,64 @@ def send_message(
         callback_data = {}
         answered = False
         stream_exhausted = False
+        streamed_terminal_error = False
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
+
+        def emit_done_frame(response: str) -> str:
+            """Persist a terminal answer. Typed stream errors stay failed for journey/fallback SLIs.
+
+            If Firestore persistence fails, still emit an in-memory ``done:`` frame (same
+            fail-open contract as ``emit_stream_error_fallback``) so the text client is
+            not left with only an earlier ``error:`` frame.
+            """
+            persist_outcome = 'degraded'
+            try:
+                ai_message, ask_for_nps = process_message(response, callback_data)
+            except Exception as persist_exc:
+                logger.error(
+                    'chat stream terminal answer persistence failed for uid=%s: %s',
+                    uid,
+                    type(persist_exc).__name__,
+                )
+                persist_outcome = 'exhausted'
+                ai_message = Message(
+                    id=str(uuid.uuid4()),
+                    text=response,
+                    created_at=datetime.now(timezone.utc),
+                    sender='ai',
+                    app_id=app_id_from_app,
+                    type='text',
+                )
+                if chat_session:
+                    ai_message.chat_session_id = chat_session.id
+                ask_for_nps = False
+            response_message = ResponseMessage(**ai_message.model_dump())
+            response_message.ask_for_nps = ask_for_nps
+            encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+            if callback_data.get('error'):
+                journey_attempt.finish('failure')
+                record_fallback(
+                    component='other',
+                    from_mode='llm_answer',
+                    to_mode='canned_reply',
+                    reason='other',
+                    outcome=persist_outcome,
+                )
+            else:
+                if persist_outcome == 'exhausted':
+                    journey_attempt.finish('failure')
+                    record_fallback(
+                        component='other',
+                        from_mode='llm_answer',
+                        to_mode='canned_reply',
+                        reason='other',
+                        outcome='exhausted',
+                    )
+                else:
+                    journey_attempt.finish('success')
+            return f"done: {encoded_response}\n\n"
+
         try:
             async for chunk in execute_chat_stream(
                 uid,
@@ -444,28 +509,44 @@ def send_message(
                 platform=x_app_platform,
             ):
                 if chunk:
+                    if chunk.startswith('error: '):
+                        streamed_terminal_error = True
                     msg = chunk.replace("\n", "__CRLF__")
                     yield f'{msg}\n\n'
                 else:
                     response = callback_data.get('answer')
                     if response:
-                        ai_message, ask_for_nps = process_message(response, callback_data)
-                        ai_message_dict = ai_message.model_dump()
-                        response_message = ResponseMessage(**ai_message_dict)
-                        response_message.ask_for_nps = ask_for_nps
-                        encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
-                            'utf-8'
-                        )
                         # This is the furthest server-observable client boundary:
                         # a yielded terminal frame is not a client-render acknowledgement.
-                        journey_attempt.finish('success')
-                        yield f"done: {encoded_response}\n\n"
+                        yield emit_done_frame(response)
                         answered = True
 
             if not answered:
-                yield await emit_stream_error_fallback(
-                    uid, app_id_from_app, chat_session, label='chat', error_recorded=bool(callback_data.get('error'))
-                )
+                # Prefer a staged typed answer (timeout / gateway) even if the producer
+                # forgot the None sentinel. Only emit the generic canned sorry when no
+                # typed answer was staged — including persona paths that yield ``error:``
+                # without setting ``callback_data['answer']`` (those still need ``done:``).
+                response = callback_data.get('answer')
+                if response:
+                    yield emit_done_frame(response)
+                else:
+                    if streamed_terminal_error:
+                        logger.error(
+                            'chat stream ended without an answer uid=%s reason=%s route=%s (error=%s)',
+                            uid,
+                            callback_data.get('error') or 'stream_failure',
+                            callback_data.get('route') or 'unknown',
+                            True,
+                        )
+                    yield await emit_stream_error_fallback(
+                        uid,
+                        app_id_from_app,
+                        chat_session,
+                        label='chat',
+                        error_recorded=bool(callback_data.get('error')),
+                        reason=callback_data.get('error'),
+                        route=callback_data.get('route'),
+                    )
             stream_exhausted = True
         except asyncio.CancelledError:
             journey_attempt.finish('cancelled')
@@ -785,6 +866,23 @@ async def transcribe_voice_message(
                 )
             )
 
+        parity_capture = SurfaceParityCapture.from_environ(
+            principal_id=uid,
+            session_id=str(uuid.uuid4()),
+            surface="ptt",
+            source="desktop_ptt_http",
+            provider_lane="stt",
+            route_or_model=stt_model or stt_provider or "prerecorded",
+            request={
+                "encoding": encoding,
+                "sample_rate": sample_rate,
+                "channels": channels,
+                "language": resolved_language,
+                "keyword_count": len(context_keywords),
+            },
+        )
+        parity_capture.observe_audio("client", audio_bytes)
+
         # Daily budget check
         duration_ms = compute_pcm_duration_ms(len(audio_bytes), sample_rate, channels)
         allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
@@ -810,6 +908,15 @@ async def transcribe_voice_message(
                 keywords=context_keywords,
             )
             outcome = TranscriptionOutcome.SUCCESS if transcript else TranscriptionOutcome.EXPECTED_SILENCE
+            parity_capture.observe(
+                "inbound",
+                {
+                    "type": "transcript",
+                    "text": transcript or "",
+                    "detected_language": detected_language,
+                    "outcome": outcome.value,
+                },
+            )
             attempt.finish(outcome)
         except Exception as error:
             failure = failure_from_exception(error, provider=stt_provider)
@@ -818,6 +925,7 @@ async def transcribe_voice_message(
         finally:
             if not attempt.finished:
                 attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
+            parity_capture.persist()
             del audio_bytes
 
         response = {
@@ -1083,6 +1191,21 @@ async def transcribe_voice_message_stream(
         await websocket.close(code=1011, reason='Transcription service unavailable')
         return
     context_keywords = _parse_context_keywords(keywords)
+    parity_capture = SurfaceParityCapture.from_environ(
+        principal_id=uid,
+        session_id=str(uuid.uuid4()),
+        surface="ptt",
+        source="desktop_ptt_stream",
+        provider_lane="stt",
+        route_or_model=stt_model,
+        request={
+            "codec": codec,
+            "sample_rate": sample_rate,
+            "channels": channels,
+            "language": stt_language,
+            "keyword_count": len(context_keywords),
+        },
+    )
 
     loop = asyncio.get_running_loop()
 
@@ -1092,6 +1215,7 @@ async def transcribe_voice_message_stream(
     segment_queue = asyncio.Queue()
 
     def stream_transcript(segments):
+        parity_capture.observe("inbound", {"type": "transcript", "segments": segments})
         loop.call_soon_threadsafe(segment_queue.put_nowait, segments)
 
     async def segment_sender():
@@ -1263,6 +1387,7 @@ async def transcribe_voice_message_stream(
                     break
 
             received_audio_bytes += len(data)
+            parity_capture.observe_audio("client", data)
             stt_audio_buffer.extend(data)
 
             # Flush to the selected provider in 30ms chunks.
@@ -1314,6 +1439,7 @@ async def transcribe_voice_message_stream(
                     pass
 
         del stt_audio_buffer
+        parity_capture.persist()
 
 
 @router.post('/v2/files', response_model=List[FileChat], tags=['chat'])
@@ -1376,9 +1502,14 @@ def upload_file_chat(
 # CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
 
 
-@router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
+@router.post(
+    '/v1/files',
+    response_model=List[FileChat],
+    tags=['chat'],
+    operation_id='upload_file_chat_v1_files_post',
+)
 @max_part_size(CHAT_FILE_MAX_PART_SIZE)
-def upload_file_chat(
+def upload_file_chat_v1(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
 ):
@@ -1432,8 +1563,13 @@ def upload_file_chat(
     return response
 
 
-@router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
-def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@router.post(
+    '/v1/messages/{message_id}/report',
+    tags=['chat'],
+    response_model=dict,
+    operation_id='report_message_v1_messages__message_id__report_post',
+)
+def report_message_v1(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
     result = chat_db.get_message(uid, message_id)
     if result is None:
         raise HTTPException(status_code=404, detail='Message not found')
@@ -1446,8 +1582,13 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
     return {'message': 'Message reported'}
 
 
-@router.delete('/v1/messages', tags=['chat'], response_model=Message)
-def clear_chat_messages(
+@router.delete(
+    '/v1/messages',
+    tags=['chat'],
+    response_model=Message,
+    operation_id='clear_chat_messages_v1_messages_delete',
+)
+def clear_chat_messages_v1(
     plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
     compat_app_id = app_id or plugin_id
@@ -1478,8 +1619,13 @@ def clear_chat_messages(
     return initial_message_util(uid, compat_app_id)
 
 
-@router.post('/v1/initial-message', tags=['chat'], response_model=Message)
-def create_initial_message(
+@router.post(
+    '/v1/initial-message',
+    tags=['chat'],
+    response_model=Message,
+    operation_id='create_initial_message_v1_initial_message_post',
+)
+def create_initial_message_v1(
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
@@ -1554,7 +1700,7 @@ def share_chat_messages(
     if result is None:
         raise HTTPException(status_code=500, detail='Failed to create share link')
 
-    return {"url": f"https://h.omi.me/chat/{token}", "token": token}
+    return {"url": share_links.build_share_url(f"/chat/{token}"), "token": token}
 
 
 @router.get('/v2/messages/shared/{token}', tags=['chat'], response_model=SharedChatMessagesResponse)

@@ -8,7 +8,6 @@ import database.conversations as conversations_db
 import database._client as db_client_module
 import database.action_items as action_items_db
 import database.conversation_finalization_identity as finalization_identity_db
-import database.memories as memories_db
 import database.redis_db as redis_db
 import database.users as users_db
 from database.conversation_vector_cleanup import (
@@ -17,7 +16,6 @@ from database.conversation_vector_cleanup import (
     delete_claimed_conversation_source,
     release_conversation_vector_cleanup_descriptor,
 )
-from database.vector_db import delete_memory_vector
 from utils.other.storage import delete_conversation_audio_files
 from utils.other.conversation_playback_storage import delete_conversation_playback_artifacts
 from models.calendar_context import CalendarMeetingContext
@@ -48,19 +46,24 @@ from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.app import App
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
 from models.shared import StatusResponse
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations import lifecycle as lifecycle_service
-from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem
 from utils import byok
-from utils.memory.surface_routing import pin_memory_system
-from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
+from utils.conversations.search import (
+    ConversationSearchUnavailableError,
+    clamp_conversation_search_pagination,
+    conversation_matches_date_range,
+    conversation_matches_speaker,
+    parse_exact_conversation_reference,
+    search_conversations,
+)
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
@@ -115,10 +118,20 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
 
     def _run_enrichment():
         try:
+            from utils.task_intelligence.proactive_engine import persist_desktop_meeting_arrival_best_effort
+
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
-                process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
+                enriched = process_conversation(
+                    uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False
+                )
+            # Deferred desktop meetings must publish their exact Chat receipt
+            # at the same terminal transition as ordinary finalization. The
+            # initial lazy row deliberately skipped this adapter, so doing it
+            # here closes the gap without waking Chat for processing rows.
+            if enriched is not None:
+                persist_desktop_meeting_arrival_best_effort(uid, enriched)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
@@ -396,11 +409,49 @@ def _ensure_aware(value: datetime) -> datetime:
 # comma-separated filter into an unhandled 500. ConversationStatus and the source set are both
 # tiny, so a cap of 20 can never reject a request a real client would send.
 MAX_IN_FILTER_VALUES = 20
+LEGACY_SEGMENT_INDEX_PREFIX = '#index:'
 
 
 def _reject_oversized_filter(values: List[str], field_name: str) -> None:
     if len(values) > MAX_IN_FILTER_VALUES:
         raise HTTPException(status_code=400, detail=f"{field_name} accepts at most {MAX_IN_FILTER_VALUES} values")
+
+
+def _resolve_bulk_segment_indices(conversation: Conversation, requested_ids: List[str]) -> List[int]:
+    """Resolve assignment targets before mutating any transcript segment.
+
+    Desktop sends positional targets for legacy transcripts that were stored without
+    segment IDs. Exact IDs remain the preferred wire contract; positional targets are
+    only accepted for completed conversations because an in-progress transcript can
+    still be reordered or merged.
+    """
+    segments = conversation.transcript_segments
+    segment_indices_by_id = {segment.id: index for index, segment in enumerate(segments)}
+    resolved_indices: List[int] = []
+    unresolved_ids: List[str] = []
+    allow_legacy_indices = conversation.status == ConversationStatus.completed
+
+    for requested_id in requested_ids:
+        segment_index = segment_indices_by_id.get(requested_id)
+        if segment_index is None and allow_legacy_indices and requested_id.startswith(LEGACY_SEGMENT_INDEX_PREFIX):
+            raw_index = requested_id[len(LEGACY_SEGMENT_INDEX_PREFIX) :]
+            if raw_index.isascii() and raw_index.isdecimal():
+                candidate_index = int(raw_index)
+                if candidate_index < len(segments):
+                    segment_index = candidate_index
+
+        if segment_index is None:
+            unresolved_ids.append(requested_id)
+        elif segment_index not in resolved_indices:
+            resolved_indices.append(segment_index)
+
+    if unresolved_ids:
+        raise HTTPException(
+            status_code=409,
+            detail=f'Unable to resolve transcript segment assignment target(s): {", ".join(unresolved_ids)}',
+        )
+
+    return resolved_indices
 
 
 @router.get(
@@ -417,6 +468,10 @@ def get_conversations(
     offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
     include_discarded: bool = True,
+    sources: Optional[str] = Query(
+        None,
+        description="Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
+    ),
     start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
@@ -425,13 +480,23 @@ def get_conversations(
 ):
     if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
-    logger.info(f'get_conversations {uid} {limit} {offset} {statuses} {folder_id} {starred}')
+    logger.info(f'get_conversations {uid} {limit} {offset} {statuses} {sources} {folder_id} {starred}')
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
         statuses = "processing,completed"
+    source_list = [source.strip() for source in sources.split(',') if source.strip()] if sources else []
+    if len(source_list) > 1 and len([status.strip() for status in statuses.split(',') if status.strip()]) > 1:
+        # Firestore permits one disjunctive `in` predicate. The archive's
+        # supported `sources=omi&statuses=processing,completed` path uses an
+        # equality source filter; reject only the unsupported two-`in` shape.
+        raise HTTPException(
+            status_code=400,
+            detail='multiple sources cannot be combined with multiple statuses',
+        )
 
     status_filter = statuses.split(",") if len(statuses) > 0 else []
     _reject_oversized_filter(status_filter, "statuses")
+    _reject_oversized_filter(source_list, "sources")
 
     conversations = conversations_db.get_conversations_without_photos(
         uid,
@@ -439,6 +504,7 @@ def get_conversations(
         offset,
         include_discarded=include_discarded,
         statuses=status_filter,
+        sources=source_list,
         start_date=start_date,
         end_date=end_date,
         folder_id=folder_id,
@@ -457,7 +523,10 @@ def get_conversations_count(
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
-    sources: Optional[str] = Query(None, description="Comma-separated source filter (e.g. friend,omi)"),
+    sources: Optional[str] = Query(
+        None,
+        description="Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
+    ),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
@@ -466,9 +535,8 @@ def get_conversations_count(
     source_list = [s.strip() for s in sources.split(',') if s.strip()] if sources else []
     _reject_oversized_filter(status_list, "statuses")
     _reject_oversized_filter(source_list, "sources")
-    if status_list and source_list:
-        # Combining status+source `in` filters would need a composite index; keep them exclusive.
-        raise HTTPException(status_code=400, detail="statuses and sources filters cannot be combined")
+    if len(source_list) > 1 and len(status_list) > 1:
+        raise HTTPException(status_code=400, detail='multiple sources cannot be combined with multiple statuses')
     count = conversations_db.get_conversations_count(
         uid,
         include_discarded=include_discarded,
@@ -495,9 +563,21 @@ def get_conversations_count(
         "may include an empty transcript_segments array even though transcript data exists."
     ),
 )
-def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_conversation_by_id(
+    conversation_id: str,
+    source: Optional[str] = Query(None, description="Optional provenance constraint for a detail read"),
+    include_discarded: bool = Query(True),
+    uid: str = Depends(auth.get_current_user_uid),
+):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    if source is not None:
+        if source != 'omi':
+            raise HTTPException(
+                status_code=400, detail="Only source=omi is supported for provenance-constrained detail reads"
+            )
+        if conversation.get('source') != 'omi' or (not include_discarded and conversation.get('discarded', False)):
+            raise HTTPException(status_code=404, detail="Conversation not found")
     # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
     if conversation.get('deferred'):
@@ -751,14 +831,7 @@ def delete_conversation(
             # Delete associated memories and action items before removing the conversation doc
             # so a partial failure cannot orphan derived data.
             db_client = getattr(db_client_module, 'db', None)
-            memory_system = pin_memory_system(uid, db_client=db_client)
-            if memory_system == MemorySystem.CANONICAL:
-                MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
-            else:
-                deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
-                for memory_id in deletion_result.get('vector_delete_ids', []):
-                    delete_memory_vector(uid, memory_id)
-
+            MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
             action_items_db.delete_action_items_for_conversation(uid, conversation_id)
             background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
@@ -1102,23 +1175,24 @@ def assign_segments_bulk(
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
 
+    if data.assign_type not in {'is_user', 'person_id'}:
+        raise HTTPException(status_code=400, detail="Invalid assign type")
+
     value = data.value
     if value == 'null':
         value = None
 
-    segment_map = {segment.id: segment for segment in conversation.transcript_segments}
+    segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
+    resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
 
-    for segment_id in data.segment_ids:
-        if segment_id in segment_map:
-            segment = segment_map[segment_id]
-            if data.assign_type == 'is_user':
-                segment.is_user = bool(value) if value is not None else False
-                segment.person_id = None
-            elif data.assign_type == 'person_id':
-                segment.is_user = False
-                segment.person_id = value
-            else:
-                raise HTTPException(status_code=400, detail="Invalid assign type")
+    for index in segment_indices:
+        segment = conversation.transcript_segments[index]
+        if data.assign_type == 'is_user':
+            segment.is_user = bool(value) if value is not None else False
+            segment.person_id = None
+        else:
+            segment.is_user = False
+            segment.person_id = value
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
@@ -1131,7 +1205,7 @@ def assign_segments_bulk(
             uid=uid,
             person_id=value,
             conversation_id=conversation_id,
-            segment_ids=data.segment_ids,
+            segment_ids=resolved_segment_ids,
         )
 
     return conversation
@@ -1208,6 +1282,47 @@ def get_shared_conversation_by_id(conversation_id: str):
     return response_dict
 
 
+class ConversationTopicRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    transcript: str = Field(..., min_length=1, max_length=100_000)
+
+
+class ConversationTopicResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    emoji: str = ""
+    title: str = ""
+
+
+@router.post('/v1/conversations/topic', response_model=ConversationTopicResponse, tags=['conversations'])
+async def generate_conversation_topic_endpoint(
+    body: ConversationTopicRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:topic")),
+):
+    """Return-only emoji + short title through the managed conv_structure feature.
+
+    Does not write Firestore. Desktop clients call this for the fast provisional title
+    on a just-saved conversation instead of inventing one via Anthropic Haiku chat
+    completions; full backend processing still overwrites it later.
+    """
+    # Deferred with the LLM helper: this router is covered by module-isolation tests that
+    # build a minimal dependency graph, and utils.subscription pulls database.user_usage
+    # in at import time.
+    from utils.llm import conversation_topic as conversation_topic_llm
+    from utils.subscription import is_trial_paywalled
+
+    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+        raise HTTPException(status_code=402, detail='trial_expired')
+    topic = await run_blocking(
+        llm_executor,
+        lambda: conversation_topic_llm.generate_conversation_topic(uid, body.transcript),
+    )
+    if topic is None:
+        raise HTTPException(status_code=502, detail="conversation_topic_failed")
+    return ConversationTopicResponse(emoji=topic.emoji or "", title=topic.title or "")
+
+
 @router.post("/v1/conversations/search", response_model=SearchConversationsResponse, tags=['conversations'])
 def search_conversations_endpoint(
     search_request: SearchRequest,
@@ -1234,6 +1349,31 @@ def search_conversations_endpoint(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
 
+    exact_conversation_id = parse_exact_conversation_reference(search_request.query)
+    if exact_conversation_id:
+        exact_page, exact_per_page = clamp_conversation_search_pagination(search_request.page, search_request.per_page)
+        conversations = conversations_db.get_conversations_by_id_without_photos(
+            uid,
+            [exact_conversation_id],
+            include_discarded=bool(search_request.include_discarded),
+        )
+        conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+        conversations = [
+            conversation
+            for conversation in conversations
+            if conversation_matches_speaker(conversation, search_request.speaker_id)
+            and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
+        ]
+        if exact_page != 1:
+            conversations = []
+        redact_conversations_for_list(conversations)
+        return {
+            'items': conversations[:exact_per_page],
+            'total_pages': 1,
+            'current_page': exact_page,
+            'per_page': exact_per_page,
+        }
+
     try:
         search_results = search_conversations(
             query=search_request.query,
@@ -1256,6 +1396,14 @@ def search_conversations_endpoint(
     # Typesense filters locked hits, but the index can lag Firestore. Re-check after hydration
     # so search never leaks that a locked conversation matched a query.
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+    # Speaker filtering happens here, not in Typesense: the index has no transcript_segments field, so
+    # asking Typesense for one 400'd and 500'd the request. The hydrated Firestore documents do carry
+    # transcript_segments, so match against those.
+    conversations = [
+        conversation
+        for conversation in conversations
+        if conversation_matches_speaker(conversation, search_request.speaker_id)
+    ]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the

@@ -1,6 +1,6 @@
 # NLLB Translation Service
 
-Self-hosted translation using **Meta NLLB-200** (No Language Left Behind) — a 200-language neural machine translation model running on GPU via CTranslate2. Replaces Google Cloud Translation V3 for realtime transcript translation in the Omi listen pipeline.
+Self-hosted translation using **Meta NLLB-200** (No Language Left Behind) — a 200-language neural machine translation model running on GPU via CTranslate2. Replaces Gemini 2.5 Flash-Lite for realtime transcript translation in the Omi listen pipeline.
 
 ## Architecture
 
@@ -12,7 +12,7 @@ backend-listen (transcribe.py)
                     └── CTranslate2 + SentencePiece (GPU inference)
 ```
 
-The backend auto-detects source language via `langdetect` before each NLLB call, passing the detected BCP-47 code as `source_language_code` so the model receives proper source language tokens. If NLLB fails, the backend falls back to Google Cloud Translation V3 automatically.
+The backend auto-detects source language via `langdetect` before each NLLB call, passing the detected BCP-47 code as `source_language_code` so the model receives proper source language tokens. If NLLB fails, the backend falls back to Gemini 2.5 Flash-Lite automatically.
 
 ## API
 
@@ -126,17 +126,17 @@ See `TUNING_RESULTS.md` for the full tuning sweep across beam sizes, compute typ
 The backend uses NLLB via the `TranslationProvider` enum in `utils/translation.py`. Provider is controlled exclusively by `TRANSLATION_SERVICE_MODELS` — the URL alone never changes provider.
 
 ```bash
-# 1. Google only (default — no config needed)
+# 1. Gemini only (default — no config needed)
 # TRANSLATION_SERVICE_MODELS is unset
 
-# 2. NLLB primary with Google fallback
-TRANSLATION_SERVICE_MODELS=nllb,google
+# 2. NLLB primary with Gemini fallback
+TRANSLATION_SERVICE_MODELS=nllb,gemini
 
-# 3. NLLB only (errors stay retryable; no implicit Google fallback)
+# 3. NLLB only (errors stay retryable; no implicit Gemini fallback)
 TRANSLATION_SERVICE_MODELS=nllb
 ```
 
-The comma-separated list is the exact provider order: fallbacks are used only when they are named. `HOSTED_TRANSLATION_API_URL` must also be set for `nllb` to activate. If the list is empty or contains no usable provider, the backend defaults to Google.
+The comma-separated list is the exact provider order: fallbacks are used only when they are named. `HOSTED_TRANSLATION_API_URL` must also be set for `nllb` to activate. If the list is empty or contains no usable provider, the backend defaults to Gemini. The legacy `google` configuration token is accepted during migration but resolves and emits as `gemini`.
 
 ## Deploy
 
@@ -171,7 +171,7 @@ After NLLB is deployed, set `HOSTED_TRANSLATION_API_URL` in the backend-listen H
   value: "http://dev-omi-nllb-translation:8080"
 ```
 
-Then set `TRANSLATION_SERVICE_MODELS=nllb,google` and restart the backend.
+Then set `TRANSLATION_SERVICE_MODELS=nllb,gemini` and restart the backend.
 
 ## Local Development
 

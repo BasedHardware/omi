@@ -17,13 +17,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
     )
   }
 
-  func testCrispInitialPollWaitsUntilAfterDeferredWarmupStarts() {
-    XCTAssertGreaterThan(
-      StartupWarmupPolicy.crispInitialPollDelay,
-      StartupWarmupPolicy.deferredWarmupDelay
-    )
-  }
-
   func testAgentVMProvisioningWaitsUntilAfterDeferredWarmupStarts() {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.agentVMProvisioningDelay,
@@ -65,6 +58,22 @@ final class StartupWarmupPolicyTests: XCTestCase {
     XCTAssertEqual(
       StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: -5),
       StartupWarmupPolicy.proactiveAssistantsStartDelay
+    )
+  }
+
+  func testRemainingDelayGeneralizesLaunchAnchorMath() {
+    XCTAssertEqual(StartupWarmupPolicy.remainingDelay(6.0, elapsedSinceLaunch: 0), 6.0)
+    XCTAssertEqual(StartupWarmupPolicy.remainingDelay(6.0, elapsedSinceLaunch: 2.0), 4.0)
+    XCTAssertEqual(StartupWarmupPolicy.remainingDelay(6.0, elapsedSinceLaunch: 10.0), 0)
+    XCTAssertEqual(StartupWarmupPolicy.remainingDelay(6.0, elapsedSinceLaunch: -5), 6.0)
+  }
+
+  func testRemainingProactiveAssistantsStartDelayUsesRemainingDelay() {
+    let elapsed: TimeInterval = 2.5
+    XCTAssertEqual(
+      StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: elapsed),
+      StartupWarmupPolicy.remainingDelay(
+        StartupWarmupPolicy.proactiveAssistantsStartDelay, elapsedSinceLaunch: elapsed)
     )
   }
 
@@ -282,9 +291,7 @@ final class StartupWarmupPolicyTests: XCTestCase {
     XCTAssertTrue(source.contains("id: .initialFileIndexing"))
     XCTAssertTrue(source.contains("id: .proactiveAssistantsStart"))
     XCTAssertTrue(source.contains("viewModelContainer.resetStartupState()"))
-    XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups(preserveCrispReadState: true)"))
-    XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups(preserveCrispReadState: false)"))
-    XCTAssertTrue(source.contains("CrispManager.shared.stop(preserveReadState: preserveCrispReadState)"))
+    XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups()"))
     XCTAssertTrue(source.contains("NSApplication.willTerminateNotification"))
   }
 

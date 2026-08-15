@@ -1,11 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/explore_install_page.dart';
-import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -23,10 +25,22 @@ class AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin {
 
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AddAppProvider>().getCategories();
-    });
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_loadApps());
+    });
+  }
+
+  Future<void> _loadApps() async {
+    try {
+      final appProvider = context.read<AppProvider>();
+      await appProvider.getApps();
+      if (mounted) {
+        await appProvider.getPopularApps();
+      }
+    } catch (e, s) {
+      Logger.handle(e, s, message: 'Error loading apps page data');
+    }
   }
 
   void scrollToTop() {

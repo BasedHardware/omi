@@ -65,15 +65,15 @@ def test_search_conversations_negative_limit_is_clamped(mcp):
     """search_conversations must clamp the vector-search k (limit) to at least 1."""
     captured = {}
 
-    def _query_vectors(query, uid, starts_at=None, ends_at=None, k=None):
-        captured["k"] = k
+    def _resolve(uid, query, *, limit, starts_at=None, ends_at=None, **kwargs):
+        captured["limit"] = limit
         return []
 
-    with patch.object(mcp.vector_db, "query_vectors", side_effect=_query_vectors):
+    with patch.object(mcp, "resolve_mcp_conversation_search_ids", side_effect=_resolve):
         result = mcp.execute_tool("test-uid", "search_conversations", {"query": "hi", "limit": -5})
 
     assert result == {"conversations": []}
-    assert captured["k"] == 1  # clamped up to the minimum
+    assert captured["limit"] == 1  # clamped up to the minimum
 
 
 def test_search_x_posts_non_int_limit_returns_invalid_params(mcp):

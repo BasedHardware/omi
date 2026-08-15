@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Mapping, Optional, Sequence
 
+from models.conversation_enums import ConversationSource
+
 MAX_CONVERSATION_TIMEOUT_SECONDS = 4 * 60 * 60
 MIN_CONVERSATION_TIMEOUT_SECONDS = 120
 TARGET_SAMPLE_RATE = 16000
@@ -171,6 +173,31 @@ def decide_existing_conversation_action(
     if seconds_since_last_segment >= conversation_creation_timeout:
         return ConversationLifecycleAction.process_and_create_new
     return ConversationLifecycleAction.continue_current
+
+
+def normalize_listen_source(value: Optional[str]) -> str:
+    """Normalize listen sources the same way conversations persist them.
+
+    Empty/missing → `omi`. Unknown tokens → `unknown` via ConversationSource._missing_,
+    matching create_new_in_progress_conversation.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return ConversationSource.omi.value
+    return ConversationSource(value.strip()).value
+
+
+def should_attach_to_existing_in_progress(
+    *,
+    existing_source: Optional[str],
+    request_source: Optional[str],
+) -> bool:
+    """Resume only when the live pointer and this socket share a source (#5388).
+
+    Device + web (or any other cross-source pair) must each own a conversation.
+    Attaching the second socket to the first pointer silently merges two audio
+    streams into one session and loses the web recording on stop.
+    """
+    return normalize_listen_source(existing_source) == normalize_listen_source(request_source)
 
 
 def decide_lifecycle_action(

@@ -498,7 +498,7 @@ describe("kernel ContextSnapshot", () => {
     store.close();
   });
 
-  it("shares one base content version across surfaces while separating renderer policy", () => {
+  it("shares one base content version across surfaces while separating renderer and capability policy", () => {
     const { store } = fixture();
     const main = store.insertSession({
       ownerId: "shared-owner",
@@ -531,8 +531,11 @@ describe("kernel ContextSnapshot", () => {
     expect(voiceSnapshot).toMatchObject({
       version: mainSnapshot.version,
       snapshotGeneration: mainSnapshot.snapshotGeneration,
-      capabilityVersion: mainSnapshot.capabilityVersion,
     });
+    // Typed-chat-only writes are intentionally absent from voice capability
+    // projections, so the capability fingerprint must diverge even though
+    // both surfaces share the same admitted context content.
+    expect(voiceSnapshot.capabilityVersion).not.toBe(mainSnapshot.capabilityVersion);
     expect(voiceSnapshot.rendererFingerprint).not.toBe(mainSnapshot.rendererFingerprint);
     expect(voiceSnapshot.rendererPolicyVersion).toBe(mainSnapshot.rendererPolicyVersion);
     store.close();

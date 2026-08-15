@@ -538,7 +538,7 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
     XCTAssertEqual(result.positions["me"]?.y ?? 0, area.midY, accuracy: 1e-9)
   }
 
-  func testLeavesSitBesideTheirParentAndIsolatesSitOutsideTheMap() throws {
+  func testLeavesSitBesideTheirParentAndIsolatesLeaveTheAnchorLegible() throws {
     var links: [Link] = [Link(a: "hub", b: "spoke", weight: 1)]
     for index in 1...6 { links.append(Link(a: "hub", b: "leaf\(index)", weight: 1)) }
     links.append(Link(a: "spoke", b: "other", weight: 1))
@@ -556,27 +556,21 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
     }
 
     let lonely = try XCTUnwrap(result.positions["lonely"])
-    XCTAssertFalse(
-      area.insetBy(dx: area.width * 0.1, dy: area.height * 0.1).contains(lonely),
-      "An unconnected entity must not sit in the middle implying structure")
+    XCTAssertGreaterThan(
+      distance(lonely, CGPoint(x: area.midX, y: area.midY)),
+      Double(min(area.width, area.height)) * 0.1,
+      "An unconnected entity must not obscure the map's anchor")
   }
 
-  /// Unconnected entities ring the map from just outside it, not from the far
-  /// edge of the canvas.
-  ///
-  /// They have to be outside: everything the relaxation placed is fitted within
-  /// the drawing area, so anything closer would sit among entities whose
-  /// positions mean something. But the band used to start a further 7% out and
-  /// step another 5% per lap, which put a lone entity most of a canvas-width
-  /// from anything it could be compared against, and the map looked like it had
-  /// shed debris rather than like it was telling you something.
-  func testUnconnectedEntitiesRingTheMapFromJustOutsideIt() throws {
+  /// Unconnected entities fill a circular peripheral field, not a rectangular
+  /// border or hollow ring around the semantic core.
+  func testUnconnectedEntitiesFillCircularPeripheralField() throws {
     var links: [Link] = []
     let spine = (0..<14).map { "spine\($0)" }
     for index in 0..<(spine.count - 1) {
       links.append(Link(a: spine[index], b: spine[index + 1], weight: 4))
     }
-    let lonely = (0..<30).map { "lonely\($0)" }
+    let lonely = (0..<600).map { "lonely\($0)" }
 
     let result = Layout.layout(
       nodeIDs: spine + lonely, links: links, anchorID: nil, typeTargets: [:], area: area)
@@ -584,16 +578,13 @@ final class MemoryAtlasForceLayoutTests: XCTestCase {
     let placed = lonely.compactMap { result.positions[$0] }
     XCTAssertEqual(placed.count, lonely.count)
 
-    for point in placed {
-      XCTAssertFalse(
-        area.contains(point), "An unconnected entity sits outside the structure's own area")
-      // Outside, but on the near side of outside. The bound is the area grown
-      // by rather more than the halo's own clearance, so ordinary tuning does
-      // not trip it and a return to a far-flung rim does.
-      let outer = area.insetBy(dx: -area.width * 0.16, dy: -area.height * 0.16)
-      XCTAssertTrue(
-        outer.contains(point), "and close enough to it to read as part of the same map")
-    }
+    let radii = placed.map { hypot($0.x - area.midX, $0.y - area.midY) }
+    let inner = min(area.width, area.height) * 0.5
+    XCTAssertGreaterThan(radii.min() ?? 0, inner * 0.35, "The catalog must leave a recognizable semantic core")
+    XCTAssertLessThan(radii.max() ?? 1, inner * 1.3, "Catalog volume must not inflate the viewport")
+    XCTAssertGreaterThan(
+      (radii.max() ?? 0) - (radii.min() ?? 0), inner * 0.25,
+      "Loose memories should fill the peripheral field, not form a hollow ring")
   }
 
   func testEveryNodeLandsOnTheCanvas() throws {

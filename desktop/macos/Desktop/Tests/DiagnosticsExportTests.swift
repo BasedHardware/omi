@@ -129,5 +129,21 @@ import XCTest
       XCTAssertFalse(
         text.contains("HEAD_MARKER_beyond_window"), "head line should be outside the bounded tail")
     }
+
+    func testLocalBundleDropsOversizedLogLinesBeforeRegexRedaction() throws {
+      let logPath = tempDir.appendingPathComponent("omi-dev.log").path
+      let secret = "SUPERSECRETKEY123"
+      let oversizedLine =
+        "[10:00:00.000] [app] api_key=\(secret) "
+        + String(
+          repeating: "x",
+          count: DiagnosticLogRedactionPolicy.maximumLineLengthForRegexRedaction + 1)
+      try oversizedLine.write(toFile: logPath, atomically: true, encoding: .utf8)
+
+      let text = DesktopDiagnosticsManager.shared.buildLocalDiagnosticsText(logPath: logPath)
+
+      XCTAssertTrue(text.contains("[redacted-oversize-log-line]"))
+      XCTAssertFalse(text.contains(secret))
+    }
   }
 #endif

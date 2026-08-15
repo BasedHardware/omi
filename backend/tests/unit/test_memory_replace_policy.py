@@ -1,4 +1,4 @@
-"""Memory replace policy — legacy re-extract and cascade delete invariants."""
+"""Universal memory source-replacement and cascade-delete invariants."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import BackgroundTasks, Depends, HTTPException, Query
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROCESS_CONVERSATION_PATH = BACKEND_DIR / "utils" / "conversations" / "process_conversation.py"
@@ -53,9 +52,7 @@ def _load_process_conversation():
             "utils.conversations.process_conversation."
         ):
             del sys.modules[name]
-    process_conversation = importlib.import_module("utils.conversations.process_conversation")
-    process_conversation.users_db = sys.modules["database.users"]
-    return process_conversation
+    return importlib.import_module("utils.conversations.process_conversation")
 
 
 def _function_body(source: str, fn_name: str) -> str:
@@ -69,25 +66,14 @@ def _function_body(source: str, fn_name: str) -> str:
     raise AssertionError(f"{fn_name} not found")
 
 
-def _load_function(path: Path, fn_name: str, namespace: dict):
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == fn_name)
-    function.decorator_list = []
-    module = ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[]))
-    exec(compile(module, str(path), "exec"), namespace)
-    return namespace[fn_name]
-
-
-def test_legacy_extract_deletes_only_after_successful_parse():
-    """Legacy re-extract must not delete conversation memories before extraction completes."""
+def test_conversation_extraction_has_no_historical_writer_or_selector():
+    """Conversation finalization has one canonical source-replacement path."""
     source = PROCESS_CONVERSATION_PATH.read_text(encoding="utf-8")
-    body = _function_body(source, "_extract_memories_legacy")
-    delete_idx = body.index("delete_memories_for_conversation")
-    extract_idx = body.index("new_memories_extractor")
-    save_idx = body.index("save_memories")
-    assert (
-        extract_idx < delete_idx < save_idx
-    ), "legacy path must extract, then delete old conversation memories, then save new ones"
+    body = _function_body(source, "_extract_memories_inner")
+    assert "_extract_memories_canonical" in body
+    assert "memory_system" not in body
+    assert "delete_memories_for_conversation" not in source
+    assert "memories_db.save_memories" not in source
 
 
 def test_canonical_extract_replaces_only_after_successful_parse():
@@ -101,118 +87,22 @@ def test_canonical_extract_replaces_only_after_successful_parse():
     assert "memory_service.write" not in body
 
 
-def test_cascade_delete_cleans_derived_data_before_claimed_source():
-    """Cascade delete must remove memories/action-items before its fenced source."""
-    calls = []
-    descriptor = object()
-    legacy_memory_system = object()
-    playback_delete = MagicMock()
-
-    def delete_claimed(uid, claimed, *, delete_source_artifacts):
-        assert delete_source_artifacts is playback_delete
-        calls.append(("source", uid, claimed))
-        return True
-
-    namespace = {
-        "BackgroundTasks": BackgroundTasks,
-        "ConversationVectorCleanupBusy": type("ConversationVectorCleanupBusy", (RuntimeError,), {}),
-        "Depends": Depends,
-        "HTTPException": HTTPException,
-        "MemoryService": MagicMock(),
-        "MemorySystem": SimpleNamespace(CANONICAL=object(), LEGACY=legacy_memory_system),
-        "Query": Query,
-        "action_items_db": SimpleNamespace(
-            delete_action_items_for_conversation=lambda uid, conversation_id: calls.append(
-                ("action_items", uid, conversation_id)
-            )
-        ),
-        "auth": SimpleNamespace(get_current_user_uid=MagicMock()),
-        "claim_conversation_vector_cleanup_descriptor": (
-            lambda uid, conversation_id: calls.append(("claim", uid, conversation_id)) or descriptor
-        ),
-        "db_client_module": SimpleNamespace(db=object()),
-        "delete_claimed_conversation_source": delete_claimed,
-        "delete_conversation_audio_files": MagicMock(),
-        "delete_conversation_playback_artifacts": playback_delete,
-        "delete_memory_vector": MagicMock(),
-        "logger": MagicMock(),
-        "memories_db": SimpleNamespace(
-            delete_memories_for_conversation=lambda uid, conversation_id: calls.append(
-                ("memories", uid, conversation_id)
-            )
-            or {"vector_delete_ids": []}
-        ),
-        "pin_memory_system": lambda *_args, **_kwargs: legacy_memory_system,
-        "release_conversation_vector_cleanup_descriptor": MagicMock(),
-    }
-    delete_conversation = _load_function(CONVERSATIONS_ROUTER_PATH, "delete_conversation", namespace)
-
-    result = delete_conversation(
-        "conversation-1",
-        BackgroundTasks(),
-        cascade=True,
-        uid="uid-1",
-    )
-
-    assert result == {"status": "Ok"}
-    assert calls == [
-        ("claim", "uid-1", "conversation-1"),
-        ("memories", "uid-1", "conversation-1"),
-        ("action_items", "uid-1", "conversation-1"),
-        ("source", "uid-1", descriptor),
-    ]
+def test_cascade_delete_cleans_memories_before_conversation_doc():
+    """Cascade delete must remove memories/action-items before the conversation document."""
+    source = CONVERSATIONS_ROUTER_PATH.read_text(encoding="utf-8")
+    fn_start = source.index("def delete_conversation(")
+    fn_end = source.index("\n@router.", fn_start)
+    body = source[fn_start:fn_end]
+    conv_delete_idx = body.index("delete_claimed_conversation_source")
+    cascade_idx = body.index("if cascade:")
+    memories_idx = body.index("retract_conversation_memories")
+    action_items_idx = body.index("delete_action_items_for_conversation")
+    assert cascade_idx < memories_idx < conv_delete_idx
+    assert cascade_idx < action_items_idx < conv_delete_idx
 
 
-@pytest.mark.parametrize("extractor_side_effect", [Exception("llm down"), []])
-def test_legacy_reextract_failure_preserves_existing_memories(extractor_side_effect, monkeypatch):
-    """If extraction fails or yields nothing, prior conversation memories must remain."""
-    pc = _load_process_conversation()
-    from models.conversation import Conversation
-    from models.conversation_enums import CategoryEnum, ConversationSource
-    from models.structured import Structured
-
-    legacy_delete = sys.modules["database.memories"].delete_memories_for_conversation
-    legacy_delete.reset_mock(return_value={"vector_delete_ids": ["old-mem-1"]})
-    legacy_save = sys.modules["database.memories"].save_memories
-    legacy_save.reset_mock()
-
-    monkeypatch.setattr(
-        pc,
-        "new_memories_extractor",
-        MagicMock(
-            side_effect=extractor_side_effect if isinstance(extractor_side_effect, Exception) else lambda *a, **k: []
-        ),
-    )
-    monkeypatch.setattr(
-        pc,
-        "memory_system_request_scope",
-        lambda uid: MagicMock(__enter__=lambda s: pc.MemorySystem.LEGACY, __exit__=lambda *a: None),
-    )
-    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
-    monkeypatch.setattr(pc.notification_db, "get_user_time_zone", lambda uid: "UTC")
-
-    conversation = Conversation(
-        id="conv-preserve",
-        created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
-        started_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
-        finished_at=datetime(2026, 6, 1, 1, tzinfo=timezone.utc),
-        source=ConversationSource.omi,
-        structured=Structured(title="Test", overview="Overview", category=CategoryEnum.personal),
-        transcript_segments=[],
-    )
-
-    if isinstance(extractor_side_effect, Exception):
-        with pytest.raises(Exception, match="llm down"):
-            pc._extract_memories_inner("uid-preserve", conversation)
-    else:
-        pc._extract_memories_inner("uid-preserve", conversation)
-
-    legacy_delete.assert_not_called()
-    legacy_save.assert_not_called()
-
-
-def test_canonical_reextract_failure_preserves_existing_memories(monkeypatch):
-    """Canonical path: strict extraction failure must not submit a replacement."""
+def test_universal_reextract_failure_preserves_existing_memories(monkeypatch):
+    """Strict extraction failure must not submit a source replacement."""
     pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
@@ -226,11 +116,6 @@ def test_canonical_reextract_failure_preserves_existing_memories(monkeypatch):
         pc,
         "extract_canonical_l1_memory_candidates",
         MagicMock(side_effect=Exception("llm down")),
-    )
-    monkeypatch.setattr(
-        pc,
-        "memory_system_request_scope",
-        lambda uid: MagicMock(__enter__=lambda s: pc.MemorySystem.CANONICAL, __exit__=lambda *a: None),
     )
     monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
 
@@ -250,8 +135,8 @@ def test_canonical_reextract_failure_preserves_existing_memories(monkeypatch):
     mock_service.replace_conversation_memories.assert_not_called()
 
 
-def test_canonical_reextract_valid_empty_replaces_existing_source_state(monkeypatch):
-    """A valid empty canonical extraction is an authoritative source replacement."""
+def test_universal_reextract_valid_empty_replaces_existing_source_state(monkeypatch):
+    """A valid empty extraction is an authoritative source replacement."""
     pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
@@ -260,11 +145,6 @@ def test_canonical_reextract_valid_empty_replaces_existing_source_state(monkeypa
     mock_service = MagicMock()
     monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
     monkeypatch.setattr(pc, "extract_canonical_l1_memory_candidates", MagicMock(return_value=[]))
-    monkeypatch.setattr(
-        pc,
-        "memory_system_request_scope",
-        lambda uid: MagicMock(__enter__=lambda s: pc.MemorySystem.CANONICAL, __exit__=lambda *a: None),
-    )
     monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
 
     conversation = Conversation(

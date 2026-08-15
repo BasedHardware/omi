@@ -239,6 +239,89 @@ describe("RunToolCapabilityBroker", () => {
     store.close();
   });
 
+  it("classifies create_memory as a coordinator main-chat non-idempotent write", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+
+    expect(capability.allowedToolNames).toContain("create_memory");
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "create-memory-1",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "create_memory",
+      toolInput: { content: "I prefer tea." },
+    });
+    expect(authorized).toMatchObject({
+      canonicalToolName: "create_memory",
+      surfaceKind: "main_chat",
+      executionRole: "coordinator",
+      effectClass: "non_idempotent_write",
+      retryPolicy: "never_auto_retry",
+    });
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      effectClass: "non_idempotent_write",
+      retryPolicy: "never_auto_retry",
+    });
+    store.close();
+  });
+
+  it.each([
+    ["realtime_voice", "coordinator"],
+    ["task_chat", "coordinator"],
+    ["background_agent", "leaf"],
+    ["delegated_agent", "leaf"],
+  ] as const)("does not authorize create_memory from %s/%s", (surfaceKind, executionRole) => {
+    const root = mkdtempSync(join(tmpdir(), "omi-capability-memory-scope-"));
+    roots.push(root);
+    const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner-1",
+      surfaceKind,
+      defaultAdapterId: "acp",
+      executionRole,
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "scope-client",
+      requestId: `scope-request-${surfaceKind}`,
+      status: "running",
+      mode: "act",
+    });
+    const attempt = store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "acp",
+      adapterInstanceId: "scope-worker",
+    });
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    expect(capability.allowedToolNames).not.toContain("create_memory");
+    expectCode(() => broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: `create-memory-${surfaceKind}`,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "create_memory",
+      toolInput: { content: "must not be saved" },
+    }), "tool_not_allowed");
+    store.close();
+  });
+
   it("rejects stale and duplicate Swift results by the exact persisted tuple", () => {
     const { store, session, run, attempt } = fixture();
     const broker = createBroker(store);

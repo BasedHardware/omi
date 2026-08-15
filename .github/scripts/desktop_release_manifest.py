@@ -6,6 +6,11 @@ workflows can use the exact same contract on clean runners. The detached
 manifest digest is SHA-256 over UTF-8 JSON with sorted keys, no insignificant
 whitespace, and non-ASCII characters preserved. A detached digest avoids the
 self-referential ambiguity of embedding a manifest hash inside the manifest.
+
+``qualification_tier`` and ``qualification_passed`` are legacy evidence-class
+fields on the frozen v1 wire schema; ``signed-smoke`` is the only tier new
+manifests carry. The names must not be renamed: every stored manifest is
+validated on every read.
 """
 
 from __future__ import annotations
@@ -237,17 +242,26 @@ def validate_manifest(value: object) -> dict[str, Any]:
     _require_string(manifest, "ed_signature")
 
     evidence_asset = _require_string(manifest, "qualification_evidence_asset")
-    if not EVIDENCE_ASSET_RE.fullmatch(evidence_asset) and evidence_asset != "desktop-smoke-result.json":
+    if not EVIDENCE_ASSET_RE.fullmatch(evidence_asset) and evidence_asset not in {
+        "desktop-smoke-result.json",
+        "desktop-smoke-result-beta.json",
+    }:
         _fail("qualification_evidence_asset must be a qualification evidence or signed-smoke asset name")
     _require_sha256(manifest, "qualification_evidence_sha256")
     qualification_tier = manifest.get("qualification_tier")
     qualification_passed = manifest.get("qualification_passed")
-    if (qualification_tier, qualification_passed) not in {("T2", True), ("emergency", False)}:
-        _fail("qualification must be passed at tier T2 or retain emergency false truth")
+    if not isinstance(qualification_passed, bool) or (qualification_tier, qualification_passed) not in {
+        ("T2", True),
+        ("signed-smoke", False),
+        ("emergency", False),
+    }:
+        _fail("release evidence must be T2, signed-smoke, or emergency truth")
     if qualification_tier == "T2" and not EVIDENCE_ASSET_RE.fullmatch(evidence_asset):
         _fail("T2 qualification requires a qualification-evidence-*.json asset")
     if qualification_tier == "emergency" and evidence_asset != "desktop-smoke-result.json":
         _fail("emergency qualification requires exact signed-smoke evidence")
+    if qualification_tier == "signed-smoke" and evidence_asset != "desktop-smoke-result-beta.json":
+        _fail("normal Beta promotion requires exact Codemagic Beta signed-smoke evidence")
 
     mode = manifest.get("backend_mode")
     if mode not in BACKEND_MODES:

@@ -19,6 +19,10 @@ trap cleanup EXIT
 
 # 1. Syntax + help + unknown command exits.
 bash -n "$SMOKE" || fail "bash -n rejected the script"
+grep -q -- '--automation-ui=quiet' "$SMOKE" \
+  || fail "direct named-bundle launch does not request quiet automation presentation"
+grep -q -- 'OMI_ENABLE_LOCAL_AUTOMATION=1' "$SMOKE" \
+  || fail "named-bundle launch lost its local automation gate"
 "$SMOKE" help >"$TMP/help.out" 2>&1 || fail "help exited nonzero"
 for word in run list scan help; do
   grep -q "$word" "$TMP/help.out" || fail "help does not mention '$word'"

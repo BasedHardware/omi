@@ -1,20 +1,54 @@
 import Cocoa
 import SwiftUI
 
-/// NSScrollView subclass that auto-focuses its NSTextView when added to a window.
-private class AutoFocusScrollView: NSScrollView {
-  var shouldFocusOnAppear = false
+/// The composer's scroll view, which owns **when the caret lands in this editor**.
+///
+/// SwiftUI's `@FocusState` cannot reach inside an `NSViewRepresentable` — `.focused()` on this editor
+/// binds to nothing — so a host that wants the caret has to ask for it, and a claim made before the
+/// view has a window has to be remembered rather than dropped (`makeNSView` runs before the hierarchy
+/// is attached, which is exactly when a freshly presented composer makes its first claim).
+private final class ComposerScrollView: NSScrollView {
+  /// A claim that arrived before there was a window to claim in.
+  var hasPendingFocusClaim = false
+  /// `focusOnAppear` call sites also bring their window forward on that first claim. A host driving
+  /// `focusRequest` never does: moving the caret is not the same as summoning a window.
+  var activatesWindowOnClaim = false
+
+  func claimFirstResponder() {
+    guard let window, let textView = documentView as? NSTextView else {
+      hasPendingFocusClaim = true
+      return
+    }
+    hasPendingFocusClaim = false
+    if activatesWindowOnClaim {
+      activatesWindowOnClaim = false
+      window.makeKeyAndOrderFront(nil)
+    }
+    guard window.firstResponder !== textView else { return }
+    window.makeFirstResponder(textView)
+  }
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
-    guard shouldFocusOnAppear, let window = self.window,
-      let textView = self.documentView as? NSTextView
-    else { return }
-    shouldFocusOnAppear = false
-    DispatchQueue.main.async {
-      window.makeKeyAndOrderFront(nil)
-      window.makeFirstResponder(textView)
-    }
+    guard hasPendingFocusClaim, window != nil else { return }
+    DispatchQueue.main.async { [weak self] in self?.claimFirstResponder() }
+  }
+}
+
+/// What `⏎` means in a composer.
+///
+/// A value because the coordinator reads the modifier from `NSApp.currentEvent`, which no hermetic
+/// test can stage — so "Shift-Return writes a newline, Return sends, and neither happens mid-IME"
+/// would otherwise be a rule nothing checks.
+package enum OmiComposerReturnKey: Equatable, Sendable {
+  /// Let the text view insert the newline itself.
+  case newline
+  /// Hand the composer's text to its host.
+  case submit
+
+  package static func resolve(hasMarkedText: Bool, shiftHeld: Bool) -> Self {
+    // Return mid-composition commits the IME candidate; it is never the composer's key.
+    hasMarkedText || shiftHeld ? .newline : .submit
   }
 }
 
@@ -56,6 +90,10 @@ package struct OmiTextEditor: NSViewRepresentable {
   var onSubmit: (() -> Void)? = nil
   var focusOnAppear: Bool = true
   var onMarkedTextChange: ((Bool) -> Void)? = nil
+  /// Monotonic caret claim: **every increment puts the caret in this editor.** The `@FocusState`
+  /// equivalent for an `NSViewRepresentable`, and deliberately a counter rather than a `Bool` — a flag
+  /// that is already `true` cannot ask for the caret back after AppKit gave it to something else.
+  var focusRequest: Int = 0
 
   // Optional height tracking (for floating bar's window resize flow)
   var minHeight: CGFloat? = nil
@@ -71,6 +109,7 @@ package struct OmiTextEditor: NSViewRepresentable {
     onSubmit: (() -> Void)? = nil,
     focusOnAppear: Bool = true,
     onMarkedTextChange: ((Bool) -> Void)? = nil,
+    focusRequest: Int = 0,
     minHeight: CGFloat? = nil,
     maxHeight: CGFloat? = nil,
     onHeightChange: ((CGFloat) -> Void)? = nil
@@ -83,6 +122,7 @@ package struct OmiTextEditor: NSViewRepresentable {
     self.onSubmit = onSubmit
     self.focusOnAppear = focusOnAppear
     self.onMarkedTextChange = onMarkedTextChange
+    self.focusRequest = focusRequest
     self.minHeight = minHeight
     self.maxHeight = maxHeight
     self.onHeightChange = onHeightChange
@@ -115,14 +155,9 @@ package struct OmiTextEditor: NSViewRepresentable {
       height: CGFloat.greatestFiniteMagnitude
     )
 
-    let scrollView: NSScrollView
-    if focusOnAppear {
-      let autoFocus = AutoFocusScrollView()
-      autoFocus.shouldFocusOnAppear = true
-      scrollView = autoFocus
-    } else {
-      scrollView = NSScrollView()
-    }
+    let scrollView = ComposerScrollView()
+    scrollView.hasPendingFocusClaim = focusOnAppear
+    scrollView.activatesWindowOnClaim = focusOnAppear
 
     scrollView.documentView = textView
     scrollView.hasVerticalScroller = true
@@ -188,6 +223,12 @@ package struct OmiTextEditor: NSViewRepresentable {
       textView.font = newFont
     }
 
+    // A raised claim is honoured once, from whichever host raised it.
+    if focusRequest != context.coordinator.lastFocusRequest {
+      context.coordinator.lastFocusRequest = focusRequest
+      (scrollView as? ComposerScrollView)?.claimFirstResponder()
+    }
+
     context.coordinator.updateMarkedTextState(textView.hasMarkedText())
   }
 
@@ -209,7 +250,16 @@ package struct OmiTextEditor: NSViewRepresentable {
     layoutManager.ensureLayout(for: textContainer)
     let usedRect = layoutManager.usedRect(for: textContainer)
     let contentHeight = usedRect.height + textView.textContainerInset.height * 2
-    let constrainedHeight = min(max(contentHeight, minH), maxH)
+    var constrainedHeight = min(max(contentHeight, minH), maxH)
+    // **Never taller than the room actually offered.** The editor asking for a height and then
+    // keeping it when the container has less is how a composer draws the reader's own words outside
+    // the panel that is supposed to hold them — the text is a scroll view, so a shorter viewport
+    // costs nothing, while overflowing costs the top and bottom lines with no way to reach them.
+    // `nil` and infinite proposals are SwiftUI asking what this view *wants*, which is the value
+    // above; a zero proposal is a probe, not an offer, so the floor still applies.
+    if let proposed = proposal.height, proposed.isFinite {
+      constrainedHeight = min(constrainedHeight, max(minH, proposed))
+    }
     return CGSize(width: proposal.width ?? nsView.bounds.width, height: constrainedHeight)
   }
 
@@ -229,6 +279,8 @@ package struct OmiTextEditor: NSViewRepresentable {
     var onSubmit: (() -> Void)?
     var onMarkedTextChange: ((Bool) -> Void)?
     var isUpdating = false
+    /// The last caret claim this editor honoured. See `OmiTextEditor.focusRequest`.
+    var lastFocusRequest = 0
 
     func updateTextBinding(_ binding: Binding<String>) {
       _text = binding
@@ -269,18 +321,13 @@ package struct OmiTextEditor: NSViewRepresentable {
     }
 
     package func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-      if textView.hasMarkedText() {
-        return false
-      }
-
-      if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-        let flags = NSApp.currentEvent?.modifierFlags ?? []
-        if !flags.contains(.shift) {
-          onSubmit?()
-          return true
-        }
-      }
-      return false
+      guard commandSelector == #selector(NSResponder.insertNewline(_:)) else { return false }
+      let key = OmiComposerReturnKey.resolve(
+        hasMarkedText: textView.hasMarkedText(),
+        shiftHeld: NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false)
+      guard key == .submit else { return false }
+      onSubmit?()
+      return true
     }
 
     func updateHeight(for textView: NSTextView, scrollView: NSScrollView) {

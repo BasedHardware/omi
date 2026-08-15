@@ -3,8 +3,8 @@ import type { CaptureCommand, CaptureEvent, ListenMessage } from '../../../share
 
 // omiListenClient now owns the transcript flow in the CALLING window but drives
 // capture REMOTELY: it opens the listen session, sends audio-start to the capture
-// window, maps listen messages to callbacks, maps a routed audio-source-error to
-// a fatal error, and tears down (audio-stop + listenStop) on stop.
+// window, reports connected only after both transport and source are ready, maps
+// a routed audio-source-error to a fatal error, and tears down on stop.
 
 vi.mock('./firebase', () => ({
   auth: { currentUser: { getIdToken: vi.fn(async () => 'test-token') } }
@@ -99,6 +99,7 @@ describe('startOmiListen', () => {
     await startOmiListen('mic', cb)
     const sessionId = startedSessionId()
     emitMsg({ sessionId, kind: 'connected' })
+    emitEvent({ type: 'audio-source-ready', sessionId })
     emitMsg({
       sessionId,
       kind: 'segments',
@@ -108,11 +109,27 @@ describe('startOmiListen', () => {
     expect(cb.onSegments).toHaveBeenCalledWith([{ text: 'hi', is_user: true, start: 0, end: 1 }])
   })
 
+  it('does not report connected until both the backend and audio source are ready', async () => {
+    const cb = callbacks()
+    await startOmiListen('system', cb)
+    const sessionId = startedSessionId()
+
+    emitMsg({ sessionId, kind: 'connected' })
+    expect(cb.onConnected).not.toHaveBeenCalled()
+
+    emitEvent({ type: 'audio-source-ready', sessionId })
+    expect(cb.onConnected).toHaveBeenCalledOnce()
+
+    emitEvent({ type: 'audio-source-ready', sessionId })
+    expect(cb.onConnected).toHaveBeenCalledOnce()
+  })
+
   it('a close AFTER connect calls onClosed; a close BEFORE connect is a fatal error', async () => {
     const cb = callbacks()
     await startOmiListen('mic', cb)
     const sessionId = startedSessionId()
     emitMsg({ sessionId, kind: 'connected' })
+    emitEvent({ type: 'audio-source-ready', sessionId })
     emitMsg({ sessionId, kind: 'closed', code: 1000, reason: 'bye' })
     expect(cb.onClosed).toHaveBeenCalledWith(1000, 'bye')
 
@@ -136,6 +153,7 @@ describe('startOmiListen', () => {
     })
     expect(cb.onError).toHaveBeenCalledWith(expect.any(Error), true)
     expect((cb.onError.mock.calls[0][0] as Error).message).toBe('blocked')
+    expect((cb.onError.mock.calls[0][0] as Error).name).toBe('NotAllowedError')
   })
 
   it('ignores messages/events for a different session', async () => {
@@ -154,7 +172,11 @@ describe('startOmiListen', () => {
     emitEvent({ type: 'capture-window-restarted' })
     const starts = bridge.commands.filter((c) => c.type === 'audio-start')
     expect(starts.length).toBe(startsBefore + 1)
-    expect(starts[starts.length - 1]).toMatchObject({ type: 'audio-start', sessionId, source: 'mic' })
+    expect(starts[starts.length - 1]).toMatchObject({
+      type: 'audio-start',
+      sessionId,
+      source: 'mic'
+    })
   })
 
   it('does NOT re-issue audio-start after stop()', async () => {

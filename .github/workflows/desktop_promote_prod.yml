@@ -1,13 +1,13 @@
-name: Promote Qualified Desktop Stable
+name: Promote Desktop Beta to Stable
 
 # Stable is a protected distribution pointer, not a backend deployment. It
-# promotes the exact signed artifact already qualified on beta; the existing
+# promotes the exact signed artifact already served on beta; the existing
 # backend deployment workflows remain independent.
 on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Qualified current beta v*-macos release tag'
+        description: 'Current beta v*-macos release tag'
         required: true
         type: string
       confirm:
@@ -17,7 +17,6 @@ on:
 
 permissions:
   contents: read
-  actions: read
   id-token: write
 
 concurrency:
@@ -51,18 +50,8 @@ jobs:
           ' /tmp/desktop-backend-health.json >/dev/null
           rm -f /tmp/desktop-backend-health.json
 
-      - name: Generate Omi Bot token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.OMI_BOT_APP_ID }}
-          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
-
-      - name: Select and validate the exact trusted qualification
-        id: candidate
+      - name: Validate stable promotion request
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           CONFIRM: ${{ inputs.confirm }}
         run: |
@@ -72,27 +61,23 @@ jobs:
             echo "Invalid macOS release tag: $RELEASE_TAG" >&2; exit 1;
           }
           git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
-          TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
-          gh api "repos/$REPO/actions/workflows/desktop_qualify_beta.yml/runs?event=workflow_dispatch&status=completed&per_page=100" \
-            --jq '.workflow_runs | sort_by(.updated_at) | reverse | .[] | @base64' > /tmp/desktop-qualification-runs.txt
-          selected=""
-          while IFS= read -r encoded; do
-            printf '%s' "$encoded" | base64 --decode > /tmp/desktop-qualification-run.json
-            if python3 .github/scripts/desktop_qualification_admission.py \
-              --run-json /tmp/desktop-qualification-run.json \
-              --repository "$REPO" --release-tag "$RELEASE_TAG" --candidate-sha "$TARGET_SHA"; then
-              selected="$(jq -r .id /tmp/desktop-qualification-run.json)"
-              break
-            fi
-          done < /tmp/desktop-qualification-runs.txt
-          [[ "$selected" =~ ^[1-9][0-9]*$ ]] || { echo 'no successful trusted qualification exists for this exact candidate' >&2; exit 1; }
-          echo "Selected trusted qualification run $selected for $RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
+          test "$(git rev-list -n1 "$RELEASE_TAG")" = "$(git rev-parse HEAD)" || {
+            echo "Checked-out promotion controls do not match $RELEASE_TAG" >&2; exit 1;
+          }
+
+      - name: Generate Omi Bot token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
       - name: Google Auth
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Fetch exact retained qualified manifest
+      - name: Fetch exact retained Beta manifest
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           RELEASE_TAG: ${{ inputs.release_tag }}
@@ -134,7 +119,7 @@ jobs:
 
           beta, stable = fields("/tmp/macos-beta-pointer.json"), fields("/tmp/macos-stable-pointer.json")
           if text(beta, "release_id") != os.environ["RELEASE_TAG"]:
-              raise SystemExit("Stable promotion requires the exact current qualified Beta release ID")
+              raise SystemExit("Stable promotion requires the exact current Beta release ID")
           generation = stable.get("generation", {}).get("integerValue", "0")
           if not generation.isdigit():
               raise SystemExit("Stable pointer generation is invalid")

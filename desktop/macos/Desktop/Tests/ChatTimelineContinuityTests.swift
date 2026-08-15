@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import XCTest
 
 @testable import Omi_Computer
@@ -1270,7 +1272,11 @@ final class ChatTimelineContinuityTests: XCTestCase {
       chatBubbleSource.contains("OmiMarkdown(text: output, sender: .ai)"),
       "agent completion body must render markdown"
     )
-    XCTAssertTrue(chatBubbleSource.contains("Text(\"Collapse\")"))
+    XCTAssertTrue(chatBubbleSource.contains("StableChatCardHeader("))
+    XCTAssertFalse(
+      chatBubbleSource.contains("private var collapseControl"),
+      "expanded cards must keep the persistent header disclosure instead of adding a second anchor"
+    )
     XCTAssertTrue(
       chatBubbleSource.contains("AgentTimelineOpenFeedback.shouldShowLinkOut("),
       "cards must gate link-out with shared policy"
@@ -1295,44 +1301,42 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
   }
 
-  func testChatSelectionDoesNotWrapStackChromeInSelectionOverlay() throws {
-    // Mechanical guard for the omi-chat-continuity main-thread freeze:
-    // ChatMessagesView used to apply `.textSelection(.enabled)` on the LazyVStack,
-    // wrapping every agent-card header Text in SelectionOverlay and thrashing
-    // GraphHost via setFont → invalidateIntrinsicContentSize.
-    let root = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
+  @MainActor
+  func testCompletedChatTranscriptLayoutConvergesAcrossRepeatedResizes() {
+    let messages = (0..<16).map { index in
+      """
+      Completed response \(index) includes **formatted text**, `inline code`, and a list:
 
-    let messagesSource = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatMessagesView.swift"),
-      encoding: .utf8
-    )
-    let markdownSource = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/OmiMarkdown.swift"),
-      encoding: .utf8
-    )
-    let bubbleSource = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatBubble.swift"),
-      encoding: .utf8
+      - First point with enough content to wrap when the transcript narrows
+      - Second point with a stable whole-message copy action
+      """
+    }
+    let host = NSHostingView(
+      rootView: ScrollView {
+        LazyVStack(alignment: .leading, spacing: 8) {
+          ForEach(messages.indices, id: \.self) { index in
+            OmiMarkdown(text: messages[index], sender: .ai)
+          }
+        }
+      }
     )
 
-    XCTAssertFalse(
-      messagesSource.contains(".textSelection(.enabled)"),
-      "chat message stack must not enable selection on chrome Text views"
-    )
-    XCTAssertFalse(
-      markdownSource.contains(".textSelection(.enabled)"),
-      "chat Markdown must not create SelectionOverlay views that can loop while scrolling"
-    )
-    XCTAssertTrue(
-      markdownSource.contains(".textSelection(.disabled)"),
-      "the OmiMarkdown boundary must explicitly suppress inherited text selection"
-    )
-    XCTAssertTrue(
-      bubbleSource.contains(".textSelection(.disabled)"),
-      "agent card headers must disable SelectionOverlay on truncated snippets"
-    )
+    var sizesByWidth = [CGFloat: CGSize]()
+    for width in [620.0, 1100.0, 760.0, 980.0, 620.0, 1100.0] {
+      host.frame = NSRect(x: 0, y: 0, width: width, height: 720)
+      host.layoutSubtreeIfNeeded()
+
+      let size = host.fittingSize
+      XCTAssertTrue(size.width.isFinite, "transcript width must remain finite")
+      XCTAssertTrue(size.height.isFinite, "transcript height must remain finite")
+      XCTAssertGreaterThan(size.height, 0, "completed messages must remain visible")
+
+      if let previous = sizesByWidth[width] {
+        XCTAssertEqual(previous, size, "repeating a transcript width must converge to the same layout")
+      } else {
+        sizesByWidth[width] = size
+      }
+    }
   }
 
   func testCanonicalSurfacesBindSharedProviderMessages() throws {
@@ -1343,26 +1347,8 @@ final class ChatTimelineContinuityTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
 
-    let chatPage = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Pages/ChatPage.swift"),
-      encoding: .utf8)
-    XCTAssertTrue(
-      chatPage.contains("messages: chatProvider.messages,"),
-      "main Chat must bind the shared ChatProvider timeline"
-    )
-    XCTAssertFalse(
-      chatPage.contains("transcriptMessages"),
-      "main Chat must not filter notch/PTT turns out of history"
-    )
-    XCTAssertTrue(
-      chatPage.contains("openAgentChatFromTimeline(agentID: agentID, completion: completion)"),
-      "main Chat must open spawned-agent links from the timeline with open result feedback"
-    )
-    XCTAssertTrue(
-      chatPage.contains("openAgentChatFromTimeline(ref: ref, completion: completion)"),
-      "main Chat must open structured agent refs with open result feedback"
-    )
-
+    // Home is the only main-window chat surface now, so the assertions the
+    // standalone chat page used to carry move onto it rather than retiring.
     let dashboard = try String(
       contentsOf: root.appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift"),
       encoding: .utf8)
@@ -1370,6 +1356,18 @@ final class ChatTimelineContinuityTests: XCTestCase {
       dashboard.components(separatedBy: "messages: chatProvider.messages,").count - 1,
       2,
       "Home chat surfaces must bind the shared ChatProvider timeline"
+    )
+    XCTAssertFalse(
+      dashboard.contains("transcriptMessages"),
+      "Home chat must not filter notch/PTT turns out of history"
+    )
+    XCTAssertTrue(
+      dashboard.contains("openAgentChatFromTimeline(agentID: agentID, completion: completion)"),
+      "Home chat must open spawned-agent links from the timeline with open result feedback"
+    )
+    XCTAssertTrue(
+      dashboard.contains("openAgentChatFromTimeline(ref: ref, completion: completion)"),
+      "Home chat must open structured agent refs with open result feedback"
     )
     XCTAssertFalse(
       dashboard.contains("transcriptMessages"),
@@ -1435,6 +1433,22 @@ final class ChatTimelineContinuityTests: XCTestCase {
       ChatContinuityInvariants.agentPreviewText(prompt: "", output: "  only output  "),
       "only output"
     )
+    XCTAssertEqual(
+      ChatContinuityInvariants.agentCardPreviewText(
+        title: "Delegated: Address the review comments",
+        prompt: "Address the review comments",
+        output: "Done"
+      ),
+      ""
+    )
+    XCTAssertEqual(
+      ChatContinuityInvariants.agentCardPreviewText(
+        title: "Research agent",
+        prompt: "Address the review comments",
+        output: "Done"
+      ),
+      "Address the review comments"
+    )
   }
 
   func testAgentCompletionCardsUsePromptPreviewHelper() throws {
@@ -1451,12 +1465,22 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
 
     XCTAssertTrue(
-      bubble.contains("ChatContinuityInvariants.agentPreviewText(prompt: promptSnippet, output: output)"),
+      bubble.contains("ChatContinuityInvariants.agentCardPreviewText(")
+        && bubble.contains("prompt: promptSnippet")
+        && bubble.contains("output: output"),
       "AgentCompletionCard header must preview promptSnippet, not raw output"
     )
     XCTAssertTrue(
-      bubble.contains("ChatContinuityInvariants.agentPreviewText(prompt: summary.prompt, output: summary.output)"),
+      bubble.contains("prompt: summary.prompt")
+        && bubble.contains("output: summary.output"),
       "BackgroundAgentCard header must preview prompt, not raw output"
+    )
+
+    XCTAssertTrue(
+      bubble.contains("HStack(alignment: .top, spacing: OmiSpacing.xxs)")
+        && bubble.contains(".frame(width: 18, height: 18, alignment: .center)")
+        && bubble.contains(".frame(width: 28, height: 28)"),
+      "agent card headers must keep status, text hierarchy, and trailing controls top-aligned"
     )
     XCTAssertTrue(
       floating.contains("ChatContinuityInvariants.agentPreviewText(")

@@ -750,11 +750,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'உங்கள் திட்டம் $date இல் புதுப்பிக்கப்படும்.';
-  }
-
-  @override
   String get basicPlan => 'இலவச திட்டம்';
 
   @override
@@ -2139,16 +2134,16 @@ class AppLocalizationsTa extends AppLocalizations {
   String get editMemory => '✏️ பதிவை திருத்தவும்';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'அடிப்படையாகப் பின் செய்';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'அடிப்படையிலிருந்து அகற்று';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'அடிப்படை நினைவு';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'எப்போதும் சூழலில்';
 
   @override
   String get memoryContentHint => 'நான் ஐஸ் கிரீம் சாப்பிட விரும்புவேன்...';
@@ -9841,4 +9836,77 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'அந்த மைக்ரோஃபோனுடன் இணைக்க முடியவில்லை. அது iPhone அமைப்புகளில் இணைக்கப்பட்டுள்ளதா என உறுதிசெய்யவும்.';
+
+  @override
+  String get syncStatusTooOld => 'ஒத்திசைக்க மிகவும் பழையது — Omi இதை ஏற்க முடியாது';
+
+  @override
+  String get planSheetChooseYourPlan => 'வரம்பற்ற Omi-ஐ திறக்க உங்கள் திட்டத்தைத் தேர்ந்தெடுக்கவும்.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, மொபைல் மற்றும் வலையில் கிடைக்கிறது';
+
+  @override
+  String get popularBadge => 'பிரபலம்';
+
+  @override
+  String get worksOnDesktop => 'டெஸ்க்டாப்பில் இயங்கும்';
+
+  @override
+  String get noDesktopAccess => 'டெஸ்க்டாப்பில் இயங்காது';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months மாதங்கள் / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count மாதங்கள் இலவசம்',
+      one: '1 மாதம் இலவசம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi இலவசம், ஆனால் இலவச பதிப்பில் உங்கள் அனுபவத்தைப் பாதிக்கும் வரம்புகள் உள்ளன:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 வினாடி தாமதம் (நிகழ்நேரம் அல்ல)';
+
+  @override
+  String get downgradeToFreemiumAction => 'இலவச பதிப்புக்கு மாறவும்';
+
+  @override
+  String get getFreeUnlimitedAccess => 'இலவச வரம்பற்ற அணுகலைப் பெறுங்கள்';
+
+  @override
+  String get shareDataForTraining => 'பயிற்சிக்காக தரவைப் பகிரவும்';
+
+  @override
+  String get yourRequestUnderReview => 'உங்கள் கோரிக்கை பரிசீலனையில் உள்ளது';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'अपडेट आवश्यक';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'माइग्रेशन जारी है';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।';
+
+  @override
+  String get accountCutoverOpenStore => 'स्टोर खोलें';
 }

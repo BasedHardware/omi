@@ -117,7 +117,7 @@ def test_beta_promotion_token_is_registered_for_only_the_two_beta_admission_rout
         if 'beta_promotion_token' in route.get('policy', {}).get('auth', {}).get('mechanisms', [])
     ]
     assert [(route.get('method'), route.get('path')) for route in routes] == [
-        ('POST', '/v2/desktop/beta/promote-qualified'),
+        ('POST', '/v2/desktop/beta/promote-candidate'),
         ('POST', '/v2/desktop/beta/candidates/reserve'),
     ]
 

@@ -23,6 +23,58 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     XCTAssertEqual(command.canonicalToolName, "semantic_search")
   }
 
+  func testChatFirstToolRequiresMainChatCapabilityAndDynamicManifest() throws {
+    let command = try AuthorizedToolExecution.parse(
+      payload(
+        toolName: "render_chat_blocks",
+        overrides: [
+          "manifestDigest": GeneratedToolExecutors.chatFirstManifestDigest,
+          "surfaceKind": "main_chat",
+          "chatFirstControlGeneration": 7,
+        ]),
+      currentOwnerID: "owner-1")
+
+    XCTAssertEqual(command.canonicalToolName, "render_chat_blocks")
+    XCTAssertEqual(command.chatFirstControlGeneration, 7)
+
+    let ordinaryChatFirstTool = try AuthorizedToolExecution.parse(
+      payload(
+        toolName: "get_memories",
+        overrides: [
+          "manifestDigest": GeneratedToolExecutors.chatFirstManifestDigest,
+          "surfaceKind": "main_chat",
+          "chatFirstControlGeneration": 7,
+        ]),
+      currentOwnerID: "owner-1")
+    XCTAssertEqual(ordinaryChatFirstTool.canonicalToolName, "get_memories")
+    XCTAssertEqual(ordinaryChatFirstTool.chatFirstControlGeneration, 7)
+
+    XCTAssertThrowsError(
+      try AuthorizedToolExecution.parse(
+        payload(
+          toolName: "render_chat_blocks",
+          overrides: [
+            "manifestDigest": GeneratedToolExecutors.chatFirstManifestDigest,
+            "surfaceKind": "main_chat",
+          ]),
+        currentOwnerID: "owner-1")
+    ) { error in
+      XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidChatFirstCapability)
+    }
+    XCTAssertThrowsError(
+      try AuthorizedToolExecution.parse(
+        payload(
+          overrides: [
+            "manifestDigest": GeneratedToolExecutors.chatFirstManifestDigest,
+            "surfaceKind": "floating_chat",
+            "chatFirstControlGeneration": 7,
+          ]),
+        currentOwnerID: "owner-1")
+    ) { error in
+      XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidChatFirstCapability)
+    }
+  }
+
   func testWrongOwnerAndManifestFailClosed() {
     XCTAssertThrowsError(
       try AuthorizedToolExecution.parse(payload(), currentOwnerID: "owner-other")
@@ -278,6 +330,7 @@ final class AuthorizedToolExecutionTests: XCTestCase {
       "manifestDigest": GeneratedToolExecutors.manifestDigest,
       "daemonBootEpoch": "boot-1",
       "executionGeneration": 3,
+      "capabilityRef": "capability-1",
       "toolName": toolName,
       "input": input,
       "inputHash": try! AuthorizedToolExecution.inputHash(for: input),

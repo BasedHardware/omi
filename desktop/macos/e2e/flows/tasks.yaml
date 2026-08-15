@@ -5,8 +5,20 @@ description: Tasks tab — search, Today/No Deadline sections, keyboard toolbar 
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TasksEscapeHandling.swift
+  # The selection and bulk steps below are explicit UI assertions: the run
+  # must expose the selection affordance, selected-row count, and bulk result.
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskMultiSelection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TasksViewModel+MultiSelection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskBulkOperationCoordinator.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailPanel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailPanelPolicy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailSourceNavigator.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  - desktop/macos/Desktop/Sources/Stores/TasksStore+BulkSelection.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage+BulkDelete.swift
 preconditions:
   - auth_ready
 
@@ -25,6 +37,41 @@ steps:
       text_visible:
         - Today
 
+  - id: S2a
+    name: Open and inspect task details
+    do: "Click one visible task row (not its completion or selection checkbox) to open the panel identified as task-detail-panel. Verify it shows the task description, 'Why Omi added this' (task-detail-why), 'Linked sources', status/details, and the task actions including the accessible task-detail-toggle and task-detail-copy-link controls. Activate task-detail-close and verify the task list remains visible."
+    expect:
+      text_visible:
+        - Task details
+        - Why Omi added this
+        - Linked sources
+        - Details
+        - Actions
+
+  - id: S2b-enter-select
+    name: Enter task multi-select mode
+    do: "Activate the Tasks surface's visible multi-selection affordance (accessible label 'Select'). Verify selection mode exposes 'Select All', '0 selected', and 'Cancel'."
+    expect:
+      text_visible:
+        - Select All
+        - 0 selected
+        - Cancel
+
+  - id: S2b-select-rows
+    name: Select two task rows
+    do: "Select two distinct visible task rows using their selection checkboxes. Verify the toolbar reports '2 selected'."
+    expect:
+      text_visible:
+        - 2 selected
+
+  - id: S2c
+    name: Execute and verify a bulk task operation
+    do: "With two task rows selected, activate the visible bulk action (for example, 'Delete 2'). Confirm deletion when prompted. Verify multi-select mode exits and the Tasks list remains usable."
+    expect:
+      text_visible:
+        - Tasks
+        - Select
+
   - id: S3
     name: Verify No Deadline section
     do: "Scroll down if needed to find the 'No Deadline' section. Verify it exists with a count badge and task items."
@@ -37,6 +84,13 @@ steps:
     do: "Verify the keyboard toolbar at the bottom shows navigation and editing controls: Navigate, New, Delete, Indent, Outdent."
     expect:
       interactive_count: { min: 3 }
+
+  - id: S4a
+    name: Cancel inline task creation with Escape
+    do: "Click New to begin an inline task, then press Escape. Verify the inline editor closes and the Tasks page remains visible."
+    expect:
+      text_visible:
+        - Tasks
 
   - id: S5
     name: Verify search and filter controls

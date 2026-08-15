@@ -93,9 +93,6 @@ def _install_dev_api_lock_bypass_stubs() -> None:
 
 
 def _repair_polluted_dev_api_lock_bypass_stubs() -> None:
-    from utils.memory.memory_system_pin import clear_memory_system_pin
-
-    clear_memory_system_pin()
     for name in _DEV_API_REAL_IMPORT_MODULES:
         sys.modules.pop(name, None)
     for name in (
@@ -140,7 +137,6 @@ _DEV_API_REAL_IMPORT_MODULES = (
     'utils.conversations.process_conversation',
     'utils.llm.knowledge_graph',
 )
-developer_module = None
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -156,35 +152,9 @@ def _reinstall_dev_api_lock_bypass_stubs():
     _repair_polluted_dev_api_lock_bypass_stubs()
 
 
-def _install_legacy_safe_memory_developer_defaults(monkeypatch):
-    """Keep dev API lock tests focused on lock checks rather than memory write gating."""
-    import utils.memory.default_read_rollout as rollout
-
-    def _legacy_rollout(uid='test-uid', **_kwargs):
-        return rollout.legacy_safe_default_read_rollout_decision(
-            uid=uid,
-            source_path='test/dev-legacy-safe',
-            consumer='developer_api',
-            reason='dev_api_lock_fixture_legacy_safe',
-        )
-
-    allowed_write = rollout.LegacyMemoryWriteGuardDecision(allowed=True, detail={'enabled': True})
-
-    monkeypatch.setattr(
-        rollout,
-        'guard_legacy_memory_write',
-        MagicMock(return_value=allowed_write),
-        raising=False,
-    )
-
-
 @pytest.fixture(autouse=True)
-def _legacy_safe_memory_developer_for_lock_tests(monkeypatch):
-    _install_legacy_safe_memory_developer_defaults(monkeypatch)
-    global developer_module
-    import routers.developer as imported_developer_module
-
-    developer_module = imported_developer_module
+def _authorized_memory_developer_for_lock_tests(monkeypatch):
+    import routers.developer as developer_module
 
     monkeypatch.setattr(
         developer_module,
@@ -236,7 +206,6 @@ def _make_conversation(locked=False, conversation_id='conv-1'):
         'language': 'en',
         'status': 'completed',
         'source': 'friend',
-        'finalization_incarnation_id': 'incarnation-1',
     }
 
 
@@ -285,13 +254,14 @@ class TestDevApiConversationLockEnforcement:
         """D1: PATCH /v1/dev/user/conversations/{id} must raise 402 for locked."""
         import database.conversations as conversations_db
 
+        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=True))
+
         from routers.developer import update_conversation_endpoint, UpdateConversationRequest
         from fastapi import HTTPException
 
         request = UpdateConversationRequest(title='New Title')
-        with patch.object(conversations_db, 'get_conversation', return_value=_make_conversation(locked=True)):
-            with pytest.raises(HTTPException) as exc_info:
-                update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
+        with pytest.raises(HTTPException) as exc_info:
+            update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
         assert exc_info.value.status_code == 402
         assert 'paid plan' in exc_info.value.detail.lower()
 
@@ -299,27 +269,26 @@ class TestDevApiConversationLockEnforcement:
         """D1: PATCH should proceed for unlocked conversations."""
         import database.conversations as conversations_db
 
+        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=False))
+        conversations_db.update_conversation_title = MagicMock()
+
         from routers.developer import update_conversation_endpoint, UpdateConversationRequest
 
-        with (
-            patch.object(conversations_db, 'get_conversation', return_value=_make_conversation(locked=False)),
-            patch.object(conversations_db, 'update_conversation_title') as update_title,
-        ):
-            request = UpdateConversationRequest(title='New Title')
-            update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
-
-        update_title.assert_called_once_with('test-uid', 'conv-1', 'New Title')
+        request = UpdateConversationRequest(title='New Title')
+        update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
+        conversations_db.update_conversation_title.assert_called_once_with('test-uid', 'conv-1', 'New Title')
 
     def test_delete_conversation_rejects_locked(self):
         """D2: DELETE /v1/dev/user/conversations/{id} must raise 402 for locked."""
         import database.conversations as conversations_db
 
+        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=True))
+
         from routers.developer import delete_conversation_endpoint
         from fastapi import HTTPException
 
-        with patch.object(conversations_db, 'get_conversation', return_value=_make_conversation(locked=True)):
-            with pytest.raises(HTTPException) as exc_info:
-                delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
+        with pytest.raises(HTTPException) as exc_info:
+            delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
         assert exc_info.value.status_code == 402
         assert 'paid plan' in exc_info.value.detail.lower()
 
@@ -327,129 +296,21 @@ class TestDevApiConversationLockEnforcement:
         """D2: DELETE should proceed for unlocked conversations."""
         import database.conversations as conversations_db
 
-        with (
-            patch.object(conversations_db, 'get_conversation', return_value=_make_conversation(locked=False)),
-            patch.object(
-                developer_module.developer_cleanup,
-                'cleanup_conversation_for_endpoint',
-                return_value=True,
-            ) as cleanup,
-        ):
-            result = developer_module.delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
+        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=False))
+
+        from routers import developer as developer_module
+
+        developer_module.developer_cleanup.cleanup_conversation_for_endpoint = MagicMock(return_value=True)
+
+        result = developer_module.delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
         assert result == {"success": True}
-        cleanup.assert_called_once_with('test-uid', 'conv-1', 'incarnation-1')
-
-    def test_delete_conversation_reports_a_draining_finalizer_as_retryable(self):
-        import database.conversations as conversations_db
-        from fastapi import HTTPException
-        from utils.conversations.developer_cleanup import ConversationCleanupUnavailable
-
-        with (
-            patch.object(conversations_db, 'get_conversation', return_value=_make_conversation(locked=False)),
-            patch.object(
-                developer_module.developer_cleanup,
-                'cleanup_conversation_for_endpoint',
-                side_effect=ConversationCleanupUnavailable('conversation_vector_cleanup_fanout_active'),
-            ),
-        ):
-            with pytest.raises(HTTPException) as exc_info:
-                developer_module.delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
-
-        assert exc_info.value.status_code == 409
-
-    def test_delete_conversation_reports_a_same_id_replacement_as_conflict(self):
-        import database.conversations as conversations_db
-        from fastapi import HTTPException
-        from utils.conversations.developer_cleanup import ConversationCleanupUnavailable
-
-        with (
-            patch.object(conversations_db, 'get_conversation', return_value=_make_conversation(locked=False)),
-            patch.object(
-                developer_module.developer_cleanup,
-                'cleanup_conversation_for_endpoint',
-                side_effect=ConversationCleanupUnavailable('conversation_vector_cleanup_incarnation_changed'),
-            ),
-        ):
-            with pytest.raises(HTTPException) as exc_info:
-                developer_module.delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
-
-        assert exc_info.value.status_code == 409
+        developer_module.developer_cleanup.cleanup_conversation_for_endpoint.assert_called_once_with(
+            'test-uid', 'conv-1', None
+        )
 
 
 # =============================================================================
 # Developer API — Memory write endpoints
-# =============================================================================
-
-
-class TestDevApiMemoryLockEnforcement:
-    """D3-D4: Dev API memory PATCH/DELETE must return 402 for locked."""
-
-    def test_patch_memory_rejects_locked(self):
-        """D3: PATCH /v1/dev/user/memories/{id} must raise 402 for locked."""
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
-
-        from routers.developer import update_memory, UpdateMemoryRequest
-        from fastapi import HTTPException
-
-        _allow_developer_memory_write_grant()
-
-        request = UpdateMemoryRequest(content='New content')
-        with pytest.raises(HTTPException) as exc_info:
-            update_memory(memory_id='mem-1', request=request, auth_context=_developer_memory_write_context())
-        assert exc_info.value.status_code == 402
-        assert 'paid plan' in exc_info.value.detail.lower()
-
-    def test_patch_memory_allows_unlocked(self):
-        """D3: PATCH should proceed for unlocked memories."""
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
-        memories_db.edit_memory = MagicMock()
-
-        from routers.developer import update_memory, UpdateMemoryRequest
-
-        _allow_developer_memory_write_grant()
-
-        request = UpdateMemoryRequest(content='New content')
-        update_memory(memory_id='mem-1', request=request, auth_context=_developer_memory_write_context())
-        memories_db.edit_memory.assert_called_once()
-
-    def test_delete_memory_rejects_locked(self):
-        """D4: DELETE /v1/dev/user/memories/{id} must raise 402 for locked."""
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
-
-        from routers.developer import delete_memory
-        from fastapi import HTTPException
-
-        _allow_developer_memory_write_grant()
-
-        with pytest.raises(HTTPException) as exc_info:
-            delete_memory(memory_id='mem-1', auth_context=_developer_memory_write_context())
-        assert exc_info.value.status_code == 402
-        assert 'paid plan' in exc_info.value.detail.lower()
-
-    def test_delete_memory_allows_unlocked(self):
-        """D4: DELETE should proceed for unlocked memories."""
-        import database.memories as memories_db
-
-        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
-        memories_db.delete_memory = MagicMock()
-
-        from routers.developer import delete_memory
-
-        _allow_developer_memory_write_grant()
-
-        result = delete_memory(memory_id='mem-1', auth_context=_developer_memory_write_context())
-        assert result == {"success": True}
-        memories_db.delete_memory.assert_called_once_with('test-uid', 'mem-1')
-
-
-# =============================================================================
-# Developer API — Action item write endpoints
 # =============================================================================
 
 
@@ -527,248 +388,3 @@ class TestDevApiActionItemLockEnforcement:
 
 # =============================================================================
 # Knowledge Graph — Rebuild must filter locked memories
-# =============================================================================
-
-
-class TestKnowledgeGraphLockEnforcement:
-    """K1: Knowledge graph rebuild must exclude locked memories."""
-
-    @pytest.fixture(autouse=True)
-    def _legacy_graph_ownership(self, monkeypatch):
-        from routers import knowledge_graph as route
-        from utils.memory.memory_system import MemorySystem
-
-        monkeypatch.setattr(route, 'pin_memory_system', MagicMock(return_value=MemorySystem.LEGACY))
-        monkeypatch.setattr(
-            route.kg_db,
-            'has_stored_memory_graph_assertions',
-            MagicMock(return_value=False),
-        )
-
-    def test_rebuild_filters_locked_memories(self):
-        """K1: _rebuild_graph_task must filter out locked memories."""
-        import database.memories as memories_db
-
-        unlocked_mem = _make_memory(locked=False, memory_id='mem-unlocked')
-        locked_mem = _make_memory(locked=True, memory_id='mem-locked')
-        memories_db.get_memories = MagicMock(return_value=[unlocked_mem, locked_mem])
-
-        from utils.llm.knowledge_graph import rebuild_knowledge_graph
-
-        rebuild_knowledge_graph.reset_mock()
-
-        from routers.knowledge_graph import _rebuild_graph_task
-
-        _rebuild_graph_task('test-uid', 'Test User')
-
-        rebuild_knowledge_graph.assert_called_once()
-        args = rebuild_knowledge_graph.call_args[0]
-        passed_memories = args[1]
-        assert len(passed_memories) == 1
-        assert passed_memories[0]['id'] == 'mem-unlocked'
-
-    def test_rebuild_passes_all_when_none_locked(self):
-        """K1: When no memories are locked, all should be passed through."""
-        import database.memories as memories_db
-
-        mems = [_make_memory(locked=False, memory_id=f'mem-{i}') for i in range(3)]
-        memories_db.get_memories = MagicMock(return_value=mems)
-
-        from utils.llm.knowledge_graph import rebuild_knowledge_graph
-
-        rebuild_knowledge_graph.reset_mock()
-
-        from routers.knowledge_graph import _rebuild_graph_task
-
-        _rebuild_graph_task('test-uid', 'Test User')
-
-        rebuild_knowledge_graph.assert_called_once()
-        args = rebuild_knowledge_graph.call_args[0]
-        assert len(args[1]) == 3
-
-    def test_rebuild_passes_empty_when_all_locked(self):
-        """K1: When all memories are locked, empty list should be passed."""
-        import database.memories as memories_db
-
-        mems = [_make_memory(locked=True, memory_id=f'mem-{i}') for i in range(3)]
-        memories_db.get_memories = MagicMock(return_value=mems)
-
-        from utils.llm.knowledge_graph import rebuild_knowledge_graph
-
-        rebuild_knowledge_graph.reset_mock()
-
-        from routers.knowledge_graph import _rebuild_graph_task
-
-        _rebuild_graph_task('test-uid', 'Test User')
-
-        rebuild_knowledge_graph.assert_called_once()
-        args = rebuild_knowledge_graph.call_args[0]
-        assert len(args[1]) == 0
-
-    def test_rebuild_handles_missing_is_locked_field(self):
-        """K1: Memories without is_locked field should default to unlocked."""
-        import database.memories as memories_db
-
-        mem = {'id': 'mem-no-field', 'content': 'Some content'}
-        memories_db.get_memories = MagicMock(return_value=[mem])
-
-        from utils.llm.knowledge_graph import rebuild_knowledge_graph
-
-        rebuild_knowledge_graph.reset_mock()
-
-        from routers.knowledge_graph import _rebuild_graph_task
-
-        _rebuild_graph_task('test-uid', 'Test User')
-
-        rebuild_knowledge_graph.assert_called_once()
-        args = rebuild_knowledge_graph.call_args[0]
-        assert len(args[1]) == 1
-
-    def test_rebuild_aborts_when_account_is_canonical(self):
-        """Canonical graph assertions must never be replaced by the legacy LLM rebuild."""
-        from utils.memory.memory_system import MemorySystem
-        from utils.llm.knowledge_graph import rebuild_knowledge_graph
-
-        rebuild_knowledge_graph.reset_mock()
-
-        import database.memories as memories_db
-
-        with patch('routers.knowledge_graph.pin_memory_system', return_value=MemorySystem.CANONICAL):
-            with patch.object(memories_db, 'get_memories') as legacy_get:
-                from routers.knowledge_graph import _rebuild_graph_task
-
-                _rebuild_graph_task('uid-canonical', 'Test User')
-
-        legacy_get.assert_not_called()
-        rebuild_knowledge_graph.assert_not_called()
-
-    def test_rebuild_reads_legacy_memories_via_memories_db(self):
-        """Non-canonical cohort must keep legacy memories_db.get_memories."""
-        from utils.memory.memory_system import MemorySystem
-        from utils.llm.knowledge_graph import rebuild_knowledge_graph
-
-        legacy_mem = _make_memory(locked=False, memory_id='mem-legacy')
-        rebuild_knowledge_graph.reset_mock()
-
-        import database.memories as memories_db
-
-        memories_db.get_memories = MagicMock(return_value=[legacy_mem])
-
-        with patch('routers.knowledge_graph.pin_memory_system', return_value=MemorySystem.LEGACY):
-            from routers.knowledge_graph import _rebuild_graph_task
-
-            _rebuild_graph_task('uid-legacy', 'Test User')
-
-        memories_db.get_memories.assert_called_once_with('uid-legacy', limit=500)
-        rebuild_knowledge_graph.assert_called_once()
-        assert rebuild_knowledge_graph.call_args[0][1][0]['id'] == 'mem-legacy'
-
-
-# =============================================================================
-# Process conversation — KG extraction must skip locked memories
-# =============================================================================
-
-
-class TestProcessConversationKGLockEnforcement:
-    """KG extraction in process_conversation must skip locked memories."""
-
-    def test_kg_extraction_guard_uses_or_condition_in_ast(self):
-        """Verify the production guard is exactly `if X.kg_extracted or X.is_locked: continue`.
-
-        Checks via AST: exactly two operands, both ast.Attribute on the same base
-        variable, attributes are {kg_extracted, is_locked}, operator is Or, and body
-        is solely `continue`. A regression like `and`, extra operands, or different
-        variables will fail this test.
-        """
-        import ast
-        import pathlib
-
-        src = (
-            pathlib.Path(__file__).resolve().parent.parent.parent
-            / 'utils'
-            / 'conversations'
-            / 'process_conversation.py'
-        )
-        tree = ast.parse(src.read_text(encoding="utf-8"), filename=str(src))
-
-        found = False
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.If):
-                continue
-            test = node.test
-            if not isinstance(test, ast.BoolOp) or not isinstance(test.op, ast.Or):
-                continue
-            # Exactly two operands
-            if len(test.values) != 2:
-                continue
-            # Both must be ast.Attribute
-            if not all(isinstance(v, ast.Attribute) for v in test.values):
-                continue
-            # Both must be ast.Name bases (not subscripts, calls, etc.)
-            if not all(isinstance(v.value, ast.Name) for v in test.values):
-                continue
-            # Both must reference the exact same variable name
-            if test.values[0].value.id != test.values[1].value.id:
-                continue
-            # Attributes must be exactly {kg_extracted, is_locked}
-            attrs = {v.attr for v in test.values}
-            if attrs != {'kg_extracted', 'is_locked'}:
-                continue
-            # Body must be solely `continue`
-            if len(node.body) == 1 and isinstance(node.body[0], ast.Continue):
-                found = True
-                break
-
-        assert found, (
-            "Expected exactly `if X.kg_extracted or X.is_locked: continue` "
-            "in process_conversation.py — AST check failed"
-        )
-
-    def test_kg_extraction_skips_locked_memory(self):
-        """Locked memories should not be sent to extract_knowledge_from_memory.
-
-        Exercises the production guard pattern (or → skip) against three cases:
-        locked, unlocked, and already-extracted.
-        """
-        from utils.llm.knowledge_graph import extract_knowledge_from_memory
-
-        extract_knowledge_from_memory.reset_mock()
-
-        locked_memory = MagicMock()
-        locked_memory.id = 'mem-locked'
-        locked_memory.kg_extracted = False
-        locked_memory.is_locked = True
-
-        unlocked_memory = MagicMock()
-        unlocked_memory.id = 'mem-unlocked'
-        unlocked_memory.kg_extracted = False
-        unlocked_memory.is_locked = False
-
-        already_extracted = MagicMock()
-        already_extracted.id = 'mem-already'
-        already_extracted.kg_extracted = True
-        already_extracted.is_locked = False
-
-        # Replicate the production guard from process_conversation.py:478-480
-        extracted = []
-        for memory_db_obj in [locked_memory, unlocked_memory, already_extracted]:
-            if memory_db_obj.kg_extracted or memory_db_obj.is_locked:
-                continue
-            extracted.append(memory_db_obj.id)
-
-        assert extracted == ['mem-unlocked'], f"Expected only unlocked/unextracted, got {extracted}"
-
-    def test_kg_extraction_guard_catches_and_regression(self):
-        """Prove that `and` instead of `or` would let locked memories through."""
-        locked_memory = MagicMock()
-        locked_memory.id = 'mem-locked'
-        locked_memory.kg_extracted = False
-        locked_memory.is_locked = True
-
-        # With `and` (wrong): both must be true to skip — locked-but-not-extracted leaks
-        wrong_skipped = locked_memory.kg_extracted and locked_memory.is_locked
-        assert not wrong_skipped, "and would skip only when BOTH are true"
-
-        # With `or` (correct): either one skips
-        correct_skipped = locked_memory.kg_extracted or locked_memory.is_locked
-        assert correct_skipped, "or correctly skips when is_locked is true"

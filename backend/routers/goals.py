@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from database import goals as goals_db
 from utils.other import endpoints as auth
 from utils.request_validation import HistoryDays
+from utils.subscription import enforce_chat_quota
 from utils.goals_response import normalize_goal_history_entry, normalize_goal_response
 from utils.llm.goals import (
     suggest_goal as suggest_goal_llm,
@@ -33,10 +34,18 @@ from models.goal import (
 )
 from models.workstream import GoalDetailProjection
 import database.workstreams as workstreams_db
+from routers.canonical_task_access import require_canonical_task_user
+from utils.task_intelligence.proactive_engine import run_goal_changed_wake
 
 router = APIRouter()
 IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=256)]
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
+
+
+def _wake_goal_change(uid: str, goal_id: str, mutation_key: object) -> None:
+    """Notify proactive Chat-first after the route's goal write has committed."""
+
+    run_goal_changed_wake(uid, goal_id=goal_id, mutation_key=mutation_key)
 
 
 @router.get('/v1/goals', tags=['goals'], response_model=Optional[GoalResponse])
@@ -57,6 +66,16 @@ def get_all_goals(
     return [normalize_goal_response(goal) for goal in goals]
 
 
+@router.get('/v1/goals/canonical/list', tags=['goals'], response_model=List[GoalResponse])
+def get_canonical_goals(
+    include_ended: bool = Query(False),
+    uid: str = Depends(require_canonical_task_user),
+) -> List[dict]:
+    """List goals through the generation-fenced universal task system."""
+    goals = goals_db.get_all_goals(uid, include_inactive=include_ended)
+    return [normalize_goal_response(goal) for goal in goals]
+
+
 @router.post('/v1/goals', tags=['goals'], response_model=GoalResponse)
 def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Create a durable goal without changing any other goal's focus or lifecycle."""
@@ -68,6 +87,7 @@ def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid))
     except goals_db.GoalConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+    _wake_goal_change(uid, created_goal['id'], created_goal.get('updated_at'))
     return normalize_goal_response(created_goal)
 
 
@@ -76,7 +96,7 @@ def create_canonical_goal(
     goal: GoalCreate,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> dict:
     """Create a generation-scoped canonical goal with safe retry semantics."""
 
@@ -90,6 +110,7 @@ def create_canonical_goal(
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
         raise AssertionError('unreachable')
+    _wake_goal_change(uid, created_goal['id'], created_goal.get('updated_at'))
     return normalize_goal_response(created_goal)
 
 
@@ -107,7 +128,7 @@ def focus_goal(
     request: GoalFocusRequest,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> dict:
     try:
         goal = goals_db.focus_goal(
@@ -121,6 +142,7 @@ def focus_goal(
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
         raise AssertionError('unreachable')
+    _wake_goal_change(uid, goal_id, goal.get('updated_at'))
     return normalize_goal_response(goal)
 
 
@@ -129,17 +151,17 @@ def unfocus_goal(
     goal_id: str,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> dict:
     try:
-        return normalize_goal_response(
-            goals_db.unfocus_goal(
-                uid,
-                goal_id,
-                idempotency_key=idempotency_key,
-                account_generation=account_generation,
-            )
+        goal = goals_db.unfocus_goal(
+            uid,
+            goal_id,
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
         )
+        _wake_goal_change(uid, goal_id, goal.get('updated_at'))
+        return normalize_goal_response(goal)
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
         raise AssertionError('unreachable')
@@ -151,7 +173,7 @@ def transition_goal_lifecycle(
     request: GoalLifecycleRequest,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> dict:
     try:
         goal = goals_db.transition_goal_lifecycle(
@@ -165,11 +187,12 @@ def transition_goal_lifecycle(
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
         raise AssertionError('unreachable')
+    _wake_goal_change(uid, goal_id, goal.get('updated_at'))
     return normalize_goal_response(goal)
 
 
 @router.get('/v1/goals/{goal_id}/detail', tags=['goals'], response_model=GoalDetailProjection)
-def get_goal_detail(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> GoalDetailProjection:
+def get_goal_detail(goal_id: str, uid: str = Depends(require_canonical_task_user)) -> GoalDetailProjection:
     try:
         return workstreams_db.get_goal_detail(uid, goal_id)
     except workstreams_db.WorkstreamNotFoundError as exc:
@@ -182,16 +205,18 @@ def append_goal_progress_event(
     request: GoalProgressEventCreate,
     idempotency_key: IdempotencyHeader,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> GoalProgressEvent:
     try:
-        return goals_db.append_goal_progress_event(
+        event = goals_db.append_goal_progress_event(
             uid,
             goal_id,
             request,
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
+        _wake_goal_change(uid, goal_id, event.sequence)
+        return event
     except goals_db.GoalStoreError as exc:
         _raise_goal_store_error(exc)
         raise AssertionError('unreachable')
@@ -201,7 +226,7 @@ def append_goal_progress_event(
 def list_goal_progress_events(
     goal_id: str,
     limit: int = Query(100, ge=1, le=500),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(require_canonical_task_user),
 ) -> list[GoalProgressEvent]:
     return goals_db.list_goal_progress_events(uid, goal_id, limit=limit)
 
@@ -219,6 +244,7 @@ def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_c
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
+    _wake_goal_change(uid, goal_id, updated_goal.get('updated_at'))
     return normalize_goal_response(updated_goal)
 
 
@@ -234,6 +260,7 @@ def update_goal_progress(
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
+    _wake_goal_change(uid, goal_id, updated_goal.get('updated_at'))
     return normalize_goal_response(updated_goal)
 
 
@@ -253,6 +280,7 @@ def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> 
     if not success:
         raise HTTPException(status_code=404, detail="Goal not found")
 
+    _wake_goal_change(uid, goal_id, 'deleted')
     return {"success": True, "deleted_id": goal_id}
 
 
@@ -283,7 +311,7 @@ def get_current_goal_advice(
     if not goal:
         return {'advice': 'Set a goal to get personalized advice!'}
 
-    return get_goal_advice(goal['id'], uid)
+    return get_goal_advice(goal_id=goal['id'], uid=uid)
 
 
 class ProgressExtractRequest(BaseModel):
@@ -310,11 +338,14 @@ class ProgressExtractResponse(BaseModel):
 def extract_and_update_progress(
     request: ProgressExtractRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:extract")),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ) -> dict:
     """
     Extract goal progress from conversation/chat text and update if found.
     Uses LLM to understand context and extract numeric progress.
     """
+    # User-initiated LLM extraction — same free-tier gate as chat (402 past cap).
+    enforce_chat_quota(uid, platform=x_app_platform)
     result = extract_and_update_goal_progress(uid, request.text)
     if result is None:
         return {'updated': False, 'reason': 'No active goal'}
