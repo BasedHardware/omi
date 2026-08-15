@@ -985,16 +985,20 @@ for (const file of files(root, new Set(["frontend"]))) {
 /**
  * THE MIGRATION FENCE.
  *
- * The four legacy-cloud deletion clients and their participant contracts live
- * under `migration/`. They scrub; they do not read or serve. `apps/service`
- * importing them would put teardown back on the product graph — the leak this
- * workspace exists to end. Comments are exempt (importSpecsIn strips them);
- * tests are not: a test in `apps/service` that reaches `migration/` is still
- * a product-tree edge.
+ * The four legacy-cloud deletion clients, their participant contracts, and the
+ * postgres receipt adapters that record their teardown live under `migration/`.
+ * They scrub; they do not read or serve. `apps/service` or `drivers/` importing
+ * them would put teardown back on the product graph — the leak this workspace
+ * exists to end. Comments are exempt (importSpecsIn strips them); tests are
+ * not: a test in `apps/service` or `drivers/` that reaches `migration/` is
+ * still a product-tree edge.
  */
 for (const file of files(root, new Set(["frontend"]))) {
   const shown = relative(root, file);
-  if (!shown.startsWith("apps/service/") || !/\.tsx?$/.test(shown)) continue;
+  if (
+    (!shown.startsWith("apps/service/") && !shown.startsWith("drivers/"))
+    || !/\.tsx?$/.test(shown)
+  ) continue;
   const text = readFileSync(file, "utf8");
   for (const spec of importSpecsIn(text)) {
     const dest = resolveRelativeImport(shown, spec);
@@ -1003,7 +1007,7 @@ for (const file of files(root, new Set(["frontend"]))) {
       || (dest !== null && (dest === "migration" || dest.startsWith("migration/")));
     if (hitsMigration) {
       failures.push(
-        `${shown}: apps/service may not import migration/; `
+        `${shown}: apps/service and drivers/ may not import migration/; `
         + "legacy cloud deletion is teardown, not a product storage backend",
       );
     }

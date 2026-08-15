@@ -58,6 +58,9 @@
     },
     "migration": {
       "name": "@platform/migration",
+      "dependencies": {
+        "postgres": "3.4.9",
+      },
     },
   },
   "packages": {

@@ -6,7 +6,7 @@ import type {
   PostgresTransactionPool,
   SerializableTransactionOptions,
   SqlStatement,
-} from "./connection";
+} from "../../drivers/postgres/connection";
 import {
   createPostgresTypesenseDeletionReceiptRepository,
   PostgresTypesenseDeletionReceiptError,
@@ -14,7 +14,7 @@ import {
 import type {
   TypesenseDeletionReceiptKey,
   TypesenseStoredDeletionReceipt,
-} from "../../migration/workers/typesense-deletion-cleanup-participant";
+} from "../workers/typesense-deletion-cleanup-participant";
 
 const sha256 = (value: unknown): string => createHash("sha256")
   .update(JSON.stringify(value), "utf8").digest("hex");

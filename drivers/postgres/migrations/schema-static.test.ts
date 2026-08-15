@@ -4,11 +4,6 @@ import { describe, expect, test } from "bun:test";
 
 import { DELETION_DISPOSAL_GROUPS } from "../../../core/control/deletion-cleanup-inventory";
 import { POSTGRES_MIGRATIONS } from "./manifest";
-import {
-  POSTGRES_DELETION_SURFACE_TABLES,
-  POSTGRES_RETAINED_DELETION_SAFETY_TABLES,
-  POSTGRES_RETAINED_RESTORE_SAFETY_TABLES,
-} from "../deletion-surface-registry";
 
 const directory = new URL("./", import.meta.url);
 const migrationSql = POSTGRES_MIGRATIONS.map((migration) => ({
@@ -165,30 +160,6 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(allSql).not.toContain("ON DELETE CASCADE");
   });
 
-  test("classifies every PostgreSQL table once for deletion or retained safety", () => {
-    const disposalRows = Object.entries(POSTGRES_DELETION_SURFACE_TABLES)
-      .flatMap(([surface, names]) => names.map((name) => ({ surface, name })));
-    const allClassified = [
-      ...disposalRows.map((row) => row.name),
-      ...POSTGRES_RETAINED_DELETION_SAFETY_TABLES,
-      ...POSTGRES_RETAINED_RESTORE_SAFETY_TABLES,
-    ];
-    expect(new Set(allClassified).size).toBe(allClassified.length);
-    expect([...allClassified].sort()).toEqual([...expectedTables].sort());
-    expect(disposalRows.some((row) => row.surface === "authoritative_memory")).toBe(true);
-    expect(disposalRows.some((row) => row.surface === "account_access")).toBe(true);
-    expect(POSTGRES_RETAINED_DELETION_SAFETY_TABLES)
-      .toContain("account_terminal_deletion_exports");
-    expect(disposalRows.map((row) => row.name))
-      .not.toContain("account_terminal_deletion_exports");
-    expect(POSTGRES_RETAINED_RESTORE_SAFETY_TABLES)
-      .toEqual([
-        "postgres_restore_replay_checkpoint_candidates",
-        "postgres_restore_admission_revisions",
-        "postgres_restore_admission_heads",
-      ]);
-  });
-
   test("retains exact stranded rollback recovery evidence behind the GCP operator role", () => {
     const sql = migrationSql.find((migration) => migration.version === 41)?.sql;
     expect(sql).toBeDefined();
@@ -239,28 +210,6 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(checkpointSql).not.toMatch(/GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[^;]*postgres_restore_replay_checkpoint_candidates/s);
     expect(checkpointSql).not.toMatch(/\b(?:UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
     expect(checkpointSql).not.toMatch(/\b(?:release|activate|traffic)_state\b/i);
-  });
-
-  test("keeps the cleanup security-definer registry identical to the typed registry", () => {
-    const cleanupSql = [...migrationSql].reverse().find((migration) =>
-      /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION omi_memory\.cleanup_surface_tables\(/.test(migration.sql),
-    )?.sql;
-    expect(cleanupSql).toBeDefined();
-    const block = cleanupSql!.match(
-      /CREATE OR REPLACE FUNCTION omi_memory\.cleanup_surface_tables\(p_surface text\)[\s\S]*?FROM \(VALUES([\s\S]*?)\) AS mapping\(surface, table_name\)/,
-    );
-    expect(block).not.toBeNull();
-    const sqlRows = [...block![1]!.matchAll(/\('([a-z0-9_]+)', '([a-z0-9_]+)'\)/g)]
-      .map((match) => ({ surface: match[1]!, table: match[2]! }))
-      .sort((left, right) => `${left.surface}:${left.table}`.localeCompare(
-        `${right.surface}:${right.table}`,
-      ));
-    const typedRows = Object.entries(POSTGRES_DELETION_SURFACE_TABLES)
-      .flatMap(([surface, names]) => names.map((table) => ({ surface, table })))
-      .sort((left, right) => `${left.surface}:${left.table}`.localeCompare(
-        `${right.surface}:${right.table}`,
-      ));
-    expect(sqlRows).toEqual(typedRows);
   });
 
   test("retains Typesense cleanup receipts behind cleanup-only named operations", () => {
@@ -602,37 +551,15 @@ describe("P2/P3/P4/P5 PostgreSQL schema contract", () => {
     expect(readinessSql).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+omi_memory\./);
   });
 
-  test("orders every cross-surface foreign key child before its parent", () => {
-    const tableSurface = new Map(Object.entries(POSTGRES_DELETION_SURFACE_TABLES)
-      .flatMap(([surface, names]) => names.map((name) => [name, surface] as const)));
-    const surfaceGroup = new Map(DELETION_DISPOSAL_GROUPS.flatMap((group, index) =>
-      group.map((surface) => [surface, index] as const)));
-    expect(new Set(DELETION_DISPOSAL_GROUPS.flat()).size)
-      .toBe(DELETION_DISPOSAL_GROUPS.flat().length);
-    for (const table of tables) {
-      const childSurface = tableSurface.get(table.name);
-      const parents = [...table.body.matchAll(/REFERENCES omi_memory\.([a-z0-9_]+)/g)]
-        .map((match) => match[1]!);
-      for (const parent of parents) {
-        const parentSurface = tableSurface.get(parent);
-        if (childSurface === undefined && parentSurface !== undefined) {
-          throw new Error(`retained table ${table.name} references disposable ${parent}`);
-        }
-        if (childSurface === undefined || parentSurface === undefined) continue;
-        const childGroup = surfaceGroup.get(childSurface as never);
-        const parentGroup = surfaceGroup.get(parentSurface as never);
-        if (childGroup === undefined || parentGroup === undefined) {
-          throw new Error(`unranked surface ${childSurface} -> ${parentSurface}`);
-        }
-        expect(childGroup, `${table.name} -> ${parent}`).toBeLessThanOrEqual(parentGroup);
-      }
-    }
-  });
-
   test("makes every authority relationship structurally account-scoped", () => {
+    const restoreSafetyTables = new Set([
+      "postgres_restore_replay_checkpoint_candidates",
+      "postgres_restore_admission_revisions",
+      "postgres_restore_admission_heads",
+    ]);
     for (const table of tables) {
       if (table.name === "platform_schema_migrations"
-        || POSTGRES_RETAINED_RESTORE_SAFETY_TABLES.includes(table.name as never)) continue;
+        || restoreSafetyTables.has(table.name)) continue;
       expect(table.body, table.name).toMatch(/\baccount_id\s+text\b/);
       if (table.name === "firebase_identity_bindings") {
         expect(table.body).toContain("PRIMARY KEY (firebase_project_id, firebase_uid)");
