@@ -19,6 +19,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketStore.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketsFeature.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDeliveryAuthority.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDestinationKey.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDetection.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextProactivityEngine.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextSubjectBindingService.swift

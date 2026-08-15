@@ -187,6 +187,39 @@ actor ContextBucketStore {
 
   private init() {}
 
+  /// Binds this visit's reference hash to a shared browser destination.
+  ///
+  /// Called once per novel browser title; afterwards `resolveBucketID` reads the
+  /// stored binding and every later visit resolves deterministically with no model
+  /// call. Caching the decision on the reference-hash primary key is what keeps
+  /// identity stable — the model is a one-time router, never a per-visit classifier.
+  ///
+  /// Returns the bucket the destination resolved to, or nil when nothing changed.
+  @discardableResult
+  func applyDestination(_ subjectID: String, for fence: ContextVisitFence) async throws -> String? {
+    guard let currentBucketID = fence.bucketID else { return nil }
+    let pool = try await poolForDestination(fence)
+    return try await pool.write { db -> String? in
+      let referenceHash = try String.fetchOne(
+        db, sql: "SELECT referenceHash FROM context_visits WHERE id = ?",
+        arguments: [fence.visitID])
+      guard let referenceHash else { return nil }
+      return try ContextDestinationBinder.apply(
+        in: db,
+        referenceHash: referenceHash,
+        currentBucketID: currentBucketID,
+        subjectID: subjectID)
+    }
+  }
+
+  private func poolForDestination(_ fence: ContextVisitFence) async throws -> DatabasePool {
+    let (pool, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool, generation == fence.poolEpoch else {
+      throw ContextBucketStoreError.databaseUnavailable
+    }
+    return pool
+  }
+
   func startVisit(
     appName: String,
     windowTitle: String?,
