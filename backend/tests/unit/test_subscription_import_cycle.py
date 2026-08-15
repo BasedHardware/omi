@@ -22,6 +22,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+# Marked slow: each test boots a fresh interpreter that imports the full backend
+# module graph, which per tests/README.md belongs outside the PR fast lane
+# (`not integration and not slow`). A fresh interpreter is still the only honest
+# seam for import-order bugs, so the cost is the test's point, not an accident.
+
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -40,12 +47,14 @@ def _import_first_in_fresh_interpreter(module: str) -> subprocess.CompletedProce
     )
 
 
+@pytest.mark.slow
 def test_utils_subscription_imports_standalone():
     result = _import_first_in_fresh_interpreter("utils.subscription")
 
     assert result.returncode == 0, f"utils.subscription is not importable on its own:\n{result.stderr}"
 
 
+@pytest.mark.slow
 def test_database_users_imports_standalone():
     # The other side of the pair must keep working too.
     result = _import_first_in_fresh_interpreter("database.users")

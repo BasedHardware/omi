@@ -342,27 +342,18 @@ def get_all_goals(
 ) -> List[Dict[str, Any]]:
     """Fetch a user's goals, newest first.
 
-    ``limit`` bounds the read at the query instead of in Python, so a caller that only needs a
-    page cannot stream the whole collection. It is opt-in: every existing caller omits it and
-    keeps the fetch-everything behaviour they rely on.
+    ``limit`` bounds the returned page after the in-Python newest-first sort. It is opt-in:
+    every existing caller omits it and keeps the full-list behaviour they rely on.
 
-    The query orders by ``created_at`` descending so the bounded page is the newest ``limit``
-    goals rather than an arbitrary slice that only looks sorted after the in-Python sort below.
-
-    ``limit`` is only supported together with ``include_inactive=True``. That shape carries no
-    equality filter, so ordering by ``created_at`` is served by Firestore's automatic
-    single-field index. Combining a limit with the ``is_active`` filter would need a composite
-    index that this project does not declare, and Firestore answers a missing composite index
-    with an opaque 500, so the unsupported combination is rejected here rather than in
-    production.
+    The bound is deliberately NOT pushed into the Firestore query: ``order_by('created_at')``
+    excludes documents that lack the field entirely, and legacy or manually created goals can
+    lack ``created_at`` — a query-level order+limit would silently drop them. Instead the full
+    stream is sorted here (goals without ``created_at`` coerce to ``datetime.min`` and sort
+    last) and the page is sliced, so the bound caps the response payload while dateless legacy
+    goals still appear once dated goals run out.
     """
-    if limit is not None and not include_inactive:
-        raise ValueError('get_all_goals(limit=...) is only supported with include_inactive=True')
-
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
     query = collection if include_inactive else collection.where(filter=FieldFilter('is_active', '==', True))
-    if limit is not None:
-        query = query.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
     goals = [normalize_goal_storage(_goal_dict(doc), goal_id=doc.id) for doc in query.stream()]
     if not include_inactive:
         goals = [goal for goal in goals if goal['is_active']]

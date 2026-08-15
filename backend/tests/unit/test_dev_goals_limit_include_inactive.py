@@ -7,11 +7,11 @@ and streamed the whole goals collection, so the clamp was dead code on that bran
 endpoint returned every goal the user had ever created -- ignoring its own documented
 "**limit**: Maximum number of goals to return".
 
-The clamp is now passed down to the query rather than applied to the result. Slicing the
-returned list would fix the payload length but still stream every historical goal first, which
-is exactly the cost the clamp's own comment says it prevents ("an oversized limit cannot stream
-the whole collection"). So these tests assert the bounded path is *taken*, not only that the
-final list is short.
+The clamp is now passed down and applied after the in-Python newest-first sort. The bound is
+deliberately not pushed into the Firestore query: order_by('created_at') excludes documents
+missing the field, and legacy goals can lack created_at, so a query-level bound would silently
+drop them. These tests assert the bounded page is the NEWEST goals, that dateless legacy goals
+survive bounding (sorting last), and that the bounded path is taken by the route.
 
 get_all_goals stays fetch-everything by default for its other callers
 (/v1/dev/user/goals/{goal_id}, routers/goals.py::get_all_goals, and the MCP goal reads); the
@@ -77,7 +77,7 @@ def test_active_only_branch_still_delegates_the_limit(monkeypatch):
     assert len(result) == 3
 
 
-# --- database: the query itself is bounded ----------------------------------------------
+# --- database: the page is the newest goals and legacy goals survive ---------------------
 
 
 class _FakeDoc:
@@ -89,12 +89,19 @@ class _FakeDoc:
         return dict(self._payload)
 
 
-class _FakeQuery:
-    """Records the query builder calls so the test can assert what Firestore was asked for."""
+class _FakeCollection:
+    """Streams the given docs; records whether a query-level order/limit was pushed down
+    (it must NOT be — that is the legacy-goal-dropping shape this fix avoids)."""
 
     def __init__(self, docs, calls):
         self._docs = docs
         self.calls = calls
+
+    def collection(self, _name):
+        return self
+
+    def document(self, _name):
+        return self
 
     def where(self, **kwargs):
         self.calls.append(('where', kwargs))
@@ -106,31 +113,7 @@ class _FakeQuery:
 
     def limit(self, count):
         self.calls.append(('limit', count))
-        return _FakeQuery(self._docs[:count], self.calls)
-
-    def stream(self):
-        return iter(self._docs)
-
-
-class _FakeClient:
-    def __init__(self, docs, calls):
-        self._docs = docs
-        self._calls = calls
-
-    def collection(self, _name):
         return self
-
-    def document(self, _name):
-        return self
-
-    def where(self, **kwargs):
-        return _FakeQuery(self._docs, self._calls).where(**kwargs)
-
-    def order_by(self, field, direction=None):
-        return _FakeQuery(self._docs, self._calls).order_by(field, direction)
-
-    def limit(self, count):
-        return _FakeQuery(self._docs, self._calls).limit(count)
 
     def stream(self):
         return iter(self._docs)
@@ -149,34 +132,47 @@ def _docs(count):
     ]
 
 
-def test_get_all_goals_bounds_the_query_when_limit_is_given():
+def test_get_all_goals_bounded_page_is_the_newest_goals():
     calls = []
-    client = _FakeClient(_docs(50), calls)
+    client = _FakeCollection(_docs(50), calls)
 
     result = goals_db_module.get_all_goals('u1', include_inactive=True, limit=5, firestore_client=client)
 
-    # The read itself is bounded, and ordered so the bounded page is the newest goals rather
-    # than an arbitrary slice that only looks sorted after the in-Python sort.
-    assert ('limit', 5) in calls
-    assert any(call[0] == 'order_by' and call[1] == 'created_at' for call in calls)
-    assert len(result) == 5
+    # Newest first: the docs were streamed oldest-first, so the page must be the LAST five
+    # ids in reverse creation order — proving the sort ran before the slice.
+    assert [g['id'] for g in result] == ['g49', 'g48', 'g47', 'g46', 'g45']
+    # And the bound was never pushed into the query, where order_by('created_at') would
+    # exclude legacy goals lacking the field.
+    assert not any(call[0] in ('order_by', 'limit') for call in calls)
+
+
+def test_get_all_goals_keeps_legacy_goals_without_created_at():
+    calls = []
+    dated = _docs(3)
+    legacy = _FakeDoc('legacy', {'is_active': True, 'status': 'background'})  # no created_at
+    client = _FakeCollection(dated + [legacy], calls)
+
+    result = goals_db_module.get_all_goals('u1', include_inactive=True, limit=10, firestore_client=client)
+
+    # The dateless legacy goal is retained (a query-level order_by would have dropped it)
+    # and sorts deterministically last.
+    assert [g['id'] for g in result] == ['g2', 'g1', 'g0', 'legacy']
+
+
+def test_get_all_goals_bounds_still_apply_over_legacy_goals():
+    client = _FakeCollection(_docs(2) + [_FakeDoc('legacy', {'is_active': True, 'status': 'background'})], [])
+
+    result = goals_db_module.get_all_goals('u1', include_inactive=True, limit=2, firestore_client=client)
+
+    # Dated goals fill the page first; the dateless one only appears when room remains.
+    assert [g['id'] for g in result] == ['g1', 'g0']
 
 
 def test_get_all_goals_stays_unbounded_for_existing_callers():
     calls = []
-    client = _FakeClient(_docs(50), calls)
+    client = _FakeCollection(_docs(50), calls)
 
     result = goals_db_module.get_all_goals('u1', include_inactive=True, firestore_client=client)
 
-    # No limit and no ordering pushed into the query: the other callers still fetch everything.
-    assert not any(call[0] == 'limit' for call in calls)
-    assert not any(call[0] == 'order_by' for call in calls)
+    assert not any(call[0] in ('limit', 'order_by') for call in calls)
     assert len(result) == 50
-
-
-def test_get_all_goals_rejects_a_limit_it_cannot_serve():
-    # A limit alongside the is_active filter would need a composite index this project does not
-    # declare, and Firestore answers a missing composite index with an opaque 500. Fail loudly
-    # here instead.
-    with pytest.raises(ValueError):
-        goals_db_module.get_all_goals('u1', include_inactive=False, limit=5, firestore_client=_FakeClient([], []))
