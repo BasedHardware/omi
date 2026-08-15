@@ -71,18 +71,189 @@ public struct CaptureStatusEvent: Codable, Sendable {
   }
 }
 
+public struct ScreenEmptyParams: Codable, Sendable {
+  public init() {
+  }
+}
+
+public enum ScreenCaptureState: String, Codable, Sendable {
+  case idle
+  case starting
+  case recording
+  case paused
+  case error
+}
+
+public enum ScreenPermission: String, Codable, Sendable {
+  case granted
+  case denied
+  case undetermined
+}
+
+public struct ScreenStartResult: Codable, Sendable {
+  public var sessionId: String
+  public var state: ScreenCaptureState
+  public init(sessionId: String, state: ScreenCaptureState) {
+    self.sessionId = sessionId
+    self.state = state
+  }
+}
+
+public struct ScreenStopResult: Codable, Sendable {
+  public var state: ScreenCaptureState
+  public init(state: ScreenCaptureState) {
+    self.state = state
+  }
+}
+
+public struct ScreenStatusResult: Codable, Sendable {
+  public var state: ScreenCaptureState
+  public var reason: String?
+  public var permission: ScreenPermission
+  public var framesStored: Int
+  public var bytesOnDisk: Int?
+  public var lastCaptureAt: String?
+  public init(state: ScreenCaptureState, reason: String? = nil, permission: ScreenPermission, framesStored: Int, bytesOnDisk: Int? = nil, lastCaptureAt: String? = nil) {
+    self.state = state
+    self.reason = reason
+    self.permission = permission
+    self.framesStored = framesStored
+    self.bytesOnDisk = bytesOnDisk
+    self.lastCaptureAt = lastCaptureAt
+  }
+}
+
+public struct ScreenFrameImageParams: Codable, Sendable {
+  public var frameRef: String
+  public var maxLongEdge: Int?
+  public init(frameRef: String, maxLongEdge: Int? = nil) {
+    self.frameRef = frameRef
+    self.maxLongEdge = maxLongEdge
+  }
+}
+
+public struct ScreenFrameImageResult: Codable, Sendable {
+  public var pngBase64: String
+  public var width: Int
+  public var height: Int
+  public init(pngBase64: String, width: Int, height: Int) {
+    self.pngBase64 = pngBase64
+    self.width = width
+    self.height = height
+  }
+}
+
+public struct ScreenExclusionsListResult: Codable, Sendable {
+  public var bundleIds: [String]
+  public init(bundleIds: [String]) {
+    self.bundleIds = bundleIds
+  }
+}
+
+public struct ScreenExclusionsSetParams: Codable, Sendable {
+  public var bundleIds: [String]
+  public init(bundleIds: [String]) {
+    self.bundleIds = bundleIds
+  }
+}
+
+public struct ScreenExclusionsSetResult: Codable, Sendable {
+  public var bundleIds: [String]
+  public var retiredFrameRefs: [String]
+  public init(bundleIds: [String], retiredFrameRefs: [String]) {
+    self.bundleIds = bundleIds
+    self.retiredFrameRefs = retiredFrameRefs
+  }
+}
+
+public struct ScreenRetentionSetParams: Codable, Sendable {
+  public var days: Int
+  public init(days: Int) {
+    self.days = days
+  }
+}
+
+public struct ScreenRetentionSetResult: Codable, Sendable {
+  public var days: Int
+  public var retiredFrameRefs: [String]
+  public init(days: Int, retiredFrameRefs: [String]) {
+    self.days = days
+    self.retiredFrameRefs = retiredFrameRefs
+  }
+}
+
+public struct ScreenRebuildIndexResult: Codable, Sendable {
+  public var frames: Int
+  public var chunks: Int
+  public init(frames: Int, chunks: Int) {
+    self.frames = frames
+    self.chunks = chunks
+  }
+}
+
+public struct ScreenPermissionResult: Codable, Sendable {
+  public var permission: ScreenPermission
+  public init(permission: ScreenPermission) {
+    self.permission = permission
+  }
+}
+
+public struct ScreenOpenSettingsResult: Codable, Sendable {
+  public var opened: Bool
+  public init(opened: Bool) {
+    self.opened = opened
+  }
+}
+
+public struct ScreenStatusEvent: Codable, Sendable {
+  public var state: ScreenCaptureState
+  public var reason: String?
+  public var permission: ScreenPermission
+  public var framesStored: Int
+  public var bytesOnDisk: Int?
+  public var lastCaptureAt: String?
+  public init(state: ScreenCaptureState, reason: String? = nil, permission: ScreenPermission, framesStored: Int, bytesOnDisk: Int? = nil, lastCaptureAt: String? = nil) {
+    self.state = state
+    self.reason = reason
+    self.permission = permission
+    self.framesStored = framesStored
+    self.bytesOnDisk = bytesOnDisk
+    self.lastCaptureAt = lastCaptureAt
+  }
+}
+
 /// Implement on the native side. Adding a request to the contract breaks this
 /// protocol's conformance until handled -> contract drift is a red compile.
 public protocol BridgeHandling: AnyObject, Sendable {
   func startCapture(_ params: StartCaptureParams) async throws -> StartCaptureResult
   func readSetting(_ params: ReadSettingParams) async throws -> ReadSettingResult
   func openExternal(_ params: OpenExternalParams) async throws -> OpenExternalResult
+  func screenStart(_ params: ScreenEmptyParams) async throws -> ScreenStartResult
+  func screenStop(_ params: ScreenEmptyParams) async throws -> ScreenStopResult
+  func screenStatus(_ params: ScreenEmptyParams) async throws -> ScreenStatusResult
+  func screenFrameImage(_ params: ScreenFrameImageParams) async throws -> ScreenFrameImageResult
+  func screenExclusionsList(_ params: ScreenEmptyParams) async throws -> ScreenExclusionsListResult
+  func screenExclusionsSet(_ params: ScreenExclusionsSetParams) async throws -> ScreenExclusionsSetResult
+  func screenRetentionSet(_ params: ScreenRetentionSetParams) async throws -> ScreenRetentionSetResult
+  func screenRebuildIndex(_ params: ScreenEmptyParams) async throws -> ScreenRebuildIndexResult
+  func screenRequestPermission(_ params: ScreenEmptyParams) async throws -> ScreenPermissionResult
+  func screenOpenSettings(_ params: ScreenEmptyParams) async throws -> ScreenOpenSettingsResult
 }
 
 public enum BridgeRequest: Sendable {
   case startCapture(StartCaptureParams)
   case readSetting(ReadSettingParams)
   case openExternal(OpenExternalParams)
+  case screenStart(ScreenEmptyParams)
+  case screenStop(ScreenEmptyParams)
+  case screenStatus(ScreenEmptyParams)
+  case screenFrameImage(ScreenFrameImageParams)
+  case screenExclusionsList(ScreenEmptyParams)
+  case screenExclusionsSet(ScreenExclusionsSetParams)
+  case screenRetentionSet(ScreenRetentionSetParams)
+  case screenRebuildIndex(ScreenEmptyParams)
+  case screenRequestPermission(ScreenEmptyParams)
+  case screenOpenSettings(ScreenEmptyParams)
 }
 
 public struct BridgeEnvelope: Codable, Sendable {
@@ -116,6 +287,36 @@ public struct BridgeDispatcher: Sendable {
       case "openExternal":
         let p = try decoder.decode(Params<OpenExternalParams>.self, from: raw).params
         resultJSON = try encoder.encode(await handler.openExternal(p))
+      case "screen.start":
+        let p = try decoder.decode(Params<ScreenEmptyParams>.self, from: raw).params
+        resultJSON = try encoder.encode(await handler.screenStart(p))
+      case "screen.stop":
+        let p = try decoder.decode(Params<ScreenEmptyParams>.self, from: raw).params
+        resultJSON = try encoder.encode(await handler.screenStop(p))
+      case "screen.status":
+        let p = try decoder.decode(Params<ScreenEmptyParams>.self, from: raw).params
+        resultJSON = try encoder.encode(await handler.screenStatus(p))
+      case "screen.frameImage":
+        let p = try decoder.decode(Params<ScreenFrameImageParams>.self, from: raw).params
+        resultJSON = try encoder.encode(await handler.screenFrameImage(p))
+      case "screen.exclusionsList":
+        let p = try decoder.decode(Params<ScreenEmptyParams>.self, from: raw).params
+        resultJSON = try encoder.encode(await handler.screenExclusionsList(p))
+      case "screen.exclusionsSet":
+        let p = try decoder.decode(Params<ScreenExclusionsSetParams>.self, from: raw).params
+        resultJSON = try encoder.encode(await handler.screenExclusionsSet(p))
+      case "screen.retentionSet":
+        let p = try decoder.decode(Params<ScreenRetentionSetParams>.self, from: raw).params
+        resultJSON = try encoder.encode(await handler.screenRetentionSet(p))
+      case "screen.rebuildIndex":
+        let p = try decoder.decode(Params<ScreenEmptyParams>.self, from: raw).params
+        resultJSON = try encoder.encode(await handler.screenRebuildIndex(p))
+      case "screen.requestPermission":
+        let p = try decoder.decode(Params<ScreenEmptyParams>.self, from: raw).params
+        resultJSON = try encoder.encode(await handler.screenRequestPermission(p))
+      case "screen.openSettings":
+        let p = try decoder.decode(Params<ScreenEmptyParams>.self, from: raw).params
+        resultJSON = try encoder.encode(await handler.screenOpenSettings(p))
       default: throw BridgeDecodeError.unknownMethod(env.method)
       }
       let body = String(data: resultJSON, encoding: .utf8) ?? "null"
@@ -131,6 +332,11 @@ public struct BridgeDispatcher: Sendable {
   public static func emitCaptureStatus(_ payload: CaptureStatusEvent) -> String {
     let body = (try? JSONEncoder().encode(payload)).flatMap { String(data: $0, encoding: .utf8) } ?? "null"
     return "window.__OmiShellBridge.__event({event:\"captureStatus\",payload:\(body)});"
+  }
+  /// Typed native -> surface push for the `screen.status` event.
+  public static func emitScreenStatus(_ payload: ScreenStatusEvent) -> String {
+    let body = (try? JSONEncoder().encode(payload)).flatMap { String(data: $0, encoding: .utf8) } ?? "null"
+    return "window.__OmiShellBridge.__event({event:\"screen.status\",payload:\(body)});"
   }
 
   static func js(reply: String) -> String { "window.__OmiShellBridge.__reply(\(reply));" }

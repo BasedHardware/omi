@@ -37,8 +37,89 @@ export interface CaptureStatusEvent {
   levelDb: number;
 }
 
+export interface ScreenEmptyParams {
+}
+
+export type ScreenCaptureState = "idle" | "starting" | "recording" | "paused" | "error";
+
+export type ScreenPermission = "granted" | "denied" | "undetermined";
+
+export interface ScreenStartResult {
+  sessionId: string;
+  state: ScreenCaptureState;
+}
+
+export interface ScreenStopResult {
+  state: ScreenCaptureState;
+}
+
+export interface ScreenStatusResult {
+  state: ScreenCaptureState;
+  reason?: string | null;
+  permission: ScreenPermission;
+  framesStored: number;
+  bytesOnDisk?: number | null;
+  lastCaptureAt?: string | null;
+}
+
+export interface ScreenFrameImageParams {
+  frameRef: string;
+  maxLongEdge?: number | null;
+}
+
+export interface ScreenFrameImageResult {
+  pngBase64: string;
+  width: number;
+  height: number;
+}
+
+export interface ScreenExclusionsListResult {
+  bundleIds: string[];
+}
+
+export interface ScreenExclusionsSetParams {
+  bundleIds: string[];
+}
+
+export interface ScreenExclusionsSetResult {
+  bundleIds: string[];
+  retiredFrameRefs: string[];
+}
+
+export interface ScreenRetentionSetParams {
+  days: number;
+}
+
+export interface ScreenRetentionSetResult {
+  days: number;
+  retiredFrameRefs: string[];
+}
+
+export interface ScreenRebuildIndexResult {
+  frames: number;
+  chunks: number;
+}
+
+export interface ScreenPermissionResult {
+  permission: ScreenPermission;
+}
+
+export interface ScreenOpenSettingsResult {
+  opened: boolean;
+}
+
+export interface ScreenStatusEvent {
+  state: ScreenCaptureState;
+  reason?: string | null;
+  permission: ScreenPermission;
+  framesStored: number;
+  bytesOnDisk?: number | null;
+  lastCaptureAt?: string | null;
+}
+
 export interface BridgeEvents {
   captureStatus: CaptureStatusEvent;
+  "screen.status": ScreenStatusEvent;
 }
 
 const HANDLER = "OmiShellBridge";
@@ -94,6 +175,36 @@ class Bridge {
   }
   openExternal(params: OpenExternalParams): Promise<OpenExternalResult> {
     return this.#call<OpenExternalResult>("openExternal", params);
+  }
+  "screen.start"(params: ScreenEmptyParams): Promise<ScreenStartResult> {
+    return this.#call<ScreenStartResult>("screen.start", params);
+  }
+  "screen.stop"(params: ScreenEmptyParams): Promise<ScreenStopResult> {
+    return this.#call<ScreenStopResult>("screen.stop", params);
+  }
+  "screen.status"(params: ScreenEmptyParams): Promise<ScreenStatusResult> {
+    return this.#call<ScreenStatusResult>("screen.status", params);
+  }
+  "screen.frameImage"(params: ScreenFrameImageParams): Promise<ScreenFrameImageResult> {
+    return this.#call<ScreenFrameImageResult>("screen.frameImage", params);
+  }
+  "screen.exclusionsList"(params: ScreenEmptyParams): Promise<ScreenExclusionsListResult> {
+    return this.#call<ScreenExclusionsListResult>("screen.exclusionsList", params);
+  }
+  "screen.exclusionsSet"(params: ScreenExclusionsSetParams): Promise<ScreenExclusionsSetResult> {
+    return this.#call<ScreenExclusionsSetResult>("screen.exclusionsSet", params);
+  }
+  "screen.retentionSet"(params: ScreenRetentionSetParams): Promise<ScreenRetentionSetResult> {
+    return this.#call<ScreenRetentionSetResult>("screen.retentionSet", params);
+  }
+  "screen.rebuildIndex"(params: ScreenEmptyParams): Promise<ScreenRebuildIndexResult> {
+    return this.#call<ScreenRebuildIndexResult>("screen.rebuildIndex", params);
+  }
+  "screen.requestPermission"(params: ScreenEmptyParams): Promise<ScreenPermissionResult> {
+    return this.#call<ScreenPermissionResult>("screen.requestPermission", params);
+  }
+  "screen.openSettings"(params: ScreenEmptyParams): Promise<ScreenOpenSettingsResult> {
+    return this.#call<ScreenOpenSettingsResult>("screen.openSettings", params);
   }
 }
 
