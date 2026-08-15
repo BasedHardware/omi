@@ -23,6 +23,11 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
         ScreenDerivedContent.untrustedPreamble,
         "Produce a 150-400 token ambient narrative and discrete factual records. Facts are",
         "proposals; include an identifier, surviving evidence text, and evidence ref for each.",
+        "Also set each fact's \"workstream\": the durable project or activity its content belongs",
+        "to, judged by the content itself rather than by which app is open. Strongly prefer one",
+        "of the active labels: none yet. Only when none fits, coin one new short",
+        "kebab-case label for a durable project, or answer \"unknown\" for generic activity you",
+        "cannot place.",
         "App: Xcode",
         "Window: PR-123",
         "Evidence ref: screenshot:42",
@@ -32,6 +37,10 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       + "\n\nSet \"destination\" to \"\(ContextDestinationKey.abstention)\"."
 
     XCTAssertEqual(prompt, expected)
+
+    let withVocabulary = ContextProactivityPromptBuilder.extractionPrompt(
+      frame: frame, fence: fence, workstreamVocabulary: ["omi", "spudpay"])
+    XCTAssertTrue(withVocabulary.contains("of the active labels: omi, spudpay."))
   }
 
   func testExtractionPromptFallsBackToVisitEvidenceRefWithoutScreenshot() {
