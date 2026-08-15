@@ -1,0 +1,41 @@
+web/admin/lib/__tests__/growth-metrics.test.ts
+  s_34650e4ce9f8ec::t_a5ddfcd817fa2e 6
+  s_34650e4ce9f8ec::t_05e20451bf32f7 137-162
+web/admin/app/api/omi/stats/activation/route.ts
+  s_34650e4ce9f8ec::t_d5f887887e0655 1-142
+web/admin/app/(protected)/dashboard/classic/page.tsx
+  s_34650e4ce9f8ec::t_04a0342dc9104b 1743
+  s_34650e4ce9f8ec::t_a3ce60e97e6916 230
+  s_34650e4ce9f8ec::t_5d42249f48125f 484-489
+  s_34650e4ce9f8ec::t_28615e2d2652ee 1913-1915
+  s_34650e4ce9f8ec::t_41c8a6300ba6b5 2305-2306,2309-2311,2313,2315
+  s_34650e4ce9f8ec::t_e257af852cf125 678-679,681-685
+  s_34650e4ce9f8ec::t_b62cddbb9f1282 245-253
+web/admin/lib/growth-metrics.ts
+  s_34650e4ce9f8ec::t_ee68a444b6c89f 165-214
+web/admin/app/api/internal/precompute/route.ts
+  s_34650e4ce9f8ec::t_5767a2961e0a1e 47-50
+  s_34650e4ce9f8ec::t_235f21f40dc66c 86-88
+  s_34650e4ce9f8ec::t_de40eaa093b850 148-153
+web/admin/lib/__tests__/activation-route.test.ts
+  s_34650e4ce9f8ec::t_3c3a17c98c91ac 25
+  s_34650e4ce9f8ec::t_5157190af9b72b 59-60,62-64,66-69,72
+  s_34650e4ce9f8ec::t_a699d8cbb9fb6b 1-24,26-58,61,65,70-71,73-152,157-158,160-161,163-165,168-183
+  s_34650e4ce9f8ec::t_759fdba05cc897 153-156,159,162,166-167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "380179c1e47a2c7157dc15f31a62bdb7d4679f0a",
+  "prompts": {},
+  "sessions": {
+    "s_34650e4ce9f8ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "caa15e01-aaae-4c85-8ad2-05945ef2f011",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
