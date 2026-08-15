@@ -66,6 +66,64 @@ final class ProactiveLaneClientTests: XCTestCase {
     XCTAssertEqual(ProactiveLaneClient.parseRetryAfterSeconds(from: response), 45)
   }
 
+  func testQuotaHeadersLogWhenRemainingIsLowAndAlwaysOn429() throws {
+    let url = try XCTUnwrap(URL(string: "https://proactive.test/v1/desktop/proactivity/completions"))
+    let low = try XCTUnwrap(
+      HTTPURLResponse(
+        url: url,
+        statusCode: 200,
+        httpVersion: nil,
+        headerFields: [
+          "X-Proactive-Quota-Limit": "200",
+          "X-Proactive-Quota-Remaining": "12",
+          "X-Proactive-Quota-Reset": "3600",
+        ]))
+    let healthy = try XCTUnwrap(
+      HTTPURLResponse(
+        url: url,
+        statusCode: 200,
+        httpVersion: nil,
+        headerFields: [
+          "X-Proactive-Quota-Limit": "200",
+          "X-Proactive-Quota-Remaining": "180",
+          "X-Proactive-Quota-Reset": "3600",
+        ]))
+    let rateLimited = try XCTUnwrap(
+      HTTPURLResponse(
+        url: url,
+        statusCode: 429,
+        httpVersion: nil,
+        headerFields: [
+          "X-Proactive-Quota-Limit": "200",
+          "X-Proactive-Quota-Remaining": "0",
+          "X-Proactive-Quota-Reset": "3600",
+        ]))
+    let rateLimitedWithoutHeaders = try XCTUnwrap(
+      HTTPURLResponse(url: url, statusCode: 429, httpVersion: nil, headerFields: [:]))
+
+    let lowObservation = try XCTUnwrap(ProactiveQuotaObservation.parse(from: low))
+    XCTAssertEqual(lowObservation.remaining, 12)
+    XCTAssertEqual(lowObservation.limit, 200)
+    XCTAssertEqual(lowObservation.resetSeconds, 3600)
+    XCTAssertTrue(lowObservation.isLow)
+    XCTAssertTrue(ProactiveQuotaObservation.shouldLog(lowObservation, statusCode: 200))
+    XCTAssertEqual(
+      ProactiveQuotaObservation.logLine(operation: "proactive_extraction", observation: lowObservation),
+      "ProactiveLaneClient: quota extraction remaining=12/200 reset=3600s")
+
+    let healthyObservation = try XCTUnwrap(ProactiveQuotaObservation.parse(from: healthy))
+    XCTAssertFalse(healthyObservation.isLow)
+    XCTAssertFalse(ProactiveQuotaObservation.shouldLog(healthyObservation, statusCode: 200))
+
+    let denied = try XCTUnwrap(ProactiveQuotaObservation.parse(from: rateLimited))
+    XCTAssertTrue(ProactiveQuotaObservation.shouldLog(denied, statusCode: 429))
+    XCTAssertTrue(ProactiveQuotaObservation.shouldLog(nil, statusCode: 429))
+    XCTAssertEqual(
+      ProactiveQuotaObservation.logLine(operation: "proactive_extraction", observation: nil),
+      "ProactiveLaneClient: quota extraction remaining=unknown")
+    XCTAssertNil(ProactiveQuotaObservation.parse(from: rateLimitedWithoutHeaders))
+  }
+
   func testExtractionSkipsNetworkDuringQuotaCooldownThenResumesAfterDeadline() async throws {
     ProactiveLaneURLStub.reset()
     let clock = ManualDateClock(Date(timeIntervalSince1970: 1_800_000_000))

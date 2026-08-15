@@ -213,6 +213,7 @@ actor ProactiveLaneClient {
       }
     }
     guard let http = response as? HTTPURLResponse else { throw ProactiveLaneClientError.invalidResponse }
+    Self.logQuotaIfNeeded(operation: operation, response: http)
     guard (200..<300).contains(http.statusCode) else {
       let retryAfter: Int?
       if http.statusCode == 429 {
@@ -273,6 +274,16 @@ actor ProactiveLaneClient {
     return Int(raw.trimmingCharacters(in: .whitespacesAndNewlines))
   }
 
+  static func parseQuotaObservation(from response: HTTPURLResponse) -> ProactiveQuotaObservation? {
+    ProactiveQuotaObservation.parse(from: response)
+  }
+
+  static func logQuotaIfNeeded(operation: String, response: HTTPURLResponse) {
+    let observation = ProactiveQuotaObservation.parse(from: response)
+    guard ProactiveQuotaObservation.shouldLog(observation, statusCode: response.statusCode) else { return }
+    log(ProactiveQuotaObservation.logLine(operation: operation, observation: observation))
+  }
+
   static func parseEnvelope(_ data: Data) throws -> ProactiveLaneResult {
     let object: Any
     do {
@@ -300,6 +311,43 @@ actor ProactiveLaneClient {
       cacheWrite: root["cache_write"] as? Bool ?? false,
       fallbackClass: root["fallback_class"] as? String ?? "unknown",
       content: content)
+  }
+}
+
+struct ProactiveQuotaObservation: Equatable, Sendable {
+  let remaining: Int
+  let limit: Int
+  let resetSeconds: Int
+
+  var isLow: Bool {
+    limit > 0 && remaining * 10 <= limit
+  }
+
+  static func parse(from response: HTTPURLResponse) -> ProactiveQuotaObservation? {
+    guard let remaining = intHeader("X-Proactive-Quota-Remaining", from: response),
+      let limit = intHeader("X-Proactive-Quota-Limit", from: response)
+    else { return nil }
+    let resetSeconds = intHeader("X-Proactive-Quota-Reset", from: response) ?? 0
+    return ProactiveQuotaObservation(remaining: remaining, limit: limit, resetSeconds: resetSeconds)
+  }
+
+  static func shouldLog(_ observation: ProactiveQuotaObservation?, statusCode: Int) -> Bool {
+    if statusCode == 429 { return true }
+    return observation?.isLow == true
+  }
+
+  static func logLine(operation: String, observation: ProactiveQuotaObservation?) -> String {
+    let label = operation.hasPrefix("proactive_") ? String(operation.dropFirst("proactive_".count)) : operation
+    guard let observation else {
+      return "ProactiveLaneClient: quota \(label) remaining=unknown"
+    }
+    return
+      "ProactiveLaneClient: quota \(label) remaining=\(observation.remaining)/\(observation.limit) reset=\(observation.resetSeconds)s"
+  }
+
+  private static func intHeader(_ name: String, from response: HTTPURLResponse) -> Int? {
+    guard let raw = response.value(forHTTPHeaderField: name) else { return nil }
+    return Int(raw.trimmingCharacters(in: .whitespacesAndNewlines))
   }
 }
 

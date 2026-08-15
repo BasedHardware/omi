@@ -3466,9 +3466,13 @@ class FloatingControlBarManager {
   }
 
   func dismissCurrentNotification() {
+    dismissCurrentNotification(kind: .user)
+  }
+
+  func dismissCurrentNotification(kind: NotificationDismissalKind) {
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
-    dismissNotificationAndAdvanceQueue(trackDismissal: true)
+    dismissNotificationAndAdvanceQueue(trackDismissal: true, kind: kind)
   }
 
   func flushQueuedNotificationsIfPossible() {
@@ -4045,7 +4049,7 @@ class FloatingControlBarManager {
 
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
-    dismissNotificationAndAdvanceQueue(trackDismissal: false)
+    dismissNotificationAndAdvanceQueue(trackDismissal: false, kind: .user)
     if case .openWhatMattersNow(let recommendationID) = notification.action {
       ContextualTaskNavigationRouter.shared.request(recommendationID: recommendationID)
       return
@@ -4068,6 +4072,22 @@ class FloatingControlBarManager {
       return false
     }
     persistNotificationMessageIfNeeded(notification)
+
+    if let existing = window.state.currentNotification, existing.id != notification.id {
+      notificationDismissWorkItem?.cancel()
+      notificationDismissWorkItem = nil
+      AnalyticsManager.shared.notificationDismissed(
+        notificationId: existing.id.uuidString,
+        title: existing.title,
+        assistantId: existing.assistantId,
+        surface: "floating_bar",
+        dismissalKind: .replaced,
+        suggestionIdentity: existing.suggestionTelemetryIdentity
+      )
+      notificationPresentationCallbacks.removeValue(forKey: existing.id)?.onDropped()
+      notificationAuthorizationSnapshots.removeValue(forKey: existing.id)
+      window.dismissNotification(animated: false)
+    }
 
     // A live voice session has no eyes. Hand it the card as silent context so a spoken
     // follow-up has a referent; the typed path gets the same thing via
@@ -4111,14 +4131,17 @@ class FloatingControlBarManager {
     )
 
     let dismissWorkItem = DispatchWorkItem { [weak self] in
-      self?.dismissNotificationAndAdvanceQueue(trackDismissal: true)
+      self?.dismissNotificationAndAdvanceQueue(trackDismissal: true, kind: .timeout)
     }
     notificationDismissWorkItem = dismissWorkItem
     DispatchQueue.main.asyncAfter(deadline: .now() + 6.0, execute: dismissWorkItem)
     return true
   }
 
-  private func dismissNotificationAndAdvanceQueue(trackDismissal: Bool) {
+  private func dismissNotificationAndAdvanceQueue(
+    trackDismissal: Bool,
+    kind: NotificationDismissalKind
+  ) {
     guard let window else { return }
 
     let dismissedNotification = window.state.currentNotification
@@ -4134,6 +4157,7 @@ class FloatingControlBarManager {
         title: dismissedNotification.title,
         assistantId: dismissedNotification.assistantId,
         surface: "floating_bar",
+        dismissalKind: kind,
         suggestionIdentity: dismissedNotification.suggestionTelemetryIdentity
       )
     }
