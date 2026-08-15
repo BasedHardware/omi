@@ -3,6 +3,7 @@
 // the Today/Yesterday/date bucketing are unit-testable without React or the DOM.
 // The Conversations page composes these over its merged cloud+local rows.
 
+import { startOfLocalDay } from '../localDay'
 import type { ConversationRow } from '../pageCache'
 
 /** Windows-ahead type filter: chat threads vs recordings. Cloud conversations are
@@ -132,19 +133,9 @@ export type DateSection = {
   rows: ConversationRow[]
 }
 
-/** Local-midnight epoch ms of the day containing `ms`. */
-export function startOfLocalDay(ms: number): number {
-  const d = new Date(ms)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
-}
-
-/** Inclusive end-of-day (23:59:59.999 local) epoch ms — for date-range upper bounds. */
-export function endOfLocalDay(ms: number): number {
-  const d = new Date(ms)
-  d.setHours(23, 59, 59, 999)
-  return d.getTime()
-}
+// Local-day helpers live in ../localDay (one copy of the local-midnight rule);
+// re-exported here because this module is the historical import site.
+export { startOfLocalDay, endOfLocalDay } from '../localDay'
 
 function sectionLabel(dayStart: number, todayStart: number): string {
   if (dayStart === todayStart) return 'Today'

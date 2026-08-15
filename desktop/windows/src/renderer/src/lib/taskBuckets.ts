@@ -2,22 +2,13 @@
 // from pages/Tasks.tsx so the rules are unit-testable against the shared
 // contracts/parity fixtures (see contracts/parity/README.md).
 
-export function startOfDay(ms: number): number {
-  const d = new Date(ms)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
-}
+import { startOfLocalDay, startOfDayOffset } from './localDay'
 
-/** Start of the local day a whole number of calendar days away from the day
- *  containing `ms`. Date.setDate handles DST shifts and month/year boundaries;
- *  a fixed `± 86_400_000` offset is 23h/25h wrong on the two DST-transition
- *  days each year, which mis-labels the neighbor day. */
-export function startOfDayOffset(ms: number, days: number): number {
-  const d = new Date(startOfDay(ms))
-  d.setDate(d.getDate() + days)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
-}
+// Re-exported under the Tasks page's existing names; the implementation lives
+// in localDay.ts so the local-midnight rule has one copy.
+export { startOfLocalDay as startOfDay, startOfDayOffset } from './localDay'
+
+const startOfDay = startOfLocalDay
 
 export type Bucket = 'today' | 'tomorrow' | 'later' | 'nodate'
 

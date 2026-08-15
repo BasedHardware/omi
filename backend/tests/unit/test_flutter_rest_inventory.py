@@ -26,14 +26,13 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
 FLUTTER_HTTP_ROOT = ROOT_DIR / 'app' / 'lib' / 'backend' / 'http'
 
-# Protocol-level exclusions, mirrored from the desktop inventories where the
-# same surface applies to this client.
-OUT_OF_SCOPE_PREFIXES = (
-    '/v2/messages/',  # SSE streaming
-    '/v2/files',  # multipart upload
-    '/v2/voice-message/transcribe-stream',  # streaming upload
-    '/v4/listen',  # WebSocket transcription socket
-)
+# Unlike the desktop inventories, every route this extractor finds is in scope:
+# the Flutter client reaches its streaming/WebSocket surfaces through other
+# bases than Env.apiBaseUrl, and the REST routes that DO appear (including
+# /v2/messages/{id}/report and /v2/files) are all modeled in the spec. Add a
+# prefix here only with a live extracted route it excludes; a prefix excluding
+# nothing is a blind spot waiting for a call site.
+OUT_OF_SCOPE_PREFIXES: tuple = ()
 
 # Client base-url roots: `dev_api.dart` / `mcp_api.dart` declare
 # `'${Env.apiBaseUrl}v1/dev'`-style prefixes and append subpaths at call sites,

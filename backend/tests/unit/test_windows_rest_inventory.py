@@ -34,14 +34,11 @@ WINDOWS_SOURCE_ROOT = ROOT_DIR / 'desktop' / 'windows' / 'src'
 # Python-backend REST SSoT.
 OUT_OF_SCOPE_PREFIXES = (
     '/v2/realtime',  # Rust desktop backend
-    '/v2/agent',  # Rust desktop backend / agent VM
-    '/v1/config/api-keys',  # Rust desktop backend
     '/v1/x/',  # integration OAuth (desktop-mediated)
     '/v1/tts/synthesize',  # Rust desktop backend
     '/v2/chat/',  # streaming chat / Rust
     '/v2/chat-sessions',  # Rust desktop backend
     '/v2/desktop/',  # Rust desktop backend
-    '/v2/messages/',  # SSE streaming
     '/v2/files',  # multipart upload
     '/v2/apps',  # Rust-proxied app routes
     '/v2/voice-message/transcribe-stream',  # streaming upload; spec models only the non-streaming sibling
@@ -161,3 +158,12 @@ def test_known_missing_routes_do_not_rot():
     spec_paths = _load_spec_paths()
     stale = sorted(r for r in KNOWN_MISSING_ROUTES if r not in routes or _covered_by_spec(r, spec_paths))
     assert not stale, f'KNOWN_MISSING_ROUTES entries no longer needed, remove them: {stale}'
+
+
+def test_out_of_scope_prefixes_match_at_least_one_route():
+    """Mirrors the macOS inventory's rot guard: a prefix excluding nothing is a
+    dead entry that silently widens the blind spot if that surface ever gains a
+    Windows call site."""
+    routes = _extract_routes_from_typescript(_load_windows_sources())
+    dead = sorted(p for p in OUT_OF_SCOPE_PREFIXES if not any(r.startswith(p) for r in routes))
+    assert not dead, f'OUT_OF_SCOPE_PREFIXES entries match no extracted route, remove them: {dead}'
