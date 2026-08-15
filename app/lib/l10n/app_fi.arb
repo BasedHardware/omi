@@ -3214,5 +3214,14 @@
     "accountCutoverMigrationInProgressTitle": "Siirto käynnissä",
     "accountCutoverMigrationInProgressMessage": "Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.",
     "accountCutoverMigrationRollbackMessage": "Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.",
-    "accountCutoverOpenStore": "Avaa kauppa"
+    "accountCutoverOpenStore": "Avaa kauppa",
+    "appDisabledTitle": "Tämä sovellus on poistettu käytöstä eikä sitä voi asentaa.",
+    "appDisabledWebhookFailures": "Sen päätepiste epäonnistui 72 tuntia peräkkäin, joten toimitukset pysäytettiin.",
+    "appDisabledGeneric": "Omi poisti sen käytöstä.",
+    "appDisabledOwnerHint": "Korjaa ensin päätepiste — käyttöönotto tarkistaa jokaisen määritetyn URL-osoitteen uudelleen.",
+    "appReEnable": "Ota uudelleen käyttöön",
+    "appReEnableFailedTitle": "Käyttöönotto epäonnistui",
+    "appReEnableFailedBody": "Tätä sovellusta ei voitu ottaa uudelleen käyttöön. Yritä uudelleen.",
+    "appDisabledOn": "Poistettu käytöstä {date}.",
+    "appDisabledLastError": "Viimeisin virhe: {error}."
 }

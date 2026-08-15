@@ -515,7 +515,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<bool> enableApp(App app) async {
     try {
       // Make the server call to enable the app
-      final success = await enableAppServer(app.id);
+      final (success, _) = await enableAppServer(app.id);
       if (_isDisposed) return false;
 
       if (success) {

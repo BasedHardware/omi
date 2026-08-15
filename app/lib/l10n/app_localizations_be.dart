@@ -9872,4 +9872,36 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Открыть магазин';
+
+  @override
+  String get appDisabledTitle => 'Гэта праграма адключана, і яе нельга ўсталяваць.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Яе endpoint не працаваў 72 гадзіны запар, таму дастаўка спынена.';
+
+  @override
+  String get appDisabledGeneric => 'Яе адключыла Omi.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'Спачатку выправіце endpoint — паўторнае ўключэнне зноў правярае кожны наладжаны URL.';
+
+  @override
+  String get appReEnable => 'Уключыць зноў';
+
+  @override
+  String get appReEnableFailedTitle => 'Не ўдалося ўключыць зноў';
+
+  @override
+  String get appReEnableFailedBody => 'Не ўдалося паўторна ўключыць гэту праграму. Паспрабуйце яшчэ раз.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Адключана $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Апошняя памылка: $error.';
+  }
 }

@@ -3214,5 +3214,14 @@
     "accountCutoverMigrationInProgressTitle": "กำลังย้ายข้อมูล",
     "accountCutoverMigrationInProgressMessage": "บัญชีของคุณกำลังย้าย ฟีเจอร์ผลิตภัณฑ์จะหยุดชั่วคราวจนกว่าการย้ายจะเสร็จ",
     "accountCutoverMigrationRollbackMessage": "บัญชีของคุณอยู่ในโหมดบำรุงรักษาหลังการย้อนกลับการย้าย ข้อมูลที่ใหม่กว่าบางส่วนอาจถูกแยกไว้",
-    "accountCutoverOpenStore": "เปิดสโตร์"
+    "accountCutoverOpenStore": "เปิดสโตร์",
+    "appDisabledTitle": "แอปนี้ถูกปิดใช้งานและไม่สามารถติดตั้งได้",
+    "appDisabledWebhookFailures": "ปลายทางล้มเหลวติดต่อกัน 72 ชั่วโมง จึงหยุดการส่งข้อมูล",
+    "appDisabledGeneric": "ถูกปิดใช้งานโดย Omi",
+    "appDisabledOwnerHint": "แก้ไขปลายทางก่อน — การเปิดใช้งานอีกครั้งจะตรวจสอบทุก URL ที่ตั้งค่าไว้ใหม่",
+    "appReEnable": "เปิดใช้งานอีกครั้ง",
+    "appReEnableFailedTitle": "เปิดใช้งานอีกครั้งไม่สำเร็จ",
+    "appReEnableFailedBody": "ไม่สามารถเปิดใช้งานแอปนี้อีกครั้งได้ โปรดลองใหม่",
+    "appDisabledOn": "ปิดใช้งานเมื่อ {date}",
+    "appDisabledLastError": "ข้อผิดพลาดล่าสุด: {error}"
 }

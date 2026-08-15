@@ -3214,5 +3214,14 @@
     "accountCutoverMigrationInProgressTitle": "Migrasi sedang berlangsung",
     "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
     "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
-    "accountCutoverOpenStore": "Buka toko"
+    "accountCutoverOpenStore": "Buka toko",
+    "appDisabledTitle": "Apl ini dilumpuhkan dan tidak boleh dipasang.",
+    "appDisabledWebhookFailures": "Endpoint-nya gagal selama 72 jam berturut-turut, jadi penghantaran dihentikan.",
+    "appDisabledGeneric": "Ia dilumpuhkan oleh Omi.",
+    "appDisabledOwnerHint": "Betulkan endpoint dahulu — pengaktifan semula akan menyemak semula setiap URL yang dikonfigurasikan.",
+    "appReEnable": "Aktifkan semula",
+    "appReEnableFailedTitle": "Gagal mengaktifkan semula",
+    "appReEnableFailedBody": "Apl ini tidak dapat diaktifkan semula. Sila cuba lagi.",
+    "appDisabledOn": "Dilumpuhkan pada {date}.",
+    "appDisabledLastError": "Ralat terakhir: {error}."
 }

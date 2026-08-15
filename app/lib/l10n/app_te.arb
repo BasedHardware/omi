@@ -10780,5 +10780,14 @@
     "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
     "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
     "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
-    "accountCutoverOpenStore": "स्टोर खोलें"
+    "accountCutoverOpenStore": "स्टोर खोलें",
+    "appDisabledTitle": "ఈ యాప్ నిలిపివేయబడింది, ఇన్‌స్టాల్ చేయలేరు.",
+    "appDisabledWebhookFailures": "దీని ఎండ్‌పాయింట్ వరుసగా 72 గంటలు విఫలమైంది, అందుకే డెలివరీలు ఆపివేయబడ్డాయి.",
+    "appDisabledGeneric": "దీన్ని Omi నిలిపివేసింది.",
+    "appDisabledOwnerHint": "ముందుగా ఎండ్‌పాయింట్‌ను సరిచేయండి — తిరిగి ప్రారంభించినప్పుడు కాన్ఫిగర్ చేసిన ప్రతి URL మళ్లీ తనిఖీ చేయబడుతుంది.",
+    "appReEnable": "తిరిగి ప్రారంభించు",
+    "appReEnableFailedTitle": "తిరిగి ప్రారంభించలేకపోయాము",
+    "appReEnableFailedBody": "ఈ యాప్‌ను తిరిగి ప్రారంభించలేకపోయాము. దయచేసి మళ్లీ ప్రయత్నించండి.",
+    "appDisabledOn": "{date} న నిలిపివేయబడింది.",
+    "appDisabledLastError": "చివరి లోపం: {error}"
 }

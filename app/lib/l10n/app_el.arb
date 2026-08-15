@@ -3214,5 +3214,14 @@
     "accountCutoverMigrationInProgressTitle": "Η μετεγκατάσταση είναι σε εξέλιξη",
     "accountCutoverMigrationInProgressMessage": "Ο λογαριασμός σας μεταφέρεται. Οι λειτουργίες προϊόντος είναι σε παύση μέχρι να ολοκληρωθεί η μετεγκατάσταση.",
     "accountCutoverMigrationRollbackMessage": "Ο λογαριασμός σας είναι σε συντήρηση μετά από επαναφορά μετεγκατάστασης. Νεότερα δεδομένα ενδέχεται να έχουν απομονωθεί.",
-    "accountCutoverOpenStore": "Άνοιγμα καταστήματος"
+    "accountCutoverOpenStore": "Άνοιγμα καταστήματος",
+    "appDisabledTitle": "Αυτή η εφαρμογή είναι απενεργοποιημένη και δεν μπορεί να εγκατασταθεί.",
+    "appDisabledWebhookFailures": "Το endpoint της απέτυχε επί 72 ώρες συνεχώς, οπότε οι αποστολές σταμάτησαν.",
+    "appDisabledGeneric": "Απενεργοποιήθηκε από την Omi.",
+    "appDisabledOwnerHint": "Διορθώστε πρώτα το endpoint — η επανενεργοποίηση ελέγχει ξανά κάθε ρυθμισμένο URL.",
+    "appReEnable": "Επανενεργοποίηση",
+    "appReEnableFailedTitle": "Η επανενεργοποίηση απέτυχε",
+    "appReEnableFailedBody": "Δεν ήταν δυνατή η επανενεργοποίηση αυτής της εφαρμογής. Δοκιμάστε ξανά.",
+    "appDisabledOn": "Απενεργοποιήθηκε στις {date}.",
+    "appDisabledLastError": "Τελευταίο σφάλμα: {error}."
 }

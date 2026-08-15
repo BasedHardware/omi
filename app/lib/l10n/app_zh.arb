@@ -3236,5 +3236,14 @@
     "accountCutoverMigrationInProgressTitle": "正在迁移",
     "accountCutoverMigrationInProgressMessage": "您的账户正在迁移。产品功能将暂停，直到迁移完成。",
     "accountCutoverMigrationRollbackMessage": "账户迁移回滚后处于维护状态。部分较新的数据可能被隔离。",
-    "accountCutoverOpenStore": "打开应用商店"
+    "accountCutoverOpenStore": "打开应用商店",
+    "appDisabledTitle": "此应用已被停用，无法安装。",
+    "appDisabledWebhookFailures": "其端点连续 72 小时失败，因此已停止推送。",
+    "appDisabledGeneric": "它已被 Omi 停用。",
+    "appDisabledOwnerHint": "请先修复端点——重新启用时会重新检查每个已配置的 URL。",
+    "appReEnable": "重新启用",
+    "appReEnableFailedTitle": "无法重新启用",
+    "appReEnableFailedBody": "无法重新启用此应用，请重试。",
+    "appDisabledOn": "于 {date} 停用。",
+    "appDisabledLastError": "最后的错误：{error}"
 }

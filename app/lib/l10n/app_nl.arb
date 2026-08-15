@@ -3214,5 +3214,14 @@
     "accountCutoverMigrationInProgressTitle": "Migratie bezig",
     "accountCutoverMigrationInProgressMessage": "Je account wordt gemigreerd. Productfuncties zijn gepauzeerd tot de migratie klaar is.",
     "accountCutoverMigrationRollbackMessage": "Je account is in onderhoud na een migratie-rollback. Nieuwere data kan geïsoleerd zijn.",
-    "accountCutoverOpenStore": "Store openen"
+    "accountCutoverOpenStore": "Store openen",
+    "appDisabledTitle": "Deze app is uitgeschakeld en kan niet worden geïnstalleerd.",
+    "appDisabledWebhookFailures": "Het endpoint faalde 72 uur achter elkaar, daarom is de bezorging gestopt.",
+    "appDisabledGeneric": "De app is door Omi uitgeschakeld.",
+    "appDisabledOwnerHint": "Repareer eerst het endpoint — bij het opnieuw inschakelen wordt elke ingestelde URL opnieuw gecontroleerd.",
+    "appReEnable": "Opnieuw inschakelen",
+    "appReEnableFailedTitle": "Opnieuw inschakelen mislukt",
+    "appReEnableFailedBody": "Deze app kon niet opnieuw worden ingeschakeld. Probeer het opnieuw.",
+    "appDisabledOn": "Uitgeschakeld op {date}.",
+    "appDisabledLastError": "Laatste fout: {error}."
 }

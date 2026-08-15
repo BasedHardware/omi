@@ -3215,5 +3215,14 @@
     "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
     "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
     "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
-    "accountCutoverOpenStore": "स्टोर खोलें"
+    "accountCutoverOpenStore": "स्टोर खोलें",
+    "appDisabledTitle": "यह ऐप अक्षम है और इंस्टॉल नहीं किया जा सकता।",
+    "appDisabledWebhookFailures": "इसका एंडपॉइंट लगातार 72 घंटे तक विफल रहा, इसलिए डिलीवरी रोक दी गई।",
+    "appDisabledGeneric": "इसे Omi ने अक्षम कर दिया था।",
+    "appDisabledOwnerHint": "पहले एंडपॉइंट ठीक करें — फिर से सक्षम करने पर हर कॉन्फ़िगर किया गया URL दोबारा जाँचा जाता है।",
+    "appReEnable": "फिर से सक्षम करें",
+    "appReEnableFailedTitle": "फिर से सक्षम नहीं हो सका",
+    "appReEnableFailedBody": "इस ऐप को फिर से सक्षम नहीं किया जा सका। कृपया पुनः प्रयास करें।",
+    "appDisabledOn": "{date} को अक्षम किया गया।",
+    "appDisabledLastError": "अंतिम त्रुटि: {error}"
 }

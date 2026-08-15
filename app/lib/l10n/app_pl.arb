@@ -3249,5 +3249,14 @@
     "accountCutoverMigrationInProgressTitle": "Trwa migracja",
     "accountCutoverMigrationInProgressMessage": "Twoje konto jest migrowane. Funkcje produktu są wstrzymane do końca migracji.",
     "accountCutoverMigrationRollbackMessage": "Twoje konto jest w trybie konserwacji po cofnięciu migracji. Nowsze dane mogą zostać odizolowane.",
-    "accountCutoverOpenStore": "Otwórz sklep"
+    "accountCutoverOpenStore": "Otwórz sklep",
+    "appDisabledTitle": "Ta aplikacja jest wyłączona i nie można jej zainstalować.",
+    "appDisabledWebhookFailures": "Jej endpoint zawodził przez 72 godziny z rzędu, więc dostarczanie zostało zatrzymane.",
+    "appDisabledGeneric": "Została wyłączona przez Omi.",
+    "appDisabledOwnerHint": "Najpierw napraw endpoint — ponowne włączenie sprawdza każdy skonfigurowany adres URL.",
+    "appReEnable": "Włącz ponownie",
+    "appReEnableFailedTitle": "Nie udało się włączyć ponownie",
+    "appReEnableFailedBody": "Nie udało się ponownie włączyć tej aplikacji. Spróbuj ponownie.",
+    "appDisabledOn": "Wyłączona {date}.",
+    "appDisabledLastError": "Ostatni błąd: {error}."
 }

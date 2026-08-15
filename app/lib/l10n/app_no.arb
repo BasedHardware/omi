@@ -3214,5 +3214,14 @@
     "accountCutoverMigrationInProgressTitle": "Migrering pågår",
     "accountCutoverMigrationInProgressMessage": "Ditt konto migreras. Produktfunktioner pausas tills migreringen är klar.",
     "accountCutoverMigrationRollbackMessage": "Ditt konto är under underhåll efter en migreringsåterställning. Nyare data kan vara isolerad.",
-    "accountCutoverOpenStore": "Öppna butik"
+    "accountCutoverOpenStore": "Öppna butik",
+    "appDisabledTitle": "Denne appen er deaktivert og kan ikke installeres.",
+    "appDisabledWebhookFailures": "Endepunktet feilet 72 timer på rad, så leveringene ble stoppet.",
+    "appDisabledGeneric": "Den ble deaktivert av Omi.",
+    "appDisabledOwnerHint": "Fiks endepunktet først — reaktivering sjekker hver konfigurerte URL på nytt.",
+    "appReEnable": "Reaktiver",
+    "appReEnableFailedTitle": "Kunne ikke reaktivere",
+    "appReEnableFailedBody": "Denne appen kunne ikke reaktiveres. Prøv igjen.",
+    "appDisabledOn": "Deaktivert {date}.",
+    "appDisabledLastError": "Siste feil: {error}."
 }

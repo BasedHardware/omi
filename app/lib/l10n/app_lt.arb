@@ -3214,5 +3214,14 @@
     "accountCutoverMigrationInProgressTitle": "Trwa migracja",
     "accountCutoverMigrationInProgressMessage": "Twoje konto jest migrowane. Funkcje produktu są wstrzymane do końca migracji.",
     "accountCutoverMigrationRollbackMessage": "Twoje konto jest w trybie konserwacji po cofnięciu migracji. Nowsze dane mogą zostać odizolowane.",
-    "accountCutoverOpenStore": "Otwórz sklep"
+    "accountCutoverOpenStore": "Otwórz sklep",
+    "appDisabledTitle": "Ši programėlė išjungta ir jos įdiegti negalima.",
+    "appDisabledWebhookFailures": "Jos galinis taškas nepavyko 72 valandas iš eilės, todėl pristatymai buvo sustabdyti.",
+    "appDisabledGeneric": "Ją išjungė „Omi“.",
+    "appDisabledOwnerHint": "Pirmiausia pataisykite galinį tašką — įjungiant iš naujo kiekvienas sukonfigūruotas URL tikrinamas dar kartą.",
+    "appReEnable": "Įjungti iš naujo",
+    "appReEnableFailedTitle": "Nepavyko įjungti iš naujo",
+    "appReEnableFailedBody": "Šios programėlės nepavyko įjungti iš naujo. Bandykite dar kartą.",
+    "appDisabledOn": "Išjungta {date}.",
+    "appDisabledLastError": "Paskutinė klaida: {error}."
 }

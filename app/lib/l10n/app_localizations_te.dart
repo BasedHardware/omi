@@ -9888,4 +9888,37 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'स्टोर खोलें';
+
+  @override
+  String get appDisabledTitle => 'ఈ యాప్ నిలిపివేయబడింది, ఇన్‌స్టాల్ చేయలేరు.';
+
+  @override
+  String get appDisabledWebhookFailures =>
+      'దీని ఎండ్‌పాయింట్ వరుసగా 72 గంటలు విఫలమైంది, అందుకే డెలివరీలు ఆపివేయబడ్డాయి.';
+
+  @override
+  String get appDisabledGeneric => 'దీన్ని Omi నిలిపివేసింది.';
+
+  @override
+  String get appDisabledOwnerHint =>
+      'ముందుగా ఎండ్‌పాయింట్‌ను సరిచేయండి — తిరిగి ప్రారంభించినప్పుడు కాన్ఫిగర్ చేసిన ప్రతి URL మళ్లీ తనిఖీ చేయబడుతుంది.';
+
+  @override
+  String get appReEnable => 'తిరిగి ప్రారంభించు';
+
+  @override
+  String get appReEnableFailedTitle => 'తిరిగి ప్రారంభించలేకపోయాము';
+
+  @override
+  String get appReEnableFailedBody => 'ఈ యాప్‌ను తిరిగి ప్రారంభించలేకపోయాము. దయచేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String appDisabledOn(String date) {
+    return '$date న నిలిపివేయబడింది.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'చివరి లోపం: $error';
+  }
 }

@@ -3215,5 +3215,14 @@
     "accountCutoverMigrationInProgressTitle": "Migración en curso",
     "accountCutoverMigrationInProgressMessage": "Tu cuenta se está migrando. Las funciones del producto están en pausa hasta que termine la migración.",
     "accountCutoverMigrationRollbackMessage": "Tu cuenta está en mantenimiento tras una reversión de migración. Algunos datos más recientes pueden quedar retenidos.",
-    "accountCutoverOpenStore": "Abrir tienda"
+    "accountCutoverOpenStore": "Abrir tienda",
+    "appDisabledTitle": "Esta app está desactivada y no se puede instalar.",
+    "appDisabledWebhookFailures": "Su endpoint falló durante 72 horas seguidas, así que se detuvieron los envíos.",
+    "appDisabledGeneric": "Fue desactivada por Omi.",
+    "appDisabledOwnerHint": "Corrige primero el endpoint: al reactivar se vuelve a comprobar cada URL configurada.",
+    "appReEnable": "Reactivar",
+    "appReEnableFailedTitle": "No se pudo reactivar",
+    "appReEnableFailedBody": "No se pudo reactivar esta app. Inténtalo de nuevo.",
+    "appDisabledOn": "Desactivada el {date}.",
+    "appDisabledLastError": "Último error: {error}."
 }

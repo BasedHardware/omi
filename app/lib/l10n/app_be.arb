@@ -10780,5 +10780,14 @@
     "accountCutoverMigrationInProgressTitle": "Идёт миграция",
     "accountCutoverMigrationInProgressMessage": "Ваш аккаунт мигрирует. Функции продукта приостановлены до завершения миграции.",
     "accountCutoverMigrationRollbackMessage": "Ваш аккаунт на обслуживании после отката миграции. Часть более новых данных может быть изолирована.",
-    "accountCutoverOpenStore": "Открыть магазин"
+    "accountCutoverOpenStore": "Открыть магазин",
+    "appDisabledTitle": "Гэта праграма адключана, і яе нельга ўсталяваць.",
+    "appDisabledWebhookFailures": "Яе endpoint не працаваў 72 гадзіны запар, таму дастаўка спынена.",
+    "appDisabledGeneric": "Яе адключыла Omi.",
+    "appDisabledOwnerHint": "Спачатку выправіце endpoint — паўторнае ўключэнне зноў правярае кожны наладжаны URL.",
+    "appReEnable": "Уключыць зноў",
+    "appReEnableFailedTitle": "Не ўдалося ўключыць зноў",
+    "appReEnableFailedBody": "Не ўдалося паўторна ўключыць гэту праграму. Паспрабуйце яшчэ раз.",
+    "appDisabledOn": "Адключана {date}.",
+    "appDisabledLastError": "Апошняя памылка: {error}."
 }

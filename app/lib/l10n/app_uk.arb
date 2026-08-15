@@ -3214,5 +3214,14 @@
     "accountCutoverMigrationInProgressTitle": "Триває міграція",
     "accountCutoverMigrationInProgressMessage": "Ваш обліковий запис мігрує. Функції продукту призупинено до завершення міграції.",
     "accountCutoverMigrationRollbackMessage": "Ваш обліковий запис на обслуговуванні після відкату міграції. Частина новіших даних може бути ізольована.",
-    "accountCutoverOpenStore": "Відкрити магазин"
+    "accountCutoverOpenStore": "Відкрити магазин",
+    "appDisabledTitle": "Цей застосунок вимкнено, і його не можна встановити.",
+    "appDisabledWebhookFailures": "Його endpoint не працював 72 години поспіль, тому доставку зупинено.",
+    "appDisabledGeneric": "Його вимкнула Omi.",
+    "appDisabledOwnerHint": "Спершу виправте endpoint — повторне ввімкнення перевіряє кожну налаштовану URL-адресу.",
+    "appReEnable": "Увімкнути знову",
+    "appReEnableFailedTitle": "Не вдалося ввімкнути знову",
+    "appReEnableFailedBody": "Не вдалося повторно ввімкнути цей застосунок. Спробуйте ще раз.",
+    "appDisabledOn": "Вимкнено {date}.",
+    "appDisabledLastError": "Остання помилка: {error}."
 }

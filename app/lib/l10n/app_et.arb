@@ -3214,5 +3214,14 @@
     "accountCutoverMigrationInProgressTitle": "Siirto käynnissä",
     "accountCutoverMigrationInProgressMessage": "Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.",
     "accountCutoverMigrationRollbackMessage": "Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.",
-    "accountCutoverOpenStore": "Avaa kauppa"
+    "accountCutoverOpenStore": "Avaa kauppa",
+    "appDisabledTitle": "See rakendus on välja lülitatud ja seda ei saa paigaldada.",
+    "appDisabledWebhookFailures": "Selle lõpp-punkt ebaõnnestus 72 tundi järjest, seega saatmine peatati.",
+    "appDisabledGeneric": "Omi lülitas selle välja.",
+    "appDisabledOwnerHint": "Paranda kõigepealt lõpp-punkt — uuesti sisselülitamisel kontrollitakse iga seadistatud URL uuesti.",
+    "appReEnable": "Lülita uuesti sisse",
+    "appReEnableFailedTitle": "Uuesti sisselülitamine ebaõnnestus",
+    "appReEnableFailedBody": "Seda rakendust ei õnnestunud uuesti sisse lülitada. Proovi uuesti.",
+    "appDisabledOn": "Välja lülitatud {date}.",
+    "appDisabledLastError": "Viimane viga: {error}."
 }

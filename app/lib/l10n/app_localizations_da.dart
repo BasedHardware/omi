@@ -9825,4 +9825,35 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Åbn butik';
+
+  @override
+  String get appDisabledTitle => 'Denne app er deaktiveret og kan ikke installeres.';
+
+  @override
+  String get appDisabledWebhookFailures => 'Dens endpoint fejlede 72 timer i træk, så leveringerne blev stoppet.';
+
+  @override
+  String get appDisabledGeneric => 'Den blev deaktiveret af Omi.';
+
+  @override
+  String get appDisabledOwnerHint => 'Ret endpointet først — genaktivering tjekker hver konfigureret URL igen.';
+
+  @override
+  String get appReEnable => 'Genaktivér';
+
+  @override
+  String get appReEnableFailedTitle => 'Kunne ikke genaktivere';
+
+  @override
+  String get appReEnableFailedBody => 'Denne app kunne ikke genaktiveres. Prøv igen.';
+
+  @override
+  String appDisabledOn(String date) {
+    return 'Deaktiveret den $date.';
+  }
+
+  @override
+  String appDisabledLastError(String error) {
+    return 'Seneste fejl: $error.';
+  }
 }

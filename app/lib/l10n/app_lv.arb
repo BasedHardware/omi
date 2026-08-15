@@ -3214,5 +3214,14 @@
     "accountCutoverMigrationInProgressTitle": "Trwa migracja",
     "accountCutoverMigrationInProgressMessage": "Twoje konto jest migrowane. Funkcje produktu są wstrzymane do końca migracji.",
     "accountCutoverMigrationRollbackMessage": "Twoje konto jest w trybie konserwacji po cofnięciu migracji. Nowsze dane mogą zostać odizolowane.",
-    "accountCutoverOpenStore": "Otwórz sklep"
+    "accountCutoverOpenStore": "Otwórz sklep",
+    "appDisabledTitle": "Šī lietotne ir atspējota, un to nevar instalēt.",
+    "appDisabledWebhookFailures": "Tās galapunkts neizdevās 72 stundas pēc kārtas, tāpēc piegādes tika apturētas.",
+    "appDisabledGeneric": "To atspējoja Omi.",
+    "appDisabledOwnerHint": "Vispirms izlabojiet galapunktu — atkārtoti iespējojot, katrs konfigurētais URL tiek pārbaudīts vēlreiz.",
+    "appReEnable": "Iespējot atkārtoti",
+    "appReEnableFailedTitle": "Neizdevās iespējot atkārtoti",
+    "appReEnableFailedBody": "Šo lietotni neizdevās iespējot atkārtoti. Mēģiniet vēlreiz.",
+    "appDisabledOn": "Atspējota {date}.",
+    "appDisabledLastError": "Pēdējā kļūda: {error}."
 }

@@ -10780,5 +10780,14 @@
     "accountCutoverMigrationInProgressTitle": "الترحيل قيد التقدم",
     "accountCutoverMigrationInProgressMessage": "حسابك قيد الترحيل. ميزات المنتج متوقفة مؤقتًا حتى انتهاء الترحيل.",
     "accountCutoverMigrationRollbackMessage": "حسابك قيد الصيانة بعد التراجع عن الترحيل. قد تُعزل بعض البيانات الأحدث.",
-    "accountCutoverOpenStore": "فتح المتجر"
+    "accountCutoverOpenStore": "فتح المتجر",
+    "appDisabledTitle": "این برنامه غیرفعال است و نمی‌توان آن را نصب کرد.",
+    "appDisabledWebhookFailures": "نقطه پایانی آن ۷۲ ساعت پیاپی ناموفق بود، بنابراین ارسال‌ها متوقف شد.",
+    "appDisabledGeneric": "توسط Omi غیرفعال شد.",
+    "appDisabledOwnerHint": "ابتدا نقطه پایانی را درست کنید — فعال‌سازی مجدد هر نشانی اینترنتی پیکربندی‌شده را دوباره بررسی می‌کند.",
+    "appReEnable": "فعال‌سازی مجدد",
+    "appReEnableFailedTitle": "فعال‌سازی مجدد ممکن نشد",
+    "appReEnableFailedBody": "این برنامه دوباره فعال نشد. لطفاً دوباره تلاش کنید.",
+    "appDisabledOn": "در {date} غیرفعال شد.",
+    "appDisabledLastError": "آخرین خطا: {error}"
 }

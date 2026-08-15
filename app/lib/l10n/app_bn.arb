@@ -10780,5 +10780,14 @@
     "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
     "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
     "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
-    "accountCutoverOpenStore": "स्टोर खोलें"
+    "accountCutoverOpenStore": "स्टोर खोलें",
+    "appDisabledTitle": "এই অ্যাপটি নিষ্ক্রিয় এবং ইনস্টল করা যাবে না।",
+    "appDisabledWebhookFailures": "এর এন্ডপয়েন্ট টানা ৭২ ঘণ্টা ব্যর্থ হয়েছে, তাই ডেলিভারি বন্ধ করা হয়েছে।",
+    "appDisabledGeneric": "এটি Omi নিষ্ক্রিয় করেছে।",
+    "appDisabledOwnerHint": "প্রথমে এন্ডপয়েন্ট ঠিক করুন — পুনরায় সক্রিয় করলে কনফিগার করা প্রতিটি URL আবার যাচাই করা হয়।",
+    "appReEnable": "পুনরায় সক্রিয় করুন",
+    "appReEnableFailedTitle": "পুনরায় সক্রিয় করা যায়নি",
+    "appReEnableFailedBody": "এই অ্যাপটি পুনরায় সক্রিয় করা যায়নি। আবার চেষ্টা করুন।",
+    "appDisabledOn": "{date} তারিখে নিষ্ক্রিয় করা হয়েছে।",
+    "appDisabledLastError": "শেষ ত্রুটি: {error}"
 }

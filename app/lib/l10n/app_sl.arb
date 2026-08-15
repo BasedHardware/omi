@@ -10780,5 +10780,14 @@
     "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
-    "accountCutoverOpenStore": "Otevřít obchod"
+    "accountCutoverOpenStore": "Otevřít obchod",
+    "appDisabledTitle": "Ta aplikacija je onemogočena in je ni mogoče namestiti.",
+    "appDisabledWebhookFailures": "Njena končna točka je odpovedovala 72 ur zapored, zato je bila dostava ustavljena.",
+    "appDisabledGeneric": "Onemogočila jo je Omi.",
+    "appDisabledOwnerHint": "Najprej popravi končno točko — ponovna omogočitev znova preveri vsak nastavljen URL.",
+    "appReEnable": "Znova omogoči",
+    "appReEnableFailedTitle": "Ponovna omogočitev ni uspela",
+    "appReEnableFailedBody": "Te aplikacije ni bilo mogoče znova omogočiti. Poskusi znova.",
+    "appDisabledOn": "Onemogočeno {date}.",
+    "appDisabledLastError": "Zadnja napaka: {error}."
 }

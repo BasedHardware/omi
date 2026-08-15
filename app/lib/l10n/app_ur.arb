@@ -10780,5 +10780,14 @@
     "accountCutoverMigrationInProgressTitle": "الترحيل قيد التقدم",
     "accountCutoverMigrationInProgressMessage": "حسابك قيد الترحيل. ميزات المنتج متوقفة مؤقتًا حتى انتهاء الترحيل.",
     "accountCutoverMigrationRollbackMessage": "حسابك قيد الصيانة بعد التراجع عن الترحيل. قد تُعزل بعض البيانات الأحدث.",
-    "accountCutoverOpenStore": "فتح المتجر"
+    "accountCutoverOpenStore": "فتح المتجر",
+    "appDisabledTitle": "یہ ایپ غیر فعال ہے اور اسے انسٹال نہیں کیا جا سکتا۔",
+    "appDisabledWebhookFailures": "اس کا اینڈ پوائنٹ مسلسل 72 گھنٹے ناکام رہا، اس لیے ترسیل روک دی گئی۔",
+    "appDisabledGeneric": "اسے Omi نے غیر فعال کیا تھا۔",
+    "appDisabledOwnerHint": "پہلے اینڈ پوائنٹ درست کریں — دوبارہ فعال کرنے پر ہر ترتیب شدہ URL دوبارہ جانچا جاتا ہے۔",
+    "appReEnable": "دوبارہ فعال کریں",
+    "appReEnableFailedTitle": "دوبارہ فعال نہیں ہو سکا",
+    "appReEnableFailedBody": "اس ایپ کو دوبارہ فعال نہیں کیا جا سکا۔ براہ کرم دوبارہ کوشش کریں۔",
+    "appDisabledOn": "{date} کو غیر فعال کیا گیا۔",
+    "appDisabledLastError": "آخری خرابی: {error}"
 }
