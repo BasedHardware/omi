@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { buildDriverSource } from "./driver-source.mjs";
 import { PENDING_VALUE, reportFromProbeText } from "./verdict.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -142,10 +143,9 @@ try {
   fail("ERROR: stack owner record did not yield a readiness token.");
 }
 
-const driverSource = readFileSync(DRIVER_PATH, "utf8").trim();
-// bash cannot round-trip env values that contain newlines; flatten so the
-// existing OMI_PROBE_JS hook actually reaches WKWebView.
-const driver = `${SCREEN_PROOF ? "window.__omiCAMode = \"screen\";" : ""}${driverSource.replace(/\s+/g, " ")}`;
+// Newlines stay intact: execve carries them through the launcher untouched,
+// and flattening them lets a `//` line comment swallow the rest of the program.
+const driver = buildDriverSource(readFileSync(DRIVER_PATH, "utf8"), { screenProof: SCREEN_PROOF });
 const childEnv = {
   ...process.env,
   OMI_API_TOKEN: token,

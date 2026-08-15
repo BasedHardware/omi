@@ -19,6 +19,7 @@ import {
   parseProbeJsLine,
   reportFromProbeText,
 } from "./verdict.mjs";
+import { buildDriverSource } from "./driver-source.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const driver = readFileSync(join(here, "driver.js"), "utf8");
@@ -184,11 +185,40 @@ test("the runner is a sibling of --accept and never aims at production", () => {
   assert.doesNotMatch(run, /--route[^\n]*rig=dev/);
   assert.match(run, /--screen-proof/);
   assert.match(run, /Does not send Chat/);
-  assert.match(run, /replace\(\/\\s\+\/g, " "\)/);
   assert.match(run, /real-model proxy is bound on 8791/);
 });
 
-test("L3 runs this harness every wave without replacing --assert", () => {
+test("the driver reaches WKWebView as parseable JavaScript", () => {
+  for (const screenProof of [false, true]) {
+    const sent = buildDriverSource(driver, { screenProof });
+    assert.doesNotThrow(
+      () => new Function(sent),
+      `driver does not parse with screenProof=${screenProof}`,
+    );
+  }
+});
+
+test("the driver is sent with its newlines, so a line comment ends at its line", () => {
+  // Shaped like driver.js: a comment inside the IIFE the probe evaluates.
+  const sent = buildDriverSource('(function () {\n// swallow\nreturn 1;\n})()', {});
+  assert.match(sent, /\n/);
+  assert.doesNotThrow(() => new Function(sent));
+  // The shape this replaced: flattening made the comment eat the program.
+  assert.throws(() => new Function(sent.replace(/\s+/g, " ")));
+});
+
+test("L3 keeps --assert, and states why the control harness is not yet a step", () => {
   assert.match(lanes, /integration\/dev-stack\.sh --assert/);
   assert.match(lanes, /node integration\/control-acceptance\/run\.mjs/);
+  // Held out, not softened: if it is ever wired in as an executable step, that
+  // must be a deliberate edit, and the note explaining the hold must go with it.
+  const l3 = lanes.slice(lanes.indexOf("  L3: {"));
+  const stepCommands = [...l3.matchAll(/^\s*command: "(.+)",$/gm)].map((m) => m[1]);
+  const holdNoted = /NOT YET A GATE/.test(l3) && /CONTROL home=failure-notice/.test(l3);
+  const wiredIn = stepCommands.some((c) => c.includes("control-acceptance/run.mjs"));
+  assert.equal(
+    wiredIn,
+    !holdNoted,
+    "control-acceptance is either a real L3 step or an explained hold — never a silent absence",
+  );
 });
