@@ -10781,8 +10781,8 @@
     "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
     "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
     "accountCutoverOpenStore": "Buka toko",
-    "chatScopeToday": "Today",
-    "chatScopeThisWeek": "This week",
-    "chatScopeAbout": "About: {title}",
-    "askAboutThisConversation": "Ask about this"
+    "chatScopeToday": "Ngayon",
+    "chatScopeThisWeek": "Ngayong linggo",
+    "chatScopeAbout": "Tungkol sa: {title}",
+    "askAboutThisConversation": "Itanong tungkol dito"
 }

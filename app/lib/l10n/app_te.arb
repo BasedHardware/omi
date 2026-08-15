@@ -10781,8 +10781,8 @@
     "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
     "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
     "accountCutoverOpenStore": "स्टोर खोलें",
-    "chatScopeToday": "Today",
-    "chatScopeThisWeek": "This week",
-    "chatScopeAbout": "About: {title}",
-    "askAboutThisConversation": "Ask about this"
+    "chatScopeToday": "ఈ రోజు",
+    "chatScopeThisWeek": "ఈ వారం",
+    "chatScopeAbout": "{title} గురించి",
+    "askAboutThisConversation": "దీని గురించి అడగండి"
 }

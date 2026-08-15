@@ -3215,8 +3215,8 @@
     "accountCutoverMigrationInProgressMessage": "Contul tău este în curs de migrare. Funcțiile produsului sunt întrerupte până la finalizarea migrării.",
     "accountCutoverMigrationRollbackMessage": "Contul tău este în mentenanță după un rollback al migrării. Unele date mai noi pot fi izolate.",
     "accountCutoverOpenStore": "Deschide magazinul",
-    "chatScopeToday": "Today",
-    "chatScopeThisWeek": "This week",
-    "chatScopeAbout": "About: {title}",
-    "askAboutThisConversation": "Ask about this"
+    "chatScopeToday": "Astăzi",
+    "chatScopeThisWeek": "Săptămâna aceasta",
+    "chatScopeAbout": "Despre: {title}",
+    "askAboutThisConversation": "Întreabă despre asta"
 }

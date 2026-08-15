@@ -641,8 +641,9 @@ class MessageProvider extends ChangeNotifier {
     );
     _isNextMessageFromVoice = false;
 
-    // Route through agent VM if Claude Agent is enabled
-    if (SharedPreferencesUtil().claudeAgentEnabled) {
+    // The agent VM protocol does not carry ChatPageContext. Use the scoped server
+    // route instead of silently dropping a conversation/timeframe boundary.
+    if (SharedPreferencesUtil().claudeAgentEnabled && context == null) {
       agentLog('[MessageProvider] claudeAgentEnabled=true, routing through agent VM');
       await _sendMessageViaAgent(text, currentAppId);
       return;

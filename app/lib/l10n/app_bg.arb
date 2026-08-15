@@ -3193,8 +3193,8 @@
     "accountCutoverMigrationInProgressMessage": "Ваш аккаунт мигрирует. Функции продукта приостановлены до завершения миграции.",
     "accountCutoverMigrationRollbackMessage": "Ваш аккаунт на обслуживании после отката миграции. Часть более новых данных может быть изолирована.",
     "accountCutoverOpenStore": "Открыть магазин",
-    "chatScopeToday": "Today",
-    "chatScopeThisWeek": "This week",
-    "chatScopeAbout": "About: {title}",
-    "askAboutThisConversation": "Ask about this"
+    "chatScopeToday": "Днес",
+    "chatScopeThisWeek": "Тази седмица",
+    "chatScopeAbout": "За: {title}",
+    "askAboutThisConversation": "Попитай за това"
 }

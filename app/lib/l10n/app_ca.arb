@@ -3193,8 +3193,8 @@
     "accountCutoverMigrationInProgressMessage": "Tu cuenta se está migrando. Las funciones del producto están en pausa hasta que termine la migración.",
     "accountCutoverMigrationRollbackMessage": "Tu cuenta está en mantenimiento tras una reversión de migración. Algunos datos más recientes pueden quedar retenidos.",
     "accountCutoverOpenStore": "Abrir tienda",
-    "chatScopeToday": "Today",
-    "chatScopeThisWeek": "This week",
-    "chatScopeAbout": "About: {title}",
-    "askAboutThisConversation": "Ask about this"
+    "chatScopeToday": "Avui",
+    "chatScopeThisWeek": "Aquesta setmana",
+    "chatScopeAbout": "Sobre: {title}",
+    "askAboutThisConversation": "Pregunta sobre això"
 }

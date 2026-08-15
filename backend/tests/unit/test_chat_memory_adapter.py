@@ -57,6 +57,7 @@ def test_chat_memory_tool_uses_universal_memory_service_without_legacy_vector_se
     legacy_call = 'vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)'
     assert 'MemoryService(db_client=firestore_db).search(' in contents
     assert 'uid, query, limit=' in contents
+    assert 'candidate_limit=' in contents
     assert legacy_call not in contents
     assert 'chat_legacy_read_authorized' not in contents
     assert 'read_default_read_rollout' not in contents

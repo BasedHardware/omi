@@ -3215,8 +3215,8 @@
     "accountCutoverMigrationInProgressMessage": "Je account wordt gemigreerd. Productfuncties zijn gepauzeerd tot de migratie klaar is.",
     "accountCutoverMigrationRollbackMessage": "Je account is in onderhoud na een migratie-rollback. Nieuwere data kan geïsoleerd zijn.",
     "accountCutoverOpenStore": "Store openen",
-    "chatScopeToday": "Today",
-    "chatScopeThisWeek": "This week",
-    "chatScopeAbout": "About: {title}",
-    "askAboutThisConversation": "Ask about this"
+    "chatScopeToday": "Vandaag",
+    "chatScopeThisWeek": "Deze week",
+    "chatScopeAbout": "Over: {title}",
+    "askAboutThisConversation": "Hiernaar vragen"
 }

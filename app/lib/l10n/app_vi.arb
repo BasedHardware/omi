@@ -3220,8 +3220,8 @@
     "accountCutoverMigrationInProgressMessage": "Tài khoản của bạn đang được di chuyển. Các tính năng sản phẩm tạm dừng cho đến khi hoàn tất.",
     "accountCutoverMigrationRollbackMessage": "Tài khoản của bạn đang bảo trì sau khi hoàn tác di chuyển. Một số dữ liệu mới hơn có thể bị cô lập.",
     "accountCutoverOpenStore": "Mở cửa hàng",
-    "chatScopeToday": "Today",
-    "chatScopeThisWeek": "This week",
-    "chatScopeAbout": "About: {title}",
-    "askAboutThisConversation": "Ask about this"
+    "chatScopeToday": "Hôm nay",
+    "chatScopeThisWeek": "Tuần này",
+    "chatScopeAbout": "Về: {title}",
+    "askAboutThisConversation": "Hỏi về điều này"
 }

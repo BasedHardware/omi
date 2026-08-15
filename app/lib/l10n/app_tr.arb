@@ -3250,8 +3250,8 @@
     "accountCutoverMigrationInProgressMessage": "Hesabınız taşınıyor. Taşıma bitene kadar ürün özellikleri duraklatılır.",
     "accountCutoverMigrationRollbackMessage": "Taşıma geri alınmasından sonra hesabınız bakımda. Daha yeni bazı veriler izole kalabilir.",
     "accountCutoverOpenStore": "Mağazayı aç",
-    "chatScopeToday": "Today",
-    "chatScopeThisWeek": "This week",
-    "chatScopeAbout": "About: {title}",
-    "askAboutThisConversation": "Ask about this"
+    "chatScopeToday": "Bugün",
+    "chatScopeThisWeek": "Bu hafta",
+    "chatScopeAbout": "Hakkında: {title}",
+    "askAboutThisConversation": "Bunu sor"
 }

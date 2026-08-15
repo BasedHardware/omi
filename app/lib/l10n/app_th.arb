@@ -3215,8 +3215,8 @@
     "accountCutoverMigrationInProgressMessage": "บัญชีของคุณกำลังย้าย ฟีเจอร์ผลิตภัณฑ์จะหยุดชั่วคราวจนกว่าการย้ายจะเสร็จ",
     "accountCutoverMigrationRollbackMessage": "บัญชีของคุณอยู่ในโหมดบำรุงรักษาหลังการย้อนกลับการย้าย ข้อมูลที่ใหม่กว่าบางส่วนอาจถูกแยกไว้",
     "accountCutoverOpenStore": "เปิดสโตร์",
-    "chatScopeToday": "Today",
-    "chatScopeThisWeek": "This week",
-    "chatScopeAbout": "About: {title}",
-    "askAboutThisConversation": "Ask about this"
+    "chatScopeToday": "วันนี้",
+    "chatScopeThisWeek": "สัปดาห์นี้",
+    "chatScopeAbout": "เกี่ยวกับ: {title}",
+    "askAboutThisConversation": "ถามเกี่ยวกับสิ่งนี้"
 }

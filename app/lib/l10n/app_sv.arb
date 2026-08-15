@@ -3215,8 +3215,8 @@
     "accountCutoverMigrationInProgressMessage": "Ditt konto migreras. Produktfunktioner pausas tills migreringen är klar.",
     "accountCutoverMigrationRollbackMessage": "Ditt konto är under underhåll efter en migreringsåterställning. Nyare data kan vara isolerad.",
     "accountCutoverOpenStore": "Öppna butik",
-    "chatScopeToday": "Today",
-    "chatScopeThisWeek": "This week",
-    "chatScopeAbout": "About: {title}",
-    "askAboutThisConversation": "Ask about this"
+    "chatScopeToday": "Idag",
+    "chatScopeThisWeek": "Den här veckan",
+    "chatScopeAbout": "Om: {title}",
+    "askAboutThisConversation": "Fråga om detta"
 }

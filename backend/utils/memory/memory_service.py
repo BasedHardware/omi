@@ -1827,14 +1827,16 @@ class MemoryService:
         query: str,
         *,
         limit: int = 5,
+        candidate_limit: Optional[int] = None,
         device_scope_request: Optional[DeviceScopeRequest] = None,
     ) -> List[MemorySearchMatch]:
         capped = max(1, min(int(limit or 5), 20))
+        candidate_cap = max(capped, min(int(candidate_limit or capped), 60))
         try:
             canonical = self._canonical.search(
                 uid,
                 query,
-                limit=min(capped * 3, 60),
+                limit=candidate_cap,
                 device_scope_request=device_scope_request,
             )
         except HTTPException:
@@ -1844,7 +1846,7 @@ class MemoryService:
         historical = self.history.search(
             uid,
             query,
-            limit=min(capped * 3, 60),
+            limit=candidate_cap,
             device_scope_request=device_scope_request,
         )
         by_id: Dict[str, MemorySearchMatch] = {}

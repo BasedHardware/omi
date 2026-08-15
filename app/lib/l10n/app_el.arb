@@ -3215,8 +3215,8 @@
     "accountCutoverMigrationInProgressMessage": "Ο λογαριασμός σας μεταφέρεται. Οι λειτουργίες προϊόντος είναι σε παύση μέχρι να ολοκληρωθεί η μετεγκατάσταση.",
     "accountCutoverMigrationRollbackMessage": "Ο λογαριασμός σας είναι σε συντήρηση μετά από επαναφορά μετεγκατάστασης. Νεότερα δεδομένα ενδέχεται να έχουν απομονωθεί.",
     "accountCutoverOpenStore": "Άνοιγμα καταστήματος",
-    "chatScopeToday": "Today",
-    "chatScopeThisWeek": "This week",
-    "chatScopeAbout": "About: {title}",
-    "askAboutThisConversation": "Ask about this"
+    "chatScopeToday": "Σήμερα",
+    "chatScopeThisWeek": "Αυτή την εβδομάδα",
+    "chatScopeAbout": "Σχετικά με: {title}",
+    "askAboutThisConversation": "Ρώτησε γι' αυτό"
 }
