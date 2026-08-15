@@ -197,9 +197,12 @@ class _MongoBatch:
         def run(coll: Any) -> None:
             result = coll.update_one(query, update)
             if result.matched_count == 0:
-                # A missing/changed doc: with a precondition the revision moved (PreconditionFailed);
-                # without one, update requires an existing doc, so raise NotFound — matching the Firestore
-                # batch (which raises at commit) instead of silently dropping the write (cubic 10887 #9).
+                # No match under a precondition means the precondition can't hold — whether the revision
+                # moved (stale) OR the document is missing. Firestore raises FailedPrecondition for a
+                # last-update-time precondition on a MISSING doc too (verified against the emulator), so
+                # raise PreconditionFailed to match the reference backend and the non-batch _update.
+                # Without a precondition, update requires an existing doc -> NotFound (matching the
+                # Firestore batch, which raises at commit, not a silent drop). See ADR superseding 0045.
                 raise PreconditionFailed(path) if if_updated_at is not None else NotFound(path)
 
         self._append(collection_name, UpdateOne(query, update), run, checked=True)
@@ -339,17 +342,15 @@ class MongoDocumentStore:
         query: Dict[str, Any] = {"_id": path}
         if if_updated_at is not None:
             # Optimistic-concurrency precondition (neutral LastUpdateOption): only apply if the stored
-            # revision still matches. A no-match then means either the revision moved (PreconditionFailed)
-            # or the document is gone (NotFound) — distinguish by a bare existence probe, matching
-            # Firestore, which raises FailedPrecondition on a stale revision and NotFound on a missing doc.
+            # revision still matches. A no-match under a precondition means the precondition cannot hold —
+            # whether the revision moved (stale) OR the document is missing — and Firestore raises
+            # FailedPrecondition for a last-update-time precondition on a MISSING doc too (verified against
+            # the emulator). So map it to PreconditionFailed to match the reference backend, superseding
+            # ADR-0045's existence-probe (which assumed Firestore raised NotFound here — it does not).
             query["_updated_at"] = if_updated_at
         result = self._db[collection_name].update_one(query, update, session=session)
         if result.matched_count == 0:
-            if if_updated_at is not None and self._db[collection_name].count_documents(
-                {"_id": path}, limit=1, session=session
-            ):
-                raise PreconditionFailed(path)
-            raise NotFound(path)
+            raise PreconditionFailed(path) if if_updated_at is not None else NotFound(path)
 
     def _delete(self, path: str, *, if_updated_at: Any = None, session: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
@@ -417,6 +418,14 @@ class MongoDocumentStore:
         mongo_filter = self._filter(collection, filters)
         # order_by is a single field name (str) or a list of (field, direction) tuples.
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
+        # Firestore's order_by returns ONLY documents that have every ordered field; a doc missing one is
+        # excluded. Mongo's sort instead includes it (a missing field sorts as null/first). Add an
+        # existence predicate per ordered payload field so both backends return the same rows (cubic
+        # PR 10887, mongo.py:455). ``__name__`` maps to ``_id`` which always exists. An $and keeps this
+        # from colliding with any existing predicate/keyset on the same field.
+        exists_clauses = [{"d." + f: {"$exists": True}} for f, _ in specs if f != "__name__"]
+        if exists_clauses:
+            mongo_filter = {"$and": [mongo_filter, *exists_clauses]}
         if start_after is not None:
             cursor_id = f"{collection}/{start_after['id']}"
             # Composite keyset (cubic PR 10887 #4/#5/#10/#11): ``values`` aligns with the REAL (payload)
@@ -468,8 +477,13 @@ class MongoDocumentStore:
         for field, op, value in filters or ():
             if field == "__name__":
                 # Document-name filter: compare the full-path _id, not a payload field (cubic PR 10887 #3
-                # — a d.__name__ predicate matched nothing, undercounting e.g. monthly chat usage).
-                mongo_filter.setdefault("_id", {})[_OP[op]] = f"{collection}/{value}"
+                # — a d.__name__ predicate matched nothing, undercounting e.g. monthly chat usage). For
+                # in/not-in the value is a LIST of ids -> a list of full-path _ids ($in/$nin need an array;
+                # f"{collection}/{list}" stringified the whole list and Mongo rejected it — cubic firestore.py:276 sibling).
+                if op in ("in", "not-in"):
+                    mongo_filter.setdefault("_id", {})[_OP[op]] = [f"{collection}/{v}" for v in value]
+                else:
+                    mongo_filter.setdefault("_id", {})[_OP[op]] = f"{collection}/{value}"
             elif op == "array_contains":
                 # Mongo matches an array field against a scalar by membership: {field: value}
                 # selects docs whose array field contains value (mirrors Firestore array_contains).

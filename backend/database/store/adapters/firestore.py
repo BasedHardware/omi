@@ -256,6 +256,19 @@ class FirestoreDocumentStore:
             raise PreconditionFailed(path) from exc
 
     # --- collection ops ---
+    @staticmethod
+    def _to_name_refs(resolver: Any, op: str, value: Any) -> Any:
+        """Convert a neutral ``__name__`` filter value into the ``DocumentReference`` (or list of them)
+        Firestore's ``__key__`` filter requires. A scoped query/count resolves ids relative to the
+        collection (``collection.document``); a collection-group query resolves full paths
+        (``client.document``). Membership ops (``in``/``not-in``/``array_contains_any``) carry a LIST of
+        ids, so each element is converted — passing the whole list to one ``.document()`` raised
+        ``TypeError`` (cubic PR 10887 firestore.py:276); ``count()`` skipped the conversion entirely, so
+        Firestore rejected the bare-string ``__key__`` value (firestore.py:277)."""
+        if op in ("in", "not-in", "array_contains_any"):
+            return [resolver(v) for v in value]
+        return resolver(value)
+
     def query(
         self,
         collection: str,
@@ -268,12 +281,14 @@ class FirestoreDocumentStore:
         fields: Optional[Sequence[str]] = None,
         start_after: Optional[Dict[str, Any]] = None,
     ) -> List[StoredDocument]:
-        query: Any = self._client.collection(collection)
+        coll = self._client.collection(collection)
+        query: Any = coll
         for field, op, value in filters or ():
             if field == "__name__":
                 # Firestore's document-name filter compares against a DocumentReference, not the bare id
-                # (cubic PR 10887 #3). The neutral value is the document id relative to this collection.
-                value = self._client.collection(collection).document(value)
+                # (cubic PR 10887 #3). The neutral value is the document id relative to this collection;
+                # for in/not-in it is a LIST of ids -> one reference each.
+                value = self._to_name_refs(coll.document, op, value)
             query = query.where(filter=FieldFilter(field, op, value))
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
         for _field, _dir in specs:
@@ -300,8 +315,14 @@ class FirestoreDocumentStore:
         return [_record_from_query(snapshot) for snapshot in query.stream()]
 
     def count(self, collection: str, *, filters: Optional[Iterable[Filter]] = None) -> int:
-        query: Any = self._client.collection(collection)
+        coll = self._client.collection(collection)
+        query: Any = coll
         for field, op, value in filters or ():
+            if field == "__name__":
+                # Same DocumentReference conversion as query() — Firestore's aggregation rejects a bare
+                # __key__ string, so a __name__-filtered count() would fail/return zero without this
+                # (cubic PR 10887 firestore.py:277).
+                value = self._to_name_refs(coll.document, op, value)
             query = query.where(filter=FieldFilter(field, op, value))
         result = query.count().get()
         return int(result[0][0].value)
@@ -319,6 +340,11 @@ class FirestoreDocumentStore:
     ) -> List[StoredDocument]:
         query: Any = self._client.collection_group(group)
         for field, op, value in filters or ():
+            if field == "__name__":
+                # In a collection group the document name IS the full logical path (the neutral facade
+                # sends the full path for a group __name__ filter), so resolve it with client.document,
+                # not a collection-relative id. Firestore's __key__ filter needs a DocumentReference.
+                value = self._to_name_refs(self._client.document, op, value)
             query = query.where(filter=FieldFilter(field, op, value))
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
         # A __name__ order on a collection group is the implicit document-name keyset (Firestore's

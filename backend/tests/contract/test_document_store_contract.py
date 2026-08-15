@@ -297,6 +297,38 @@ def test_query_name_filter_matches_document_ids(store, uid):
     assert {d.id for d in store.query(base, filters=[("__name__", ">=", "e2")])} == {"e2", "e3"}
 
 
+def test_count_with_name_filter_matches_document_ids(store, uid):
+    # cubic PR 10887 firestore.py:277: count() must convert a __name__ id to a DocumentReference like
+    # query() does — Firestore's aggregation rejects a bare __key__ string, so a __name__-filtered count
+    # failed/returned zero. Both backends must return the same count.
+    base = f"users/{uid}/events"
+    for doc_id in ("e1", "e2", "e3"):
+        store.set(f"{base}/{doc_id}", {"n": doc_id})
+    assert store.count(base, filters=[("__name__", ">=", "e2")]) == 2
+
+
+def test_query_name_filter_in_list_matches_document_ids(store, uid):
+    # cubic PR 10887 firestore.py:276: for `in`/`not-in` the __name__ value is a LIST of ids; the
+    # Firestore adapter fed the whole list to one .document() -> TypeError. Each id must become a
+    # DocumentReference. Both backends must select the same rows.
+    base = f"users/{uid}/events"
+    for doc_id in ("e1", "e2", "e3"):
+        store.set(f"{base}/{doc_id}", {"n": doc_id})
+    assert {d.id for d in store.query(base, filters=[("__name__", "in", ["e1", "e3"])])} == {"e1", "e3"}
+
+
+def test_query_group_name_filter_matches_full_path(store, uid):
+    # cubic PR 10887 (firestore query_group __name__): a collection-group __name__ filter matches the
+    # full document path. The Firestore adapter passed the value bare (Firestore needs a
+    # DocumentReference); the neutral facade sends the full path for a group __name__ filter.
+    # A collection-group query spans ALL parents, so use a group name unique to this test (the emulator
+    # / shared Mongo db persist across tests, and a reused group name would see other tests' docs).
+    store.set(f"users/{uid}/namegroup/n1", {"kind": "nm"})
+    store.set(f"users/{uid}/namegroup/n2", {"kind": "nm"})
+    got = {d.id for d in store.query_group("namegroup", filters=[("__name__", "==", f"users/{uid}/namegroup/n1")])}
+    assert got == {"n1"}
+
+
 def test_query_sole_name_order_paginates(store, uid):
     # cubic PR 10887 #5/#11: order_by __name__ + cursor pages by document name. On Mongo the keyset hit
     # d.__name__ (never exists) so page 2 was empty (staged_tasks / review_queue legacy scans).
@@ -608,6 +640,36 @@ def test_batch_update_missing_doc_raises_not_found(store, uid):
     batch.update(f"users/{uid}/people/ghost", {"a": 1})
     with pytest.raises(NotFound):
         batch.commit()
+
+
+def test_update_missing_doc_with_precondition_raises_precondition_failed(store, uid):
+    # cubic PR 10887 (mongo.py:203) — corrected against the reference backend: a precondition
+    # (if_updated_at) update of a missing doc must raise PreconditionFailed, NOT NotFound. Firestore
+    # raises FailedPrecondition for a last-update-time precondition on a missing doc (verified against the
+    # emulator), so both backends and both paths (non-batch _update AND batch) must agree. The Mongo
+    # existence-probe from ADR-0045 wrongly returned NotFound here; this supersedes it. (No precondition
+    # still -> NotFound: test_update_missing_raises_not_found / test_batch_update_missing_doc_raises_not_found.)
+    from datetime import datetime, timezone
+
+    precond = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    with pytest.raises(PreconditionFailed):
+        store.update(f"users/{uid}/people/ghost", {"a": 1}, if_updated_at=precond)
+    batch = store.batch()
+    batch.update(f"users/{uid}/people/ghost", {"a": 1}, if_updated_at=precond)
+    with pytest.raises(PreconditionFailed):
+        batch.commit()
+
+
+def test_query_order_by_excludes_documents_missing_the_ordered_field(store, uid):
+    # cubic PR 10887 (mongo.py:455): Firestore's order_by returns ONLY docs that have the ordered field;
+    # a doc missing it is excluded. Mongo's sort instead includes it (missing sorts as null/first). Both
+    # backends must agree — the Mongo adapter adds an $exists predicate per ordered field.
+    base = f"users/{uid}/items"
+    store.set(f"{base}/a", {"n": 2})
+    store.set(f"{base}/b", {"n": 1})
+    store.set(f"{base}/c", {"other": 9})  # no ``n`` -> excluded from an order_by('n')
+    ids = [d.path.rsplit("/", 1)[-1] for d in store.query(base, order_by="n", direction="asc")]
+    assert ids == ["b", "a"]
 
 
 def test_batch_create_inserts_and_collides(store, uid):

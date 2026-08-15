@@ -231,6 +231,12 @@ class FakeDocumentStore:
     ) -> List[StoredDocument]:
         rows = self._matching_rows(collection, filters)
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
+        # Firestore's order_by excludes docs missing an ordered field; the adapters emulate this with an
+        # $exists predicate (mongo.py query()). The fake must too, or a doc lacking the order field wrongly
+        # appears here and the hermetic test diverges from both backends (cubic PR 10887 mongo.py:455).
+        for _f, _ in specs:
+            if _f != "__name__":
+                rows = [(p, d) for p, d in rows if _f in d]
 
         # ``__name__`` means the document id (its full path), matching the adapters.
         def _sort_val(pd: Any, field: str) -> Any:
