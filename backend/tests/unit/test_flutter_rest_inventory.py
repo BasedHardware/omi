@@ -44,12 +44,7 @@ BASE_URL_ROOTS = {'/v1/dev', '/v1/mcp'}
 
 # Known gaps already tracked with a follow-up owner. Add here ONLY with a note
 # naming the tracking PR/issue, exactly like the desktop inventories.
-KNOWN_MISSING_ROUTES: Set[str] = {
-    # Backend wrapped-2025 routes exist but are not exported to the app-client
-    # spec; same export-scope gap class as #11613's search-chunks incident.
-    '/v1/wrapped/2025',
-    '/v1/wrapped/2025/generate',
-}
+KNOWN_MISSING_ROUTES: Set[str] = set()
 
 # Dart route literals: capture from `${Env.apiBaseUrl}` to the closing quote,
 # then cut at the first `?` (query strings and optional-query ternaries).
@@ -88,8 +83,19 @@ def _load_spec_paths() -> Set[str]:
     return set(spec.get('paths', {}).keys())
 
 
-def _normalize_for_match(path: str) -> str:
-    return re.sub(r'\{[^}]+\}', '{param}', path)
+def _covered_by_spec(route: str, spec_paths: Set[str]) -> bool:
+    """Segment-wise match where a spec `{param}` segment matches ANY client
+    segment, including a hardcoded literal (`/v1/wrapped/2025` is covered by
+    `/v1/wrapped/{year}` exactly as the HTTP router resolves it). A client
+    `{param}` segment still requires a spec param at that position."""
+    segments = route.split('/')
+    for spec_path in spec_paths:
+        spec_segments = spec_path.split('/')
+        if len(spec_segments) != len(segments):
+            continue
+        if all(s.startswith('{') or s == c for s, c in zip(spec_segments, segments)):
+            return True
+    return False
 
 
 def test_flutter_sources_exist_and_declare_backend_routes():
@@ -103,10 +109,8 @@ def test_flutter_sources_exist_and_declare_backend_routes():
 
 def test_every_in_scope_flutter_rest_route_exists_in_app_client_openapi():
     routes = _in_scope(_extract_routes_from_dart(_load_flutter_sources()))
-    spec_normalized = {_normalize_for_match(p) for p in _load_spec_paths()}
-    missing = sorted(
-        r for r in routes if _normalize_for_match(r) not in spec_normalized and r not in KNOWN_MISSING_ROUTES
-    )
+    spec_paths = _load_spec_paths()
+    missing = sorted(r for r in routes if not _covered_by_spec(r, spec_paths) and r not in KNOWN_MISSING_ROUTES)
     assert not missing, (
         'Flutter REST routes hardcoded under app/lib/backend/http are missing from the '
         'app-client OpenAPI spec. Either add the backend route + response_model, document '
@@ -119,6 +123,6 @@ def test_known_missing_routes_do_not_rot():
     """A KNOWN_MISSING entry whose route gained a spec entry (or left the code)
     must be removed so the allowlist only ever shrinks toward zero."""
     routes = _in_scope(_extract_routes_from_dart(_load_flutter_sources()))
-    spec_normalized = {_normalize_for_match(p) for p in _load_spec_paths()}
-    stale = sorted(r for r in KNOWN_MISSING_ROUTES if r not in routes or _normalize_for_match(r) in spec_normalized)
+    spec_paths = _load_spec_paths()
+    stale = sorted(r for r in KNOWN_MISSING_ROUTES if r not in routes or _covered_by_spec(r, spec_paths))
     assert not stale, f'KNOWN_MISSING_ROUTES entries no longer needed, remove them: {stale}'

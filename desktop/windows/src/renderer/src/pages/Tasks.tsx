@@ -7,7 +7,7 @@ import { PageHeader } from '../components/layout/PageHeader'
 import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
 import { EmptyState } from '../components/ui/EmptyState'
 import { toast } from '../lib/toast'
-import { bucketOf, formatDue, startOfDay, type Bucket } from '../lib/taskBuckets'
+import { bucketOf, formatDue, startOfDay, startOfDayOffset, type Bucket } from '../lib/taskBuckets'
 import type { ActionItemRecord } from '../../../shared/types'
 import type { Conversation as CloudConversation } from '../lib/omiApi.generated'
 
@@ -273,6 +273,27 @@ export function Tasks(): React.JSX.Element {
 
   // For open/all: group open items by due bucket. For done/all: a flat
   // completed list (newest first), shown after the open buckets.
+  // The bucket grouping reads the clock, so a page left open across local
+  // midnight would keep yesterday's Today/Tomorrow split until something else
+  // re-rendered. Tick the day anchor at each local midnight; bucketOf(t, dayStamp)
+  // is equivalent to bucketOf(t, Date.now()) because the rule only consumes
+  // startOfDay(now).
+  const [dayStamp, setDayStamp] = useState(() => startOfDay(Date.now()))
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    const arm = (): void => {
+      timer = setTimeout(
+        () => {
+          setDayStamp(startOfDay(Date.now()))
+          arm()
+        },
+        Math.max(1000, startOfDayOffset(Date.now(), 1) - Date.now())
+      )
+    }
+    arm()
+    return () => clearTimeout(timer)
+  }, [])
+
   const openGroups = useMemo(() => {
     if (filter === 'done') return []
     const groups: Record<Bucket, ActionItemRecord[]> = {
@@ -283,7 +304,7 @@ export function Tasks(): React.JSX.Element {
     }
     for (const t of items) {
       if (t.completed) continue
-      groups[bucketOf(t)].push(t)
+      groups[bucketOf(t, dayStamp)].push(t)
     }
     for (const b of BUCKET_ORDER) {
       groups[b].sort((a, c) => {
@@ -297,7 +318,7 @@ export function Tasks(): React.JSX.Element {
       bucket: b,
       items: groups[b]
     }))
-  }, [items, filter])
+  }, [items, filter, dayStamp])
 
   const doneItems = useMemo(() => {
     if (filter === 'open') return []

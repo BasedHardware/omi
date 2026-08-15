@@ -29,7 +29,7 @@ cross-platform decision instead of a single-platform drive-by.
 | Backend (fixture integrity + serialization contract) | `backend/tests/unit/test_parity_contracts.py` | `backend/test.sh`, CI Backend unit suite |
 | Flutter app | `app/test/parity/parity_contracts_test.dart` | `app/test.sh`, CI Flutter tests |
 | Windows desktop | `desktop/windows/src/renderer/src/lib/parityContracts.test.ts` | `npm test` in `desktop/windows`, CI Desktop Windows tests |
-| macOS desktop | Adapter pending. The fixtures already encode the macOS model (`fold_overdue`, `categoryFor` in `desktop/macos/Desktop/Sources/TasksPage.swift`); a `ParityContractsTests.swift` reading this directory is the follow-up for a machine that can run the Swift test lane. |
+| macOS desktop | Adapter pending. The fixtures already encode the macOS model (`fold_overdue`, `categoryFor` in `desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift`); a `ParityContractsTests.swift` reading this directory is the follow-up for a machine that can run the Swift test lane. |
 
 The backend suite validates every fixture file structurally (parseable, complete
 expectations, self-consistent day-key arithmetic) so a malformed fixture cannot pass
@@ -48,7 +48,7 @@ in the same PR.
 1. Overdue model. The Flutter app (`app/lib/pages/action_items/task_categorization.dart`)
    uses a separate Overdue bucket: past-due tasks go to Overdue, and tasks with no due
    date created more than 7 days ago age into Overdue. macOS (`categoryFor`,
-   TasksPage.swift) and Windows (`lib/taskBuckets.ts`) fold past-due into Today and have
+   `desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift`) and Windows (`lib/taskBuckets.ts`) fold past-due into Today and have
    no aging rule. The Windows comment previously claimed the fold model matched the
    Flutter app; it does not, and `task_due_buckets.json` pins BOTH models per case so the
    difference is explicit until product picks one.

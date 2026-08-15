@@ -243,8 +243,10 @@ class ActionItemResponse(BaseModel):
         # Firestore timestamps are UTC; a naive one leaking through serializes
         # without an offset, which Dart/JS decode as LOCAL wall time and Swift's
         # ISO8601 decoder rejects outright. Stamp UTC so every emitted timestamp
-        # carries an explicit offset (contracts/parity/README.md).
-        if value is not None and value.tzinfo is None:
+        # carries an explicit offset (contracts/parity/README.md). utcoffset()
+        # rather than tzinfo: a tzinfo whose utcoffset() returns None is still
+        # semantically naive and would serialize offsetless all the same.
+        if value is not None and value.utcoffset() is None:
             return value.replace(tzinfo=timezone.utc)
         return value
 

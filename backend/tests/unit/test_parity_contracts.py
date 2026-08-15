@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from models.action_item import ActionItemResponse
 
@@ -121,7 +122,9 @@ def test_backend_rejects_the_divergence_case_junk_forms():
     for case in divergence_cases:
         assert case['expected_by_model']['strict_decode']['parses'] is False, case['name']
         assert case['expected_by_model']['tolerant_decode']['parses'] is True, case['name']
-        with pytest.raises(Exception):
+        # ValidationError specifically: a broader except would also swallow a
+        # rotted fixture (missing keys raise KeyError above, loudly).
+        with pytest.raises(ValidationError):
             ActionItemResponse.model_validate(case['payload'])
 
 
@@ -149,3 +152,27 @@ def test_aware_datetimes_keep_their_instant():
     )
     emitted = item.model_dump(mode='json')['due_at']
     assert datetime.fromisoformat(emitted.replace('Z', '+00:00')) == aware
+
+
+def test_semantically_naive_tzinfo_serializes_with_an_explicit_utc_offset():
+    """A tzinfo whose utcoffset() returns None is still naive for serialization
+    purposes; the guard must key off utcoffset(), not tzinfo presence."""
+    import datetime as datetime_module
+
+    class _OffsetlessTzinfo(datetime_module.tzinfo):
+        def utcoffset(self, dt):
+            return None
+
+        def dst(self, dt):
+            return None
+
+        def tzname(self, dt):
+            return 'offsetless'
+
+    semi_naive = datetime(2026, 8, 20, 16, 0, 0, tzinfo=_OffsetlessTzinfo())
+    item = ActionItemResponse.model_validate(
+        {'id': 'ai_parity_semi', 'description': 'semantically naive', 'completed': False, 'due_at': semi_naive}
+    )
+    emitted = item.model_dump(mode='json')['due_at']
+    assert emitted.endswith('Z') or '+00:00' in emitted, f'no offset emitted: {emitted!r}'
+    assert datetime.fromisoformat(emitted.replace('Z', '+00:00')) == semi_naive.replace(tzinfo=timezone.utc)

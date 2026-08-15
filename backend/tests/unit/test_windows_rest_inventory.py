@@ -53,12 +53,10 @@ OUT_OF_SCOPE_PREFIXES = (
 # entries mirror test_desktop_rest_inventory.py: the same backend surfaces are
 # consumed by both desktop clients and carry the same follow-up.
 KNOWN_MISSING_ROUTES: Set[str] = {
-    # Backend routers exist (routers/auto_model.py, google-calendar integration)
-    # but the routes are not exported to the app-client spec yet; same
-    # export-scope gap class as #11613's search-chunks incident.
+    # Backend router exists (routers/auto_model.py) but the route is not
+    # exported to the app-client spec yet; same export-scope gap class as
+    # #11613's search-chunks incident.
     '/v1/auto/model-pick',
-    '/v1/integrations/google_calendar',
-    '/v1/integrations/google_calendar/oauth-url',
     # These backend routes exist but return unmodeled (loose) responses, so
     # adding them to the app-client surface would regress the strict
     # `unmodeled_success_response_count == 0` gate (see the macOS inventory's
@@ -119,22 +117,35 @@ def _load_spec_paths() -> Set[str]:
     return set(spec.get('paths', {}).keys())
 
 
-def _normalize_for_match(path: str) -> str:
-    return re.sub(r'\{[^}]+\}', '{param}', path)
+def _covered_by_spec(route: str, spec_paths: Set[str]) -> bool:
+    """Segment-wise match where a spec `{param}` segment matches ANY client
+    segment, including a hardcoded literal, exactly as the HTTP router resolves
+    the path. A client `{param}` segment still requires a spec param there."""
+    segments = route.split('/')
+    for spec_path in spec_paths:
+        spec_segments = spec_path.split('/')
+        if len(spec_segments) != len(segments):
+            continue
+        if all(s.startswith('{') or s == c for s, c in zip(spec_segments, segments)):
+            return True
+    return False
 
 
 def test_windows_sources_exist_and_declare_backend_routes():
     assert WINDOWS_SOURCE_ROOT.is_dir(), 'Windows desktop source tree moved; update WINDOWS_SOURCE_ROOT'
-    routes = _extract_routes_from_typescript(_load_windows_sources())
-    assert routes, 'route extraction found nothing; the extraction regex or client layout changed'
+    routes = _in_scope(_extract_routes_from_typescript(_load_windows_sources()))
+    # A bare non-empty assertion lets the extractor silently regress to a single
+    # route; the floor keeps the extraction honest (currently ~60 in scope).
+    assert len(routes) >= 20, (
+        f'route extraction found only {len(routes)} in-scope routes; the extraction '
+        'regex or client layout changed and the extractor needs updating'
+    )
 
 
 def test_every_in_scope_windows_rest_route_exists_in_app_client_openapi():
     routes = _in_scope(_extract_routes_from_typescript(_load_windows_sources()))
-    spec_normalized = {_normalize_for_match(p) for p in _load_spec_paths()}
-    missing = sorted(
-        r for r in routes if _normalize_for_match(r) not in spec_normalized and r not in KNOWN_MISSING_ROUTES
-    )
+    spec_paths = _load_spec_paths()
+    missing = sorted(r for r in routes if not _covered_by_spec(r, spec_paths) and r not in KNOWN_MISSING_ROUTES)
     assert not missing, (
         'Windows REST routes hardcoded under desktop/windows/src are missing from the '
         'app-client OpenAPI spec. Either add the backend route + response_model, document '
@@ -147,6 +158,6 @@ def test_known_missing_routes_do_not_rot():
     """A KNOWN_MISSING entry whose route gained a spec entry (or left the code)
     must be removed so the allowlist only ever shrinks toward zero."""
     routes = _in_scope(_extract_routes_from_typescript(_load_windows_sources()))
-    spec_normalized = {_normalize_for_match(p) for p in _load_spec_paths()}
-    stale = sorted(r for r in KNOWN_MISSING_ROUTES if r not in routes or _normalize_for_match(r) in spec_normalized)
+    spec_paths = _load_spec_paths()
+    stale = sorted(r for r in KNOWN_MISSING_ROUTES if r not in routes or _covered_by_spec(r, spec_paths))
     assert not stale, f'KNOWN_MISSING_ROUTES entries no longer needed, remove them: {stale}'
