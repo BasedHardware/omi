@@ -116,7 +116,7 @@ class RecoveryTests(unittest.TestCase):
                 "FAIL: SERVICE_ACCOUNT_JSON=<redacted>",
                 "ERROR: Cookie: <redacted>",
                 "WARN: Set-Cookie: <redacted>",
-                "FAIL: https://example.test/callback?access_token=<redacted>&mode=test",
+                "FAIL: https://example.test/callback?access_token=<redacted>&mode=<redacted>",
             ],
         )
         self.assertNotIn("super-secret", json.dumps(capsule))
@@ -234,6 +234,31 @@ class RecoveryTests(unittest.TestCase):
         summary = RECOVERY.markdown_summary(capsule)
         self.assertIn("Failed-step log tail", summary)
         self.assertIn("noise 249 token=<redacted>", summary)
+
+    def test_log_tail_redacts_query_tokens_github_pats_and_fence_breakers(self) -> None:
+        log = (
+            b"GET https://example.test/callback?token=supersecret&mode=test\n"
+            b"exchange https://example.test/oidc?foo=1&SOME_OIDC_TOKEN=oidc-secret-value\n"
+            b"auth github_pat_11ABCDEFG0123456789abcdefghijklmnopqrstuv\n"
+            b"jwt eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0In0.signature\n"
+            b"``` rm -rf / ```\n"
+        )
+        capsule = RECOVERY.build_capsule(
+            build_id=BUILD_ID,
+            token="not-recorded",
+            profiles=self.profiles(),
+            opener=self.opener(build_payload("Unknown Codemagic step"), log),
+        )
+        dumped = json.dumps(capsule)
+        self.assertNotIn("supersecret", dumped)
+        self.assertNotIn("oidc-secret-value", dumped)
+        self.assertNotIn("github_pat_11ABCDEFG0123456789abcdefghijklmnopqrstuv", dumped)
+        self.assertNotIn("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", dumped)
+        self.assertIn("token=<redacted>", dumped)
+        self.assertIn("SOME_OIDC_TOKEN=<redacted>", dumped)
+        summary = RECOVERY.markdown_summary(capsule)
+        self.assertNotIn("``` rm -rf / ```", summary)
+        self.assertIn("''' rm -rf / '''", summary)
 
 
 if __name__ == "__main__":

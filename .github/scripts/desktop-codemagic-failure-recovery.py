@@ -45,6 +45,9 @@ BEARER_RE = re.compile(r"(?i)(\bbearer\s+)\S+")
 URL_CREDENTIAL_RE = re.compile(
     r"(?i)([?&](?:access_token|refresh_token|id_token|api_key|key|signature|x-goog-signature)=)[^&\s]+"
 )
+QUERY_ASSIGNMENT_RE = re.compile(r"([?&][A-Za-z0-9_.%-]+=)[^&\s]+")
+GITHUB_TOKEN_RE = re.compile(r"\b(?:github_pat_|gh[pousr]_)[A-Za-z0-9_]+\b")
+JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
 
 
 class RecoveryError(RuntimeError):
@@ -156,6 +159,9 @@ def sanitize_line(line: str) -> str:
     line = CREDENTIAL_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
     line = BEARER_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
     line = URL_CREDENTIAL_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
+    line = QUERY_ASSIGNMENT_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
+    line = GITHUB_TOKEN_RE.sub("<redacted>", line)
+    line = JWT_RE.sub("<redacted>", line)
     return line
 
 
@@ -304,7 +310,7 @@ def markdown_summary(capsule: dict[str, Any]) -> str:
     log_tail = capsule.get("log_tail") or []
     if log_tail:
         lines.extend(["", "### Failed-step log tail (last 200 lines)", "", "```"])
-        lines.extend(str(line) for line in log_tail)
+        lines.extend(str(line).replace("```", "'''") for line in log_tail)
         lines.append("```")
     command = capsule.get("rehearsal_command")
     if isinstance(command, str):

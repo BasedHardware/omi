@@ -13,6 +13,5 @@
     ".github/scripts/check-release-process-guards.py",
     ".github/workflows/desktop_auto_release.yml"
   ],
-  "status": "dormant",
-  "dormant_since": "2026-08-14T19:43:00Z"
+  "status": "open"
 }
