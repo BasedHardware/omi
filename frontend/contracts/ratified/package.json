@@ -54,7 +54,7 @@
   ],
   "scripts": {
     "build": "node scripts/clean.mjs && tsc -p tsconfig.json",
-    "test": "node --test test/*.test.mjs",
+    "test": "node ../../scripts/run-node-test.mjs test/*.test.mjs",
     "check:types": "tsc -p fixtures/clean-consumer/tsconfig.json --noEmit",
     "check:markers": "node scripts/check-domain-markers.mjs",
     "check:provenance": "node scripts/provenance.mjs --check",

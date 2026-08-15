@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "test": "node --test test/*.test.mjs",
+    "test": "node ../../scripts/run-node-test.mjs test/*.test.mjs",
     "lint": "echo i18n:no-lint-yet"
   },
   "devDependencies": {
