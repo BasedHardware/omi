@@ -12,8 +12,10 @@ import {
   resolveDevSttConfig,
 } from "../listen/mlx-whisper-boot";
 import { createMlxWhisperTranscriptionSource } from "../listen/mlx-whisper-transcription-source";
+import type { ChatGenerationLivenessPolicy } from "../chat/generation-supervisor";
 import { createGetActionItemsToolLoop } from "../chat/action-items-tool";
 import { createProductionGatewayToolLoop } from "../chat/gateway-tool-composition";
+import { resolveDevGenerationLiveness } from "../chat/real-model-liveness";
 import { LOOPBACK_HOST, assertPortInRange } from "../net/loopback";
 import { isQaEvidenceRunId } from "../observability/producer-evidence";
 import { QA_FIXTURE_TIME_ANCHOR_UTC } from "../qa/seed";
@@ -64,6 +66,7 @@ const DEFAULT_OWNER = "local-dev-user";
 const DEFAULT_MEMORY_COUNT = 12;
 const DEFAULT_TIMEZONE = "America/Los_Angeles";
 
+
 const fail = (message: string): never => {
   // Legible, actionable, and free of any user content.
   process.stderr.write(`\nomi dev-server: ${message}\n\n`);
@@ -85,6 +88,7 @@ interface BootConfig {
     readonly token: string;
     readonly laneId: string;
   }> | null;
+  readonly generationLiveness: ChatGenerationLivenessPolicy | null;
   readonly stt: ReturnType<typeof resolveDevSttConfig>;
 }
 
@@ -152,6 +156,16 @@ const readConfig = (): BootConfig => {
     laneId: process.env.OMI_LLM_GATEWAY_LANE?.trim() || "omi:auto:chat-agent",
   });
 
+  // The default liveness policy (100ms to first event, 1s total) is sized for
+  // the canned test gateway, which answers instantly. A real model does not:
+  // measured against GLM-4.7 through integration/local-model-gateway.mjs, a
+  // one-sentence question spent 280 reasoning tokens before its first
+  // `delta.content`, and the generation-source only observes content deltas —
+  // so every real-model generation finalized `generation_timeout` and chat
+  // answered nothing. Real-model runs get real-model deadlines; the canned
+  // default is untouched.
+  const generationLiveness = resolveDevGenerationLiveness(process.env.OMI_CHAT_MODEL);
+
   let stt: ReturnType<typeof resolveDevSttConfig>;
   try {
     stt = resolveDevSttConfig({
@@ -177,6 +191,7 @@ const readConfig = (): BootConfig => {
     readyRecordPath: rawReadyRecordPath ?? null,
     seedPersona,
     llmGateway,
+    generationLiveness,
     stt,
   });
 };
@@ -249,6 +264,9 @@ const main = (): void => {
       generationSource,
       ...(transcriptionSource === null ? {} : { transcriptionSource }),
       screenRetentionIntervalMs: SCREEN_RETENTION_INTERVAL_MS,
+      ...(config.generationLiveness === null
+        ? {}
+        : { generationLiveness: config.generationLiveness }),
       ...(config.seedPersona === "demo"
         ? { seedPersona: "demo" as const, overlaySeed: applyDemoPersonaSeed }
         : {}),
