@@ -758,7 +758,7 @@ actor TaskAssistant: ProactiveAssistant {
         await TaskPromotionService.shared.promoteIfNeeded()
       }
     } catch {
-      logError("Task: Candidate outbox delivery failed; will retry", error: error)
+      await CandidateOutboxRetryPolicy.handleDeliveryFailure(error, localID: localID)
     }
   }
 
