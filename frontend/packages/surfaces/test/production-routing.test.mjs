@@ -25,9 +25,8 @@ test("a platform memories selection with no route named lands on the surface tha
   assert.equal(route(null, null, "platform"), "memories");
   // red-proof: returning "home" here reproduces the exact failure the documented launcher
   // hit. `dev-stack.sh --generation platform` passes `generation=platform` and NO route;
-  // Home reads memories through the LEGACY store, so the new backend serves zero reads
-  // while the app looks perfect and logs no rejection — because the selection was honored,
-  // just never used. Measured: servedReads 0 -> 0 before this, 0 -> 2 after.
+  // the memories surface is the one that selection is asking to review. Home now honors
+  // the same selection when the host names `route=home`.
 });
 
 test("with no platform selection the default is unchanged", () => {
