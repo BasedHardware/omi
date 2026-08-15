@@ -8,7 +8,6 @@ from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-import tiktoken
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -26,6 +25,11 @@ from .gateway_error_contract import is_byok_rate_limit_gateway_error
 from utils.byok import has_byok_keys
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
+from utils.llm.prompt_cache import (
+    EXPLICIT_CACHE_MINIMUM_TOKENS,
+    EXPLICIT_CACHE_OPTIONS,
+    has_cacheable_prefix,
+)
 
 try:
     from utils.llm.gateway_client import should_route_features_through_gateway
@@ -42,10 +46,10 @@ CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ST
 CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE = 'conversation_action_items.extract.shadow'
 CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED'
 CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE'
-GPT56_EXPLICIT_CACHE_OPTIONS = {'mode': 'explicit', 'ttl': '30m'}
+GPT56_EXPLICIT_CACHE_OPTIONS = EXPLICIT_CACHE_OPTIONS
 CONVERSATION_CACHE_BUCKET_COUNT = 4
 CONVERSATION_CACHE_BUCKET_SECONDS = 15
-GPT56_CACHE_MINIMUM_TOKENS = 1024
+GPT56_CACHE_MINIMUM_TOKENS = EXPLICIT_CACHE_MINIMUM_TOKENS
 
 
 def _cache_bucket_key(prefix: str, *, now: float | None = None) -> str:
@@ -73,11 +77,7 @@ def _gpt56_cacheable_system_message(content: str, *, cache_enabled: bool) -> Any
 
 def _has_gpt56_cacheable_static_prefix(content: str) -> bool:
     """Use the model-family tokenizer as a conservative preflight for a cache write."""
-    try:
-        return len(tiktoken.get_encoding('o200k_base').encode(content)) >= GPT56_CACHE_MINIMUM_TOKENS
-    except AttributeError:
-        # Do not make a cache write merely because an optional tokenizer dependency is unavailable.
-        return len(content) >= GPT56_CACHE_MINIMUM_TOKENS * 4
+    return has_cacheable_prefix(content)
 
 
 # =============================================

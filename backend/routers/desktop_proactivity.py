@@ -10,7 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from jsonschema import Draft202012Validator, SchemaError, ValidationError
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -23,6 +23,7 @@ from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.desktop_llm_stub import llm_stub_enabled
 from utils.llm.gateway_client import llm_gateway_headers
 from utils.llm.gateway_observability import record_direct_exception_surface
+from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS, has_cacheable_prefix
 from utils.llm.providers import get_openai_api_key
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import get_current_user_uid
@@ -64,6 +65,36 @@ class _ProviderRequest:
     fallback_class: str
 
 
+@dataclass(frozen=True)
+class ProactiveQuotaState:
+    limit: int
+    remaining: int
+    reset_seconds: int
+
+
+_QUOTA_LIMIT_HEADER = "X-Proactive-Quota-Limit"
+_QUOTA_REMAINING_HEADER = "X-Proactive-Quota-Remaining"
+_QUOTA_RESET_HEADER = "X-Proactive-Quota-Reset"
+
+
+def _quota_headers(state: ProactiveQuotaState, *, include_retry_after: bool = False) -> dict[str, str]:
+    headers = {
+        _QUOTA_LIMIT_HEADER: str(state.limit),
+        _QUOTA_REMAINING_HEADER: str(state.remaining),
+        _QUOTA_RESET_HEADER: str(state.reset_seconds),
+    }
+    if include_retry_after:
+        headers["Retry-After"] = str(state.reset_seconds)
+    return headers
+
+
+def _apply_quota_headers(response: Response | None, state: ProactiveQuotaState | None) -> None:
+    if response is None or state is None:
+        return
+    for name, value in _quota_headers(state).items():
+        response.headers[name] = value
+
+
 def _dev_direct_provider_allowed() -> bool:
     stage = resolve_stage_from_env()
     if stage in {EnvStage.DEV.value, EnvStage.LOCAL.value}:
@@ -96,9 +127,14 @@ def _proactive_provider_request(request: "ProactiveCompletionRequest", uid: str,
     # budget on hidden reasoning. Extraction then returns an empty message with
     # finish_reason=length instead of the required strict JSON payload.
     payload["reasoning_effort"] = "minimal" if request.operation == ProactiveOperation.EXTRACTION else "medium"
-    # These are gateway cache extensions, not OpenAI request fields.
-    payload["messages"] = request.messages
-    payload.pop("prompt_cache_key", None)
+    # Keep the breakpointed messages built above. The desktop client packs the stable
+    # bucket prompt, the volatile frame metadata and the screenshot into ONE user
+    # message, and the provider only serves a cache read from a prefix that ends on a
+    # message boundary or on an explicit breakpoint. Replacing these with the raw
+    # request messages removes the only readable boundary in the prompt, which charges
+    # a full cache write on every call and lets no read ever hit.
+    # prompt_cache_options and metadata are gateway extensions, not OpenAI request
+    # fields; prompt_cache_key is a real OpenAI field and is kept.
     payload.pop("prompt_cache_options", None)
     payload.pop("metadata", None)
     record_fallback(
@@ -197,7 +233,7 @@ def _customer_subscription(uid: str) -> Subscription | None:
     )
 
 
-async def _consume_quota(uid: str, operation: ProactiveOperation) -> None:
+async def _consume_quota(uid: str, operation: ProactiveOperation) -> ProactiveQuotaState:
     operation_value = operation.value
     try:
         subscription = await run_blocking(
@@ -206,7 +242,7 @@ async def _consume_quota(uid: str, operation: ProactiveOperation) -> None:
             uid,
         )
         limit = _quota_limit_for_subscription(operation, subscription)
-        allowed, _, retry_after = await run_blocking(
+        allowed, remaining, reset_seconds = await run_blocking(
             critical_executor,
             redis_db.reserve_rate_limit,
             uid,
@@ -216,12 +252,14 @@ async def _consume_quota(uid: str, operation: ProactiveOperation) -> None:
         )
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Proactive metering is temporarily unavailable") from exc
+    state = ProactiveQuotaState(limit=limit, remaining=remaining, reset_seconds=reset_seconds)
     if not allowed:
         raise HTTPException(
             status_code=429,
             detail="Proactive request limit exceeded",
-            headers={"Retry-After": str(retry_after)},
+            headers=_quota_headers(state, include_retry_after=True),
         )
+    return state
 
 
 async def _release_quota(uid: str, operation: ProactiveOperation) -> None:
@@ -304,11 +342,29 @@ def _gateway_payload(request: ProactiveCompletionRequest) -> dict[str, Any]:
             "parser_version": "desktop_proactive_json.v1",
         },
     }
-    if request.cache_key is not None:
+    if request.cache_key is not None and has_cacheable_prefix(_stable_prefix_text(request.messages)):
         payload["prompt_cache_key"] = request.cache_key
-        payload["prompt_cache_options"] = {"mode": "explicit", "ttl": "30m"}
+        payload["prompt_cache_options"] = dict(EXPLICIT_CACHE_OPTIONS)
         payload["messages"] = _add_explicit_cache_breakpoint(request.messages)
     return payload
+
+
+def _stable_prefix_text(messages: list[dict[str, Any]]) -> str:
+    """Return the text a breakpoint would mark as cacheable, for a size preflight.
+
+    A prefix under the provider minimum is never served back as a read, so marking
+    it buys nothing. Mirrors the message chosen by ``_add_explicit_cache_breakpoint``.
+    """
+    for message in reversed(messages):
+        content = message.get("content")
+        if isinstance(content, list):
+            first = next((part for part in content if isinstance(part, dict)), None)
+            if first is not None and first.get("type") == "text" and isinstance(first.get("text"), str):
+                return first["text"]
+            return ""
+        if isinstance(content, str):
+            return content
+    return ""
 
 
 def _add_explicit_cache_breakpoint(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -450,6 +506,7 @@ async def _post_provider_completion(
 @router.post("/v1/desktop/proactivity/completions", response_model=ProactiveCompletionEnvelope)
 async def proactive_completion(
     request: ProactiveCompletionRequest,
+    response: Response,
     uid: str = Depends(_authorized_desktop_user),
 ) -> ProactiveCompletionEnvelope:
     operation = request.operation.value
@@ -466,7 +523,8 @@ async def proactive_completion(
             response=response_body,
         )
 
-    await _consume_quota(uid, request.operation)
+    quota = await _consume_quota(uid, request.operation)
+    _apply_quota_headers(response, quota)
     request_id = str(uuid4())
     provider_request: _ProviderRequest | None = None
     direct_extraction_retry_attempted = False

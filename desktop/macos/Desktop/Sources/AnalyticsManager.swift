@@ -2,6 +2,15 @@ import AppKit
 import Foundation
 import Sentry
 
+/// Closed reason a presented notification left the screen. Auto-hide and explicit
+/// close must not share a single "dismissed" bucket — that made engagement
+/// unreadable (expiry counted as a user dismiss).
+enum NotificationDismissalKind: String, CaseIterable, Sendable {
+  case user
+  case timeout
+  case replaced
+}
+
 /// Unified analytics manager that sends events to PostHog.
 /// Use this instead of calling PostHogManager directly
 @MainActor
@@ -1061,12 +1070,14 @@ class AnalyticsManager {
   func suggestionAssistantEvaluationFailed(
     identity: SuggestionAssistantTelemetry.Identity,
     shape: SuggestionAssistantTelemetry.EvaluationShape,
-    latency: TimeInterval
+    latency: TimeInterval,
+    reason: SuggestionAssistantTelemetry.EvaluationFailureReason
   ) {
     let payload = SuggestionAssistantTelemetry.evaluationFailedPayload(
       identity: identity,
       shape: shape,
-      latency: latency
+      latency: latency,
+      reason: reason
     )
     captureSuggestionAssistantTelemetryForTests(
       SuggestionAssistantTelemetry.evaluationFailedEventName,
@@ -1075,7 +1086,8 @@ class AnalyticsManager {
     PostHogManager.shared.suggestionAssistantEvaluationFailed(
       identity: identity,
       shape: shape,
-      latency: latency
+      latency: latency,
+      reason: reason
     )
   }
 
@@ -1246,12 +1258,15 @@ class AnalyticsManager {
     title: String,
     assistantId: String,
     surface: String,
+    dismissalKind: NotificationDismissalKind,
     suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     if let suggestionIdentity {
+      var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+      properties["dismissal_kind"] = dismissalKind.rawValue
       captureSuggestionAssistantTelemetryForTests(
         "Notification Dismissed",
-        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+        properties: properties
       )
     }
     PostHogManager.shared.notificationDismissed(
@@ -1259,6 +1274,7 @@ class AnalyticsManager {
       title: title,
       assistantId: assistantId,
       surface: surface,
+      dismissalKind: dismissalKind,
       suggestionIdentity: suggestionIdentity
     )
   }

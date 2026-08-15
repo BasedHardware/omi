@@ -6,15 +6,25 @@ from unittest.mock import MagicMock
 
 import httpx
 import pytest
+from fastapi import Response
 
 from routers import desktop_proactivity
 from utils.subscription import NEO_DESKTOP_GRANDFATHER_CUTOFF
 
+# The provider ignores a cached prefix under 1024 tokens, so any test that expects
+# explicit caching to engage must carry a stable block that clears that floor.
+CACHEABLE_STABLE_PROMPT = "stable bucket instructions for the proactive director. " * 400
 
-def request(operation: str = "proactive_extraction", *, cache_key: str | None = None):
+
+def request(
+    operation: str = "proactive_extraction",
+    *,
+    cache_key: str | None = None,
+    messages: list[dict] | None = None,
+):
     return desktop_proactivity.ProactiveCompletionRequest(
         operation=operation,
-        messages=[{"role": "user", "content": "screen context"}],
+        messages=messages or [{"role": "user", "content": "screen context"}],
         response_format={
             "type": "json_schema",
             "json_schema": {
@@ -34,7 +44,13 @@ def request(operation: str = "proactive_extraction", *, cache_key: str | None = 
 
 def test_operation_pins_lane_and_only_reasoning_enables_explicit_cache():
     extraction = desktop_proactivity._gateway_payload(request())
-    reasoning = desktop_proactivity._gateway_payload(request("proactive_reasoning", cache_key="bucket-7-version-3"))
+    reasoning = desktop_proactivity._gateway_payload(
+        request(
+            "proactive_reasoning",
+            cache_key="bucket-7-version-3",
+            messages=[{"role": "user", "content": CACHEABLE_STABLE_PROMPT}],
+        )
+    )
 
     assert extraction["model"] == "omi:auto:desktop-proactive-extraction"
     assert "prompt_cache_options" not in extraction
@@ -46,6 +62,34 @@ def test_operation_pins_lane_and_only_reasoning_enables_explicit_cache():
     assert parts[1]["prompt_cache_breakpoint"] == {"mode": "explicit"}
 
 
+def test_stable_block_under_provider_minimum_is_not_marked_for_cache():
+    """A prefix the provider will never serve back must not be marked or keyed.
+
+    The write is billed at a premium over fresh input, so paying for one that can
+    never be read is strictly worse than not caching at all.
+    """
+    payload = desktop_proactivity._gateway_payload(
+        request(
+            "proactive_reasoning",
+            cache_key="bucket-7-version-3",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "short stable block"},
+                        {"type": "text", "text": "captured at: 2026-08-15T16:00:00Z"},
+                    ],
+                }
+            ],
+        )
+    )
+
+    assert "prompt_cache_key" not in payload
+    assert "prompt_cache_options" not in payload
+    parts = payload["messages"][0]["content"]
+    assert not any(isinstance(part, dict) and "prompt_cache_breakpoint" in part for part in parts)
+
+
 def test_reasoning_cache_breakpoint_precedes_volatile_text_and_image():
     def parts_for(captured_at: str):
         request_value = request("proactive_reasoning", cache_key="bucket-7-version-3")
@@ -53,7 +97,7 @@ def test_reasoning_cache_breakpoint_precedes_volatile_text_and_image():
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "stable bucket"},
+                    {"type": "text", "text": CACHEABLE_STABLE_PROMPT},
                     {"type": "text", "text": f"captured at: {captured_at}"},
                     {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,"}},
                 ],
@@ -64,7 +108,7 @@ def test_reasoning_cache_breakpoint_precedes_volatile_text_and_image():
     parts = parts_for("2026-08-13T16:00:00Z")
     later_parts = parts_for("2026-08-13T16:00:01Z")
 
-    assert parts[0] == {"type": "text", "text": "stable bucket"}
+    assert parts[0] == {"type": "text", "text": CACHEABLE_STABLE_PROMPT}
     assert parts[1]["prompt_cache_breakpoint"] == {"mode": "explicit"}
     assert parts[2]["text"].startswith("captured at:")
     assert parts[3]["type"] == "image_url"
@@ -119,7 +163,12 @@ async def test_quota_is_allowed_based_and_fails_closed(monkeypatch):
     with pytest.raises(desktop_proactivity.HTTPException) as exhausted:
         await desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
     assert exhausted.value.status_code == 429
-    assert exhausted.value.headers == {"Retry-After": "19"}
+    assert exhausted.value.headers == {
+        "Retry-After": "19",
+        "X-Proactive-Quota-Limit": "200",
+        "X-Proactive-Quota-Remaining": "0",
+        "X-Proactive-Quota-Reset": "19",
+    }
 
     monkeypatch.setattr(
         desktop_proactivity.redis_db,
@@ -160,6 +209,95 @@ async def test_quota_matches_expanded_director_budget(monkeypatch, operation, ex
     assert observed["key"] == f"desktop_{operation.value}"
     assert observed["limit"] == expected_limit
     assert observed["window_seconds"] == 24 * 60 * 60
+
+
+@pytest.mark.asyncio
+async def test_quota_headers_present_on_success(monkeypatch):
+    async def run_blocking(_, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(desktop_proactivity, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proactivity, "get_customer_firestore_client", MagicMock())
+    monkeypatch.setattr(desktop_proactivity.users_db, "get_user_valid_subscription", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        desktop_proactivity.redis_db,
+        "reserve_rate_limit",
+        lambda *_: (True, 12, 3600),
+    )
+
+    state = await desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
+    assert state == desktop_proactivity.ProactiveQuotaState(limit=200, remaining=12, reset_seconds=3600)
+
+    response = Response()
+    desktop_proactivity._apply_quota_headers(response, state)
+    assert response.headers["X-Proactive-Quota-Limit"] == "200"
+    assert response.headers["X-Proactive-Quota-Remaining"] == "12"
+    assert response.headers["X-Proactive-Quota-Reset"] == "3600"
+    assert "retry-after" not in {name.lower() for name in response.headers.keys()}
+
+
+@pytest.mark.asyncio
+async def test_completion_success_attaches_quota_headers(monkeypatch):
+    class GatewayClient:
+        async def post(self, url, *, headers, json):
+            return httpx.Response(
+                200,
+                request=httpx.Request("POST", url),
+                json={
+                    "model": "gpt-5.6-luna",
+                    "choices": [{"message": {"content": '{"summary":"ok"}'}}],
+                    "usage": {"prompt_tokens": 8},
+                },
+            )
+
+    class Semaphore:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    async def consume(*_):
+        return desktop_proactivity.ProactiveQuotaState(limit=200, remaining=12, reset_seconds=3600)
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://gateway")
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
+    monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
+
+    response = Response()
+    result = await desktop_proactivity.proactive_completion(request(), response, uid="user-1")
+    assert result.provider_model == "gpt-5.6-luna"
+    assert response.headers["X-Proactive-Quota-Limit"] == "200"
+    assert response.headers["X-Proactive-Quota-Remaining"] == "12"
+    assert response.headers["X-Proactive-Quota-Reset"] == "3600"
+
+
+def test_release_after_delete_does_not_go_negative():
+    import fakeredis
+
+    client = fakeredis.FakeRedis()
+    script = client.register_script(desktop_proactivity.redis_db._RATE_LIMIT_RELEASE_LUA_SOURCE)
+    key = "rl:desktop_proactive_extraction:user-1"
+
+    remaining = script(keys=[key], args=[])
+    assert int(remaining) == 0
+    stored = client.get(key)
+    assert stored is None or int(stored) >= 0
+
+    client.set(key, 3)
+    remaining = script(keys=[key], args=[])
+    assert int(remaining) == 2
+    assert int(client.get(key)) == 2
+
+    client.delete(key)
+    remaining = script(keys=[key], args=[])
+    assert int(remaining) == 0
+    stored = client.get(key)
+    if stored is not None:
+        assert int(stored) >= 0
 
 
 @pytest.mark.parametrize(
@@ -212,7 +350,9 @@ async def test_offline_stub_honors_schema_without_gateway_or_quota(monkeypatch):
     monkeypatch.setattr(desktop_proactivity, "_consume_quota", forbidden)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", forbidden)
 
-    result = await desktop_proactivity.proactive_completion(request("proactive_reasoning"), uid="offline-user")
+    result = await desktop_proactivity.proactive_completion(
+        request("proactive_reasoning"), Response(), uid="offline-user"
+    )
 
     assert result.provider_model == "omi-offline-stub"
     assert result.fallback_class == "offline_stub"
@@ -250,7 +390,7 @@ async def test_gateway_failure_releases_reserved_quota(monkeypatch):
     monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
 
     with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
-        await desktop_proactivity.proactive_completion(request(), uid="user-1")
+        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
 
     assert unavailable.value.status_code == 502
     assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
@@ -280,6 +420,49 @@ def test_dev_direct_provider_fallback_is_scoped_to_proactivity(monkeypatch):
     )
     assert reasoning_provider.payload["model"] == "gpt-5.6-luna"
     assert reasoning_provider.payload["reasoning_effort"] == "medium"
+
+
+def test_dev_direct_keeps_cache_breakpoint_so_reads_can_hit(monkeypatch):
+    """The direct path must not discard the only readable boundary in the prompt.
+
+    The client packs the stable prompt, the volatile frame metadata and the
+    screenshot into one user message. The provider serves a cache read only from a
+    prefix ending on a message boundary or an explicit breakpoint, so dropping the
+    breakpoint charges a full write per call that no later call can ever read.
+    """
+    monkeypatch.delenv("OMI_LLM_GATEWAY_URL", raising=False)
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.setattr(desktop_proactivity, "get_openai_api_key", lambda: "dev-provider-key")
+    monkeypatch.setattr(desktop_proactivity, "record_fallback", lambda **values: None)
+
+    provider = desktop_proactivity._proactive_provider_request(
+        request(
+            "proactive_reasoning",
+            cache_key="bucket-7-version-3",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": CACHEABLE_STABLE_PROMPT},
+                        {"type": "text", "text": "captured at: 2026-08-15T16:00:00Z"},
+                        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,"}},
+                    ],
+                }
+            ],
+        ),
+        "user-1",
+        "request-3",
+    )
+
+    parts = provider.payload["messages"][0]["content"]
+    assert parts[0] == {"type": "text", "text": CACHEABLE_STABLE_PROMPT}
+    assert parts[1]["prompt_cache_breakpoint"] == {"mode": "explicit"}
+    assert parts[2]["text"].startswith("captured at:")
+    # prompt_cache_key is a real OpenAI request field; the options/metadata wrappers
+    # are gateway-only extensions the provider would reject.
+    assert provider.payload["prompt_cache_key"] == "bucket-7-version-3"
+    assert "prompt_cache_options" not in provider.payload
+    assert "metadata" not in provider.payload
 
 
 def test_direct_provider_fallback_fails_closed_outside_dev(monkeypatch):
@@ -389,7 +572,7 @@ async def test_direct_extraction_retries_length_once_without_extra_quota_reserva
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
 
-    result = await desktop_proactivity.proactive_completion(request(), uid="user-1")
+    result = await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
 
     assert len(calls) == 2
     assert calls[0][2]["max_completion_tokens"] == 1024
@@ -457,7 +640,7 @@ async def test_direct_extraction_length_retry_releases_quota_once_after_final_fa
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
 
     with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
-        await desktop_proactivity.proactive_completion(request(), uid="user-1")
+        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
 
     assert unavailable.value.status_code == 502
     assert [payload["max_completion_tokens"] for payload in calls] == [1024, 2400]
@@ -493,7 +676,7 @@ async def test_provider_configuration_failure_releases_reserved_quota(monkeypatc
     )
 
     with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
-        await desktop_proactivity.proactive_completion(request(), uid="user-1")
+        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
 
     assert unavailable.value.status_code == 503
     assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
@@ -541,7 +724,7 @@ async def test_facade_adds_provenance_and_cache_envelope(monkeypatch):
     )
 
     result = await desktop_proactivity.proactive_completion(
-        request("proactive_reasoning", cache_key="bucket-1"), uid="user-1"
+        request("proactive_reasoning", cache_key="bucket-1"), Response(), uid="user-1"
     )
 
     assert seen["json"]["model"] == "omi:auto:desktop-proactive-reasoning"

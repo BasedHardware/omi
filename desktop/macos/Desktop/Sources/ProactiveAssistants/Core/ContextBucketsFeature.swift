@@ -82,4 +82,42 @@ enum ContextBucketsFeature {
 
   static let retrievalKillSwitchFlagName = "context_buckets_retrieval_kill"
   private static let localRetrievalOverrideName = "OMI_FORCE_BUCKET_RETRIEVAL"
+
+  /// Evaluates a departed bucket immediately when its departure extraction just
+  /// validated a notify-worthy fact, grounded on the departing frame, instead
+  /// of waiting for the next revisit's dwell.
+  ///
+  /// Non-production dogfood defaults to on with the same inverted env override
+  /// as the pipeline flag (`OMI_FORCE_DEPARTURE_EVALUATION=0` turns it off).
+  /// Production and beta stay off until the departure path is validated in
+  /// dogfood — unlike the surfaces above there is deliberately no remote stop
+  /// yet, because nothing ships dark to users this way.
+  @MainActor static var isDepartureEvaluationEnabled: Bool {
+    guard isEnabled else { return false }
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localDepartureEvaluationOverrideName] != "0"
+    }
+    return false
+  }
+
+  private static let localDepartureEvaluationOverrideName = "OMI_FORCE_DEPARTURE_EVALUATION"
+
+  /// Quotes quality-gated validated facts from sibling buckets of the visit's
+  /// live workstream into the director's volatile prompt, and widens delivery
+  /// dedup to that workstream.
+  ///
+  /// Non-production dogfood defaults to on with the same inverted env override
+  /// as the flags above (`OMI_FORCE_BUCKET_WORKSTREAMS=0` turns it off).
+  /// Production and beta stay off until pooling is validated in dogfood — like
+  /// departure evaluation there is deliberately no remote stop yet, because
+  /// nothing ships dark to users this way.
+  @MainActor static var isWorkstreamPoolingEnabled: Bool {
+    guard isEnabled else { return false }
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localWorkstreamPoolingOverrideName] != "0"
+    }
+    return false
+  }
+
+  private static let localWorkstreamPoolingOverrideName = "OMI_FORCE_BUCKET_WORKSTREAMS"
 }

@@ -206,7 +206,7 @@ actor GeminiClient {
     )
   }
 
-  enum GeminiClientError: LocalizedError {
+  nonisolated enum GeminiClientError: LocalizedError {
     case missingAPIKey
     case networkError(Error)
     case invalidResponse

@@ -247,6 +247,75 @@ final class ContextDeliveryLifecycleTests: XCTestCase {
     XCTAssertEqual(afterVisible, ContextDeliveryAttempt(id: nil, reason: .dailyBudget))
   }
 
+  /// The rehearsal replay of the measured field failure: a 13-second revisit
+  /// settles at +8s, the user leaves at +13s, and the in-flight evaluation used
+  /// to die at the next active-only guard — quota spent, nothing delivered.
+  /// With run-to-completion freshness the departed-but-recent visit still
+  /// assembles its snapshot and reserves a delivery attempt.
+  func testVisitThatCompletedFiveSecondsAgoStillReservesADeliveryAttempt() async throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    let versionID = try await seedBucketAndVisit(in: pool, poolEpoch: poolEpoch, now: now)
+    try await pool.write { db in
+      try db.execute(
+        sql: "UPDATE context_visits SET outcome = 'completed', endedAt = ? WHERE id = 1",
+        arguments: [now.addingTimeInterval(-5)])
+    }
+    let fence = ContextVisitFence(
+      visitID: 1,
+      contextGeneration: 1,
+      poolEpoch: poolEpoch,
+      bucketID: "bucket",
+      startedAt: now.addingTimeInterval(-18))
+
+    let freshness = await ContextBucketStore.shared.fenceFreshness(fence, now: now)
+    XCTAssertEqual(
+      freshness, ContextVisitFreshness(fresh: true, endedAt: now.addingTimeInterval(-5)))
+
+    let snapshot = await ContextBucketStore.shared.snapshot(for: fence)
+    XCTAssertNotNil(
+      snapshot, "the snapshot path must resolve a completed visit's bucket, not only an active one")
+
+    let attempt = try await ContextBucketStore.shared.beginDeliveryAttempt(
+      fence: fence,
+      snapshot: try XCTUnwrap(snapshot),
+      gate: allowedGate(),
+      now: now)
+    XCTAssertEqual(attempt.reason, .allowed)
+    XCTAssertNotNil(attempt.id)
+
+    let rowCount = try await pool.read { db in
+      try Int.fetchOne(
+        db,
+        sql: "SELECT COUNT(*) FROM proactive_deliveries WHERE visitID = 1 AND bucketVersionID = ?",
+        arguments: [versionID])
+    }
+    XCTAssertEqual(rowCount, 1, "run-to-completion must create the reservation row")
+  }
+
+  func testVisitThatCompletedTwoMinutesAgoIsStaleAtTheNextGuard() async throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    _ = try await seedBucketAndVisit(in: pool, poolEpoch: poolEpoch, now: now)
+    try await pool.write { db in
+      try db.execute(
+        sql: "UPDATE context_visits SET outcome = 'completed', endedAt = ? WHERE id = 1",
+        arguments: [now.addingTimeInterval(-120)])
+    }
+    let fence = ContextVisitFence(
+      visitID: 1,
+      contextGeneration: 1,
+      poolEpoch: poolEpoch,
+      bucketID: "bucket",
+      startedAt: now.addingTimeInterval(-133))
+
+    let freshness = await ContextBucketStore.shared.fenceFreshness(fence, now: now)
+    XCTAssertEqual(
+      freshness, ContextVisitFreshness(fresh: false, endedAt: now.addingTimeInterval(-120)))
+  }
+
   private func allowedGate() -> ContextDeliveryGateInput {
     ContextDeliveryGateInput(
       masterEnabled: true,

@@ -74,28 +74,6 @@ enum ContextDirectorTaskSelection {
   }
 }
 
-extension ContextBucketStore {
-  func activeFenceIsValid(_ fence: ContextVisitFence) async -> Bool {
-    let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let pool, poolEpoch == fence.poolEpoch else { return false }
-    do {
-      return try await pool.read { db in
-        try Bool.fetchOne(
-          db,
-          sql: """
-            SELECT EXISTS(
-              SELECT 1 FROM context_visits
-              WHERE id = ? AND contextGeneration = ? AND poolEpoch = ? AND outcome = 'active'
-            )
-            """,
-          arguments: [fence.visitID, fence.contextGeneration, fence.poolEpoch]) ?? false
-      }
-    } catch {
-      return false
-    }
-  }
-}
-
 actor ContextProactivityEngine {
   static let shared = ContextProactivityEngine(client: .shared, store: .shared)
   private let client: ProactiveLaneClient
@@ -108,7 +86,7 @@ actor ContextProactivityEngine {
   init(
     client: ProactiveLaneClient,
     store: ContextBucketStore,
-    dwellNanoseconds: UInt64 = 8_000_000_000,
+    dwellNanoseconds: UInt64 = 2_000_000_000,
     presentationPreflight: @escaping @Sendable (String) async -> OwnerBoundNotificationPresentationResult = {
       ownerID in
       await NotificationService.shared.contextDirectorPresentationPreflight(ownerID: ownerID)
@@ -141,22 +119,95 @@ actor ContextProactivityEngine {
     let preflightReason = ContextDeliveryBudget.freeGate(input: gate)
     guard preflightReason == .allowed else {
       log("Context director suppressed before preparation: \(preflightReason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: preflightReason, stage: .preflight)
       return
     }
+    // Run-to-completion: a settled visit's evaluation survives a context switch
+    // for a bounded window (the visit stays "fresh" while active or briefly
+    // after a completed departure), so fast task-switchers can still receive
+    // what their quota already paid for. Every later stage re-checks freshness.
+    let freshness = await store.fenceFreshness(fence)
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      await store.activeFenceIsValid(fence),
+      freshness.fresh,
       let snapshot = await store.snapshot(for: fence)
     else { return }
     // Facts are the only source of notification worthiness. A bucket containing
     // ambient narrative alone cannot purchase a frontier-model call.
     guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else { return }
+    // After a departure the latest tracked frame can be the NEXT context's
+    // screen. Sample the frame first, then re-read freshness and bound the
+    // sample against it: the transition persists `endedAt` before the next
+    // context's frame is tracked, so a bound applied to a post-sampling
+    // freshness read cannot admit the wrong screen — while a bound computed
+    // from the pre-snapshot read above could, when the switch lands between
+    // that read and this lookup.
     guard
-      let currentFrame = await MainActor.run(body: {
+      let frameSample = await MainActor.run(body: {
         AssistantCoordinator.shared.trackedFrameForDirector(startedAt: fence.startedAt)
       })
     else { return }
+    let frameFreshness = await store.fenceFreshness(fence)
+    guard
+      frameFreshness.fresh,
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: frameSample.frame.captureTime,
+        storedAt: frameSample.storedAt,
+        startedAt: fence.startedAt,
+        endedAt: frameFreshness.endedAt)
+    else { return }
+    await evaluateAndDeliver(
+      fence: fence,
+      snapshot: snapshot,
+      currentFrame: frameSample.frame,
+      authorizationSnapshot: authorizationSnapshot)
+  }
 
+  /// Departure-triggered evaluation: a departure extraction that just validated
+  /// a notify-worthy fact evaluates the departed bucket immediately, grounded
+  /// on the departing frame the extraction already holds, instead of waiting
+  /// for the next revisit's dwell. Callers gate on
+  /// `ContextDepartureEvaluationPolicy`; every delivery gate below and the
+  /// freshness window still apply, so a departure older than the validity
+  /// window dies exactly like any other stale evaluation. The dwell admission
+  /// set serializes this against a still-running `contextEntered` evaluation of
+  /// the same visit.
+  func evaluateAfterDeparture(fence: ContextVisitFence, departingFrame: CapturedFrame) async {
+    guard fence.bucketID != nil else { return }
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
+    guard dwellAdmission.begin(visitID: fence.visitID) else { return }
+    defer { dwellAdmission.finish(visitID: fence.visitID) }
+    let gate = await MainActor.run { Self.liveDeliveryGateInput() }
+    let preflightReason = ContextDeliveryBudget.freeGate(input: gate)
+    guard preflightReason == .allowed else {
+      log("Context director suppressed before departure evaluation: \(preflightReason.rawValue)")
+      return
+    }
+    let freshness = await store.fenceFreshness(fence)
+    guard
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      freshness.fresh,
+      let snapshot = await store.snapshot(for: fence)
+    else { return }
+    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else { return }
+    await evaluateAndDeliver(
+      fence: fence,
+      snapshot: snapshot,
+      currentFrame: departingFrame,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  /// The shared post-settle tail of the director pipeline: presentation
+  /// preflight, gate rebuilds, budget reservation, the model call (plus the
+  /// bounded retrieval hop), grounding validation, and the presentation
+  /// handoff. `contextEntered` reaches it after dwell/settle/frame lookup;
+  /// `evaluateAfterDeparture` reaches it with the departing frame.
+  private func evaluateAndDeliver(
+    fence: ContextVisitFence,
+    snapshot: ContextBucketSnapshot,
+    currentFrame: CapturedFrame,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async {
     guard let ownerID = await MainActor.run(body: { RuntimeOwnerIdentity.currentOwnerId() }) else { return }
     let attemptPreflight = await presentationPreflight(ownerID)
     guard Self.presentationSurfaceAvailable(attemptPreflight) else {
@@ -168,6 +219,7 @@ actor ContextProactivityEngine {
     let attemptReason = ContextDeliveryBudget.freeGate(input: attemptGate)
     guard attemptReason == .allowed else {
       log("Context director suppressed before attempt: \(attemptReason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: attemptReason, stage: .attempt)
       return
     }
 
@@ -177,6 +229,7 @@ actor ContextProactivityEngine {
     } catch { return }
     guard attempt.reason == .allowed, let deliveryID = attempt.id else {
       log("Context director suppressed: \(attempt.reason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: attempt.reason, stage: .reservation)
       return
     }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
@@ -193,21 +246,57 @@ actor ContextProactivityEngine {
         from: TasksStore.shared.incompleteTasks,
         now: currentFrame.captureTime)
     }
-    let recentDeliveries = await store.recentDeliveredForBucket(
+    var recentDeliveries = await store.recentDeliveredForBucket(
       bucketID: snapshot.bucketID, now: currentFrame.captureTime)
+    // The related-workstream section: validated facts from sibling buckets of
+    // the visit's live workstream, quality-gated and quoted as non-citable
+    // context. Read the flag once so section, dedup, and provenance agree; with
+    // the flag off (or no live tag) the prompt is byte-identical to today.
+    let workstreamPoolingEnabled = await MainActor.run {
+      ContextBucketsFeature.isWorkstreamPoolingEnabled
+    }
+    var workstreamSection: String? = nil
+    var workstreamProvenance: [String: Any]? = nil
+    if workstreamPoolingEnabled,
+      let liveTag = await store.liveWorkstreamTag(for: fence, now: currentFrame.captureTime)
+    {
+      let selected = ContextWorkstreamPooling.select(
+        await store.workstreamPool(
+          tag: liveTag, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime),
+        now: currentFrame.captureTime)
+      if !selected.isEmpty {
+        workstreamSection = ContextWorkstreamPooling.promptSection(
+          tag: liveTag, items: selected, now: currentFrame.captureTime)
+        workstreamProvenance = [
+          "tag": liveTag,
+          "pooled_fact_ids": selected.map(\.factID),
+        ]
+      }
+      // Tag-aware dedup: with pooling, the same cross-app point is reachable
+      // from every bucket carrying this tag, so sibling deliveries join the
+      // bucket's own under the same prompt cap.
+      let workstreamDeliveries = await store.recentDeliveredForWorkstream(
+        tag: liveTag, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime)
+      recentDeliveries = Array(
+        (recentDeliveries + workstreamDeliveries)
+          .sorted { $0.deliveredAt > $1.deliveredAt }
+          .prefix(ContextBucketRecentDelivery.promptCap))
+    }
     // Read once and use for the whole visit: schema, prompt, and hop admission
     // must agree, and a mid-visit flag flip must not desynchronize them. With
     // the flag off, schema and prompt are byte-identical to the pre-hop build.
     let retrievalHopEnabled = await MainActor.run { ContextBucketsFeature.isRetrievalHopEnabled }
     let prompt = ContextProactivityPromptBuilder.directorStablePrompt(
       snapshot: snapshot, allowLookup: retrievalHopEnabled)
-    let uncachedPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
-      tasks: taskContext,
-      frame: currentFrame,
-      recentDeliveries: recentDeliveries)
+    let uncachedPrompt =
+      ContextProactivityPromptBuilder.directorVolatilePrompt(
+        tasks: taskContext,
+        frame: currentFrame,
+        recentDeliveries: recentDeliveries)
+      + (workstreamSection.map { "\n\n" + $0 } ?? "")
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      await store.activeFenceIsValid(fence)
+      await store.fenceFreshness(fence).fresh
     else {
       await terminalize(
         deliveryID: deliveryID,
@@ -223,6 +312,7 @@ actor ContextProactivityEngine {
     let evaluationReason = ContextDeliveryBudget.freeGate(input: evaluationGate)
     guard evaluationReason == .allowed else {
       log("Context director suppressed before model: \(evaluationReason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: evaluationReason, stage: .preModel)
       await terminalize(
         deliveryID: deliveryID,
         decisionType: "silence",
@@ -244,7 +334,7 @@ actor ContextProactivityEngine {
       await ContextProactivityTelemetry.record(result)
       guard
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-        await store.activeFenceIsValid(fence)
+        await store.fenceFreshness(fence).fresh
       else {
         await terminalize(
           deliveryID: deliveryID,
@@ -292,7 +382,7 @@ actor ContextProactivityEngine {
         // staleness, so a future failure path cannot quietly bypass it.
         guard
           RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-          await store.activeFenceIsValid(fence)
+          await store.fenceFreshness(fence).fresh
         else {
           await terminalize(
             deliveryID: deliveryID,
@@ -331,11 +421,15 @@ actor ContextProactivityEngine {
         hopProvenance["cited_refs"] = retrievedRefs
         provenance["retrieval"] = hopProvenance
       }
+      if let workstreamProvenance {
+        provenance["workstream"] = workstreamProvenance
+      }
       let provenanceData = try JSONSerialization.data(withJSONObject: provenance, options: [.sortedKeys])
       let provenanceJSON = String(data: provenanceData, encoding: .utf8) ?? "{}"
       try await store.completeDelivery(
         id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
         message: decision.message, state: "model_completed")
+      await ContextProactivityTelemetry.recordDirectorDecision(decision.decision)
       if decision.decision == "silence" {
         try await store.completeDelivery(
           id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
@@ -357,7 +451,7 @@ actor ContextProactivityEngine {
         message: decision.message, state: "policy_approved")
       guard
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-        await store.activeFenceIsValid(fence),
+        await store.fenceFreshness(fence).fresh,
         let ownerID = await MainActor.run(body: { RuntimeOwnerIdentity.currentOwnerId() })
       else {
         await terminalize(
@@ -373,6 +467,8 @@ actor ContextProactivityEngine {
       let presentationReason = ContextDeliveryBudget.freeGate(input: presentationGate)
       guard presentationReason == .allowed else {
         log("Context director suppressed before presentation: \(presentationReason.rawValue)")
+        await ContextProactivityTelemetry.recordGateRejection(
+          reason: presentationReason, stage: .presentation)
         try await store.completeDelivery(
           id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
           message: decision.message, state: "suppressed")
@@ -415,7 +511,9 @@ actor ContextProactivityEngine {
       // free gate once more at the actual handoff so master-off, snooze, paywall,
       // or another proactive presentation wins the race.
       let handoffGate = await MainActor.run { Self.liveDeliveryGateInput() }
-      guard ContextDeliveryBudget.freeGate(input: handoffGate) == .allowed else {
+      let handoffReason = ContextDeliveryBudget.freeGate(input: handoffGate)
+      guard handoffReason == .allowed else {
+        await ContextProactivityTelemetry.recordGateRejection(reason: handoffReason, stage: .handoff)
         try await store.completeDelivery(
           id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
           message: decision.message, state: "suppressed")
@@ -516,13 +614,15 @@ actor ContextProactivityEngine {
     }
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      await store.activeFenceIsValid(fence)
+      await store.fenceFreshness(fence).fresh
     else { return abandoned(items, failure: "stale_visit") }
     // Retrieval awaited the network; rebuild the free gate before the second
     // paid call so disabling notifications, snoozing, or becoming paywalled
     // mid-hop never spends more director budget.
     let hopGate = await MainActor.run { Self.liveDeliveryGateInput() }
-    guard ContextDeliveryBudget.freeGate(input: hopGate) == .allowed else {
+    let hopReason = ContextDeliveryBudget.freeGate(input: hopGate)
+    guard hopReason == .allowed else {
+      await ContextProactivityTelemetry.recordGateRejection(reason: hopReason, stage: .retrievalHop)
       return abandoned(items, failure: "pre_model_gate")
     }
     do {
@@ -681,6 +781,18 @@ actor ContextProactivityEngine {
       "required": required,
       "additionalProperties": false,
     ]
+  }
+}
+
+/// Admission for the departure-triggered director evaluation: only a departure
+/// extraction that just validated a fact at or above the worthiness threshold,
+/// with the feature flag on, buys an immediate evaluation of the departed
+/// bucket. Everything else waits for the next revisit's dwell as before.
+enum ContextDepartureEvaluationPolicy {
+  static let worthinessThreshold = 0.6
+
+  static func triggers(maximumValidatedWorthiness: Double, flagEnabled: Bool) -> Bool {
+    flagEnabled && maximumValidatedWorthiness >= worthinessThreshold
   }
 }
 
