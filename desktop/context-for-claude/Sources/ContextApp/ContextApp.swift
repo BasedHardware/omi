@@ -108,6 +108,19 @@ enum TerminationOrigin {
         ContextLog.milestone("Power off in progress; this process will not reopen itself", "shell")
     }
 
+    /// This app is restarting itself and has **already** arranged for the replacement.
+    ///
+    /// Not "the user pressed Quit", though it sets the same flag, and the distinction is worth a
+    /// name: what the delegate needs to know is that a successor is already spoken for. Unmarked,
+    /// `Permissions.relaunchApp()` would reach `applicationWillTerminate` looking exactly like the
+    /// termination `shouldReviveAfterTermination` exists to undo — a quit nobody here asked for,
+    /// moments after a permission landed — and the app would spawn a second relaunch helper on top
+    /// of the one it had just spawned, spending a revival from the budget for it.
+    static func relaunchWasArrangedHere() {
+        wasRequestedLocally = true
+        ContextLog.milestone("Restarting: a relaunch helper is already up for this bundle", "shell")
+    }
+
     /// Puts the flag back to how a fresh process finds it.
     ///
     /// Nothing in the app calls this — a real process only ever ends once, so there is no un-asking.
@@ -252,6 +265,13 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
         InkFonts.invalidate()
 
         MainActor.assumeIsolated {
+            // **What this process was allowed to do when it started**, recorded before any surface
+            // exists to change it. `shouldReviveAfterTermination` asks whether a grant arrived
+            // *during* the run, and a change needs something to be a change from. Ahead of
+            // `Engine.start()` because the engine's own capability poll short-circuits — see
+            // `Permissions.noteGrantsAtLaunch()`.
+            Permissions.noteGrantsAtLaunch()
+
             // Before Engine.start(), so the icon exists the moment there is state to show — and
             // before onboarding, which finishes by pointing at it.
             StatusItemController.shared.install()
@@ -527,7 +547,10 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     /// service whose change a running process cannot pick up, the app has four of them on one card,
     /// and a predicate that has to enumerate which of macOS's alerts it believes in will keep being
     /// wrong in the same direction. What is actually true at this moment is smaller and knowable:
-    /// **somebody other than the user ended a run that had not finished.**
+    /// **somebody other than the user ended a run that had not finished** — or, since the third
+    /// report, ended a finished one the instant a permission landed in it. See the `aGrantJustArrived`
+    /// parameter for why that second half had to be added and why it is a grant *arriving* rather
+    /// than the far easier "somebody other than the user ended us".
     ///
     /// - Parameters:
     ///   - requestedLocally: the process is ending because something in this app asked it to — the
@@ -537,6 +560,33 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     ///     nothing to lose by staying quit, and reopening on them would be the app refusing to leave.
     ///     It also bounds the blast radius of the widened gate: outside the one flow that macOS ends
     ///     on purpose, nothing here reopens anything.
+    ///   - aGrantJustArrived: a capability this process could not use has become one it can, within
+    ///     the last couple of minutes. **This is the third failure, and it is the same failure a
+    ///     third time.** The clause above bounded the revival to an unfinished run, on the reasoning
+    ///     that "outside the one flow macOS ends on purpose, nothing here reopens anything" — and
+    ///     macOS does not restrict itself to that flow. From the live trace of the third report, a
+    ///     user who had finished setup months of use ago went to Privacy & Security to turn a stale
+    ///     switch off and on again, which is the remedy this app's own `staleGrantReason` tells them
+    ///     to use:
+    ///
+    ///     ```text
+    ///     11:40:09  tccd                SecurityPrivacyExtension pid=9049 — the Privacy pane
+    ///     11:40:11  Context for Claude  Handling Quit AppleEvent
+    ///     11:40:11  Context for Claude  Termination — requestedLocally=false
+    ///                                   onboardingInProgress=false … → staying quit
+    ///     ```
+    ///
+    ///     Reported as *"the app crashes upon giving permissions"*, and it is not a crash: there is
+    ///     no `.ips` report anywhere, and the exit is a clean one. The app simply granted the user's
+    ///     wish by disappearing — capture stopped, silently, at the exact moment the user had just
+    ///     told it to start.
+    ///
+    ///     So the second clause is an `||` rather than a widening. `requestedLocally == false` on
+    ///     its own would have covered this and must not be used: measured in this app's own log, an
+    ///     ordinary Sparkle update is also an external quit, and reviving one of those would race
+    ///     the relaunch the updater is already performing. A grant *arriving* is the fact that is
+    ///     true of macOS's TCC recycle and of nothing else — see `Permissions.aGrantJustArrived()`,
+    ///     which also explains why a grant being *revoked* is pointedly not this.
     ///   - revivalsAlreadySpent: how many times this install has already brought itself back inside
     ///     `RevivalBudget.window`. The old shape could not loop by accident of how a permission flag
     ///     worked; this one says so out loud, because an app that respawns forever is worse than an
@@ -566,10 +616,11 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     static func shouldReviveAfterTermination(
         requestedLocally: Bool,
         onboardingInProgress: Bool,
+        aGrantJustArrived: Bool,
         revivalsAlreadySpent: Int
     ) -> Bool {
         guard !requestedLocally else { return false }
-        guard onboardingInProgress else { return false }
+        guard onboardingInProgress || aGrantJustArrived else { return false }
         return revivalsAlreadySpent < RevivalBudget.allowance
     }
 
@@ -610,11 +661,17 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
         let tutorialBeat = TutorialResume().step
         let onboardingInProgress = Self.aRunIsWaiting(
             onboardingResume: OnboardingResume().step, tutorialResume: tutorialBeat)
+        // **The clause that covers a run with nothing waiting in it.** Re-reads every capability
+        // rather than trusting the last poll: the quit follows the switch by a second or two and the
+        // engine's poll runs every thirty, so on the reported timeline nothing had looked since
+        // before the grant existed.
+        let grantJustArrived = Permissions.aGrantJustArrived()
         let budget = RevivalBudget()
         let spent = budget.recent().count
         let revive = Self.shouldReviveAfterTermination(
             requestedLocally: requestedLocally,
             onboardingInProgress: onboardingInProgress,
+            aGrantJustArrived: grantJustArrived,
             revivalsAlreadySpent: spent)
 
         // **Every input and the answer, at a level that is still readable tomorrow.**
@@ -637,6 +694,10 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
                 // every other field on this line: the next report has to be readable in one query,
                 // and "in progress" alone would not say which flow the user lost.
                 + "tutorialBeat=\(tutorialBeat?.rawValue ?? "none") "
+                // The clause that decides the case with no unfinished run behind it, and therefore
+                // the one the next report will turn on. Reported next to the old fields precisely so
+                // "the app vanished when I gave it a permission" is one query away from an answer.
+                + "grantJustArrived=\(grantJustArrived) "
                 + "revivalsSpent=\(spent)/\(RevivalBudget.allowance) "
                 + "screenPendingRelaunch=\(Permissions.screenNeedsRelaunch) "
                 + "→ \(revive ? "reopening this bundle" : "staying quit")",

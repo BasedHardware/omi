@@ -128,7 +128,20 @@ enum Permissions {
 
     // MARK: - Reading
 
+    /// **Every read is also an observation.**
+    ///
+    /// The answer is unchanged; what the wrapper adds is that the ledger behind `aGrantJustArrived`
+    /// is fed by the polls the app already runs rather than by a clock of its own. The engine
+    /// re-reads every capability every thirty seconds and the onboarding gate does it twice a
+    /// second, so "a grant arrived while we were running" is a fact the app is already in a position
+    /// to notice — it simply was not writing it down.
     static func check(_ c: Capability) -> Bool {
+        let granted = liveCheck(c)
+        grantLedger.observe(c, granted: granted)
+        return granted
+    }
+
+    private static func liveCheck(_ c: Capability) -> Bool {
         switch c {
         case .microphone:
             return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
@@ -177,6 +190,70 @@ enum Permissions {
             let granted = check(c)
             return CapabilityReport(name: c.rawValue, granted: granted, detail: statusWord(for: c, granted: granted))
         }
+    }
+
+    // MARK: - A grant that arrived while this process was running
+
+    /// **How recently a grant has to have landed for a quit nobody here asked for to be macOS
+    /// recycling this process on account of it.**
+    ///
+    /// Measured on this Mac: the switch is flipped in Privacy & Security at 11:40:09 and the Quit
+    /// Apple Event lands at 11:40:11. Two seconds. The window is not that tight because macOS's
+    /// alert sits there until it is answered, and a user who reads it before pressing "Quit &
+    /// Reopen" is still inside the same episode. It is not much wider either: every second of it is
+    /// a second in which an ordinary external quit would be undone instead, and staying quit is the
+    /// safe direction for every clause of this decision.
+    static let grantArrivalSeconds: Double = 120
+
+    /// **Whether a capability this process could not use has just become one it can.**
+    ///
+    /// The narrow half of `ContextAppDelegate.shouldReviveAfterTermination`. "Somebody other than
+    /// the user ended us" is equally true of an update installing itself — the 13:35 termination in
+    /// this app's own log is Sparkle, one second after it launched its updater — and of `killall`,
+    /// and reviving either of those is the app refusing to leave. What is true *only* of the TCC
+    /// case is that a grant this process was without a moment ago is now in place, which is the
+    /// entire reason macOS ends the process: capture rights are settled when a process starts, so
+    /// the new answer cannot reach this one.
+    ///
+    /// Reads every capability before answering rather than trusting the ledger as it stands. The
+    /// quit follows the switch by a second or two and the app's own capability poll runs every
+    /// thirty, so on the reported timeline nothing had looked since before the grant existed.
+    ///
+    /// **A grant *lost* is deliberately not this.** macOS raises the same alert when a switch goes
+    /// off, and a user who takes a permission away and then ends the app is a user the app must not
+    /// argue with.
+    static func aGrantJustArrived(
+        within seconds: Double = grantArrivalSeconds, now: Double = ContextTime.now
+    ) -> Bool {
+        readEveryCapability()
+        return grantArrivedRecently(
+            secondsSince: grantLedger.secondsSinceGrantArrived(now: now), within: seconds)
+    }
+
+    /// Seeds the ledger with what this process was allowed to do when it started, so that a change
+    /// has something to be a change *from*.
+    ///
+    /// Called from `applicationDidFinishLaunching`, before any UI exists to grant anything, rather
+    /// than left to the launch-time capability poll: `groupedReport` stops at a group's first
+    /// ungranted member, so on a Mac with the microphone missing the system-audio row is never read
+    /// at launch and its baseline would be taken at whatever later moment something got around to
+    /// asking — which is exactly the moment a grant would be invisible from.
+    static func noteGrantsAtLaunch() {
+        readEveryCapability()
+    }
+
+    /// Pure, so the window is assertable without a TCC record moving.
+    ///
+    /// `>= 0` for the reason `capturedRecently` has it: a clock that moved backwards leaves a stamp
+    /// in the future, and a stamp in the future has to read as "nothing just arrived" rather than as
+    /// a licence to reopen.
+    nonisolated static func grantArrivedRecently(secondsSince: Double?, within: Double) -> Bool {
+        guard let secondsSince else { return false }
+        return secondsSince >= 0 && secondsSince <= within
+    }
+
+    private static func readEveryCapability() {
+        for c in Capability.allCases { _ = check(c) }
     }
 
     // MARK: - Asking
@@ -422,6 +499,15 @@ enum Permissions {
     /// conditions at three call sites, because the engine, the menu bar and the MCP `status` tool
     /// all have to be telling the same story — the previous arrangement had the engine writing one
     /// sentence, the watcher logging a different one, and `status` reporting neither.
+    /// **The one spelling of the command that repairs an unusable Screen Recording record.**
+    ///
+    /// Named here rather than written out at each place that needs it, because there are now two: the
+    /// sentence `ScreenBlock.recordUnusable` renders, and the menu bar control that copies it to the
+    /// clipboard. A command the user is told to run and a command the app puts on their clipboard have
+    /// to be the same string — two literals is how they drift, and a wrong bundle id in a `tccutil`
+    /// line either does nothing or resets somebody else's permission.
+    static let screenRecordResetCommand = "tccutil reset ScreenCapture com.omi.context-for-claude"
+
     enum ScreenBlock: Equatable {
         /// Never granted. The user's own choice, and nothing has gone wrong.
         case notGranted
@@ -433,6 +519,10 @@ enum Permissions {
         /// when a process connects, so a grant made after launch applies to the *next* launch. This
         /// is the one case no amount of polling can fix.
         case needsRelaunch
+        /// The grant is switched on, this process started *holding* it, and macOS refused it anyway.
+        /// The record itself is unusable and only deleting it will help — see
+        /// `screenGrantStaleness(grantedAtLaunch:captureDeclined:)`.
+        case recordUnusable
 
         var reason: String {
             switch self {
@@ -443,20 +533,33 @@ enum Permissions {
             case .needsRelaunch:
                 return "Screen Recording is on, but I have to be reopened before I can actually "
                     + "see the screen — click the Screen row to restart me."
+            case .recordUnusable:
+                // Names the command because the command is the only thing that works. Every softer
+                // sentence this app has tried here — "reopen me", "turn it off and back on" — is a
+                // loop the user cannot get out of, and they have been round it: *"Granting screen
+                // permissions doesn't work. I've already granted permissions."*
+                return "Screen Recording is on and macOS still refuses me — the permission was "
+                    + "recorded by an earlier version of me, and reopening cannot replace it. In "
+                    + "Terminal: \(Permissions.screenRecordResetCommand). Then grant it once more."
             }
         }
 
         /// Whether this is something that was working and is not. Drives the log level, because an
         /// `info` line is evicted from the unified log within minutes and this is precisely the
         /// event that has to still be there tomorrow.
-        var isRegression: Bool { self == .grantLost }
+        ///
+        /// `.recordUnusable` counts for the same reason `.grantLost` does, and rather more: it is a
+        /// state the user cannot leave without being told a command, so the line explaining it is
+        /// the one a support conversation a day later has to be able to find.
+        var isRegression: Bool { self == .grantLost || self == .recordUnusable }
     }
 
     static func screenBlock() -> ScreenBlock? {
         screenBlock(
             granted: check(.screen),
             hasEverCaptured: hasEverCaptured(.screen),
-            needsRelaunch: screenNeedsRelaunch)
+            needsRelaunch: screenNeedsRelaunch,
+            recordIsUnusable: screenRecordIsUnusable)
     }
 
     /// **The trichotomy itself, as a pure function of the three facts it is made of.**
@@ -470,9 +573,14 @@ enum Permissions {
     /// record this computer's screen and audio"* on screen — which is the reported bug, arriving on
     /// a loop over a switch the user can see is already on.
     nonisolated static func screenBlock(
-        granted: Bool, hasEverCaptured: Bool, needsRelaunch: Bool
+        granted: Bool, hasEverCaptured: Bool, needsRelaunch: Bool, recordIsUnusable: Bool
     ) -> ScreenBlock? {
         guard granted else { return hasEverCaptured ? .grantLost : .notGranted }
+        // Ahead of `needsRelaunch`, and it has to be: an unusable record is *also* a stale grant, so
+        // both flags are true at once and whichever is tested first is the sentence the user reads.
+        // Testing the relaunch first is how this app spent two rounds telling a user to reopen it
+        // for a record no reopening can repair.
+        if recordIsUnusable { return .recordUnusable }
         return needsRelaunch ? .needsRelaunch : nil
     }
 
@@ -518,7 +626,100 @@ enum Permissions {
     /// window-server capture rights are settled when a process connects — and retrying is what put
     /// the system alert on a three-second loop in front of a user whose switch was already on.
     nonisolated static func screenGrantIsStale(grantedAtLaunch: Bool, captureDeclined: Bool) -> Bool {
-        !grantedAtLaunch || captureDeclined
+        screenGrantStaleness(grantedAtLaunch: grantedAtLaunch, captureDeclined: captureDeclined) != .none
+    }
+
+    /// **Which of the two stale states this is — and they are not the same problem.**
+    ///
+    /// `screenGrantIsStale` above answers "is the grant TCC vouches for unusable by this process",
+    /// and that was the right question for its own fix. It is the wrong question to *act* on,
+    /// because its two disjuncts have opposite remedies and it hands back one boolean:
+    ///
+    /// - **`!grantedAtLaunch`** — the grant appeared after we connected to the window server. Those
+    ///   rights are settled at connection time, so the grant belongs to the *next* process. A
+    ///   reopen genuinely fixes this, and the app should offer one.
+    /// - **`grantedAtLaunch && captureDeclined`** — this process started already holding the grant,
+    ///   and macOS refused it anyway. There is nothing here for a reopen to change: the next
+    ///   process will start holding exactly the same grant and be refused for exactly the same
+    ///   reason. Something about the *record* is wrong, not about this process's timing.
+    ///
+    /// The second state is the reported bug, and this Mac's own logs are what name it. `tccd`,
+    /// still firing while this was written:
+    ///
+    /// ```text
+    /// tccd: Failed to match existing code requirement for subject com.omi.context-for-claude
+    ///       and service kTCCServiceScreenCapture
+    ///         identifier "com.omi.context-for-claude" and certificate leaf = H"bb925114bcb6…"
+    ///         identifier "com.omi.context-for-claude" and anchor apple generic and certificate
+    ///           1[field.1.2.840.113635.100.6.2.6] … and certificate leaf[subject.OU] = "9536L8KLMP"
+    /// ```
+    ///
+    /// Two requirements: the one TCC **stored** when the grant was first given, pinned to the leaf
+    /// certificate of a build signed with a different key, and the one this Developer ID build
+    /// actually has. TCC matches against the stored blob, and flipping the switch in System Settings
+    /// updates the row's allowed flag without rewriting it — so the grant is permanently inert and
+    /// every remedy the app has offered so far is a dead end the user loops on. Verbatim: *"Granting
+    /// screen permissions doesn't work. I've already granted permissions."*
+    ///
+    /// **What makes this detectable without reading TCC's database** — which is SIP-protected, and
+    /// so is the log that carries the line above — is that a relaunch is a *control*. `grantedAtLaunch`
+    /// is the app's own record of whether the grant was already there when this process started, and
+    /// `captureDeclined` is ScreenCaptureKit's `userDeclined` on this process. True together, they
+    /// say the reopen this app asks for has already been performed and changed nothing. From the
+    /// live trace of the report, that is exactly the pair, twice, in two consecutive processes:
+    ///
+    /// ```text
+    /// 11:39:56  Context for Claude[9394]  ScreenCaptureKit refused this process while TCC still
+    ///                                     reports the grant as on
+    /// 11:42:13  Context for Claude[9660]  ScreenCaptureKit refused this process while TCC still
+    ///                                     reports the grant as on
+    /// ```
+    ///
+    /// **What was rejected, and why**, since both alternatives look reasonable until they are
+    /// measured:
+    ///
+    /// - *Compare a stored cdhash against this build's*, the way `reconcileSystemAudioRecords`
+    ///   already does for its own cached grant. Measured on the affected install:
+    ///   `context.permission.systemAudio.signature` is `708e9a67…` and the installed bundle's
+    ///   `CDHash` is `708e9a67…` — the same. The re-sign that poisoned the TCC record happened
+    ///   *before* that key was ever written, so the comparison reports "unchanged" for precisely the
+    ///   install that has the problem. It can only ever catch a *future* re-sign, which is no help
+    ///   to anybody already stuck.
+    /// - *Count the launches that met a lost grant.* It cannot separate "the record is unusable"
+    ///   from "the user switched it off and has not switched it back on", so it would tell people to
+    ///   delete a permission they revoked deliberately.
+    ///
+    /// Both are guesses about history. This is an observation about now, and it needs nothing
+    /// persisted at all.
+    enum ScreenGrantStaleness: Equatable {
+        /// The grant is real and this process is using it.
+        case none
+        /// The grant belongs to the next process. Reopening is the remedy.
+        case waitingOnRelaunch
+        /// The grant is unusable no matter how many processes ask. Deleting the record is the remedy.
+        case recordUnusable
+    }
+
+    nonisolated static func screenGrantStaleness(
+        grantedAtLaunch: Bool, captureDeclined: Bool
+    ) -> ScreenGrantStaleness {
+        // The grant arrived mid-run, so the next process is the one that gets it — whether or not
+        // ScreenCaptureKit has got round to refusing this one yet.
+        guard grantedAtLaunch else { return .waitingOnRelaunch }
+        // Held since launch. A refusal now cannot be about this process being early.
+        return captureDeclined ? .recordUnusable : .none
+    }
+
+    /// The live reading of the state above: this process launched holding the grant and macOS
+    /// refused it anyway.
+    ///
+    /// Both inputs are process-scoped on purpose and neither is persisted, which is what makes this
+    /// self-limiting: a successor that is not refused reports `false` on its own, with nothing to
+    /// clear and no stale flag to outlive the problem.
+    static var screenRecordIsUnusable: Bool {
+        screenGrantStaleness(
+            grantedAtLaunch: screenGrantedAtLaunch, captureDeclined: screenCaptureWasDeclined)
+            == .recordUnusable
     }
 
     /// **Records that ScreenCaptureKit refused this process, in so many words.**
@@ -533,9 +734,15 @@ enum Permissions {
     static func noteScreenCaptureDeclined() {
         guard !screenCaptureDeclined.isSignalled else { return }
         screenCaptureDeclined.signal()
+        // Which of the two refusals this is, at the moment it happens. The same sentence for both
+        // is how the log from the reported incident reads as "reopen me" twice in two consecutive
+        // processes without ever saying that the reopen had already been tried.
         ContextLog.milestone(
             "ScreenCaptureKit refused this process while TCC still reports the grant as on — "
-                + "Context for Claude has to be reopened before it can see the screen",
+                + (screenRecordIsUnusable
+                    ? "and this process launched already holding the grant, so no reopening can "
+                        + "fix it: the TCC record itself is unusable"
+                    : "Context for Claude has to be reopened before it can see the screen"),
             "permissions")
     }
 
@@ -611,18 +818,76 @@ enum Permissions {
 
     /// Quits this process and starts a fresh one, **in that order**. The button behind
     /// "Restart to finish".
+    ///
+    /// **This used to end the process with `exit(0)`, and that was wrong in a way nothing could
+    /// see.** `exit(0)` does not run `applicationWillTerminate`, so this path — the one the app puts
+    /// in front of a user the moment they grant Screen Recording — skipped `Engine.pause()`
+    /// entirely. That callback is what closes the open capture session and writes the final
+    /// heartbeat, and its own note says what happens without it: *"the last session stays open
+    /// forever and `status()` reports a recording that stopped hours ago."* Every restart from this
+    /// button left one behind. It also skipped the `Termination —` milestone, which is why a
+    /// restart is the one way of leaving this app that leaves no trace in the log at all.
+    ///
+    /// `NSApp.terminate` runs the delegate this app already has, so the flush has one owner rather
+    /// than a second copy here — the same argument that keeps the relauncher script in
+    /// `spawnRelaunchHelper()` and nowhere else. The origin is marked first because the delegate
+    /// asks *who ended this run*: unmarked, a restart pressed seconds after a grant landed is
+    /// precisely the shape `shouldReviveAfterTermination` revives, and the app would spawn a second
+    /// relaunch helper on top of the one this function has already arranged.
+    ///
+    /// **The order is still the whole fix, and it is unchanged.** The helper goes up before
+    /// anything ends the process, and the process only ends if the helper is genuinely running —
+    /// `Process.run()` throws when the spawn fails, so `true` means a real pid exists. What no
+    /// caller can verify is the `open` at the far end of it, because by then there is nothing left
+    /// to verify it with; that is inherent to an app relaunching itself, and the milestone the
+    /// helper logs is the handle the next report has on it.
+    ///
+    /// Still `-> Never`, and still honest: the two paths that do not terminate park the thread
+    /// rather than return. Parking runs the run loop rather than blocking it, so AppKit is free to
+    /// process the termination that was just asked for — and if it somehow never arrives, the user
+    /// is left with a running app instead of no app, which is the direction this whole function has
+    /// to fail in.
     static func relaunchApp() -> Never {
-        guard spawnRelaunchHelper() else {
-            // Nothing left to try, and exiting anyway would be the worst outcome: the user pressed a
-            // button labelled "Restart to finish" and would be left with no app and no Dock icon to
-            // reopen it from. Stay up instead — the card is still on screen and the menu bar still
-            // offers Quit — rather than terminate into nothing.
+        guard prepareRelaunch() else { park() }
+
+        // Both call sites are a click — the menu bar's Screen row and onboarding's "Restart to
+        // finish" — so this is the main thread by construction.
+        MainActor.assumeIsolated {
+            TerminationOrigin.relaunchWasArrangedHere()
+            NSApp.terminate(nil)
+        }
+        park()
+    }
+
+    /// **Everything a restart does before the point of no return**, and whether the process may now
+    /// be ended.
+    ///
+    /// Split out because the two lines after it cannot be run by a test without ending the test
+    /// process, and the decision they are gated on is the one with a user-visible wrong answer:
+    /// ending a process whose replacement was never arranged leaves somebody who pressed "Restart
+    /// to finish" with no app at all. `spawnHelper` is injectable for that reason and nothing in the
+    /// app passes it.
+    ///
+    /// - Returns: `false` when the helper did not come up, which the caller must read as *stay
+    ///   running*. The card is still on screen and the menu bar still offers Quit, so a failed
+    ///   restart costs the user a click rather than their app.
+    static func prepareRelaunch(spawnHelper: () -> Bool = { spawnRelaunchHelper() }) -> Bool {
+        guard spawnHelper() else {
             ContextTelemetry.recordFallback(
                 area: .settings, from: "relaunch", to: "stay-running",
                 reason: "helper-spawn-failed", outcome: .degraded)
-            while true { RunLoop.current.run(mode: .default, before: .distantFuture) }
+            return false
         }
-        exit(0)
+        return true
+    }
+
+    /// Runs the run loop forever, for the two paths of `relaunchApp()` that must not return.
+    ///
+    /// Deliberately not `sleep` or a bare spin: AppKit still has to be able to process the
+    /// termination this was called after, and the app still has to answer its menu bar if that
+    /// termination never comes.
+    private static func park() -> Never {
+        while true { RunLoop.current.run(mode: .default, before: .distantFuture) }
     }
 
     // MARK: - Per-capability request paths
@@ -1113,6 +1378,13 @@ enum Permissions {
     // MARK: - Plumbing
 
     private static let state = RequestState()
+
+    /// In memory and never persisted, because what it holds is a claim about *this* process: a grant
+    /// that arrived after we started is precisely the grant a successor launches already holding, so
+    /// a stamp carried across a relaunch would tell the successor to relaunch itself for a change it
+    /// has already picked up. That is the fork bomb `RevivalBudget` exists to bound, and it should
+    /// not be relying on the budget to do it.
+    private static let grantLedger = GrantLedger()
 
     /// In memory on purpose, and never persisted. What it holds is proof about *this* process —
     /// window-server capture rights are fixed when a process connects — so a stamp carried across a
@@ -1642,6 +1914,48 @@ private final class RequestState: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return pending.contains(c)
+    }
+}
+
+/// **When a capability this process could not use last became one it can.**
+///
+/// Not `private`, unlike the three below it, and that is deliberate: this is the seam the revival
+/// rule is asserted through. Every input to `Permissions.aGrantJustArrived()` other than this is a
+/// live TCC record, so a test written against the static API can only ever assert whatever this Mac
+/// happens to be granted — and would go on passing if the transition rules here were replaced by
+/// `true`.
+///
+/// The rules, and why each one is a rule:
+///
+/// - **A first sighting is a baseline, not a change.** There is nothing before it for it to differ
+///   from, and counting it would make every launch of an app that is granted everything look like a
+///   grant that had just landed.
+/// - **Only a transition *into* granted is stamped.** macOS raises its "Quit & Reopen" alert when a
+///   switch goes off as well as on, and an app that reopens itself after the user revokes a
+///   permission is the app arguing with them.
+/// - **A grant that has been in place for hours is not one that just arrived.** The stamp moves on
+///   the transition and not on the readings that follow it, so the thirty-second poll cannot keep
+///   renewing it — otherwise every external quit for the rest of the session would be undone.
+///
+/// Locked for the reason `CaptureClock` is: written from whichever thread happened to read a
+/// capability, and read from the delegate on the way out.
+final class GrantLedger: @unchecked Sendable {
+    private let lock = NSLock()
+    private var seen: [Capability: Bool] = [:]
+    private var arrivedAt: Double?
+
+    func observe(_ c: Capability, granted: Bool, now: Double = ContextTime.now) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let previously = seen.updateValue(granted, forKey: c) else { return }
+        guard granted, !previously else { return }
+        arrivedAt = now
+    }
+
+    func secondsSinceGrantArrived(now: Double) -> Double? {
+        lock.lock()
+        defer { lock.unlock() }
+        return arrivedAt.map { now - $0 }
     }
 }
 

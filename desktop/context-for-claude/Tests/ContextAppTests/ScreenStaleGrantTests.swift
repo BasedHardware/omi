@@ -77,7 +77,11 @@ final class ScreenStaleGrantTests: XCTestCase {
             lastBlock = Permissions.screenBlock(
                 granted: preflightGranted,
                 hasEverCaptured: hasEverCaptured,
-                needsRelaunch: needsRelaunch)
+                needsRelaunch: needsRelaunch,
+                recordIsUnusable: preflightGranted
+                    && Permissions.screenGrantStaleness(
+                        grantedAtLaunch: grantedAtLaunch, captureDeclined: captureDeclined)
+                        == .recordUnusable)
             guard lastBlock == nil else { return }
 
             attempts += 1
@@ -105,15 +109,45 @@ final class ScreenStaleGrantTests: XCTestCase {
                 + "\"would like to record this computer's screen and audio\" alert")
     }
 
-    func testTheRefusalIsReportedAsSomethingTheUserCanActuallyFix() {
+    /// **The refusal that survives the relaunch the app asked for.**
+    ///
+    /// `grantedAtLaunch` defaults to `true` here, which is the whole content of this case: the
+    /// process started already holding the grant. There is nothing for a reopen to change — the
+    /// successor starts holding the same grant and is refused for the same reason — so telling the
+    /// user to reopen is a loop, and they went round it. Live, in two consecutive processes:
+    ///
+    /// ```text
+    /// 11:39:56  Context for Claude[9394]  ScreenCaptureKit refused this process …
+    /// 11:42:13  Context for Claude[9660]  ScreenCaptureKit refused this process …
+    /// ```
+    ///
+    /// Reported as *"Granting screen permissions doesn't work. I've already granted permissions."*
+    func testARefusalThatOutlivedTheRelaunchIsNotAnotherRelaunchNudge() {
         var launch = Launch()
         launch.osDeclines = true
         launch.run(ticks: 2)
 
         XCTAssertEqual(
+            launch.lastBlock, .recordUnusable,
+            "the reopen has already happened and the refusal is still here, so the record is the "
+                + "thing that is wrong — a second relaunch nudge is the dead end the user reported")
+    }
+
+    /// The inverse, and the case that must keep working: a grant that landed *after* this process
+    /// connected to the window server genuinely is fixed by reopening, and must still say so.
+    ///
+    /// Without this, the fix above would be a rename — every refusal would tell every user to run a
+    /// Terminal command, including the ordinary ones two seconds from being fine.
+    func testAGrantThatArrivedMidRunStillJustAsksToBeReopened() {
+        var launch = Launch()
+        launch.grantedAtLaunch = false
+        launch.osDeclines = true
+        launch.run(ticks: 2)
+
+        XCTAssertEqual(
             launch.lastBlock, .needsRelaunch,
-            "the grant is real and unusable by this process, which is the one case no amount of "
-                + "polling can fix — the surface has to offer a relaunch instead of a re-request")
+            "this process was simply early; the next one gets the grant and nothing is wrong with "
+                + "the record")
     }
 
     /// The half that makes the count above meaningful: the gate must not have simply switched screen
@@ -157,22 +191,93 @@ final class ScreenStaleGrantTests: XCTestCase {
     /// becomes an app that answers "restart me" to a permission nobody ever granted.
     func testAnUngrantedScreenIsStillTheUsersOwnChoice() {
         XCTAssertEqual(
-            Permissions.screenBlock(granted: false, hasEverCaptured: false, needsRelaunch: false),
+            Permissions.screenBlock(
+                granted: false, hasEverCaptured: false, needsRelaunch: false, recordIsUnusable: false),
             .notGranted)
     }
 
     func testAGrantThisInstallUsedAndLostIsStillARegression() {
         XCTAssertEqual(
-            Permissions.screenBlock(granted: false, hasEverCaptured: true, needsRelaunch: false),
+            Permissions.screenBlock(
+                granted: false, hasEverCaptured: true, needsRelaunch: false, recordIsUnusable: false),
             .grantLost)
         XCTAssertTrue(
-            Permissions.screenBlock(granted: false, hasEverCaptured: true, needsRelaunch: false)?
+            Permissions.screenBlock(
+                granted: false, hasEverCaptured: true, needsRelaunch: false, recordIsUnusable: false)?
                 .isRegression == true,
             "a promise that stopped being kept has to be logged as one")
     }
 
+    // MARK: - Telling the two stale states apart
+
+    /// The reported state, as a unit. This is the one the boolean could not express.
+    func testAGrantHeldSinceLaunchAndStillRefusedIsAnUnusableRecord() {
+        XCTAssertEqual(
+            Permissions.screenGrantStaleness(grantedAtLaunch: true, captureDeclined: true),
+            .recordUnusable,
+            """
+            The process started holding the grant and macOS refused it anyway. Window-server \
+            capture rights are settled at connection time, so the successor starts from exactly \
+            here — there is no reopening out of this.
+            """)
+    }
+
+    /// The state the original predicate was written for, still named the way it was.
+    func testAGrantThatArrivedAfterLaunchIsWaitingOnARelaunch() {
+        XCTAssertEqual(
+            Permissions.screenGrantStaleness(grantedAtLaunch: false, captureDeclined: false),
+            .waitingOnRelaunch)
+        XCTAssertEqual(
+            Permissions.screenGrantStaleness(grantedAtLaunch: false, captureDeclined: true),
+            .waitingOnRelaunch,
+            """
+            A refusal in a process that was early is still just a process that was early. Only a \
+            refusal that could not have been about timing accuses the record.
+            """)
+    }
+
+    func testAHealthyLaunchIsNeitherStaleState() {
+        XCTAssertEqual(
+            Permissions.screenGrantStaleness(grantedAtLaunch: true, captureDeclined: false), .none)
+    }
+
+    /// **The guidance is the fix.** The state exists so the user is told the one thing that works,
+    /// and the app has already spent two rounds telling them things that do not.
+    func testTheUnusableRecordIsExplainedWithTheCommandThatActuallyFixesIt() {
+        let reason = Permissions.ScreenBlock.recordUnusable.reason
+
+        XCTAssertTrue(
+            reason.contains("tccutil reset ScreenCapture com.omi.context-for-claude"),
+            """
+            Deleting the record is the only remedy — System Settings updates the row's allowed flag \
+            without rewriting the stored code requirement — so the sentence has to name the exact \
+            command rather than gesture at it.
+            """)
+        XCTAssertFalse(
+            reason.lowercased().contains("reopen me"),
+            "reopening is the advice this state exists to stop repeating")
+        XCTAssertTrue(
+            Permissions.ScreenBlock.recordUnusable.isRegression,
+            """
+            Logged at a level that survives: this is a state the user cannot leave without being \
+            told a command, so the line explaining it has to still be readable tomorrow.
+            """)
+    }
+
+    /// The two remedies must not be confusable in the copy either — a user reading the relaunch
+    /// sentence must not be handed a Terminal command, and vice versa.
+    func testTheRelaunchSentenceStillOffersARelaunchAndNothingElse() {
+        let reason = Permissions.ScreenBlock.needsRelaunch.reason
+
+        XCTAssertTrue(reason.contains("reopened"))
+        XCTAssertFalse(
+            reason.contains("tccutil"),
+            "a process that is merely early must not be sent to delete a perfectly good record")
+    }
+
     func testAWorkingScreenReportsNoBlockAtAll() {
         XCTAssertNil(
-            Permissions.screenBlock(granted: true, hasEverCaptured: true, needsRelaunch: false))
+            Permissions.screenBlock(
+                granted: true, hasEverCaptured: true, needsRelaunch: false, recordIsUnusable: false))
     }
 }

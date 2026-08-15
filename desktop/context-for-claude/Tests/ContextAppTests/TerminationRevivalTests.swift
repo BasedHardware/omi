@@ -62,6 +62,7 @@ final class TerminationRevivalTests: XCTestCase {
             ContextAppDelegate.shouldReviveAfterTermination(
                 requestedLocally: false,
                 onboardingInProgress: true,
+                aGrantJustArrived: false,
                 revivalsAlreadySpent: 0),
             """
             This is "Quit & Reopen" pressed on macOS's own alert: the user answered a permission, \
@@ -95,6 +96,7 @@ final class TerminationRevivalTests: XCTestCase {
             ContextAppDelegate.shouldReviveAfterTermination(
                 requestedLocally: false,
                 onboardingInProgress: true,
+                aGrantJustArrived: false,
                 revivalsAlreadySpent: 0),
             """
             Accessibility was just granted and Screen Recording never was. The app is still \
@@ -112,6 +114,7 @@ final class TerminationRevivalTests: XCTestCase {
             ContextAppDelegate.shouldReviveAfterTermination(
                 requestedLocally: true,
                 onboardingInProgress: true,
+                aGrantJustArrived: false,
                 revivalsAlreadySpent: 0),
             """
             Every other condition for reviving holds, and it still must not: the user pressed Quit \
@@ -133,6 +136,7 @@ final class TerminationRevivalTests: XCTestCase {
             ContextAppDelegate.shouldReviveAfterTermination(
                 requestedLocally: TerminationOrigin.wasRequestedLocally,
                 onboardingInProgress: true,
+                aGrantJustArrived: false,
                 revivalsAlreadySpent: 0),
             "the same inputs that revive an unasked-for termination must not revive this one")
     }
@@ -149,23 +153,113 @@ final class TerminationRevivalTests: XCTestCase {
             ContextAppDelegate.shouldReviveAfterTermination(
                 requestedLocally: TerminationOrigin.wasRequestedLocally,
                 onboardingInProgress: true,
+                aGrantJustArrived: false,
                 revivalsAlreadySpent: 0),
             "a Mac that is shutting down is not asking for the app back")
     }
 
-    /// Outside onboarding there is nothing to come back to, and an app that reappears after being
-    /// quit is the app refusing to leave.
+    /// With no run waiting and no grant behind it, an app that reappears after being quit is the app
+    /// refusing to leave.
     ///
-    /// This is also what bounds the widened gate. Dropping the permission clause made the predicate
-    /// "somebody other than the user ended us", and that sentence on its own would reopen the app
-    /// after an Activity Monitor quit at any point in its life.
+    /// **This is what bounds both clauses, and the second one needed it more than the first.**
+    /// "Somebody other than the user ended us" would have covered the reported bug in one line and
+    /// must not be used: measured in this app's own log, an ordinary Sparkle update is an external
+    /// quit too — the updater launches at 13:35:18 and the app is terminated at 13:35:21, with
+    /// `requestedLocally=false` — and reviving that would race the relaunch Sparkle is already
+    /// performing. `killall` and an Activity Monitor quit land here identically.
     @MainActor
-    func testAFinishedUserIsLeftAlone() {
+    func testAnExternalQuitWithNothingBehindItIsLeftAlone() {
         XCTAssertFalse(
             ContextAppDelegate.shouldReviveAfterTermination(
                 requestedLocally: false,
                 onboardingInProgress: false,
+                aGrantJustArrived: false,
                 revivalsAlreadySpent: 0))
+    }
+
+    // MARK: - The third report: a permission granted after setup
+
+    /// **The reported bug**, in the user's words: *"The app crashes upon giving permissions."*
+    ///
+    /// There is no crash. No `.ips` report exists for this bundle in either DiagnosticReports
+    /// directory, and the exit is clean. What happens is that the user opens Privacy & Security to
+    /// turn a stale switch off and on — the remedy `Permissions.staleGrantReason` tells them to use
+    /// — and macOS recycles the process so the new grant can take effect:
+    ///
+    /// ```text
+    /// 11:40:09  tccd                accessing={SecurityPrivacyExtension, pid=9049}
+    /// 11:40:11  Context for Claude  [AppKit:Application] Handling Quit AppleEvent
+    /// 11:40:11  Context for Claude  Termination — requestedLocally=false onboardingInProgress=false
+    ///                               tutorialBeat=none revivalsSpent=0/3 → staying quit
+    /// 11:40:11  launchservicesd     QUITTING: pid=9394
+    /// ```
+    ///
+    /// Setup was finished, so `onboardingInProgress` was false and the whole predicate fell at the
+    /// second clause. From the user's chair the app vanished at the exact moment they told it to
+    /// start recording, and capture stopped silently while they believed it had just been switched
+    /// on — which is worse than useless for a capture app.
+    @MainActor
+    func testAPermissionGrantedAfterSetupBringsTheAppBack() {
+        XCTAssertTrue(
+            ContextAppDelegate.shouldReviveAfterTermination(
+                requestedLocally: false,
+                onboardingInProgress: false,
+                aGrantJustArrived: true,
+                revivalsAlreadySpent: 0),
+            """
+            A grant this process could not use has just become one it can, and macOS ended the \
+            process precisely so a successor could pick it up. Nothing else is going to launch that \
+            successor.
+            """)
+    }
+
+    /// The half that must still say no, on the new clause as much as the old one. A grant landing
+    /// two minutes before the user presses ⌘Q does not make ⌘Q something to undo.
+    @MainActor
+    func testAUserQuitOutranksAGrantThatJustArrived() {
+        TerminationOrigin.userAskedToQuit()
+
+        XCTAssertFalse(
+            ContextAppDelegate.shouldReviveAfterTermination(
+                requestedLocally: TerminationOrigin.wasRequestedLocally,
+                onboardingInProgress: false,
+                aGrantJustArrived: true,
+                revivalsAlreadySpent: 0),
+            """
+            The grant clause is a reason to come back from a termination nobody here asked for. It \
+            is never a reason to come back from one the user did.
+            """)
+    }
+
+    /// …and the same for a Mac that is closing the session. Granting a permission and then choosing
+    /// Restart is an entirely ordinary sequence, and the app must go quietly.
+    @MainActor
+    func testAPowerOffOutranksAGrantThatJustArrived() {
+        TerminationOrigin.systemIsPoweringOff()
+
+        XCTAssertFalse(
+            ContextAppDelegate.shouldReviveAfterTermination(
+                requestedLocally: TerminationOrigin.wasRequestedLocally,
+                onboardingInProgress: false,
+                aGrantJustArrived: true,
+                revivalsAlreadySpent: 0),
+            "reopening into a session that is closing is the app arguing with the shutdown")
+    }
+
+    /// The ceiling binds the new clause too. Four capabilities on one card is four consecutive
+    /// grants, so this is a path a real user can walk rather than a hypothetical.
+    @MainActor
+    func testTheBudgetStillStopsAGrantDrivenChain() {
+        XCTAssertFalse(
+            ContextAppDelegate.shouldReviveAfterTermination(
+                requestedLocally: false,
+                onboardingInProgress: false,
+                aGrantJustArrived: true,
+                revivalsAlreadySpent: RevivalBudget.allowance),
+            """
+            An app that respawns forever is worse than an app that needs reopening, and the \
+            allowance has to bound every route into the revival rather than only the first one.
+            """)
     }
 
     // MARK: - It cannot loop
@@ -192,6 +286,7 @@ final class TerminationRevivalTests: XCTestCase {
                 ContextAppDelegate.shouldReviveAfterTermination(
                     requestedLocally: false,
                     onboardingInProgress: true,
+                    aGrantJustArrived: false,
                     revivalsAlreadySpent: spent)
             else { break }
 
@@ -205,6 +300,136 @@ final class TerminationRevivalTests: XCTestCase {
             """
             The chain has to end, and it has to end at the stated allowance rather than wherever an \
             unrelated permission flag happens to fall over.
+            """)
+    }
+
+    /// The same proof for the clause that has no unfinished run under it.
+    ///
+    /// The worst case for looping is sharper here than it is for onboarding, because the successor
+    /// launches *holding* the grant — so if the ledger behind `aGrantJustArrived` were ever
+    /// persisted, every generation would read its predecessor's arrival and the chain would only be
+    /// stopped by the budget. This drives the predicate as though that had happened.
+    @MainActor
+    func testAGrantDrivenChainTerminatesToo() {
+        var spent = 0
+        var revivals = 0
+
+        for _ in 0..<50 {
+            guard
+                ContextAppDelegate.shouldReviveAfterTermination(
+                    requestedLocally: false,
+                    onboardingInProgress: false,
+                    aGrantJustArrived: true,
+                    revivalsAlreadySpent: spent)
+            else { break }
+
+            revivals += 1
+            spent += 1
+        }
+
+        XCTAssertEqual(revivals, RevivalBudget.allowance, "the ceiling is the predicate's own, on both routes in")
+    }
+
+    // MARK: - What counts as a grant arriving
+
+    /// A first sighting is the baseline this process starts from, not a change to act on.
+    ///
+    /// Without this every launch of a Mac that is granted everything would look like four grants
+    /// landing at once, and the first external quit of the session would reopen the app.
+    func testTheFirstSightingOfACapabilityIsNotAnArrival() {
+        let ledger = GrantLedger()
+
+        ledger.observe(.screen, granted: true, now: 100)
+
+        XCTAssertNil(
+            ledger.secondsSinceGrantArrived(now: 100),
+            "there is nothing before the first reading for it to differ from")
+    }
+
+    /// The reported episode, through the ledger: ungranted at launch, granted a moment before the
+    /// quit.
+    func testAnUngrantedCapabilityBecomingGrantedIsAnArrival() {
+        let ledger = GrantLedger()
+
+        ledger.observe(.accessibility, granted: false, now: 100)
+        ledger.observe(.accessibility, granted: true, now: 160)
+
+        XCTAssertEqual(ledger.secondsSinceGrantArrived(now: 162), 2)
+    }
+
+    /// **A permission taken away is not a permission given.**
+    ///
+    /// macOS raises the same "Quit & Reopen" alert when a switch goes off, so this is a live path
+    /// rather than a hypothetical — and an app that reopens itself after the user revokes its
+    /// access is the app arguing with them about the one thing they are most entitled to decide.
+    func testARevokedGrantIsNotAnArrival() {
+        let ledger = GrantLedger()
+
+        ledger.observe(.microphone, granted: true, now: 100)
+        ledger.observe(.microphone, granted: false, now: 160)
+
+        XCTAssertNil(ledger.secondsSinceGrantArrived(now: 161))
+    }
+
+    /// **The stamp is the transition, not the readings that follow it.**
+    ///
+    /// The engine re-reads every capability every thirty seconds. If each of those readings renewed
+    /// the stamp, a grant made once at breakfast would keep the app inside the arrival window for
+    /// the rest of the day — and every external quit in it, an update included, would be undone.
+    func testAGrantThatHasBeenInPlaceForHoursIsNotAnArrival() {
+        let ledger = GrantLedger()
+
+        ledger.observe(.screen, granted: false, now: 0)
+        ledger.observe(.screen, granted: true, now: 60)
+        // Six hours of the ordinary poll, all of it agreeing with what it already saw.
+        for tick in stride(from: 90.0, through: 21_600, by: 30) {
+            ledger.observe(.screen, granted: true, now: tick)
+        }
+
+        XCTAssertEqual(
+            ledger.secondsSinceGrantArrived(now: 21_600), 21_540,
+            "the arrival stays where it happened; a poll is not an event")
+        XCTAssertFalse(
+            Permissions.grantArrivedRecently(
+                secondsSince: ledger.secondsSinceGrantArrived(now: 21_600),
+                within: Permissions.grantArrivalSeconds))
+    }
+
+    /// The window itself, asserted without a TCC record moving.
+    func testTheArrivalWindowBoundsTheDecisionInBothDirections() {
+        let window = Permissions.grantArrivalSeconds
+
+        XCTAssertFalse(
+            Permissions.grantArrivedRecently(secondsSince: nil, within: window),
+            "nothing has arrived, so nothing is a reason to reopen")
+        XCTAssertTrue(
+            Permissions.grantArrivedRecently(secondsSince: 2, within: window),
+            "two seconds is the measured gap between the switch and the Quit Apple Event")
+        XCTAssertFalse(
+            Permissions.grantArrivedRecently(secondsSince: window + 1, within: window),
+            "outside the window this is an ordinary external quit and the app stays quit")
+        XCTAssertFalse(
+            Permissions.grantArrivedRecently(secondsSince: -1, within: window),
+            """
+            A clock that moved backwards leaves a stamp in the future. It has to read as "nothing \
+            arrived" rather than as a licence to reopen — staying quit is the safe direction for \
+            every clause of this decision.
+            """)
+    }
+
+    /// End to end on the live seam: a process in which nobody has granted anything has nothing to
+    /// come back for, whatever this Mac happens to be allowed to do.
+    ///
+    /// The one assertion here that is machine-independent, and it is the one worth having: the
+    /// first reading of each capability is a baseline, so no arrangement of TCC records on the
+    /// machine running the suite can make this answer true.
+    func testALiveProcessWithNoGrantChangeReportsNoArrival() {
+        XCTAssertFalse(
+            Permissions.aGrantJustArrived(),
+            """
+            Nothing was granted during this test process, so the delegate must not be told a grant \
+            arrived — a predicate that answered from the current grant state rather than from a \
+            change would reopen the app after any external quit at all.
             """)
     }
 
@@ -352,7 +577,9 @@ final class TerminationRevivalTests: XCTestCase {
             user reported was a no.
             """)
 
-        for input in ["requestedLocally=", "onboardingInProgress=", "revivalsSpent="] {
+        for input in [
+            "requestedLocally=", "onboardingInProgress=", "grantJustArrived=", "revivalsSpent=",
+        ] {
             XCTAssertTrue(
                 tail.contains(input),
                 "the line has to carry \(input) or it cannot say why the answer was what it was")
