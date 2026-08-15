@@ -9,7 +9,12 @@ import pytest
 from fastapi import Response
 
 from routers import desktop_proactivity
-from utils.subscription import NEO_DESKTOP_GRANDFATHER_CUTOFF
+from utils.subscription import (
+    DESKTOP_ACCESS_TIER_ARCHITECT,
+    DESKTOP_ACCESS_TIER_FREE,
+    DESKTOP_ACCESS_TIER_FULL,
+    NEO_DESKTOP_GRANDFATHER_CUTOFF,
+)
 
 # The provider ignores a cached prefix under 1024 tokens, so any test that expects
 # explicit caching to engage must carry a stable block that clears that floor.
@@ -165,7 +170,7 @@ async def test_quota_is_allowed_based_and_fails_closed(monkeypatch):
     assert exhausted.value.status_code == 429
     assert exhausted.value.headers == {
         "Retry-After": "19",
-        "X-Proactive-Quota-Limit": "200",
+        "X-Proactive-Quota-Limit": "150",
         "X-Proactive-Quota-Remaining": "0",
         "X-Proactive-Quota-Reset": "19",
     }
@@ -184,11 +189,11 @@ async def test_quota_is_allowed_based_and_fails_closed(monkeypatch):
 @pytest.mark.parametrize(
     ("operation", "expected_limit"),
     [
-        (desktop_proactivity.ProactiveOperation.EXTRACTION, 200),
-        (desktop_proactivity.ProactiveOperation.REASONING, 100),
+        (desktop_proactivity.ProactiveOperation.EXTRACTION, 150),
+        (desktop_proactivity.ProactiveOperation.REASONING, 60),
     ],
 )
-async def test_quota_matches_expanded_director_budget(monkeypatch, operation, expected_limit):
+async def test_quota_reservation_uses_the_free_row_and_daily_window(monkeypatch, operation, expected_limit):
     observed = {}
 
     async def run_blocking(_, function, *args, **kwargs):
@@ -226,11 +231,11 @@ async def test_quota_headers_present_on_success(monkeypatch):
     )
 
     state = await desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
-    assert state == desktop_proactivity.ProactiveQuotaState(limit=200, remaining=12, reset_seconds=3600)
+    assert state == desktop_proactivity.ProactiveQuotaState(limit=150, remaining=12, reset_seconds=3600)
 
     response = Response()
     desktop_proactivity._apply_quota_headers(response, state)
-    assert response.headers["X-Proactive-Quota-Limit"] == "200"
+    assert response.headers["X-Proactive-Quota-Limit"] == "150"
     assert response.headers["X-Proactive-Quota-Remaining"] == "12"
     assert response.headers["X-Proactive-Quota-Reset"] == "3600"
     assert "retry-after" not in {name.lower() for name in response.headers.keys()}
@@ -301,11 +306,55 @@ def test_release_after_delete_does_not_go_negative():
 
 
 @pytest.mark.parametrize(
+    ("tier", "extraction_limit", "reasoning_limit"),
+    [
+        (DESKTOP_ACCESS_TIER_FREE, 150, 60),
+        (DESKTOP_ACCESS_TIER_FULL, 1000, 500),
+        (DESKTOP_ACCESS_TIER_ARCHITECT, 2000, 1000),
+    ],
+)
+def test_each_tier_resolves_to_its_exact_limit_pair(monkeypatch, tier, extraction_limit, reasoning_limit):
+    monkeypatch.setattr(desktop_proactivity, "effective_desktop_access_tier", lambda *_args, **_kwargs: tier)
+    subscription = SimpleNamespace(plan=desktop_proactivity.PlanType.basic)
+    assert (
+        desktop_proactivity._quota_limit_for_subscription(
+            desktop_proactivity.ProactiveOperation.EXTRACTION, subscription
+        )
+        == extraction_limit
+    )
+    assert (
+        desktop_proactivity._quota_limit_for_subscription(
+            desktop_proactivity.ProactiveOperation.REASONING, subscription
+        )
+        == reasoning_limit
+    )
+
+
+def test_unknown_tier_falls_back_to_free_row_without_raising(monkeypatch):
+    monkeypatch.setattr(
+        desktop_proactivity, "effective_desktop_access_tier", lambda *_args, **_kwargs: "desktop_does_not_exist"
+    )
+    subscription = SimpleNamespace(plan=desktop_proactivity.PlanType.basic)
+    assert (
+        desktop_proactivity._quota_limit_for_subscription(
+            desktop_proactivity.ProactiveOperation.EXTRACTION, subscription
+        )
+        == 150
+    )
+    assert (
+        desktop_proactivity._quota_limit_for_subscription(
+            desktop_proactivity.ProactiveOperation.REASONING, subscription
+        )
+        == 60
+    )
+
+
+@pytest.mark.parametrize(
     ("plan", "reasoning_limit", "extraction_limit"),
     [
-        (desktop_proactivity.PlanType.basic, 100, 200),
-        (desktop_proactivity.PlanType.operator, 200, 400),
-        (desktop_proactivity.PlanType.architect, 400, 800),
+        (desktop_proactivity.PlanType.basic, 60, 150),
+        (desktop_proactivity.PlanType.operator, 500, 1000),
+        (desktop_proactivity.PlanType.architect, 1000, 2000),
     ],
 )
 def test_quota_limit_scales_from_server_verified_subscription(plan, reasoning_limit, extraction_limit):
@@ -331,13 +380,13 @@ def test_post_cutoff_neo_uses_free_quota_while_grandfathered_neo_keeps_full_quot
 
     assert (
         desktop_proactivity._quota_limit_for_subscription(desktop_proactivity.ProactiveOperation.REASONING, post_cutoff)
-        == 100
+        == 60
     )
     assert (
         desktop_proactivity._quota_limit_for_subscription(
             desktop_proactivity.ProactiveOperation.REASONING, grandfathered
         )
-        == 200
+        == 500
     )
 
 
