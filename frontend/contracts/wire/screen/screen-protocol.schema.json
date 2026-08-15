@@ -1,0 +1,498 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omi.me/schema/screen-http-protocol/draft-v1.json",
+  "title": "Omi /v1/screen HTTP Protocol",
+  "description": "Hand-written schema-of-record for the screen-recording HTTP wire. DRAFT-v1 — pending David's ratification; sibling native-capture and Rewind lanes treat these shapes as their spec. Modeled on the listen schema's documentation conventions (x-omi-* annotations, closed additionalProperties, $defs as the single home for each payload). Pixels and H.265 chunks NEVER appear on this wire or in the service store: the client OCRs on-device and syncs text+metadata only.",
+  "x-omi-protocol": {
+    "spec": "screen-http-protocol",
+    "schema_version": "draft-v1",
+    "status": "draft-pending-ratification",
+    "ratification": "pending David; authorized as a NEW contract family by the 2026-08-15 screen-backend lane brief (DAVID-OVERNIGHT-2026-08-15-RULINGS.md full-parity with the legacy desktop Rewind sink)",
+    "transport": "http",
+    "privacy": {
+      "pixels_on_wire": false,
+      "chunks_on_wire": false,
+      "rule": "Frame pixels and 60s H.265 chunks stay on the capturing device. The service stores metadata, OCR text, block geometry, dhash, and an opaque client-local frame_ref so the native lane can garbage-collect chunks after retention."
+    },
+    "auth": {
+      "mechanism": "dependency",
+      "detail": "uid derived server-side from the Authorization bearer token. Every path is owner-scoped (ownerAccountId). Missing or invalid credentials are 401 unauthorized."
+    },
+    "paths": [
+      {
+        "id": "ingest",
+        "method": "POST",
+        "path": "/v1/screen/frames",
+        "request_ref": "#/$defs/FrameIngestRequest",
+        "response_ref": "#/$defs/FrameIngestResponse",
+        "detail": "Batched HTTP ingest. A WebSocket is not required for v1. One capture_session_id binds the batch; each frame carries its own captured_at, app identity, frame_ref, dhash, and OCR attachment. Duplicate identical ids are no-ops; a colliding id with different bytes is 409."
+      },
+      {
+        "id": "timeline",
+        "method": "GET",
+        "path": "/v1/screen/timeline",
+        "query": ["day", "limit", "offset"],
+        "response_ref": "#/$defs/TimelinePage",
+        "detail": "One local calendar day, ordered by captured_at ascending, with app identity on every row. Day is YYYY-MM-DD in the account timezone."
+      },
+      {
+        "id": "day_span",
+        "method": "GET",
+        "path": "/v1/screen/days",
+        "response_ref": "#/$defs/DaySpanSummary",
+        "detail": "Which local days hold at least one surviving frame, plus oldest/newest captured_at and the live frame count."
+      },
+      {
+        "id": "search",
+        "method": "GET",
+        "path": "/v1/screen/search",
+        "query": ["q", "limit"],
+        "response_ref": "#/$defs/TextSearchResponse",
+        "detail": "Keyword (FTS) search over normalized OCR text. Hits carry a snippet and the block ids that matched, which power on-image highlight parity. Semantic/vector search is a seam: when unconfigured it returns status not_configured and does not affect FTS ranking."
+      },
+      {
+        "id": "retention_read",
+        "method": "GET",
+        "path": "/v1/screen/retention",
+        "response_ref": "#/$defs/RetentionSetting",
+        "detail": "Current retention window. Unset accounts report the default of 7."
+      },
+      {
+        "id": "retention_write",
+        "method": "PUT",
+        "path": "/v1/screen/retention",
+        "request_ref": "#/$defs/RetentionSetting",
+        "response_ref": "#/$defs/RetentionSetting",
+        "detail": "days must be 3, 7, 14, 30, or 0 (unlimited, the legacy sentinel). Negative or unparseable values fail SAFE to unlimited (0) and never to a deleting window. A successful write sweeps that owner immediately."
+      },
+      {
+        "id": "retired_refs",
+        "method": "GET",
+        "path": "/v1/screen/retired",
+        "response_ref": "#/$defs/RetiredFrameRefsPage",
+        "detail": "frame_refs the service retired so the native lane can delete the corresponding local chunks. The service never held pixels."
+      }
+    ],
+    "invariants": [
+      {
+        "id": "INV-SCREEN-001",
+        "title": "Pixels never cross the wire",
+        "checkable": true,
+        "rule": "no-pixel-fields",
+        "detail": "Request and response objects forbid pixel, image, and chunk-byte fields. additionalProperties is false on every payload. A client-local frame_ref is the only handle to bytes that stay on device."
+      },
+      {
+        "id": "INV-SCREEN-002",
+        "title": "OCR blocks are required for highlight parity",
+        "checkable": true,
+        "rule": "ocr-blocks-required",
+        "detail": "Every ingested frame carries full_text plus at least one block with text and normalized x,y,w,h,confidence. Search hits name the matched block ids so Rewind can highlight on the local image."
+      },
+      {
+        "id": "INV-SCREEN-003",
+        "title": "Retention 0 is unlimited; invalid never deletes",
+        "checkable": true,
+        "rule": "retention-fail-safe-unlimited",
+        "detail": "The legacy sentinel 0 means unlimited. Negative, non-finite, or otherwise unparseable days coerce to 0. The default when unset is 7. A coerced-unlimited setting must not delete any row."
+      },
+      {
+        "id": "INV-SCREEN-004",
+        "title": "Owner scope is total",
+        "checkable": true,
+        "rule": "owner-account-id",
+        "detail": "Every read and write is keyed by the authenticated ownerAccountId. Another account's frames are indistinguishable from absence."
+      },
+      {
+        "id": "INV-SCREEN-005",
+        "title": "FTS is real; vector search is a seam",
+        "checkable": true,
+        "rule": "fts-now-vector-later",
+        "detail": "Text search always runs FTS over normalized OCR. The embedding/vector source is optional configuration; the default adapter answers not_configured and must not invent ranking."
+      }
+    ],
+    "contract_of_record": "omi:frontend/contracts/wire/screen/screen-protocol.schema.json"
+  },
+  "$defs": {
+    "FrameRefChunk": {
+      "type": "object",
+      "x-omi-role": "model",
+      "additionalProperties": false,
+      "required": ["kind", "path", "offset"],
+      "properties": {
+        "kind": { "const": "chunk" },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Client-local path of the 60s H.265 chunk that contains this frame. Never fetched by the service."
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Client-defined offset into that chunk (milliseconds into the 60s window at baseline). The service stores the integer opaquely."
+        }
+      }
+    },
+    "FrameRefOpaque": {
+      "type": "object",
+      "x-omi-role": "model",
+      "additionalProperties": false,
+      "required": ["kind", "ref"],
+      "properties": {
+        "kind": { "const": "opaque" },
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opaque client-local handle. The service round-trips it; it must not be a URL the service would fetch."
+        }
+      }
+    },
+    "FrameRef": {
+      "x-omi-role": "model",
+      "description": "Client-local locator for pixels that never leave the device. Tagged union: chunk path+offset, or an opaque ref.",
+      "oneOf": [
+        { "$ref": "#/$defs/FrameRefChunk" },
+        { "$ref": "#/$defs/FrameRefOpaque" }
+      ]
+    },
+    "OcrBlock": {
+      "type": "object",
+      "x-omi-role": "model",
+      "additionalProperties": false,
+      "required": ["id", "text", "x", "y", "w", "h", "confidence"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable id within the frame. The client may supply one; the service defaults to the 0-based index as a decimal string. Search hits refer to this id."
+        },
+        "text": { "type": "string" },
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Normalized left edge of the block in the captured frame, origin top-left."
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Normalized top edge of the block in the captured frame, origin top-left."
+        },
+        "w": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "description": "Normalized width. x+w must not exceed 1 beyond a 1e-4 float slop."
+        },
+        "h": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "description": "Normalized height. y+h must not exceed 1 beyond a 1e-4 float slop."
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "On-device OCR confidence for this block (Apple Vision at baseline)."
+        }
+      }
+    },
+    "OcrAttachment": {
+      "type": "object",
+      "x-omi-role": "model",
+      "additionalProperties": false,
+      "required": ["full_text", "blocks"],
+      "properties": {
+        "full_text": {
+          "type": "string",
+          "description": "Concatenated OCR for the frame. Indexed by FTS5 after normalization."
+        },
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/OcrBlock" },
+          "description": "Per-block geometry. Required: on-image highlight parity cannot be reconstructed from full_text alone."
+        }
+      }
+    },
+    "FrameIngestItem": {
+      "type": "object",
+      "x-omi-role": "model",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "captured_at",
+        "app_bundle_id",
+        "app_name",
+        "window_title",
+        "device_name",
+        "client_device_id",
+        "frame_ref",
+        "dhash",
+        "ocr"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Client-chosen idempotency key for this frame under the owner."
+        },
+        "captured_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC instant the focused window was captured."
+        },
+        "app_bundle_id": { "type": "string" },
+        "app_name": { "type": "string" },
+        "window_title": { "type": "string" },
+        "device_name": { "type": "string" },
+        "client_device_id": { "type": "string", "minLength": 1 },
+        "frame_ref": { "$ref": "#/$defs/FrameRef" },
+        "dhash": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Perceptual difference hash computed on-device. Not a pixel payload."
+        },
+        "ocr": { "$ref": "#/$defs/OcrAttachment" }
+      }
+    },
+    "FrameIngestRequest": {
+      "type": "object",
+      "x-omi-role": "request",
+      "x-omi-path": "/v1/screen/frames",
+      "additionalProperties": false,
+      "required": ["capture_session_id", "frames"],
+      "properties": {
+        "capture_session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Client identity for one capture session. Many frames share it."
+        },
+        "frames": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/FrameIngestItem" }
+        }
+      }
+    },
+    "FrameIngestAccepted": {
+      "type": "object",
+      "x-omi-role": "model",
+      "additionalProperties": false,
+      "required": ["id", "inserted"],
+      "properties": {
+        "id": { "type": "string" },
+        "inserted": {
+          "type": "boolean",
+          "description": "false when this id was already stored with identical bytes (idempotent replay)."
+        }
+      }
+    },
+    "FrameIngestResponse": {
+      "type": "object",
+      "x-omi-role": "response",
+      "x-omi-path": "/v1/screen/frames",
+      "additionalProperties": false,
+      "required": ["capture_session_id", "accepted", "duplicate", "frames"],
+      "properties": {
+        "capture_session_id": { "type": "string" },
+        "accepted": { "type": "integer", "minimum": 0 },
+        "duplicate": { "type": "integer", "minimum": 0 },
+        "frames": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FrameIngestAccepted" }
+        }
+      }
+    },
+    "TimelineFrame": {
+      "type": "object",
+      "x-omi-role": "model",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "capture_session_id",
+        "captured_at",
+        "app_bundle_id",
+        "app_name",
+        "window_title",
+        "device_name",
+        "client_device_id",
+        "frame_ref",
+        "dhash"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "capture_session_id": { "type": "string" },
+        "captured_at": { "type": "string", "format": "date-time" },
+        "app_bundle_id": { "type": "string" },
+        "app_name": { "type": "string" },
+        "window_title": { "type": "string" },
+        "device_name": { "type": "string" },
+        "client_device_id": { "type": "string" },
+        "frame_ref": { "$ref": "#/$defs/FrameRef" },
+        "dhash": { "type": "string" }
+      },
+      "description": "Timeline rows carry app identity and the client-local ref. OCR is omitted so a day page stays lean; search is the text surface."
+    },
+    "TimelinePage": {
+      "type": "object",
+      "x-omi-role": "response",
+      "x-omi-path": "/v1/screen/timeline",
+      "additionalProperties": false,
+      "required": ["day", "frames"],
+      "properties": {
+        "day": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "Local calendar day in the account timezone."
+        },
+        "frames": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TimelineFrame" }
+        }
+      }
+    },
+    "DaySpanSummary": {
+      "type": "object",
+      "x-omi-role": "response",
+      "x-omi-path": "/v1/screen/days",
+      "additionalProperties": false,
+      "required": ["days", "oldest_captured_at", "newest_captured_at", "frame_count"],
+      "properties": {
+        "days": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "description": "Ascending unique local days that currently hold at least one frame."
+        },
+        "oldest_captured_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "newest_captured_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "frame_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "TextSearchHit": {
+      "type": "object",
+      "x-omi-role": "model",
+      "additionalProperties": false,
+      "required": [
+        "frame_id",
+        "captured_at",
+        "app_bundle_id",
+        "app_name",
+        "window_title",
+        "snippet",
+        "matched_block_ids",
+        "rank"
+      ],
+      "properties": {
+        "frame_id": { "type": "string" },
+        "captured_at": { "type": "string", "format": "date-time" },
+        "app_bundle_id": { "type": "string" },
+        "app_name": { "type": "string" },
+        "window_title": { "type": "string" },
+        "snippet": {
+          "type": "string",
+          "description": "OCR excerpt with matched terms wrapped in << >> (FTS5 snippet convention)."
+        },
+        "matched_block_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "OcrBlock.id values whose text matched the query. Powers on-image highlight."
+        },
+        "rank": {
+          "type": "number",
+          "description": "Higher is better. FTS ranking (bm25 inverted to this polarity) for the keyword hits."
+        }
+      }
+    },
+    "SemanticSearchStatus": {
+      "x-omi-role": "model",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {
+            "status": { "const": "not_configured" }
+          },
+          "description": "Default. No embedding engine is wired; keyword hits are the whole result."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "hits"],
+          "properties": {
+            "status": { "const": "ready" },
+            "hits": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/TextSearchHit" }
+            }
+          },
+          "description": "Reserved for a later embedding adapter. Not emitted by the draft-v1 default source."
+        }
+      ]
+    },
+    "TextSearchResponse": {
+      "type": "object",
+      "x-omi-role": "response",
+      "x-omi-path": "/v1/screen/search",
+      "additionalProperties": false,
+      "required": ["query", "hits", "semantic"],
+      "properties": {
+        "query": { "type": "string" },
+        "hits": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TextSearchHit" }
+        },
+        "semantic": { "$ref": "#/$defs/SemanticSearchStatus" }
+      }
+    },
+    "RetentionSetting": {
+      "type": "object",
+      "x-omi-role": "model",
+      "additionalProperties": false,
+      "required": ["days"],
+      "properties": {
+        "days": {
+          "type": "integer",
+          "enum": [0, 3, 7, 14, 30],
+          "description": "3, 7, 14, or 30 days, or 0 for unlimited (legacy sentinel). Default when unset: 7. Invalid input is coerced to 0, never to a deleting window."
+        }
+      }
+    },
+    "RetiredFrameRef": {
+      "type": "object",
+      "x-omi-role": "model",
+      "additionalProperties": false,
+      "required": ["frame_id", "frame_ref", "retired_at"],
+      "properties": {
+        "frame_id": { "type": "string" },
+        "frame_ref": { "$ref": "#/$defs/FrameRef" },
+        "retired_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "RetiredFrameRefsPage": {
+      "type": "object",
+      "x-omi-role": "response",
+      "x-omi-path": "/v1/screen/retired",
+      "additionalProperties": false,
+      "required": ["retired"],
+      "properties": {
+        "retired": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RetiredFrameRef" }
+        }
+      }
+    }
+  }
+}

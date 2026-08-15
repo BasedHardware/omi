@@ -2,6 +2,7 @@
 // domain-pending(UNK-DOMCORE-002)
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
+// domain-pending(DIV-DOMAPPS-007)
 // domain-pending(DIV-CHAT-REV-001)
 // domain-pending(DIV-CHAT-HASH-001)
 // domain-pending(DIV-DOMTASK-001)
@@ -113,6 +114,12 @@ import {
   LISTEN_MAX_CREDENTIAL_LEASE_MILLISECONDS,
   registerListenRoutes,
 } from "./routes/listen";
+import { registerScreenRoutes } from "./routes/screen";
+import {
+  createUnconfiguredScreenEmbeddingSource,
+  type ScreenEmbeddingSource,
+} from "./screen/embedding-source";
+import { createScreenRetentionWorker } from "./screen/retention-worker";
 import { registerQaRoutes } from "./routes/qa";
 import { registerQaEvidenceRoutes } from "./routes/qa-evidence";
 import { registerQaControlRoutes } from "./routes/qa-control";
@@ -136,6 +143,7 @@ import {
 } from "./stores/folder-deletion-unit-of-work";
 import { createInMemoryStragglerTable, type StragglerTable } from "./stores/straggler-table";
 import { createInMemoryListenStore, type ListenStore } from "./stores/listen-store";
+import { createInMemoryScreenStore, type ScreenStore } from "./stores/screen-store";
 import {
   defineListenSegmentUnitOfWork,
   type ListenSegmentUnitOfWork,
@@ -242,6 +250,10 @@ export interface LocalServiceOptions {
   /** Test override; production-shaped listen authentication is rechecked at least once per second. */
   readonly listenCredentialLeaseMilliseconds?: number;
   readonly listenCredentialNowMilliseconds?: () => number;
+  /** Optional semantic-search seam; omission is the not-configured default. */
+  readonly screenEmbeddings?: ScreenEmbeddingSource;
+  /** 0 disables the repeating retention timer; boot sweep still runs. Default 6h. */
+  readonly screenRetentionIntervalMs?: number;
   /** Deterministic attachment lifecycle seams for tests. */
   readonly nowEpochMilliseconds?: () => number;
   readonly attachmentId?: () => string;
@@ -265,6 +277,7 @@ export interface LocalServiceStores {
   readonly accountLifecycle: AccountLifecycleStore;
   readonly listen: ListenStore;
   readonly listenSegments: ListenSegmentUnitOfWork;
+  readonly screen: ScreenStore;
   readonly chatMessages: ChatMessagesStore;
   readonly chatAttachments: ChatAttachmentsStore;
   readonly chatEvents: ChatGenerationEventsStore;
@@ -335,6 +348,7 @@ export const createInMemoryLocalServiceStores = (): InMemoryLocalServiceStores =
     hasFolder: (accountId, folderId) => folders.hasFolder(accountId, folderId),
   });
   const listen = createInMemoryListenStore();
+  const screen = createInMemoryScreenStore();
   const settings = createInMemorySettingsProjectionStore();
   const listenConnection = Object.freeze({ listen, settings });
   const listenContext = createUnitOfWorkContext(listenConnection);
@@ -370,6 +384,7 @@ export const createInMemoryLocalServiceStores = (): InMemoryLocalServiceStores =
     accountLifecycle: createInMemoryAccountLifecycleStore(),
     listen,
     listenSegments,
+    screen,
     chatMessages,
     chatAttachments,
     chatEvents,
@@ -415,6 +430,7 @@ export interface LocalService {
     readonly opsCounter: WriteOpsCounter;
     readonly settings: SettingsProjectionStore;
     readonly listen: ListenStore;
+    readonly screen: ScreenStore;
     readonly chatMessages: ChatMessagesStore;
     readonly chatAttachments: ChatAttachmentsStore;
     readonly chatEvents: ChatGenerationEventsStore;
@@ -510,6 +526,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     stores.chatAttachments.reset();
     stores.chatMessages.reset();
     stores.listen.reset();
+    stores.screen.reset();
     conversations.reset();
     folders.reset();
     stores.tasks.reset();
@@ -878,6 +895,19 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     recordProtocolReady: producerEvidence.recordProtocolReady,
     recordAcceptedBinary: producerEvidence.recordAcceptedBinary,
   });
+  registerScreenRoutes(app, {
+    resolvePrincipal,
+    store: stores.screen,
+    embeddings: options.screenEmbeddings ?? createUnconfiguredScreenEmbeddingSource(),
+    counter,
+    now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
+    accountTimezone: options.accountTimezone,
+  });
+  createScreenRetentionWorker({
+    store: stores.screen,
+    now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
+    intervalMs: options.screenRetentionIntervalMs ?? 0,
+  });
   registerChatMessagesRoutes(app, {
     resolvePrincipal,
     messages: stores.chatMessages,
@@ -978,6 +1008,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       opsCounter,
       settings: stores.settings,
       listen: stores.listen,
+      screen: stores.screen,
       chatMessages: stores.chatMessages,
       chatAttachments: stores.chatAttachments,
       chatEvents: stores.chatEvents,

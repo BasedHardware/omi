@@ -97,6 +97,27 @@ test("explicit QA reset restores every externally supplied SQLite store family",
     sampleRate: 16_000,
     channels: 1,
   });
+  stores.screen.ingest({
+    accountId: OWNER,
+    captureSessionId: "screen-reset-session",
+    frames: [
+      {
+        id: "screen-reset-frame",
+        captured_at: NOW,
+        app_bundle_id: "com.example.browser",
+        app_name: "Browser",
+        window_title: "reset",
+        device_name: "Fixture",
+        client_device_id: "device-reset",
+        frame_ref: { kind: "opaque", ref: "reset-ref" },
+        dhash: "reset-dhash",
+        ocr: {
+          full_text: "reset Harborline",
+          blocks: [{ id: "0", text: "reset Harborline", x: 0.1, y: 0.1, w: 0.4, h: 0.1, confidence: 0.9 }],
+        },
+      },
+    ],
+  });
   stores.chatAttachments.stage({
     id: "attachment-reset",
     contentReference: "content-reset",
@@ -170,6 +191,7 @@ test("explicit QA reset restores every externally supplied SQLite store family",
   expect(stores.accountLifecycle.readLifecycle(OWNER)).toBe("active");
   expect(stores.accountLifecycle.readLifecycle(OTHER_OWNER)).toBeNull();
   expect(stores.listen.readSession(OWNER, "listen-reset-session")).toBeNull();
+  expect(stores.screen.daySpan(OWNER, "UTC").frame_count).toBe(0);
   expect(stores.chatMessages.readMessage(OWNER, "reset-chat")).toBeNull();
   expect(stores.chatEvents.listUnterminated()).toEqual([]);
   expect((db.query("SELECT count(*) AS count FROM service_chat_attachments").get() as {

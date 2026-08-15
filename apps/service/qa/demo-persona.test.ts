@@ -1,4 +1,5 @@
 // domain-pending(DIV-DOMAPPS-001)
+// domain-pending(DIV-DOMAPPS-007)
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMTASK-001)
 import { describe, expect, test } from "bun:test";
@@ -46,6 +47,10 @@ interface RouteSnapshot {
   readonly settings: {
     readonly identity: { readonly displayName: string; readonly email: string };
   };
+  readonly screen: {
+    readonly days: readonly string[];
+    readonly frame_count: number;
+  };
 }
 
 const snapshotRoutes = async (
@@ -57,7 +62,8 @@ const snapshotRoutes = async (
   const folders = await (await request("/v1/folders")).json() as RouteSnapshot["folders"];
   const chat = await (await request("/v1/chat-messages?limit=50")).json() as RouteSnapshot["chat"];
   const settings = await (await request("/v1/settings")).json() as RouteSnapshot["settings"];
-  return { memories, tasks, conversations, folders, chat, settings };
+  const screen = await (await request("/v1/screen/days")).json() as RouteSnapshot["screen"];
+  return { memories, tasks, conversations, folders, chat, settings, screen };
 };
 
 const assertQaSeedUnchanged = (snapshot: RouteSnapshot): void => {
@@ -83,6 +89,9 @@ const assertQaSeedUnchanged = (snapshot: RouteSnapshot): void => {
   }
   if (snapshot.settings.identity.displayName !== OWNER || snapshot.settings.identity.email !== "") {
     throw new TypeError("QA seed lock: settings identity is not the historical QA owner");
+  }
+  if (snapshot.screen.frame_count !== 0 || snapshot.screen.days.length !== 0) {
+    throw new TypeError("QA seed lock: screen frames are not empty");
   }
 };
 
@@ -140,6 +149,13 @@ describe("demo persona HTTP routes", () => {
         displayName: DEMO_PERSONA_DISPLAY_NAME,
         email: "",
       });
+      expect(snapshot.screen.frame_count).toBeGreaterThan(0);
+      expect(JSON.stringify(snapshot.screen)).toContain("2026-08-");
+      const search = await (await request("/v1/screen/search?q=Harborline")).json() as {
+        readonly hits: readonly { readonly snippet: string }[];
+      };
+      expect(search.hits.length).toBeGreaterThan(0);
+      expect(JSON.stringify(search)).toContain("Harborline");
       expect(service.seedIdentity()).toMatchObject({
         owner_account_id: OWNER,
         memory_count: DEMO_PERSONA_MEMORY_COUNT,
@@ -161,6 +177,7 @@ describe("demo persona HTTP routes", () => {
       expect(JSON.stringify(right.conversations)).toBe(JSON.stringify(left.conversations));
       expect(JSON.stringify(right.chat)).toBe(JSON.stringify(left.chat));
       expect(JSON.stringify(right.settings)).toBe(JSON.stringify(left.settings));
+      expect(JSON.stringify(right.screen)).toBe(JSON.stringify(left.screen));
     } finally {
       first.db.close();
       second.db.close();
