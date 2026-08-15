@@ -33,7 +33,7 @@ void main() {
     );
   });
 
-  test('real iOS writer replaces no prior run and atomically writes the exact seven-row document', () async {
+  test('real iOS writer replaces no prior run and atomically writes the exact eight-row document', () async {
     final scratch = await Directory.systemTemp.createTemp('omi-ios-consumer-evidence-');
     addTearDown(() => scratch.delete(recursive: true));
     final result = File('${scratch.path}/result.json');
@@ -55,7 +55,7 @@ void main() {
     expect(decoded['schema'], consumerEvidenceSchema);
     expect(decoded['runId'], 'run-ios-consumer');
     final rows = decoded['rows'] as List<dynamic>;
-    expect(rows, hasLength(7));
+    expect(rows, hasLength(8));
     for (final rowValue in rows) {
       final row = rowValue as Map<String, dynamic>;
       expect(row.keys.toSet(), {

@@ -96,7 +96,7 @@ test("healthy direct-service two-shell report passes with no nullable shell", ()
   assert.equal(report.result, "pass");
   assert.equal(report.launchers.macos.status, "pass");
   assert.equal(report.launchers.ios.status, "pass");
-  assert.equal(report.evidence.rows.length, 14);
+  assert.equal(report.evidence.rows.length, 16);
 });
 
 test("RED-PROOF dead-backend: readiness history cannot replace a live final probe", () => {
@@ -126,7 +126,7 @@ test("RED-PROOF generation-mismatch: a coordinate rendered as another domain", (
   assert.match(named(report, "no_generation_mismatch").detail, /rendered route/);
 });
 
-test("RED-PROOF ios:null is an explicit shell failure even with fourteen rows", () => {
+test("RED-PROOF ios:null is an explicit shell failure even with sixteen rows", () => {
   const input = facts();
   input.launchers.ios = null;
   const report = reportFor(input);

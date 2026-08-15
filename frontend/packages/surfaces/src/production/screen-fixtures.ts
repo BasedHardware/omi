@@ -65,7 +65,6 @@ function frame(
   appBundleId: string,
   appName: string,
   windowTitle: string,
-  offset: number,
 ): ScreenTimelineFrame {
   return Object.freeze({
     id,
@@ -76,7 +75,7 @@ function frame(
     window_title: windowTitle,
     device_name: "Demo Mac",
     client_device_id: "demo-mac-1",
-    frame_ref: Object.freeze({ kind: "chunk", path: `chunks/demo/${id}.hevc`, offset }),
+    frame_ref: Object.freeze({ kind: "opaque" as const, ref: id }),
     dhash: `demo-dhash-${id}`,
   });
 }
@@ -87,7 +86,6 @@ const FRAME_HARBORLINE = frame(
   "com.apple.Safari",
   "Safari",
   "Harborline Cafe — Saturday table",
-  0,
 );
 const FRAME_CEDAR = frame(
   "demo-screen-cedar-packing",
@@ -95,7 +93,6 @@ const FRAME_CEDAR = frame(
   "com.apple.Notes",
   "Notes",
   "Cedar Loop packing",
-  12_000,
 );
 const FRAME_FABLE = frame(
   "demo-screen-fable-wick-sketch",
@@ -103,7 +100,6 @@ const FRAME_FABLE = frame(
   "com.apple.Preview",
   "Preview",
   "Fable and Wick window sketch",
-  4_000,
 );
 
 const OCR_BY_ID: Readonly<Record<string, ScreenOcrAttachment>> = Object.freeze({

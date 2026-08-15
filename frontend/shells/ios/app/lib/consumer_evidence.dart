@@ -4,7 +4,7 @@ import 'dart:io';
 
 const consumerEvidenceSchema = 'omi.consumer-evidence.v1';
 
-enum ConsumerEvidenceRoute { memories, tasks, conversations, folders, listen, chat, settings }
+enum ConsumerEvidenceRoute { memories, tasks, conversations, folders, listen, chat, settings, screen }
 
 extension ConsumerEvidenceRouteName on ConsumerEvidenceRoute {
   String get wireName => name;
@@ -141,13 +141,13 @@ final class ConsumerEvidenceCollector {
 
   Future<void> finish() async {
     if (_rows.length != ConsumerEvidenceRoute.values.length) {
-      throw StateError('all seven rendered routes are required');
+      throw StateError('all matrix rendered routes are required');
     }
     final rows = ConsumerEvidenceRoute.values
         .map((route) {
           final row = _rows[route];
           if (row == null) {
-            throw StateError('all seven rendered routes are required');
+            throw StateError('all matrix rendered routes are required');
           }
           return row;
         })
@@ -315,8 +315,14 @@ const renderedConsumerObservationJavaScript = r'''
   if (!e || e.dataset.surfaceState !== 'ready' || e.dataset.qaFixture !== 'none') return null;
   const route = e.dataset.route;
   const semantic = e.dataset.consumerSemantic;
-  if (!['memories','tasks','conversations','folders','listen','chat','settings'].includes(route)) return null;
+  if (!['memories','tasks','conversations','folders','listen','chat','settings','screen'].includes(route)) return null;
   if (typeof semantic !== 'string' || semantic.trim() === '' || new TextEncoder().encode(semantic).length > 256) return null;
+  if (route === 'screen') {
+    const frames = Number(e.dataset.frameTotal);
+    const image = e.dataset.frameImage;
+    if (!Number.isSafeInteger(frames) || frames < 0) return null;
+    if (frames > 0 && image !== 'ready') return null;
+  }
   if (route === 'listen') {
     const transcript = e.dataset.consumerTranscript;
     if (typeof transcript !== 'string' || transcript.trim() === '' || new TextEncoder().encode(transcript).length > 1024) return null;

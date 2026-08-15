@@ -19,6 +19,7 @@ export const DOMAINS = Object.freeze([
   "listen",
   "chat",
   "settings",
+  "screen",
 ]);
 export const MATRIX_SIZE = SHELLS.length * DOMAINS.length;
 export const SERVICE_EXECUTABLE = "apps/service/bin/dev-server.ts";

@@ -183,6 +183,34 @@ describe("demo persona HTTP routes", () => {
       second.db.close();
     }
   });
+
+  test("seeded screen frames use opaque refs and never claim missing chunk files", async () => {
+    // red-proof: restore kind:"chunk" path chunks/demo/${id}.hevc. This test
+    // fails, and Rewind on the seeded stack shows "Frame image is not available here."
+    const { db, request } = boot(true);
+    try {
+      const span = await (await request("/v1/screen/days")).json() as { readonly days: readonly string[] };
+      const frames: Array<{ readonly id: string; readonly frame_ref: { readonly kind: string; readonly ref?: string; readonly path?: string } }> = [];
+      for (const day of span.days) {
+        const page = await (await request(`/v1/screen/timeline?day=${day}`)).json() as {
+          readonly frames: readonly { readonly id: string; readonly frame_ref: { readonly kind: string; readonly ref?: string; readonly path?: string } }[];
+        };
+        frames.push(...page.frames);
+      }
+      expect(frames.map((frame) => frame.id).sort()).toEqual([
+        "demo-screen-cedar-packing",
+        "demo-screen-fable-wick-sketch",
+        "demo-screen-harborline-reservation",
+      ]);
+      for (const frame of frames) {
+        expect(frame.frame_ref).toEqual({ kind: "opaque", ref: frame.id });
+      }
+      expect(JSON.stringify(frames)).not.toContain("chunks/demo");
+      expect(JSON.stringify(frames)).not.toContain(".hevc");
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("persona fence", () => {

@@ -118,7 +118,15 @@ import {
   LISTEN_MAX_CREDENTIAL_LEASE_MILLISECONDS,
   registerListenRoutes,
 } from "./routes/listen";
-import { registerScreenRoutes } from "./routes/screen";
+import {
+  SCREEN_DAYS_PATH,
+  SCREEN_FRAMES_PATH,
+  SCREEN_RETENTION_PATH,
+  SCREEN_RETIRED_PATH,
+  SCREEN_SEARCH_PATH,
+  SCREEN_TIMELINE_PATH,
+  registerScreenRoutes,
+} from "./routes/screen";
 import {
   createUnconfiguredScreenEmbeddingSource,
   type ScreenEmbeddingSource,
@@ -500,6 +508,15 @@ const successfulHttpDomain = (
     && (path === FOLDERS_PATH || path.startsWith(`${FOLDERS_PATH}/`))) return "folders";
   if (method === "GET" && path === SETTINGS_PATH) return "settings";
   if (method === "POST" && path === CHAT_MESSAGES_PATH) return "chat";
+  if (method === "GET" && (
+    path === SCREEN_DAYS_PATH
+    || path === SCREEN_TIMELINE_PATH
+    || path === SCREEN_SEARCH_PATH
+    || path === SCREEN_RETENTION_PATH
+    || path === SCREEN_RETIRED_PATH
+  )) return "screen";
+  if (method === "POST" && path === SCREEN_FRAMES_PATH) return "screen";
+  if (method === "PUT" && path === SCREEN_RETENTION_PATH) return "screen";
   return null;
 };
 

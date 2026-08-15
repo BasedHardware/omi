@@ -9,6 +9,7 @@ const expectedDomains = [
   "listen",
   "chat",
   "settings",
+  "screen",
 ];
 const exactKeys = (value, keys) =>
   value !== null &&
@@ -41,7 +42,9 @@ try {
 if (!exactKeys(document, ["schema", "runId", "rows"])) fail("document keys are not exact");
 if (document.schema !== "omi.consumer-evidence.v1") fail("wrong schema");
 if (document.runId !== runId) fail("wrong run id");
-if (!Array.isArray(document.rows) || document.rows.length !== 7) fail("expected seven rows");
+if (!Array.isArray(document.rows) || document.rows.length !== expectedDomains.length) {
+  fail(`expected ${expectedDomains.length} rows`);
+}
 
 const seen = new Set();
 for (const [index, row] of document.rows.entries()) {
@@ -71,4 +74,4 @@ for (const [index, row] of document.rows.entries()) {
   }
 }
 if (expectedDomains.some((domain) => !seen.has(domain))) fail("missing domain");
-process.stdout.write(`consumer-evidence: valid run=${runId} shell=${shell} rows=7\n`);
+process.stdout.write(`consumer-evidence: valid run=${runId} shell=${shell} rows=${expectedDomains.length}\n`);

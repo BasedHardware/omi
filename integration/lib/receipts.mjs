@@ -41,7 +41,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { rawRunIdFailure, validateFinalEvidenceMatrix } from "./evidence-matrix.mjs";
+import { rawRunIdFailure, validateFinalEvidenceMatrix, MATRIX_SIZE } from "./evidence-matrix.mjs";
 import {
   REPO_PATHS,
   WORKSPACE_ROOT,
@@ -377,7 +377,7 @@ export function writeReceipt({
   // the half that decides whether such a report can become a green receipt.
   //
   // `null` and `undefined` are refused. The L3-specific validator below then
-  // requires a complete 14-coordinate producer/consumer matrix.
+  // requires a complete MATRIX_SIZE-coordinate producer/consumer matrix.
   const unobservedArbiters = row.requiredArbiters.filter(
     (key) => !(key in arbiters) || arbiters[key] === null || arbiters[key] === undefined,
   );
@@ -401,7 +401,7 @@ export function writeReceipt({
     });
     if (!exactArbiters || runIdError || !matrixValidation.ok) {
       throw new Error(
-        "writeReceipt: lane L3 requires exact safe arbiter keys and a revalidated canonical 14-row producer/consumer evidenceMatrix; "
+        `writeReceipt: lane L3 requires exact safe arbiter keys and a revalidated canonical ${MATRIX_SIZE}-row producer/consumer evidenceMatrix; `
         + `${runIdError ?? (matrixValidation.failures.join("; ") || "arbiter keys are not exact")}.`,
       );
     }

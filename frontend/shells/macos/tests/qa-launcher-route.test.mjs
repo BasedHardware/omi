@@ -39,7 +39,7 @@ function fixture() {
   writeFileSync(join(dist, "index.html"), "<!doctype html>");
   const writer = join(scratch, "write-result.mjs");
   writeFileSync(writer, `import { writeFileSync } from "node:fs";
-const domains = ["memories","tasks","conversations","folders","listen","chat","settings"];
+const domains = ["memories","tasks","conversations","folders","listen","chat","settings","screen"];
 const [file, runId] = process.argv.slice(2);
 const rows = domains.map((domain) => ({runId,shell:"macos",domain,fixture:"none",evidence:"rendered-semantic",observation:{route:domain,state:"ready",semantic:domain+":rendered",...(domain === "listen" ? {transcript:"Local transcription is connected."} : {})},shellTreeHash:"1".repeat(40),surfaceTreeHash:"2".repeat(40)}));
 writeFileSync(file, JSON.stringify({schema:"omi.consumer-evidence.v1",runId,rows}));
@@ -96,7 +96,7 @@ if [[ "\$*" == *'-X POST'* ]]; then printf 'issued-token'; else printf '204'; fi
   };
 }
 
-test("macOS QA launcher freezes origin, URLs, and the seven evidence routes before actions", () => {
+test("macOS QA launcher freezes origin, URLs, and the eight evidence routes before actions", () => {
   // red-proof: append ::macos in the launcher or retain a prior host result;
   // the raw-run action log or pre-gate stale-file assertion fails.
   const source = readFileSync(launcher, "utf8");

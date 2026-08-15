@@ -157,7 +157,7 @@ let document = try! JSONSerialization.jsonObject(with: Data(contentsOf: result))
 check("exact document keys", Set(document.keys) == ["schema", "runId", "rows"])
 check("exact schema", document["schema"] as? String == consumerEvidenceSchema)
 let rows = document["rows"] as! [[String: Any]]
-check("exact seven rows", rows.count == 7)
+check("exact eight rows", rows.count == 8)
 for row in rows {
   check("exact row keys", Set(row.keys) == ["runId", "shell", "domain", "fixture", "evidence", "observation", "shellTreeHash", "surfaceTreeHash"])
   check("row identity", row["runId"] as? String == "run-macos-consumer" && row["shell"] as? String == "macos")
@@ -196,7 +196,7 @@ test("native evidence validator rejects reversed route rows and accepts canonica
   const scratch = mkdtempSync(join(tmpdir(), "omi-consumer-evidence-order-"));
   try {
     const result = join(scratch, "result.json");
-    const domains = ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"];
+    const domains = ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings", "screen"];
     const document = {
       schema: "omi.consumer-evidence.v1",
       runId: "run-order-proof",

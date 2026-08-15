@@ -95,6 +95,7 @@ describe("GET /v1/qa/evidence", () => {
       ["/v1/conversations", "conversations"],
       ["/v1/folders", "folders"],
       ["/v1/settings", "settings"],
+      ["/v1/screen/days", "screen"],
     ] as const) {
       expect((await service.app.request(path, { headers: headers(service, "macos") })).status)
         .toBe(200);
@@ -149,9 +150,9 @@ describe("GET /v1/qa/evidence", () => {
     const document = await evidence(service);
     expect(document.schema).toBe("omi.producer-evidence.v1");
     expect(document.runId).toBe(RUN);
-    expect(document.rows).toHaveLength(14);
+    expect(document.rows).toHaveLength(16);
     expect(new Set(document.rows.map((candidate) =>
-      `${candidate.runId}/${candidate.shell}/${candidate.domain}`)).size).toBe(14);
+      `${candidate.runId}/${candidate.shell}/${candidate.domain}`)).size).toBe(16);
     expect(row(document, "macos", "tasks").http?.successful).toBe(1);
     expect(row(document, "macos", "memories").http?.successful).toBe(1);
     expect(row(document, "ios", "memories").http?.successful).toBe(2);

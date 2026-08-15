@@ -266,7 +266,8 @@ final class ScreenLocalStore: @unchecked Sendable {
     windowTitle: String,
     dhash: String,
     ocr: ScreenOCRAttachment?,
-    allowWrite: Bool
+    allowWrite: Bool,
+    frameRef: String? = nil
   ) throws -> ScreenIndexRow {
     lock.lock()
     defer { lock.unlock() }
@@ -279,7 +280,7 @@ final class ScreenLocalStore: @unchecked Sendable {
     }
     guard let writer else { throw ScreenStoreError.writerUnavailable }
     let offset = try writer.append(image: clamped, capturedAt: capturedAt)
-    let ref = UUID().uuidString.lowercased()
+    let ref = frameRef ?? UUID().uuidString.lowercased()
     let id = ref
     let ocrJSON: String?
     if let ocr {
