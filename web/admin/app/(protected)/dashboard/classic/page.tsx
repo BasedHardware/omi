@@ -228,6 +228,9 @@ interface ViralMetrics {
   summary: {
     quickRatio: number | null;
     activationRate: number | null;
+    activationTelemetryCoverage: number | null;
+    activationSignups: number;
+    activationPooledRate: number | null;
     dauMau: number;
     dauWau: number;
     dau: number;
@@ -1716,7 +1719,9 @@ export default function AnalyticsPage() {
                 <Legend />
                 <Bar yAxisId="left" dataKey="signups" name="Signups" fill="#3b82f6" radius={[2, 2, 0, 0]} opacity={0.5} />
                 <Bar yAxisId="left" dataKey="activated" name="Activated" fill="#22c55e" radius={[2, 2, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="rate" name="Activation %" stroke="#f97316" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
+                {/* capableRate, not rate: weeks whose cohort ran no reporting
+                    build are a gap in the line rather than a plotted zero. */}
+                <Line yAxisId="right" type="monotone" dataKey="capableRate" name="Activation %" stroke="#f97316" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
               </ComposedChart>
             </ResponsiveContainer>
           ) : (
@@ -1886,9 +1891,9 @@ export default function AnalyticsPage() {
               {latestWeeklyActivation?.activated.toLocaleString() ?? "--"}
             </div>
             <p className="truncate text-xs text-muted-foreground">
-              {latestWeeklyActivation
-                ? `${latestWeeklyActivation.rate.toFixed(1)}% activation · Memory in 7d`
-                : "Memory within 7 days of signup"}
+              {latestWeeklyActivation?.capableRate != null
+                ? `${latestWeeklyActivation.capableRate.toFixed(1)}% activation · Memory in 7d`
+                : "Memory in 7d · no reporting build in this cohort"}
             </p>
           </div>
         ),
@@ -2281,7 +2286,19 @@ export default function AnalyticsPage() {
           <div className={`text-2xl font-bold ${(vm?.summary.activationRate ?? 0) >= 50 ? "text-green-600" : ""}`}>
             {vm?.summary.activationRate != null ? `${vm.summary.activationRate}%` : "--"}
           </div>
-          <p className="text-xs text-muted-foreground">Memory within 7d</p>
+          {/* Coverage is the difference between "users are not activating" and
+              "we cannot see whether they activated". Never show the rate alone
+              while some of the fleet cannot report it. */}
+          <p className="text-xs text-muted-foreground">
+            {vm?.summary.activationRate != null
+              ? `Memory within 7d · n=${vm.summary.activationSignups}`
+              : "Memory within 7d · not yet measurable"}
+          </p>
+          {vm != null && (vm.summary.activationTelemetryCoverage ?? 0) < 100 && (
+            <p className="text-xs text-amber-600">
+              {vm.summary.activationTelemetryCoverage ?? 0}% of signups on a build that reports it
+            </p>
+          )}
         </div>
       ),
     },
