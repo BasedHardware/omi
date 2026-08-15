@@ -14,7 +14,7 @@ import {
 import type {
   TypesenseDeletionReceiptKey,
   TypesenseStoredDeletionReceipt,
-} from "../../apps/service/workers/typesense-deletion-cleanup-participant";
+} from "../../migration/workers/typesense-deletion-cleanup-participant";
 
 const sha256 = (value: unknown): string => createHash("sha256")
   .update(JSON.stringify(value), "utf8").digest("hex");

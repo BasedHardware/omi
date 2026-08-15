@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import type {
   FirestoreLegacyGenerationReceiptKey,
   FirestoreStoredLegacyGenerationReceipt,
-} from "../../apps/service/workers/firestore-legacy-generation-cleanup-participant";
+} from "../../migration/workers/firestore-legacy-generation-cleanup-participant";
 import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,

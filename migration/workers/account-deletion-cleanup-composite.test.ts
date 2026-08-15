@@ -1,18 +1,18 @@
 import { describe, expect, test } from "bun:test";
 
-import type { AccountControlProjection } from "../../../core/control/account-control";
+import type { AccountControlProjection } from "../../core/control/account-control";
 import {
   DELETION_CLEANUP_SURFACES,
   DELETION_INVENTORY_CONTRACT_VERSION,
   DELETION_INVENTORY_SOURCE_RECEIPT_VERSION,
   type DeletionCleanupSurface,
-} from "../../../core/control/deletion-cleanup-inventory";
+} from "../../core/control/deletion-cleanup-inventory";
 import type {
   DeletionDominanceInput,
   TerminalControlTombstone,
   TerminalDeletionExportReceipt,
-} from "../../../core/control/deletion-dominance";
-import { runAccountDeletionCleanupCycle } from "./account-deletion-cleanup";
+} from "../../core/control/deletion-dominance";
+import { runAccountDeletionCleanupCycle } from "../../apps/service/workers/account-deletion-cleanup";
 import {
   createCompositeAccountDeletionCleanupPort,
   DeletionCleanupCompositeError,

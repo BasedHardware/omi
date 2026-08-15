@@ -6,7 +6,8 @@
   "workspaces": [
     "core/*",
     "drivers/*",
-    "harness"
+    "harness",
+    "migration"
   ],
   "scripts": {
     "test": "bun test",

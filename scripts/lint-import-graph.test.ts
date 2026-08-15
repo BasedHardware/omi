@@ -679,3 +679,18 @@ test("colocation fence rejects backend source importing frontend/", () => {
     rmSync(fixture, { force: true });
   }
 });
+
+test("migration fence rejects apps/service importing migration/", () => {
+  const fixture = join(platformRoot, "apps", "service", "workers", "migration-import-tripwire.ts");
+  try {
+    writeFileSync(
+      fixture,
+      'import { createGcsDeletionCleanupParticipant } from "../../../migration/workers/gcs-deletion-cleanup-participant";\nexport const planted = createGcsDeletionCleanupParticipant;\n',
+    );
+    const result = runLint();
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain("apps/service may not import migration/");
+  } finally {
+    rmSync(fixture, { force: true });
+  }
+});

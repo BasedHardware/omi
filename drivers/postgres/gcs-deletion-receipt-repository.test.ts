@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import type {
   GcsDeletionReceiptKey,
   GcsStoredDeletionReceipt,
-} from "../../apps/service/workers/gcs-deletion-cleanup-participant";
+} from "../../migration/workers/gcs-deletion-cleanup-participant";
 import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,

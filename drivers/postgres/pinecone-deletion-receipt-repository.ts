@@ -10,7 +10,7 @@ import {
   type PineconeDeletionReceiptLoad,
   type PineconeDeletionReceiptRepository,
   type PineconeStoredDeletionReceipt,
-} from "../../apps/service/workers/pinecone-deletion-cleanup-participant";
+} from "../../migration/workers/pinecone-deletion-cleanup-participant";
 import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,

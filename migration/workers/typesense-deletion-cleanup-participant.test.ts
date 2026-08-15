@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 
-import type { DeletionCleanupDispositionReceipt } from "./account-deletion-cleanup";
+import type { DeletionCleanupDispositionReceipt } from "../../apps/service/workers/account-deletion-cleanup";
 import type {
   DeletionSurfaceParticipant,
   HeldDeletionSurfaceSession,

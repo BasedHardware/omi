@@ -10,7 +10,7 @@ import {
   type FirestoreLegacyGenerationReceiptRepository,
   type FirestoreLegacyGenerationRole,
   type FirestoreStoredLegacyGenerationReceipt,
-} from "../../apps/service/workers/firestore-legacy-generation-cleanup-participant";
+} from "../../migration/workers/firestore-legacy-generation-cleanup-participant";
 import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,

@@ -56,6 +56,9 @@
     "harness": {
       "name": "@platform/harness",
     },
+    "migration": {
+      "name": "@platform/migration",
+    },
   },
   "packages": {
     "@fastify/busboy": ["@fastify/busboy@3.2.0", "", {}, "sha512-m9FVDXU3GT2ITSe0UaMA5rU3QkfC/UXtCU8y0gSN/GugTqtVldOBWIB5V6V3sbmenVZUIpU6f+mPEO2+m5iTaA=="],
@@ -113,6 +116,8 @@
     "@platform/harness": ["@platform/harness@workspace:harness"],
 
     "@platform/ledger": ["@platform/ledger@workspace:core/ledger"],
+
+    "@platform/migration": ["@platform/migration@workspace:migration"],
 
     "@platform/model-driver": ["@platform/model-driver@workspace:drivers/model"],
 

@@ -9,7 +9,7 @@ import {
   type GcsDeletionReceiptRepository,
   type GcsDeletionRole,
   type GcsStoredDeletionReceipt,
-} from "../../apps/service/workers/gcs-deletion-cleanup-participant";
+} from "../../migration/workers/gcs-deletion-cleanup-participant";
 import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,

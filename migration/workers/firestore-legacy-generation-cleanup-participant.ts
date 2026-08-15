@@ -1,14 +1,14 @@
 import { createHash } from "node:crypto";
 import { isProxy } from "node:util/types";
 
-import { isWellFormedAccountId } from "../../../core/control/account-control";
+import { isWellFormedAccountId } from "../../core/control/account-control";
 import {
   DELETION_INVENTORY_CONTRACT_VERSION,
   DELETION_INVENTORY_SOURCE_RECEIPT_VERSION,
   type DeletionCleanupSurface,
   type DeletionInventorySourceReceipt,
-} from "../../../core/control/deletion-cleanup-inventory";
-import type { DeletionCleanupDispositionReceipt } from "./account-deletion-cleanup";
+} from "../../core/control/deletion-cleanup-inventory";
+import type { DeletionCleanupDispositionReceipt } from "../../apps/service/workers/account-deletion-cleanup";
 import type {
   DeletionCleanupCoordinate,
   DeletionSurfaceParticipant,
