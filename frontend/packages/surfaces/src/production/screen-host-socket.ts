@@ -135,7 +135,14 @@ export function createProductionScreenHostBridge(
       return { state: (typeof state === "string" ? state : "idle") as PlatformScreenCaptureEngineState };
     },
     async frameImage(input: { frameRef: ScreenFrameRef; maxLongEdge?: number }) {
-      const result = await post("screen.frameImage", input);
+      // The shell contract is a string handle. Production timeline rows carry
+      // the HTTP FrameRef object; unwrap it here rather than posting a shape
+      // JSONDecoder will reject as an unreadable envelope.
+      const frameRef = input.frameRef.kind === "opaque" ? input.frameRef.ref : input.frameRef.path;
+      const result = await post("screen.frameImage", {
+        frameRef,
+        ...(input.maxLongEdge === undefined ? {} : { maxLongEdge: input.maxLongEdge }),
+      });
       const pngBase64 = ownData(result, "pngBase64");
       const width = ownData(result, "width");
       const height = ownData(result, "height");

@@ -251,11 +251,19 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
     _ userContentController: WKUserContentController,
     didReceive message: WKScriptMessage
   ) {
-    guard let webView = message.webView,
-      let raw = message.body as? String,
-      let data = raw.data(using: .utf8),
+    guard let webView = message.webView else {
+      logListen("listen-host: dropped (no webView)")
+      return
+    }
+    guard let data = jsonData(from: message.body),
       let command = try? JSONDecoder().decode(ListenSocketCommand.self, from: data)
-    else { return }
+    else {
+      logListen("listen-host: dropped bodyType=\(type(of: message.body))")
+      return
+    }
+    logListen(
+      "listen-host: action=\(command.action) id=\(command.id) operation=\(command.operation ?? "-")"
+    )
 
     if command.action == "preflight" {
       let operation = command.operation ?? "check"
@@ -263,18 +271,24 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
       case "request-permission":
         let hasUsage =
           Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription") is String
+        let tcc = AVCaptureDevice.authorizationStatus(for: .audio)
         if ListenCapturePolicy.canRequestAccess(
           hasUsageDescription: hasUsage, evidenceAudioEnabled: evidenceAudioEnabled),
-          AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined
+          tcc == .notDetermined
         {
-          AVCaptureDevice.requestAccess(for: .audio) { [weak self, weak webView] _ in
+          logListen("listen-tcc: AVCaptureDevice.requestAccess firing tcc=\(tccName(tcc))")
+          AVCaptureDevice.requestAccess(for: .audio) { [weak self, weak webView] granted in
             DispatchQueue.main.async {
               guard let self, let webView else { return }
+              self.logListen("listen-tcc: AVCaptureDevice.requestAccess returned \(granted)")
               self.emitPreflight(id: command.id, webView: webView)
             }
           }
           return
         }
+        logListen(
+          "listen-tcc: requestAccess skipped usage=\(hasUsage) evidence=\(evidenceAudioEnabled) tcc=\(tccName(tcc))"
+        )
         emitPreflight(id: command.id, webView: webView)
       case "open-settings":
         let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
@@ -477,6 +491,15 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
 
   private func onMain(_ body: @escaping () -> Void) {
     if Thread.isMainThread { body() } else { DispatchQueue.main.async(execute: body) }
+  }
+
+  private func jsonData(from body: Any) -> Data? {
+    if let raw = body as? String { return raw.data(using: .utf8) }
+    if let data = body as? Data { return data }
+    if JSONSerialization.isValidJSONObject(body) {
+      return try? JSONSerialization.data(withJSONObject: body)
+    }
+    return nil
   }
 
   private func emit(id: String, payload: [String: Any], webView: WKWebView, callback: String = "__omiListenSocketEvent") {

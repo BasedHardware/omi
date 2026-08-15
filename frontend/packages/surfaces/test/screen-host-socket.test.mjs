@@ -36,6 +36,24 @@ test("production screen bridge posts fixed verbs and never invents a working con
   assert.equal(absent.available, false);
 });
 
+test("frameImage posts the shell string handle, not the HTTP FrameRef object", async () => {
+  const createBridge = await loadProductionExport("screen-host-socket.ts", "createProductionScreenHostBridge");
+  const posted = [];
+  const channel = { postMessage(message) { posted.push(JSON.parse(message)); } };
+  const host = { webkit: { messageHandlers: { omiScreenBridge: channel } } };
+  const bridge = createBridge(host);
+  const pending = bridge.frameImage({ frameRef: { kind: "opaque", ref: "local-frame-1" } });
+  assert.deepEqual(posted[0], {
+    id: "screen-1",
+    action: "screen.frameImage",
+    params: { frameRef: "local-frame-1" },
+  });
+  host.__omiScreenBridgeEvent("screen-1", { pngBase64: "QQ==", width: 2, height: 1 });
+  const image = await pending;
+  assert.equal(image.width, 2);
+  assert.equal(image.height, 1);
+});
+
 test("malformed status pushes do not become permission-denied", async () => {
   const createBridge = await loadProductionExport("screen-host-socket.ts", "createProductionScreenHostBridge");
   const channel = { postMessage() {} };
