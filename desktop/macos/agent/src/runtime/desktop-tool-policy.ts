@@ -12,6 +12,11 @@ export type DesktopCoordinatorBundle =
   | "desktop.artifacts.manage"
   | "desktop.automation.read"
   | "desktop.automation.act_dev_only"
+  | "desktop.automation.act"
+  | "desktop.contacts.read"
+  | "desktop.messaging.read"
+  | "desktop.mail.read"
+  | "desktop.messaging.send"
   | "desktop.permissions.request"
   | "external.write_prepare"
   | "external.write_send";
@@ -81,6 +86,16 @@ const SCREEN_SUMMARY_TOOLS = new Set(["semantic_search", "get_work_context"]);
 // ChatToolExecutor independently enforces the current-turn consent at execution.
 const PERMISSION_REQUEST_TOOLS = new Set(["request_permission"]);
 const AUTOMATION_READ_TOOLS = new Set(["check_permission_status"]);
+const CONTACTS_READ_TOOLS = new Set(["search_contacts"]);
+const MESSAGING_READ_TOOLS = new Set(["list_message_chats", "read_message_history"]);
+// Mail headers name who is writing to the user and about what. That is the
+// same class of disclosure as a message thread, so it takes the same durable
+// approval rather than riding along as an ordinary local read.
+const MAIL_READ_TOOLS = new Set(["list_mail_messages"]);
+const MESSAGING_SEND_TOOLS = new Set(["send_message"]);
+// Production actuation, unlike `act_dev_only`: allowed in release bundles but
+// never without a dispatch or an unexpired scoped grant.
+const AUTOMATION_ACT_TOOLS = new Set(["run_applescript"]);
 const LOCAL_READ_TOOLS = new Set([
   "execute_sql",
   "get_daily_recap",
@@ -131,6 +146,11 @@ function bundlesForOmiTool(tool: OmiToolManifestEntry): DesktopCoordinatorBundle
   if (TASK_WRITE_TOOLS.has(tool.name)) bundles.add("desktop.tasks.readwrite");
   if (MEMORY_WRITE_TOOLS.has(tool.name)) bundles.add("desktop.memories.write");
   if (AUTOMATION_READ_TOOLS.has(tool.name)) bundles.add("desktop.automation.read");
+  if (CONTACTS_READ_TOOLS.has(tool.name)) bundles.add("desktop.contacts.read");
+  if (MESSAGING_READ_TOOLS.has(tool.name)) bundles.add("desktop.messaging.read");
+  if (MAIL_READ_TOOLS.has(tool.name)) bundles.add("desktop.mail.read");
+  if (MESSAGING_SEND_TOOLS.has(tool.name)) bundles.add("desktop.messaging.send");
+  if (AUTOMATION_ACT_TOOLS.has(tool.name)) bundles.add("desktop.automation.act");
   if (PERMISSION_REQUEST_TOOLS.has(tool.name)) bundles.add("desktop.permissions.request");
   if (EXTERNAL_SEND_TOOLS.has(tool.name)) bundles.add("external.write_send");
   if (tool.executor.kind === "runtimeControl") {
@@ -141,6 +161,36 @@ function bundlesForOmiTool(tool: OmiToolManifestEntry): DesktopCoordinatorBundle
   return [...bundles];
 }
 
+/// Bundles whose data or effects are sensitive enough that the request is
+/// classified high-risk and can never resolve without a dispatch or grant.
+const SENSITIVE_BUNDLES: readonly DesktopCoordinatorBundle[] = [
+  "desktop.context.screenshot_image",
+  "external.write_send",
+  "desktop.automation.act_dev_only",
+  "desktop.automation.act",
+  "desktop.messaging.read",
+  "desktop.mail.read",
+  "desktop.messaging.send",
+  "desktop.permissions.request",
+];
+
+/// Bundles that carry a write or actuation effect rather than a local read.
+const WRITE_BUNDLES: readonly DesktopCoordinatorBundle[] = [
+  "desktop.agent_control.manage",
+  "desktop.tasks.readwrite",
+  "desktop.artifacts.manage",
+  "external.write_prepare",
+  "external.write_send",
+  "desktop.automation.act_dev_only",
+  "desktop.automation.act",
+  "desktop.messaging.send",
+  "desktop.permissions.request",
+];
+
+function isSensitiveBundle(bundle: DesktopCoordinatorBundle): boolean {
+  return SENSITIVE_BUNDLES.includes(bundle);
+}
+
 function descriptorFromToolName(toolName: string): DesktopToolDescriptor | undefined {
   const control = controlDescriptor(toolName);
   if (control) return control;
@@ -149,11 +199,7 @@ function descriptorFromToolName(toolName: string): DesktopToolDescriptor | undef
   const bundles = bundlesForOmiTool(tool);
   const destructive = tool.annotations.destructiveHint === true;
   const write = tool.annotations.readOnlyHint !== true;
-  const sensitive =
-    bundles.includes("desktop.context.screenshot_image") ||
-    bundles.includes("external.write_send") ||
-    bundles.includes("desktop.automation.act_dev_only") ||
-    bundles.includes("desktop.permissions.request");
+  const sensitive = bundles.some(isSensitiveBundle);
   return {
     name: tool.name,
     bundles,
@@ -166,21 +212,8 @@ function descriptorFromToolName(toolName: string): DesktopToolDescriptor | undef
 }
 
 function descriptorFromBundles(bundles: readonly DesktopCoordinatorBundle[]): DesktopToolDescriptor {
-  const sensitive = bundles.some((bundle) =>
-    ["desktop.context.screenshot_image", "external.write_send", "desktop.automation.act_dev_only", "desktop.permissions.request"].includes(bundle),
-  );
-  const write = bundles.some((bundle) =>
-    [
-      "desktop.agent_control.manage",
-      "desktop.tasks.readwrite",
-      "desktop.memories.write",
-      "desktop.artifacts.manage",
-      "external.write_prepare",
-      "external.write_send",
-      "desktop.automation.act_dev_only",
-      "desktop.permissions.request",
-    ].includes(bundle),
-  );
+  const sensitive = bundles.some(isSensitiveBundle);
+  const write = bundles.some((bundle) => WRITE_BUNDLES.includes(bundle));
   return {
     name: "bundle_request",
     bundles,
@@ -196,6 +229,9 @@ function hasAllowGrant(request: DesktopToolPolicyRequest, bundle: DesktopCoordin
   const nowMs = request.nowMs ?? Date.now();
   return (request.grants ?? []).some((grant) => {
     if (grant.effect !== "allow" || grant.bundle !== bundle || grant.expiresAtMs <= nowMs) return false;
+    if ((bundle === "desktop.messaging.send" || bundle === "desktop.automation.act") && !grant.resourceRef) {
+      return false;
+    }
     if (grant.operation && grant.operation !== request.operation) return false;
     if (grant.resourceRef && grant.resourceRef !== request.resourceRef) return false;
     return true;
@@ -238,10 +274,7 @@ export function evaluateDesktopToolPolicy(request: DesktopToolPolicyRequest): De
     request.broadScreenHistory === true ||
     request.externalSend === true ||
     request.persistentGrant === true ||
-    requiredBundles.includes("desktop.context.screenshot_image") ||
-    requiredBundles.includes("external.write_send") ||
-    requiredBundles.includes("desktop.automation.act_dev_only") ||
-    requiredBundles.includes("desktop.permissions.request") ||
+    requiredBundles.some(isSensitiveBundle) ||
     descriptor.approvalPolicy === "user_approval" ||
     descriptor.approvalPolicy === "policy_grant";
 

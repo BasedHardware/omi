@@ -96,6 +96,7 @@ def wire_common_stubs(install) -> SimpleNamespace:
     redis_db.check_rate_limit = MagicMock(return_value=(True, 99, 0))
     redis_db.store_chat_share = MagicMock()
     redis_db.get_chat_share = MagicMock(return_value=None)
+    redis_db.r = MagicMock()
 
     executors = install('utils.executors', ModuleType('utils.executors'))
     executors.critical_executor = MagicMock()
@@ -151,6 +152,9 @@ def wire_common_stubs(install) -> SimpleNamespace:
         'utils.observability.transcription', ModuleType('utils.observability.transcription')
     )
     transcription_observability.TranscriptionAttempt = MagicMock
+
+    fallback_observability = install('utils.observability.fallback', ModuleType('utils.observability.fallback'))
+    fallback_observability.record_fallback = MagicMock()
 
     rate_limit = install('utils.rate_limit_config', ModuleType('utils.rate_limit_config'))
     rate_limit.get_effective_limit = MagicMock(return_value=(100, 60))

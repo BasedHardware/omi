@@ -7,6 +7,7 @@ the OpenAI-compatible chat-completions contract; direct specialist traffic keeps
 Anthropic's native streaming contract.
 """
 
+import base64
 import json
 import uuid
 import asyncio
@@ -51,6 +52,7 @@ from utils.retrieval.tools import (
     traverse_knowledge_graph_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
+from utils.device_tools import DEVICE_TOOL_NAMES, build_device_tools, device_tool_timeout_for_stream_budget
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.safety import (
     AgentSafetyGuard,
@@ -112,23 +114,26 @@ class _PerplexityWebSearchToolProxy:
 
     @property
     def args_schema(self):
+        class _FallbackArgsSchema:
+            @classmethod
+            def schema(cls):
+                return {
+                    'properties': {'query': {'type': 'string'}},
+                    'required': ['query'],
+                }
+
         try:
             from utils.retrieval.tools.perplexity_tools import perplexity_web_search_tool
-
-            return perplexity_web_search_tool.args_schema
         except ModuleNotFoundError as error:
             if error.name != 'langchain_core.tools':
                 raise
-
-            class _FallbackArgsSchema:
-                @classmethod
-                def schema(cls):
-                    return {
-                        'properties': {'query': {'type': 'string'}},
-                        'required': ['query'],
-                    }
-
             return _FallbackArgsSchema
+
+        # Under the LangChain-stub harness the @tool decorator is a passthrough, so the
+        # imported object is a bare function with no args_schema. The real decorator always
+        # supplies one, so falling back here cannot mask a production schema loss.
+        schema = getattr(perplexity_web_search_tool, 'args_schema', None)
+        return schema if schema is not None else _FallbackArgsSchema
 
     async def ainvoke(self, tool_input, config=None):
         from utils.retrieval.tools.perplexity_tools import perplexity_web_search_tool
@@ -233,8 +238,10 @@ CORE_TOOLS = [
     traverse_knowledge_graph_tool,
 ]
 
-# Standard tool names (used to detect app tools by exclusion)
-STANDARD_TOOL_NAMES = {t.name for t in CORE_TOOLS}
+# Standard tool names (used to detect app tools by exclusion). Device tools are
+# included because they are named like core tools (propose_message), and
+# _extract_app_id would otherwise read "propose" as an app id.
+STANDARD_TOOL_NAMES = {t.name for t in CORE_TOOLS} | set(DEVICE_TOOL_NAMES)
 
 
 def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str:
@@ -327,6 +334,16 @@ class AsyncStreamingCallback(BaseCallbackHandler):
 
     def put_data_nowait(self, text):
         self._put_nowait_threadsafe(f"data: {text}")
+
+    async def put_device_tool_request(self, request: dict):
+        """Ask the client to run a tool that only exists on their device.
+
+        Emitted on the stream that is already open for this turn, so the turn
+        stays live while the user answers instead of being suspended and resumed.
+        Base64 keeps arbitrary message text off the line-delimited SSE grammar.
+        """
+        encoded = base64.b64encode(json.dumps(request).encode('utf-8')).decode('utf-8')
+        await self.queue.put(f"tool: {encoded}")
 
     async def end(self):
         await self.queue.put(None)
@@ -1183,11 +1200,12 @@ async def execute_agentic_chat_stream(
     platform: Optional[str] = None,
     current_datetime_block: Optional[str] = None,
     tz: Optional[str] = None,
+    device_tool_names: Optional[set] = None,
     setup_deadline_at: Optional[float] = None,
 ) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
-    Yields formatted chunks with "data: " or "think: " prefixes.
+    Yields formatted chunks with "data: ", "think: " or "tool: " prefixes.
     ``setup_deadline_at`` is an absolute loop-clock deadline shared with the
     chat router so metadata + prompt/tool load use one setup budget.
     """
@@ -1323,9 +1341,44 @@ IMPORTANT: Always search for and use these tools when relevant. Never tell the u
 You have fetch_url_tool available. When the user shares any URL (starting with http:// or https://), you MUST call fetch_url_tool to read its content before responding. Never say you cannot browse, visit, or read a URL. Always attempt to fetch it first.
 </url_fetching_instructions>"""
 
-    # Build the canonical tool schemas once. Direct mode keeps Anthropic's shape;
-    # managed mode converts function tools to the OpenAI-compatible shape below.
-    tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
+    # The callback is created before tool conversion because device tools close
+    # over it: their execution is a round trip to the client on this stream.
+    callback = AsyncStreamingCallback()
+
+    stream_started_at = asyncio.get_running_loop().time()
+
+    def device_tool_timeout() -> int:
+        remaining = AGENT_STREAM_MAX_DURATION_SECONDS - (asyncio.get_running_loop().time() - stream_started_at)
+        return min(
+            max(0, int(remaining)),
+            device_tool_timeout_for_stream_budget(remaining),
+        )
+
+    # Device tools the client declared it can run. Appended after the fixed core
+    # list so the cached tools prefix stays byte-stable for clients that declare
+    # none, and stable per-client for those that do. Unlike app tools these are
+    # immediately visible — the model cannot discover them via tool search.
+    device_tools = build_device_tools(
+        uid,
+        set(device_tool_names or ()),
+        callback,
+        timeout_seconds=device_tool_timeout,
+    )
+    if device_tools:
+        device_tool_list = ', '.join(sorted(t.name for t in device_tools))
+        logger.info('Device tools available uid=%s tools=%s', uid, device_tool_list)
+        system_prompt += f"""
+
+<device_tools>
+These tools run on the user's own device, not on the server: {device_tool_list}
+
+propose_message opens the system compose sheet — it does NOT send. Only report a
+message as sent when the tool result says status=sent. If it says cancelled, the
+user chose not to send; acknowledge that rather than retrying.
+</device_tools>"""
+
+    # Convert tools to Anthropic format (core = visible, app = defer_loading)
+    tool_schemas, tool_registry = _convert_tools(core_tools + device_tools, app_tools)
     if gateway_feature_mode:
         # Anthropic's native web_search server tool is not understood by the
         # OpenAI-compatible gateway. Expose the existing Perplexity-backed
@@ -1346,8 +1399,6 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         anthropic_messages, current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
     )
 
-    callback = AsyncStreamingCallback()
-
     # Conversations collected by tools for citation
     conversations_collected = []
 
@@ -1364,7 +1415,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         "conversations_collected": conversations_collected,
         "safety_guard": safety_guard,
         "chat_session_id": chat_session.id if chat_session else None,
-        "tools": core_tools + app_tools,
+        "tools": core_tools + device_tools + app_tools,
     }
 
     # Store config in context variable for tools that use agent_config_context
@@ -1420,7 +1471,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # client, but the first-event clock below still bounds silence from the producer
     # (post-setup TTFT) separately from that setup progress.
     try:
-        started_at = asyncio.get_running_loop().time()
+        started_at = stream_started_at
         received_first_event = False
         while True:
             remaining_seconds = AGENT_STREAM_MAX_DURATION_SECONDS - (asyncio.get_running_loop().time() - started_at)

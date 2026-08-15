@@ -217,6 +217,13 @@ do not hand-edit those paths to match a specific machine.
 | Background poll with `RequestAuthPolicy.sessionPreserving` | Caller | Throw `.unauthorized`; no session invalidation |
 | `DesktopLocalProfile` harness | Auth emulator bootstrap | Re-bootstrap emulator session; no prod invalidation side effects |
 
+### On-device tool surface
+- Contacts, Messages, and AppleScript actuation reach the machine through kernel policy, never improvised shell. See `desktop/macos/docs/device-tool-surface.md`.
+- `desktop.messaging.read` is sensitive like `desktop.messaging.send`: reading a thread exposes the other party, so it takes the same approval record.
+- `desktop.automation.act` is the production sibling of `act_dev_only` — reachable in release builds, never resolvable without a dispatch or scoped grant.
+- Untrusted values (handles, message bodies, paths) reach `osascript` as `argv` only; interpolating them into script source is an injection bug.
+- `OMI_MESSAGES_DB` overrides the Messages store path so tests never read real message history.
+
 ### Database Structure
 - **Firestore** (`based-hardware`): User data, conversations, action items
 - **Redis**: Caching

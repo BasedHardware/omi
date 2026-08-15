@@ -86,6 +86,8 @@ final class QuickActionsIconPatcher: NSObject {
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
+  private var deviceToolsChannel: FlutterMethodChannel?
+  private let deviceToolsService = DeviceToolsService()
   private var phoneMicController: PhoneMicController?
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
@@ -150,12 +152,6 @@ final class QuickActionsIconPatcher: NSObject {
           PhoneMicHostApiSetup.setUp(binaryMessenger: messenger, api: PhoneMicHostApiImpl(controller: controller))
       }
 
-      // Retrieve the link from parameters
-    if let url = AppLinks.shared.getLink(launchOptions: launchOptions) {
-      // We have a link, propagate it to your Flutter app or not
-      AppLinks.shared.handleLink(url: url)
-      return true // Returning true will stop the propagation to other packages
-    }
     //Creates a method channel to handle notifications on kill
     let controller = window?.rootViewController as? FlutterViewController
     methodChannel = FlutterMethodChannel(name: "com.friend.ios/notifyOnKill", binaryMessenger: controller!.binaryMessenger)
@@ -173,6 +169,12 @@ final class QuickActionsIconPatcher: NSObject {
     appleHealthChannel = FlutterMethodChannel(name: "com.omi.apple_health", binaryMessenger: controller!.binaryMessenger)
     appleHealthChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleAppleHealthCall(call, result: result)
+    }
+
+    // Create the on-device tool surface method channel
+    deviceToolsChannel = FlutterMethodChannel(name: "com.omi.device_tools", binaryMessenger: controller!.binaryMessenger)
+    deviceToolsChannel?.setMethodCallHandler { [weak self] (call, result) in
+      self?.deviceToolsService.handleMethodCall(call, result: result)
     }
 
     // Create Speech Recognition method channel
@@ -259,6 +261,16 @@ final class QuickActionsIconPatcher: NSObject {
     }
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
+    }
+
+    // Handled last, not first. This branch returns early to stop propagation to
+    // other packages, so running it before the channels above meant a cold
+    // launch from a URL left the app with no method channels at all for the rest
+    // of the session — including com.omi.device_tools, which Dart still
+    // advertises, so every device tool call failed with surface_unavailable.
+    if let url = AppLinks.shared.getLink(launchOptions: launchOptions) {
+      AppLinks.shared.handleLink(url: url)
+      return true
     }
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)

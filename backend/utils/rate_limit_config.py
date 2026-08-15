@@ -46,6 +46,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Chat — 2-6 LLM calls per message
     "chat:send_message": (120, 3600),
     "chat:initial": (60, 3600),
+    # Device tool results carry no LLM cost — one cheap Redis write per tool the
+    # model calls on the user's own device. Bounded well above chat:send_message
+    # because a single turn can dispatch several device tool calls.
+    "chat:device_tool_result": (600, 3600),
     # Voice — Deepgram + LLM
     "voice:transcribe": (60, 3600),
     "voice:transcribe_stream": (60, 3600),
