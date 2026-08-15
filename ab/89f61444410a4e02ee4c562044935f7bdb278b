@@ -1,0 +1,54 @@
+desktop/context-for-claude/Sources/ContextApp/Search/SearchBarWindow.swift
+  s_d58145f2e376ea::t_9628df2999702d 425-431
+  s_d58145f2e376ea::t_76b64a843f6b28 660-672
+desktop/context-for-claude/Tests/ContextAppTests/TimelineEscapeTests.swift
+  s_d58145f2e376ea::t_ba2e5dddfd8e92 29,55,129
+  s_d58145f2e376ea::t_a5059cf0940283 185-202
+  s_d58145f2e376ea::t_bd018975eed45b 203-209
+  s_d58145f2e376ea::t_eb9c4b25cd859a 87,177
+desktop/context-for-claude/Sources/ContextApp/Settings/ShortcutRecorderMonitor.swift
+  s_d58145f2e376ea::t_5b2fb8dc9beb85 100
+  s_d58145f2e376ea::t_53c4052b5b1691 1-50,56,58-59,65-70,74-93,96,102-120,125-126,129,131-138
+  s_d58145f2e376ea::t_c54d6063519356 121-123
+  s_d58145f2e376ea::t_49c831f62584aa 94-95,97-99,101
+  s_d58145f2e376ea::t_f2c84737b79c22 57,60-61,71-73
+  s_d58145f2e376ea::t_759c94e8ab17df 127-128,130
+  s_d58145f2e376ea::t_73249d0ba21630 51-55,62-64
+  s_d58145f2e376ea::t_43290b40452b39 124
+desktop/context-for-claude/Tests/ContextAppTests/KeyboardReachTests.swift
+  s_d58145f2e376ea::t_6f9dcfaa453d8f 65-67
+  s_d58145f2e376ea::t_f140c3774aa1e1 44-64,68-141
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsGeneralPane.swift
+  s_d58145f2e376ea::t_29cbcfb3bba290 461-469,471,490-491
+  s_d58145f2e376ea::t_07c00c86280f99 382-385
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindWindow.swift
+  s_d58145f2e376ea::t_791a8c77c7fbd9 373-391
+desktop/context-for-claude/Tests/ContextAppTests/KeyWindowPrecondition.swift
+  s_d58145f2e376ea::t_db4ada07fc7a6a 83
+  s_d58145f2e376ea::t_ec01e766069e74 4-5,15-20,22-35,38-59,61-62,68,75-78
+  s_d58145f2e376ea::t_13dd3a1a70b040 74,79-82,84-87
+  s_d58145f2e376ea::t_48b470d38102b9 1-3,6-14,21,36-37,60,63-67,69-73,88-91
+desktop/context-for-claude/Tests/ContextAppTests/TimelineKeyStatusTests.swift
+  s_d58145f2e376ea::t_2f260eb4271cef 92
+  s_d58145f2e376ea::t_a0c62d1dadb570 93-99
+  s_d58145f2e376ea::t_86ee04b2fdaa49 166-175
+  s_d58145f2e376ea::t_5f2c243395ccbf 61-70
+  s_d58145f2e376ea::t_d7eb6696889475 45-50,57-60,71,75-76
+  s_d58145f2e376ea::t_3cf7df4db72f92 176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ab89f61444410a4e02ee4c562044935f7bdb278b",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
