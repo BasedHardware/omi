@@ -176,6 +176,77 @@ final class ContextDeliveryLifecycleTests: XCTestCase {
     XCTAssertEqual(result, ContextDeliveryAttempt(id: nil, reason: .cooldown))
   }
 
+  func testDailyBudgetIgnoresInvisibleOutcomesButCountsVisibleSpend() async throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    let versionID = try await seedBucketAndVisit(in: pool, poolEpoch: poolEpoch, now: now)
+    let gate = ContextDeliveryGateInput(
+      masterEnabled: true,
+      frequencyLevel: 1,
+      paywalled: false,
+      cooldownSeconds: 0)
+    let limit = gate.dailyLimit
+    try await pool.write { db in
+      for index in 0..<(limit + 2) {
+        try db.execute(
+          sql: """
+            INSERT INTO proactive_deliveries
+              (id, visitID, bucketID, bucketVersionID, decisionType, lifecycleState,
+               provenanceJson, attemptedAt, expiresAt, createdAt)
+            VALUES (?, NULL, 'bucket', ?, 'silence', 'suppressed', '{}', ?, ?, ?)
+            """,
+          arguments: [
+            "silence-\(index)", versionID,
+            now.addingTimeInterval(-3_600), now.addingTimeInterval(3_600),
+            now.addingTimeInterval(-3_600),
+          ])
+      }
+    }
+    let snapshot = ContextBucketSnapshot(
+      bucketID: "bucket",
+      versionID: versionID,
+      version: 1,
+      header: "header",
+      frozenRankedSegment: Data(),
+      tail: [],
+      validatedFacts: ["fact:one statement"],
+      notifyWorthiness: 1)
+
+    let afterSilences = try await ContextBucketStore.shared.beginDeliveryAttempt(
+      fence: ContextVisitFence(
+        visitID: 1, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket",
+        startedAt: now),
+      snapshot: snapshot, gate: gate, now: now)
+    XCTAssertEqual(
+      afterSilences.reason, .allowed,
+      "silent evaluations never reached the user, so they must not spend the daily budget")
+
+    try await pool.write { db in
+      for index in 0..<limit {
+        try db.execute(
+          sql: """
+            INSERT INTO proactive_deliveries
+              (id, visitID, bucketID, bucketVersionID, decisionType, lifecycleState,
+               provenanceJson, attemptedAt, deliveredAt, expiresAt, createdAt)
+            VALUES (?, NULL, 'bucket', ?, 'insight', 'delivered', '{}', ?, ?, ?, ?)
+            """,
+          arguments: [
+            "visible-\(index)", versionID,
+            now.addingTimeInterval(-7_200), now.addingTimeInterval(-7_200),
+            now.addingTimeInterval(3_600), now.addingTimeInterval(-7_200),
+          ])
+      }
+    }
+
+    let afterVisible = try await ContextBucketStore.shared.beginDeliveryAttempt(
+      fence: ContextVisitFence(
+        visitID: 2, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket",
+        startedAt: now),
+      snapshot: snapshot, gate: gate, now: now)
+    XCTAssertEqual(afterVisible, ContextDeliveryAttempt(id: nil, reason: .dailyBudget))
+  }
+
   private func allowedGate() -> ContextDeliveryGateInput {
     ContextDeliveryGateInput(
       masterEnabled: true,
