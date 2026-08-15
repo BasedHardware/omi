@@ -257,6 +257,24 @@ def _build_quota_exceeded_reply(
     return ResponseMessage(**ai_msg.model_dump(), ask_for_nps=False)
 
 
+def _build_quota_accounting_unavailable_reply(compat_app_id: Optional[str]) -> ResponseMessage:
+    """SSE-visible retry copy when Free-plan counter persistence fails.
+
+    Returned as an in-memory ``done:`` frame only — do not persist a human or AI
+    message here. Persisting before accounting succeeds would orphan user text on
+    retries (fresh message ids / idempotency keys under the same outage).
+    """
+    ai_msg = Message(
+        id=str(uuid.uuid4()),
+        text=("Usage accounting is temporarily unavailable. Please retry in a moment — " "your message was not saved."),
+        created_at=datetime.now(timezone.utc),
+        sender='ai',
+        type='text',
+        app_id=compat_app_id,
+    )
+    return ResponseMessage(**ai_msg.model_dump(), ask_for_nps=False)
+
+
 def _record_chat_quota_question(
     uid: str,
     *,
@@ -371,11 +389,10 @@ def send_message(
 
     if chat_session:
         message.chat_session_id = chat_session.id
-        chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
-    chat_db.add_message(uid, message.model_dump())
-    # Fail-closed before any billable LLM / goal work: a Firestore outage must not
-    # leave Free-plan turns uncounted while the provider still runs.
+    # Fail-closed before persisting the human turn or starting billable work:
+    # a Firestore outage must not leave Free-plan turns uncounted, orphan
+    # messages on retry, or return a bare HTTP 503 that mobile SSE silently drops.
     try:
         _record_chat_quota_question(
             uid,
@@ -385,15 +402,20 @@ def send_message(
             chat_session_id=message.chat_session_id,
             platform=x_app_platform,
         )
-    except Exception as exc:
+    except Exception:
         logger.exception('Failed to record chat quota question source=v2_messages uid=%s', uid)
-        raise HTTPException(
-            status_code=503,
-            detail={
-                'error': 'quota_accounting_unavailable',
-                'message': 'Usage accounting is temporarily unavailable. Please retry.',
-            },
-        ) from exc
+        response_msg = _build_quota_accounting_unavailable_reply(compat_app_id)
+
+        def _quota_accounting_unavailable_stream():
+            encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')
+            yield f"done: {encoded}\n\n"
+
+        return StreamingResponse(_quota_accounting_unavailable_stream(), media_type="text/event-stream")
+
+    if chat_session:
+        chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
+
+    chat_db.add_message(uid, message.model_dump())
 
     # Check for goal progress (background) — rate-limited to one call per user per 5 min
     if try_acquire_goal_extraction_lock(uid):

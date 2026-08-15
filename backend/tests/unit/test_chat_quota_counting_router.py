@@ -124,7 +124,9 @@ def test_v2_messages_quota_exceeded_reply_does_not_record_quota_question():
 
 
 def test_v2_messages_fails_closed_when_quota_accounting_write_fails():
-    """A Firestore/outage failure recording the Free-plan counter must not start the LLM."""
+    """A Firestore/outage failure recording the Free-plan counter must not start the LLM,
+    must not persist the human turn (retry would otherwise orphan copies), and must emit an
+    SSE ``done:`` frame mobile can render — not a bare HTTP 503."""
     client, module, saved = _make_chat_client()
     try:
         stream_calls = {'n': 0}
@@ -143,11 +145,12 @@ def test_v2_messages_fails_closed_when_quota_accounting_write_fails():
             headers={'X-App-Platform': 'ios'},
         )
 
-        assert response.status_code == 503
-        body = response.json()
-        assert body['detail']['error'] == 'quota_accounting_unavailable'
+        assert response.status_code == 200
+        assert 'done: ' in response.text
         assert stream_calls['n'] == 0
         module.llm_executor.submit.assert_not_called()
+        module.chat_db.add_message.assert_not_called()
+        module.chat_db.add_message_to_chat_session.assert_not_called()
     finally:
         _cleanup(saved)
 
