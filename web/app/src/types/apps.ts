@@ -70,6 +70,10 @@ export interface App {
   is_popular?: boolean;
   created_at?: string;
   source_code_url?: string;
+  disabled?: boolean;
+  disabled_reason?: string;
+  disabled_at?: string;
+  disabled_error?: string;
 }
 
 export interface AppCategory {
@@ -144,11 +148,7 @@ export interface AppsSearchParams {
 
 // Filter types for the UI
 export type SortOption =
-  | 'installs_desc'
-  | 'rating_desc'
-  | 'rating_asc'
-  | 'name_asc'
-  | 'name_desc';
+  'installs_desc' | 'rating_desc' | 'rating_asc' | 'name_asc' | 'name_desc';
 
 export interface AppsFilters {
   category?: string;
