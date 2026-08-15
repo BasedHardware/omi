@@ -21,15 +21,19 @@ test("rendered semantic observation accepts the closed live routes", async () =>
     "consumer-observation.ts",
     "readRenderedConsumerObservation",
   );
-  for (const route of ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings", "rewind"]) {
-    const transcript = route === "listen" ? { "data-consumer-transcript": "rendered words" } : {};
+  for (const route of ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings", "rewind", "screen"]) {
+    const extra = route === "listen"
+      ? { "data-consumer-transcript": "rendered words" }
+      : route === "screen"
+        ? { "data-frame-total": "0", "data-frame-image": "absent" }
+        : {};
     const observation = read(documentWith({
       "data-production-shell": "true",
       "data-route": route,
       "data-surface-state": "ready",
       "data-qa-fixture": "none",
       "data-consumer-semantic": `${route}:items:1`,
-      ...transcript,
+      ...extra,
     }));
     assert.deepEqual(observation, route === "listen"
       ? { route, state: "ready", semantic: `${route}:items:1`, transcript: "rendered words" }
@@ -84,4 +88,45 @@ test("semantic and Listen transcript values are bounded", async () => {
   })), null);
   // red-proof: remove either upper bound. A surface can then copy arbitrary DOM
   // text into the host-readable contract instead of one bounded semantic fact.
+});
+
+test("screen observation is ready with no frames, and refuses a timeline whose image did not decode", async () => {
+  const read = await loadProductionExport(
+    "consumer-observation.ts",
+    "readRenderedConsumerObservation",
+  );
+  const base = {
+    "data-production-shell": "true",
+    "data-route": "screen",
+    "data-surface-state": "ready",
+    "data-qa-fixture": "none",
+    "data-consumer-semantic": "screen:frames:3:hits:0:image:ready",
+  };
+  assert.deepEqual(read(documentWith({
+    ...base,
+    "data-frame-total": "0",
+    "data-frame-image": "absent",
+    "data-consumer-semantic": "screen:frames:0:hits:0:image:absent",
+  })), {
+    route: "screen",
+    state: "ready",
+    semantic: "screen:frames:0:hits:0:image:absent",
+  });
+  assert.equal(read(documentWith({
+    ...base,
+    "data-frame-total": "3",
+    "data-frame-image": "unavailable",
+  })), null);
+  assert.deepEqual(read(documentWith({
+    ...base,
+    "data-frame-total": "3",
+    "data-frame-image": "ready",
+  })), {
+    route: "screen",
+    state: "ready",
+    semantic: "screen:frames:3:hits:0:image:ready",
+  });
+  // red-proof: drop the image-ready gate. A dangling chunk ref still produces
+  // frames>0 with data-frame-image=unavailable, and Rewind stays observably
+  // broken while this helper returns a live row.
 });

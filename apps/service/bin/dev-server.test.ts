@@ -201,6 +201,7 @@ const exerciseShell = async (token: string, shell: "macos" | "ios"): Promise<voi
     "/v1/conversations",
     "/v1/folders",
     "/v1/settings",
+    "/v1/screen/days",
   ]) {
     expect((await fetch(`${BASE_URL}${path}`, {
       headers: authorizedHeaders(token, shell),
@@ -210,7 +211,7 @@ const exerciseShell = async (token: string, shell: "macos" | "ios"): Promise<voi
   await listen(token, shell);
 };
 
-test("real dev-server owns one durable SQLite service for all seven domains", async () => {
+test("real dev-server owns one durable SQLite service for all eight domains", async () => {
   const directory = mkdtempSync(join(tmpdir(), "omi-dev-server-proof-"));
   const databasePath = join(directory, "qa.sqlite");
   const readinessPath = join(directory, "readiness.json");
@@ -243,7 +244,7 @@ test("real dev-server owns one durable SQLite service for all seven domains", as
     });
     expect(producer.status).toBe(200);
     const document = await producer.json() as QaProducerEvidenceDocument;
-    expect(document.rows).toHaveLength(14);
+    expect(document.rows).toHaveLength(16);
     for (const evidenceRow of document.rows) {
       if (evidenceRow.domain === "listen") {
         expect(evidenceRow.listen?.protocolReady).toBeGreaterThan(0);

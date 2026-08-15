@@ -194,7 +194,7 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
       className="production-shell screen-production-shell"
       aria-label={t(locale, "nav.rewind")}
       data-production-shell="true"
-      data-route="rewind"
+      data-route="screen"
       data-surface-state={status.refresh.phase}
       data-qa-fixture={fixture ?? "none"}
       data-empty-kind={emptyKind ?? "none"}
@@ -205,7 +205,8 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
       data-playback-rate={String(rate)}
       data-frame-index={String(counterCurrent)}
       data-frame-total={String(counterTotal)}
-      data-consumer-semantic={`rewind:frames:${frames.length}:hits:${store.searchHits().length}`}
+      data-frame-image={image.kind}
+      data-consumer-semantic={`screen:frames:${frames.length}:hits:${store.searchHits().length}:image:${image.kind}`}
     >
       <ProductionChrome
         locale={locale}

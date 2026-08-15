@@ -99,7 +99,7 @@ export function buildReport(facts, { readinessRecord = facts?.service?.readiness
       "two_shell_results",
       "macOS and iOS both built, launched, and returned structured results for this run",
       "shell launchers: separate host-owned exit outcomes after native validation",
-      "consumer matrix: seven rendered semantic rows from each shell",
+      "consumer matrix: eight rendered semantic rows from each shell",
       shellFailures.length === 0 ? "pass" : "fail",
       shellFailures.join("; ") || "macos and ios structured results both passed",
     ),

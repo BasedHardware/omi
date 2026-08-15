@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   CONSUMER_EVIDENCE_SCHEMA,
+  DOMAINS,
   SERVICE_EXECUTABLE,
   rawRunIdFailure,
   validateServiceReadiness,
@@ -31,8 +32,8 @@ function requireRawRunId(runId) {
 }
 
 function deriveNativeShell(document, label) {
-  if (!Array.isArray(document?.rows) || document.rows.length !== 7) {
-    throw new Error(`${label} native document must contain exactly seven rows`);
+  if (!Array.isArray(document?.rows) || document.rows.length !== DOMAINS.length) {
+    throw new Error(`${label} native document must contain exactly ${DOMAINS.length} rows`);
   }
   const shells = new Set(document.rows.map((row) => row?.shell));
   if (shells.size !== 1) throw new Error(`${label} native rows do not carry one consistent shell`);

@@ -39,7 +39,7 @@ test("Rewind is a live production destination with capture history, not a deferr
   });
   try {
     const shell = rendered.container.querySelector("[data-production-shell='true']");
-    assert.equal(shell?.getAttribute("data-route"), "rewind");
+    assert.equal(shell?.getAttribute("data-route"), "screen");
     assert.notEqual(shell?.getAttribute("data-surface-state"), "unavailable");
     assert.match(shell?.textContent ?? "", /Rewind/);
     assert.match(shell?.textContent ?? "", /Harborline Cafe/);

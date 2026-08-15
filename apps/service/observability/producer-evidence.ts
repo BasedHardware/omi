@@ -13,6 +13,7 @@ export const QA_EVIDENCE_DOMAINS = Object.freeze([
   "listen",
   "chat",
   "settings",
+  "screen",
 ] as const);
 
 export type QaEvidenceShell = typeof QA_EVIDENCE_SHELLS[number];

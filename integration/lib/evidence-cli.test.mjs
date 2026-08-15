@@ -57,7 +57,7 @@ test("merge-consumer derives shell from rows, invokes native validation, and pre
   assert.deepEqual(readFileSync(iosPath), beforeIos);
   const merged = JSON.parse(readFileSync(out, "utf8"));
   assert.deepEqual(Object.keys(merged).sort(), ["rows", "runId", "schema"]);
-  assert.equal(merged.rows.length, 14);
+  assert.equal(merged.rows.length, 16);
   assert.deepEqual(merged.rows.map((row) => `${row.shell}/${row.domain}`),
     ["macos", "ios"].flatMap((shell) => DOMAINS.map((domain) => `${shell}/${domain}`)));
 });

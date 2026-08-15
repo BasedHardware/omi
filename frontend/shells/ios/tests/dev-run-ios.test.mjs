@@ -38,7 +38,7 @@ test("the iOS QA launcher selects only a closed local-origin production route", 
     const node = path.join(scratch, "node");
     const nativeResult = path.join(scratch, "native-result.json");
     const invalidNativeResult = path.join(scratch, "invalid-native-result.json");
-    const domains = ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"];
+    const domains = ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings", "screen"];
     writeFileSync(nativeResult, JSON.stringify({
       schema: "omi.consumer-evidence.v1",
       runId: "run-launcher-proof",

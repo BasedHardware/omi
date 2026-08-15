@@ -150,7 +150,7 @@ final class ConsumerEvidenceDriver {
           if self.routeIndex == ConsumerEvidenceRoute.allCases.count {
             try self.collector.finish()
             FileHandle.standardError.write(
-              Data("CONSUMER-EVIDENCE: wrote seven rendered routes\n".utf8))
+              Data("CONSUMER-EVIDENCE: wrote eight rendered routes\n".utf8))
             if ProcessInfo.processInfo.environment["OMI_CONSUMER_EVIDENCE_EXIT"] == "1" {
               NSApp.terminate(nil)
             }
@@ -228,8 +228,14 @@ final class ConsumerEvidenceDriver {
       if (!e || e.dataset.surfaceState !== 'ready' || e.dataset.qaFixture !== 'none') return null;
       const route = e.dataset.route;
       const semantic = e.dataset.consumerSemantic;
-      if (!['memories','tasks','conversations','folders','listen','chat','settings'].includes(route)) return null;
+      if (!['memories','tasks','conversations','folders','listen','chat','settings','screen'].includes(route)) return null;
       if (typeof semantic !== 'string' || semantic.trim() === '' || new TextEncoder().encode(semantic).length > 256) return null;
+      if (route === 'screen') {
+        const frames = Number(e.dataset.frameTotal);
+        const image = e.dataset.frameImage;
+        if (!Number.isSafeInteger(frames) || frames < 0) return null;
+        if (frames > 0 && image !== 'ready') return null;
+      }
       if (route === 'listen') {
         const transcript = e.dataset.consumerTranscript;
         if (typeof transcript !== 'string' || transcript.trim() === '' || new TextEncoder().encode(transcript).length > 1024) return null;

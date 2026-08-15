@@ -330,7 +330,6 @@ const demoFrame = (
   windowTitle: string,
   fullText: string,
   blocks: readonly ReturnType<typeof screenBlock>[],
-  chunkOffset: number,
 ) => Object.freeze({
   id,
   captured_at: new Date(instantMs(dayIndex, offsetMs)).toISOString(),
@@ -339,11 +338,9 @@ const demoFrame = (
   window_title: windowTitle,
   device_name: "Demo Mac",
   client_device_id: "demo-mac-1",
-  frame_ref: Object.freeze({
-    kind: "chunk" as const,
-    path: `chunks/demo/${id}.hevc`,
-    offset: chunkOffset,
-  }),
+  // Opaque like live ingest. Chunk paths would claim HEVC this process cannot
+  // write; the Mac store plants synthetic frames for these ids on decode.
+  frame_ref: Object.freeze({ kind: "opaque" as const, ref: id }),
   dhash: `demo-dhash-${id}`,
   ocr: Object.freeze({
     full_text: fullText,
@@ -366,7 +363,6 @@ export const DEMO_SCREEN_FRAME_SEED = Object.freeze([
       screenBlock("0", "Harborline Cafe", 0.08, 0.12, 0.4, 0.08, 0.98),
       screenBlock("1", "Saturday noon table for Mira Vale and Jordan Hale.", 0.08, 0.22, 0.7, 0.1, 0.94),
     ]),
-    0,
   ),
   demoFrame(
     "demo-screen-cedar-packing",
@@ -380,7 +376,6 @@ export const DEMO_SCREEN_FRAME_SEED = Object.freeze([
       screenBlock("0", "Pack rain shells", 0.1, 0.18, 0.5, 0.08, 0.96),
       screenBlock("1", "two water bottles, and the Northbridge Library field guide.", 0.1, 0.28, 0.72, 0.12, 0.91),
     ]),
-    12_000,
   ),
   demoFrame(
     "demo-screen-fable-wick-sketch",
@@ -394,7 +389,6 @@ export const DEMO_SCREEN_FRAME_SEED = Object.freeze([
       screenBlock("0", "Fable and Wick window sketch", 0.15, 0.2, 0.6, 0.1, 0.97),
       screenBlock("1", "Wickwater crate list", 0.15, 0.4, 0.45, 0.08, 0.93),
     ]),
-    4_000,
   ),
 ]);
 

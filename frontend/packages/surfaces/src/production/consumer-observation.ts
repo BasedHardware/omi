@@ -9,6 +9,7 @@ export const CONSUMER_EVIDENCE_ROUTES = [
   "chat",
   "settings",
   "rewind",
+  "screen",
 ] as const;
 
 export type ConsumerEvidenceRoute = typeof CONSUMER_EVIDENCE_ROUTES[number];
@@ -68,6 +69,12 @@ export function readRenderedConsumerObservation(
   const semantic = bounded(surface.dataset["consumerSemantic"], MAX_SEMANTIC_LENGTH);
   if (semantic === null) return null;
   const transcript = bounded(surface.dataset["consumerTranscript"], MAX_TRANSCRIPT_LENGTH);
+  if (renderedRoute === "screen") {
+    const frames = Number(surface.dataset["frameTotal"]);
+    const image = surface.dataset["frameImage"];
+    if (!Number.isSafeInteger(frames) || frames < 0) return null;
+    if (frames > 0 && image !== "ready") return null;
+  }
   if (renderedRoute === "listen") {
     return transcript === null
       ? null

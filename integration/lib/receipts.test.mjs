@@ -31,7 +31,7 @@ import { worktreeStamp } from "./provenance.mjs";
 // faked its own tree hash would prove nothing). Nothing here mutates the real
 // repo; staleness is always simulated by hand-editing the receipt's stamp.
 let workspaceRoot;
-const L3_DOMAINS = ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"];
+const L3_DOMAINS = ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings", "screen"];
 function l3Arbiters() {
   const runId = "run-receipt-test";
   const shellTreeHash = worktreeStamp({ repo: "core-foundation" }).treeHash;
@@ -119,7 +119,7 @@ describe("the exact L3 evidence matrix is required, not merely an aggregate", ()
       lane: "L3", result: "pass", durationMs: 1000,
       arbiters: l3Arbiters(), workspaceRoot,
     });
-    assert.equal(receipt.arbiters.evidenceMatrix.rows.length, 14);
+    assert.equal(receipt.arbiters.evidenceMatrix.rows.length, 16);
   });
 
   it("RED-PROOF collapsing shell and surface hashes to one worktree stamp is refused", () => {
@@ -148,10 +148,10 @@ describe("the exact L3 evidence matrix is required, not merely an aggregate", ()
   it("RED-PROOF an aggregate count cannot replace one missing coordinate", () => {
     const arbiters = structuredClone(l3Arbiters());
     arbiters.evidenceMatrix.rows.pop();
-    arbiters.evidenceMatrix.total = 14;
+    arbiters.evidenceMatrix.total = 16;
     assert.throws(
       () => writeReceipt({ lane: "L3", result: "pass", durationMs: 1000, arbiters, workspaceRoot }),
-      /canonical 14-row producer\/consumer evidenceMatrix/,
+      /canonical 16-row producer\/consumer evidenceMatrix/,
     );
   });
 

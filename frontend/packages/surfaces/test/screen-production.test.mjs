@@ -80,6 +80,9 @@ test("ready Rewind renders app badge, window title, timestamp, extracted text, a
       t("en", "screen.frameCounter", { current: 1, total: 2 }),
     );
     assert.equal(rendered.container.querySelector("main")?.getAttribute("data-capture-tone"), "green");
+    assert.ok(rendered.container.querySelector("img.screen-frame-image"));
+    assert.equal(rendered.container.querySelector("main")?.getAttribute("data-route"), "screen");
+    assert.equal(rendered.container.querySelector("main")?.getAttribute("data-frame-image"), "ready");
   } finally {
     await rendered.cleanup();
   }
@@ -190,6 +193,7 @@ test("bridge-absent degrades capture and frame images without hiding history", a
     assert.equal(rendered.container.querySelector(".screen-capture-toggle"), null, "no working capture control is drawn");
     assert.ok(rendered.container.querySelector(".production-disabled-control"));
     assert.equal(rendered.container.querySelector("img.screen-frame-image"), null);
+    assert.equal(rendered.container.querySelector("main")?.getAttribute("data-frame-image"), "unavailable");
   } finally {
     await rendered.cleanup();
   }

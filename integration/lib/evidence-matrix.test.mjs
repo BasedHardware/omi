@@ -1,6 +1,6 @@
 // LIFECYCLE: permanent
 //
-// Red-proofs for the exact two-shell/seven-domain arbiter. Each test names the
+// Red-proofs for the exact two-shell/eight-domain arbiter. Each test names the
 // mutation that must turn a seemingly healthy receipt red.
 
 import assert from "node:assert/strict";
@@ -84,7 +84,7 @@ function mustFail(result, pattern) {
   assert.match(result.failures.join("\n"), pattern);
 }
 
-test("healthy evidence is exactly the 2 x 7 Cartesian matrix", () => {
+test("healthy evidence is exactly the 2 x 8 Cartesian matrix", () => {
   const result = verdict();
   assert.deepEqual(result.failures, []);
   assert.equal(result.result, "pass");
@@ -100,8 +100,8 @@ test("RED-PROOF missing shell/domain row cannot be replaced by an aggregate", ()
   consumer.rows.pop();
   // red-proof: remove ios/settings and add consumer.total=13. The aggregate is
   // intentionally ignored and the coordinate remains missing.
-  consumer.total = 13;
-  mustFail(verdict({ consumer }), /exactly 14|missing coordinate ios\/settings/);
+  consumer.total = 15;
+  mustFail(verdict({ consumer }), /exactly 16|missing coordinate ios\/screen/);
 });
 
 test("RED-PROOF duplicate coordinate cannot stand in for its missing sibling", () => {
@@ -201,6 +201,13 @@ test("RED-PROOF successful HTTP served counts are per coordinate", () => {
   producer.rows.find((row) => row.shell === "ios" && row.domain === "folders").http.successful = 0;
   producer.totalSuccessful = 99;
   mustFail(verdict({ producer }), /ios\/folders.*positive successful served count/);
+});
+
+test("RED-PROOF a missing screen served count cannot hide a dead Rewind", () => {
+  const producer = healthyProducer();
+  producer.rows.find((row) => row.shell === "macos" && row.domain === "screen").http.successful = 0;
+  producer.totalSuccessful = 99;
+  mustFail(verdict({ producer }), /macos\/screen.*positive successful served count/);
 });
 
 test("RED-PROOF invented store metadata is outside P7 readiness and producer schemas", () => {

@@ -43,6 +43,7 @@ enum ConsumerEvidenceRoute: String, CaseIterable, Codable {
   case listen
   case chat
   case settings
+  case screen
 }
 
 struct RenderedConsumerObservation: Codable, Equatable {
@@ -146,7 +147,7 @@ enum ConsumerEvidenceError: Error, CustomStringConvertible {
     case .unexpectedRoute(let expected, let actual):
       return "expected rendered route \(expected.rawValue), got \(actual.rawValue)"
     case .duplicateRoute(let route): return "duplicate rendered route \(route.rawValue)"
-    case .missingRoutes: return "all seven rendered routes are required"
+    case .missingRoutes: return "all matrix rendered routes are required"
     }
   }
 }

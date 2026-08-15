@@ -251,6 +251,7 @@ test(
         join(sources, "ScreenImaging.swift"),
         join(sources, "ScreenOCR.swift"),
         join(sources, "ScreenStore.swift"),
+        join(sources, "ScreenDemoSeed.swift"),
         join(sources, "ScreenIngest.swift"),
         join(sources, "ScreenCapture.swift"),
         main,

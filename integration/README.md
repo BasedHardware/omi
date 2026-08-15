@@ -107,7 +107,7 @@ P7's structural and real-subprocess tests own the single-store proof; H3 does no
 store-set fields on this readiness schema.
 
 After both shells finish, `GET /v1/qa/evidence?run=<run-id>` must return
-`omi.producer-evidence.v1` with exactly 14 rows. Each row carries the same `runId`, a shell
+`omi.producer-evidence.v1` with exactly 16 rows. Each row carries the same `runId`, a shell
 (`macos` or `ios`), a domain, and `evidence: "served-outcome"`. Every non-Listen row has a
 positive `http.successful`; Chat also has positive `chat.acceptedAdmission`. Listen has:
 
@@ -129,7 +129,7 @@ or other user/fixture content.
 
 The host gives each native shell the same raw run id. Only the host-owned
 `x-omi-client-id` transport attribution appends `::<shell>`. Each shell writes an exact
-top-level `{schema,runId,rows}` `omi.consumer-evidence.v1` document with exactly seven rows;
+top-level `{schema,runId,rows}` `omi.consumer-evidence.v1` document with exactly eight rows;
 `shell` exists only on each row. Every row includes:
 
 ```json
@@ -157,6 +157,9 @@ carries a non-empty rendered `observation.transcript`; every other domain must o
 evidence contains no transcript to compare against. The host records launcher status and exit code
 in separate safe facts; it never stamps or rewrites either native result document.
 
-The final `omi.shell-domain-matrix.v1` report and receipt contain the 14 joined producer and
+The final `omi.shell-domain-matrix.v1` report and receipt contain the 16 joined producer and
 consumer rows. Missing, duplicate, wrong-run, wrong-shell, fixture, stale-tree, aggregate,
-dispatch-only, readiness-only, and screenshot-only evidence all fail.
+dispatch-only, readiness-only, and screenshot-only evidence all fail. Screen consumer
+observation is ready when the Rewind surface is live with no frames, or when at least one
+frame's native image decoded; a timeline with frames and `data-frame-image` other than
+`ready` is not a rendered-semantic row.

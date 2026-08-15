@@ -42,6 +42,7 @@ test("an explicit route always beats the platform default", () => {
   assert.equal(route("conversations", null, "platform"), "conversations");
   assert.equal(route("folders", null, "platform"), "folders");
   assert.equal(route("rewind", null, "platform"), "rewind");
+  assert.equal(route("screen", null, "platform"), "rewind");
   assert.equal(route("apps", null, "platform"), "apps");
   assert.equal(route("brain-map", null, "platform"), "brain-map");
   assert.equal(route("listen", null, "platform"), "listen");
@@ -70,6 +71,7 @@ test("every explicit destination resolves the same whatever the generation is", 
     assert.equal(route("listen", null, generation), "listen");
     assert.equal(route("folders", null, generation), "folders");
     assert.equal(route("rewind", null, generation), "rewind");
+    assert.equal(route("screen", null, generation), "rewind");
     assert.equal(route("apps", null, generation), "apps");
     assert.equal(route("brain-map", null, generation), "brain-map");
     assert.equal(route("chat", null, generation), "chat");
@@ -108,6 +110,7 @@ test("mobile Settings return routes fail closed to Home", () => {
   for (const destination of ["home", "memories", "conversations", "folders", "tasks", "rewind", "apps", "brain-map", "listen", "chat"]) {
     assert.equal(resolveSettingsReturnRoute(destination), destination);
   }
+  assert.equal(resolveSettingsReturnRoute("screen"), "rewind");
   for (const unsafe of [null, "", "settings", "unsupported", "__proto__", "https://example.com/"]) {
     assert.equal(resolveSettingsReturnRoute(unsafe), "home");
   }

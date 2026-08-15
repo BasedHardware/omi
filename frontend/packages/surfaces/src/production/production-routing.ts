@@ -50,6 +50,7 @@ export function resolveProductionRoute(input: ProductionRouteInput): ProductionR
   const { requestedRoute, requestedQa, memoriesGeneration } = input;
 
   if (requestedRoute !== null) {
+    if (requestedRoute === "screen") return "rewind";
     switch (requestedRoute) {
       case "home":
       case "memories":
@@ -85,6 +86,7 @@ export function resolveProductionRoute(input: ProductionRouteInput): ProductionR
 
 /** A Settings sheet may return only to a real, non-Settings destination. */
 export function resolveSettingsReturnRoute(requestedRoute: string | null): SettingsReturnRoute {
+  if (requestedRoute === "screen") return "rewind";
   switch (requestedRoute) {
     case "home":
     case "memories":
