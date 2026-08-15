@@ -109,7 +109,8 @@ actor ContextProactivityEngine {
     guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
     guard dwellAdmission.begin(visitID: fence.visitID) else { return }
     defer { dwellAdmission.finish(visitID: fence.visitID) }
-    do { try await Task.sleep(nanoseconds: dwellNanoseconds) } catch { return }
+    let dwell = await resolvedDwellNanoseconds(for: fence)
+    do { try await Task.sleep(nanoseconds: dwell) } catch { return }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
     do { try await store.markVisitSettled(fence) } catch { return }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
@@ -156,8 +157,68 @@ actor ContextProactivityEngine {
         startedAt: fence.startedAt,
         endedAt: frameFreshness.endedAt)
     else { return }
-    let currentFrame = frameSample.frame
+    await evaluateAndDeliver(
+      fence: fence,
+      snapshot: snapshot,
+      currentFrame: frameSample.frame,
+      authorizationSnapshot: authorizationSnapshot)
+  }
 
+  /// Departure-triggered evaluation: a departure extraction that just validated
+  /// a notify-worthy fact evaluates the departed bucket immediately, grounded
+  /// on the departing frame the extraction already holds, instead of waiting
+  /// for the next revisit's dwell. Callers gate on
+  /// `ContextDepartureEvaluationPolicy`; every delivery gate below and the
+  /// freshness window still apply, so a departure older than the validity
+  /// window dies exactly like any other stale evaluation. The dwell admission
+  /// set serializes this against a still-running `contextEntered` evaluation of
+  /// the same visit.
+  func evaluateAfterDeparture(fence: ContextVisitFence, departingFrame: CapturedFrame) async {
+    guard fence.bucketID != nil else { return }
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
+    guard dwellAdmission.begin(visitID: fence.visitID) else { return }
+    defer { dwellAdmission.finish(visitID: fence.visitID) }
+    let gate = await MainActor.run { Self.liveDeliveryGateInput() }
+    let preflightReason = ContextDeliveryBudget.freeGate(input: gate)
+    guard preflightReason == .allowed else {
+      log("Context director suppressed before departure evaluation: \(preflightReason.rawValue)")
+      return
+    }
+    let freshness = await store.fenceFreshness(fence)
+    guard
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      freshness.fresh,
+      let snapshot = await store.snapshot(for: fence)
+    else { return }
+    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else { return }
+    await evaluateAndDeliver(
+      fence: fence,
+      snapshot: snapshot,
+      currentFrame: departingFrame,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  /// A bucket the user keeps returning to has already proven engagement, so the
+  /// settle wait shrinks (never disappears) once recent completed-visit time in
+  /// this bucket crosses the policy threshold.
+  private func resolvedDwellNanoseconds(for fence: ContextVisitFence) async -> UInt64 {
+    guard let bucketID = fence.bucketID else { return dwellNanoseconds }
+    let engagement = await store.recentEngagementSeconds(bucketID: bucketID)
+    return ContextDwellPolicy.dwellNanoseconds(
+      base: dwellNanoseconds, cumulativeEngagementSeconds: engagement)
+  }
+
+  /// The shared post-settle tail of the director pipeline: presentation
+  /// preflight, gate rebuilds, budget reservation, the model call (plus the
+  /// bounded retrieval hop), grounding validation, and the presentation
+  /// handoff. `contextEntered` reaches it after dwell/settle/frame lookup;
+  /// `evaluateAfterDeparture` reaches it with the departing frame.
+  private func evaluateAndDeliver(
+    fence: ContextVisitFence,
+    snapshot: ContextBucketSnapshot,
+    currentFrame: CapturedFrame,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async {
     guard let ownerID = await MainActor.run(body: { RuntimeOwnerIdentity.currentOwnerId() }) else { return }
     let attemptPreflight = await presentationPreflight(ownerID)
     guard Self.presentationSurfaceAvailable(attemptPreflight) else {
@@ -692,6 +753,52 @@ actor ContextProactivityEngine {
       "required": required,
       "additionalProperties": false,
     ]
+  }
+}
+
+/// Shortens (never skips) the dwell settle for a bucket the user demonstrably
+/// keeps returning to. A run of short revisits proves engagement that a single
+/// 8-second dwell was designed to establish, so the wait shrinks once recent
+/// per-bucket engagement crosses a threshold. Settle semantics are untouched:
+/// the visit still settles after the (shorter) sleep, on the same path.
+enum ContextDwellPolicy {
+  /// Rolling window over which completed-visit engagement accumulates.
+  static let engagementLookbackSeconds: TimeInterval = 180
+  /// Cumulative engaged seconds at which the dwell shortens.
+  static let engagedCumulativeSeconds: TimeInterval = 20
+  static let shortenedDwellNanoseconds: UInt64 = 2_000_000_000
+
+  static func dwellNanoseconds(base: UInt64, cumulativeEngagementSeconds: TimeInterval) -> UInt64 {
+    guard cumulativeEngagementSeconds >= engagedCumulativeSeconds else { return base }
+    // min: a caller-configured dwell shorter than the shortened value (tests
+    // use zero) must never be lengthened by an engagement bonus.
+    return min(base, shortenedDwellNanoseconds)
+  }
+
+  /// Sum of completed-visit durations clipped to the lookback window ending at
+  /// `now`. Computable from `context_visits` alone — no new table.
+  static func cumulativeEngagementSeconds(
+    visitIntervals: [(startedAt: Date, endedAt: Date)], now: Date
+  ) -> TimeInterval {
+    let lookbackStart = now.addingTimeInterval(-engagementLookbackSeconds)
+    return visitIntervals.reduce(0.0) { total, interval in
+      let start = max(interval.startedAt, lookbackStart)
+      let end = min(interval.endedAt, now)
+      guard end > start else { return total }
+      return total + end.timeIntervalSince(start)
+    }
+  }
+}
+
+/// Admission for the departure-triggered director evaluation: only a departure
+/// extraction that just validated a fact at or above the worthiness threshold,
+/// with the feature flag on, buys an immediate evaluation of the departed
+/// bucket. Everything else waits for the next revisit's dwell as before.
+enum ContextDepartureEvaluationPolicy {
+  static let worthinessThreshold = 0.6
+
+  static func triggers(maximumValidatedWorthiness: Double, flagEnabled: Bool) -> Bool {
+    flagEnabled && maximumValidatedWorthiness >= worthinessThreshold
   }
 }
 
