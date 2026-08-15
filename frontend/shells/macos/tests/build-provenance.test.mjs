@@ -172,3 +172,44 @@ test(
     }
   },
 );
+
+test("build-shell.sh links AVFoundation, stamps TCC usage strings, and codesigns without failing unsigned builds", async () => {
+  const source = await read("scripts/build-shell.sh");
+  assert.match(source, /-framework AVFoundation/);
+  assert.match(source, /NSMicrophoneUsageDescription/);
+  assert.match(source, /Omi uses the microphone only while you explicitly capture/);
+  assert.match(source, /NSScreenCaptureUsageDescription/);
+  assert.match(source, /Omi captures the screen only while you explicitly share it/);
+  assert.match(source, /OMI_CODESIGN_IDENTITY/);
+  assert.match(source, /Apple Development/);
+  assert.match(source, /codesign --force --sign/);
+  assert.match(source, /TCC persist/);
+  assert.match(source, /must never fail the build/);
+  assert.match(source, /Never fail\n# the build if signing is unavailable/);
+  assert.match(source, /unsigned: no Apple Development identity/);
+  assert.match(source, /unsigned: codesign failed/);
+  assert.match(source, /unsigned: codesign unavailable/);
+  // Signing lives in a conditional so `set -euo pipefail` cannot abort the
+  // build when codesign or an identity is missing.
+  assert.match(
+    source,
+    /if \[\[ -z "\$sign_identity" \]\][\s\S]*elif ! command -v codesign[\s\S]*elif codesign --force --sign/,
+  );
+  // red-proof: dropping the usage-description keys, the AVFoundation link, or
+  // making codesign an unguarded command (so unsigned machines fail the build)
+  // reddens a named assertion above.
+});
+
+test(
+  "a built .app Info.plist carries microphone and screen-capture usage descriptions",
+  { skip: builtApps.length === 0 ? "no built .app under .build/ — run scripts/build-shell.sh first" : false },
+  async () => {
+    for (const { app, shellStamp } of builtApps) {
+      const plistFile = shellStamp.replace(/Resources\/omi-build-stamp\.json$/, "Info.plist");
+      const plist = await readFile(plistFile, "utf8");
+      assert.match(plist, /NSMicrophoneUsageDescription/, `${app} missing microphone usage string`);
+      assert.match(plist, /Omi uses the microphone only while you explicitly capture/);
+      assert.match(plist, /NSScreenCaptureUsageDescription/, `${app} missing screen-capture usage string`);
+    }
+  },
+);

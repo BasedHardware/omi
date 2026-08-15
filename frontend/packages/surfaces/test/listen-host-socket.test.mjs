@@ -31,6 +31,31 @@ for (const shell of ["macos", "ios"]) {
     assert.deepEqual(messages, ["server frame"]);
   });
 
+  test(`${shell} production composition posts start/stop capture verbs on the same id without credentials`, async () => {
+    const createFactory = await loadProductionExport(
+      "listen-host-socket.ts",
+      "createProductionListenHostSocketFactory",
+    );
+    const posted = [];
+    const channel = { postMessage(message) { posted.push(JSON.parse(message)); } };
+    const host = shell === "macos"
+      ? { webkit: { messageHandlers: { omiListenSocket: channel } } }
+      : { omiListenSocket: channel };
+    const socket = createFactory(host)("/v4/listen?language=en");
+    socket.start();
+    socket.stop();
+    socket.close(1000, "capture stopped by user");
+    assert.deepEqual(posted, [
+      { id: "listen-1", action: "open", path: "/v4/listen?language=en" },
+      { id: "listen-1", action: "start" },
+      { id: "listen-1", action: "stop" },
+      { id: "listen-1", action: "close", code: 1000, reason: "capture stopped by user" },
+    ]);
+    assert.equal(JSON.stringify(posted).includes("127.0.0.1:5290"), false);
+    assert.equal(JSON.stringify(posted).toLowerCase().includes("authorization"), false);
+    assert.equal(JSON.stringify(posted).toLowerCase().includes("bearer"), false);
+  });
+
   test(`${shell} preflight reports host state without device identifiers and exposes only advertised recovery`, async () => {
     const createProvider = await loadProductionExport(
       "listen-host-socket.ts",
