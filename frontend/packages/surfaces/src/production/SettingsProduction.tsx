@@ -4,6 +4,9 @@ import type { StoreStatus } from "@omi-core/domain";
 import type { AppearanceSelection, EntitlementState, SettingsSnapshot } from "./settings-merge.js";
 import { entitlementNotice, usageLabelArgs } from "./settings-merge.js";
 import type { ProductionSettingsStore } from "./ProductionSettingsStore.js";
+import type { ProductionScreenStore } from "./ProductionScreenStore.js";
+import { SCREEN_RETENTION_DAYS, type ScreenRetentionDays } from "@omi-core/adapters-platform";
+import { storageSummaryLabel } from "./screen-presentation.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { ProductionIcon } from "./ProductionIcon.js";
@@ -53,8 +56,9 @@ function limitPresentation(
   return notice.upgrade === "route" ? "reached-upgrade" : "reached-no-upgrade";
 }
 
-export function SettingsProduction({ store, fixture, locale = "en", onReady, onUpgrade, presentation = "page", returnHref = "?route=home", onDismiss }: {
+export function SettingsProduction({ store, screenStore, fixture, locale = "en", onReady, onUpgrade, presentation = "page", returnHref = "?route=home", onDismiss }: {
   store: ProductionSettingsStore;
+  screenStore?: ProductionScreenStore;
   fixture?: string;
   locale?: Locale;
   onReady?: () => void;
@@ -70,7 +74,11 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
   const [savePhase, setSavePhase] = useState<SavePhase>("idle");
   const [signingOut, setSigningOut] = useState(false);
   const [signedOutNotice, setSignedOutNotice] = useState<string | null>(null);
+  const [exclusionDraft, setExclusionDraft] = useState("");
+  const [screenTick, setScreenTick] = useState(0);
   const appearanceControlId = useId();
+  const retentionControlId = useId();
+  const exclusionControlId = useId();
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
@@ -84,7 +92,8 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
       setOperationError(t(locale, "lifecycle.error"));
     }
     setStatus(store.status());
-  }, [locale, store]);
+    if (screenStore) setScreenTick((value) => value + 1);
+  }, [locale, screenStore, store]);
 
   const run = useCallback<RunOperation>(async (operation) => {
     setOperationError(null);
@@ -102,10 +111,12 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
   useEffect(() => {
     let active = true;
     const unsubscribe = store.subscribe(() => { if (active) void reload(); });
+    const unsubscribeScreen = screenStore?.subscribe(() => { if (active) void reload(); });
     const boot = async (): Promise<void> => {
       await reload();
       try {
         await store.refresh();
+        await screenStore?.refresh();
       } catch {
         setOperationError(t(locale, "lifecycle.error"));
         await reload();
@@ -117,8 +128,8 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
       }
     };
     void boot();
-    return () => { active = false; unsubscribe(); };
-  }, [locale, reload, store]);
+    return () => { active = false; unsubscribe(); unsubscribeScreen?.(); };
+  }, [locale, reload, screenStore, store]);
 
   const canRouteUpgrade = typeof onUpgrade === "function";
   const phase = status.refresh.phase;
@@ -365,6 +376,94 @@ export function SettingsProduction({ store, fixture, locale = "en", onReady, onU
             <h2 id="settings-plan-heading">{t(locale, "settings.planSection")}</h2>
             <p className="settings-state-title">{t(locale, "settings.entitlementAbsentTitle")}</p>
             <p className="settings-state-copy">{t(locale, "settings.entitlementAbsentBody")}</p>
+          </section>
+        )}
+        {screenStore && (
+          <section
+            className="settings-section settings-screen-section"
+            aria-labelledby="settings-screen-heading"
+            data-settings-screen="true"
+            data-retention-days={String(screenStore.retentionDays())}
+            data-bytes-known={screenStore.bytesOnDisk() === null ? "false" : "true"}
+            data-screen-tick={screenTick}
+          >
+            <h2 id="settings-screen-heading">{t(locale, "screen.retentionSection")}</h2>
+            <p className="settings-storage-summary" data-storage-summary="true">
+              {(() => {
+                const summary = storageSummaryLabel({
+                  frames: screenStore.framesStored(),
+                  bytesOnDisk: screenStore.bytesOnDisk(),
+                });
+                return summary.size === null
+                  ? t(locale, "screen.storageBytesUnknown", { frames: summary.frames })
+                  : t(locale, "screen.storageSummary", { frames: summary.frames, size: summary.size });
+              })()}
+            </p>
+            {screenStore.bridgeAvailable() ? (
+              <>
+                <div className="settings-row">
+                  <label className="settings-row-copy" htmlFor={retentionControlId}>
+                    <span className="settings-row-title">{t(locale, "screen.retentionLabel")}</span>
+                  </label>
+                  <span className="settings-select-wrap">
+                    <select
+                      id={retentionControlId}
+                      aria-label={t(locale, "screen.retentionLabel")}
+                      value={String(screenStore.retentionDays())}
+                      onChange={(event) => void run(() => screenStore.setRetentionDays(Number(event.target.value) as ScreenRetentionDays))}
+                    >
+                      {SCREEN_RETENTION_DAYS.map((days) => (
+                        <option key={days} value={String(days)}>
+                          {days === 0 ? t(locale, "screen.retentionUnlimited") : t(locale, "screen.retentionDays", { days })}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                </div>
+                <div className="settings-exclusions">
+                  <h3>{t(locale, "screen.excludedApps")}</h3>
+                  <ul>
+                    {screenStore.exclusions().map((bundleId) => (
+                      <li key={bundleId}>
+                        <span>{bundleId}</span>
+                        <button type="button" onClick={() => void run(() => screenStore.removeExclusion(bundleId))}>
+                          {t(locale, "screen.excludedRemove")}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="settings-exclusion-add">
+                    <label htmlFor={exclusionControlId} className="visually-hidden">{t(locale, "screen.excludedBundle")}</label>
+                    <input
+                      id={exclusionControlId}
+                      value={exclusionDraft}
+                      onChange={(event) => setExclusionDraft(event.target.value)}
+                      placeholder={t(locale, "screen.excludedBundle")}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void run(async () => {
+                        await screenStore.addExclusion(exclusionDraft);
+                        setExclusionDraft("");
+                      })}
+                    >
+                      {t(locale, "screen.excludedAdd")}
+                    </button>
+                    <button type="button" onClick={() => void run(() => screenStore.resetExclusions())}>
+                      {t(locale, "screen.excludedReset")}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <ProductionDisabledControl
+                label={t(locale, "screen.captureToggle")}
+                explanation={t(locale, "screen.captureUnavailable")}
+                className="settings-screen-unavailable"
+                focusable={true}
+              />
+            )}
+            <p className="settings-battery-note">{t(locale, "screen.batteryNote")}</p>
           </section>
         )}
         {dead.length > 0 && (

@@ -18,11 +18,14 @@ import {
 import {
   createUnavailableListenPreflightProvider,
   createPlatformListenCaptureClient,
+  createUnavailableScreenBridge,
   type PlatformListenSocketFactory,
+  type PlatformScreenBridgeAccess,
 } from "@omi-core/adapters-platform";
 import type { SchemaDocument } from "@omi-core/wire-listen";
 import { createPlatformProductionStoreFactory, parseGenerationSelectionFromEntries, resolveGenerationSelection } from "./ProductionStores.js";
 import { createPlatformProductionListenStore } from "./createPlatformListenStore.js";
+import { createPlatformProductionScreenStore } from "./createPlatformScreenStore.js";
 import { generationMismatch, resolveProductionRoute, resolveSettingsReturnRoute } from "./production-routing.js";
 import { productionRouteHref } from "./ProductionChrome.js";
 import { MemoriesProduction } from "./MemoriesProduction.js";
@@ -35,16 +38,19 @@ import { PROPOSITION_FIXTURE_STATES, fixturePropositionStore, type PropositionFi
 import { ChatProduction } from "./ChatProduction.js";
 import { SettingsProduction } from "./SettingsProduction.js";
 import { ListenProduction } from "./ListenProduction.js";
+import { ScreenProduction } from "./ScreenProduction.js";
 import { FoldersProduction } from "./FoldersProduction.js";
 import { DeferredDestinationProduction } from "./DeferredDestinationProduction.js";
 import { ProductionLifecycleRegion } from "./ProductionPrimitives.js";
 import { createProductionListenHostPreflightProvider, createProductionListenHostSocketFactory } from "./listen-host-socket.js";
+import { createProductionScreenHostBridge } from "./screen-host-socket.js";
 import { createPlatformProductionSettingsStore } from "./createPlatformSettingsStore.js";
 import { CHAT_FIXTURE_STATES, fixtureChatStore, type ChatFixtureState } from "./chat-fixtures.js";
 import { SETTINGS_FIXTURE_STATES, fixtureSettingsStore, type SettingsFixtureState } from "./settings-fixtures.js";
 import { CONVERSATION_FIXTURE_STATES, fixtureConversationDetailId, fixtureConversationStore, fixtureFolderStore, type ConversationFixtureState } from "./conversation-fixtures.js";
 import { FIXED_NOW as TASK_FIXED_NOW, FIXTURE_STATES as TASK_FIXTURE_STATES, fixtureStore as fixtureTaskStore, type FixtureState as TaskFixtureState } from "./task-fixtures.js";
 import { LISTEN_FIXTURE_STATES, fixtureListenStore, type ListenFixtureState } from "./listen-fixtures.js";
+import { SCREEN_FIXTURE_STATES, fixtureScreenStore, type ScreenFixtureState } from "./screen-fixtures.js";
 import { resolvePolishFixture } from "./polish-evidence-fixtures.js";
 import "./styles.css";
 
@@ -78,6 +84,7 @@ type OmiHostConfig = {
   /** Native hosts attach auth while keeping credentials out of JS-visible state. */
   readonly listenSocketFactory?: PlatformListenSocketFactory;
   readonly listenPreflightProvider?: import("@omi-core/adapters-platform").PlatformListenPreflightProvider;
+  readonly screenBridge?: PlatformScreenBridgeAccess;
 };
 const hostConfig: OmiHostConfig =
   (globalThis as { __OMI_HOST_CONFIG__?: OmiHostConfig }).__OMI_HOST_CONFIG__ ?? {};
@@ -332,6 +339,9 @@ if (query.get("lab") === "1") {
   const listenFixture = fixtureRequest && requestedQa === "listen" && LISTEN_FIXTURE_STATES.includes(fixtureValue as ListenFixtureState)
     ? fixtureValue as ListenFixtureState
     : undefined;
+  const rewindFixture = fixtureRequest && requestedQa === "rewind" && SCREEN_FIXTURE_STATES.includes(fixtureValue as ScreenFixtureState)
+    ? fixtureValue as ScreenFixtureState
+    : undefined;
   const homeFixture = fixtureRequest && requestedQa === "home";
   const root = createRoot(document.getElementById("root")!);
   if (propositionFixture) {
@@ -356,10 +366,13 @@ if (query.get("lab") === "1") {
   } else if (listenFixture) {
     const evidenceLabel = `polish:${polishFixture?.state ?? listenFixture}`;
     root.render(<StrictMode><ListenProduction store={fixtureListenStore(listenFixture)} source={{ kind: "fixture", fixture: evidenceLabel }} fixture={evidenceLabel} locale={locale} onReady={() => emitReady(`fixture:${listenFixture}`)} /></StrictMode>);
+  } else if (rewindFixture) {
+    const evidenceLabel = `polish:${polishFixture?.state ?? rewindFixture}`;
+    root.render(<StrictMode><ScreenProduction store={fixtureScreenStore(rewindFixture)} source={{ kind: "fixture", fixture: evidenceLabel }} fixture={evidenceLabel} locale={locale} onReady={() => emitReady(`fixture:${rewindFixture}`)} /></StrictMode>);
   } else if (route === "unsupported") {
     root.render(<StrictMode>{unsupportedRoute()}</StrictMode>);
     emitReady("unsupported");
-  } else if (route === "apps" || route === "rewind" || route === "brain-map") {
+  } else if (route === "apps" || route === "brain-map") {
     markRendered(route, null);
     root.render(<StrictMode><DeferredDestinationProduction destination={route} locale={locale} onReady={() => emitReady("unavailable:contract-not-connected")} /></StrictMode>);
   } else if (!isBridgeHttpAvailable()) {
@@ -457,14 +470,32 @@ if (query.get("lab") === "1") {
           const store = createPlatformProductionListenStore(client, env);
           markRendered("listen", null);
           root.render(<StrictMode><ListenProduction store={store} locale={locale} onReady={() => emitReady("bridge:platform-listen")} /></StrictMode>);
+        } else if (route === "rewind") {
+          const screenBridge = hostConfig.screenBridge
+            ?? createProductionScreenHostBridge();
+          const store = createPlatformProductionScreenStore({
+            http,
+            env,
+            bridge: screenBridge.available ? screenBridge : createUnavailableScreenBridge(),
+            initialFrameId: query.get("frame"),
+          });
+          markRendered("rewind", null);
+          root.render(<StrictMode><ScreenProduction store={store} locale={locale} onReady={() => emitReady("bridge:platform-screen")} /></StrictMode>);
         } else if (route === "chat") {
           const store = await platform.openChat();
           markRendered("chat", null);
           root.render(<StrictMode><ChatProduction store={store} locale={locale} onReady={() => emitReady("bridge:platform-chat")} /></StrictMode>);
         } else if (route === "settings") {
           const store = await createPlatformProductionSettingsStore(http, appearancePreference);
+          const screenBridge = hostConfig.screenBridge
+            ?? createProductionScreenHostBridge();
+          const screenStore = createPlatformProductionScreenStore({
+            http,
+            env,
+            bridge: screenBridge.available ? screenBridge : createUnavailableScreenBridge(),
+          });
           markRendered("settings", null);
-          root.render(<StrictMode><SettingsProduction store={store} locale={locale} presentation={settingsPresentation} returnHref={settingsReturnHref} onReady={() => emitReady("bridge:platform-settings")} /></StrictMode>);
+          root.render(<StrictMode><SettingsProduction store={store} screenStore={screenStore} locale={locale} presentation={settingsPresentation} returnHref={settingsReturnHref} onReady={() => emitReady("bridge:platform-settings")} /></StrictMode>);
         } else if (route === "memories") {
           const store = await stores.openMemories();
           markRendered("memories-legacy", "legacy");

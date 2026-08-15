@@ -1,0 +1,227 @@
+.screen-production-shell {
+  max-width: 960px;
+  margin: 0 auto;
+  color: var(--content-primary);
+}
+
+.screen-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-xl);
+  margin: var(--space-xl) 0 var(--space-lg);
+}
+
+.screen-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+  margin: var(--space-lg) 0;
+}
+
+.screen-search {
+  flex: 1 1 16rem;
+}
+
+.screen-day-control {
+  position: relative;
+}
+
+.screen-day-toggle,
+.screen-capture-toggle,
+.screen-permission-action,
+.screen-rebuild,
+.screen-day-jumps button,
+.screen-playback button,
+.screen-extracted header button,
+.screen-result-group-header,
+.screen-result-hit {
+  min-height: var(--min-tap-target);
+  padding: 0 var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--content-primary);
+}
+
+.screen-day-popover {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  margin-top: var(--space-xs);
+  min-width: 16rem;
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel, var(--radius-control));
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-raised, none);
+}
+
+.screen-day-span,
+.screen-permission-note,
+.screen-engine-error,
+.screen-bridge-note,
+.screen-frame-unavailable,
+.screen-frame-loading {
+  margin: var(--space-sm) 0;
+  color: var(--content-secondary);
+}
+
+.screen-day-jumps,
+.screen-playback,
+.screen-day-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.screen-day-list {
+  list-style: none;
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+}
+
+.screen-capture-toggle.is-green { color: var(--success); border-color: var(--success); }
+.screen-capture-toggle.is-red { color: var(--danger); border-color: var(--danger); }
+.screen-capture-toggle.is-amber { color: var(--warning); border-color: var(--warning); }
+
+.screen-capture-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--min-tap-target);
+  padding: 0 var(--space-sm);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+}
+
+.screen-capture-badge.is-paused,
+.screen-capture-badge.is-recovering {
+  color: var(--warning);
+}
+
+.screen-workspace {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.screen-results {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.screen-result-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-section);
+  background: var(--surface-raised);
+}
+
+.screen-result-group.is-selected {
+  border-color: var(--accent);
+}
+
+.screen-result-group ul {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-sm);
+}
+
+.screen-result-hit {
+  width: 100%;
+  text-align: left;
+}
+
+.screen-result-hit mark {
+  background: color-mix(in srgb, var(--warning) 35%, transparent);
+  color: inherit;
+}
+
+.screen-stage {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.screen-stage-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.screen-app-badge,
+.screen-timestamp-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: calc(var(--min-tap-target) * 0.7);
+  padding: 0 var(--space-sm);
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  color: var(--content-secondary);
+}
+
+.screen-frame-stage {
+  position: relative;
+  min-height: 12rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-section);
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+
+.screen-frame-image-wrap {
+  position: relative;
+}
+
+.screen-frame-image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.screen-highlights {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+}
+
+.screen-highlight {
+  position: absolute;
+  border: 2px solid var(--warning);
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+}
+
+.screen-extracted {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-section);
+  padding: var(--space-md);
+  background: var(--surface-raised);
+}
+
+.screen-extracted header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.screen-extracted h2 {
+  margin: 0;
+  font-size: var(--type-body-size);
+}
+
+.screen-extracted-text {
+  white-space: pre-wrap;
+  margin: var(--space-sm) 0 0;
+}
+
+.screen-timeline input[type="range"] {
+  width: 100%;
+}
+
+.screen-frame-counter {
+  margin-left: auto;
+  color: var(--content-secondary);
+}
