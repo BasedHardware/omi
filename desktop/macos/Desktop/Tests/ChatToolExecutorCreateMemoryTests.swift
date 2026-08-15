@@ -206,6 +206,25 @@ final class ChatToolExecutorCreateMemoryTests: XCTestCase {
     XCTAssertTrue(result.contains("explicit_user_intent_required"), result)
   }
 
+  func testExecutorRejectsUngroundedMemoryContentWithoutCallingBackend() async {
+    let client = APIClient(session: URLSession(configuration: .ephemeral))
+    let result = await ChatToolExecutor.execute(
+      ToolCall(
+        name: "create_memory",
+        arguments: ["content": "David loves coffee."],
+        thoughtSignature: nil),
+      originatingSurfaceRef: .mainChat(chatId: "test"),
+      originatingUserText: "Please remember that I prefer tea.",
+      expectedOwnerID: "create-memory-tool-owner",
+      backendAPIClient: client)
+
+    XCTAssertTrue(result.contains("memory_content_not_user_supplied"), result)
+    XCTAssertFalse(
+      ChatToolExecutor.isMemoryContentGroundedInUserRequest(
+        content: "David loves coffee.",
+        userText: "Please remember that I prefer tea."))
+  }
+
   func testExecutorAcceptsRewrittenContentWhenSaveIntentIsPresent() async throws {
     CreateMemoryRequestCapture.reset()
     setenv("OMI_PYTHON_API_URL", "http://create-memory-contract-test:9001", 1)

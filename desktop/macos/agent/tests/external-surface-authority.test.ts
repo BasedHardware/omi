@@ -15,6 +15,7 @@ import { handleAgentControlToolCall } from "../src/runtime/control-tools.js";
 import { recordJournalTurn, terminalizeJournalTurn, updateJournalTurn } from "../src/runtime/conversation-journal.js";
 import {
   hasExplicitMemorySaveIntent,
+  hasMemoryContentGroundedInUserRequest,
   routeExternalSurfaceTool,
 } from "../src/runtime/external-surface-tool-policy.js";
 import { AgentRuntimeKernel, ExternalSurfaceAuthorityError } from "../src/runtime/kernel.js";
@@ -443,14 +444,17 @@ describe("external realtime surface authority", () => {
 
     for (const prompt of memorySaveIntentCorpus.authorized) {
       expect(hasExplicitMemorySaveIntent(prompt), prompt).toBe(true);
+      const groundedContent = prompt.toLowerCase().includes("proactivity")
+        ? "David is currently testing proactivity in Omi"
+        : "I prefer tea.";
       expect(routeExternalSurfaceTool({
         toolName: "create_memory",
-        toolInput: { content: "I prefer tea." },
+        toolInput: { content: groundedContent },
         originatingPrompt: prompt,
-      })).toEqual({
+      })).toMatchObject({
         action: "execute",
         toolName: "create_memory",
-        toolInput: { content: "I prefer tea." },
+        toolInput: { content: groundedContent },
         recoveredFromDelegation: false,
       });
     }
@@ -482,6 +486,18 @@ describe("external realtime surface authority", () => {
       toolInput: { content: "Please save this: I prefer tea." },
       originatingPrompt: "Please save this: I prefer tea.",
     })).toMatchObject({ action: "execute", toolName: "create_memory" });
+  });
+
+  it("rejects create_memory content that is not grounded in the current request", () => {
+    expect(hasMemoryContentGroundedInUserRequest(
+      { content: "David loves coffee." },
+      "Please remember that I prefer tea.",
+    )).toBe(false);
+    expect(routeExternalSurfaceTool({
+      toolName: "create_memory",
+      toolInput: { content: "David loves coffee." },
+      originatingPrompt: "Please remember that I prefer tea.",
+    })).toMatchObject({ action: "reject", code: "memory_content_not_in_user_request" });
   });
 
   it("defaults external spawns to Omi unless the current user selects one provider", () => {
