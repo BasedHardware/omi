@@ -60,6 +60,21 @@ def _reinstall_merge_conversations_stubs():
     _install_merge_conversations_stubs()
 
 
+@pytest.fixture(autouse=True)
+def _source_has_memories_to_retract():
+    """These cases all describe a source that *has* canonical memories.
+
+    Retraction is skipped when a source has none (nothing can dangle), so the
+    precondition is stated here rather than rewriting each assertion below.
+    See test_merge_skips_retraction_without_canonical_memories.py.
+    """
+    with patch(
+        "utils.conversations.merge_conversations._source_has_canonical_memories",
+        return_value=True,
+    ):
+        yield
+
+
 def test_delete_conversation_related_data_always_retracts_through_universal_service():
     service = MagicMock()
 

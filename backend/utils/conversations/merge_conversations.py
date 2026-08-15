@@ -21,7 +21,9 @@ from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from models.structured import Structured
+from models.product_memory import MemoryItemStatus
 from utils.memory.memory_service import MemoryService
+from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items_for_source
 from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.conversations import lifecycle as lifecycle_service
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
@@ -570,6 +572,29 @@ def _shared_client_device_provenance(
     return client_device_id, client_platform
 
 
+def _source_has_canonical_memories(uid: str, conversation_id: str) -> bool:
+    """Whether this conversation still has canonical memory evidence to retract.
+
+    Retraction runs through the canonical replace boundary, which is fenced by
+    `_require_canonical_intake_enabled()`. When the deployment fence is closed
+    that call raises, source deletion aborts, and the merge unwinds after the
+    merged conversation has already been built — the user is left with the merge
+    *and* both originals.
+
+    The fence closes intake, so a conversation ingested while it was closed has
+    no canonical memories in the first place. Reading the source cohort first
+    (an unfenced read) tells us whether there is any evidence that could be left
+    dangling. If there is none, there is nothing to retract and nothing to
+    protect, so deletion may proceed. If there is, the original abort stands.
+    """
+    items = fetch_authoritative_product_memory_items_for_source(
+        uid,
+        conversation_id,
+        db_client=firestore_db,
+    )
+    return any(item.status != MemoryItemStatus.tombstoned for item in items)
+
+
 def _delete_conversation_and_related_data(
     uid: str,
     conversation_id: str,
@@ -591,15 +616,20 @@ def _delete_conversation_and_related_data(
     import database.action_items as action_items_db
 
     try:
-        memory_service = MemoryService(db_client=firestore_db)
-        if on_authoritative_retraction is None:
-            memory_service.retract_conversation_memories(uid, conversation_id)
-        else:
-            memory_service.retract_conversation_memories(
-                uid,
-                conversation_id,
-                on_authoritative_commit=on_authoritative_retraction,
-            )
+        if _source_has_canonical_memories(uid, conversation_id):
+            memory_service = MemoryService(db_client=firestore_db)
+            if on_authoritative_retraction is None:
+                memory_service.retract_conversation_memories(uid, conversation_id)
+            else:
+                memory_service.retract_conversation_memories(
+                    uid,
+                    conversation_id,
+                    on_authoritative_commit=on_authoritative_retraction,
+                )
+        elif on_authoritative_retraction is not None:
+            # Nothing to retract, but everything below this point still destroys
+            # source state, so failure handling must treat the source as started.
+            on_authoritative_retraction()
     except Exception as e:
         logger.error(f"Error deleting memories for {conversation_id}: {e}")
         # Every account uses canonical source retraction.  Source deletion must
