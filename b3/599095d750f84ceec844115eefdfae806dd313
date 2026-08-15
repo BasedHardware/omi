@@ -1,0 +1,35 @@
+desktop/context-for-claude/Tests/ContextAppTests/TimelineKeyStatusTests.swift
+  s_d58145f2e376ea::t_d4007264a6edfc 158-159,164-165
+  s_d58145f2e376ea::t_5a37efe7746bac 125-135,141-143
+  s_d58145f2e376ea::t_e0f43ad2da9362 1-102,146-157,160-163,166-167
+  s_d58145f2e376ea::t_661ec39570693e 103-124,136-140,144-145
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindWindow.swift
+  s_d58145f2e376ea::t_8ece42fa83f82c 279-303,307
+  s_d58145f2e376ea::t_4fbceb2396ac5b 320-335,338-341,343-347
+  s_d58145f2e376ea::t_3de92a72d60555 349-353,355-366,377-382
+  s_d58145f2e376ea::t_64ccd2265bc356 266-271
+  s_d58145f2e376ea::t_23b8ebd349bfa5 367-376
+  s_d58145f2e376ea::t_1f5c3ba42f3fff 227
+  s_d58145f2e376ea::t_d5673c10fe2a40 62-69
+  s_d58145f2e376ea::t_b4f2235f00c007 151-160,162
+  s_d58145f2e376ea::t_7d107b90c74800 348
+desktop/context-for-claude/Tests/ContextAppTests/TimelineEscapeTests.swift
+  s_d58145f2e376ea::t_4393a08e0cfc18 111-117,119-126,129-130
+  s_d58145f2e376ea::t_53c15214a20fd9 16-24,29,31,36-37,41-53,55,60-61,66-91,97-102,105-108,118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b3599095d750f84ceec844115eefdfae806dd313",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
