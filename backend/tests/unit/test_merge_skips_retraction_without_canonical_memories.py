@@ -359,3 +359,43 @@ def test_historical_source_conversation_ids_collects_both_reference_shapes():
         ]
     )
     assert rs.historical_source_conversation_ids("uid-any", memory_service=service) == {"conv-a", "conv-b"}
+
+
+def test_a_canonical_commit_during_the_scope_reads_refuses_the_skip():
+    """A pre-fence write that commits while we read must not be skipped over.
+
+    The fence never moves in this scenario, so the fence re-read alone cannot
+    catch it; the commit epoch can.
+    """
+    from utils.memory import retraction_scope as rs
+
+    service = MagicMock()
+    with patch.object(rs, "canonical_intake_is_fenced", return_value=True):
+        with patch.object(rs, "source_retraction_is_a_noop", return_value=True):
+            with patch.object(rs, "canonical_commit_epoch", side_effect=[(7, 3, "abc"), (7, 4, "def")]):
+                assert (
+                    rs.retraction_can_be_skipped("uid-any", "conv-1", memory_service=service, db_client=None) is False
+                )
+
+
+def test_a_stable_commit_epoch_allows_the_skip():
+    from utils.memory import retraction_scope as rs
+
+    service = MagicMock()
+    with patch.object(rs, "canonical_intake_is_fenced", return_value=True):
+        with patch.object(rs, "source_retraction_is_a_noop", return_value=True):
+            with patch.object(rs, "canonical_commit_epoch", side_effect=[(7, 3, "abc"), (7, 3, "abc")]):
+                assert rs.retraction_can_be_skipped("uid-any", "conv-1", memory_service=service, db_client=None) is True
+
+
+def test_a_missing_state_head_is_a_stable_epoch_not_a_mismatch():
+    # Most accounts have no memory_state/head while intake is fenced; that
+    # absence must not read as "something changed" and block every skip.
+    from utils.memory import retraction_scope as rs
+
+    absent = MagicMock()
+    absent.read_error_reason = MagicMock(value="missing_state_head")
+    with patch.object(rs, "read_memory_v3_trusted_account_generation", return_value=absent):
+        first = rs.canonical_commit_epoch("uid-any", db_client=None)
+        second = rs.canonical_commit_epoch("uid-any", db_client=None)
+    assert first == second == ("unavailable", "missing_state_head")

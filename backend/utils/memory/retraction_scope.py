@@ -13,12 +13,13 @@ nothing to retract in the first place. These are the unfenced reads that decide.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Set
+from typing import Any, Optional, Set, Tuple
 
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from models.product_memory import MemoryItemStatus
 from utils.memory.memory_service import MemoryService
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items_for_source
+from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 
 
 def canonical_intake_is_fenced() -> bool:
@@ -92,6 +93,21 @@ def source_retraction_is_a_noop(
     return True
 
 
+def canonical_commit_epoch(uid: str, *, db_client: Any) -> Tuple[Any, ...]:
+    """A value that changes whenever canonical state for ``uid`` advances.
+
+    ``memory_state/head`` is written by the canonical apply boundary, so its
+    generation/sequence/commit id move on every committed canonical write. Most
+    accounts have no head at all while intake is fenced; that absence is itself
+    a stable value, and its failure reason is included so "no head" and "read
+    failed" are never conflated.
+    """
+    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    if trusted.read_error_reason is not None:
+        return ("unavailable", trusted.read_error_reason.value)
+    return (trusted.account_generation, trusted.commit_sequence, trusted.head_commit_id)
+
+
 def retraction_can_be_skipped(
     uid: str,
     conversation_id: str,
@@ -107,13 +123,22 @@ def retraction_can_be_skipped(
     failure abort. The ``and`` short-circuits, so the history scan never runs on
     the healthy path.
 
-    The fence is re-read after the scope reads. A fence that closed *during*
-    them means a canonical write may have been in flight against the old
-    deployment mode and could commit after the reads observed an empty scope, so
-    the skip is refused and the caller retracts as before.
+    Two staleness guards around the scope reads, because "the scope is empty"
+    is only safe if it was still empty when the decision was made:
+
+    * the fence is re-read, so a fence that opened during the reads refuses the
+      skip rather than acting on a snapshot taken under the old mode;
+    * the canonical commit epoch is captured before and compared after, so a
+      write that was already in flight against the pre-fence mode and commits
+      during the reads is caught even though the fence never moved.
+
+    Neither makes check-and-delete atomic — that needs a transaction spanning
+    the memory store and the conversation document. They bound the window to
+    "nothing canonical committed while we looked".
     """
     if not canonical_intake_is_fenced():
         return False
+    epoch_before = canonical_commit_epoch(uid, db_client=db_client)
     is_noop = source_retraction_is_a_noop(
         uid,
         conversation_id,
@@ -121,4 +146,6 @@ def retraction_can_be_skipped(
         db_client=db_client,
         historical_source_ids=historical_source_ids,
     )
-    return is_noop and canonical_intake_is_fenced()
+    if not is_noop or not canonical_intake_is_fenced():
+        return False
+    return canonical_commit_epoch(uid, db_client=db_client) == epoch_before
