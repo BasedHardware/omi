@@ -198,14 +198,29 @@ enum ContextProactivityPromptBuilder {
   /// and second director calls of a visit so both share one cached prefix, and
   /// it therefore describes both states ("when that section is present…"). It is
   /// gated on `allowLookup` so the flag-off prompt stays byte-identical to today.
+  /// Wording is load-bearing and was tuned against live data, not guessed.
+  ///
+  /// The first draft asked only about "a question that is actually part of this
+  /// context". Measured against the reasoning model on the case this feature
+  /// exists for — the user drafting a message whose answer sits elsewhere in
+  /// their history — that fired **3 times out of 8**, so the hop missed its own
+  /// motivating case most of the time. Naming the writing-a-question case
+  /// explicitly took it to **8/8**.
+  ///
+  /// Broadening did not cost anything. Across 60 real bucket snapshots of
+  /// ordinary work context it still requests a lookup **0 times**, so no second
+  /// director call is bought in normal use, and two controls — a question the
+  /// supplied facts already answer, and a context asking nothing — stayed at 0/3
+  /// under both wordings. A worked example was also tried and changed nothing,
+  /// so it is deliberately omitted rather than carried on the cached prefix.
   static let directorLookupInstruction = """
-    If a question that is actually part of this context needs information absent from
-    everything supplied here, set lookup_query to one short search phrase naming the missing
-    thing; otherwise set lookup_query to "". Still return your best decision alongside it:
-    the lookup buys at most one re-evaluation with a RETRIEVED CONTEXT section appended, and
-    when that section is already present below, any further lookup_query is ignored. Refs
-    from that section (conversation:…, memory:…) may be cited in bucket_entry_refs only when
-    the section supplies them.
+    If this context contains a question, request, or reference whose answer is not present in
+    the supplied facts — including a question the user is currently writing — set lookup_query to
+    one short search phrase naming the missing thing. Otherwise set lookup_query to "". Still return
+    your best decision alongside it: the lookup buys at most one re-evaluation with a RETRIEVED
+    CONTEXT section appended, and when that section is already present below, any further
+    lookup_query is ignored. Refs from that section (conversation:…, memory:…) may be cited in
+    bucket_entry_refs only when the section supplies them.
     """
 
   static func directorStablePrompt(snapshot: ContextBucketSnapshot, allowLookup: Bool = false) -> String {
