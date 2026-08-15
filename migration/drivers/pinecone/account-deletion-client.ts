@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { isProxy } from "node:util/types";
 
-import { isWellFormedAccountId } from "../../core/control/account-control";
+import { isWellFormedAccountId } from "../../../core/control/account-control";
 import {
   PINECONE_DELETION_INDEX_NAME,
   PINECONE_DELETION_PAGE_SIZE,
@@ -12,7 +12,7 @@ import {
   type PineconeAccountVectorScanRequest,
   type PineconeDeletionCollectionRegistry,
   type PineconeDeletionCollectionRole,
-} from "../../apps/service/workers/pinecone-deletion-cleanup-participant";
+} from "../../workers/pinecone-deletion-cleanup-participant";
 
 export interface PineconeAuthenticatedJsonRequest {
   readonly api_version: "2025-10";

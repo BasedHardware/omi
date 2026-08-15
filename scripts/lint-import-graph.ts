@@ -915,8 +915,8 @@ for (const row of WIRE_PATH_REGISTRY) {
  */
 const importSpecPattern =
   /(?:from\s+|import\s*\(\s*|export\s+(?:type\s+)?(?:\*(?:\s+as\s+\w+)?|\{[^}]*\})\s+from\s+)["']([^"']+)["']/g;
-const backendImportRoots = ["core/", "drivers/", "apps/"];
-const backendSourcePrefixes = ["apps/", "core/", "drivers/", "harness/", "contract-tests/", "spikes/"];
+const backendImportRoots = ["core/", "drivers/", "apps/", "migration/"];
+const backendSourcePrefixes = ["apps/", "core/", "drivers/", "harness/", "contract-tests/", "spikes/", "migration/"];
 const resolveRelativeImport = (fromShown: string, spec: string): string | null => {
   if (!spec.startsWith(".")) return null;
   const fromDir = dirname(fromShown);
@@ -977,6 +977,34 @@ for (const file of files(root, new Set(["frontend"]))) {
       failures.push(
         `${shown}: backend source may not import frontend/ directly; `
         + "the vendored @omi-core/ratified-contracts package is the only crossing",
+      );
+    }
+  }
+}
+
+/**
+ * THE MIGRATION FENCE.
+ *
+ * The four legacy-cloud deletion clients and their participant contracts live
+ * under `migration/`. They scrub; they do not read or serve. `apps/service`
+ * importing them would put teardown back on the product graph — the leak this
+ * workspace exists to end. Comments are exempt (importSpecsIn strips them);
+ * tests are not: a test in `apps/service` that reaches `migration/` is still
+ * a product-tree edge.
+ */
+for (const file of files(root, new Set(["frontend"]))) {
+  const shown = relative(root, file);
+  if (!shown.startsWith("apps/service/") || !/\.tsx?$/.test(shown)) continue;
+  const text = readFileSync(file, "utf8");
+  for (const spec of importSpecsIn(text)) {
+    const dest = resolveRelativeImport(shown, spec);
+    const hitsMigration = spec === "@platform/migration"
+      || spec.startsWith("@platform/migration/")
+      || (dest !== null && (dest === "migration" || dest.startsWith("migration/")));
+    if (hitsMigration) {
+      failures.push(
+        `${shown}: apps/service may not import migration/; `
+        + "legacy cloud deletion is teardown, not a product storage backend",
       );
     }
   }

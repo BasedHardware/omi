@@ -9,7 +9,7 @@ import {
   type TypesenseDeletionReceiptLoad,
   type TypesenseDeletionReceiptRepository,
   type TypesenseStoredDeletionReceipt,
-} from "../../apps/service/workers/typesense-deletion-cleanup-participant";
+} from "../../migration/workers/typesense-deletion-cleanup-participant";
 import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,

@@ -24,6 +24,7 @@ const FORBIDDEN = [
   "integration/local-test-gateway",
   "harness/",
   "spikes/",
+  "migration/",
 ] as const;
 
 const args = [

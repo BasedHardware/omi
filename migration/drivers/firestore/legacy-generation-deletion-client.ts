@@ -10,7 +10,7 @@ import {
   type FirestoreLegacyGenerationDocument,
   type FirestoreLegacyGenerationScanRequest,
   type FirestoreLegacyGenerationScanResult,
-} from "../../apps/service/workers/firestore-legacy-generation-cleanup-participant";
+} from "../../workers/firestore-legacy-generation-cleanup-participant";
 
 export interface FirestoreAuthenticatedJsonRequest {
   readonly method: "GET" | "POST" | "DELETE";

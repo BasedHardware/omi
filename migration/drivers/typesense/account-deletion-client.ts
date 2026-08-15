@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { isProxy } from "node:util/types";
 
-import { isWellFormedAccountId } from "../../core/control/account-control";
+import { isWellFormedAccountId } from "../../../core/control/account-control";
 import {
   TYPESENSE_DELETION_MAX_DOCUMENTS_PER_COLLECTION,
   TYPESENSE_DELETION_PAGE_SIZE,
@@ -12,7 +12,7 @@ import {
   type TypesenseAccountDocumentScanRequest,
   type TypesenseDeletionCollectionRole,
   type TypesenseDeletionCollectionRegistry,
-} from "../../apps/service/workers/typesense-deletion-cleanup-participant";
+} from "../../workers/typesense-deletion-cleanup-participant";
 
 export interface TypesenseAuthenticatedJsonRequest {
   readonly method: "GET" | "DELETE";

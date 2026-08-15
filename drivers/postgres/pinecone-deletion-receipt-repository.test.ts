@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import type {
   PineconeDeletionReceiptKey,
   PineconeStoredDeletionReceipt,
-} from "../../apps/service/workers/pinecone-deletion-cleanup-participant";
+} from "../../migration/workers/pinecone-deletion-cleanup-participant";
 import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,

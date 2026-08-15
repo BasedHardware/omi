@@ -4,7 +4,7 @@ import {
   createPineconeDeletionCollectionRegistry,
   type PineconeAccountVectorDeleteRequest,
   type PineconeAccountVectorScanRequest,
-} from "../../apps/service/workers/pinecone-deletion-cleanup-participant";
+} from "../../workers/pinecone-deletion-cleanup-participant";
 import {
   PineconeAccountDeletionClientError,
   createPineconeAccountDeletionVectorClient,

@@ -5,12 +5,12 @@ import {
   DELETION_DISPOSAL_GROUPS,
   type DeletionCleanupSurface,
   type DeletionInventorySourceReceipt,
-} from "../../../core/control/deletion-cleanup-inventory";
+} from "../../core/control/deletion-cleanup-inventory";
 import type {
   AccountDeletionCleanupPort,
   DeletionCleanupDispositionReceipt,
   HeldDeletionCleanupSession,
-} from "./account-deletion-cleanup";
+} from "../../apps/service/workers/account-deletion-cleanup";
 
 const DIGEST = /^[0-9a-f]{64}$/;
 const OPERATION_REF = /^opref1_[0-9a-f]{64}$/;

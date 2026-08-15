@@ -7,7 +7,7 @@ import {
   type TypesenseAuthenticatedJsonTransport,
 } from "./account-deletion-client";
 import { createTypesenseDeletionCollectionRegistry } from
-  "../../apps/service/workers/typesense-deletion-cleanup-participant";
+  "../../workers/typesense-deletion-cleanup-participant";
 
 const accountId = "account:typesense-cleanup";
 const registry = createTypesenseDeletionCollectionRegistry({

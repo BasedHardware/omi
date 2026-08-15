@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   FIRESTORE_LEGACY_GENERATION_MAX_DOCUMENTS_PER_ACCOUNT,
   createFirestoreLegacyGenerationCollectionRegistry,
-} from "../../apps/service/workers/firestore-legacy-generation-cleanup-participant";
+} from "../../workers/firestore-legacy-generation-cleanup-participant";
 import {
   FirestoreLegacyGenerationClientError,
   createFirestoreLegacyGenerationDocumentClient,

@@ -12,7 +12,7 @@ import {
   type GcsDeletionCollectionRegistry,
   type GcsDeletionRole,
   type GcsObjectMode,
-} from "../../apps/service/workers/gcs-deletion-cleanup-participant";
+} from "../../workers/gcs-deletion-cleanup-participant";
 
 export interface GcsAuthenticatedJsonRequest {
   readonly api_version: "storage-json-v1";

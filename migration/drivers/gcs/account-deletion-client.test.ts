@@ -4,7 +4,7 @@ import {
   GCS_DELETION_PAGE_SIZE,
   GCS_DELETION_ROLES,
   createGcsDeletionCollectionRegistry,
-} from "../../apps/service/workers/gcs-deletion-cleanup-participant";
+} from "../../workers/gcs-deletion-cleanup-participant";
 import {
   GcsAccountDeletionClientError,
   createGcsAccountDeletionObjectClient,
