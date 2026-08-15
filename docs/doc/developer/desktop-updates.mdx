@@ -12,6 +12,11 @@ dogfooding. Beta OAuth remains on the production identity authority. The bundle
 identities intentionally isolate local storage, Keychain/TCC state, package names,
 and telemetry without creating another customer account universe.
 
+Stable.app does not Sparkle-install beta-channel builds. Early access is the
+separately-installable Omi Beta app. The default appcast serves only the stable
+channel so leftover Stable-identity clients that still request Sparkle
+`channel=beta` freeze until `macos-stable` surpasses their build.
+
 ## Release model
 
 One Codemagic build signs and notarizes Stable and Beta artifact pairs from one

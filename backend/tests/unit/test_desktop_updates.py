@@ -719,7 +719,7 @@ class TestAppcastEndpoint:
     async def test_returns_xml_with_items(self):
         mock_releases = [
             {
-                "channel": "beta",
+                "channel": "stable",
                 "release": {
                     "published_at": "2026-03-01T00:00:00Z",
                     "body": "",
@@ -735,7 +735,7 @@ class TestAppcastEndpoint:
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/xml"
         assert "<item>" in resp.text
-        assert "sparkle:channel>beta<" in resp.text
+        assert "<sparkle:channel>" not in resp.text
 
     @pytest.mark.asyncio
     async def test_404_when_no_releases(self):
@@ -748,7 +748,7 @@ class TestAppcastEndpoint:
     async def test_deduplicates_by_channel(self):
         mock_releases = [
             {
-                "channel": "beta",
+                "channel": "stable",
                 "release": {
                     "published_at": "2026-03-02T00:00:00Z",
                     "body": "",
@@ -758,7 +758,7 @@ class TestAppcastEndpoint:
                 "metadata": {},
             },
             {
-                "channel": "beta",
+                "channel": "stable",
                 "release": {
                     "published_at": "2026-03-01T00:00:00Z",
                     "body": "",
@@ -778,7 +778,7 @@ class TestAppcastEndpoint:
     async def test_skips_release_without_zip(self):
         mock_releases = [
             {
-                "channel": "beta",
+                "channel": "stable",
                 "release": {"published_at": "2026-03-01T00:00:00Z", "body": "", "assets": [_dmg_asset()]},
                 "version_info": {"version": "1.0.0+100", "build": "100"},
                 "metadata": {},
@@ -807,10 +807,9 @@ class TestAppcastEndpoint:
 
     @pytest.mark.asyncio
     async def test_appcast_never_exposes_implicit_stable_item_when_only_beta_resolves(self):
-        """#9528: legacy Sparkle treats untagged items as stable-default.
-
-        A beta-only resolved feed must tag every <item> with sparkle:channel=beta
-        so no untagged item can be mistaken for stable.
+        """A beta-only resolved feed must tag every <item> with sparkle:channel=beta
+        so no untagged item can be mistaken for stable. That contract lives on
+        identity=beta; the default feed must not include the beta item at all.
         """
         mock_releases = [
             {
@@ -818,24 +817,29 @@ class TestAppcastEndpoint:
                 "release": {
                     "published_at": "2026-03-01T00:00:00Z",
                     "body": "",
-                    "assets": [_zip_asset("https://example.com/Omi-beta.zip")],
+                    "assets": [
+                        _zip_asset("https://example.com/Omi-beta.zip"),
+                        _beta_zip_asset("https://example.com/Omi.Beta.zip"),
+                    ],
                 },
                 "version_info": {"version": "2.0.0+200", "build": "200"},
-                "metadata": {"edSignature": "beta-sig"},
+                "metadata": {"edSignature": "beta-sig", "betaEdSignature": "beta-id-sig"},
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
-                resp = await client.get("/v2/desktop/appcast.xml")
-        assert resp.status_code == 200
-        assert resp.text.count("<item>") == 1
-        assert resp.text.count("<sparkle:channel>beta</sparkle:channel>") == 1
-        # No untagged item that legacy clients could treat as stable-default.
-        assert resp.text.count("<item>") == resp.text.count("<sparkle:channel>beta</sparkle:channel>")
+                default_resp = await client.get("/v2/desktop/appcast.xml")
+                beta_resp = await client.get("/v2/desktop/appcast.xml", params={"identity": "beta"})
+        assert default_resp.status_code == 200
+        assert default_resp.text.count("<item>") == 0
+        assert beta_resp.status_code == 200
+        assert beta_resp.text.count("<item>") == 1
+        assert beta_resp.text.count("<sparkle:channel>beta</sparkle:channel>") == 1
+        assert beta_resp.text.count("<item>") == beta_resp.text.count("<sparkle:channel>beta</sparkle:channel>")
 
     @pytest.mark.asyncio
-    async def test_appcast_stable_item_is_untagged_and_beta_item_is_explicit(self):
-        """#9528: stable must be the implicit Sparkle default; beta must be tagged."""
+    async def test_appcast_stable_identity_omits_beta_channel_items(self):
+        """Stable.app must not Sparkle-install beta-channel Omi.zip (Mechanism 2 freeze)."""
         mock_releases = [
             {
                 "channel": "stable",
@@ -862,16 +866,10 @@ class TestAppcastEndpoint:
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/appcast.xml")
         assert resp.status_code == 200
-        assert resp.text.count("<item>") == 2
-        assert resp.text.count("<sparkle:channel>beta</sparkle:channel>") == 1
+        assert resp.text.count("<item>") == 1
         assert "https://example.com/Omi-stable.zip" in resp.text
-        assert "https://example.com/Omi-beta.zip" in resp.text
-
-        items = resp.text.split("<item>")[1:]
-        stable_item = next(item for item in items if "Omi-stable.zip" in item)
-        beta_item = next(item for item in items if "Omi-beta.zip" in item)
-        assert "<sparkle:channel>" not in stable_item.split("</item>")[0]
-        assert "<sparkle:channel>beta</sparkle:channel>" in beta_item.split("</item>")[0]
+        assert "https://example.com/Omi-beta.zip" not in resp.text
+        assert "<sparkle:channel>" not in resp.text
 
 
 # --- Download endpoint ---
@@ -939,7 +937,7 @@ class TestDownloadEndpoint:
             {
                 "channel": "beta",
                 "version_info": {"version": "1.0.0+100", "build": "100"},
-                "release": {"assets": [_dmg_asset("https://example.com/older-beta.dmg")]},
+                "release": {"assets": [_beta_dmg_asset("https://example.com/older-beta.dmg")]},
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
@@ -1817,7 +1815,7 @@ class TestBetaIdentityServing:
         assert "stable-sig" not in xml
 
     @pytest.mark.asyncio
-    async def test_appcast_default_identity_is_unchanged_by_beta_assets(self):
+    async def test_appcast_default_identity_omits_beta_channel_entirely(self):
         entries = [
             _beta_live_entry(
                 channel="beta",
@@ -1830,8 +1828,9 @@ class TestBetaIdentityServing:
                 resp = await client.get("/v2/desktop/appcast.xml")
 
         assert resp.status_code == 200
+        assert resp.text.count("<item>") == 0
         assert "Omi.Beta.zip" not in resp.text
-        assert "https://example.com/Omi.zip" in resp.text
+        assert "https://example.com/Omi.zip" not in resp.text
 
     @pytest.mark.asyncio
     async def test_appcast_identity_beta_omits_releases_without_beta_artifacts(self):
@@ -1924,20 +1923,18 @@ class TestBetaIdentityServing:
         assert "https://example.com/omi.dmg" in resp.text
 
     @pytest.mark.asyncio
-    async def test_download_beta_endpoint_falls_back_to_stable_dmg_pre_rollout(self):
-        # Public macos.omi.me/beta must not 404 while no live beta release ships
-        # beta-identity artifacts; the strict guard stays on the Sparkle feed.
+    async def test_download_beta_endpoint_does_not_fall_back_to_stable_dmg(self):
+        # A "get Beta" link must never install Omi.app. Missing beta-identity
+        # artifacts fail closed instead of serving omi.dmg.
         entries = [
             _beta_live_entry(channel="beta", assets=[_zip_asset(), _dmg_asset()], metadata={"edSignature": "sig"}),
         ]
         with (
             patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=entries),
             patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=[]),
-            patch("routers.updates.record_fallback") as fallback,
         ):
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/beta")
 
-        assert resp.status_code == 200
-        assert "https://example.com/omi.dmg" in resp.text
-        fallback.assert_called_once()
+        assert resp.status_code == 404
+        assert "omi.dmg" not in resp.text
