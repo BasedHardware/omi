@@ -1014,7 +1014,14 @@ private struct OmiMarkdownCitationContent: View {
         }
       }
     } else {
-      OmiMarkdownContent(text: text, style: style, fontScale: fontScale)
+      // Type-erased on purpose (#11573). `OmiMarkdownContent.body` reaches this view through
+      // `textView` and `OmiMarkdownTableView`, so naming `OmiMarkdownContent` here closes a cycle
+      // in the *static* view-type graph. SwiftUI's `View._viewListCount(inputs:)` walks that graph
+      // by type, never evaluating a body, so no value-level guard bounds it: on macOS 15 a
+      // `ScrollView`/`LazyVStack` host recursed until the main thread wrote past its stack guard
+      // page and died with SIGSEGV. `AnyView` is the terminator — it resolves its count
+      // dynamically, which cuts both cycles here and leaves the graph acyclic.
+      AnyView(OmiMarkdownContent(text: text, style: style, fontScale: fontScale))
     }
   }
 }
