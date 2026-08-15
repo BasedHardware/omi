@@ -238,7 +238,8 @@ export type PlatformProductionStoreFactory = ProductionStoreFactory & {
   openPlatformTasks(): Promise<ProductionPlatformTaskStore>;
   /**
    * Named platform conversations store. `openConversations()` stays on the
-   * legacy adapter until the next lane repoints Home.
+   * legacy adapter. Home asks for this port by name; it does not repoint
+   * `openConversations()`.
    */
   openPlatformConversations(): Promise<ProductionPlatformConversationStore>;
   /**

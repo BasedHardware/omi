@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Conversation, Memory } from "@omi-core/contracts";
 import { formatDate, formatNumber, t } from "@omi-core/i18n";
 import type { RefreshStatus, StoreStatus } from "@omi-core/domain";
 import { ProductionChrome, productionRouteHref } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, type ProductionAnnouncementScheduler, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { ProductionIcon } from "./ProductionIcon.js";
 import { presentMemoryContent } from "./memory-presentation.js";
+import { presentPropositionContent } from "./proposition-presentation.js";
 import { combineHomeRefreshStatuses, homeSurfacePresentation } from "./home-presentation.js";
 import { refreshPhaseNoticeKey } from "./lifecycle-presentation.js";
+import {
+  compareHomeSpineTimestamps,
+  type HomeConversationHit,
+  type HomeMemoryHit,
+} from "./home-hits.js";
 import "./home.css";
 
 type Locale = string;
@@ -19,24 +24,46 @@ export type SearchProjection<T> = {
   subscribe(listener: () => void): () => void;
 };
 
+type MappableProjection<T> = {
+  list(): Promise<readonly T[] | T[]>;
+  status(): StoreStatus;
+  refresh?: () => Promise<void>;
+  subscribe(listener: () => void): () => void;
+};
+
+/** Map a generation-specific store onto Home's hit shape without inventing fields. */
+export function mapHomeProjection<T, U>(
+  source: MappableProjection<T>,
+  mapItem: (item: T) => U,
+): SearchProjection<U> {
+  const mapped: SearchProjection<U> = {
+    list: async () => (await source.list()).map(mapItem),
+    status: () => source.status(),
+    subscribe: (listener) => source.subscribe(listener),
+  };
+  const refresh = source.refresh;
+  if (refresh) mapped.refresh = () => refresh();
+  return mapped;
+}
+
 export type HomeSearchSources = {
-  memories: SearchProjection<Memory>;
-  conversations: SearchProjection<Conversation>;
+  memories: SearchProjection<HomeMemoryHit>;
+  conversations: SearchProjection<HomeConversationHit>;
 };
 
 type HomeRows = {
-  memories: Memory[];
-  conversations: Conversation[];
+  memories: HomeMemoryHit[];
+  conversations: HomeConversationHit[];
 };
 
 type HomeKind = "all" | "conversation" | "memory";
 type HomeSpineRow =
-  | { kind: "memory"; timestamp: number; value: Memory }
-  | { kind: "conversation"; timestamp: number; value: Conversation };
+  | { kind: "memory"; timestamp: number | null; value: HomeMemoryHit }
+  | { kind: "conversation"; timestamp: number; value: HomeConversationHit };
 
 const EMPTY_ROWS: HomeRows = { memories: [], conversations: [] };
 
-function conversationHref(id: Conversation["id"]): string {
+function conversationHref(id: string): string {
   const params = new URLSearchParams(location.search);
   params.delete("qa");
   params.delete("state");
@@ -49,13 +76,19 @@ function normalize(value: string, locale: Locale): string {
   return value.trim().toLocaleLowerCase(locale);
 }
 
-function conversationTimestamp(conversation: Conversation): number {
-  return conversation.startedAt ?? conversation.updatedAt ?? conversation.createdAt;
+function presentHomeMemory(hit: HomeMemoryHit, locale: Locale): string {
+  if (hit.copy === "synthesized") {
+    const content = presentPropositionContent(hit.text);
+    return content.kind === "machine-coordinate" && content.observedAt !== null
+      ? t(locale, "memoriesPlatform.savedMemory", { date: formatDate(content.observedAt, locale) })
+      : content.text;
+  }
+  return presentMemoryContent(hit.text).body;
 }
 
-function spineSearchText(row: HomeSpineRow): string {
+function spineSearchText(row: HomeSpineRow, locale: Locale): string {
   switch (row.kind) {
-    case "memory": return `${row.value.content} ${row.value.category}`;
+    case "memory": return presentHomeMemory(row.value, locale);
     case "conversation": return `${row.value.title} ${row.value.overview}`;
   }
 }
@@ -124,12 +157,12 @@ export function HomeProduction({ sources, source, locale = "en", onReady, initia
 
   const needle = normalize(query, locale);
   const spine = useMemo<HomeSpineRow[]>(() => [
-    ...rows.memories.map((value): HomeSpineRow => ({ kind: "memory", timestamp: value.updatedAt, value })),
-    ...rows.conversations.map((value): HomeSpineRow => ({ kind: "conversation", timestamp: conversationTimestamp(value), value })),
-  ].sort((left, right) => right.timestamp - left.timestamp), [rows]);
+    ...rows.memories.map((value): HomeSpineRow => ({ kind: "memory", timestamp: value.timestamp, value })),
+    ...rows.conversations.map((value): HomeSpineRow => ({ kind: "conversation", timestamp: value.timestamp, value })),
+  ].sort((left, right) => compareHomeSpineTimestamps(left.timestamp, right.timestamp)), [rows]);
   const results = useMemo(() => spine.filter((row) => {
     if (kind !== "all" && row.kind !== kind) return false;
-    return !needle || normalize(spineSearchText(row), locale).includes(needle);
+    return !needle || normalize(spineSearchText(row, locale), locale).includes(needle);
   }), [kind, locale, needle, spine]);
   const filtering = Boolean(needle) || kind !== "all";
   // Every notice / row visibility decision ships through this helper — JSX does not re-derive.
@@ -214,10 +247,10 @@ export function HomeProduction({ sources, source, locale = "en", onReady, initia
           {presentation.showsSavedRows ? (
             <div className="home-result-spine">
               {results.map((row) => {
-                const date = formatDate(row.timestamp, locale, { dateStyle: "medium" });
+                const date = row.timestamp === null ? null : formatDate(row.timestamp, locale, { dateStyle: "medium" });
                 if (row.kind === "memory") return <article className="home-result-row" data-actionable="false" key={`memory:${row.value.id}`}>
                   <span className="home-result-icon is-memory"><ProductionIcon name="library" size={18} /></span>
-                  <div className="home-result-copy"><p>{presentMemoryContent(row.value.content).body}</p><small>{[t(locale, "nav.memories"), date].join(" · ")}</small></div>
+                  <div className="home-result-copy"><p>{presentHomeMemory(row.value, locale)}</p><small>{[t(locale, "nav.memories"), date].filter(Boolean).join(" · ")}</small></div>
                 </article>;
                 if (row.kind === "conversation") return <a className="home-result-row" href={conversationHref(row.value.id)} key={`conversation:${row.value.id}`}>
                   <span className="home-result-icon is-conversation"><ProductionIcon name="conversations" size={18} /></span>
