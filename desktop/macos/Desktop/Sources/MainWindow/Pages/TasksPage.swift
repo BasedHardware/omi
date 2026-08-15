@@ -1614,8 +1614,8 @@ class TasksViewModel: ObservableObject {
 
   /// Handle a key-down event. Returns true if the event was consumed.
   func handleKeyDown(_ event: NSEvent, chatOpen: Bool = false) -> Bool {
-    // Don't intercept keys when a text field has focus
-    if let firstResponder = NSApp.keyWindow?.firstResponder,
+    // Don't intercept keys when a text field has focus.
+    if let firstResponder = NSApplication.shared.keyWindow?.firstResponder,
       firstResponder is NSTextView || firstResponder is NSTextField
     {
       return false
@@ -1677,8 +1677,7 @@ class TasksViewModel: ObservableObject {
 
     // Cmd+N: new task (inline at top)
     if modifiers == .command && keyCode == 45 {
-      isInlineCreating = true
-      inlineCreateAfterTaskId = nil
+      beginTopInlineCreation()
       return true
     }
 
@@ -1759,8 +1758,8 @@ class TasksViewModel: ObservableObject {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
         guard self?.lastEnterPressTime == capturedTime else { return }
         self?.lastEnterPressTime = nil
-        self?.isInlineCreating = true
         self?.inlineCreateAfterTaskId = self?.keyboardSelectedTaskId
+        self?.isInlineCreating = true
       }
       return true
     }
@@ -3328,10 +3327,27 @@ class TasksViewModel: ObservableObject {
     !isMultiSelectMode && !showCompleted
   }
 
+  /// Keep the list mounted when it carries the standing composer.
+  var showsTasksListWhenEmpty: Bool {
+    showsTodayComposer
+  }
+
+  /// Cmd+N and the + button return to the active view before focusing Today.
+  func beginTopInlineCreation() {
+    showCompleted = false
+    inlineCreateAfterTaskId = nil
+    isInlineCreating = true
+  }
+
   /// Empty categories are hidden, except Today while it hosts the composer —
   /// an empty day must still offer somewhere to type.
   func rendersSection(_ category: TaskCategory, hasTasks: Bool) -> Bool {
     hasTasks || (category == .today && showsTodayComposer)
+  }
+
+  /// An anchored insertion temporarily replaces the standing composer.
+  func showsTodaySectionComposer(inlineCreateAfterTaskId: String?) -> Bool {
+    showsTodayComposer && inlineCreateAfterTaskId == nil
   }
 
   /// Create an inline task below the specified task
@@ -3423,6 +3439,8 @@ struct TasksPage: View {
   // Keyboard navigation state
   @State private var inlineCreateText = ""
   @FocusState private var inlineCreateFocused: Bool
+  @State private var todayComposerText = ""
+  @FocusState private var todayComposerFocused: Bool
   @State private var keyboardMonitor: Any?
 
   // Chat panel resize state
@@ -3762,7 +3780,7 @@ struct TasksPage: View {
         loadingView
       } else if let error = viewModel.activeViewError, viewModel.activeTasks.isEmpty {
         errorView(error)
-      } else if viewModel.displayTasks.isEmpty
+      } else if viewModel.displayTasks.isEmpty && !viewModel.showsTasksListWhenEmpty
         && suggestedStore.candidates.isEmpty && !suggestedStore.isLoading
       {
         emptyView
@@ -3806,15 +3824,23 @@ struct TasksPage: View {
     }
     .onChange(of: viewModel.isInlineCreating) { _, isCreating in
       if isCreating {
-        // Keyboard triggered inline create — reset text and focus
-        inlineCreateText = ""
+        let isTopCreation = viewModel.inlineCreateAfterTaskId == nil
+        if isTopCreation {
+          inlineCreateFocused = false
+        } else {
+          inlineCreateText = ""
+          todayComposerFocused = false
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-          inlineCreateFocused = true
+          if isTopCreation {
+            todayComposerFocused = true
+          } else {
+            inlineCreateFocused = true
+          }
         }
       } else {
-        // Finished or reset. Focus is left alone: the pinned composer stays
-        // ready for the next task, and Esc drops focus through cancel.
         inlineCreateText = ""
+        inlineCreateFocused = false
       }
     }
   }
@@ -3862,11 +3888,29 @@ struct TasksPage: View {
     }
     let afterId = viewModel.inlineCreateAfterTaskId
     inlineCreateText = ""
-    // The pinned composer keeps focus so tasks can be entered back to back;
-    // a row-anchored composer is a one-shot insert and closes.
-    inlineCreateFocused = afterId == nil
+    inlineCreateFocused = false
     Task {
       await viewModel.createInlineTask(description: text, afterTaskId: afterId, forceToday: forToday)
+    }
+  }
+
+  private func cancelTodayComposer() {
+    todayComposerText = ""
+    todayComposerFocused = false
+    viewModel.isInlineCreating = false
+    viewModel.inlineCreateAfterTaskId = nil
+  }
+
+  private func commitTodayComposer() {
+    let text = todayComposerText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty else {
+      cancelTodayComposer()
+      return
+    }
+    todayComposerText = ""
+    todayComposerFocused = true
+    Task {
+      await viewModel.createInlineTask(description: text, afterTaskId: nil, forceToday: true)
     }
   }
 
@@ -4023,8 +4067,7 @@ struct TasksPage: View {
 
   private var addTaskButton: some View {
     Button {
-      viewModel.inlineCreateAfterTaskId = nil
-      viewModel.isInlineCreating = true
+      viewModel.beginTopInlineCreation()
     } label: {
       Image(systemName: "plus")
         .scaledFont(size: OmiType.body)
@@ -4336,7 +4379,6 @@ struct TasksPage: View {
                 await viewModel.completeNewlyCreatedTask(id: taskID)
               }
             )
-
             ForEach(TaskCategory.allCases, id: \.self) { category in
               let orderedTasks = viewModel.getOrderedTasks(for: category)
               if viewModel.rendersSection(category, hasTasks: !orderedTasks.isEmpty) {
@@ -4418,16 +4460,17 @@ struct TasksPage: View {
                   onInlineCommit: { commitInlineCreate() },
                   onInlineCancel: { cancelInlineCreate() },
                   onInlineCommitToday: { commitInlineCreate(forToday: true) },
-                  showsSectionComposer: category == .today && viewModel.showsTodayComposer,
-                  sectionComposerText: $inlineCreateText,
-                  sectionComposerFocused: $inlineCreateFocused,
-                  onSectionComposerCommit: { commitInlineCreate(forToday: true) },
-                  onSectionComposerCancel: { cancelInlineCreate() }
+                  showsSectionComposer: category == .today
+                    && viewModel.showsTodaySectionComposer(
+                      inlineCreateAfterTaskId: viewModel.inlineCreateAfterTaskId),
+                  sectionComposerText: $todayComposerText,
+                  sectionComposerFocused: $todayComposerFocused,
+                  onSectionComposerCommit: { commitTodayComposer() },
+                  onSectionComposerCancel: { cancelTodayComposer() }
                 )
               }
             }
           } else {
-
             // Flat list for other sort options, completed view, or multi-select mode
             ForEach(viewModel.displayTasks) { task in
               VStack(spacing: 0) {
@@ -4691,7 +4734,6 @@ struct TaskCategorySection: View {
   var sectionComposerFocused: FocusState<Bool>.Binding? = nil
   var onSectionComposerCommit: (() -> Void)? = nil
   var onSectionComposerCancel: (() -> Void)? = nil
-
   @State private var isTopDropTargeted = false
 
   private var visibleTasks: [TaskActionItem] {

@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 @testable import Omi_Computer
@@ -42,6 +43,39 @@ final class InlineTaskTodayButtonTests: XCTestCase {
       vm.rendersSection(.today, hasTasks: false),
       "bulk edit has no composer, so an empty Today has nothing to show")
     XCTAssertTrue(vm.rendersSection(.today, hasTasks: true))
+  }
+
+  func testCommandNWithEmptyTasksSurfacesTodayComposer() throws {
+    TasksStore.shared.resetSessionState()
+    let vm = TasksViewModel()
+    vm.showCompleted = true
+    let event = try XCTUnwrap(
+      NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: .command,
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        characters: "n",
+        charactersIgnoringModifiers: "n",
+        isARepeat: false,
+        keyCode: 45))
+
+    XCTAssertTrue(vm.displayTasks.isEmpty)
+    XCTAssertFalse(vm.showsTasksListWhenEmpty)
+    XCTAssertTrue(vm.handleKeyDown(event))
+    XCTAssertTrue(vm.isInlineCreating)
+    XCTAssertFalse(vm.showCompleted)
+    XCTAssertTrue(vm.showsTasksListWhenEmpty)
+    XCTAssertTrue(vm.rendersSection(.today, hasTasks: false))
+  }
+
+  func testAnchoredCreateSuppressesStandingTodayComposer() {
+    let vm = TasksViewModel()
+
+    XCTAssertTrue(vm.showsTodaySectionComposer(inlineCreateAfterTaskId: nil))
+    XCTAssertFalse(vm.showsTodaySectionComposer(inlineCreateAfterTaskId: "existing-task"))
   }
 
   func testTaskWithTodayDueAtAppearsInTodayCategory() {
