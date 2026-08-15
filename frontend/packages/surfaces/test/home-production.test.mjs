@@ -11,6 +11,12 @@ import {
 } from "../src/production/home-presentation.ts";
 import { refreshPhaseNoticeKey } from "../src/production/lifecycle-presentation.ts";
 import {
+  compareHomeSpineTimestamps,
+  homeConversationHitFromRecord,
+  homeMemoryHitFromLegacy,
+  homeMemoryHitFromSynthesized,
+} from "../src/production/home-hits.ts";
+import {
   closeRenderHarness,
   loadProductionExport,
   renderComponent,
@@ -94,8 +100,9 @@ test("home search source stays a memory-and-conversation chronological projectio
   assert.match(source, /kind: "memory"/);
   assert.match(source, /kind: "conversation"/);
   assert.doesNotMatch(source, /kind: "task"/);
-  assert.match(source, /sort\(\(left, right\) => right\.timestamp - left\.timestamp\)/);
+  assert.match(source, /sort\(\(left, right\) => compareHomeSpineTimestamps\(left\.timestamp, right\.timestamp\)\)/);
   assert.match(source, /\["all", "conversation", "memory"\]/);
+  assert.doesNotMatch(source, /right\.timestamp - left\.timestamp/);
   assert.match(styles, /grid-template-rows:\s*auto auto minmax\(0,1fr\)/);
   assert.match(styles, /\.home-chat-entry \{ grid-row: 2;/);
   assert.match(styles, /height:\s*64px/);
@@ -180,7 +187,7 @@ test("Home saved-refresh failure shows age and a working retry without making me
   const HomeProduction = await loadProductionExport("HomeProduction.tsx", "HomeProduction");
   const fixtureMemoryStore = await loadProductionExport("memory-fixtures.ts", "fixtureStore");
   const [savedMemory] = await fixtureMemoryStore("normal").list();
-  const memories = refreshableProjection([savedMemory]);
+  const memories = refreshableProjection([homeMemoryHitFromLegacy(savedMemory)]);
   const conversations = refreshableProjection([]);
   let now = 120_000;
   const rendered = await renderComponent(HomeProduction, {
@@ -211,12 +218,13 @@ test("Home saved-refresh failure shows age and a working retry without making me
 
 test("HomeProduction renders a merged searchable spine with clear, filter, and keyboard focus behavior", async () => {
   const HomeProduction = await loadProductionExport("HomeProduction.tsx", "HomeProduction");
+  const mapHomeProjection = await loadProductionExport("HomeProduction.tsx", "mapHomeProjection");
   const fixtureMemoryStore = await loadProductionExport("memory-fixtures.ts", "fixtureStore");
   const fixtureConversationStore = await loadProductionExport("conversation-fixtures.ts", "fixtureConversationStore");
   const rendered = await renderComponent(HomeProduction, {
     sources: {
-      memories: fixtureMemoryStore("normal"),
-      conversations: fixtureConversationStore("normal"),
+      memories: mapHomeProjection(fixtureMemoryStore("normal"), homeMemoryHitFromLegacy),
+      conversations: mapHomeProjection(fixtureConversationStore("normal"), homeConversationHitFromRecord),
     },
   });
 
@@ -267,6 +275,7 @@ test("HomeProduction renders a merged searchable spine with clear, filter, and k
 
 test("Home keeps result rows non-live and debounces only concise count changes", async () => {
   const HomeProduction = await loadProductionExport("HomeProduction.tsx", "HomeProduction");
+  const mapHomeProjection = await loadProductionExport("HomeProduction.tsx", "mapHomeProjection");
   const fixtureMemoryStore = await loadProductionExport("memory-fixtures.ts", "fixtureStore");
   const fixtureConversationStore = await loadProductionExport("conversation-fixtures.ts", "fixtureConversationStore");
   let nextTimer = 0;
@@ -277,8 +286,8 @@ test("Home keeps result rows non-live and debounces only concise count changes",
   };
   const rendered = await renderComponent(HomeProduction, {
     sources: {
-      memories: fixtureMemoryStore("normal"),
-      conversations: fixtureConversationStore("normal"),
+      memories: mapHomeProjection(fixtureMemoryStore("normal"), homeMemoryHitFromLegacy),
+      conversations: mapHomeProjection(fixtureConversationStore("normal"), homeConversationHitFromRecord),
     },
     announcementScheduler: scheduler,
   });
@@ -355,11 +364,12 @@ test("home renders each of the five refresh states distinguishably", async () =>
   const HomeProduction = await loadProductionExport("HomeProduction.tsx", "HomeProduction");
   const fixtureMemoryStore = await loadProductionExport("memory-fixtures.ts", "fixtureStore");
   const [savedMemory] = await fixtureMemoryStore("normal").list();
+  const savedHit = homeMemoryHitFromLegacy(savedMemory);
   const renderCases = [
     { phase: "initial-loading", rows: [], notice: EN_MESSAGES["lifecycle.loading"], emptyKind: null },
-    { phase: "refreshing", rows: [savedMemory], notice: EN_MESSAGES["lifecycle.refreshing"], emptyKind: null },
+    { phase: "refreshing", rows: [savedHit], notice: EN_MESSAGES["lifecycle.refreshing"], emptyKind: null },
     { phase: "ready", rows: [], notice: null, emptyKind: "empty-projection" },
-    { phase: "saved-but-refresh-failed", rows: [savedMemory], notice: EN_MESSAGES["lifecycle.savedFailed"], emptyKind: null },
+    { phase: "saved-but-refresh-failed", rows: [savedHit], notice: EN_MESSAGES["lifecycle.savedFailed"], emptyKind: null },
     { phase: "unavailable", rows: [], notice: EN_MESSAGES["lifecycle.unavailable"], emptyKind: null },
   ];
   for (const renderCase of renderCases) {
@@ -441,4 +451,72 @@ test("home makes no empty-state claim before it is ready to make one", () => {
   assert.equal(present("ready", true, 0).emptyKind, "empty-projection");
   assert.equal(present("ready", true, 0, true).emptyKind, "filtered-out");
   assert.equal(present("ready", true, 3).emptyKind, null);
+});
+
+test("Home mapping carries server fields and does not invent a synthesized timestamp", () => {
+  const legacy = homeMemoryHitFromLegacy({
+    id: "legacy-one",
+    content: "notes: Keep the morning review short",
+    updatedAt: 1_700_000_000_000,
+    category: "manual",
+  });
+  assert.equal(legacy.text, "notes: Keep the morning review short");
+  assert.equal(legacy.timestamp, 1_700_000_000_000);
+  assert.equal(legacy.copy, "legacy");
+  assert.equal("category" in legacy, false);
+
+  const synthesized = homeMemoryHitFromSynthesized({
+    id: "synth-one",
+    text: "Harborline pours the same oat cortado every weekday.",
+  });
+  assert.equal(synthesized.text, "Harborline pours the same oat cortado every weekday.");
+  assert.equal(synthesized.timestamp, null);
+  assert.equal(synthesized.copy, "synthesized");
+  assert.equal("updatedAt" in synthesized, false);
+  assert.equal("category" in synthesized, false);
+  assert.equal("content" in synthesized, false);
+
+  const conversation = homeConversationHitFromRecord({
+    id: "conv-one",
+    title: "Cedar Loop",
+    overview: "Walked the loop",
+    createdAt: 10,
+    updatedAt: 20,
+    startedAt: 15,
+  });
+  assert.equal(conversation.timestamp, 15);
+  assert.equal(conversation.title, "Cedar Loop");
+  assert.equal(compareHomeSpineTimestamps(20, 10), -10);
+  assert.equal(compareHomeSpineTimestamps(null, 10), 1);
+  assert.equal(compareHomeSpineTimestamps(10, null), -1);
+  // red-proof: assigning updatedAt: 0 (or Date.now()) on the synthesized hit
+  // invents a time the platform projection does not have.
+});
+
+test("Home renders a synthesized memory without inventing a date, and still shows the failure notice", async () => {
+  const HomeProduction = await loadProductionExport("HomeProduction.tsx", "HomeProduction");
+  const hit = homeMemoryHitFromSynthesized({
+    id: "synth-harborline",
+    text: "Harborline pours the same oat cortado every weekday.",
+  });
+  const memories = projection("saved-but-refresh-failed", [hit]);
+  const conversations = projection("saved-but-refresh-failed");
+  const rendered = await renderComponent(HomeProduction, {
+    sources: { memories: memories.source, conversations: conversations.source },
+  });
+  try {
+    const main = rendered.container.querySelector("main[data-route=home]");
+    assert.equal(main?.getAttribute("data-surface-state"), "saved-but-refresh-failed");
+    assert.equal(
+      rendered.container.querySelector(".status-notice")?.textContent,
+      EN_MESSAGES["lifecycle.savedFailed"],
+    );
+    const row = rendered.container.querySelector("article.home-result-row");
+    assert.match(row?.textContent ?? "", /Harborline pours the same oat cortado/);
+    assert.equal(row?.textContent?.includes(" · "), false, "no date separator when the platform item has no timestamp");
+  } finally {
+    await rendered.cleanup();
+  }
+  // red-proof: formatDate(0) or formatDate(updatedAt) on a synthesized row
+  // prints a invented calendar day next to a proposition that has none.
 });

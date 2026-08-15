@@ -191,7 +191,7 @@ test("what actually rendered is observable from outside the bundle", async () =>
   // mismatch alarm can never fire.
   for (const marker of [
     'markRendered("memories-platform", "platform")',
-    'markRendered("home", "legacy")',
+    'markRendered("home", memoriesGeneration)',
     'markRendered("tasks", null)',
     'markRendered("conversations", null)',
     'markRendered("folders", null)',

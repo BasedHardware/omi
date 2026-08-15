@@ -31,7 +31,9 @@ import { productionRouteHref } from "./ProductionChrome.js";
 import { MemoriesProduction } from "./MemoriesProduction.js";
 import { ConversationsProduction } from "./ConversationsProduction.js";
 import { TasksProduction, type TasksProductionProps } from "./TasksProduction.js";
-import { HomeProduction } from "./HomeProduction.js";
+import { HomeProduction, mapHomeProjection } from "./HomeProduction.js";
+import { openHomeSearchSources } from "./home-sources.js";
+import { homeConversationHitFromRecord, homeMemoryHitFromLegacy } from "./home-hits.js";
 import { MemoriesPlatformProduction } from "./MemoriesPlatformProduction.js";
 import { fixtureStore, FIXTURE_STATES, type FixtureState } from "./memory-fixtures.js";
 import { PROPOSITION_FIXTURE_STATES, fixturePropositionStore, type PropositionFixtureState } from "./proposition-fixtures.js";
@@ -353,7 +355,7 @@ if (query.get("lab") === "1") {
   } else if (settingsFixture) {
     root.render(<StrictMode><SettingsProduction store={fixtureSettingsStore(settingsFixture)} fixture={settingsFixture} locale={locale} presentation={settingsPresentation} returnHref={settingsReturnHref} onReady={() => emitReady(`fixture:${settingsFixture}`)} /></StrictMode>);
   } else if (homeFixture) {
-    root.render(<StrictMode><HomeProduction sources={{ memories: fixtureStore("normal"), conversations: fixtureConversationStore("normal") }} source={{ kind: "fixture", fixture: "home" }} locale={locale} onReady={() => emitReady("fixture:home")} /></StrictMode>);
+    root.render(<StrictMode><HomeProduction sources={{ memories: mapHomeProjection(fixtureStore("normal"), homeMemoryHitFromLegacy), conversations: mapHomeProjection(fixtureConversationStore("normal"), homeConversationHitFromRecord) }} source={{ kind: "fixture", fixture: "home" }} locale={locale} onReady={() => emitReady("fixture:home")} /></StrictMode>);
   } else if (taskFixture) {
     root.render(<StrictMode><TasksProduction store={fixtureTaskStore(taskFixture)} fixture={taskFixture} locale={locale} translate={translateTasks} now={TASK_FIXED_NOW} onReady={() => emitReady(`fixture:${taskFixture}`)} /></StrictMode>);
   } else if (conversationFixture) {
@@ -424,18 +426,21 @@ if (query.get("lab") === "1") {
           return;
         }
         if (route === "home") {
-          const [memories, conversations] = await Promise.all([
-            stores.openMemories(),
-            stores.openConversations(),
+          const { sources, memoriesGeneration } = await openHomeSearchSources(platform);
+          const homeRefreshes = await Promise.allSettled([
+            sources.memories.refresh?.() ?? Promise.resolve(),
+            sources.conversations.refresh?.() ?? Promise.resolve(),
           ]);
-          const homeRefreshes = await Promise.allSettled([memories.refresh(), conversations.refresh()]);
           const homeInitialLastSuccessAt = homeRefreshes.every((result) => result.status === "fulfilled")
-            && memories.status().refresh.phase === "ready"
-            && conversations.status().refresh.phase === "ready"
+            && sources.memories.status().refresh.phase === "ready"
+            && sources.conversations.status().refresh.phase === "ready"
               ? env.now()
               : null;
-          markRendered("home", "legacy");
-          root.render(<StrictMode><HomeProduction sources={{ memories, conversations }} source={{ kind: "live", origin: hostConfig.platformOriginLabel ?? "bridge" }} locale={locale} initialLastSuccessAt={homeInitialLastSuccessAt} now={env.now} onReady={() => emitReady("bridge")} /></StrictMode>);
+          markRendered("home", memoriesGeneration);
+          const homeReady = memoriesGeneration === "platform" || platform.selection.conversations === "platform"
+            ? "bridge:platform"
+            : "bridge";
+          root.render(<StrictMode><HomeProduction sources={sources} source={{ kind: "live", origin: hostConfig.platformOriginLabel ?? "bridge" }} locale={locale} initialLastSuccessAt={homeInitialLastSuccessAt} now={env.now} onReady={() => emitReady(homeReady)} /></StrictMode>);
         } else if (route === "tasks") {
           const store = await stores.openTasks();
           markRendered("tasks", null);
