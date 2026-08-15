@@ -196,8 +196,8 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["auto install", "automatic install", "download updates", "install updates"],
       section: .about, icon: "info.circle", settingId: "about.autoinstall"),
     SettingsSearchItem(
-      name: "Update Channel", subtitle: "Choose between stable and beta update channels",
-      keywords: ["channel", "beta", "stable", "release channel"], section: .about,
+      name: "Omi Beta", subtitle: "Install the separate Omi Beta app beside this one",
+      keywords: ["channel", "beta", "stable", "release channel", "omi beta"], section: .about,
       icon: "info.circle", settingId: "about.channel"),
     SettingsSearchItem(
       name: "Version Info", subtitle: "Current app version and build number",

@@ -121,14 +121,8 @@ class SettingsSyncManager {
     // Push-to-talk voice replies are no longer configurable. Ignore the legacy
     // server field so old synced `false` values cannot suppress spoken answers.
 
-    // Update channel (server-authoritative override)
-    // Note: updateChannel.didSet already calls checkForUpdatesInBackground()
-    if let channel = remote.updateChannel, let parsed = UpdateChannel(rawValue: channel) {
-      if UpdaterViewModel.shared.updateChannel != parsed {
-        log("SettingsSyncManager: Server assigned update channel: \(channel)")
-        UpdaterViewModel.shared.updateChannel = parsed
-      }
-    }
+    // Sparkle channel is identity-bound. Ignore a server-assigned update_channel
+    // so a leftover user-doc "beta" cannot opt Stable.app into Mechanism 2.
 
     NotificationCenter.default.post(name: .assistantSettingsDidSyncFromServer, object: nil)
   }
