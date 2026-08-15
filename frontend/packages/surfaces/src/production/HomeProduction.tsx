@@ -41,8 +41,7 @@ export function mapHomeProjection<T, U>(
     status: () => source.status(),
     subscribe: (listener) => source.subscribe(listener),
   };
-  const refresh = source.refresh;
-  if (refresh) mapped.refresh = () => refresh();
+  if (source.refresh) mapped.refresh = source.refresh.bind(source);
   return mapped;
 }
 

@@ -520,3 +520,29 @@ test("Home renders a synthesized memory without inventing a date, and still show
   // red-proof: formatDate(0) or formatDate(updatedAt) on a synthesized row
   // prints a invented calendar day next to a proposition that has none.
 });
+
+test("openHomeSearchSources on a platform selection never opens the legacy memories store", async () => {
+  const openHomeSearchSources = await loadProductionExport("home-sources.ts", "openHomeSearchSources");
+  const calls = { memories: 0, synthesized: 0, conversations: 0, platformConversations: 0 };
+  const stub = (name) => ({
+    async list() { return []; },
+    status() { return { refresh: { phase: "ready", hasSavedData: false }, pendingWrites: 0, deadLetters: [] }; },
+    subscribe() { return () => {}; },
+    async refresh() {},
+    label: name,
+  });
+  const { sources, memoriesGeneration } = await openHomeSearchSources({
+    selection: { memories: "platform", conversations: "platform", folders: "platform", tasks: "legacy" },
+    async openMemories() { calls.memories += 1; return stub("legacy-memories"); },
+    async openSynthesizedMemories() { calls.synthesized += 1; return stub("synthesized"); },
+    async openConversations() { calls.conversations += 1; return stub("legacy-conversations"); },
+    async openPlatformConversations() { calls.platformConversations += 1; return stub("platform-conversations"); },
+  });
+  assert.equal(memoriesGeneration, "platform");
+  assert.deepEqual(calls, { memories: 0, synthesized: 1, conversations: 0, platformConversations: 1 });
+  assert.equal(typeof sources.memories.list, "function");
+  assert.equal(typeof sources.conversations.list, "function");
+  // red-proof: routing Home through openMemories() under a platform selection
+  // hits the legacy memories wire this service does not serve, and paints
+  // "Showing saved data. Couldn't refresh."
+});
