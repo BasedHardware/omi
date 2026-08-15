@@ -71,7 +71,10 @@ class FirebaseAuthProvider:
         )
 
     def get_user_profile(self, uid: str) -> UserProfile:
-        rec = _auth().get_user(uid)
+        try:
+            rec = _auth().get_user(uid)
+        except Exception as exc:  # firebase SDK exceptions -> neutral taxonomy (parity with verify_token)
+            raise _translate(exc)
         providers: List[str] = [getattr(p, 'provider_id', '') for p in (getattr(rec, 'provider_data', None) or [])]
         return UserProfile(
             uid=rec.uid,
@@ -87,13 +90,22 @@ class FirebaseAuthProvider:
 
     def update_user_profile(self, uid: str, *, display_name: Optional[str] = None) -> None:
         if display_name is not None:
-            _auth().update_user(uid, display_name=display_name)
+            try:
+                _auth().update_user(uid, display_name=display_name)
+            except Exception as exc:
+                raise _translate(exc)
 
     def delete_user(self, uid: str) -> None:
-        _auth().delete_user(uid)
+        try:
+            _auth().delete_user(uid)
+        except Exception as exc:
+            raise _translate(exc)
 
     def mint_custom_token(self, uid: str) -> str:
-        token = _auth().create_custom_token(uid)
+        try:
+            token = _auth().create_custom_token(uid)
+        except Exception as exc:
+            raise _translate(exc)
         return token.decode('utf-8') if isinstance(token, bytes) else str(token)
 
     def exchange_idp_credential(self, provider: str, id_token: str, access_token: Optional[str] = None) -> str:
@@ -116,14 +128,27 @@ class FirebaseAuthProvider:
             params['access_token'] = access_token
         post_body = urlencode(params)
         url = f'https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={api_key}'
-        resp = httpx.post(
-            url,
-            json={'postBody': post_body, 'requestUri': 'http://localhost', 'returnIdpCredential': True, 'returnSecureToken': True},
-            timeout=_HTTP_TIMEOUT_SECONDS,
-        )
+        try:
+            resp = httpx.post(
+                url,
+                json={
+                    'postBody': post_body,
+                    'requestUri': 'http://localhost',
+                    'returnIdpCredential': True,
+                    'returnSecureToken': True,
+                },
+                timeout=_HTTP_TIMEOUT_SECONDS,
+            )
+        except httpx.HTTPError as exc:
+            # Transport failure (connect/timeout/DNS): a neutral AuthError, not a raw httpx exception that
+            # would escape the port and 500 the sign-in route (cubic PR 10887 firebase.py:119).
+            raise errors.AuthError(f'signInWithIdp transport error: {exc}')
         if resp.status_code != 200:
             raise errors.AuthError(f'signInWithIdp failed: status={resp.status_code}')
-        uid = resp.json().get('localId')
+        try:
+            uid = resp.json().get('localId')
+        except ValueError as exc:  # non-JSON 200 body
+            raise errors.AuthError(f'signInWithIdp returned a non-JSON body: {exc}')
         if not uid:
             raise errors.AuthError('no uid returned from signInWithIdp')
         return uid
