@@ -333,11 +333,15 @@ services:
       - --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER:-admin}
-      # No silent default: an unset password must fail the stack, never bootstrap a
-      # publicly-reachable Keycloak admin with the trivial admin/admin credential. Dev
-      # sets it explicitly in .env.dev (admin is a conscious local choice); prod must
-      # supply a strong operator secret.
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:?KC_ADMIN_PASSWORD must be set (no default admin/admin bootstrap)}
+      # No silent default: an unset password never bootstraps a publicly-reachable Keycloak admin with a
+      # trivial admin/admin credential. We use ``:-`` (empty when unset), NOT ``:?`` — compose-spec
+      # interpolates the WHOLE merged config BEFORE profile filtering, so a mandatory ``:?`` here aborted
+      # `docker compose config`/`up` for EVERY posture, even those that never start keycloak (it is gated
+      # behind the `auth` profile) (cubic PR 10887 compose.selfhost.yaml:340). Safety is preserved by
+      # Keycloak itself: an empty KC_BOOTSTRAP_ADMIN_PASSWORD fails startup loudly ("bootstrap admin
+      # username available only when bootstrap admin password is set", verified), and only when the auth
+      # profile actually runs. Dev sets it in .env.dev; prod supplies a strong operator secret.
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-}
     volumes:
       # Persist H2 (realm + imported omi-backend-admin) across `down`/`up`. --import-realm seeds a
       # FRESH volume from the imported realm; on an existing volume KC keeps the persisted realm (a

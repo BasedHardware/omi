@@ -40,13 +40,13 @@
     {
       "clientId": "omi-backend-admin",
       "name": "Backend admin API (service account)",
-      "description": "Confidential service-account client for the Keycloak admin API (OIDC_ADMIN_* in backend.env): user-name resolution for memory attribution. DEV secret — regenerate for production.",
+      "description": "Admin-API service-account client (OIDC_ADMIN_* in backend.env). PLACEHOLDER secret CHANGE_ME + realm-management view-users: regenerate this AND OIDC_ADMIN_CLIENT_SECRET before exposing Keycloak.",
       "enabled": true,
       "publicClient": false,
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
-      "secret": "dev-omi-backend-admin-secret"
+      "secret": "CHANGE_ME"
     }
   ],
   "users": [
