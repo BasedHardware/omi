@@ -1,0 +1,37 @@
+desktop/macos/Desktop/Sources/MainWindow/CaptureListeningLogic.swift
+  s_3ccc0619ee6841::t_6e08d652f5f84c 28-130
+desktop/macos/Desktop/Tests/ShellStatusIconLegibilityTests.swift
+  s_3ccc0619ee6841::t_e7f953b27a6e87 599
+  s_3ccc0619ee6841::t_e6c406d0213e5f 619
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
+  s_3ccc0619ee6841::t_affc49d97802c9 387
+  s_3ccc0619ee6841::t_b57305a534d46f 248-254,259,261
+  s_3ccc0619ee6841::t_6e3af40b779fe5 368-373
+  s_3ccc0619ee6841::t_e2c965dc006412 388,391-398
+  s_3ccc0619ee6841::t_520d8f9883664b 340-346
+  s_3ccc0619ee6841::t_dbcd7a79d8dd99 427-438,443-444
+  s_3ccc0619ee6841::t_804b2bde65c655 207-219
+  s_3ccc0619ee6841::t_8be4139912c0d2 298-307
+  s_3ccc0619ee6841::t_c3ac0f7d9500a0 455,459,462,475-484
+  s_3ccc0619ee6841::t_c34822e0613322 456-458,464-474
+  s_3ccc0619ee6841::t_8f83e12eb33d78 220-229
+desktop/macos/Desktop/Tests/ShellListeningCycleTests.swift
+  s_3ccc0619ee6841::t_e9b11ea88ee05b 16-19
+  s_3ccc0619ee6841::t_99131f3cc284b3 1-15,20-194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "be2d0f49f9a036a52bccd54a219b8e3866836459",
+  "prompts": {},
+  "sessions": {
+    "s_3ccc0619ee6841": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a651b70-49a8-4b37-aff0-ae9fbe9619cb",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
