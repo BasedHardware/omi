@@ -62,4 +62,24 @@ enum ContextBucketsFeature {
 
   static let destinationKillSwitchFlagName = "context_buckets_destination_kill"
   private static let localDestinationOverrideName = "OMI_FORCE_BUCKET_DESTINATIONS"
+
+  /// Lets the director spend one bounded retrieval hop (a second model call over
+  /// conversation/memory search results) when its first response asks for one.
+  ///
+  /// Separate from `isEnabled` and separately stoppable: this is the only path
+  /// that doubles the per-visit director cost and the only one that quotes
+  /// cross-bucket history into a director prompt, so it needs a remote stop that
+  /// does not take the whole pipeline down with it. Same inverted fail-open
+  /// semantics as the other kill switches. With the flag off, the director's
+  /// schema, prompt, and single-call flow are byte-identical to today.
+  @MainActor static var isRetrievalHopEnabled: Bool {
+    guard isEnabled else { return false }
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localRetrievalOverrideName] != "0"
+    }
+    return !PostHogManager.shared.isFeatureEnabled(retrievalKillSwitchFlagName)
+  }
+
+  static let retrievalKillSwitchFlagName = "context_buckets_retrieval_kill"
+  private static let localRetrievalOverrideName = "OMI_FORCE_BUCKET_RETRIEVAL"
 }
