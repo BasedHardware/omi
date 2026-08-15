@@ -1,0 +1,58 @@
+desktop/context-for-claude/Sources/ContextApp/Permissions.swift
+  s_d58145f2e376ea::t_063d06245f90a3 60-79
+  s_d58145f2e376ea::t_40de20e602a619 1129-1134
+  s_d58145f2e376ea::t_ad6ecc0acc8d45 817-821,829,831
+  s_d58145f2e376ea::t_4d76470ce537e3 442
+  s_d58145f2e376ea::t_a0dfb7ce5da616 822-828
+  s_d58145f2e376ea::t_a90662859d64ab 388-412
+  s_d58145f2e376ea::t_d5c524ee925087 413-415
+  s_d58145f2e376ea::t_e78ac79de8a5b4 416,912-916,921-1004,1689
+  s_d58145f2e376ea::t_d6d8d27d591b8b 6
+  s_d58145f2e376ea::t_59b1c10b60ad15 773
+  s_d58145f2e376ea::t_f61b6bee680d19 1682-1687
+  s_d58145f2e376ea::t_b4824ff1652cfb 727-755,757-759
+  s_d58145f2e376ea::t_74f605d2cbba0d 760-772,774-798
+  s_d58145f2e376ea::t_ad98d03ba349d9 1086-1088
+  s_d58145f2e376ea::t_b2164bf2451f86 1019-1022
+  s_d58145f2e376ea::t_3d8b149b8c8722 756
+  s_d58145f2e376ea::t_0f7c7d3a60208c 1135-1139
+  s_d58145f2e376ea::t_a840162b0e4ae4 417
+  s_d58145f2e376ea::t_8d4d2934b7a8a8 1005
+  s_d58145f2e376ea::t_c6c8d43beaa05a 1140
+  s_d58145f2e376ea::t_faa106aae2fd51 1688
+  s_d58145f2e376ea::t_f70b472ab3622a 1690
+desktop/context-for-claude/Tests/ContextAppTests/SystemAudioGrantRecordTests.swift
+  s_d58145f2e376ea::t_367addbbdb9f83 1-181
+desktop/context-for-claude/Sources/ContextApp/Capture/SystemAudioCapture.swift
+  s_d58145f2e376ea::t_e45961504d89b9 474-475
+  s_d58145f2e376ea::t_6dd6676fc7f3ad 447-473,476
+  s_d58145f2e376ea::t_410499afe49963 136-138
+  s_d58145f2e376ea::t_8fb0b7deb5f992 477
+desktop/context-for-claude/Sources/ContextApp/Engine.swift
+  s_d58145f2e376ea::t_a60ff7a1e87a47 1267-1271
+  s_d58145f2e376ea::t_28b5139ffcd475 517-521
+  s_d58145f2e376ea::t_e8f45ff9bbe902 812-827
+  s_d58145f2e376ea::t_74f44d43fae709 343-348
+  s_d58145f2e376ea::t_c55f0ae93c81ee 537-540
+  s_d58145f2e376ea::t_b3daeed61ead5c 684-688,690-693
+desktop/context-for-claude/Tests/ContextAppTests/StaleGrantGuidanceTests.swift
+  s_d58145f2e376ea::t_c0be030bcb4d84 170-177
+  s_d58145f2e376ea::t_80ea88cedc6770 259-264,268,270,274
+  s_d58145f2e376ea::t_5f3acb640c6462 1-169,178-258,265-267,269,271-273,275-276
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "5d4b50154ebf0ccb10f97290bae6bc5b329324a9",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
