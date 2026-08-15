@@ -1,0 +1,29 @@
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
+  s_3ccc0619ee6841::t_5de740b16fa96e 257-258,266-270,455-456
+desktop/macos/Desktop/Sources/AppState/MeetingConversationBoundaryPolicy.swift
+  s_3ccc0619ee6841::t_6601f01930e911 3-17
+desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  s_3ccc0619ee6841::t_717e9846326aff 619-620
+desktop/macos/Desktop/Sources/AppState/AppState+MeetingGatePause.swift
+  s_3ccc0619ee6841::t_664a99b942b524 1-37
+desktop/macos/Desktop/Tests/ShellListeningCycleTests.swift
+  s_3ccc0619ee6841::t_c81db22ee062d0 167-207
+desktop/macos/e2e/flows/audio-recording.yaml
+  s_3ccc0619ee6841::t_e652eee9b9292a 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f38339d84fdf323d227ed866ef1b6c40eeabf189",
+  "prompts": {},
+  "sessions": {
+    "s_3ccc0619ee6841": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a651b70-49a8-4b37-aff0-ae9fbe9619cb",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
