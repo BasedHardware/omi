@@ -254,7 +254,8 @@ enum ShellStatusTooltip {
   /// wordless control is the only place that promise is written down. Naming the destination also
   /// makes the third mode discoverable without clicking twice to find it.
   static func audio(
-    state: HomeStatusState, mode: String, isAwaitingMeeting: Bool = false, next: String
+    state: HomeStatusState, mode: String, isAwaitingMeeting: Bool = false, next: String,
+    hasMicrophonePermission: Bool = true
   ) -> String {
     switch state {
     case .blocked:
@@ -262,6 +263,11 @@ enum ShellStatusTooltip {
     case .active:
       return "Audio — listening (\(mode)). Click for \(next)."
     case .inactive:
+      // Without the microphone grant a click spends itself on the permission prompt and the mode
+      // does not move, so promising the next mode here would be a promise the click cannot keep.
+      guard hasMicrophonePermission else {
+        return "Audio — off. Omi needs microphone access. Click to grant it."
+      }
       if isAwaitingMeeting {
         return "Audio — waiting for a call (\(mode)). Nothing is being transcribed. Click for \(next)."
       }
@@ -446,7 +452,8 @@ struct ShellStatusIcons: View {
         appState: appState, raw: audioRecordingModeRaw),
       isAwaitingMeeting: appState.isAwaitingMeeting,
       next: CaptureListeningLogic.audioRecordingModeTitle(
-        CaptureListeningLogic.nextAudioRecordingMode(after: listeningMode)))
+        CaptureListeningLogic.nextAudioRecordingMode(after: listeningMode)),
+      hasMicrophonePermission: appState.hasMicrophonePermission)
   }
 
   private var captureState: HomeStatusState {

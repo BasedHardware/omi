@@ -164,6 +164,47 @@ final class ShellListeningCycleTests: XCTestCase {
     XCTAssertFalse(titles.contains { $0.isEmpty }, "every mode has to be nameable in the tooltip")
   }
 
+  /// Without the microphone grant the first click opens the permission prompt and the mode does
+  /// not advance, so the tooltip must not name a mode that click will not reach.
+  func testTheTooltipDoesNotPromiseAModeAClickCannotReachWithoutPermission() {
+    let denied = ShellStatusTooltip.audio(
+      state: .inactive, mode: "Off", next: "Always On", hasMicrophonePermission: false)
+    XCTAssertFalse(
+      denied.contains("Always On"),
+      "the tooltip reads \"\(denied)\" while the microphone grant is missing — that click opens "
+        + "the permission prompt and leaves the mode where it was, so naming the next mode is a "
+        + "promise the click cannot keep.")
+    XCTAssertTrue(
+      denied.localizedCaseInsensitiveContains("microphone"),
+      "it has to say what is actually missing: \(denied)")
+
+    let granted = ShellStatusTooltip.audio(
+      state: .inactive, mode: "Off", next: "Always On", hasMicrophonePermission: true)
+    XCTAssertTrue(
+      granted.contains("Always On"),
+      "with permission granted the click really does select the next mode: \(granted)")
+  }
+
+  /// Only Meetings must not keep a microphone open while it cannot yet prove a call is running.
+  /// Selecting it from a live Always session builds a fresh detector, so the first reconcile pass
+  /// sees `meetingStateReady == false` — the moment this guards.
+  func testOnlyMeetingsPausesCaptureUntilTheMeetingGateHasAnswered() {
+    XCTAssertTrue(
+      MeetingGateReadinessPolicy.shouldPauseCapture(mode: .onlyMeetings, meetingStateReady: false),
+      "switching to Only Meetings before the detector has reported left capture running. "
+        + "\"Not known yet\" has to mean \"not in a call\" for a gate the user selected in order "
+        + "to close the microphone.")
+    XCTAssertFalse(
+      MeetingGateReadinessPolicy.shouldPauseCapture(mode: .onlyMeetings, meetingStateReady: true),
+      "once the detector has reported, the normal gating decides")
+    XCTAssertFalse(
+      MeetingGateReadinessPolicy.shouldPauseCapture(mode: .always, meetingStateReady: false),
+      "Always On is not gated on meetings and must not be paused by an unready detector")
+    XCTAssertFalse(
+      MeetingGateReadinessPolicy.shouldPauseCapture(mode: .off, meetingStateReady: false),
+      "Off is stopped by the session teardown, not by this pause")
+  }
+
   /// The hint exists because Only Meetings is the one mode whose behaviour is invisible: the
   /// control reads as on while nothing is being recorded. If it stops saying so, it is decoration.
   func testTheMeetingsHintExplainsThatTheMicrophoneStaysClosed() {
