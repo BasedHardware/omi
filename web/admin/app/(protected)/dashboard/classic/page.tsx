@@ -227,6 +227,7 @@ interface ViralMetrics {
   activation: { date: string; signups: number; activated: number; rate: number }[];
   summary: {
     quickRatio: number | null;
+    /** Telemetry-derived; unreliable while the fleet is mid-rollout. Prefer `ActivationStats`. */
     activationRate: number | null;
     activationTelemetryCoverage: number | null;
     activationSignups: number;
@@ -239,6 +240,15 @@ interface ViralMetrics {
     l5PlusPct: number;
     totalUsers: number;
   };
+}
+
+interface ActivationStats {
+  weeks: { week: string; signups: number; activated: number; rate: number }[];
+  signups: number;
+  activated: number;
+  rate: number | null;
+  erroredUsers: number;
+  freshAt?: number;
 }
 
 interface KFactorData {
@@ -471,6 +481,12 @@ export default function AnalyticsPage() {
   const { data: kFactorData, isLoading: kFactorLoading } =
     useSWR<KFactorData>(token ? ["/api/omi/stats/k-factor/posthog?days=30", token] : null, authFetcher, swrOpts);
 
+  // Activation comes from Firestore conversation records, not from the desktop
+  // `Memory Created` event in viral-metrics: older builds cannot emit that
+  // event, so the PostHog figure tracks build age rather than behaviour.
+  const { data: activationStats } =
+    useSWR<ActivationStats>(token ? ["/api/omi/stats/activation?days=60", token] : null, authFetcher, swrOpts);
+
   const { data: macosVersionStats, isLoading: macosVersionStatsLoading } =
     useSWR<MacosVersionStatsData>(token ? ["/api/omi/stats/macos-versions", token] : null, authFetcher, swrOpts);
 
@@ -659,9 +675,14 @@ export default function AnalyticsPage() {
     () => completedWeeklyNewUsers(allDailyData).slice(-12),
     [allDailyData],
   );
+  // Firestore-derived when available; the telemetry series is only a fallback
+  // for the window before the activation route has a cached payload.
   const weeklyActivationData = useMemo(
-    () => maturedWeeklyActivation(activationData).slice(-12),
-    [activationData],
+    () =>
+      activationStats?.weeks?.length
+        ? activationStats.weeks.slice(-12)
+        : maturedWeeklyActivation(activationData).slice(-12),
+    [activationStats, activationData],
   );
   const latestWeeklyNewUsers = weeklyNewUsersData.at(-1) ?? null;
   const latestWeeklyActivation = weeklyActivationData.at(-1) ?? null;
@@ -1719,9 +1740,7 @@ export default function AnalyticsPage() {
                 <Legend />
                 <Bar yAxisId="left" dataKey="signups" name="Signups" fill="#3b82f6" radius={[2, 2, 0, 0]} opacity={0.5} />
                 <Bar yAxisId="left" dataKey="activated" name="Activated" fill="#22c55e" radius={[2, 2, 0, 0]} />
-                {/* capableRate, not rate: weeks whose cohort ran no reporting
-                    build are a gap in the line rather than a plotted zero. */}
-                <Line yAxisId="right" type="monotone" dataKey="capableRate" name="Activation %" stroke="#f97316" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
+                <Line yAxisId="right" type="monotone" dataKey="rate" name="Activation %" stroke="#f97316" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
               </ComposedChart>
             </ResponsiveContainer>
           ) : (
@@ -1891,9 +1910,9 @@ export default function AnalyticsPage() {
               {latestWeeklyActivation?.activated.toLocaleString() ?? "--"}
             </div>
             <p className="truncate text-xs text-muted-foreground">
-              {latestWeeklyActivation?.capableRate != null
-                ? `${latestWeeklyActivation.capableRate.toFixed(1)}% activation · Memory in 7d`
-                : "Memory in 7d · no reporting build in this cohort"}
+              {latestWeeklyActivation
+                ? `${latestWeeklyActivation.rate.toFixed(1)}% activation · conversation in 7d`
+                : "Conversation within 7 days of signup"}
             </p>
           </div>
         ),
@@ -2283,20 +2302,17 @@ export default function AnalyticsPage() {
       initialLayout: { cols: 2, rows: 1 },
       render: () => (
         <div>
-          <div className={`text-2xl font-bold ${(vm?.summary.activationRate ?? 0) >= 50 ? "text-green-600" : ""}`}>
-            {vm?.summary.activationRate != null ? `${vm.summary.activationRate}%` : "--"}
+          <div className={`text-2xl font-bold ${(activationStats?.rate ?? 0) >= 50 ? "text-green-600" : ""}`}>
+            {activationStats?.rate != null ? `${activationStats.rate}%` : "--"}
           </div>
-          {/* Coverage is the difference between "users are not activating" and
-              "we cannot see whether they activated". Never show the rate alone
-              while some of the fleet cannot report it. */}
           <p className="text-xs text-muted-foreground">
-            {vm?.summary.activationRate != null
-              ? `Memory within 7d · n=${vm.summary.activationSignups}`
-              : "Memory within 7d · not yet measurable"}
+            {activationStats?.rate != null
+              ? `Conversation within 7d · n=${activationStats.signups.toLocaleString()}`
+              : "Conversation within 7 days of signup"}
           </p>
-          {vm != null && (vm.summary.activationTelemetryCoverage ?? 0) < 100 && (
+          {(activationStats?.erroredUsers ?? 0) > 0 && (
             <p className="text-xs text-amber-600">
-              {vm.summary.activationTelemetryCoverage ?? 0}% of signups on a build that reports it
+              {activationStats?.erroredUsers} users unreadable this run
             </p>
           )}
         </div>

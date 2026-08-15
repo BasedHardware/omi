@@ -162,6 +162,56 @@ function percent(numerator: number, denominator: number): number | null {
   return Math.round((numerator / denominator) * 1000) / 10;
 }
 
+export interface ActivationCohortMember {
+  signupAt: string;
+  activated: boolean;
+}
+
+export interface ActivationSeries {
+  weeks: { week: string; signups: number; activated: number; rate: number }[];
+  signups: number;
+  activated: number;
+  rate: number | null;
+}
+
+/**
+ * Roll a per-user activation cohort into weekly buckets plus a pooled rate.
+ *
+ * Unlike the PostHog series this has no telemetry-coverage dimension: it is
+ * derived from the conversation records themselves, which exist regardless of
+ * what the client managed to report. Callers must pass only members whose
+ * activation window has already elapsed.
+ */
+export function rollUpActivationCohort(
+  members: readonly ActivationCohortMember[],
+): ActivationSeries {
+  const totals = new Map<string, { signups: number; activated: number }>();
+  let signups = 0;
+  let activated = 0;
+
+  for (const member of members) {
+    const week = mondayKey(member.signupAt);
+    if (!week) continue;
+    const current = totals.get(week) ?? { signups: 0, activated: 0 };
+    current.signups += 1;
+    signups += 1;
+    if (member.activated) {
+      current.activated += 1;
+      activated += 1;
+    }
+    totals.set(week, current);
+  }
+
+  const weeks = Array.from(totals, ([week, t]) => ({
+    week,
+    signups: t.signups,
+    activated: t.activated,
+    rate: percent(t.activated, t.signups) ?? 0,
+  })).sort((a, b) => a.week.localeCompare(b.week));
+
+  return { weeks, signups, activated, rate: percent(activated, signups) };
+}
+
 /**
  * Pool a daily activation series into the single headline rate.
  *

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   completedWeeklyNewUsers,
   maturedWeeklyActivation,
+  rollUpActivationCohort,
   summarizeActivation,
 } from "@/lib/growth-metrics";
 
@@ -131,5 +132,31 @@ describe("summarizeActivation", () => {
     expect(result.signups).toBe(0);
     expect(result.rate).toBeNull();
     expect(result.telemetryCoverage).toBeNull();
+  });
+});
+
+describe("rollUpActivationCohort", () => {
+  it("buckets members by the Monday of their signup and pools the rate", () => {
+    const result = rollUpActivationCohort([
+      { signupAt: "2026-08-03T09:00:00Z", activated: true },
+      { signupAt: "2026-08-05T23:59:00Z", activated: false },
+      { signupAt: "2026-08-09T12:00:00Z", activated: true },
+      { signupAt: "2026-08-10T00:00:00Z", activated: false },
+    ]);
+
+    expect(result.weeks).toEqual([
+      { week: "2026-08-03", signups: 3, activated: 2, rate: 66.7 },
+      { week: "2026-08-10", signups: 1, activated: 0, rate: 0 },
+    ]);
+    expect(result.signups).toBe(4);
+    expect(result.activated).toBe(2);
+    expect(result.rate).toBe(50);
+  });
+
+  it("returns a null rate for an empty cohort rather than zero", () => {
+    const result = rollUpActivationCohort([]);
+
+    expect(result.weeks).toEqual([]);
+    expect(result.rate).toBeNull();
   });
 });
