@@ -555,8 +555,30 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     let tailRange = try XCTUnwrap(text.range(of: "== RECENT TAIL ==\nt"))
     XCTAssertLessThan(factsRange.lowerBound, tailRange.lowerBound)
     XCTAssertGreaterThanOrEqual(
+      text.distance(from: factsRange.upperBound, to: tailRange.lowerBound),
+      7_000,
+      "validated facts must keep their reserved room when the frozen segment is at budget")
+    XCTAssertGreaterThanOrEqual(
       text.distance(from: tailRange.upperBound, to: text.endIndex), 5_000,
       "the rolling tail must keep roughly the room it had before the frozen budget grew")
+  }
+
+  func testAssembleIgnoresAVolatileStoredHeaderSoTheCachePrefixStaysStable() {
+    let snapshot = ContextBucketSnapshot(
+      bucketID: "bucket", versionID: 41, version: 41,
+      header: "41 qualifying visits.",
+      frozenRankedSegment: Data("- entry:one narrative\n".utf8),
+      tail: ["entry:two narrative"],
+      validatedFacts: ["fact:one PR-123 is blocked"],
+      notifyWorthiness: 1,
+      visitCount: 41)
+    let assembled = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
+    XCTAssertTrue(assembled.contains(ContextBucketPromptAssembler.stableHeader))
+    XCTAssertFalse(
+      assembled.contains("41"),
+      "a stored header that still carries the visit count must not enter the assembled prefix")
+    XCTAssertFalse(
+      ContextProactivityPromptBuilder.directorStablePrompt(snapshot: snapshot).contains("41"))
   }
 
   private func task(

@@ -289,6 +289,16 @@ actor ContextProactivityEngine {
     }
     if candidatesEnabled {
       let tags = await store.workstreamTags(for: snapshot.bucketID)
+      if !tags.isEmpty {
+        // Lookup is cross-bucket by durable assignment; bucket-scoped delivery
+        // memory would re-send a sibling's already-shown point.
+        let assignedDeliveries = await store.recentDeliveredForAssignedWorkstreams(
+          tags: tags, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime)
+        recentDeliveries = Array(
+          (recentDeliveries + assignedDeliveries)
+            .sorted { $0.deliveredAt > $1.deliveredAt }
+            .prefix(ContextBucketRecentDelivery.promptCap))
+      }
       let armed = await store.armedCandidates(
         bucketID: snapshot.bucketID, tags: tags, now: currentFrame.captureTime)
       // A candidate can sit armed for up to 12 hours; the fact(s) it was
@@ -296,13 +306,16 @@ actor ContextProactivityEngine {
       // been superseded. Revalidate every grounding id against the current
       // bucket_facts state before treating a candidate as deliverable, so a
       // decayed candidate falls through to the director instead of gating
-      // and presenting stale text with stale citations.
+      // and presenting stale text with stale citations. Decline the stale
+      // row so it cannot block the reconciler from writing a replacement.
       var grounded: [ContextProactiveCandidate] = []
       for candidate in armed {
         if await store.groundingFactIDsAreCurrentlyValid(
           candidate.groundingFactIDs, bucketID: candidate.bucketID, now: currentFrame.captureTime)
         {
           grounded.append(candidate)
+        } else {
+          await store.declineCandidate(id: candidate.id, now: currentFrame.captureTime)
         }
       }
       let recentMessages = recentDeliveries.compactMap(\.message)
@@ -805,6 +818,9 @@ actor ContextProactivityEngine {
           onDropped: { [weak self] in
             guard let self else { return }
             Task {
+              // Claimed at consume time; this callback means it was never shown.
+              await self.store.restoreCandidate(
+                id: candidate.id, now: currentFrame.captureTime)
               await self.terminalize(
                 deliveryID: deliveryID,
                 decisionType: "silence",
@@ -817,6 +833,7 @@ actor ContextProactivityEngine {
       case .presented, .queued:
         return
       case .suppressed, .windowUnavailable, .rejectedOwnerChange:
+        // onDropped already ran (and restores) for these refusal paths.
         return
       }
     } catch {

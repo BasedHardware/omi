@@ -236,6 +236,38 @@ final class ContextBucketSchemaTests: XCTestCase {
     XCTAssertEqual(remaining, ["live"])
   }
 
+  func testExpiredAndTerminalCandidatesAreDeletedByRetentionSweep() throws {
+    let queue = try migratedQueue()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO context_buckets (id, subjectKind, subjectID, createdAt, updatedAt)
+          VALUES ('bucket', 'task', 'task-1', ?, ?)
+          """,
+        arguments: [now, now])
+      for (id, state, expiry) in [
+        ("armed-live", "armed", now.addingTimeInterval(60)),
+        ("armed-expired", "armed", now.addingTimeInterval(-1)),
+        ("consumed", "consumed", now.addingTimeInterval(60)),
+      ] {
+        try db.execute(
+          sql: """
+            INSERT INTO proactive_candidates
+              (id, bucketID, message, groundingFactIDsJson, triggerNote, state,
+               createdAt, expiresAt)
+            VALUES (?, 'bucket', 'message', '[]', 'when relevant', ?, ?, ?)
+            """,
+          arguments: [id, state, now, expiry])
+      }
+      XCTAssertEqual(try ContextBucketSchema.deleteExpiredProactiveCandidates(in: db, now: now), 2)
+    }
+    let remaining = try queue.read { db in
+      try String.fetchAll(db, sql: "SELECT id FROM proactive_candidates ORDER BY id")
+    }
+    XCTAssertEqual(remaining, ["armed-live"])
+  }
+
   func testContextTablesAreExcludedFromAgentSync() {
     XCTAssertTrue(ContextBucketSchema.tableNames.isDisjoint(with: AgentSyncService.syncedTableNames))
   }

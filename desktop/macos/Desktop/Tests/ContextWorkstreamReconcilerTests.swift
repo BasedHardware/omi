@@ -164,29 +164,8 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
         triggerNote: "when relevant"),
     ]
     try queue.write { db in
-      // insertArmedCandidates itself only opens its own pool.write via the
-      // store; exercise the same guard logic directly against this queue.
-      var seen = Set<String>()
-      let groupByID = Dictionary(groups.map { ($0.bucketID, $0) }, uniquingKeysWith: { _, last in last })
-      for candidate in proposed {
-        let bucketID =
-          ContextWorkstreamTagging.resolveGroup(candidate.bucket, batchIDs: groups.map(\.bucketID))
-          ?? (groupByID[candidate.bucket] != nil ? candidate.bucket : nil)
-        guard let bucketID, !seen.contains(bucketID) else { continue }
-        let message = candidate.message.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty else { continue }
-        let cited = candidate.factIDs.map { $0.hasPrefix("fact:") ? String($0.dropFirst(5)) : $0 }
-          .filter { !$0.isEmpty }
-        let factIDs = try ContextProactiveCandidateWriter.validatedFactIDs(
-          cited, bucketID: bucketID, now: now, in: db)
-        guard !cited.isEmpty, Set(factIDs) == Set(cited) else { continue }
-        let trigger = candidate.triggerNote.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trigger.isEmpty else { continue }
-        seen.insert(bucketID)
-        try ContextProactiveCandidateWriter.insertArmed(
-          bucketID: bucketID, workstreamTag: nil, message: message, factIDs: factIDs,
-          triggerNote: trigger, now: now, in: db)
-      }
+      try ContextProactiveCandidateWriter.insertValidatedCandidates(
+        proposed, groups: groups, now: now, in: db)
     }
     let messages = try queue.read { db in
       try String.fetchAll(db, sql: "SELECT message FROM proactive_candidates WHERE bucketID = 'here'")
@@ -243,6 +222,124 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
     XCTAssertNotEqual(
       ContextPromptCacheKey.reconcilerTagging, ContextPromptCacheKey.reconcilerCandidates,
       "two different instruction blocks under one key would only evict each other")
+  }
+
+  func testInsertsSkipAGarbageCollectedBucketWithoutAbortingTheRestOfTheBatch() throws {
+    let queue = try migratedQueue()
+    try queue.write { db in
+      try seedBucket("kept", factCount: 3, newestOffset: 0, tagged: false, in: db)
+      try seedBucket("gone", factCount: 3, newestOffset: 0, tagged: false, in: db)
+      try db.execute(sql: "DELETE FROM context_buckets WHERE id = 'gone'")
+      try ContextWorkstreamTagging.insertAssignment(
+        bucketID: "gone", tag: "hermes", now: now, in: db)
+      try ContextWorkstreamTagging.insertAssignment(
+        bucketID: "kept", tag: "hermes", now: now, in: db)
+      try ContextProactiveCandidateWriter.insertArmed(
+        bucketID: "gone", workstreamTag: "hermes",
+        message: "should not land", factIDs: ["gone-0"], triggerNote: "when relevant",
+        now: now, in: db)
+      try ContextProactiveCandidateWriter.insertArmed(
+        bucketID: "kept", workstreamTag: "hermes",
+        message: "the Hermes PR still needs review", factIDs: ["kept-0"],
+        triggerNote: "when relevant", now: now, in: db)
+    }
+    let tags = try queue.read { db in
+      try String.fetchAll(db, sql: "SELECT tag FROM bucket_workstreams ORDER BY bucketID")
+    }
+    XCTAssertEqual(tags, ["hermes"])
+    let messages = try queue.read { db in
+      try String.fetchAll(db, sql: "SELECT message FROM proactive_candidates ORDER BY message")
+    }
+    XCTAssertEqual(messages, ["the Hermes PR still needs review"])
+  }
+
+  func testDeletingABucketCascadesWorkstreamAndCandidateRows() throws {
+    let queue = try migratedQueue()
+    try queue.write { db in
+      try seedBucket("here", factCount: 1, newestOffset: 0, tagged: true, in: db)
+      try insertCandidate(
+        id: "live", bucketID: "here", tag: "hermes", message: "message", createdAt: now, in: db)
+      try db.execute(sql: "DELETE FROM context_buckets WHERE id = 'here'")
+    }
+    let leftover = try queue.read { db in
+      (
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM bucket_workstreams") ?? -1,
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM proactive_candidates") ?? -1
+      )
+    }
+    XCTAssertEqual(leftover.0, 0, "workstream rows must cascade with the bucket")
+    XCTAssertEqual(leftover.1, 0, "candidate rows must cascade with the bucket")
+  }
+
+  func testHasArmedCandidateIgnoresACandidateWhoseGroundingIsNoLongerValid() throws {
+    let queue = try migratedQueue()
+    try queue.write { db in
+      try seedBucket("here", factCount: 1, newestOffset: 0, tagged: false, in: db)
+      try insertCandidate(
+        id: "stale", bucketID: "here", tag: nil, message: "message", createdAt: now, in: db)
+      try db.execute(
+        sql: "UPDATE proactive_candidates SET groundingFactIDsJson = '[\"here-0\"]' WHERE id = 'stale'")
+      XCTAssertTrue(
+        try ContextProactiveCandidateWriter.hasArmedCandidate(bucketID: "here", now: now, in: db))
+      try db.execute(sql: "UPDATE bucket_facts SET validityState = 'rejected' WHERE id = 'here-0'")
+      XCTAssertFalse(
+        try ContextProactiveCandidateWriter.hasArmedCandidate(bucketID: "here", now: now, in: db),
+        "an ungrounded armed row must not block the reconciler from writing a replacement")
+    }
+  }
+
+  func testRestoreReArmsAConsumedCandidateAndRefusesAnExpiredOne() throws {
+    let queue = try migratedQueue()
+    try queue.write { db in
+      try seedBucket("here", factCount: 1, newestOffset: 0, tagged: false, in: db)
+      try insertCandidate(
+        id: "live", bucketID: "here", tag: nil, message: "message", createdAt: now, in: db)
+      XCTAssertTrue(try ContextProactiveCandidateLookup.consume(id: "live", now: now, in: db))
+      XCTAssertTrue(try ContextProactiveCandidateLookup.restore(id: "live", now: now, in: db))
+      XCTAssertEqual(
+        try String.fetchOne(db, sql: "SELECT state FROM proactive_candidates WHERE id = 'live'"),
+        "armed")
+      XCTAssertTrue(try ContextProactiveCandidateLookup.consume(id: "live", now: now, in: db))
+
+      try insertCandidate(
+        id: "stale", bucketID: "here", tag: nil, message: "message",
+        createdAt: now.addingTimeInterval(-13 * 60 * 60), in: db)
+      try db.execute(
+        sql: "UPDATE proactive_candidates SET state = 'consumed', consumedAt = ?, expiresAt = ? WHERE id = 'stale'",
+        arguments: [now.addingTimeInterval(-60), now.addingTimeInterval(-60)])
+      XCTAssertFalse(try ContextProactiveCandidateLookup.restore(id: "stale", now: now, in: db))
+    }
+  }
+
+  func testAssignedTagDeliveryMemorySeesASiblingBucketsDeliveredMessage() throws {
+    let queue = try migratedQueue()
+    try queue.write { db in
+      try seedBucket("here", factCount: 1, newestOffset: 0, tagged: true, in: db)
+      try seedBucket("other", factCount: 1, newestOffset: 0, tagged: true, in: db)
+      try db.execute(
+        sql: """
+          INSERT INTO proactive_deliveries
+            (id, bucketID, decisionType, lifecycleState, provenanceJson, message,
+             attemptedAt, deliveredAt, expiresAt, createdAt)
+          VALUES ('d1', 'other', 'insight', 'delivered', '{}', 'the Hermes PR still needs review',
+                  ?, ?, ?, ?)
+          """,
+        arguments: [now, now, now.addingTimeInterval(30 * 24 * 60 * 60), now])
+    }
+    let sibling = try queue.read { db in
+      try ContextProactiveCandidateLookup.recentDeliveredForAssignedTags(
+        tags: ["hermes"], excludingBucketID: "here", now: now, limit: 15, in: db)
+    }
+    XCTAssertEqual(sibling.map(\.message), ["the Hermes PR still needs review"])
+    let bucketHit = ContextProactiveCandidate(
+      id: "dup", bucketID: "other", workstreamTag: "hermes",
+      message: "the Hermes PR still needs review",
+      groundingFactIDsJson: "[\"f1\"]", triggerNote: "when the PR is open",
+      state: "armed", createdAt: now, expiresAt: now.addingTimeInterval(60), consumedAt: nil)
+    XCTAssertNil(
+      ContextProactiveCandidateLookup.firstDeliverable(
+        candidates: [bucketHit], recentMessages: sibling.compactMap(\.message)),
+      "a workstream-matched candidate must not re-send a sibling bucket's delivered point")
   }
 
   func testConsumeAndDeclineRejectACandidateThatHasAlreadyExpired() throws {

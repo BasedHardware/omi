@@ -161,7 +161,11 @@ enum ContextBucketPromptAssembler {
   /// block rather than the end. The frozen segment above them is the part that
   /// is stable unconditionally, and it is the part that was made large.
   static func assemble(_ snapshot: ContextBucketSnapshot) -> Data {
-    var data = Data(("== BUCKET HEADER ==\n" + snapshot.header + "\n== FROZEN RANKED CONTEXT ==\n").utf8)
+    // Always the constant header, never `snapshot.header`: versions published
+    // before this change stored a per-visit counter in that column, and putting
+    // those bytes back above the frozen segment would keep the cache prefix
+    // uncacheable until every bucket republished.
+    var data = Data(("== BUCKET HEADER ==\n" + stableHeader + "\n== FROZEN RANKED CONTEXT ==\n").utf8)
     // This exact byte segment is the stable cache prefix. Never decode/re-encode it.
     data.append(snapshot.frozenRankedSegment)
     let totalByteBudget = injectionTokenBudget * 4
@@ -758,6 +762,11 @@ enum ContextBucketPurger {
           arguments: [bucketID])
         try db.execute(
           sql: "DELETE FROM proactive_deliveries WHERE bucketID = ?", arguments: [bucketID])
+        // Candidate messages quote this bucket's facts. Leaving them armed
+        // after a privacy purge would keep excluded-app prose in the database
+        // and on the next delivery path.
+        try db.execute(
+          sql: "DELETE FROM proactive_candidates WHERE bucketID = ?", arguments: [bucketID])
         // Recompute visit metadata from surviving completed visits so the
         // bucket no longer reports deleted activity as recent or count it.
         let survivingCount =

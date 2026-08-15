@@ -319,6 +319,11 @@ enum ContextWorkstreamTagging {
   static func insertAssignment(
     bucketID: String, tag: String, now: Date, in db: Database
   ) throws {
+    // The reconciler's batch was selected on a read snapshot. Deterministic GC
+    // can delete a bucket before this write runs; inserting against a missing
+    // parent is a foreign-key abort that would roll back every other
+    // assignment in the same transaction.
+    guard try bucketExists(bucketID, in: db) else { return }
     try db.execute(
       sql: """
         INSERT OR IGNORE INTO bucket_workstreams
@@ -326,6 +331,12 @@ enum ContextWorkstreamTagging {
         VALUES (?, ?, ?, 'reconciler', ?)
         """,
       arguments: [UUID().uuidString.lowercased(), bucketID, tag, now])
+  }
+
+  static func bucketExists(_ bucketID: String, in db: Database) throws -> Bool {
+    try Bool.fetchOne(
+      db, sql: "SELECT EXISTS(SELECT 1 FROM context_buckets WHERE id = ?)", arguments: [bucketID]
+    ) ?? false
   }
 
   static func existingTags(in db: Database) throws -> Set<String> {
@@ -410,15 +421,66 @@ enum ContextProactiveCandidateWriter {
   }
 
   static func hasArmedCandidate(bucketID: String, now: Date, in db: Database) throws -> Bool {
-    try Bool.fetchOne(
-      db,
-      sql: """
-        SELECT EXISTS(
-          SELECT 1 FROM proactive_candidates
-          WHERE bucketID = ? AND state = 'armed' AND expiresAt > ?
-        )
-        """,
-      arguments: [bucketID, now]) ?? false
+    let armed = try ContextProactiveCandidateLookup.lookupArmed(
+      bucketID: bucketID, tags: [], now: now, in: db)
+    for candidate in armed {
+      let ids = candidate.groundingFactIDs
+      guard !ids.isEmpty else { continue }
+      let valid = try validatedFactIDs(ids, bucketID: bucketID, now: now, in: db)
+      if Set(valid) == Set(ids) { return true }
+    }
+    return false
+  }
+
+  static func insertValidatedCandidates(
+    _ proposed: [Response.Candidate],
+    groups: [ContextWorkstreamReconcileGroup],
+    now: Date,
+    in db: Database
+  ) throws {
+    var seen = Set<String>()
+    for candidate in proposed {
+      _ = try insertValidatedCandidate(
+        candidate, groups: groups, seen: &seen, now: now, in: db)
+    }
+  }
+
+  /// Validates one model-proposed candidate and, if it is the first valid one
+  /// for its bucket in this response, writes it. `seen` is only marked after
+  /// every check succeeds, so an invalid earlier proposal cannot shadow a
+  /// later valid one for the same bucket.
+  @discardableResult
+  static func insertValidatedCandidate(
+    _ candidate: Response.Candidate,
+    groups: [ContextWorkstreamReconcileGroup],
+    seen: inout Set<String>,
+    now: Date,
+    in db: Database
+  ) throws -> Bool {
+    let groupByID = Dictionary(
+      groups.map { ($0.bucketID, $0) }, uniquingKeysWith: { _, last in last })
+    let bucketID =
+      ContextWorkstreamTagging.resolveGroup(candidate.bucket, batchIDs: groups.map(\.bucketID))
+      ?? (groupByID[candidate.bucket] != nil ? candidate.bucket : nil)
+    guard let bucketID, !seen.contains(bucketID) else { return false }
+    let message = candidate.message.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !message.isEmpty else { return false }
+    let cited = candidate.factIDs.map { $0.hasPrefix("fact:") ? String($0.dropFirst(5)) : $0 }
+      .filter { !$0.isEmpty }
+    let factIDs = try validatedFactIDs(cited, bucketID: bucketID, now: now, in: db)
+    guard !cited.isEmpty, Set(factIDs) == Set(cited) else { return false }
+    let trigger = candidate.triggerNote.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trigger.isEmpty else { return false }
+    seen.insert(bucketID)
+    try insertArmed(
+      bucketID: bucketID,
+      workstreamTag: groupByID[bucketID]?.workstreamTag,
+      message: String(message.prefix(600)),
+      factIDs: factIDs,
+      triggerNote: String(trigger.prefix(300)),
+      now: now,
+      in: db)
+    return true
   }
 
   static func insertArmed(
@@ -430,6 +492,7 @@ enum ContextProactiveCandidateWriter {
     now: Date,
     in db: Database
   ) throws {
+    guard try ContextWorkstreamTagging.bucketExists(bucketID, in: db) else { return }
     let data = try JSONEncoder().encode(factIDs)
     let json = String(data: data, encoding: .utf8) ?? "[]"
     try db.execute(
@@ -520,6 +583,58 @@ enum ContextProactiveCandidateLookup {
         """,
       arguments: [now, id, now])
     return db.changesCount > 0
+  }
+
+  /// Re-arms a candidate that was claimed for presentation but never shown.
+  /// `onDropped` is the only caller: it fires for sync refusals and for a
+  /// queued card that is later evicted, and it does not fire after
+  /// `onPresented` (those callbacks are consumed at present time).
+  @discardableResult
+  static func restore(id: String, now: Date, in db: Database) throws -> Bool {
+    try db.execute(
+      sql: """
+        UPDATE proactive_candidates
+        SET state = 'armed', consumedAt = NULL
+        WHERE id = ? AND state = 'consumed' AND expiresAt > ?
+        """,
+      arguments: [id, now])
+    return db.changesCount > 0
+  }
+
+  /// Sibling-bucket deliveries for durable workstream assignments. Lookup can
+  /// return a candidate written against another bucket that shares a tag, so
+  /// dedup must see those buckets' delivered messages too — `bucket_facts.workstreamTag`
+  /// is dormant and cannot be this source.
+  static func recentDeliveredForAssignedTags(
+    tags: [String],
+    excludingBucketID: String,
+    now: Date,
+    limit: Int,
+    in db: Database
+  ) throws -> [ContextBucketRecentDelivery] {
+    let cap = max(0, min(limit, ContextBucketRecentDelivery.promptCap))
+    guard !tags.isEmpty, cap > 0 else { return [] }
+    let placeholders = tags.map { _ in "?" }.joined(separator: ",")
+    var arguments: StatementArguments = [excludingBucketID]
+    arguments += StatementArguments(tags)
+    // Annotated: a mixed [Date, Int] literal is ambiguous to the type checker.
+    let cutoff = now.addingTimeInterval(-ContextBucketRecentDelivery.memoryLookback)
+    arguments += StatementArguments([cutoff, cap] as [any DatabaseValueConvertible])
+    return try ContextBucketRecentDelivery.fetchAll(
+      db,
+      sql: """
+        SELECT decisionType, message, deliveredAt FROM proactive_deliveries
+        WHERE bucketID <> ?
+          AND bucketID IN (
+            SELECT DISTINCT bucketID FROM bucket_workstreams WHERE tag IN (\(placeholders))
+          )
+          AND lifecycleState = 'delivered'
+          AND deliveredAt IS NOT NULL
+          AND deliveredAt >= ?
+        ORDER BY deliveredAt DESC
+        LIMIT ?
+        """,
+      arguments: arguments)
   }
 
   static func expireStale(now: Date, in db: Database) throws {

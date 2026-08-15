@@ -585,6 +585,31 @@ actor ContextBucketStore {
       }) ?? false
   }
 
+  @discardableResult
+  func restoreCandidate(id: String, now: Date = Date()) async -> Bool {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return false }
+    return
+      (try? await pool.write { db in
+        try ContextProactiveCandidateLookup.restore(id: id, now: now, in: db)
+      }) ?? false
+  }
+
+  func recentDeliveredForAssignedWorkstreams(
+    tags: [String],
+    excludingBucketID: String,
+    now: Date = Date(),
+    limit: Int = ContextBucketRecentDelivery.promptCap
+  ) async -> [ContextBucketRecentDelivery] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    return
+      (try? await pool.read { db in
+        try ContextProactiveCandidateLookup.recentDeliveredForAssignedTags(
+          tags: tags, excludingBucketID: excludingBucketID, now: now, limit: limit, in: db)
+      }) ?? []
+  }
+
   /// Whether every grounding fact behind an armed candidate is still
   /// validated and unexpired. A candidate can sit armed for up to 12 hours;
   /// the fact(s) it cited at write time may since have expired or been
@@ -724,39 +749,9 @@ actor ContextBucketStore {
     guard !proposed.isEmpty else { return }
     let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
-    // `let` so the write closure can capture it: a `var` is not Sendable.
-    let groupByID = Dictionary(groups.map { ($0.bucketID, $0) }, uniquingKeysWith: { _, last in last })
     try await pool.write { db in
-      var seen = Set<String>()
-      for candidate in proposed {
-        let bucketID =
-          ContextWorkstreamTagging.resolveGroup(
-            candidate.bucket, batchIDs: groups.map(\.bucketID))
-          ?? (groupByID[candidate.bucket] != nil ? candidate.bucket : nil)
-        // Membership is checked (not claimed) here: an earlier invalid
-        // candidate for this bucket must not block a later valid one, so
-        // `seen` is only marked once every validation below has passed.
-        guard let bucketID, !seen.contains(bucketID) else { continue }
-        let message = candidate.message.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty else { continue }
-        let cited = candidate.factIDs.map {
-          $0.hasPrefix("fact:") ? String($0.dropFirst(5)) : $0
-        }.filter { !$0.isEmpty }
-        let factIDs = try ContextProactiveCandidateWriter.validatedFactIDs(
-          cited, bucketID: bucketID, now: now, in: db)
-        guard !cited.isEmpty, Set(factIDs) == Set(cited) else { continue }
-        let trigger = candidate.triggerNote.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trigger.isEmpty else { continue }
-        seen.insert(bucketID)
-        try ContextProactiveCandidateWriter.insertArmed(
-          bucketID: bucketID,
-          workstreamTag: groupByID[bucketID]?.workstreamTag,
-          message: String(message.prefix(600)),
-          factIDs: factIDs,
-          triggerNote: String(trigger.prefix(300)),
-          now: now,
-          in: db)
-      }
+      try ContextProactiveCandidateWriter.insertValidatedCandidates(
+        proposed, groups: groups, now: now, in: db)
     }
   }
 
