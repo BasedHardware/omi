@@ -698,11 +698,28 @@ package final class InkGlassView: NSView {
 /// draw (see the cost table in this file's header) and ≈0.9 ms to mount, so this is a question about
 /// how the surface *looks*, not about frame rate; `glassFloatingBar` is the one caller that wants it,
 /// because a bar floating over scrolling content does need a material of its own.
+/// The backdrop's view, which also reports its extent as visible glass.
+///
+/// The registry (`InkGlassHitRegions`) reads live frames from views that are already mounted. It
+/// must never be fed a view of its own: a zero-drawing `NSViewRepresentable` added to the panel's
+/// background broke `ImageRenderer` output for the whole subtree, which is how the panel's corner
+/// clip regressed.
+package final class InkGlassBackdropView: NSVisualEffectView {
+  package override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    if window == nil {
+      InkGlassHitRegions.shared.unregister(self)
+    } else {
+      InkGlassHitRegions.shared.register(self)
+    }
+  }
+}
+
 package struct InkGlassBackdrop: NSViewRepresentable {
   package init() {}
 
-  package func makeNSView(context: Context) -> NSVisualEffectView {
-    let view = NSVisualEffectView()
+  package func makeNSView(context: Context) -> InkGlassBackdropView {
+    let view = InkGlassBackdropView()
     view.material = InkGlass.material
     view.blendingMode = .behindWindow
     view.state = .active
@@ -710,7 +727,7 @@ package struct InkGlassBackdrop: NSViewRepresentable {
     return view
   }
 
-  package func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+  package func updateNSView(_ view: InkGlassBackdropView, context: Context) {}
 }
 
 /// The whole panel — material, scrim, corner, edge — as one SwiftUI view, for a caller that wants to
@@ -765,9 +782,6 @@ package struct InkGlassPanelModifier: ViewModifier {
     content
       .environment(\.colorScheme, .light)
       .clipShape(shape)
-      // Report the panel's extent as interactive content regardless of Reduce Transparency: the
-      // material may be replaced by a flat wash, but the surface still owns the pointer.
-      .background(InkGlassHitRegionReporter())
       .background {
         ZStack(alignment: .top) {
           if InkGlass.showsMaterial(reduceTransparency: reduceTransparency) {

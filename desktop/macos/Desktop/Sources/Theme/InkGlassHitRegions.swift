@@ -37,6 +37,19 @@ package final class InkGlassHitRegions {
     views.remove(view)
   }
 
+  /// Whether `window` has any registered surface at all. A window with none has nothing to judge
+  /// a click against, so its caller must keep the window interactive rather than turn the whole
+  /// thing into a pass-through hole (Reduce Transparency mounts no backdrop).
+  package func hasSurfaces(in window: NSWindow) -> Bool {
+    surfaceCount(in: window) > 0
+  }
+
+  /// Registered, visible surfaces for `window`. Exposed so the `debug_hit_probe` bridge action can
+  /// say whether a pass-through verdict came from the geometry or from the empty-registry fallback.
+  package func surfaceCount(in window: NSWindow) -> Int {
+    views.allObjects.filter { $0.window === window && !$0.isHiddenOrHasHiddenAncestor }.count
+  }
+
   /// Whether `pointInWindow` (window base coordinates, bottom-left origin) lies on any visible
   /// registered surface belonging to `window`.
   package func containsPoint(_ pointInWindow: NSPoint, in window: NSWindow) -> Bool {
