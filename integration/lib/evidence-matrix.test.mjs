@@ -13,6 +13,7 @@ import {
   PRODUCER_EVIDENCE_SCHEMA,
   SERVICE_BASE_URL,
   SERVICE_EXECUTABLE,
+  isAllowedServiceBaseUrl,
   SERVICE_READINESS_SCHEMA,
   SHELLS,
   arbitrateEvidence,
@@ -317,6 +318,39 @@ test("RED-PROOF unknown service launcher executable cannot satisfy readiness", (
   );
   assert.equal(result.ok, false);
   assert.match(result.failures.join("\n"), /unknown launcher executable/);
+});
+
+test("RED-PROOF readiness accepts a live app-facing test lease and refuses any other origin", () => {
+  const databasePath = "/tmp/run/service.sqlite";
+  const healthy = {
+    schema: SERVICE_READINESS_SCHEMA,
+    runId: RUN,
+    executable: SERVICE_EXECUTABLE,
+    baseUrl: SERVICE_BASE_URL,
+    databasePath,
+    pid: 123,
+    evidencePath: "/v1/qa/evidence",
+    devToken: "local-only-token",
+    ownerAccountId: "local-fixture-owner",
+  };
+  assert.equal(isAllowedServiceBaseUrl(SERVICE_BASE_URL), true);
+  assert.equal(isAllowedServiceBaseUrl("http://127.0.0.1:14851"), true);
+  assert.equal(isAllowedServiceBaseUrl("http://127.0.0.1:14870"), true);
+  assert.equal(isAllowedServiceBaseUrl("http://127.0.0.1:14850"), false);
+  assert.equal(isAllowedServiceBaseUrl("http://127.0.0.1:3000"), false);
+  assert.equal(validateServiceReadiness({ ...healthy, baseUrl: "http://127.0.0.1:14851" }, { runId: RUN, databasePath, pid: 123 }).ok, true);
+  const refused = validateServiceReadiness(
+    { ...healthy, baseUrl: "http://127.0.0.1:14851" },
+    { runId: RUN, databasePath, pid: 123, baseUrl: SERVICE_BASE_URL },
+  );
+  assert.equal(refused.ok, false);
+  assert.match(refused.failures.join("\n"), /service readiness baseUrl must be http:\/\/127\.0\.0\.1:4851/);
+  const foreign = validateServiceReadiness(
+    { ...healthy, baseUrl: "http://127.0.0.1:3000" },
+    { runId: RUN, databasePath, pid: 123 },
+  );
+  assert.equal(foreign.ok, false);
+  assert.match(foreign.failures.join("\n"), /production 4851 origin or a live app-facing test lease/);
 });
 
 test("RED-PROOF a foreign readiness PID cannot stand in for the launched service", () => {

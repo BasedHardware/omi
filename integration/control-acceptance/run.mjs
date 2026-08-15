@@ -9,7 +9,7 @@
 // usage: node integration/control-acceptance/run.mjs
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,9 +26,9 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PLATFORM_ROOT = join(HERE, "..", "..");
 const DRIVER_PATH = join(HERE, "driver.js");
-const SERVICE_URL = "http://127.0.0.1:4851";
-const GATEWAY_TEST = "http://127.0.0.1:8788";
-const GATEWAY_REAL = "http://127.0.0.1:8791";
+const PRODUCTION_SERVICE_URL = "http://127.0.0.1:4851";
+const PRODUCTION_GATEWAY_TEST = "http://127.0.0.1:8788";
+const PRODUCTION_GATEWAY_REAL = "http://127.0.0.1:8791";
 const APP_NAME = "omi-on-control-acceptance";
 
 function fail(message, code = 1) {
@@ -67,11 +67,12 @@ if (process.argv.includes("--help") || process.argv.includes("-h")) {
       "CONTROL-ACCEPTANCE status=PASS|FAIL.",
       "",
       "--screen-proof  only the Rewind capture control + omiScreenBridge round",
-      "                trip. Does not send Chat. Use this when 4851 is already",
-      "                serving and the canned gateway is not paired with it.",
+      "                trip. Does not send Chat. Use this when the local service",
+      "                is already serving and the canned gateway is not paired with it.",
       "",
-      "OMI_CHAT_MODEL=real uses the local real-model proxy on 8791; default is",
-      "the canned gateway on 8788. Never points at api.omi.me.",
+      "OMI_CHAT_MODEL=real uses the local real-model proxy; default is the canned",
+      "gateway. A full run always boots a leased stack so it does not contend",
+      "with a long-lived 4851 holder. Never points at api.omi.me.",
     ].join("\n") + "\n",
   );
   process.exit(0);
@@ -86,26 +87,16 @@ switch (process.env.OMI_CHAT_MODEL ?? "") {
     fail("ERROR: OMI_CHAT_MODEL must be unset, test, or real.", 2);
 }
 
-const gatewayUrl = process.env.OMI_CHAT_MODEL === "real" ? GATEWAY_REAL : GATEWAY_TEST;
-if (SERVICE_URL.includes("api.omi.me") || gatewayUrl.includes("api.omi.me")) {
+const gatewayUrl = process.env.OMI_CHAT_MODEL === "real" ? PRODUCTION_GATEWAY_REAL : PRODUCTION_GATEWAY_TEST;
+if (PRODUCTION_SERVICE_URL.includes("api.omi.me") || gatewayUrl.includes("api.omi.me")) {
   fail("ERROR: refusing a production origin.", 2);
 }
 
-const serviceUp = serving(SERVICE_URL);
-const gatewayUp = serving(gatewayUrl);
-const realProxyUp = serving(GATEWAY_REAL);
-if (!SCREEN_PROOF && process.env.OMI_CHAT_MODEL !== "real" && realProxyUp) {
-  fail(
-    "ERROR: real-model proxy is bound on 8791 while OMI_CHAT_MODEL is not real. Stop that stack or set OMI_CHAT_MODEL=real.",
-  );
-}
-if (!SCREEN_PROOF && serviceUp !== gatewayUp) {
-  fail(
-    `ERROR: partial stack (service ${serviceUp ? "up" : "down"}, gateway ${gatewayUp ? "up" : "down"}). Stop it with integration/dev-stack.sh --stop`,
-  );
-}
-if (SCREEN_PROOF && !serviceUp) {
-  fail("ERROR: --screen-proof needs a reachable local service on 4851.");
+if (SCREEN_PROOF) {
+  const serviceUp = serving(PRODUCTION_SERVICE_URL);
+  if (!serviceUp) {
+    fail("ERROR: --screen-proof needs a reachable local service on 4851.");
+  }
 }
 
 const runDir = mkdtempSync(join(tmpdir(), "omi-control-acceptance-"));
@@ -125,8 +116,10 @@ process.on("SIGINT", () => {
   process.exit(130);
 });
 
-if (!SCREEN_PROOF && !serviceUp && !gatewayUp) {
-  const up = spawnSync(stack, ["--up"], {
+if (!SCREEN_PROOF) {
+  // Verification never attaches to 4851/8788/8791. Those ports are the
+  // long-lived human stack; a listener there is not this run. A real-model proxy is bound on 8791 only for someone else's stack, not this leased boot.
+  const up = spawnSync(stack, ["--up", "--lease"], {
     cwd: PLATFORM_ROOT,
     env: { ...process.env, OMI_SEED_PERSONA: "demo", OMI_DEV_STACK_RUNDIR: runDir },
     stdio: "inherit",
@@ -140,13 +133,29 @@ const ownerPath = booted
   : join(process.env.OMI_DEV_STACK_RUNDIR || "/tmp/omi-dev-stack", "service-owner.json");
 
 let token = "";
+let serviceUrl = PRODUCTION_SERVICE_URL;
+let surfacePort = "5290";
 try {
   const owner = JSON.parse(readFileSync(ownerPath, "utf8"));
   const ready = JSON.parse(readFileSync(owner.readinessPath, "utf8"));
   if (typeof ready.devToken !== "string" || ready.devToken.length === 0) throw new Error("empty");
   token = ready.devToken;
+  if (typeof ready.baseUrl === "string" && ready.baseUrl.startsWith("http://127.0.0.1:")) {
+    serviceUrl = ready.baseUrl;
+  }
 } catch {
   fail("ERROR: stack owner record did not yield a readiness token.");
+}
+const leasePath = join(dirname(ownerPath), "port-lease.json");
+if (existsSync(leasePath)) {
+  try {
+    const lease = JSON.parse(readFileSync(leasePath, "utf8"));
+    if (typeof lease?.urls?.service === "string") serviceUrl = lease.urls.service;
+    // macOS origin stays 5290: the launcher pin is sibling-owned. A leased
+    // surface port here would be a silent drift, not a concurrent stack.
+  } catch {
+    fail("ERROR: stack port lease record is unreadable.");
+  }
 }
 
 // Newlines stay intact: execve carries them through the launcher untouched,
@@ -155,8 +164,8 @@ const driver = buildDriverSource(readFileSync(DRIVER_PATH, "utf8"), { screenProo
 const childEnv = {
   ...process.env,
   OMI_API_TOKEN: token,
-  OMI_API_BASE_URL: SERVICE_URL,
-  OMI_SURFACE_PORT: "5290",
+  OMI_API_BASE_URL: serviceUrl,
+  OMI_SURFACE_PORT: surfacePort,
   OMI_APP_NAME: APP_NAME,
   OMI_BUILD_DIR: buildDir,
   OMI_PROBE_JS: driver,
@@ -184,7 +193,7 @@ if (SCREEN_PROOF) {
 }
 
 const started = Date.now();
-const launched = spawnSync(launcher, ["--api", SERVICE_URL, "--route", "home"], {
+const launched = spawnSync(launcher, ["--api", serviceUrl, "--route", "home"], {
   cwd: dirname(launcher),
   env: childEnv,
   encoding: "utf8",

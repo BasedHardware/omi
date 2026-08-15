@@ -12,6 +12,7 @@ read -r CORE_REPO PLATFORM_REPO <<<"$(printf '%s' "$PATHS" | node -e '
 SERVICE_REL="apps/service/bin/dev-server.ts"
 SERVICE_LAUNCHER="$PLATFORM_REPO/$SERVICE_REL"
 SERVICE_URL="http://127.0.0.1:4851"
+SERVICE_PORT=4851
 GATEWAY_LAUNCHER="$HERE/local-test-gateway.mjs"
 GATEWAY_PORT=8788
 GATEWAY_TOKEN="local-test-gateway-token"
@@ -20,6 +21,7 @@ MODEL_GATEWAY_LAUNCHER="$HERE/local-model-gateway.mjs"
 MODEL_GATEWAY_PORT=8791
 GATEWAY_SCRIPT_NEEDLE="local-test-gateway.mjs"
 MACOS_ORIGIN="http://127.0.0.1:5290"
+SURFACE_PORT=5290
 SURFACES="$CORE_REPO/frontend/packages/surfaces"
 MACOS_LAUNCHER="$CORE_REPO/frontend/shells/macos/scripts/dev-run-macos.sh"
 IOS_LAUNCHER="$CORE_REPO/frontend/shells/ios/scripts/dev-run-ios.sh"
@@ -27,7 +29,7 @@ OWNER_TOOL="$HERE/lib/process-owner.mjs"
 LOG_SANITIZER="$HERE/lib/sanitize-log.mjs"
 ARTIFACT_GUARD="$HERE/lib/artifact-safety.mjs"
 
-MODE_ASSERT=0 MODE_JSON=0 MODE_UP=0 STOP_ONLY=0 DOCTOR_ONLY=0
+MODE_ASSERT=0 MODE_JSON=0 MODE_UP=0 STOP_ONLY=0 DOCTOR_ONLY=0 LEASE_MODE=0
 DEVICE=""
 REQUESTED_RUN_ID=""
 RED_PROOF=""
@@ -40,10 +42,11 @@ while (( $# )); do
     --doctor) DOCTOR_ONLY=1; shift ;;
     --device) DEVICE="${2:?--device needs a simulator UDID}"; shift 2 ;;
     --run-id) REQUESTED_RUN_ID="${2:?--run-id needs a raw run id}"; shift 2 ;;
+    --lease) LEASE_MODE=1; shift ;;
     --red-proof) RED_PROOF="${2:?--red-proof needs stale-dist|dead-backend|generation-mismatch}"; shift 2 ;;
     --help|-h)
       sed -n '2,8p' "$0"
-      printf '%s\n' "usage: integration/dev-stack.sh [--run-id <raw-id>] [--device <udid>] [--assert] [--json] [--up|--stop]"
+      printf '%s\n' "usage: integration/dev-stack.sh [--run-id <raw-id>] [--device <udid>] [--lease] [--assert] [--json] [--up|--stop]"
       exit 0
       ;;
     *) echo "ERROR: unknown option $1" >&2; exit 2 ;;
@@ -54,7 +57,7 @@ if (( MODE_UP && (MODE_ASSERT || MODE_JSON) )); then
   echo "ERROR: --up is service-only and cannot be combined with --assert or --json." >&2
   exit 2
 fi
-if (( STOP_ONLY && (MODE_UP || MODE_ASSERT || MODE_JSON) )); then
+if (( STOP_ONLY && (MODE_UP || MODE_ASSERT || MODE_JSON || LEASE_MODE) )); then
   echo "ERROR: --stop cannot be combined with a run mode." >&2
   exit 2
 fi
@@ -66,6 +69,11 @@ GATEWAY_PID_PATH="$RUNDIR/local-test-gateway.pid"
 GATEWAY_IDENTITY_FILE="$RUNDIR/local-test-gateway-start-identity"
 GATEWAY_PID=""
 GATEWAY_START_IDENTITY=""
+LEASE_HOLDER_PID_PATH="$RUNDIR/port-lease-holder.pid"
+LEASE_HOLDER_IDENTITY_FILE="$RUNDIR/port-lease-holder-start-identity"
+LEASE_HOLDER_PID=""
+LEASE_HOLDER_START_IDENTITY=""
+APP_FACING_LEASE=""
 mkdir -p "$RUNDIR"
 RUNTIME_LOG="$HERE/../apps/service/observability/runtime-log.ts"
 runtime_log() {
@@ -132,11 +140,23 @@ stop_owned_gateways() {
     "$RUNDIR/local-model-gateway-start-identity" "local-model-gateway.mjs"
 }
 
+stop_lease_holder() {
+  if [[ "${LEASE_HOLDER_PID:-}" =~ ^[0-9]+$ && -n "${LEASE_HOLDER_START_IDENTITY:-}" ]]; then
+    stop_gateway_process "$LEASE_HOLDER_PID" "$LEASE_HOLDER_START_IDENTITY" \
+      "stack-port-lease.ts" \
+      "${LEASE_HOLDER_PID_PATH:-}" "${LEASE_HOLDER_IDENTITY_FILE:-}"
+  fi
+  stop_gateway_record "$RUNDIR/port-lease-holder.pid" \
+    "$RUNDIR/port-lease-holder-start-identity" "stack-port-lease.ts"
+}
+
 if (( STOP_ONLY )); then
   runtime_log info dev-stack.stop
   stop_owned_gateways
   node "$OWNER_TOOL" stop --record "$OWNERFILE"
-  exit $?
+  stop_rc=$?
+  stop_lease_holder
+  exit "$stop_rc"
 fi
 if (( DOCTOR_ONLY )); then
   "$HERE/doctor.sh"
@@ -209,6 +229,7 @@ cleanup() {
       wait "$SERVICE_LOGGER_PID" 2>/dev/null || true
     fi
   fi
+  stop_lease_holder
   [[ ! -p "$SERVICE_LOG_PIPE" ]] || rm -f -- "$SERVICE_LOG_PIPE"
   [[ ! -e "$SERVICE_LOG_READY" ]] || rm -f -- "$SERVICE_LOG_READY"
   # Keep failed-run diagnostics. Deleting the run dir on a successful stop used
@@ -251,35 +272,83 @@ fi
 node "$OWNER_TOOL" prepare --record "$OWNERFILE" >/dev/null || exit $?
 
 listener() { lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null || true; }
-occupied=0
-held="$(listener 4851)"
-if [[ -n "$held" ]]; then
-  echo "ERROR: required port 4851 is occupied; this harness will not kill it or start a second listener." >&2
-  printf '%s\n' "$held" >&2
-  occupied=1
-fi
-held="$(listener "$GATEWAY_PORT")"
-if [[ -n "$held" ]]; then
-  if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
-    echo "ERROR: required local model gateway port ${GATEWAY_PORT} is occupied; this harness will not kill it or start a second listener." >&2
-  else
-    echo "ERROR: required local test gateway port ${GATEWAY_PORT} is occupied; this harness will not kill it or start a second listener." >&2
+if (( LEASE_MODE )); then
+  LEASE_FILE="$RUN_DIR/port-lease.json"
+  APP_FACING_LEASE="$RUN_DIR/app-facing-test-lease.json"
+  LEASE_ROLES="service,gateway"
+  GATEWAY_KIND="test"
+  if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then GATEWAY_KIND="real"; fi
+  rm -f -- "$LEASE_HOLDER_PID_PATH" "$LEASE_HOLDER_IDENTITY_FILE" "$LEASE_FILE" "$APP_FACING_LEASE"
+  hold_args=(hold --run-id "$RUN_ID" --out "$LEASE_FILE" --app-facing-lease "$APP_FACING_LEASE" \
+    --roles "$LEASE_ROLES" --gateway-kind "$GATEWAY_KIND")
+  if (( MODE_UP == 0 )); then hold_args+=(--parent-pid $$); fi
+  ( exec bun "$HERE/lib/stack-port-lease.ts" "${hold_args[@]}" ) >/dev/null 2>"$RUN_DIR/port-lease-holder.log" &
+  LEASE_HOLDER_PID=$!
+  LEASE_SNAPSHOT="$(node "$OWNER_TOOL" snapshot --pid "$LEASE_HOLDER_PID")" || exit $?
+  LEASE_HOLDER_START_IDENTITY="$(printf '%s' "$LEASE_SNAPSHOT" | node -e '
+    let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).startIdentity))')"
+  printf '%s\n' "$LEASE_HOLDER_PID" > "$LEASE_HOLDER_PID_PATH"
+  printf '%s\n' "$LEASE_HOLDER_START_IDENTITY" > "$LEASE_HOLDER_IDENTITY_FILE"
+  lease_ready=0
+  for _ in $(seq 1 80); do
+    if [[ -s "$LEASE_FILE" && -s "$APP_FACING_LEASE" ]]; then lease_ready=1; break; fi
+    kill -0 "$LEASE_HOLDER_PID" 2>/dev/null || break
+    sleep 0.05
+  done
+  if (( lease_ready == 0 )); then
+    echo "ERROR: could not acquire a run-scoped port lease." >&2
+    if [[ -s "$RUN_DIR/port-lease-holder.log" ]]; then cat "$RUN_DIR/port-lease-holder.log" >&2; fi
+    runtime_log warn dev-stack.refused --reason port_lease_failed
+    exit 1
   fi
-  printf '%s\n' "$held" >&2
-  occupied=1
-fi
-if (( MODE_UP == 0 )); then
-  held="$(listener 5290)"
+  SERVICE_PORT="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j.ports.service))' "$LEASE_FILE")"
+  GATEWAY_PORT="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j.ports.gateway))' "$LEASE_FILE")"
+  SERVICE_URL="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(j.urls.service)' "$LEASE_FILE")"
+  GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
+  printf 'lease service=%s gateway=%s\n' "$SERVICE_PORT" "$GATEWAY_PORT"
+  cp -f -- "$LEASE_FILE" "$RUNDIR/port-lease.json"
+  if (( MODE_UP == 0 )); then
+    # The macOS QA launcher pins 5290 (IndexedDB origin). That pin is
+    # sibling-owned under frontend/shells; this lane cannot lease it.
+    held="$(listener 5290)"
+    if [[ -n "$held" ]]; then
+      echo "ERROR: required port 5290 is occupied; this harness will not kill it or drift ports." >&2
+      printf '%s\n' "$held" >&2
+      runtime_log warn dev-stack.refused --reason port_occupied
+      exit 1
+    fi
+  fi
+else
+  occupied=0
+  held="$(listener 4851)"
   if [[ -n "$held" ]]; then
-    echo "ERROR: required port 5290 is occupied; this harness will not kill it or drift ports." >&2
+    echo "ERROR: required port 4851 is occupied; this harness will not kill it or start a second listener." >&2
     printf '%s\n' "$held" >&2
     occupied=1
   fi
+  held="$(listener "$GATEWAY_PORT")"
+  if [[ -n "$held" ]]; then
+    if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+      echo "ERROR: required local model gateway port ${GATEWAY_PORT} is occupied; this harness will not kill it or start a second listener." >&2
+    else
+      echo "ERROR: required local test gateway port ${GATEWAY_PORT} is occupied; this harness will not kill it or start a second listener." >&2
+    fi
+    printf '%s\n' "$held" >&2
+    occupied=1
+  fi
+  if (( MODE_UP == 0 )); then
+    held="$(listener 5290)"
+    if [[ -n "$held" ]]; then
+      echo "ERROR: required port 5290 is occupied; this harness will not kill it or drift ports." >&2
+      printf '%s\n' "$held" >&2
+      occupied=1
+    fi
+  fi
+  (( occupied == 0 )) || {
+    runtime_log warn dev-stack.refused --reason port_occupied
+    exit 1
+  }
 fi
-(( occupied == 0 )) || {
-  runtime_log warn dev-stack.refused --reason port_occupied
-  exit 1
-}
 
 printf 'run %s\n' "$RUN_ID"
 printf 'service %s with one run-scoped SQLite database\n' "$SERVICE_REL"
@@ -322,8 +391,12 @@ if (( gateway_ready == 0 )); then
   exit 1
 fi
 mkfifo "$SERVICE_LOG_PIPE" || { echo "ERROR: could not create the service log sanitizer pipe." >&2; exit 1; }
+service_args=("$SERVICE_REL")
+if (( LEASE_MODE )); then
+  service_args+=(--app-facing-test-lease "$APP_FACING_LEASE")
+fi
 ( cd "$PLATFORM_REPO" && \
-  OMI_PORT=4851 \
+  OMI_PORT="$SERVICE_PORT" \
   OMI_QA_DB="$DATABASE_PATH" \
   OMI_RUN_ID="$RUN_ID" \
   OMI_DEV_READY_RECORD="$READINESS_PATH" \
@@ -331,7 +404,7 @@ mkfifo "$SERVICE_LOG_PIPE" || { echo "ERROR: could not create the service log sa
   OMI_LLM_GATEWAY_URL="$GATEWAY_URL" \
   OMI_LLM_GATEWAY_SERVICE_TOKEN="$GATEWAY_TOKEN" \
   TZ=UTC \
-  exec bun "$SERVICE_REL" ) > "$SERVICE_LOG_PIPE" 2>&1 &
+  exec bun "${service_args[@]}" ) > "$SERVICE_LOG_PIPE" 2>&1 &
 SERVICE_PID=$!
 SERVICE_SNAPSHOT="$(node "$OWNER_TOOL" snapshot --pid "$SERVICE_PID")" || exit $?
 SERVICE_START_IDENTITY="$(printf '%s' "$SERVICE_SNAPSHOT" | node -e '
@@ -359,7 +432,7 @@ fi
 rm -f -- "$TOKEN_PATH"
 node "$HERE/lib/evidence-cli.mjs" validate-readiness \
   --record "$READINESS_PATH" --run-id "$RUN_ID" --database "$DATABASE_PATH" \
-  --pid "$SERVICE_PID" --token-out "$TOKEN_PATH" >/dev/null || exit $?
+  --pid "$SERVICE_PID" --token-out "$TOKEN_PATH" --base-url "$SERVICE_URL" >/dev/null || exit $?
 DEV_TOKEN="$(read -r value < "$TOKEN_PATH"; printf '%s' "$value")"
 rm -f -- "$TOKEN_PATH"
 [[ -n "$DEV_TOKEN" ]] || { echo "ERROR: readiness record supplied no dev token." >&2; exit 1; }
@@ -435,7 +508,7 @@ SURFACE_TREE="$(node -e '
 
 MACOS_RAW="$LOG_DIR/macos.raw.log"
 OMI_API_TOKEN="$DEV_TOKEN" \
-OMI_SURFACE_PORT=5290 \
+OMI_SURFACE_PORT="$SURFACE_PORT" \
 OMI_SURFACES_DIST="$SURFACES/dist" \
 OMI_BUILD_DIR="$RUN_DIR/macos-build" \
 OMI_APP_NAME="omi-on-single-service-evidence" \

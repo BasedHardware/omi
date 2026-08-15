@@ -5,10 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "bun:test";
 
+import { acquireAppFacingTestLease, writeAppFacingTestLeaseFile } from "../net/test-allocation";
 import type { QaProducerEvidenceDocument } from "../observability/producer-evidence";
 
-const PORT = 4851;
-const BASE_URL = `http://127.0.0.1:${PORT}`;
 const RUN = "run-dev-server-subprocess-proof";
 
 interface Readiness {
@@ -36,12 +35,29 @@ const spawnService = async (
   databasePath: string,
   readinessPath: string,
   extraEnv: Record<string, string> = {},
-): Promise<{ readonly child: Bun.Subprocess; readonly readiness: Readiness }> => {
-  const child = Bun.spawn([process.execPath, "apps/service/bin/dev-server.ts"], {
+): Promise<{
+  readonly child: Bun.Subprocess;
+  readonly readiness: Readiness;
+  readonly baseUrl: string;
+  readonly port: number;
+  readonly releaseLease: () => void;
+}> => {
+  const leaseDir = mkdtempSync(join(tmpdir(), "omi-dev-server-lease-"));
+  const lease = acquireAppFacingTestLease({ runId: RUN });
+  const leasePath = join(leaseDir, "app-facing-test-lease.json");
+  writeAppFacingTestLeaseFile(leasePath, lease);
+  const port = lease.port;
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const child = Bun.spawn([
+    process.execPath,
+    "apps/service/bin/dev-server.ts",
+    "--app-facing-test-lease",
+    leasePath,
+  ], {
     cwd: process.cwd(),
     env: {
       ...process.env,
-      OMI_PORT: String(PORT),
+      OMI_PORT: String(port),
       OMI_QA_DB: databasePath,
       OMI_RUN_ID: RUN,
       OMI_DEV_READY_RECORD: readinessPath,
@@ -58,7 +74,7 @@ const spawnService = async (
     await waitUntil(async () => {
       if (!existsSync(readinessPath)) return false;
       try {
-        return (await fetch(`${BASE_URL}/ready`)).status === 200;
+        return (await fetch(`${baseUrl}/ready`)).status === 200;
       } catch {
         return false;
       }
@@ -66,11 +82,19 @@ const spawnService = async (
   } catch (error) {
     const stderr = await new Response(child.stderr).text();
     child.kill("SIGTERM");
+    lease.release();
+    rmSync(leaseDir, { recursive: true, force: true });
     throw new Error(`${String(error)}; dev-server stderr: ${stderr}`);
   }
   return {
     child,
     readiness: JSON.parse(readFileSync(readinessPath, "utf8")) as Readiness,
+    baseUrl,
+    port,
+    releaseLease: () => {
+      lease.release();
+      rmSync(leaseDir, { recursive: true, force: true });
+    },
   };
 };
 
@@ -89,17 +113,18 @@ const authorizedHeaders = (
 });
 
 const postJson = (
+  baseUrl: string,
   path: string,
   token: string,
   body: unknown,
   shell: "macos" | "ios" = "macos",
-): Promise<Response> => fetch(`${BASE_URL}${path}`, {
+): Promise<Response> => fetch(`${baseUrl}${path}`, {
   method: "POST",
   headers: authorizedHeaders(token, shell),
   body: JSON.stringify(body),
 });
 
-const cutOverTasks = async (token: string): Promise<void> => {
+const cutOverTasks = async (baseUrl: string, token: string): Promise<void> => {
   for (const body of [
     {
       control_revision: 1,
@@ -123,9 +148,9 @@ const cutOverTasks = async (token: string): Promise<void> => {
       deletion_epoch: null,
     },
   ]) {
-    expect((await postJson("/v1/qa/control/observe", token, body)).status).toBe(200);
+    expect((await postJson(baseUrl, "/v1/qa/control/observe", token, body)).status).toBe(200);
   }
-  expect((await postJson("/v1/qa/control/activate", token, {
+  expect((await postJson(baseUrl, "/v1/qa/control/activate", token, {
     epoch: 7,
     at_control_revision: 3,
   })).status).toBe(200);
@@ -154,27 +179,29 @@ const parseSseBlocks = (text: string): readonly Record<string, unknown>[] =>
       .find((line) => line.startsWith("data: "))!.slice(6)) as Record<string, unknown>));
 
 const fetchGenerationEvents = (
+  baseUrl: string,
   token: string,
   generationId: string,
   shell: "macos" | "ios" = "macos",
-): Promise<Response> => fetch(`${BASE_URL}/v1/chat-generations/${generationId}/events`, {
+): Promise<Response> => fetch(`${baseUrl}/v1/chat-generations/${generationId}/events`, {
   headers: authorizedHeaders(token, shell),
 });
 
 const fetchAgentEvents = (
+  baseUrl: string,
   token: string,
   generationId: string,
   shell: "macos" | "ios" = "macos",
-): Promise<Response> => fetch(`${BASE_URL}/v1/chat-generations/${generationId}/agent-events`, {
+): Promise<Response> => fetch(`${baseUrl}/v1/chat-generations/${generationId}/agent-events`, {
   headers: authorizedHeaders(token, shell),
 });
 
-const listen = async (token: string, shell: "macos" | "ios"): Promise<void> => {
+const listen = async (baseUrl: string, token: string, shell: "macos" | "ios"): Promise<void> => {
   const session = shell === "macos"
     ? "a661b15a-2401-4f5c-a4c4-23643dcf26d1"
     : "8f95c2d8-f398-4d72-94d3-580cffc96ef7";
   const socket = new WebSocket(
-    `ws://127.0.0.1:${PORT}/v4/listen?client_conversation_id=${session}`,
+    `${baseUrl.replace("http://", "ws://")}/v4/listen?client_conversation_id=${session}`,
     { headers: authorizedHeaders(token, shell) },
   );
   let ready = false;
@@ -194,7 +221,7 @@ const listen = async (token: string, shell: "macos" | "ios"): Promise<void> => {
   socket.close(1000, "done");
 };
 
-const exerciseShell = async (token: string, shell: "macos" | "ios"): Promise<void> => {
+const exerciseShell = async (baseUrl: string, token: string, shell: "macos" | "ios"): Promise<void> => {
   for (const path of [
     "/v1/memories",
     "/v1/tasks",
@@ -203,12 +230,12 @@ const exerciseShell = async (token: string, shell: "macos" | "ios"): Promise<voi
     "/v1/settings",
     "/v1/screen/days",
   ]) {
-    expect((await fetch(`${BASE_URL}${path}`, {
+    expect((await fetch(`${baseUrl}${path}`, {
       headers: authorizedHeaders(token, shell),
     })).status).toBe(200);
   }
-  expect((await postJson("/v1/chat-messages", token, chatPayload(shell), shell)).status).toBe(201);
-  await listen(token, shell);
+  expect((await postJson(baseUrl, "/v1/chat-messages", token, chatPayload(shell), shell)).status).toBe(201);
+  await listen(baseUrl, token, shell);
 };
 
 test("real dev-server owns one durable SQLite service for all eight domains", async () => {
@@ -216,30 +243,32 @@ test("real dev-server owns one durable SQLite service for all eight domains", as
   const databasePath = join(directory, "qa.sqlite");
   const readinessPath = join(directory, "readiness.json");
   let child: Bun.Subprocess | null = null;
+  let releaseLease: (() => void) | null = null;
   try {
     const first = await spawnService(databasePath, readinessPath);
     child = first.child;
+    releaseLease = first.releaseLease;
     expect(first.readiness).toMatchObject({
       schema: "omi.dev-service-readiness.v1",
       runId: RUN,
       executable: "apps/service/bin/dev-server.ts",
-      baseUrl: BASE_URL,
+      baseUrl: first.baseUrl,
       databasePath,
       evidencePath: "/v1/qa/evidence",
       ownerAccountId: "local-dev-user",
     });
     expect(first.readiness.pid).toBe(first.child.pid);
-    await cutOverTasks(first.readiness.devToken);
-    await exerciseShell(first.readiness.devToken, "macos");
-    await exerciseShell(first.readiness.devToken, "ios");
+    await cutOverTasks(first.baseUrl, first.readiness.devToken);
+    await exerciseShell(first.baseUrl, first.readiness.devToken, "macos");
+    await exerciseShell(first.baseUrl, first.readiness.devToken, "ios");
 
-    const createdFolder = await postJson("/v1/folders", first.readiness.devToken, {
+    const createdFolder = await postJson(first.baseUrl, "/v1/folders", first.readiness.devToken, {
       name: "Persisted across restart",
     });
     expect(createdFolder.status).toBe(201);
     expect(await createdFolder.json()).toEqual({ id: "qa-folder-created-001" });
 
-    const producer = await fetch(`${BASE_URL}/v1/qa/evidence?run=${RUN}`, {
+    const producer = await fetch(`${first.baseUrl}/v1/qa/evidence?run=${RUN}`, {
       headers: { authorization: `Bearer ${first.readiness.devToken}` },
     });
     expect(producer.status).toBe(200);
@@ -260,16 +289,19 @@ test("real dev-server owns one durable SQLite service for all eight domains", as
 
     await stopService(child);
     child = null;
+    releaseLease();
+    releaseLease = null;
     rmSync(readinessPath);
 
     const second = await spawnService(databasePath, readinessPath);
     child = second.child;
-    const folders = await fetch(`${BASE_URL}/v1/folders`, {
+    releaseLease = second.releaseLease;
+    const folders = await fetch(`${second.baseUrl}/v1/folders`, {
       headers: authorizedHeaders(second.readiness.devToken, "macos"),
     });
     expect((await folders.json() as readonly { readonly id: string }[])
       .some((folder) => folder.id === "qa-folder-created-001")).toBeTrue();
-    const history = await fetch(`${BASE_URL}/v1/chat-messages`, {
+    const history = await fetch(`${second.baseUrl}/v1/chat-messages`, {
       headers: authorizedHeaders(second.readiness.devToken, "macos"),
     });
     const messages = (await history.json() as {
@@ -278,22 +310,23 @@ test("real dev-server owns one durable SQLite service for all eight domains", as
     expect(messages.map((message) => message.id)).toContain("subprocess-chat-macos");
     expect(messages.map((message) => message.id)).toContain("subprocess-chat-ios");
 
-    expect((await fetch(`${BASE_URL}/v1/qa/reset`, {
+    expect((await fetch(`${second.baseUrl}/v1/qa/reset`, {
       method: "POST",
       headers: { authorization: `Bearer ${second.readiness.devToken}` },
     })).status).toBe(200);
-    const resetFolders = await fetch(`${BASE_URL}/v1/folders`, {
+    const resetFolders = await fetch(`${second.baseUrl}/v1/folders`, {
       headers: authorizedHeaders(second.readiness.devToken, "macos"),
     });
     expect((await resetFolders.json() as readonly { readonly id: string }[])
       .some((folder) => folder.id === "qa-folder-created-001")).toBeFalse();
-    const resetHistory = await fetch(`${BASE_URL}/v1/chat-messages`, {
+    const resetHistory = await fetch(`${second.baseUrl}/v1/chat-messages`, {
       headers: authorizedHeaders(second.readiness.devToken, "macos"),
     });
     expect((await resetHistory.json() as { readonly messages: readonly unknown[] }).messages)
       .toEqual([]);
   } finally {
     if (child !== null) await stopService(child);
+    releaseLease?.();
     rmSync(directory, { recursive: true, force: true });
   }
 }, 20_000);
@@ -334,14 +367,17 @@ test("dev-server entrypoint completes a gateway-backed chat turn with default me
     },
   });
   let child: Bun.Subprocess | null = null;
+  let releaseLease: (() => void) | null = null;
   try {
     const spawned = await spawnService(databasePath, readinessPath, {
       OMI_LLM_GATEWAY_URL: `http://127.0.0.1:${gateway.port}`,
       OMI_LLM_GATEWAY_SERVICE_TOKEN: gatewayToken,
     });
     child = spawned.child;
+    releaseLease = spawned.releaseLease;
     const token = spawned.readiness.devToken;
     const admitted = await postJson(
+      spawned.baseUrl,
       "/v1/chat-messages",
       token,
       chatPayload("macos", "subprocess-gateway-chat"),
@@ -352,7 +388,7 @@ test("dev-server entrypoint completes a gateway-backed chat turn with default me
       readonly generation: { readonly id: string };
     };
     const generationId = admission.generation.id;
-    const canonicalBody = await (await fetchGenerationEvents(token, generationId)).text();
+    const canonicalBody = await (await fetchGenerationEvents(spawned.baseUrl, token, generationId)).text();
     const canonicalFrames = parseSseBlocks(canonicalBody);
     expect(canonicalFrames.filter((frame) => frame.kind === "done")).toHaveLength(1);
     expect(canonicalFrames.at(-1)).toMatchObject({
@@ -360,7 +396,7 @@ test("dev-server entrypoint completes a gateway-backed chat turn with default me
       message: { text: "Subprocess gateway answer.", generationOutcome: "completed" },
     });
 
-    const agentBody = await (await fetchAgentEvents(token, generationId)).text();
+    const agentBody = await (await fetchAgentEvents(spawned.baseUrl, token, generationId)).text();
     const agentEvents = parseSseBlocks(agentBody);
     expect(agentEvents.every((event) => event.runId === generationId)).toBe(true);
     expect(agentEvents).toContainEqual(expect.objectContaining({
@@ -387,6 +423,7 @@ test("dev-server entrypoint completes a gateway-backed chat turn with default me
     expect(publicProjection).not.toContain("cit1_");
   } finally {
     if (child !== null) await stopService(child);
+    releaseLease?.();
     gateway.stop(true);
     rmSync(directory, { recursive: true, force: true });
   }

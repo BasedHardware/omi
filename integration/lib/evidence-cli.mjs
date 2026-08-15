@@ -73,6 +73,7 @@ if (command === "validate-run-id") {
   const databasePath = flag("--database");
   const pid = Number(flag("--pid"));
   const tokenOut = flag("--token-out");
+  const expectedBaseUrl = flag("--base-url");
   if (!path || !runId || !databasePath || !tokenOut || !Number.isSafeInteger(pid) || pid <= 0) {
     process.stderr.write("validate-readiness needs --record, --run-id, --database, --token-out, and positive integer --pid\n");
     process.exit(2);
@@ -89,6 +90,7 @@ if (command === "validate-run-id") {
     databasePath,
     pid,
     executable: SERVICE_EXECUTABLE,
+    ...(expectedBaseUrl ? { baseUrl: expectedBaseUrl } : {}),
   });
   if (!result.ok) {
     process.stderr.write(`${result.failures.join("\n")}\n`);

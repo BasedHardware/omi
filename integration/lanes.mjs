@@ -191,7 +191,7 @@ export const LANES = {
     steps: [
       {
         cwd: CORE_REPO,
-        command: "integration/dev-stack.sh --assert",
+        command: "integration/dev-stack.sh --assert --lease",
       },
       // NOW A GATE. Held out until 2026-08-15, and wired in the moment the
       // written condition was met rather than by anyone's judgement call.
