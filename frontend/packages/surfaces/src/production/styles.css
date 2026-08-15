@@ -460,22 +460,27 @@ html[data-platform="desktop"][data-color-mode="dark"] .task-card:hover,
 html[data-platform="desktop"][data-color-mode="dark"] .task-card.is-selected { border-color: var(--border); background: color-mix(in srgb, var(--surface-elevated) 70%, transparent); }
 
 /* WKWebView lets AppKit own the true material while the DOM remains a semantic
- * and testable overlay. Browser captures retain the fallback glass above. */
-html[data-platform="desktop"][data-native-glass="true"] { background: transparent; }
+ * overlay. Gaps between islands stay clear (html/body). Island fills must not
+ * be fully transparent: a clear WKWebView still occludes the AppKit glass
+ * behind it, so `background: transparent` here is desktop bleed-through. */
+html[data-platform="desktop"][data-native-glass="true"] {
+  background: transparent;
+  --native-glass-fill: color-mix(in srgb, var(--surface-raised) 94%, transparent);
+}
 html[data-platform="desktop"][data-native-glass="true"] .production-nav:first-child,
 html[data-platform="desktop"][data-native-glass="true"] .desktop-page-panel,
 html[data-platform="desktop"][data-native-glass="true"] .home-search-hero,
+html[data-platform="desktop"][data-native-glass="true"] .home-chat-entry,
 html[data-platform="desktop"][data-native-glass="true"] .home-results-panel {
   border-color: rgba(255,255,255,.16);
-  background: transparent;
+  background: var(--native-glass-fill);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 
 /*
- * Where the rows came from. Deliberately NOT modelled on `.qa-label`, which styles.css
- * hides at desktop width — a fixture render that looks like live data is the confusion
- * this badge exists to prevent, so it is visible at every width and in both modes.
+ * Fixture provenance only. Live account data does not render this node.
+ * Sentence case: uppercase made a truthful warning read as debug chrome.
  */
 .data-source-badge {
   display: block;
@@ -487,15 +492,13 @@ html[data-platform="desktop"][data-native-glass="true"] .home-results-panel {
   font-family: var(--type-label-family);
   font-size: var(--type-label-size);
   letter-spacing: var(--type-label-tracking);
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .data-source-badge.tone-fixture {
   border-color: var(--warning);
   color: var(--content-primary);
 }
-
-.data-source-badge.tone-live { border-color: var(--success); }
 
 /* Shared visual grammar -------------------------------------------------- */
 .production-icon { display: inline-block; flex: 0 0 auto; vertical-align: middle; }

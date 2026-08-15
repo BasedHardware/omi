@@ -11,18 +11,22 @@ test("native host keeps the route-shaped Ink composition", async () => {
   const source = await read("shell/Sources/OmiShell/GlassHost.swift");
   assert.match(source, /topGlass = GlassPanelView\(cornerRadius: 26\)/);
   assert.match(source, /heroGlass = GlassPanelView\(cornerRadius: 22\)/);
+  assert.match(source, /chatGlass = GlassPanelView\(cornerRadius: 22\)/);
   assert.match(source, /contentGlass = GlassPanelView\(cornerRadius: 22\)/);
   assert.match(source, /let navToHeroGap: CGFloat = 8/);
   assert.match(source, /let heroHeight: CGFloat = 64/);
-  assert.match(source, /let heroToResultsGap: CGFloat = 12/);
+  assert.match(source, /let heroToChatGap: CGFloat = 12/);
+  assert.match(source, /let chatHeight: CGFloat = 50/);
+  assert.match(source, /let chatToResultsGap: CGFloat = 12/);
+  assert.match(source, /let chatWidth: CGFloat = min\(420,/);
   assert.match(source, /if let route = value\("route"\)/);
   assert.match(source, /if let fixture = value\("qa"\)/);
   assert.match(source, /material\.material = \.hudWindow/);
   assert.match(source, /material\.blendingMode = \.behindWindow/);
   assert.match(source, /withAlphaComponent\(reduced \? 0\.98 : 0\.46\)/);
   assert.match(source, /layer\?\.shadowPath = CGPath\(roundedRect:/);
-  // red-proof: collapsing Home's hero and results into one opaque plate,
-  // changing the scrim, or clipping the outer shadow fails this contract.
+  // red-proof: collapsing Home's hero, chat chip, and results into one opaque
+  // plate, changing the scrim, or clipping the outer shadow fails this contract.
 });
 
 test("transparent gaps remain draggable instead of becoming an invisible web canvas", async () => {
