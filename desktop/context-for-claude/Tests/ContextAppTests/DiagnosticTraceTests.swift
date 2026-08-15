@@ -1,3 +1,4 @@
+import ContextCore
 import OSLog
 import XCTest
 
@@ -123,6 +124,79 @@ final class DiagnosticTraceTests: XCTestCase {
                 errors and nothing to place them in.
                 """)
         }
+    }
+
+    // MARK: - The capability restart
+
+    /// **A grant is the moment the app rebuilds its capture stack, and the log has to say so.**
+    ///
+    /// Reported as "the app crashes upon giving permissions". A grant makes `refreshCapabilities`
+    /// build a CoreAudio process tap, open an input device and open a fresh ScreenCaptureKit request
+    /// against rights macOS has just re-evaluated — and if the process ends anywhere in there, the
+    /// only surviving evidence distinguishing "trapped mid-restart" from "asked to quit" is whether
+    /// the closing milestone follows the opening one. Everything the restart itself writes is
+    /// `ContextLog.info`, which is gone from the unified log minutes later.
+    ///
+    /// Behavioural, over the pure function the bracket is gated on rather than over TCC.
+    func testACapabilityThatMovedIsNamedForTheRestartBracket() {
+        let before = [
+            CapabilityReport(name: "microphone", granted: false, detail: "Not granted"),
+            CapabilityReport(name: "screen", granted: true, detail: "Granted"),
+        ]
+        let after = [
+            CapabilityReport(name: "microphone", granted: true, detail: "Granted"),
+            CapabilityReport(name: "screen", granted: true, detail: "Granted"),
+        ]
+
+        let note = Engine.capabilityRestartNote(from: before, to: after)
+
+        XCTAssertEqual(
+            note, "microphone: Not granted → Granted",
+            """
+            The restart bracket has to name the capability that moved. "capture restarted" with no \
+            subject cannot tell a microphone grant from a screen grant in a report read hours later, \
+            which is the whole question a grant-time disappearance turns on.
+            """)
+    }
+
+    /// **The same read twice is not an event**, and this is the half that keeps the bracket usable.
+    ///
+    /// `refreshCapabilities` runs once a second while the menu bar popover is open and every thirty
+    /// seconds from the maintenance loop. A milestone on every call would be thousands of persisted
+    /// lines a day around the handful that matter — the failure `ContextLog` names, arriving through
+    /// the fix for a different one.
+    func testAnUnchangedCapabilityReadIsSilent() {
+        let rows = [
+            CapabilityReport(name: "microphone", granted: true, detail: "Granted"),
+            CapabilityReport(name: "screen", granted: false, detail: "Action required"),
+        ]
+
+        XCTAssertNil(
+            Engine.capabilityRestartNote(from: rows, to: rows),
+            "an unchanged capability read must not write a persisted line; it happens every second")
+        XCTAssertNil(
+            Engine.capabilityRestartNote(from: [], to: rows),
+            """
+            The first read of a launch is not a change anybody made. Bracketing it would put the \
+            milestone on every launch, where `Engine started` already says the same thing.
+            """)
+    }
+
+    /// **A group whose missing member changed still restarts a source**, and `granted` alone cannot
+    /// see it: "Microphone" covers the input device and the system-audio tap, so a microphone grant
+    /// that leaves the tap outstanding is `granted: false` before and after — over a real restart of
+    /// one of the two streams.
+    func testAGroupWhoseMissingMemberMovedIsStillABracketedRestart() {
+        let before = [CapabilityReport(name: "microphone", granted: false, detail: "Not granted")]
+        let after = [CapabilityReport(name: "microphone", granted: false, detail: "Action required")]
+
+        XCTAssertEqual(
+            Engine.capabilityRestartNote(from: before, to: after),
+            "microphone: Not granted → Action required",
+            """
+            A group row that stays ungranted while its first missing member moves is a real source \
+            restart. Comparing `granted` alone would leave exactly that restart unbracketed.
+            """)
     }
 
     // MARK: - The command in the doc

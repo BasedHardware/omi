@@ -544,10 +544,53 @@ final class Engine: ObservableObject {
 
     /// Re-reads the permission state and starts anything that is now allowed but not yet running —
     /// a grant that lands after launch, or a source that failed and can be retried.
+    ///
+    /// **The bracket around `startPermittedSources()` is a breadcrumb, not decoration.** A grant is
+    /// the one moment this app builds a CoreAudio process tap, opens an input device and connects a
+    /// fresh `ScreenCaptureKit` request against rights macOS has just re-evaluated — and "it crashes
+    /// when I give permissions" is what a user calls the app disappearing there. The two ways it can
+    /// disappear need different fixes and are indistinguishable after the fact: a run whose last
+    /// line is the opening milestone died *inside* the restart, while a run carrying both and then
+    /// stopping was asked to quit. Everything the restart itself writes is `info` and evicted from
+    /// the unified log within minutes, so without this pair a report that arrives an hour later can
+    /// answer neither question.
+    ///
+    /// Gated on `capabilityRestartNote` rather than logged on entry, because this runs every second
+    /// while the menu bar popover is open and every thirty seconds from the maintenance loop: a
+    /// milestone at that rate would bury the log it exists to make readable.
     func refreshCapabilities() {
+        let previous = capabilities
         capabilities = Permissions.groupedReport()
+        let note = Self.capabilityRestartNote(from: previous, to: capabilities)
+        if let note { ContextLog.milestone("Capabilities changed (\(note)) — restarting capture", "engine") }
         startPermittedSources()
+        if let note { ContextLog.milestone("Capabilities changed (\(note)) — restart returned", "engine") }
         publishState()
+    }
+
+    /// What moved between two capability reads, named for the log — or nil when nothing moved and
+    /// there is therefore nothing worth bracketing.
+    ///
+    /// Nil for the first read of a launch (`previous` empty). A row appearing for the first time is
+    /// not a change anybody made, and `start()` seeds `capabilities` before anything reaches here.
+    ///
+    /// Compares the whole row rather than `granted` alone. A microphone group whose first missing
+    /// member moves from the microphone to the system-audio tap is `granted: false` both times and a
+    /// different state of the world — and it is precisely the one that restarts a source, so a
+    /// comparison that could not see it would leave the restart it caused unbracketed.
+    ///
+    /// Pure and `nonisolated` so the thing this line can actually get wrong — becoming per-tick
+    /// noise — is assertable without a TCC grant.
+    nonisolated static func capabilityRestartNote(
+        from previous: [CapabilityReport], to current: [CapabilityReport]
+    ) -> String? {
+        guard !previous.isEmpty else { return nil }
+        let before = Dictionary(previous.map { ($0.name, $0) }, uniquingKeysWith: { _, last in last })
+        let moved = current.compactMap { row -> String? in
+            guard let was = before[row.name], was != row else { return nil }
+            return "\(row.name): \(was.detail) → \(row.detail)"
+        }
+        return moved.isEmpty ? nil : moved.joined(separator: ", ")
     }
 
     // MARK: - Sources
