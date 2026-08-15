@@ -21,6 +21,7 @@ import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
 import { EmptyState } from '../components/ui/EmptyState'
 import { TaskDetailPanel } from '../components/tasks/TaskDetailPanel'
 import { TaskChatPanel } from '../components/tasks/TaskChatPanel'
+import { SuggestedTasksSection } from '../components/tasks/SuggestedTasksSection'
 import {
   EMPTY_SELECTION,
   applySelectionClick,
@@ -1075,6 +1076,16 @@ export function Tasks(): React.JSX.Element {
               <Check className="mb-3 h-10 w-10 opacity-40" />
               <p className="text-sm">All caught up.</p>
             </div>
+          )}
+
+          {!loading && !error && filter !== 'done' && !selectMode && (
+            <SuggestedTasksSection
+              onAccepted={() => {
+                // The accepted task lives backend-side; reconcile pulls it into the
+                // local store, whose change event re-reads the list.
+                void window.omi.tasksReconcile().catch(() => {})
+              }}
+            />
           )}
 
           {!loading && (openGroups.length > 0 || doneItems.length > 0 || showTodayComposer) && (
