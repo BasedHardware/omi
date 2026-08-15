@@ -48,6 +48,7 @@
     sawStreaming: false,
     listenPermissionBefore: null,
     screenClicked: false,
+    screenFrameSelected: false,
     statusId: null,
     witnesses: null,
   });
@@ -682,7 +683,9 @@
       return PENDING;
     }
     const total = Number(root?.getAttribute("data-frame-total") || "0");
-    if (Number.isFinite(total) && total > 0) selectTimelineFrame();
+    if (Number.isFinite(total) && total > 0 && !state.screenFrameSelected) {
+      state.screenFrameSelected = selectTimelineFrame();
+    }
     const verdict = screenFrame(root);
     if (verdict === "frame-rendered") {
       record(state, "screen", "frame-rendered");
