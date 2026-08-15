@@ -62,7 +62,12 @@ dependencies:
   pdf: ^3.11.0
   intl: ^0.20.2
   permission_handler: ^12.0.0+1
-  flutter_contacts: ^1.1.9+2
+  # Must stay >=2.0.0 — 1.x's iOS registration force-unwraps
+  # UIApplication.shared.delegate!.window!!.rootViewController!, which is nil under the
+  # UIScene lifecycle and crashes on launch (EXC_BREAKPOINT), taking every alphabetically
+  # later plugin down with it since GeneratedPluginRegistrant registers synchronously.
+  # 2.x's rewritten registration doesn't touch window at all. See #11568.
+  flutter_contacts: ^2.3.1
   intl_country_data:
     git:
       url: https://github.com/mdmohsin7/intl_country_data.git
