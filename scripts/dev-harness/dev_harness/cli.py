@@ -18,7 +18,7 @@ import urllib.request
 from pathlib import Path
 from typing import Iterable
 
-from . import config, providers, qualification, safety, memory_scenarios
+from . import config, providers, safety, memory_scenarios
 
 OWNERSHIP_PREFIX = "omi-dev-harness"
 
@@ -1099,39 +1099,6 @@ def cmd_logs(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_qualification_lease(args: argparse.Namespace) -> int:
-    repo_root = _repo_root()
-    if args.lease_action == "acquire":
-        lease = qualification.acquire(
-            repo_root=repo_root,
-            lease_id=args.lease_id,
-            owner_pid=args.owner_pid,
-            port_offset=args.port_offset,
-            retained_runs=args.retained_runs,
-            retention_age_seconds=args.retention_age_seconds,
-        )
-        print(json.dumps(lease, sort_keys=True))
-        return 0
-    if args.lease_action == "release":
-        qualification.release(
-            repo_root=repo_root,
-            lease_id=args.lease_id,
-            token=args.token,
-            retained_runs=args.retained_runs,
-            retention_age_seconds=args.retention_age_seconds,
-        )
-        return 0
-    if args.lease_action == "preflight-fault-cleanup":
-        qualification.preflight_fault_cleanup(
-            repo_root=repo_root,
-            lease_id=args.lease_id,
-            token=args.token,
-            result_path=Path(args.result),
-        )
-        return 0
-    raise AssertionError(f"Unexpected qualification lease action {args.lease_action!r}")
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="dev-harness")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1148,29 +1115,6 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "status":
             command.add_argument("--write-summary", action="store_true", default=False)
         command.set_defaults(func=func)
-    lease = sub.add_parser("qualification-lease", help="Acquire or safely release a local qualification stack lease")
-    lease_sub = lease.add_subparsers(dest="lease_action", required=True)
-    acquire = lease_sub.add_parser("acquire")
-    acquire.add_argument("--lease-id", required=True)
-    acquire.add_argument("--owner-pid", required=True, type=int)
-    acquire.add_argument("--port-offset", required=True, type=int)
-    acquire.add_argument("--retained-runs", type=int, default=qualification.DEFAULT_RETAINED_RUNS)
-    acquire.add_argument("--retention-age-seconds", type=int, default=qualification.DEFAULT_RETENTION_MAX_AGE_SECONDS)
-    acquire.set_defaults(func=cmd_qualification_lease)
-    release = lease_sub.add_parser("release")
-    release.add_argument("--lease-id", required=True)
-    release.add_argument("--token", required=True)
-    release.add_argument("--retained-runs", type=int, default=qualification.DEFAULT_RETAINED_RUNS)
-    release.add_argument("--retention-age-seconds", type=int, default=qualification.DEFAULT_RETENTION_MAX_AGE_SECONDS)
-    release.set_defaults(func=cmd_qualification_lease)
-    fault_preflight = lease_sub.add_parser(
-        "preflight-fault-cleanup",
-        help="Validate and reclaim the exact lease-owned disposable fault listener",
-    )
-    fault_preflight.add_argument("--lease-id", required=True)
-    fault_preflight.add_argument("--token", required=True)
-    fault_preflight.add_argument("--result", required=True)
-    fault_preflight.set_defaults(func=cmd_qualification_lease)
     return parser
 
 
@@ -1178,7 +1122,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = build_parser().parse_args(list(argv) if argv is not None else None)
     try:
         return int(args.func(args))
-    except (safety.SafetyError, qualification.QualificationLeaseError) as exc:
+    except safety.SafetyError as exc:
         print(f"Safety check failed: {exc}")
         return 2
 

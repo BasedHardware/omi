@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import httpx
 import pytest
+from fastapi import Response
 
 from routers import desktop_proactivity
 from utils.subscription import NEO_DESKTOP_GRANDFATHER_CUTOFF
@@ -119,7 +120,12 @@ async def test_quota_is_allowed_based_and_fails_closed(monkeypatch):
     with pytest.raises(desktop_proactivity.HTTPException) as exhausted:
         await desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
     assert exhausted.value.status_code == 429
-    assert exhausted.value.headers == {"Retry-After": "19"}
+    assert exhausted.value.headers == {
+        "Retry-After": "19",
+        "X-Proactive-Quota-Limit": "200",
+        "X-Proactive-Quota-Remaining": "0",
+        "X-Proactive-Quota-Reset": "19",
+    }
 
     monkeypatch.setattr(
         desktop_proactivity.redis_db,
@@ -160,6 +166,95 @@ async def test_quota_matches_expanded_director_budget(monkeypatch, operation, ex
     assert observed["key"] == f"desktop_{operation.value}"
     assert observed["limit"] == expected_limit
     assert observed["window_seconds"] == 24 * 60 * 60
+
+
+@pytest.mark.asyncio
+async def test_quota_headers_present_on_success(monkeypatch):
+    async def run_blocking(_, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(desktop_proactivity, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proactivity, "get_customer_firestore_client", MagicMock())
+    monkeypatch.setattr(desktop_proactivity.users_db, "get_user_valid_subscription", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        desktop_proactivity.redis_db,
+        "reserve_rate_limit",
+        lambda *_: (True, 12, 3600),
+    )
+
+    state = await desktop_proactivity._consume_quota("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)
+    assert state == desktop_proactivity.ProactiveQuotaState(limit=200, remaining=12, reset_seconds=3600)
+
+    response = Response()
+    desktop_proactivity._apply_quota_headers(response, state)
+    assert response.headers["X-Proactive-Quota-Limit"] == "200"
+    assert response.headers["X-Proactive-Quota-Remaining"] == "12"
+    assert response.headers["X-Proactive-Quota-Reset"] == "3600"
+    assert "retry-after" not in {name.lower() for name in response.headers.keys()}
+
+
+@pytest.mark.asyncio
+async def test_completion_success_attaches_quota_headers(monkeypatch):
+    class GatewayClient:
+        async def post(self, url, *, headers, json):
+            return httpx.Response(
+                200,
+                request=httpx.Request("POST", url),
+                json={
+                    "model": "gpt-5.6-luna",
+                    "choices": [{"message": {"content": '{"summary":"ok"}'}}],
+                    "usage": {"prompt_tokens": 8},
+                },
+            )
+
+    class Semaphore:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    async def consume(*_):
+        return desktop_proactivity.ProactiveQuotaState(limit=200, remaining=12, reset_seconds=3600)
+
+    monkeypatch.setattr(desktop_proactivity, "llm_stub_enabled", lambda: False)
+    monkeypatch.setenv("OMI_LLM_GATEWAY_URL", "http://gateway")
+    monkeypatch.setattr(desktop_proactivity, "_consume_quota", consume)
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: GatewayClient())
+    monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
+    monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
+
+    response = Response()
+    result = await desktop_proactivity.proactive_completion(request(), response, uid="user-1")
+    assert result.provider_model == "gpt-5.6-luna"
+    assert response.headers["X-Proactive-Quota-Limit"] == "200"
+    assert response.headers["X-Proactive-Quota-Remaining"] == "12"
+    assert response.headers["X-Proactive-Quota-Reset"] == "3600"
+
+
+def test_release_after_delete_does_not_go_negative():
+    import fakeredis
+
+    client = fakeredis.FakeRedis()
+    script = client.register_script(desktop_proactivity.redis_db._RATE_LIMIT_RELEASE_LUA_SOURCE)
+    key = "rl:desktop_proactive_extraction:user-1"
+
+    remaining = script(keys=[key], args=[])
+    assert int(remaining) == 0
+    stored = client.get(key)
+    assert stored is None or int(stored) >= 0
+
+    client.set(key, 3)
+    remaining = script(keys=[key], args=[])
+    assert int(remaining) == 2
+    assert int(client.get(key)) == 2
+
+    client.delete(key)
+    remaining = script(keys=[key], args=[])
+    assert int(remaining) == 0
+    stored = client.get(key)
+    if stored is not None:
+        assert int(stored) >= 0
 
 
 @pytest.mark.parametrize(
@@ -212,7 +307,9 @@ async def test_offline_stub_honors_schema_without_gateway_or_quota(monkeypatch):
     monkeypatch.setattr(desktop_proactivity, "_consume_quota", forbidden)
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", forbidden)
 
-    result = await desktop_proactivity.proactive_completion(request("proactive_reasoning"), uid="offline-user")
+    result = await desktop_proactivity.proactive_completion(
+        request("proactive_reasoning"), Response(), uid="offline-user"
+    )
 
     assert result.provider_model == "omi-offline-stub"
     assert result.fallback_class == "offline_stub"
@@ -250,7 +347,7 @@ async def test_gateway_failure_releases_reserved_quota(monkeypatch):
     monkeypatch.setattr(desktop_proactivity, "llm_gateway_headers", lambda **_: {})
 
     with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
-        await desktop_proactivity.proactive_completion(request(), uid="user-1")
+        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
 
     assert unavailable.value.status_code == 502
     assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
@@ -389,7 +486,7 @@ async def test_direct_extraction_retries_length_once_without_extra_quota_reserva
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_client", lambda: DirectClient())
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
 
-    result = await desktop_proactivity.proactive_completion(request(), uid="user-1")
+    result = await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
 
     assert len(calls) == 2
     assert calls[0][2]["max_completion_tokens"] == 1024
@@ -457,7 +554,7 @@ async def test_direct_extraction_length_retry_releases_quota_once_after_final_fa
     monkeypatch.setattr(desktop_proactivity, "get_llm_gateway_semaphore", lambda: Semaphore())
 
     with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
-        await desktop_proactivity.proactive_completion(request(), uid="user-1")
+        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
 
     assert unavailable.value.status_code == 502
     assert [payload["max_completion_tokens"] for payload in calls] == [1024, 2400]
@@ -493,7 +590,7 @@ async def test_provider_configuration_failure_releases_reserved_quota(monkeypatc
     )
 
     with pytest.raises(desktop_proactivity.HTTPException) as unavailable:
-        await desktop_proactivity.proactive_completion(request(), uid="user-1")
+        await desktop_proactivity.proactive_completion(request(), Response(), uid="user-1")
 
     assert unavailable.value.status_code == 503
     assert released == [("user-1", desktop_proactivity.ProactiveOperation.EXTRACTION)]
@@ -541,7 +638,7 @@ async def test_facade_adds_provenance_and_cache_envelope(monkeypatch):
     )
 
     result = await desktop_proactivity.proactive_completion(
-        request("proactive_reasoning", cache_key="bucket-1"), uid="user-1"
+        request("proactive_reasoning", cache_key="bucket-1"), Response(), uid="user-1"
     )
 
     assert seen["json"]["model"] == "omi:auto:desktop-proactive-reasoning"

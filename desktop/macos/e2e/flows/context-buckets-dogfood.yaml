@@ -17,14 +17,21 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketRollup.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketSchema.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketStore.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextWorkstreamPooling.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketsFeature.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDeliveryAuthority.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDestinationKey.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDetection.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDirectorRetrieval.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextProactivityEngine.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextSubjectBindingService.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextTitleNormalizer.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextVisitCoordinator.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/WorkHistoryHandle.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/WorkHistoryHandleExtractor.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/WorkHistoryIndex.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/InsightSQLPrivacy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationSettingsSyncCoordinator.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/TaskContextualResurfacingService.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindCaptureExclusion.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/StagedTaskStorage.swift
@@ -79,6 +86,14 @@ steps:
       binding, delivery, or candidate from the prior authorization session appears.
 
   - id: S6
+    name: Ask chat for the document by handle
+    do: >
+      After revisiting one of the numbered documents from S1, ask chat where that document
+      is. Confirm get_work_context returns a visit or workstream brief whose handle is the
+      document URL or file path, not only a Rewind screenshot. Switching browsers on the
+      same URL must stay one workstream.
+
+  - id: S7
     name: Logs are clean
     log.expect:
       absent:

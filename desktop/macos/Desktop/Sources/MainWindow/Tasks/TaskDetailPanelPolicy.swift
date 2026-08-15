@@ -79,14 +79,13 @@ struct TaskDetailPanelState: Equatable {
 enum TaskDetailPanelPresentationPolicy {
   static func showsHoverActions(
     isRowHovering: Bool,
-    isPriorityPickerPresented: Bool,
     isMultiSelectMode: Bool,
     isDeletedTask: Bool,
     isTextFieldFocused: Bool,
     isDetailPanelPresented: Bool
   ) -> Bool {
     guard !isDetailPanelPresented else { return false }
-    return (isRowHovering || isPriorityPickerPresented)
+    return isRowHovering
       && !isMultiSelectMode
       && !isDeletedTask
       && !isTextFieldFocused
@@ -233,9 +232,7 @@ enum TaskDetailSourceLinkPolicy {
     if !task.tags.isEmpty {
       fields.append(TaskDetailField(label: "Tags", value: task.tags.joined(separator: ", ")))
     }
-    if let priority = task.priority, !priority.isEmpty {
-      fields.append(TaskDetailField(label: "Priority", value: priority.capitalized))
-    }
+    // Priority is not a read-only field here — the panel edits it directly.
     if let source = task.source, !source.isEmpty {
       fields.append(TaskDetailField(label: "Source", value: "\(task.sourceLabel) (\(source))"))
     }

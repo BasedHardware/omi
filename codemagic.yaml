@@ -2677,7 +2677,7 @@ workflows:
       - name: Publish immutable external preview
         script: |
           if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
-            echo "Normal releases publish through the beta/stable qualification lane."
+            echo "Normal releases publish through the beta/stable signed-smoke lane."
             exit 0
           fi
           set -euo pipefail

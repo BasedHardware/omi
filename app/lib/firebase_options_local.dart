@@ -26,16 +26,16 @@ class DefaultFirebaseOptions {
   }
 
   static const android = FirebaseOptions(
-    apiKey: 'local-firebase-auth-emulator-api-key',
-    appId: '1:000000000000:android:omi-dev-local',
+    apiKey: 'AIzaSyDEMOOMILOCALFAKEKEY00000000000000',
+    appId: '1:000000000000:android:0000000000000000',
     messagingSenderId: '000000000000',
     projectId: 'demo-omi-local',
     storageBucket: 'demo-omi-local.localhost',
   );
 
   static const ios = FirebaseOptions(
-    apiKey: 'local-firebase-auth-emulator-api-key',
-    appId: '1:000000000000:ios:omi-dev-local',
+    apiKey: 'AIzaSyDEMOOMILOCALFAKEKEY00000000000000',
+    appId: '1:000000000000:ios:0000000000000000',
     messagingSenderId: '000000000000',
     projectId: 'demo-omi-local',
     storageBucket: 'demo-omi-local.localhost',
@@ -43,8 +43,8 @@ class DefaultFirebaseOptions {
   );
 
   static const macos = FirebaseOptions(
-    apiKey: 'local-firebase-auth-emulator-api-key',
-    appId: '1:000000000000:ios:omi-dev-local',
+    apiKey: 'AIzaSyDEMOOMILOCALFAKEKEY00000000000000',
+    appId: '1:000000000000:ios:0000000000000000',
     messagingSenderId: '000000000000',
     projectId: 'demo-omi-local',
     storageBucket: 'demo-omi-local.localhost',
@@ -52,8 +52,8 @@ class DefaultFirebaseOptions {
   );
 
   static const web = FirebaseOptions(
-    apiKey: 'local-firebase-auth-emulator-api-key',
-    appId: '1:000000000000:web:omi-dev-local',
+    apiKey: 'AIzaSyDEMOOMILOCALFAKEKEY00000000000000',
+    appId: '1:000000000000:web:0000000000000000',
     messagingSenderId: '000000000000',
     projectId: 'demo-omi-local',
     authDomain: 'demo-omi-local.firebaseapp.com',

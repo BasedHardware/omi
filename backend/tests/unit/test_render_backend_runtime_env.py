@@ -112,7 +112,8 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in memory_env
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
     assert 'MEMORY_ENABLED_USERS' not in memory_env
-    assert 'MEMORY_MODE=off' in memory_env
+    assert 'MEMORY_ENABLED=on' in memory_env
+    assert 'MEMORY_MODE=' not in memory_env
     assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED=false' in memory_env
     assert 'TYPESENSE_HOST_PORT=443' in memory_env
 
@@ -147,6 +148,7 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
     notifications_job = cloud_run['jobs']['notifications-job']
     notifications_env = notifications_job['env']
     forbidden_notifications_vars = {
+        'MEMORY_ENABLED',
         'MEMORY_MODE',
         'MEMORY_ENABLED_USERS',
         'MEMORY_V3_GET_ENABLED',
@@ -190,7 +192,8 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     assert rc == 0
     out = capsys.readouterr().out
     job_env = _job_env_block(out, 'memory_maintenance_job')
-    assert 'MEMORY_MODE=off' in job_env
+    assert 'MEMORY_ENABLED=off' in job_env
+    assert 'MEMORY_MODE=' not in job_env
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in job_env
     assert 'MEMORY_ENABLED_USERS' not in job_env
 

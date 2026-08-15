@@ -39,12 +39,12 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
         # omi-test-quality: source-inspection -- static workflow-auth wiring for
         # SCA-155; the external GitHub/Codemagic webhook boundary has no local seam.
         workflow = (SCRIPT.parents[1] / "workflows" / "desktop_auto_release.yml").read_text(encoding="utf-8")
-        tag_job = workflow.split("  tag-release:\n", 1)[1]
-        self.assertLess(tag_job.index("- name: Generate Omi Bot token"), tag_job.index("- name: Checkout"))
-        self.assertEqual(tag_job.count("token: ${{ steps.app-token.outputs.token }}"), 2)
-        self.assertIn("Verify native Codemagic tag intake or dispatch fenced fallback", tag_job)
-        self.assertIn("check-codemagic-tag-intake.py", tag_job)
-        self.assertIn("if: always() && steps.final-plan.outputs.should_release == 'true'", tag_job)
+        job = workflow.split("  plan-and-tag:\n", 1)[1]
+        self.assertLess(job.index("- name: Generate Omi Bot token"), job.index("- name: Checkout with Omi Bot token"))
+        self.assertEqual(job.count("token: ${{ steps.app-token.outputs.token }}"), 2)
+        self.assertIn("Verify native Codemagic tag intake or dispatch fenced fallback", job)
+        self.assertIn("check-codemagic-tag-intake.py", job)
+        self.assertIn("if: always() && steps.final-plan.outputs.should_release == 'true'", job)
 
     def test_native_git_transport_publishes_a_lightweight_tag_not_an_annotated_tag(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

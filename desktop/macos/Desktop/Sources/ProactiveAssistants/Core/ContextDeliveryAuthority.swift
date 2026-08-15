@@ -112,6 +112,20 @@ enum ContextDeliveryBudget {
   /// 24-hour Redis window (`_QUOTA_WINDOW_SECONDS`), not local midnight.
   static let dailyWindowSeconds: TimeInterval = 24 * 60 * 60
 
+  /// How long after a visit ends its in-flight director evaluation may still
+  /// run to completion and deliver. Requiring `outcome = 'active'` at every
+  /// stage meant any context switch killed the evaluation mid-flight — quota
+  /// spent, nothing delivered — so users who task-switch fast could never
+  /// receive a delivery. Notifications are context-free banners, so a recent
+  /// departure does not invalidate the outcome; each stage re-checks freshness,
+  /// which bounds how stale a departed visit's delivery can be.
+  static let deliveryValidityWindowSeconds: TimeInterval = 60
+
+  /// A departed visit's evaluation must ground on a frame from that visit, not
+  /// the next context's screen. Frames captured at most this long after the
+  /// visit ended still count as the visit's own capture.
+  static let departedFrameCaptureEpsilonSeconds: TimeInterval = 2
+
   static func dailyLimit(frequencyLevel: Int, planMultiplier: Int = 1) -> Int {
     let base = [0, 10, 20, 40, 60, 100][max(0, min(5, frequencyLevel))]
     return base * max(1, planMultiplier)
@@ -226,10 +240,18 @@ extension ContextBucketStore {
           cooldownSeconds: gate.cooldownSeconds)
       else { return ContextDeliveryAttempt(id: nil, reason: .cooldown) }
       let windowStart = ContextDeliveryBudget.dailyWindowStart(now: now)
+      // The daily budget caps user-visible interruptions. Evaluations that resolved
+      // to silence or failed never reached the user, so they must not spend it — a
+      // day of heavy screen activity would otherwise exhaust the budget on invisible
+      // decisions and read as a dead feature. In-flight attempts still count until
+      // they resolve, so a burst cannot over-reserve past the cap.
       let attemptedInWindow =
         try Int.fetchOne(
           db,
-          sql: "SELECT COUNT(*) FROM proactive_deliveries WHERE attemptedAt >= ?",
+          sql: """
+            SELECT COUNT(*) FROM proactive_deliveries
+            WHERE attemptedAt >= ? AND lifecycleState NOT IN ('suppressed', 'failed')
+            """,
           arguments: [windowStart]) ?? 0
       guard attemptedInWindow < gate.dailyLimit else {
         return ContextDeliveryAttempt(id: nil, reason: .dailyBudget)

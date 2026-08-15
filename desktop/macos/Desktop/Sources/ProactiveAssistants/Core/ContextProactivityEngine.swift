@@ -8,11 +8,19 @@ struct ContextDirectorDecision: Codable, Equatable, Sendable {
   let reasoning: String
   let bucketEntryRefs: [String]
   let factIDs: [String]
+  /// Request for the single retrieval hop; empty or absent means none.
+  ///
+  /// Optional so a response predating this field still decodes: synthesized
+  /// `Decodable` uses `decodeIfPresent` for optionals. `var` with a default
+  /// keeps the memberwise initializer source-compatible for existing callers
+  /// (same pattern as `BucketExtraction.destination`).
+  var lookupQuery: String? = nil
 
   enum CodingKeys: String, CodingKey {
     case decision, title, message, reasoning
     case bucketEntryRefs = "bucket_entry_refs"
     case factIDs = "fact_ids"
+    case lookupQuery = "lookup_query"
   }
 
   func clamped() -> ContextDirectorDecision {
@@ -22,7 +30,10 @@ struct ContextDirectorDecision: Codable, Equatable, Sendable {
       message: String(message.prefix(600)),
       reasoning: String(reasoning.prefix(1_200)),
       bucketEntryRefs: bucketEntryRefs.prefix(20).map { String($0.prefix(200)) },
-      factIDs: factIDs.prefix(20).map { String($0.prefix(200)) })
+      factIDs: factIDs.prefix(20).map { String($0.prefix(200)) },
+      lookupQuery: lookupQuery.map {
+        String($0.prefix(ContextDirectorRetrievalHop.maximumQueryLength))
+      })
   }
 }
 
@@ -63,49 +74,34 @@ enum ContextDirectorTaskSelection {
   }
 }
 
-extension ContextBucketStore {
-  func activeFenceIsValid(_ fence: ContextVisitFence) async -> Bool {
-    let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let pool, poolEpoch == fence.poolEpoch else { return false }
-    do {
-      return try await pool.read { db in
-        try Bool.fetchOne(
-          db,
-          sql: """
-            SELECT EXISTS(
-              SELECT 1 FROM context_visits
-              WHERE id = ? AND contextGeneration = ? AND poolEpoch = ? AND outcome = 'active'
-            )
-            """,
-          arguments: [fence.visitID, fence.contextGeneration, fence.poolEpoch]) ?? false
-      }
-    } catch {
-      return false
-    }
-  }
-}
-
 actor ContextProactivityEngine {
   static let shared = ContextProactivityEngine(client: .shared, store: .shared)
   private let client: ProactiveLaneClient
   private let store: ContextBucketStore
   private let presentationPreflight: @Sendable (String) async -> OwnerBoundNotificationPresentationResult
+  private let retrieve: @Sendable (String, RuntimeOwnerAuthorizationSnapshot) async -> [ContextRetrievedItem]
   private var dwellAdmission = ContextVisitDwellAdmission()
   private let dwellNanoseconds: UInt64
 
   init(
     client: ProactiveLaneClient,
     store: ContextBucketStore,
-    dwellNanoseconds: UInt64 = 8_000_000_000,
+    dwellNanoseconds: UInt64 = 2_000_000_000,
     presentationPreflight: @escaping @Sendable (String) async -> OwnerBoundNotificationPresentationResult = {
       ownerID in
       await NotificationService.shared.contextDirectorPresentationPreflight(ownerID: ownerID)
+    },
+    retrieve: @escaping @Sendable (String, RuntimeOwnerAuthorizationSnapshot) async -> [ContextRetrievedItem] = {
+      query, authorizationSnapshot in
+      await ContextDirectorRetrievalExecutor.retrieve(
+        query: query, authorizationSnapshot: authorizationSnapshot)
     }
   ) {
     self.client = client
     self.store = store
     self.dwellNanoseconds = dwellNanoseconds
     self.presentationPreflight = presentationPreflight
+    self.retrieve = retrieve
   }
 
   func contextEntered(_ fence: ContextVisitFence) async {
@@ -123,22 +119,95 @@ actor ContextProactivityEngine {
     let preflightReason = ContextDeliveryBudget.freeGate(input: gate)
     guard preflightReason == .allowed else {
       log("Context director suppressed before preparation: \(preflightReason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: preflightReason, stage: .preflight)
       return
     }
+    // Run-to-completion: a settled visit's evaluation survives a context switch
+    // for a bounded window (the visit stays "fresh" while active or briefly
+    // after a completed departure), so fast task-switchers can still receive
+    // what their quota already paid for. Every later stage re-checks freshness.
+    let freshness = await store.fenceFreshness(fence)
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      await store.activeFenceIsValid(fence),
+      freshness.fresh,
       let snapshot = await store.snapshot(for: fence)
     else { return }
     // Facts are the only source of notification worthiness. A bucket containing
     // ambient narrative alone cannot purchase a frontier-model call.
     guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else { return }
+    // After a departure the latest tracked frame can be the NEXT context's
+    // screen. Sample the frame first, then re-read freshness and bound the
+    // sample against it: the transition persists `endedAt` before the next
+    // context's frame is tracked, so a bound applied to a post-sampling
+    // freshness read cannot admit the wrong screen — while a bound computed
+    // from the pre-snapshot read above could, when the switch lands between
+    // that read and this lookup.
     guard
-      let currentFrame = await MainActor.run(body: {
+      let frameSample = await MainActor.run(body: {
         AssistantCoordinator.shared.trackedFrameForDirector(startedAt: fence.startedAt)
       })
     else { return }
+    let frameFreshness = await store.fenceFreshness(fence)
+    guard
+      frameFreshness.fresh,
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: frameSample.frame.captureTime,
+        storedAt: frameSample.storedAt,
+        startedAt: fence.startedAt,
+        endedAt: frameFreshness.endedAt)
+    else { return }
+    await evaluateAndDeliver(
+      fence: fence,
+      snapshot: snapshot,
+      currentFrame: frameSample.frame,
+      authorizationSnapshot: authorizationSnapshot)
+  }
 
+  /// Departure-triggered evaluation: a departure extraction that just validated
+  /// a notify-worthy fact evaluates the departed bucket immediately, grounded
+  /// on the departing frame the extraction already holds, instead of waiting
+  /// for the next revisit's dwell. Callers gate on
+  /// `ContextDepartureEvaluationPolicy`; every delivery gate below and the
+  /// freshness window still apply, so a departure older than the validity
+  /// window dies exactly like any other stale evaluation. The dwell admission
+  /// set serializes this against a still-running `contextEntered` evaluation of
+  /// the same visit.
+  func evaluateAfterDeparture(fence: ContextVisitFence, departingFrame: CapturedFrame) async {
+    guard fence.bucketID != nil else { return }
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
+    guard dwellAdmission.begin(visitID: fence.visitID) else { return }
+    defer { dwellAdmission.finish(visitID: fence.visitID) }
+    let gate = await MainActor.run { Self.liveDeliveryGateInput() }
+    let preflightReason = ContextDeliveryBudget.freeGate(input: gate)
+    guard preflightReason == .allowed else {
+      log("Context director suppressed before departure evaluation: \(preflightReason.rawValue)")
+      return
+    }
+    let freshness = await store.fenceFreshness(fence)
+    guard
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      freshness.fresh,
+      let snapshot = await store.snapshot(for: fence)
+    else { return }
+    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else { return }
+    await evaluateAndDeliver(
+      fence: fence,
+      snapshot: snapshot,
+      currentFrame: departingFrame,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  /// The shared post-settle tail of the director pipeline: presentation
+  /// preflight, gate rebuilds, budget reservation, the model call (plus the
+  /// bounded retrieval hop), grounding validation, and the presentation
+  /// handoff. `contextEntered` reaches it after dwell/settle/frame lookup;
+  /// `evaluateAfterDeparture` reaches it with the departing frame.
+  private func evaluateAndDeliver(
+    fence: ContextVisitFence,
+    snapshot: ContextBucketSnapshot,
+    currentFrame: CapturedFrame,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async {
     guard let ownerID = await MainActor.run(body: { RuntimeOwnerIdentity.currentOwnerId() }) else { return }
     let attemptPreflight = await presentationPreflight(ownerID)
     guard Self.presentationSurfaceAvailable(attemptPreflight) else {
@@ -150,6 +219,7 @@ actor ContextProactivityEngine {
     let attemptReason = ContextDeliveryBudget.freeGate(input: attemptGate)
     guard attemptReason == .allowed else {
       log("Context director suppressed before attempt: \(attemptReason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: attemptReason, stage: .attempt)
       return
     }
 
@@ -159,6 +229,7 @@ actor ContextProactivityEngine {
     } catch { return }
     guard attempt.reason == .allowed, let deliveryID = attempt.id else {
       log("Context director suppressed: \(attempt.reason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: attempt.reason, stage: .reservation)
       return
     }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
@@ -175,16 +246,57 @@ actor ContextProactivityEngine {
         from: TasksStore.shared.incompleteTasks,
         now: currentFrame.captureTime)
     }
-    let recentDeliveries = await store.recentDeliveredForBucket(
+    var recentDeliveries = await store.recentDeliveredForBucket(
       bucketID: snapshot.bucketID, now: currentFrame.captureTime)
-    let prompt = ContextProactivityPromptBuilder.directorStablePrompt(snapshot: snapshot)
-    let uncachedPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
-      tasks: taskContext,
-      frame: currentFrame,
-      recentDeliveries: recentDeliveries)
+    // The related-workstream section: validated facts from sibling buckets of
+    // the visit's live workstream, quality-gated and quoted as non-citable
+    // context. Read the flag once so section, dedup, and provenance agree; with
+    // the flag off (or no live tag) the prompt is byte-identical to today.
+    let workstreamPoolingEnabled = await MainActor.run {
+      ContextBucketsFeature.isWorkstreamPoolingEnabled
+    }
+    var workstreamSection: String? = nil
+    var workstreamProvenance: [String: Any]? = nil
+    if workstreamPoolingEnabled,
+      let liveTag = await store.liveWorkstreamTag(for: fence, now: currentFrame.captureTime)
+    {
+      let selected = ContextWorkstreamPooling.select(
+        await store.workstreamPool(
+          tag: liveTag, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime),
+        now: currentFrame.captureTime)
+      if !selected.isEmpty {
+        workstreamSection = ContextWorkstreamPooling.promptSection(
+          tag: liveTag, items: selected, now: currentFrame.captureTime)
+        workstreamProvenance = [
+          "tag": liveTag,
+          "pooled_fact_ids": selected.map(\.factID),
+        ]
+      }
+      // Tag-aware dedup: with pooling, the same cross-app point is reachable
+      // from every bucket carrying this tag, so sibling deliveries join the
+      // bucket's own under the same prompt cap.
+      let workstreamDeliveries = await store.recentDeliveredForWorkstream(
+        tag: liveTag, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime)
+      recentDeliveries = Array(
+        (recentDeliveries + workstreamDeliveries)
+          .sorted { $0.deliveredAt > $1.deliveredAt }
+          .prefix(ContextBucketRecentDelivery.promptCap))
+    }
+    // Read once and use for the whole visit: schema, prompt, and hop admission
+    // must agree, and a mid-visit flag flip must not desynchronize them. With
+    // the flag off, schema and prompt are byte-identical to the pre-hop build.
+    let retrievalHopEnabled = await MainActor.run { ContextBucketsFeature.isRetrievalHopEnabled }
+    let prompt = ContextProactivityPromptBuilder.directorStablePrompt(
+      snapshot: snapshot, allowLookup: retrievalHopEnabled)
+    let uncachedPrompt =
+      ContextProactivityPromptBuilder.directorVolatilePrompt(
+        tasks: taskContext,
+        frame: currentFrame,
+        recentDeliveries: recentDeliveries)
+      + (workstreamSection.map { "\n\n" + $0 } ?? "")
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      await store.activeFenceIsValid(fence)
+      await store.fenceFreshness(fence).fresh
     else {
       await terminalize(
         deliveryID: deliveryID,
@@ -200,6 +312,7 @@ actor ContextProactivityEngine {
     let evaluationReason = ContextDeliveryBudget.freeGate(input: evaluationGate)
     guard evaluationReason == .allowed else {
       log("Context director suppressed before model: \(evaluationReason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: evaluationReason, stage: .preModel)
       await terminalize(
         deliveryID: deliveryID,
         decisionType: "silence",
@@ -207,20 +320,21 @@ actor ContextProactivityEngine {
         state: "suppressed")
       return
     }
+    let cacheKey = "bucket:\(snapshot.bucketID):v\(snapshot.version)"
     do {
-      let result = try await client.complete(
+      var result = try await client.complete(
         operation: ModelQoS.Proactivity.reasoningOperation,
         prompt: prompt,
         uncachedPrompt: uncachedPrompt,
         imageData: currentFrame.jpegData,
-        jsonSchema: Self.schema,
-        cacheKey: "bucket:\(snapshot.bucketID):v\(snapshot.version)",
+        jsonSchema: Self.schema(allowLookup: retrievalHopEnabled),
+        cacheKey: cacheKey,
         maxCompletionTokens: 800,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
       guard
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-        await store.activeFenceIsValid(fence)
+        await store.fenceFreshness(fence).fresh
       else {
         await terminalize(
           deliveryID: deliveryID,
@@ -229,9 +343,63 @@ actor ContextProactivityEngine {
           state: "failed")
         return
       }
-      let decision = try JSONDecoder().decode(ContextDirectorDecision.self, from: Data(result.content.utf8)).clamped()
+      let firstDecision = try JSONDecoder().decode(
+        ContextDirectorDecision.self, from: Data(result.content.utf8)
+      ).clamped()
+      var decision = firstDecision
+      var retrievedRefAllowlist: Set<String> = []
+      var retrievalProvenance: [String: Any]? = nil
+      // The single bounded retrieval hop: at most one retrieval and one further
+      // director call per visit, and only when the director asked for one.
+      // `plan` is the sole admission and this is the sole second call site, so
+      // a second response requesting another lookup has nowhere to loop to.
+      if let lookupQuery = ContextDirectorRetrievalHop.plan(
+        lookupQuery: firstDecision.lookupQuery,
+        flagEnabled: retrievalHopEnabled,
+        priorHops: 0)
+      {
+        let hop = await performRetrievalHop(
+          query: lookupQuery,
+          stablePrompt: prompt,
+          volatilePrompt: uncachedPrompt,
+          imageData: currentFrame.jpegData,
+          cacheKey: cacheKey,
+          fence: fence,
+          authorizationSnapshot: authorizationSnapshot)
+        // A failed, empty, or gated hop keeps the first decision untouched:
+        // retrieval may upgrade a decision, never lose one.
+        decision = ContextDirectorRetrievalHop.finalDecision(
+          first: firstDecision, second: hop.decision)
+        retrievedRefAllowlist = hop.allowedRefs
+        retrievalProvenance = hop.provenance
+        if let secondResult = hop.result { result = secondResult }
+        // The owner/fence guard above ran before the hop, and the hop spans a
+        // retrieval round trip plus a second model call. Ownership can be revoked
+        // or the visit can end inside that window, so the same guard must run
+        // again before anything is persisted — otherwise falling back to the
+        // first decision would deliver against context the pre-hop code would
+        // have refused. Re-checked here rather than trusting the hop to report
+        // staleness, so a future failure path cannot quietly bypass it.
+        guard
+          RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+          await store.fenceFreshness(fence).fresh
+        else {
+          await terminalize(
+            deliveryID: deliveryID,
+            decisionType: "silence",
+            provenanceJSON: "{\"failure\":\"stale_visit\"}",
+            state: "failed")
+          return
+        }
+      }
+      // Bucket refs keep today's validation path untouched; retrieved-namespace
+      // refs validate only against the allowlist of items quoted to this very
+      // call, which is empty unless the hop completed.
+      let citedRefs = ContextDirectorRetrievalHop.partitionCitedRefs(decision.bucketEntryRefs)
       let entryRefs = await store.validatedEntryRefs(
-        decision.bucketEntryRefs, bucketID: snapshot.bucketID)
+        citedRefs.bucket, bucketID: snapshot.bucketID)
+      let retrievedRefs = ContextDirectorRetrievalHop.validatedRetrievedRefs(
+        citedRefs.retrieved, allowed: retrievedRefAllowlist)
       let factIDs =
         decision.decision == "silence"
         ? []
@@ -239,7 +407,7 @@ actor ContextProactivityEngine {
           decision.factIDs,
           snapshotFacts: snapshot.validatedFacts,
           bucketID: snapshot.bucketID)
-      let provenance: [String: Any] = [
+      var provenance: [String: Any] = [
         "bucket_id": snapshot.bucketID,
         "bucket_version_id": snapshot.versionID,
         "bucket_entry_refs": entryRefs,
@@ -249,17 +417,29 @@ actor ContextProactivityEngine {
         "cached_tokens": result.usage.cachedTokens,
         "cache_write_tokens": result.usage.cacheWriteTokens,
       ]
+      if var hopProvenance = retrievalProvenance {
+        hopProvenance["cited_refs"] = retrievedRefs
+        provenance["retrieval"] = hopProvenance
+      }
+      if let workstreamProvenance {
+        provenance["workstream"] = workstreamProvenance
+      }
       let provenanceData = try JSONSerialization.data(withJSONObject: provenance, options: [.sortedKeys])
       let provenanceJSON = String(data: provenanceData, encoding: .utf8) ?? "{}"
       try await store.completeDelivery(
         id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
         message: decision.message, state: "model_completed")
+      await ContextProactivityTelemetry.recordDirectorDecision(decision.decision)
       if decision.decision == "silence" {
         try await store.completeDelivery(
           id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
           message: nil, state: "suppressed")
         return
       }
+      // Deliberately evaluated on bucket refs alone: a delivery must still stand
+      // on at least one bucket entry and one validated bucket fact, exactly as
+      // before the retrieval hop existed. Retrieved refs are additive citations
+      // and can never substitute for bucket grounding.
       guard ContextDirectorGrounding.permitsNonSilence(entryRefs: entryRefs, factIDs: factIDs) else {
         try await store.completeDelivery(
           id: deliveryID, decisionType: "silence", provenanceJSON: provenanceJSON,
@@ -271,7 +451,7 @@ actor ContextProactivityEngine {
         message: decision.message, state: "policy_approved")
       guard
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-        await store.activeFenceIsValid(fence),
+        await store.fenceFreshness(fence).fresh,
         let ownerID = await MainActor.run(body: { RuntimeOwnerIdentity.currentOwnerId() })
       else {
         await terminalize(
@@ -287,6 +467,8 @@ actor ContextProactivityEngine {
       let presentationReason = ContextDeliveryBudget.freeGate(input: presentationGate)
       guard presentationReason == .allowed else {
         log("Context director suppressed before presentation: \(presentationReason.rawValue)")
+        await ContextProactivityTelemetry.recordGateRejection(
+          reason: presentationReason, stage: .presentation)
         try await store.completeDelivery(
           id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
           message: decision.message, state: "suppressed")
@@ -329,33 +511,40 @@ actor ContextProactivityEngine {
       // free gate once more at the actual handoff so master-off, snooze, paywall,
       // or another proactive presentation wins the race.
       let handoffGate = await MainActor.run { Self.liveDeliveryGateInput() }
-      guard ContextDeliveryBudget.freeGate(input: handoffGate) == .allowed else {
+      let handoffReason = ContextDeliveryBudget.freeGate(input: handoffGate)
+      guard handoffReason == .allowed else {
+        await ContextProactivityTelemetry.recordGateRejection(reason: handoffReason, stage: .handoff)
         try await store.completeDelivery(
           id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
           message: decision.message, state: "suppressed")
         return
       }
+      // The bounded hop is the last writer of `decision`, so hand the main actor
+      // the settled value rather than this actor's mutable binding: the callbacks
+      // below outlive the handoff, and capturing the variable makes their reads
+      // race with any later write to it.
+      let presentedDecision = decision
       let presentation = await MainActor.run {
         let context = FloatingBarNotificationContext(
-          sourceTitle: decision.title,
+          sourceTitle: presentedDecision.title,
           assistantId: "context-director",
-          contextSummary: decision.reasoning,
-          detail: entryRefs.joined(separator: ", "),
+          contextSummary: presentedDecision.reasoning,
+          detail: (entryRefs + retrievedRefs).joined(separator: ", "),
           provenanceRef: deliveryID)
         return NotificationService.shared.presentContextDirectorNotification(
           ownerID: ownerID,
-          title: decision.title,
-          message: decision.message,
-          decisionType: decision.decision,
+          title: presentedDecision.title,
+          message: presentedDecision.message,
+          decisionType: presentedDecision.decision,
           context: context,
           onPresented: { [weak self] in
             guard let self else { return }
             Task {
               await self.completePresentedDelivery(
                 deliveryID: deliveryID,
-                decisionType: decision.decision,
+                decisionType: presentedDecision.decision,
                 provenanceJSON: provenanceJSON,
-                message: decision.message,
+                message: presentedDecision.message,
                 authorizationSnapshot: authorizationSnapshot)
             }
           },
@@ -384,6 +573,86 @@ actor ContextProactivityEngine {
     } catch {
       await recordDirectorFailure(deliveryID: deliveryID, error: error)
       // Network and model failures stay user-silent; provenance carries the class.
+    }
+  }
+
+  private struct RetrievalHopOutcome {
+    /// The final decision from the second call, or nil when the first stands.
+    let decision: ContextDirectorDecision?
+    /// Refs of the items actually quoted to the second call. Empty otherwise,
+    /// so retrieved-namespace citations fail closed whenever no hop completed.
+    let allowedRefs: Set<String>
+    let provenance: [String: Any]
+    let result: ProactiveLaneResult?
+  }
+
+  /// Runs retrieval and, when it returned anything, exactly one more director
+  /// call. Non-throwing on purpose: every failure path returns a nil decision,
+  /// which leaves the already-decoded first decision in force. The provenance
+  /// object always records what the hop attempted so a delivered citation of a
+  /// retrieved ref remains auditable from the delivery row alone.
+  private func performRetrievalHop(
+    query: String,
+    stablePrompt: String,
+    volatilePrompt: String,
+    imageData: Data?,
+    cacheKey: String,
+    fence: ContextVisitFence,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async -> RetrievalHopOutcome {
+    func abandoned(_ items: [ContextRetrievedItem], failure: String?) -> RetrievalHopOutcome {
+      RetrievalHopOutcome(
+        decision: nil,
+        allowedRefs: [],
+        provenance: ContextDirectorRetrievalHop.provenance(
+          query: query, items: items, citedRefs: [], hopCompleted: false, failure: failure),
+        result: nil)
+    }
+    let items = await retrieve(query, authorizationSnapshot)
+    guard let section = ContextDirectorRetrievalHop.promptSection(query: query, items: items) else {
+      return abandoned(items, failure: "empty_results")
+    }
+    guard
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      await store.fenceFreshness(fence).fresh
+    else { return abandoned(items, failure: "stale_visit") }
+    // Retrieval awaited the network; rebuild the free gate before the second
+    // paid call so disabling notifications, snoozing, or becoming paywalled
+    // mid-hop never spends more director budget.
+    let hopGate = await MainActor.run { Self.liveDeliveryGateInput() }
+    let hopReason = ContextDeliveryBudget.freeGate(input: hopGate)
+    guard hopReason == .allowed else {
+      await ContextProactivityTelemetry.recordGateRejection(reason: hopReason, stage: .retrievalHop)
+      return abandoned(items, failure: "pre_model_gate")
+    }
+    do {
+      // Identical stable prompt and cache key as the first call, so the second
+      // call re-reads the same cached prefix. The retrieved section is volatile
+      // and rides only in the uncached suffix, below the volatile prompt, which
+      // keeps it under the untrusted preamble that opens the stable prompt.
+      let result = try await client.complete(
+        operation: ModelQoS.Proactivity.reasoningOperation,
+        prompt: stablePrompt,
+        uncachedPrompt: volatilePrompt + "\n\n" + section,
+        imageData: imageData,
+        jsonSchema: Self.schema(allowLookup: true),
+        cacheKey: cacheKey,
+        maxCompletionTokens: 800,
+        authorizationSnapshot: authorizationSnapshot)
+      await ContextProactivityTelemetry.record(result)
+      let decision = try JSONDecoder().decode(
+        ContextDirectorDecision.self, from: Data(result.content.utf8)
+      ).clamped()
+      return RetrievalHopOutcome(
+        decision: decision,
+        allowedRefs: Set(items.map(\.ref)),
+        provenance: ContextDirectorRetrievalHop.provenance(
+          query: query, items: items, citedRefs: [], hopCompleted: true, failure: nil),
+        result: result)
+    } catch {
+      let classification = ProactiveLaneFailureClassification.classify(error)
+      log("Context director retrieval hop failed, keeping first decision: \(classification.logDescription)")
+      return abandoned(items, failure: classification.failure)
     }
   }
 
@@ -486,20 +755,44 @@ actor ContextProactivityEngine {
       lastGlobalPresentationAt: NotificationService.shared.lastProactivePresentationAtForCurrentOwner())
   }
 
-  static var schema: [String: Any] {
-    [
+  static var schema: [String: Any] { schema(allowLookup: false) }
+
+  static func schema(allowLookup: Bool) -> [String: Any] {
+    var properties: [String: Any] = [
+      "decision": ["type": "string", "enum": ["suggest", "insight", "task_candidate", "resurface", "silence"]],
+      "title": ["type": "string"],
+      "message": ["type": "string"],
+      "reasoning": ["type": "string"],
+      "bucket_entry_refs": ["type": "array", "items": ["type": "string"]],
+      "fact_ids": ["type": "array", "items": ["type": "string"]],
+    ]
+    var required = ["decision", "title", "message", "reasoning", "bucket_entry_refs", "fact_ids"]
+    if allowLookup {
+      // Strict structured output requires every declared property to be listed
+      // as required, so the prompt tells the model to answer "" for no lookup.
+      // With the retrieval flag off the field is absent entirely, keeping the
+      // request byte-identical to today.
+      properties["lookup_query"] = ["type": "string"]
+      required.append("lookup_query")
+    }
+    return [
       "type": "object",
-      "properties": [
-        "decision": ["type": "string", "enum": ["suggest", "insight", "task_candidate", "resurface", "silence"]],
-        "title": ["type": "string"],
-        "message": ["type": "string"],
-        "reasoning": ["type": "string"],
-        "bucket_entry_refs": ["type": "array", "items": ["type": "string"]],
-        "fact_ids": ["type": "array", "items": ["type": "string"]],
-      ],
-      "required": ["decision", "title", "message", "reasoning", "bucket_entry_refs", "fact_ids"],
+      "properties": properties,
+      "required": required,
       "additionalProperties": false,
     ]
+  }
+}
+
+/// Admission for the departure-triggered director evaluation: only a departure
+/// extraction that just validated a fact at or above the worthiness threshold,
+/// with the feature flag on, buys an immediate evaluation of the departed
+/// bucket. Everything else waits for the next revisit's dwell as before.
+enum ContextDepartureEvaluationPolicy {
+  static let worthinessThreshold = 0.6
+
+  static func triggers(maximumValidatedWorthiness: Double, flagEnabled: Bool) -> Bool {
+    flagEnabled && maximumValidatedWorthiness >= worthinessThreshold
   }
 }
 

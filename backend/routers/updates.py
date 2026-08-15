@@ -836,14 +836,17 @@ async def get_desktop_appcast_xml(
 ):
     """
     Sparkle appcast XML endpoint for desktop auto-updates.
-    Returns a single feed with both beta and stable channel items.
-    Sparkle clients filter by their configured allowed channels.
 
     identity=beta is requested only by the separately-installable "Omi Beta" app
     (its SUFeedURL carries the parameter): it gets beta-channel items only, with
     beta-identity enclosures, so Sparkle can never replace it with a
-    stable-identity bundle. Legacy stable-identity installs on the beta channel
-    keep the default feed and their current update behavior.
+    stable-identity bundle.
+
+    The default (stable-identity) feed serves only the stable channel. Stable.app
+    must not Sparkle-install beta-channel Omi.zip builds; that leftover path left
+    the same bundle on production APIs with newer Swift. Old Stable clients that
+    still request Sparkle channel=beta therefore freeze until macos-stable
+    surpasses their build.
     """
     try:
         desktop_releases = await _get_live_desktop_releases(platform)
@@ -857,7 +860,8 @@ async def get_desktop_appcast_xml(
 
         for entry in desktop_releases:
             channel = entry["channel"]
-            if identity == "beta" and channel != "beta":
+            wanted_channel = "beta" if identity == "beta" else "stable"
+            if channel != wanted_channel:
                 continue
             if channel in seen_channels:
                 continue
@@ -945,24 +949,12 @@ async def download_latest_desktop_release(
         raise HTTPException(status_code=404, detail=f"No live desktop releases found for platform: {platform}")
 
     if identity == "beta" and platform == "macos":
-        # Serve the side-by-side Omi Beta DMG when the live beta release ships it;
-        # otherwise fall back to the stable-identity installer so the public link
-        # never 404s pre-rollout. The strict identity guard stays on the Sparkle
-        # feed where in-place replacement could corrupt an install's identity.
+        # Serve only the side-by-side Omi Beta DMG. Falling back to omi.dmg would
+        # install the stable-identity app from a "get Beta" link.
         for entry in desktop_releases:
             if entry["channel"] != channel:
                 continue
             installer_url = await _resolve_beta_identity_dmg(entry)
-            if not installer_url:
-                record_fallback(
-                    component='other',
-                    from_mode='desktop_download_beta_identity',
-                    to_mode='desktop_download_stable_identity',
-                    reason='config_incomplete',
-                    outcome='degraded',
-                    log=logger,
-                )
-                installer_url = _get_installer_download_url(entry["release"], platform)
             if installer_url:
                 version = entry["version_info"]["version"]
                 return HTMLResponse(

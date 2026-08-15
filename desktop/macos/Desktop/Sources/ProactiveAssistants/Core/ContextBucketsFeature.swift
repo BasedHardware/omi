@@ -44,4 +44,80 @@ enum ContextBucketsFeature {
     guard AppBuild.isBetaProductionBundle else { return false }
     return !PostHogManager.shared.isFeatureEnabled(killSwitchFlagName)
   }
+
+  /// Groups browser tabs of one website into a single bucket instead of one bucket
+  /// per tab title.
+  ///
+  /// Separate from `isEnabled` and separately stoppable: this is the only path that
+  /// can make two different reference hashes share a bucket, so it needs its own
+  /// remote stop that does not take the whole pipeline down with it. Same inverted
+  /// fail-open semantics as the pipeline kill switch.
+  @MainActor static var isDestinationRoutingEnabled: Bool {
+    guard isEnabled else { return false }
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localDestinationOverrideName] != "0"
+    }
+    return !PostHogManager.shared.isFeatureEnabled(destinationKillSwitchFlagName)
+  }
+
+  static let destinationKillSwitchFlagName = "context_buckets_destination_kill"
+  private static let localDestinationOverrideName = "OMI_FORCE_BUCKET_DESTINATIONS"
+
+  /// Lets the director spend one bounded retrieval hop (a second model call over
+  /// conversation/memory search results) when its first response asks for one.
+  ///
+  /// Separate from `isEnabled` and separately stoppable: this is the only path
+  /// that doubles the per-visit director cost and the only one that quotes
+  /// cross-bucket history into a director prompt, so it needs a remote stop that
+  /// does not take the whole pipeline down with it. Same inverted fail-open
+  /// semantics as the other kill switches. With the flag off, the director's
+  /// schema, prompt, and single-call flow are byte-identical to today.
+  @MainActor static var isRetrievalHopEnabled: Bool {
+    guard isEnabled else { return false }
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localRetrievalOverrideName] != "0"
+    }
+    return !PostHogManager.shared.isFeatureEnabled(retrievalKillSwitchFlagName)
+  }
+
+  static let retrievalKillSwitchFlagName = "context_buckets_retrieval_kill"
+  private static let localRetrievalOverrideName = "OMI_FORCE_BUCKET_RETRIEVAL"
+
+  /// Evaluates a departed bucket immediately when its departure extraction just
+  /// validated a notify-worthy fact, grounded on the departing frame, instead
+  /// of waiting for the next revisit's dwell.
+  ///
+  /// Non-production dogfood defaults to on with the same inverted env override
+  /// as the pipeline flag (`OMI_FORCE_DEPARTURE_EVALUATION=0` turns it off).
+  /// Production and beta stay off until the departure path is validated in
+  /// dogfood — unlike the surfaces above there is deliberately no remote stop
+  /// yet, because nothing ships dark to users this way.
+  @MainActor static var isDepartureEvaluationEnabled: Bool {
+    guard isEnabled else { return false }
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localDepartureEvaluationOverrideName] != "0"
+    }
+    return false
+  }
+
+  private static let localDepartureEvaluationOverrideName = "OMI_FORCE_DEPARTURE_EVALUATION"
+
+  /// Quotes quality-gated validated facts from sibling buckets of the visit's
+  /// live workstream into the director's volatile prompt, and widens delivery
+  /// dedup to that workstream.
+  ///
+  /// Non-production dogfood defaults to on with the same inverted env override
+  /// as the flags above (`OMI_FORCE_BUCKET_WORKSTREAMS=0` turns it off).
+  /// Production and beta stay off until pooling is validated in dogfood — like
+  /// departure evaluation there is deliberately no remote stop yet, because
+  /// nothing ships dark to users this way.
+  @MainActor static var isWorkstreamPoolingEnabled: Bool {
+    guard isEnabled else { return false }
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localWorkstreamPoolingOverrideName] != "0"
+    }
+    return false
+  }
+
+  private static let localWorkstreamPoolingOverrideName = "OMI_FORCE_BUCKET_WORKSTREAMS"
 }

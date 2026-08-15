@@ -280,41 +280,16 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
     return errors
 
 
-def validate_desktop_release_gates(qualification: str, stable: str) -> list[str]:
+def validate_desktop_release_gates(stable: str) -> list[str]:
     errors: list[str] = []
-    shared_required = (
+    for fragment in (
         "Verify live desktop-backend chat compatibility",
         '.chat_contract_version == "1"',
-    )
-    for workflow, text, endpoint in (
-        (
-            "desktop_qualify_beta.yml",
-            qualification,
-            "https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
-        ),
-        (
-            "desktop_promote_prod.yml",
-            stable,
-            "https://desktop-backend-hhibjajaja-uc.a.run.app",
-        ),
+        "https://desktop-backend-hhibjajaja-uc.a.run.app",
     ):
-        for fragment in (*shared_required, endpoint):
-            if fragment not in text:
-                errors.append(f"{workflow}: missing desktop-backend compatibility gate {fragment!r}")
-    for fragment in (
-        "https://api.omiapi.com/v1/health",
-        '.status == "ok"',
-        'python_status: "ok"',
-        "Prove production Firebase UID continuity on Beta development authorities",
-        "probe_beta_uid_continuity.py",
-        "FIREBASE_AUTH_PROJECT_ID: based-hardware",
-        "firebase_release_probe_token.py",
-    ):
-        if fragment not in qualification:
-            errors.append(f"desktop_qualify_beta.yml: missing development Python compatibility gate {fragment!r}")
-    if qualification.find(shared_required[0]) >= qualification.find("Qualify exact candidate on the M1 Studio"):
-        errors.append("desktop_qualify_beta.yml: backend compatibility must precede candidate qualification")
-    if stable.find(shared_required[0]) >= stable.find("Advance explicit stable pointer"):
+        if fragment not in stable:
+            errors.append(f"desktop_promote_prod.yml: missing desktop-backend compatibility gate {fragment!r}")
+    if stable.find("Verify live desktop-backend chat compatibility") >= stable.find("Advance explicit stable pointer"):
         errors.append("desktop_promote_prod.yml: backend compatibility must precede Stable pointer mutation")
     return errors
 
@@ -374,7 +349,6 @@ def validate_all(
     *,
     dev: str,
     prod: str,
-    qualification: str,
     stable: str,
     recovery: str,
     dockerfile: str,
@@ -384,7 +358,7 @@ def validate_all(
     return [
         *validate_deploy_workflow(dev, production=False),
         *validate_deploy_workflow(prod, production=True),
-        *validate_desktop_release_gates(qualification, stable),
+        *validate_desktop_release_gates(stable),
         *validate_recovery_workflow(recovery),
         *validate_contract_sources(
             dockerfile=dockerfile,
@@ -398,7 +372,6 @@ def main() -> int:
     errors = validate_all(
         dev=(WORKFLOWS / "desktop_backend_auto_dev.yml").read_text(encoding="utf-8"),
         prod=(WORKFLOWS / "desktop_backend_prod.yml").read_text(encoding="utf-8"),
-        qualification=(WORKFLOWS / "desktop_qualify_beta.yml").read_text(encoding="utf-8"),
         stable=(WORKFLOWS / "desktop_promote_prod.yml").read_text(encoding="utf-8"),
         recovery=(WORKFLOWS / "desktop_backend_recover_prod.yml").read_text(encoding="utf-8"),
         dockerfile=(ROOT / "backend/Dockerfile.desktop_backend").read_text(encoding="utf-8"),

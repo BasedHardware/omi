@@ -78,17 +78,23 @@ def hydrate_chunk_texts(uid: str, rows: List[Dict[str, Any]]) -> List[Dict[str, 
 
     Re-reads the conversations from Firestore (decrypted by the db layer) and rebuilds
     the deterministic chunking, so transcript text never has to live in Pinecone.
-    Rows whose conversation/chunk no longer exists are dropped.
+    Rows whose conversation/chunk no longer exists are dropped. Each hydrated row also
+    carries the parent conversation's title and start time ('conversation_title' /
+    'conversation_started_at') so callers can emit typed sources without a second read.
     """
     conv_ids = list({r['conversation_id'] for r in rows if r.get('conversation_id')})
     if not conv_ids:
         return []
     conversations = conversations_db.get_conversations_by_id(uid, conv_ids)
     chunks_by_conv: Dict[str, Dict[int, str]] = {}
+    meta_by_conv: Dict[str, Dict[str, Any]] = {}
     for c in conversations:
         segs: List[Dict[str, Any]] = c.get('transcript_segments') or []
         started = c.get('started_at') or c.get('created_at')
         chunks_by_conv[c['id']] = {ch['chunk_index']: ch['text'] for ch in build_transcript_chunks(segs, started)}
+        structured = c.get('structured')
+        title = structured.get('title') if isinstance(structured, dict) else None
+        meta_by_conv[c['id']] = {'conversation_title': title, 'conversation_started_at': started}
 
     hydrated: List[Dict[str, Any]] = []
     for r in rows:
@@ -96,6 +102,6 @@ def hydrate_chunk_texts(uid: str, rows: List[Dict[str, Any]]) -> List[Dict[str, 
         chunk_idx = r.get('chunk_index')
         conv_chunks = chunks_by_conv.get(conv_id) if conv_id else None
         text = conv_chunks.get(chunk_idx) if (conv_chunks is not None and chunk_idx is not None) else None
-        if text:
-            hydrated.append({**r, 'text': text})
+        if text and conv_id:
+            hydrated.append({**r, 'text': text, **meta_by_conv.get(conv_id, {})})
     return hydrated

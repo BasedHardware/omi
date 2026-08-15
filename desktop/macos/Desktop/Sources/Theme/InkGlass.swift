@@ -765,11 +765,15 @@ package struct InkGlassPanelModifier: ViewModifier {
     content
       .environment(\.colorScheme, .light)
       .clipShape(shape)
-      // Report the panel's extent as interactive content regardless of Reduce Transparency: the
-      // material may be replaced by a flat wash, but the surface still owns the pointer.
-      .background(InkGlassHitRegionReporter())
       .background {
         ZStack(alignment: .top) {
+          // Inside the glass stack, never wrapping the caller's content: an AppKit view added as a
+          // background *of the clipped content* changed how ImageRenderer rasterized the subtree and
+          // dropped the corner clip. Here it sits beside the material, which has always been a
+          // representable, and it is mounted in every mode — Reduce Transparency removes the
+          // material, not the surface, and a panel that registers nothing would let clicks fall
+          // through to the desktop.
+          InkGlassHitRegionReporter(cornerRadius: cornerRadius)
           if InkGlass.showsMaterial(reduceTransparency: reduceTransparency) {
             InkGlassBackdrop()
           }

@@ -275,6 +275,168 @@ final class ContextProactivityEngineTests: XCTestCase {
     XCTAssertEqual(json["error_type"] as? String, "timed_out")
   }
 
+  func testVisitFreshnessRunsToCompletionOnlyWithinTheDeliveryValidityWindow() throws {
+    let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: 1, bucketID: "bucket-a", startedAt: now)
+
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE context_visits SET outcome = 'active', endedAt = NULL WHERE id = 1")
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now),
+        ContextVisitFreshness(fresh: true, endedAt: nil),
+        "an active visit is always fresh")
+
+      try db.execute(
+        sql: "UPDATE context_visits SET outcome = 'completed', endedAt = ? WHERE id = 1",
+        arguments: [now.addingTimeInterval(-5)])
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now),
+        ContextVisitFreshness(fresh: true, endedAt: now.addingTimeInterval(-5)),
+        "a departure five seconds ago must not kill the in-flight evaluation")
+
+      try db.execute(
+        sql: "UPDATE context_visits SET endedAt = ? WHERE id = 1",
+        arguments: [now.addingTimeInterval(-ContextDeliveryBudget.deliveryValidityWindowSeconds)])
+      XCTAssertTrue(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now).fresh,
+        "the validity window boundary is inclusive")
+
+      try db.execute(
+        sql: "UPDATE context_visits SET endedAt = ? WHERE id = 1",
+        arguments: [now.addingTimeInterval(-120)])
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now),
+        ContextVisitFreshness(fresh: false, endedAt: now.addingTimeInterval(-120)),
+        "an evaluation that drags past the window after departure dies at its next guard")
+
+      try db.execute(
+        sql: "UPDATE context_visits SET endedAt = NULL WHERE id = 1")
+      XCTAssertFalse(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now).fresh,
+        "a completed visit with no recorded departure time fails closed")
+    }
+  }
+
+  func testVisitFreshnessRejectsDiscardedAndInterruptedOutcomesHoweverRecent() throws {
+    let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: 1, bucketID: "bucket-a", startedAt: now)
+
+    try queue.write { db in
+      for outcome in ["discarded", "interrupted"] {
+        try db.execute(
+          sql: "UPDATE context_visits SET outcome = ?, endedAt = ? WHERE id = 1",
+          arguments: [outcome, now.addingTimeInterval(-1)])
+        XCTAssertFalse(
+          try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now).fresh,
+          "a \(outcome) visit never earned a delivery, however recent")
+      }
+    }
+  }
+
+  func testVisitFreshnessFailsClosedWhenTheFenceIdentityDoesNotMatch() throws {
+    let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+
+    try queue.read { db in
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(
+          in: db,
+          fence: ContextVisitFence(
+            visitID: 1, contextGeneration: 99, poolEpoch: 1, bucketID: "bucket-a", startedAt: now),
+          now: now),
+        .stale)
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(
+          in: db,
+          fence: ContextVisitFence(
+            visitID: 999, contextGeneration: 1, poolEpoch: 1, bucketID: "bucket-a", startedAt: now),
+          now: now),
+        .stale)
+    }
+  }
+
+  func testSnapshotBucketResolutionSurvivesACompletedVisitButNotADiscardedOne() throws {
+    let queue = try contextBucketDatabase()
+
+    try queue.write { db in
+      // The fixture seeds visit 1 as completed: the snapshot path must still
+      // resolve its bucket so a run-to-completion evaluation can assemble.
+      XCTAssertEqual(
+        try ContextBucketVisitResolver.persistedBucketID(
+          in: db, visitID: 1, contextGeneration: 1, poolEpoch: 1),
+        "bucket-a")
+
+      try db.execute(sql: "UPDATE context_visits SET outcome = 'discarded' WHERE id = 1")
+      XCTAssertNil(
+        try ContextBucketVisitResolver.persistedBucketID(
+          in: db, visitID: 1, contextGeneration: 1, poolEpoch: 1))
+    }
+  }
+
+  func testDepartureEvaluationTriggersOnlyAtTheWorthinessThresholdWithTheFlagOn() {
+    XCTAssertFalse(
+      ContextDepartureEvaluationPolicy.triggers(
+        maximumValidatedWorthiness: 0.59, flagEnabled: true))
+    XCTAssertTrue(
+      ContextDepartureEvaluationPolicy.triggers(
+        maximumValidatedWorthiness: 0.6, flagEnabled: true))
+    XCTAssertFalse(
+      ContextDepartureEvaluationPolicy.triggers(
+        maximumValidatedWorthiness: 1.0, flagEnabled: false),
+      "the feature flag gates the departure path entirely")
+  }
+
+  func testDirectorFrameBoundRejectsTheNextContextsScreenAfterDeparture() {
+    let startedAt = Date(timeIntervalSince1970: 1_725_000_000)
+    let endedAt = startedAt.addingTimeInterval(13)
+
+    XCTAssertFalse(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: startedAt.addingTimeInterval(-1),
+        storedAt: startedAt,
+        startedAt: startedAt,
+        endedAt: nil),
+      "a frame captured before the visit began never grounds it")
+    XCTAssertTrue(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: startedAt.addingTimeInterval(30),
+        storedAt: startedAt.addingTimeInterval(30),
+        startedAt: startedAt,
+        endedAt: nil),
+      "an active visit keeps today's behavior: any frame at or after startedAt")
+    XCTAssertTrue(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: startedAt.addingTimeInterval(10),
+        storedAt: startedAt.addingTimeInterval(10),
+        startedAt: startedAt,
+        endedAt: endedAt),
+      "a frame captured and tracked during the visit grounds its departed evaluation")
+    // The switch tick: the next context's frame is CAPTURED milliseconds before
+    // the transition writes endedAt, so capture time cannot exclude it — but it
+    // is only STORED after the transition persisted the departure.
+    XCTAssertFalse(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: endedAt.addingTimeInterval(-0.005),
+        storedAt: endedAt.addingTimeInterval(0.010),
+        startedAt: startedAt,
+        endedAt: endedAt),
+      "the next context's frame on the switch tick must not ground the departed visit")
+    XCTAssertFalse(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: endedAt.addingTimeInterval(
+          ContextDeliveryBudget.departedFrameCaptureEpsilonSeconds + 1),
+        storedAt: endedAt.addingTimeInterval(
+          ContextDeliveryBudget.departedFrameCaptureEpsilonSeconds + 1),
+        startedAt: startedAt,
+        endedAt: endedAt),
+      "a frame captured after departure plus epsilon is the next context's screen")
+  }
+
   private func provenanceObject(_ json: String) throws -> [String: Any] {
     let object = try JSONSerialization.jsonObject(with: Data(json.utf8))
     return try XCTUnwrap(object as? [String: Any])
@@ -565,5 +727,199 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
   private func provenanceObject(_ json: String) throws -> [String: Any] {
     let object = try JSONSerialization.jsonObject(with: Data(json.utf8))
     return try XCTUnwrap(object as? [String: Any])
+  }
+}
+
+final class ContextDepartureEvaluationStoreTests: XCTestCase {
+  private var fixture: RewindStorageTestIsolation.Fixture?
+
+  override func setUp() async throws {
+    try await super.setUp()
+    fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "departure-evaluation-store")
+  }
+
+  override func tearDown() async throws {
+    await RewindStorageTestIsolation.tearDown(userDir: fixture?.userDir)
+    fixture = nil
+    try await super.tearDown()
+  }
+
+  func testWorkstreamTagsPersistPoolAcrossBucketsAndResolveTheLiveTag() async throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    try await seedBucket(in: pool, now: now)
+    try await pool.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO context_buckets (id, subjectKind, subjectID, createdAt, updatedAt)
+          VALUES ('bucket-b', 'task', 'workstream-sibling', ?, ?)
+          """,
+        arguments: [now, now])
+      try Self.insertVisit(
+        db, id: 1, poolEpoch: poolEpoch, outcome: "completed",
+        startedAt: now.addingTimeInterval(-13), endedAt: now)
+      try db.execute(
+        sql: """
+          INSERT INTO context_visits
+            (id, contextGeneration, poolEpoch, bucketID, appName, rawContextKey,
+             normalizedContextKey, referenceHash, startedAt, endedAt, outcome, createdAt, updatedAt)
+          VALUES (2, 1, ?, 'bucket-b', 'Sibling App', 'raw', 'normalized', 'reference-b', ?, ?,
+                  'completed', ?, ?)
+          """,
+        arguments: [poolEpoch, now.addingTimeInterval(-60), now.addingTimeInterval(-40), now, now])
+    }
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket",
+      startedAt: now.addingTimeInterval(-13))
+    let siblingFence = ContextVisitFence(
+      visitID: 2, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket-b",
+      startedAt: now.addingTimeInterval(-60))
+
+    func fact(_ statement: String, workstream: String?, worthiness: Double, visit: Int64)
+      -> BucketExtraction.Fact
+    {
+      BucketExtraction.Fact(
+        statement: statement,
+        identifiers: ["identity"],
+        evidenceText: "evidence",
+        evidenceRefs: ["visit:\(visit)"],
+        confidence: 1,
+        notifyWorthiness: worthiness,
+        workstream: workstream)
+    }
+    // "Omi App" must survive sanitization as "omi-app"; the sibling writes one
+    // poolable fact, one below the worthiness floor, and one scaffolding-shaped
+    // statement that the selector must drop.
+    _ = try await ContextBucketStore.shared.writeExtraction(
+      BucketExtraction(
+        narrative: "own narrative",
+        facts: [fact("own visit fact", workstream: "Omi App", worthiness: 0.7, visit: 1)]),
+      for: fence, appName: "Test App", rawContextKey: "raw", normalizedContextKey: "normalized",
+      now: now)
+    _ = try await ContextBucketStore.shared.writeExtraction(
+      BucketExtraction(
+        narrative: "sibling narrative",
+        facts: [
+          fact("sibling poolable fact", workstream: "omi app", worthiness: 0.8, visit: 2),
+          fact("sibling weak fact", workstream: "omi-app", worthiness: 0.1, visit: 2),
+          fact(
+            "Identifier proposal: visit:2", workstream: "omi-app", worthiness: 0.9, visit: 2),
+        ]),
+      for: siblingFence, appName: "Sibling App", rawContextKey: "raw",
+      normalizedContextKey: "normalized", now: now.addingTimeInterval(-30))
+
+    let liveTag = await ContextBucketStore.shared.liveWorkstreamTag(for: fence, now: now)
+    XCTAssertEqual(liveTag, "omi-app")
+    let activeTags = await ContextBucketStore.shared.activeWorkstreamTags(now: now)
+    XCTAssertEqual(activeTags, ["omi-app"])
+
+    let candidates = await ContextBucketStore.shared.workstreamPool(
+      tag: "omi-app", excludingBucketID: "bucket", now: now)
+    let selected = ContextWorkstreamPooling.select(candidates, now: now)
+    XCTAssertEqual(selected.map(\.statement), ["sibling poolable fact"])
+    XCTAssertEqual(selected.map(\.bucketID), ["bucket-b"])
+    let section = try XCTUnwrap(
+      ContextWorkstreamPooling.promptSection(tag: "omi-app", items: selected, now: now))
+    XCTAssertTrue(section.contains("RELATED WORKSTREAM CONTEXT (omi-app)"))
+    XCTAssertTrue(section.contains("sibling poolable fact"))
+    XCTAssertFalse(section.contains("fact:"), "pooled facts must never expose citable refs")
+  }
+
+  func testWriteExtractionReportsTheMaximumWorthinessOfNewlyValidatedFactsOnly() async throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    try await seedBucket(in: pool, now: now)
+    try await pool.write { db in
+      try Self.insertVisit(
+        db, id: 1, poolEpoch: poolEpoch, outcome: "completed",
+        startedAt: now.addingTimeInterval(-13), endedAt: now)
+    }
+    let fence = ContextVisitFence(
+      visitID: 1,
+      contextGeneration: 1,
+      poolEpoch: poolEpoch,
+      bucketID: "bucket",
+      startedAt: now.addingTimeInterval(-13))
+
+    let result = try await ContextBucketStore.shared.writeExtraction(
+      BucketExtraction(
+        narrative: "narrative",
+        facts: [
+          BucketExtraction.Fact(
+            statement: "validated commitment",
+            identifiers: ["deadline"],
+            evidenceText: "evidence",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.6),
+          // Higher worthiness, but no identifier: needs_review, so it must not
+          // count toward the departure-evaluation admission signal.
+          BucketExtraction.Fact(
+            statement: "unidentified claim",
+            identifiers: [],
+            evidenceText: "evidence",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.9),
+        ]),
+      for: fence,
+      appName: "Test App",
+      rawContextKey: "raw",
+      normalizedContextKey: "normalized",
+      now: now)
+
+    let writeResult = try XCTUnwrap(result)
+    XCTAssertEqual(writeResult.maximumValidatedWorthiness, 0.6, accuracy: 0.000_001)
+    XCTAssertTrue(
+      ContextDepartureEvaluationPolicy.triggers(
+        maximumValidatedWorthiness: writeResult.maximumValidatedWorthiness, flagEnabled: true))
+
+    let below = try await ContextBucketStore.shared.writeExtraction(
+      BucketExtraction(
+        narrative: "narrative two",
+        facts: [
+          BucketExtraction.Fact(
+            statement: "mild update",
+            identifiers: ["status"],
+            evidenceText: "evidence",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.59)
+        ]),
+      for: fence,
+      appName: "Test App",
+      rawContextKey: "raw",
+      normalizedContextKey: "normalized",
+      now: now.addingTimeInterval(1))
+    let belowResult = try XCTUnwrap(below)
+    XCTAssertFalse(
+      ContextDepartureEvaluationPolicy.triggers(
+        maximumValidatedWorthiness: belowResult.maximumValidatedWorthiness, flagEnabled: true))
+  }
+
+  private func seedBucket(in pool: DatabasePool, now: Date) async throws {
+    try await pool.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO context_buckets (id, subjectKind, subjectID, createdAt, updatedAt)
+          VALUES ('bucket', 'task', 'departure-evaluation', ?, ?)
+          """,
+        arguments: [now, now])
+    }
+  }
+
+  private static func insertVisit(
+    _ db: Database, id: Int64, poolEpoch: Int, outcome: String, startedAt: Date, endedAt: Date?
+  ) throws {
+    try db.execute(
+      sql: """
+        INSERT INTO context_visits
+          (id, contextGeneration, poolEpoch, bucketID, appName, rawContextKey,
+           normalizedContextKey, referenceHash, startedAt, endedAt, outcome, createdAt, updatedAt)
+        VALUES (?, 1, ?, 'bucket', 'Test App', 'raw', 'normalized', ?, ?, ?, ?, ?, ?)
+        """,
+      arguments: [id, poolEpoch, "reference-\(id)", startedAt, endedAt, outcome, startedAt, startedAt])
   }
 }

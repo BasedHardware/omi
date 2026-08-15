@@ -597,6 +597,7 @@ export interface AssistantSettingsResponse {
   shared?: SharedAssistantSettings | null;
   task?: TaskAssistantSettings | null;
   update_channel?: string | null;
+  web_search?: WebSearchAssistantSettings | null;
   [key: string]: unknown;
 }
 
@@ -3740,6 +3741,7 @@ export interface UpdateAssistantSettingsRequest {
   shared?: SharedAssistantSettings | null;
   task?: TaskAssistantSettings | null;
   update_channel?: string | null;
+  web_search?: WebSearchAssistantSettings | null;
 }
 
 export interface UpdateConversationRequest {
@@ -3923,6 +3925,10 @@ export interface VoiceMessageTranscriptionResponse {
   stt_model?: string | null;
   stt_provider?: string | null;
   transcript: string;
+}
+
+export interface WebSearchAssistantSettings {
+  enabled?: boolean | null;
 }
 
 export type WebhookType = "audio_bytes" | "audio_bytes_websocket" | "realtime_transcript" | "memory_created" | "day_summary";
@@ -4595,6 +4601,7 @@ export interface OmiApiSchemas {
   "VerifyPhoneNumberRequest": VerifyPhoneNumberRequest;
   "VerifyPhoneNumberResponse": VerifyPhoneNumberResponse;
   "VoiceMessageTranscriptionResponse": VoiceMessageTranscriptionResponse;
+  "WebSearchAssistantSettings": WebSearchAssistantSettings;
   "WebhookType": WebhookType;
   "WhatMattersNowProjection": WhatMattersNowProjection;
   "WorkIntentReceipt": WorkIntentReceipt;

@@ -1717,7 +1717,9 @@ final class DesktopAutomationActionRegistry {
               windowSize: window.frame.size,
               isResizable: window.styleMask.contains(.resizable),
               contentContains: { InkGlassHitRegions.shared.containsPoint($0, in: window) })
-            extras = " shellAccepts=\(accepts) ignores=\(window.ignoresMouseEvents)"
+            extras =
+              " shellAccepts=\(accepts) glassSurfaces=\(InkGlassHitRegions.shared.surfaceCount(in: window))"
+              + " ignores=\(window.ignoresMouseEvents)"
           }
           return
             "\(String(describing: type(of: window)))(\"\(window.title)\" level=\(window.level.rawValue) key=\(window.isKeyWindow) idx=\(window.orderedIndex)\(extras))"
