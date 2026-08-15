@@ -150,7 +150,7 @@ async def test_quota_is_allowed_based_and_fails_closed(monkeypatch):
         (desktop_proactivity.ProactiveOperation.REASONING, 60),
     ],
 )
-async def test_quota_matches_expanded_director_budget(monkeypatch, operation, expected_limit):
+async def test_quota_reservation_uses_the_free_row_and_daily_window(monkeypatch, operation, expected_limit):
     observed = {}
 
     async def run_blocking(_, function, *args, **kwargs):
