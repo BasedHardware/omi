@@ -10,6 +10,18 @@ struct ContextVisitFence: Equatable, Sendable {
   let startedAt: Date
 }
 
+/// Whether an in-flight director evaluation may still act for a visit, plus the
+/// visit's departure time once it has one. A visit is fresh while `active`, and
+/// stays fresh for `ContextDeliveryBudget.deliveryValidityWindowSeconds` after a
+/// `completed` departure so an evaluation the user already paid for can run to
+/// completion. `discarded` and `interrupted` outcomes are never fresh.
+struct ContextVisitFreshness: Equatable, Sendable {
+  let fresh: Bool
+  let endedAt: Date?
+
+  static let stale = ContextVisitFreshness(fresh: false, endedAt: nil)
+}
+
 struct ContextBucketSnapshot: Equatable, Sendable {
   let bucketID: String
   let versionID: Int64
@@ -64,6 +76,12 @@ enum ContextBucketGarbageCollection {
 /// Resolves the durable bucket for a visit identity. Extracted so subject/bucket
 /// consistency after explicit rebinding is testable without the singleton store.
 enum ContextBucketVisitResolver {
+  /// The durable bucket identity this visit persisted, guarding against a
+  /// mid-visit destination rebinding. Liveness is deliberately not enforced
+  /// here — that is `ContextBucketStore.visitFreshness`'s job — so a visit that
+  /// completed moments ago can still resolve its bucket while an in-flight
+  /// evaluation runs to completion. Discarded and interrupted visits stay
+  /// unresolvable.
   static func persistedBucketID(
     in db: Database,
     visitID: Int64,
@@ -74,7 +92,8 @@ enum ContextBucketVisitResolver {
       db,
       sql: """
         SELECT bucketID FROM context_visits
-        WHERE id = ? AND contextGeneration = ? AND poolEpoch = ? AND outcome = 'active'
+        WHERE id = ? AND contextGeneration = ? AND poolEpoch = ?
+          AND outcome IN ('active', 'completed')
         """,
       arguments: [visitID, contextGeneration, poolEpoch])
   }
@@ -362,6 +381,49 @@ actor ContextBucketStore {
       }
     } catch {
       return false
+    }
+  }
+
+  /// Run-to-completion admission for the director pipeline: fresh while the
+  /// visit is active, and for a bounded window after a completed departure.
+  /// Every stage of an in-flight evaluation re-checks this, so an evaluation
+  /// that drags past the window after departure still dies at its next guard.
+  static func visitFreshness(
+    in db: Database, fence: ContextVisitFence, now: Date
+  ) throws -> ContextVisitFreshness {
+    guard
+      let row = try Row.fetchOne(
+        db,
+        sql: """
+          SELECT outcome, endedAt FROM context_visits
+          WHERE id = ? AND contextGeneration = ? AND poolEpoch = ?
+          """,
+        arguments: [fence.visitID, fence.contextGeneration, fence.poolEpoch])
+    else { return .stale }
+    let outcome: String = row["outcome"]
+    let endedAt: Date? = row["endedAt"]
+    switch outcome {
+    case "active":
+      return ContextVisitFreshness(fresh: true, endedAt: endedAt)
+    case "completed":
+      let cutoff = now.addingTimeInterval(-ContextDeliveryBudget.deliveryValidityWindowSeconds)
+      let withinWindow = endedAt.map { $0 >= cutoff } ?? false
+      return ContextVisitFreshness(fresh: withinWindow, endedAt: endedAt)
+    default:
+      // discarded/interrupted: the visit never earned a delivery, however recent.
+      return ContextVisitFreshness(fresh: false, endedAt: endedAt)
+    }
+  }
+
+  func fenceFreshness(_ fence: ContextVisitFence, now: Date = Date()) async -> ContextVisitFreshness {
+    let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool, poolEpoch == fence.poolEpoch else { return .stale }
+    do {
+      return try await pool.read { db in
+        try Self.visitFreshness(in: db, fence: fence, now: now)
+      }
+    } catch {
+      return .stale
     }
   }
 
