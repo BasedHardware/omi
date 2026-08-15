@@ -40,7 +40,12 @@ struct ContextDeliveryAttempt: Equatable, Sendable {
 /// A successfully presented director notification for one bucket, used only as
 /// bounded prompt context. This is a signal to the model, not a delivery gate.
 struct ContextBucketRecentDelivery: Equatable, Sendable, Decodable, FetchableRecord {
-  static let promptCap = 6
+  /// The prompt tells the director not to re-send a point it already delivered.
+  /// Showing it six of them made that instruction unenforceable in practice —
+  /// measured at 7 repeats in 34 deliveries. The block is now rendered with
+  /// absolute timestamps, so it is byte-stable for a given delivery set and
+  /// carrying more of it is close to free.
+  static let promptCap = 15
   static let summaryCharacterLimit = 320
   /// Delivery memory outlives notification expiry so the director cannot
   /// forget, and re-send, a point it already delivered earlier in the day.

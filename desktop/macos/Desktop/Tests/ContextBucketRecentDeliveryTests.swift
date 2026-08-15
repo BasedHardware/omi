@@ -37,30 +37,32 @@ final class ContextBucketRecentDeliveryTests: XCTestCase {
       deliveredAt: now.addingTimeInterval(-26 * 60),
       now: now)
 
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
     let recent = await ContextBucketStore.shared.recentDeliveredForBucket(
       bucketID: "bucket", now: now)
     let prompt = ContextProactivityPromptBuilder.directorPrompt(
       snapshot: snapshot(versionID: versionID),
       tasks: [],
       frame: CapturedFrame(jpegData: Data(), appName: "Notes", frameNumber: 1, captureTime: now),
-      recentDeliveries: recent)
+      recentDeliveries: recent,
+      timeZone: timeZone)
 
     XCTAssertEqual(recent.map(\.decisionType), ["resurface", "insight"])
     XCTAssertEqual(
-      ContextProactivityPromptBuilder.recentDeliveriesSection(recent, now: now),
+      ContextProactivityPromptBuilder.recentDeliveriesSection(recent, timeZone: timeZone),
       """
       == RECENTLY DELIVERED FOR THIS BUCKET ==
       Do not re-send any of these points, even reworded.
-      - resurface (1m ago): Keep the investigation open
-      - insight (26m ago): Status changed
+      - resurface (2027-01-15 02:58 EST): Keep the investigation open
+      - insight (2027-01-15 02:34 EST): Status changed
       """)
     XCTAssertTrue(
       prompt.hasSuffix(
         """
         == RECENTLY DELIVERED FOR THIS BUCKET ==
         Do not re-send any of these points, even reworded.
-        - resurface (1m ago): Keep the investigation open
-        - insight (26m ago): Status changed
+        - resurface (2027-01-15 02:58 EST): Keep the investigation open
+        - insight (2027-01-15 02:34 EST): Status changed
         """))
   }
 
@@ -76,14 +78,14 @@ final class ContextBucketRecentDeliveryTests: XCTestCase {
       recentDeliveries: recent)
 
     XCTAssertEqual(recent, [])
-    XCTAssertNil(ContextProactivityPromptBuilder.recentDeliveriesSection(recent, now: now))
+    XCTAssertNil(ContextProactivityPromptBuilder.recentDeliveriesSection(recent))
     XCTAssertFalse(prompt.contains("== RECENTLY DELIVERED FOR THIS BUCKET =="))
   }
 
   func testAssembledPromptCapsRecentDeliveriesAtPromptCap() async throws {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
     let versionID = try await seedBucket(now: now)
-    for index in 0..<8 {
+    for index in 0..<(ContextBucketRecentDelivery.promptCap + 2) {
       try await seedDelivered(
         id: "nudge-\(index)",
         visitID: Int64(index + 1),
@@ -104,22 +106,12 @@ final class ContextBucketRecentDeliveryTests: XCTestCase {
 
     XCTAssertEqual(
       recent.map(\.message),
-      ["nudge-0", "nudge-1", "nudge-2", "nudge-3", "nudge-4", "nudge-5"])
+      (0..<ContextBucketRecentDelivery.promptCap).map { "nudge-\($0)" })
     XCTAssertEqual(recent.count, ContextBucketRecentDelivery.promptCap)
-    XCTAssertEqual(
-      ContextProactivityPromptBuilder.recentDeliveriesSection(recent, now: now),
-      """
-      == RECENTLY DELIVERED FOR THIS BUCKET ==
-      Do not re-send any of these points, even reworded.
-      - resurface (1m ago): nudge-0
-      - resurface (2m ago): nudge-1
-      - resurface (3m ago): nudge-2
-      - resurface (4m ago): nudge-3
-      - resurface (5m ago): nudge-4
-      - resurface (6m ago): nudge-5
-      """)
-    XCTAssertFalse(prompt.contains("nudge-6"))
-    XCTAssertFalse(prompt.contains("nudge-7"))
+    XCTAssertEqual(recent.count, 15, "the enlarged window is what makes the no-repeat rule enforceable")
+    XCTAssertTrue(prompt.contains("nudge-14"))
+    XCTAssertFalse(prompt.contains("nudge-15"))
+    XCTAssertFalse(prompt.contains("nudge-16"))
   }
 
   func testRecentDeliveriesSurviveExpiryInsideTheLookbackAndDropOutsideIt() async throws {
@@ -179,7 +171,7 @@ final class ContextBucketRecentDeliveryTests: XCTestCase {
           VALUES ('bucket', 1, 'header', ?, ?)
           """,
         arguments: [Data(), now])
-      for visitID in 1...8 {
+      for visitID in 1...(ContextBucketRecentDelivery.promptCap + 2) {
         try db.execute(
           sql: """
             INSERT INTO context_visits

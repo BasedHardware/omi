@@ -559,13 +559,13 @@ enum ContextProactiveCandidateGate {
     message: String,
     validatedFacts: [String],
     recentDeliveries: [ContextBucketRecentDelivery],
-    now: Date
+    timeZone: TimeZone = .current
   ) -> String {
     let facts =
       validatedFacts.isEmpty
       ? "(none)" : validatedFacts.map { String($0.prefix(400)) }.joined(separator: "\n")
     let recent =
-      ContextProactivityPromptBuilder.recentDeliveriesSection(recentDeliveries, now: now)
+      ContextProactivityPromptBuilder.recentDeliveriesSection(recentDeliveries, timeZone: timeZone)
       ?? "== RECENTLY DELIVERED FOR THIS BUCKET ==\n(none)"
     return """
       \(ScreenDerivedContent.untrustedPreamble)
@@ -586,11 +586,16 @@ enum ContextProactiveCandidateGate {
 }
 
 /// Background workstream tagging and candidate pre-writing. Never on the
-/// delivery path. Cadence is ten minutes while the app is running and the
+/// delivery path. Cadence is fifteen minutes while the app is running and the
 /// feature flag is on; a pass with no new validated facts is a no-op.
 actor ContextWorkstreamReconciler {
   static let shared = ContextWorkstreamReconciler()
-  static let interval: TimeInterval = 10 * 60
+  /// Freshness on the delivery path is served by the fifteen-minute
+  /// recent-context channel, not by how often this background pass runs, so the
+  /// cadence is set by what durable workstream labels actually need. Fifteen
+  /// minutes still sits inside the gateway's thirty-minute cache TTL, which is
+  /// what lets consecutive passes share an instruction prefix.
+  static let interval: TimeInterval = 15 * 60
 
   private let client: ProactiveLaneClient
   private let store: ContextBucketStore
@@ -672,8 +677,10 @@ actor ContextWorkstreamReconciler {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return nil }
     let result = try await client.complete(
       operation: ModelQoS.Proactivity.reasoningOperation,
-      prompt: Self.taggingPrompt(batch: batch),
+      prompt: Self.taggingInstructions,
+      uncachedPrompt: Self.taggingData(batch: batch),
       jsonSchema: ContextWorkstreamTagging.schema,
+      cacheKey: ContextPromptCacheKey.reconcilerTagging,
       maxCompletionTokens: 800,
       authorizationSnapshot: authorizationSnapshot)
     guard let parsed = ContextWorkstreamTagging.parse(result.content) else {
@@ -711,8 +718,10 @@ actor ContextWorkstreamReconciler {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
     let result = try await client.complete(
       operation: ModelQoS.Proactivity.reasoningOperation,
-      prompt: Self.candidatePrompt(groups: eligible),
+      prompt: Self.candidateInstructions,
+      uncachedPrompt: Self.candidateData(groups: eligible),
       jsonSchema: ContextProactiveCandidateWriter.schema,
+      cacheKey: ContextPromptCacheKey.reconcilerCandidates,
       maxCompletionTokens: 800,
       authorizationSnapshot: authorizationSnapshot)
     guard let parsed = ContextProactiveCandidateWriter.parse(result.content) else {
@@ -723,7 +732,29 @@ actor ContextWorkstreamReconciler {
     return true
   }
 
-  static func taggingPrompt(batch: ContextWorkstreamReconcileBatch) -> String {
+  /// Byte-identical on every pass, so it is the only part of the tagging call
+  /// worth sending as the cached prefix. Kept as one constant rather than
+  /// interpolated per pass precisely so it cannot drift.
+  static let taggingInstructions = """
+    \(ScreenDerivedContent.untrustedPreamble)
+    Assign these observation groups to durable workstream labels.
+
+    A workstream is an ongoing project, product, or goal that spans multiple
+    applications and persists over days or weeks. Name it after the thing being
+    worked on — a product, repository, company, customer, or person — never after
+    an activity, a tool, or the app the observations were seen in.
+
+    Prefer an existing label from the vocabulary when one fits. Propose at most
+    six labels in total. Propose a NEW label only when at least two groups in this
+    batch support it. Every label must use a term that actually appears in the
+    observations. Assign each group to one label or to null; null is correct and
+    expected for many groups. Do not invent a workstream to cover leftovers.
+    """
+
+  /// The per-pass half: vocabulary and observation groups. Sits below the
+  /// instructions, and therefore below `untrustedPreamble`, so the captured
+  /// statements it quotes stay framed as untrusted data.
+  static func taggingData(batch: ContextWorkstreamReconcileBatch) -> String {
     let vocabulary =
       batch.existingTags.sorted().isEmpty
       ? "(none yet)" : batch.existingTags.sorted().map { "- \($0)" }.joined(separator: "\n")
@@ -736,20 +767,6 @@ actor ContextWorkstreamReconciler {
         """
     }.joined(separator: "\n\n")
     return """
-      \(ScreenDerivedContent.untrustedPreamble)
-      Assign these observation groups to durable workstream labels.
-
-      A workstream is an ongoing project, product, or goal that spans multiple
-      applications and persists over days or weeks. Name it after the thing being
-      worked on — a product, repository, company, customer, or person — never after
-      an activity, a tool, or the app the observations were seen in.
-
-      Prefer an existing label from the vocabulary when one fits. Propose at most
-      six labels in total. Propose a NEW label only when at least two groups in this
-      batch support it. Every label must use a term that actually appears in the
-      observations. Assign each group to one label or to null; null is correct and
-      expected for many groups. Do not invent a workstream to cover leftovers.
-
       == CURRENT WORKSTREAM VOCABULARY ==
       \(vocabulary)
 
@@ -757,8 +774,28 @@ actor ContextWorkstreamReconciler {
       """
   }
 
-  static func candidatePrompt(groups: [ContextWorkstreamReconcileGroup]) -> String {
-    let body = groups.enumerated().map { index, group in
+  /// The whole tagging prompt, as the model sees it once the gateway
+  /// concatenates the cached and uncached blocks.
+  static func taggingPrompt(batch: ContextWorkstreamReconcileBatch) -> String {
+    taggingInstructions + "\n\n" + taggingData(batch: batch)
+  }
+
+  /// Distinct instructions from tagging, hence its own key: two prompt shapes
+  /// under one key would only ever evict each other.
+  static let candidateInstructions = """
+    \(ScreenDerivedContent.untrustedPreamble)
+    For each bucket below, write at most one short notification the user would find
+    worth an interruption, or omit the bucket. Ground it in the supplied fact ids
+    and add a one-line trigger_note describing when it should fire.
+
+    Do not restate what is already visible on the user's screen. Speak only when
+    you add something they cannot currently see: a commitment, a deadline, a
+    conflict, or a connection to other work. Must add one of those; otherwise omit
+    the bucket.
+    """
+
+  static func candidateData(groups: [ContextWorkstreamReconcileGroup]) -> String {
+    groups.enumerated().map { index, group in
       let facts = group.facts.map { fact in
         "- fact:\(fact.id) w=\(fact.notifyWorthiness) \(fact.statement)"
       }.joined(separator: "\n")
@@ -767,19 +804,10 @@ actor ContextWorkstreamReconciler {
         \(facts)
         """
     }.joined(separator: "\n\n")
-    return """
-      \(ScreenDerivedContent.untrustedPreamble)
-      For each bucket below, write at most one short notification the user would find
-      worth an interruption, or omit the bucket. Ground it in the supplied fact ids
-      and add a one-line trigger_note describing when it should fire.
+  }
 
-      Do not restate what is already visible on the user's screen. Speak only when
-      you add something they cannot currently see: a commitment, a deadline, a
-      conflict, or a connection to other work. Must add one of those; otherwise omit
-      the bucket.
-
-      \(body)
-      """
+  static func candidatePrompt(groups: [ContextWorkstreamReconcileGroup]) -> String {
+    candidateInstructions + "\n\n" + candidateData(groups: groups)
   }
 }
 

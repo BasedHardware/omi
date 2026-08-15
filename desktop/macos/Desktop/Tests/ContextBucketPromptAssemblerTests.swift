@@ -59,11 +59,13 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     let capturedAt = Date(timeIntervalSince1970: 1_700_000_000)
     let dueAt = Date(timeIntervalSince1970: 1_700_003_600)
     let snapshot = ContextBucketSnapshot(
-      bucketID: "bucket", versionID: 5, version: 2, header: "Persistent work context; 2 qualifying visits.",
+      bucketID: "bucket", versionID: 5, version: 2,
+      header: ContextBucketPromptAssembler.stableHeader,
       frozenRankedSegment: Data("frozen:entry-1\n".utf8),
       tail: ["tail:entry-2"],
       validatedFacts: ["fact:PR-123"],
-      notifyWorthiness: 1)
+      notifyWorthiness: 1,
+      visitCount: 2)
     let frame = CapturedFrame(
       jpegData: Data(), appName: "Terminal", windowTitle: "deploy.sh", frameNumber: 9,
       captureTime: capturedAt)
@@ -110,13 +112,19 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       "App: Terminal",
       "Window: deploy.sh",
       "Captured at: 2023-11-14 17:13 EST",
+      "Qualifying visits to this context: 2",
     ].joined(separator: "\n")
 
     XCTAssertEqual(prompt, expected)
-    XCTAssertTrue(prompt.contains("== BUCKET HEADER ==\nPersistent work context; 2 qualifying visits."))
+    XCTAssertTrue(prompt.contains("== BUCKET HEADER ==\nPersistent work context."))
     XCTAssertTrue(prompt.contains("== FROZEN RANKED CONTEXT ==\nfrozen:entry-1"))
-    XCTAssertTrue(prompt.contains("== RECENT TAIL ==\ntail:entry-2"))
+    // Validated facts sit ahead of the rolling tail: the tail rewrites every
+    // visit, so anything behind it can never survive as a cached prefix.
     XCTAssertTrue(prompt.contains("== VALIDATED FACTS ==\nfact:PR-123"))
+    XCTAssertTrue(prompt.contains("== RECENT TAIL ==\ntail:entry-2"))
+    let factsIndex = try XCTUnwrap(prompt.range(of: "== VALIDATED FACTS =="))
+    let tailIndex = try XCTUnwrap(prompt.range(of: "== RECENT TAIL =="))
+    XCTAssertLessThan(factsIndex.lowerBound, tailIndex.lowerBound)
     XCTAssertFalse(prompt.contains("== RECENTLY DELIVERED FOR THIS BUCKET =="))
   }
 
@@ -181,11 +189,102 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       "",
       "== RECENTLY DELIVERED FOR THIS BUCKET ==",
       "Do not re-send any of these points, even reworded.",
-      "- resurface (1m ago): Keep the investigation open",
-      "- insight (26m ago): Status changed",
+      "- resurface (2023-11-14 17:12 EST): Keep the investigation open",
+      "- insight (2023-11-14 16:47 EST): Status changed",
     ].joined(separator: "\n")
 
     XCTAssertEqual(prompt, expected)
+  }
+
+  /// The invariant the whole caching change rests on: two consecutive visits to
+  /// the same bucket differ in `version` and `visitCount`, and nothing else, so
+  /// every byte the gateway can match on must be identical between them. A
+  /// counter anywhere in the assembled bucket segment — which is what
+  /// `header` used to carry — puts a changing byte above the frozen segment and
+  /// makes a cross-visit hit impossible no matter how large that segment grows.
+  func testStablePrefixIsByteIdenticalAcrossVisitCountAndVersionChanges() throws {
+    func snapshot(version: Int, visitCount: Int) -> ContextBucketSnapshot {
+      ContextBucketSnapshot(
+        bucketID: "bucket",
+        versionID: Int64(version),
+        version: version,
+        header: ContextBucketPromptAssembler.stableHeader,
+        frozenRankedSegment: Data("- entry:one narrative\n".utf8),
+        tail: ["entry:two narrative"],
+        validatedFacts: ["fact:one PR-123 is blocked"],
+        notifyWorthiness: 1,
+        visitCount: visitCount)
+    }
+    let earlier = snapshot(version: 41, visitCount: 41)
+    let later = snapshot(version: 42, visitCount: 42)
+
+    XCTAssertEqual(
+      ContextBucketPromptAssembler.assemble(earlier),
+      ContextBucketPromptAssembler.assemble(later),
+      "the assembled bucket segment must not depend on the version or the visit count")
+    XCTAssertEqual(
+      ContextProactivityPromptBuilder.directorStablePrompt(snapshot: earlier),
+      ContextProactivityPromptBuilder.directorStablePrompt(snapshot: later),
+      "the cached half of the director prompt must be byte-identical across visits")
+    XCTAssertEqual(
+      ContextProactivityPromptBuilder.directorStablePrompt(snapshot: earlier, allowLookup: true),
+      ContextProactivityPromptBuilder.directorStablePrompt(snapshot: later, allowLookup: true))
+
+    // The count is not lost, it moved: it belongs to the volatile half, which
+    // is sent uncached and may change freely.
+    let frame = CapturedFrame(
+      jpegData: Data(), appName: "Notes", frameNumber: 1,
+      captureTime: Date(timeIntervalSince1970: 1_700_000_000))
+    XCTAssertTrue(
+      ContextProactivityPromptBuilder.directorVolatilePrompt(
+        tasks: [], frame: frame, visitCount: 42
+      ).contains("Qualifying visits to this context: 42"))
+    XCTAssertFalse(
+      ContextProactivityPromptBuilder.directorStablePrompt(snapshot: later).contains("42"))
+    XCTAssertFalse(
+      ContextBucketPromptAssembler.stableHeader.contains(where: \.isNumber),
+      "a digit in the header is the shape of the defect this test exists to prevent")
+  }
+
+  /// The recent-delivery block is only worth enlarging if it stops rewriting
+  /// itself: a relative age ("3m ago") produced different bytes on every call
+  /// for an unchanged delivery set.
+  func testRecentDeliveriesRenderIdenticallyForTheSameSetAtDifferentTimes() throws {
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+    let base = Date(timeIntervalSince1970: 1_700_000_000)
+    let deliveries = [
+      ContextBucketRecentDelivery(
+        decisionType: "resurface", message: "Keep the investigation open",
+        deliveredAt: base.addingTimeInterval(-65)),
+      ContextBucketRecentDelivery(
+        decisionType: "insight", message: nil, deliveredAt: base.addingTimeInterval(-26 * 60)),
+    ]
+    let snapshot = ContextBucketSnapshot(
+      bucketID: "bucket", versionID: 1, version: 1,
+      header: ContextBucketPromptAssembler.stableHeader,
+      frozenRankedSegment: Data(), tail: [], validatedFacts: ["fact"], notifyWorthiness: 1)
+
+    func section(at now: Date) -> String {
+      let prompt = ContextProactivityPromptBuilder.directorPrompt(
+        snapshot: snapshot,
+        tasks: [],
+        frame: CapturedFrame(
+          jpegData: Data(), appName: "Notes", frameNumber: 1, captureTime: now),
+        recentDeliveries: deliveries,
+        timeZone: timeZone)
+      let marker = "== RECENTLY DELIVERED FOR THIS BUCKET =="
+      return String(prompt[(prompt.range(of: marker)?.lowerBound ?? prompt.startIndex)...])
+    }
+
+    XCTAssertEqual(section(at: base), section(at: base.addingTimeInterval(37 * 60)))
+    XCTAssertEqual(
+      section(at: base),
+      """
+      == RECENTLY DELIVERED FOR THIS BUCKET ==
+      Do not re-send any of these points, even reworded.
+      - resurface (2023-11-14 17:12 EST): Keep the investigation open
+      - insight (2023-11-14 16:47 EST)
+      """)
   }
 
   func testDirectorPromptKeepsLocalDateWhenUTCHasAlreadyRolledToTheNextDay() throws {
@@ -204,7 +303,8 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     XCTAssertFalse(prompt.contains("2026-08-11"))
   }
 
-  func testDirectorPromptCapsRecentDeliveriesAndOmitsTheSectionWhenEmpty() {
+  func testDirectorPromptCapsRecentDeliveriesAndOmitsTheSectionWhenEmpty() throws {
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
     let capturedAt = Date(timeIntervalSince1970: 1_700_000_000)
     let snapshot = ContextBucketSnapshot(
       bucketID: "bucket", versionID: 1, version: 1, header: "header",
@@ -212,33 +312,43 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     let frame = CapturedFrame(
       jpegData: Data(), appName: "Notes", frameNumber: 10, captureTime: capturedAt)
     let empty = ContextProactivityPromptBuilder.directorPrompt(
-      snapshot: snapshot, tasks: [], frame: frame, recentDeliveries: [])
+      snapshot: snapshot, tasks: [], frame: frame, recentDeliveries: [], timeZone: timeZone)
     XCTAssertFalse(empty.contains("== RECENTLY DELIVERED FOR THIS BUCKET =="))
 
-    let overflow = (0..<8).map { index in
+    let overflow = (0..<17).map { index in
       ContextBucketRecentDelivery(
         decisionType: "resurface",
         message: "nudge-\(index)",
         deliveredAt: capturedAt.addingTimeInterval(TimeInterval(-60 * (index + 1))))
     }
     let capped = ContextProactivityPromptBuilder.directorPrompt(
-      snapshot: snapshot, tasks: [], frame: frame, recentDeliveries: overflow)
+      snapshot: snapshot, tasks: [], frame: frame, recentDeliveries: overflow, timeZone: timeZone)
     XCTAssertEqual(
-      ContextProactivityPromptBuilder.recentDeliveriesSection(overflow, now: capturedAt),
+      ContextProactivityPromptBuilder.recentDeliveriesSection(overflow, timeZone: timeZone),
       """
       == RECENTLY DELIVERED FOR THIS BUCKET ==
       Do not re-send any of these points, even reworded.
-      - resurface (1m ago): nudge-0
-      - resurface (2m ago): nudge-1
-      - resurface (3m ago): nudge-2
-      - resurface (4m ago): nudge-3
-      - resurface (5m ago): nudge-4
-      - resurface (6m ago): nudge-5
+      - resurface (2023-11-14 17:12 EST): nudge-0
+      - resurface (2023-11-14 17:11 EST): nudge-1
+      - resurface (2023-11-14 17:10 EST): nudge-2
+      - resurface (2023-11-14 17:09 EST): nudge-3
+      - resurface (2023-11-14 17:08 EST): nudge-4
+      - resurface (2023-11-14 17:07 EST): nudge-5
+      - resurface (2023-11-14 17:06 EST): nudge-6
+      - resurface (2023-11-14 17:05 EST): nudge-7
+      - resurface (2023-11-14 17:04 EST): nudge-8
+      - resurface (2023-11-14 17:03 EST): nudge-9
+      - resurface (2023-11-14 17:02 EST): nudge-10
+      - resurface (2023-11-14 17:01 EST): nudge-11
+      - resurface (2023-11-14 17:00 EST): nudge-12
+      - resurface (2023-11-14 16:59 EST): nudge-13
+      - resurface (2023-11-14 16:58 EST): nudge-14
       """)
-    XCTAssertTrue(capped.contains("- resurface (1m ago): nudge-0"))
-    XCTAssertTrue(capped.contains("- resurface (6m ago): nudge-5"))
-    XCTAssertFalse(capped.contains("nudge-6"))
-    XCTAssertFalse(capped.contains("nudge-7"))
+    XCTAssertEqual(ContextBucketRecentDelivery.promptCap, 15)
+    XCTAssertTrue(capped.contains("- resurface (2023-11-14 17:12 EST): nudge-0"))
+    XCTAssertTrue(capped.contains("- resurface (2023-11-14 16:58 EST): nudge-14"))
+    XCTAssertFalse(capped.contains("nudge-15"))
+    XCTAssertFalse(capped.contains("nudge-16"))
   }
 
   func testBoundedSummaryKeepsDistinguishingContentPastTheOldTruncatePoint() {
@@ -421,19 +531,32 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     XCTAssertEqual(refs, ["screenshot:42"])
   }
 
-  func testPromptAssemblyHonorsInjectionBudget() {
+  /// A full-size frozen segment must be additional context, not context taken
+  /// from the facts and the tail: those two are what the director actually
+  /// decides on, and starving them to buy history would be a regression the
+  /// byte budget alone would not catch.
+  func testPromptAssemblyHonorsInjectionBudgetAndStillCarriesFactsAndTail() throws {
     let snapshot = ContextBucketSnapshot(
       bucketID: "bucket", versionID: 1, version: 1, header: String(repeating: "h", count: 500),
-      frozenRankedSegment: Data(String(repeating: "f", count: 6_000).utf8),
+      frozenRankedSegment: Data(
+        String(
+          repeating: "f", count: ContextBucketPromptAssembler.frozenRankedByteBudget
+        ).utf8),
       tail: Array(repeating: String(repeating: "t", count: 2_400), count: 5),
       validatedFacts: Array(repeating: String(repeating: "v", count: 1_500), count: 20),
       notifyWorthiness: 1)
 
     let assembled = ContextBucketPromptAssembler.assemble(snapshot)
+    let text = try XCTUnwrap(String(data: assembled, encoding: .utf8))
 
     XCTAssertLessThanOrEqual(assembled.count, ContextBucketPromptAssembler.injectionTokenBudget * 4)
     XCTAssertTrue(assembled.contains(snapshot.frozenRankedSegment))
-    XCTAssertNotNil(String(data: assembled, encoding: .utf8))
+    let factsRange = try XCTUnwrap(text.range(of: "== VALIDATED FACTS ==\nv"))
+    let tailRange = try XCTUnwrap(text.range(of: "== RECENT TAIL ==\nt"))
+    XCTAssertLessThan(factsRange.lowerBound, tailRange.lowerBound)
+    XCTAssertGreaterThanOrEqual(
+      text.distance(from: tailRange.upperBound, to: text.endIndex), 5_000,
+      "the rolling tail must keep roughly the room it had before the frozen budget grew")
   }
 
   private func task(

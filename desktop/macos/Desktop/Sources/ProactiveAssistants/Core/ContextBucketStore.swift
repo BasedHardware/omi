@@ -31,6 +31,11 @@ struct ContextBucketSnapshot: Equatable, Sendable {
   let tail: [String]
   let validatedFacts: [String]
   let notifyWorthiness: Double
+  /// Qualifying visits to this bucket. Read live rather than baked into
+  /// `header`, because it changes every visit and the header is part of the
+  /// director's cached prefix. `var` with a default keeps the memberwise
+  /// initializer source-compatible for callers that do not have a count.
+  var visitCount: Int = 0
 }
 
 enum ContextBucketStoreError: Error {
@@ -831,6 +836,9 @@ actor ContextBucketStore {
             AND (expiresAt IS NULL OR expiresAt > ?)
           """,
         arguments: [bucketID, now]) ?? 0
+    let visitCount =
+      try Int.fetchOne(
+        db, sql: "SELECT visitCount FROM context_buckets WHERE id = ?", arguments: [bucketID]) ?? 0
     return ContextBucketSnapshot(
       bucketID: bucketID,
       versionID: version["id"],
@@ -839,7 +847,8 @@ actor ContextBucketStore {
       frozenRankedSegment: version["frozenRankedSegment"],
       tail: Array(tail),
       validatedFacts: facts,
-      notifyWorthiness: worthiness)
+      notifyWorthiness: worthiness,
+      visitCount: visitCount)
   }
 
   func snapshot(for fence: ContextVisitFence) async -> ContextBucketSnapshot? {

@@ -331,7 +331,8 @@ actor ContextProactivityEngine {
       ContextProactivityPromptBuilder.directorVolatilePrompt(
         tasks: taskContext,
         frame: currentFrame,
-        recentDeliveries: recentDeliveries)
+        recentDeliveries: recentDeliveries,
+        visitCount: snapshot.visitCount)
       + (workstreamSection.map { "\n\n" + $0 } ?? "")
     if candidatesEnabled {
       let selected = ContextWorkstreamPooling.selectRecent(
@@ -371,7 +372,7 @@ actor ContextProactivityEngine {
         state: "suppressed")
       return
     }
-    let cacheKey = "bucket:\(snapshot.bucketID):v\(snapshot.version)"
+    let cacheKey = ContextPromptCacheKey.director
     do {
       var result = try await client.complete(
         operation: ModelQoS.Proactivity.reasoningOperation,
@@ -669,8 +670,7 @@ actor ContextProactivityEngine {
         prompt: ContextProactiveCandidateGate.prompt(
           message: candidate.message,
           validatedFacts: snapshot.validatedFacts,
-          recentDeliveries: recentDeliveries,
-          now: currentFrame.captureTime),
+          recentDeliveries: recentDeliveries),
         imageData: currentFrame.jpegData,
         jsonSchema: ContextProactiveCandidateGate.schema,
         maxCompletionTokens: 120,

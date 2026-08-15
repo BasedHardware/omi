@@ -116,28 +116,65 @@ enum BucketFactValidator {
   }
 }
 
-enum ContextBucketPromptAssembler {
-  static let injectionTokenBudget = 5_000
-  static let ambientTailCompactionThreshold = 3_500
-  static let frozenRankedByteBudget = 6_000
+/// Gateway cache keys for the proactive prompts.
+///
+/// Deliberately constant. A key is only a routing hint — a hit still requires a
+/// byte-identical literal prefix — so a key naming the bucket and version was
+/// strictly more volatile than the content it named: `publishVersion` runs on
+/// every completed visit, which fragmented the cache into one entry per bucket
+/// per visit and guaranteed each one was written and never read. One constant
+/// key per prompt shape lets every call of that shape share the instruction
+/// prefix.
+enum ContextPromptCacheKey {
+  static let director = "director:v1"
+  static let reconcilerTagging = "reconciler:v1"
+  static let reconcilerCandidates = "reconciler-candidates:v1"
+}
 
+enum ContextBucketPromptAssembler {
+  /// Sized so the enlarged frozen segment is genuinely additional context rather
+  /// than context stolen from facts and tail: 16_000 frozen bytes + the 8_000-byte
+  /// fact reservation + the ~6_000 bytes the tail has always had.
+  static let injectionTokenBudget = 7_500
+  static let ambientTailCompactionThreshold = 3_500
+  static let factByteReservation = 8_000
+  /// Frozen history is the one block that is both large and byte-stable, so it is
+  /// the only one worth buying at scale: past the first call of a bucket it is
+  /// billed at cached rates.
+  static let frozenRankedByteBudget = 16_000
+
+  /// Deliberately constant. Everything above the frozen segment is part of the
+  /// longest-common-prefix the gateway matches on, so a per-visit counter here
+  /// made a cross-visit cache hit structurally impossible — it changed bytes
+  /// above the segment it was supposed to be stabilizing. The visit count now
+  /// rides in the volatile director section instead, where changing is free.
+  static let stableHeader = "Persistent work context."
+
+  /// Blocks are ordered least-volatile first, because cache matching is
+  /// longest-common-prefix and the first differing byte discards everything
+  /// after it: constant header, then the append-only frozen segment, then
+  /// validated facts, and only then the rolling five-entry tail, which rewrites
+  /// on every visit and would otherwise invalidate the facts sitting behind it.
+  ///
+  /// Facts are only stable across visits that validated no new fact — the
+  /// snapshot orders them newest-first, so a new one lands at the head of the
+  /// block rather than the end. The frozen segment above them is the part that
+  /// is stable unconditionally, and it is the part that was made large.
   static func assemble(_ snapshot: ContextBucketSnapshot) -> Data {
     var data = Data(("== BUCKET HEADER ==\n" + snapshot.header + "\n== FROZEN RANKED CONTEXT ==\n").utf8)
     // This exact byte segment is the stable cache prefix. Never decode/re-encode it.
     data.append(snapshot.frozenRankedSegment)
     let totalByteBudget = injectionTokenBudget * 4
-    let facts =
-      snapshot.validatedFacts.isEmpty
-      ? "" : "\n== VALIDATED FACTS ==\n\(snapshot.validatedFacts.joined(separator: "\n"))"
-    let factReservation = min(8_000, max(0, totalByteBudget - data.count))
-    let tailBudget = max(0, totalByteBudget - data.count - factReservation)
+    if !snapshot.validatedFacts.isEmpty {
+      data.append(
+        utf8Prefix(
+          "\n== VALIDATED FACTS ==\n\(snapshot.validatedFacts.joined(separator: "\n"))",
+          maxBytes: min(factByteReservation, max(0, totalByteBudget - data.count))))
+    }
     data.append(
       utf8Prefix(
         "\n== RECENT TAIL ==\n\(snapshot.tail.joined(separator: "\n"))",
-        maxBytes: tailBudget))
-    if !snapshot.validatedFacts.isEmpty {
-      data.append(utf8Prefix(facts, maxBytes: max(0, totalByteBudget - data.count)))
-    }
+        maxBytes: max(0, totalByteBudget - data.count)))
     return data
   }
 
@@ -219,7 +256,8 @@ enum ContextProactivityPromptBuilder {
     \(directorStablePrompt(snapshot: snapshot))
 
     \(directorVolatilePrompt(
-      tasks: tasks, frame: frame, recentDeliveries: recentDeliveries, timeZone: timeZone))
+      tasks: tasks, frame: frame, recentDeliveries: recentDeliveries,
+      visitCount: snapshot.visitCount, timeZone: timeZone))
     """
   }
 
@@ -284,10 +322,14 @@ enum ContextProactivityPromptBuilder {
       """
   }
 
+  /// `visitCount` lives here, not in the bucket header, because it changes on
+  /// every visit and anything that changes must sit below the cached prefix.
+  /// Zero means "not supplied" and prints nothing.
   static func directorVolatilePrompt(
     tasks: [ContextDirectorTaskContext],
     frame: CapturedFrame,
     recentDeliveries: [ContextBucketRecentDelivery] = [],
+    visitCount: Int = 0,
     timeZone: TimeZone = .current
   ) -> String {
     let actionableCutoff = frame.captureTime.addingTimeInterval(
@@ -310,42 +352,39 @@ enum ContextProactivityPromptBuilder {
       Window: \(frame.windowTitle ?? "")
       Captured at: \(localTimestamp(frame.captureTime, timeZone: timeZone))
       """
-    if let recent = recentDeliveriesSection(recentDeliveries, now: frame.captureTime) {
+    if visitCount > 0 {
+      prompt += "\nQualifying visits to this context: \(visitCount)"
+    }
+    if let recent = recentDeliveriesSection(recentDeliveries, timeZone: timeZone) {
       prompt += "\n\n\(recent)"
     }
     return prompt
   }
 
+  /// Rendered with absolute local timestamps rather than a relative age, so the
+  /// same delivery set produces the same bytes on every call. A "3m ago" age
+  /// rewrote this block every time it was built, which is what kept it — and
+  /// everything the model could learn from it — off the cacheable side.
   static func recentDeliveriesSection(
     _ deliveries: [ContextBucketRecentDelivery],
-    now: Date
+    timeZone: TimeZone = .current
   ) -> String? {
     let entries = Array(deliveries.prefix(ContextBucketRecentDelivery.promptCap))
     guard !entries.isEmpty else { return nil }
     let lines = entries.map { delivery -> String in
       let decision = String(delivery.decisionType.prefix(32))
-      let age = relativeAge(from: delivery.deliveredAt, now: now)
+      let at = localTimestamp(delivery.deliveredAt, timeZone: timeZone)
       let summary = boundedSummary(delivery.message)
       if summary.isEmpty {
-        return "- \(decision) (\(age))"
+        return "- \(decision) (\(at))"
       }
-      return "- \(decision) (\(age)): \(summary)"
+      return "- \(decision) (\(at)): \(summary)"
     }
     return """
       == RECENTLY DELIVERED FOR THIS BUCKET ==
       Do not re-send any of these points, even reworded.
       \(lines.joined(separator: "\n"))
       """
-  }
-
-  static func relativeAge(from deliveredAt: Date, now: Date) -> String {
-    let seconds = max(0, Int(now.timeIntervalSince(deliveredAt).rounded(.down)))
-    if seconds < 60 { return "\(seconds)s ago" }
-    let minutes = seconds / 60
-    if minutes < 60 { return "\(minutes)m ago" }
-    let hours = minutes / 60
-    if hours < 48 { return "\(hours)h ago" }
-    return "\(hours / 24)d ago"
   }
 
   static func boundedSummary(_ message: String?) -> String {
@@ -610,10 +649,11 @@ extension ContextBucketStore {
       }
       frozen = Data(rankedLines.joined().utf8)
     }
-    let visitCount =
-      try Int.fetchOne(
-        db, sql: "SELECT visitCount FROM context_buckets WHERE id = ?", arguments: [bucketID]) ?? 0
-    let header = "Persistent work context; \(visitCount) qualifying visits."
+    // Constant on purpose: this string is published above the frozen segment on
+    // every version, so interpolating the visit count here changed bytes at the
+    // very top of the cache prefix once per visit. The count is read live from
+    // `context_buckets` into the volatile director section instead.
+    let header = ContextBucketPromptAssembler.stableHeader
     try db.execute(
       sql: """
         INSERT INTO bucket_versions

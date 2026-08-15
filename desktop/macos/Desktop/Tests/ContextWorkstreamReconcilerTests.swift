@@ -196,6 +196,55 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
       "the invalid first candidate for the bucket must not claim it and drop the valid one")
   }
 
+  /// The reconciler's instruction blocks are what the constant cache keys name,
+  /// so they must not vary with the batch, and splitting them out must leave the
+  /// prompt the model receives byte-identical to the unsplit one.
+  func testReconcilerInstructionBlocksAreBatchIndependentAndComposeToTheWholePrompt() {
+    func batch(_ bucketID: String, tags: Set<String>) -> ContextWorkstreamReconcileBatch {
+      ContextWorkstreamReconcileBatch(
+        groups: [
+          ContextWorkstreamReconcileGroup(
+            bucketID: bucketID,
+            facts: [
+              ContextWorkstreamBatchFact(
+                id: "\(bucketID)-0", bucketID: bucketID, appName: "Notes",
+                statement: "PR-123 is blocked", notifyWorthiness: 0.9, createdAt: now)
+            ],
+            needsCandidate: true,
+            workstreamTag: nil)
+        ],
+        existingTags: tags)
+    }
+    let first = batch("alpha", tags: ["hermes"])
+    let second = batch("beta", tags: [])
+
+    XCTAssertNotEqual(
+      ContextWorkstreamReconciler.taggingData(batch: first),
+      ContextWorkstreamReconciler.taggingData(batch: second))
+    XCTAssertEqual(
+      ContextWorkstreamReconciler.taggingPrompt(batch: first),
+      ContextWorkstreamReconciler.taggingInstructions + "\n\n"
+        + ContextWorkstreamReconciler.taggingData(batch: first))
+    XCTAssertEqual(
+      ContextWorkstreamReconciler.candidatePrompt(groups: first.groups),
+      ContextWorkstreamReconciler.candidateInstructions + "\n\n"
+        + ContextWorkstreamReconciler.candidateData(groups: first.groups))
+    // The safety preamble must stay above every quoted statement, which means
+    // it belongs to the instruction half, not the per-pass data half.
+    XCTAssertTrue(
+      ContextWorkstreamReconciler.taggingInstructions.hasPrefix(
+        ScreenDerivedContent.untrustedPreamble))
+    XCTAssertTrue(
+      ContextWorkstreamReconciler.candidateInstructions.hasPrefix(
+        ScreenDerivedContent.untrustedPreamble))
+    XCTAssertFalse(
+      ContextWorkstreamReconciler.taggingData(batch: first).contains(
+        ScreenDerivedContent.untrustedPreamble))
+    XCTAssertNotEqual(
+      ContextPromptCacheKey.reconcilerTagging, ContextPromptCacheKey.reconcilerCandidates,
+      "two different instruction blocks under one key would only evict each other")
+  }
+
   func testConsumeAndDeclineRejectACandidateThatHasAlreadyExpired() throws {
     let queue = try migratedQueue()
     try queue.write { db in
