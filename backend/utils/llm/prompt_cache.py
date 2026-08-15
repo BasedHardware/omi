@@ -15,21 +15,22 @@ nothing, so callers preflight with :func:`has_cacheable_prefix` first.
 
 from __future__ import annotations
 
-import tiktoken
-
 # Below this, the provider never serves a read, so a breakpoint is pure noise.
 EXPLICIT_CACHE_MINIMUM_TOKENS = 1024
+
+# Deliberately a character heuristic rather than a real tokenizer. This runs on
+# the request path, and `tiktoken.get_encoding` fetches its vocabulary from a
+# remote blob on first use: a network failure there would surface as a 500 on a
+# call that only needed to answer "is this block big enough to be worth
+# caching?". Four characters per token is the usual English ratio, and the
+# decision degrades gracefully either way — slightly under-counting skips a
+# marginal cache write, slightly over-counting pays for one.
+EXPLICIT_CACHE_MINIMUM_CHARACTERS = EXPLICIT_CACHE_MINIMUM_TOKENS * 4
 
 EXPLICIT_CACHE_OPTIONS = {'mode': 'explicit', 'ttl': '30m'}
 EXPLICIT_CACHE_BREAKPOINT = {'mode': 'explicit'}
 
 
 def has_cacheable_prefix(content: str) -> bool:
-    """Use the model-family tokenizer as a conservative preflight for a cache write."""
-    if not content:
-        return False
-    try:
-        return len(tiktoken.get_encoding('o200k_base').encode(content)) >= EXPLICIT_CACHE_MINIMUM_TOKENS
-    except AttributeError:
-        # Do not make a cache write merely because an optional tokenizer dependency is unavailable.
-        return len(content) >= EXPLICIT_CACHE_MINIMUM_TOKENS * 4
+    """Conservative preflight: is this block worth marking for a cache write?"""
+    return len(content) >= EXPLICIT_CACHE_MINIMUM_CHARACTERS
