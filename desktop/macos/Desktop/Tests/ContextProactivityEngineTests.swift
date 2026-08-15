@@ -275,6 +275,155 @@ final class ContextProactivityEngineTests: XCTestCase {
     XCTAssertEqual(json["error_type"] as? String, "timed_out")
   }
 
+  func testVisitFreshnessRunsToCompletionOnlyWithinTheDeliveryValidityWindow() throws {
+    let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: 1, bucketID: "bucket-a", startedAt: now)
+
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE context_visits SET outcome = 'active', endedAt = NULL WHERE id = 1")
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now),
+        ContextVisitFreshness(fresh: true, endedAt: nil),
+        "an active visit is always fresh")
+
+      try db.execute(
+        sql: "UPDATE context_visits SET outcome = 'completed', endedAt = ? WHERE id = 1",
+        arguments: [now.addingTimeInterval(-5)])
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now),
+        ContextVisitFreshness(fresh: true, endedAt: now.addingTimeInterval(-5)),
+        "a departure five seconds ago must not kill the in-flight evaluation")
+
+      try db.execute(
+        sql: "UPDATE context_visits SET endedAt = ? WHERE id = 1",
+        arguments: [now.addingTimeInterval(-ContextDeliveryBudget.deliveryValidityWindowSeconds)])
+      XCTAssertTrue(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now).fresh,
+        "the validity window boundary is inclusive")
+
+      try db.execute(
+        sql: "UPDATE context_visits SET endedAt = ? WHERE id = 1",
+        arguments: [now.addingTimeInterval(-120)])
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now),
+        ContextVisitFreshness(fresh: false, endedAt: now.addingTimeInterval(-120)),
+        "an evaluation that drags past the window after departure dies at its next guard")
+
+      try db.execute(
+        sql: "UPDATE context_visits SET endedAt = NULL WHERE id = 1")
+      XCTAssertFalse(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now).fresh,
+        "a completed visit with no recorded departure time fails closed")
+    }
+  }
+
+  func testVisitFreshnessRejectsDiscardedAndInterruptedOutcomesHoweverRecent() throws {
+    let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: 1, bucketID: "bucket-a", startedAt: now)
+
+    try queue.write { db in
+      for outcome in ["discarded", "interrupted"] {
+        try db.execute(
+          sql: "UPDATE context_visits SET outcome = ?, endedAt = ? WHERE id = 1",
+          arguments: [outcome, now.addingTimeInterval(-1)])
+        XCTAssertFalse(
+          try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now).fresh,
+          "a \(outcome) visit never earned a delivery, however recent")
+      }
+    }
+  }
+
+  func testVisitFreshnessFailsClosedWhenTheFenceIdentityDoesNotMatch() throws {
+    let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+
+    try queue.read { db in
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(
+          in: db,
+          fence: ContextVisitFence(
+            visitID: 1, contextGeneration: 99, poolEpoch: 1, bucketID: "bucket-a", startedAt: now),
+          now: now),
+        .stale)
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(
+          in: db,
+          fence: ContextVisitFence(
+            visitID: 999, contextGeneration: 1, poolEpoch: 1, bucketID: "bucket-a", startedAt: now),
+          now: now),
+        .stale)
+    }
+  }
+
+  func testSnapshotBucketResolutionSurvivesACompletedVisitButNotADiscardedOne() throws {
+    let queue = try contextBucketDatabase()
+
+    try queue.write { db in
+      // The fixture seeds visit 1 as completed: the snapshot path must still
+      // resolve its bucket so a run-to-completion evaluation can assemble.
+      XCTAssertEqual(
+        try ContextBucketVisitResolver.persistedBucketID(
+          in: db, visitID: 1, contextGeneration: 1, poolEpoch: 1),
+        "bucket-a")
+
+      try db.execute(sql: "UPDATE context_visits SET outcome = 'discarded' WHERE id = 1")
+      XCTAssertNil(
+        try ContextBucketVisitResolver.persistedBucketID(
+          in: db, visitID: 1, contextGeneration: 1, poolEpoch: 1))
+    }
+  }
+
+  func testDirectorFrameBoundRejectsTheNextContextsScreenAfterDeparture() {
+    let startedAt = Date(timeIntervalSince1970: 1_725_000_000)
+    let endedAt = startedAt.addingTimeInterval(13)
+
+    XCTAssertFalse(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: startedAt.addingTimeInterval(-1),
+        storedAt: startedAt,
+        startedAt: startedAt,
+        endedAt: nil),
+      "a frame captured before the visit began never grounds it")
+    XCTAssertTrue(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: startedAt.addingTimeInterval(30),
+        storedAt: startedAt.addingTimeInterval(30),
+        startedAt: startedAt,
+        endedAt: nil),
+      "an active visit keeps today's behavior: any frame at or after startedAt")
+    XCTAssertTrue(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: startedAt.addingTimeInterval(10),
+        storedAt: startedAt.addingTimeInterval(10),
+        startedAt: startedAt,
+        endedAt: endedAt),
+      "a frame captured and tracked during the visit grounds its departed evaluation")
+    // The switch tick: the next context's frame is CAPTURED milliseconds before
+    // the transition writes endedAt, so capture time cannot exclude it — but it
+    // is only STORED after the transition persisted the departure.
+    XCTAssertFalse(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: endedAt.addingTimeInterval(-0.005),
+        storedAt: endedAt.addingTimeInterval(0.010),
+        startedAt: startedAt,
+        endedAt: endedAt),
+      "the next context's frame on the switch tick must not ground the departed visit")
+    XCTAssertFalse(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: endedAt.addingTimeInterval(
+          ContextDeliveryBudget.departedFrameCaptureEpsilonSeconds + 1),
+        storedAt: endedAt.addingTimeInterval(
+          ContextDeliveryBudget.departedFrameCaptureEpsilonSeconds + 1),
+        startedAt: startedAt,
+        endedAt: endedAt),
+      "a frame captured after departure plus epsilon is the next context's screen")
+  }
+
   private func provenanceObject(_ json: String) throws -> [String: Any] {
     let object = try JSONSerialization.jsonObject(with: Data(json.utf8))
     return try XCTUnwrap(object as? [String: Any])

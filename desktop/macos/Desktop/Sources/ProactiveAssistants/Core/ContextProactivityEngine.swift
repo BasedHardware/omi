@@ -74,28 +74,6 @@ enum ContextDirectorTaskSelection {
   }
 }
 
-extension ContextBucketStore {
-  func activeFenceIsValid(_ fence: ContextVisitFence) async -> Bool {
-    let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let pool, poolEpoch == fence.poolEpoch else { return false }
-    do {
-      return try await pool.read { db in
-        try Bool.fetchOne(
-          db,
-          sql: """
-            SELECT EXISTS(
-              SELECT 1 FROM context_visits
-              WHERE id = ? AND contextGeneration = ? AND poolEpoch = ? AND outcome = 'active'
-            )
-            """,
-          arguments: [fence.visitID, fence.contextGeneration, fence.poolEpoch]) ?? false
-      }
-    } catch {
-      return false
-    }
-  }
-}
-
 actor ContextProactivityEngine {
   static let shared = ContextProactivityEngine(client: .shared, store: .shared)
   private let client: ProactiveLaneClient
@@ -143,19 +121,41 @@ actor ContextProactivityEngine {
       log("Context director suppressed before preparation: \(preflightReason.rawValue)")
       return
     }
+    // Run-to-completion: a settled visit's evaluation survives a context switch
+    // for a bounded window (the visit stays "fresh" while active or briefly
+    // after a completed departure), so fast task-switchers can still receive
+    // what their quota already paid for. Every later stage re-checks freshness.
+    let freshness = await store.fenceFreshness(fence)
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      await store.activeFenceIsValid(fence),
+      freshness.fresh,
       let snapshot = await store.snapshot(for: fence)
     else { return }
     // Facts are the only source of notification worthiness. A bucket containing
     // ambient narrative alone cannot purchase a frontier-model call.
     guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else { return }
+    // After a departure the latest tracked frame can be the NEXT context's
+    // screen. Sample the frame first, then re-read freshness and bound the
+    // sample against it: the transition persists `endedAt` before the next
+    // context's frame is tracked, so a bound applied to a post-sampling
+    // freshness read cannot admit the wrong screen — while a bound computed
+    // from the pre-snapshot read above could, when the switch lands between
+    // that read and this lookup.
     guard
-      let currentFrame = await MainActor.run(body: {
+      let frameSample = await MainActor.run(body: {
         AssistantCoordinator.shared.trackedFrameForDirector(startedAt: fence.startedAt)
       })
     else { return }
+    let frameFreshness = await store.fenceFreshness(fence)
+    guard
+      frameFreshness.fresh,
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: frameSample.frame.captureTime,
+        storedAt: frameSample.storedAt,
+        startedAt: fence.startedAt,
+        endedAt: frameFreshness.endedAt)
+    else { return }
+    let currentFrame = frameSample.frame
 
     guard let ownerID = await MainActor.run(body: { RuntimeOwnerIdentity.currentOwnerId() }) else { return }
     let attemptPreflight = await presentationPreflight(ownerID)
@@ -207,7 +207,7 @@ actor ContextProactivityEngine {
       recentDeliveries: recentDeliveries)
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      await store.activeFenceIsValid(fence)
+      await store.fenceFreshness(fence).fresh
     else {
       await terminalize(
         deliveryID: deliveryID,
@@ -244,7 +244,7 @@ actor ContextProactivityEngine {
       await ContextProactivityTelemetry.record(result)
       guard
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-        await store.activeFenceIsValid(fence)
+        await store.fenceFreshness(fence).fresh
       else {
         await terminalize(
           deliveryID: deliveryID,
@@ -292,7 +292,7 @@ actor ContextProactivityEngine {
         // staleness, so a future failure path cannot quietly bypass it.
         guard
           RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-          await store.activeFenceIsValid(fence)
+          await store.fenceFreshness(fence).fresh
         else {
           await terminalize(
             deliveryID: deliveryID,
@@ -357,7 +357,7 @@ actor ContextProactivityEngine {
         message: decision.message, state: "policy_approved")
       guard
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-        await store.activeFenceIsValid(fence),
+        await store.fenceFreshness(fence).fresh,
         let ownerID = await MainActor.run(body: { RuntimeOwnerIdentity.currentOwnerId() })
       else {
         await terminalize(
@@ -516,7 +516,7 @@ actor ContextProactivityEngine {
     }
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      await store.activeFenceIsValid(fence)
+      await store.fenceFreshness(fence).fresh
     else { return abandoned(items, failure: "stale_visit") }
     // Retrieval awaited the network; rebuild the free gate before the second
     // paid call so disabling notifications, snoozing, or becoming paywalled
