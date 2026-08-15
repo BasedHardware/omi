@@ -1,0 +1,50 @@
+// LIFECYCLE: permanent
+// Structural red-proofs for the human local-demo launcher. Behavioral proofs
+// live in apps/service/qa/demo-persona.test.ts (HTTP) and a headed/accept run.
+
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+
+const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
+const app = read("./dev-app.sh");
+const stack = read("./dev-stack.sh");
+const pkg = JSON.parse(read("../package.json"));
+
+test("RED-PROOF dev-app.sh composes the existing stack and macOS launcher", () => {
+  assert.match(app, /dev-stack\.sh/);
+  assert.match(app, /--up/);
+  assert.match(app, /dev-run-macos\.sh/);
+  assert.match(app, /--route home/);
+  assert.doesNotMatch(app, /Bun\.serve|createLocalDevService/);
+  assert.equal((app.match(/exec "\$MACOS_LAUNCHER"/g) ?? []).length, 1);
+});
+
+test("RED-PROOF the demo launcher exports the persona only for the stack it boots", () => {
+  assert.match(app, /OMI_SEED_PERSONA=demo "\$STACK" --up/);
+  assert.match(app, /serving "\$SERVICE_URL"/);
+  assert.match(app, /serving "\$GATEWAY_URL"/);
+  assert.match(app, /reused the listeners already serving 4851 and 8788/);
+});
+
+test("RED-PROOF the demo launcher never prints a token", () => {
+  assert.match(app, /OMI_API_TOKEN="\$DEV_TOKEN"/);
+  assert.doesNotMatch(app, /printf '.*%s.*' "\$DEV_TOKEN"/);
+  assert.doesNotMatch(app, /echo "\$DEV_TOKEN"/);
+  assert.doesNotMatch(app, /console\.log\(.*[Tt]oken/);
+});
+
+test("RED-PROOF stop instructions name the existing stack stopper", () => {
+  assert.match(app, /integration\/dev-stack\.sh --stop/);
+  assert.match(stack, /STOP_ONLY=1/);
+});
+
+test("RED-PROOF bun run app is wired to the one launcher", () => {
+  assert.equal(pkg.scripts.app, "bash integration/dev-app.sh");
+});
+
+test("RED-PROOF the launcher discloses the local test gateway, never production", () => {
+  assert.match(app, /local test gateway/);
+  assert.match(app, /not a real model/);
+  assert.doesNotMatch(app, /api\.omi\.me|\?rig=dev/);
+});

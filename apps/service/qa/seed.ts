@@ -67,6 +67,14 @@ const QA_SEED_TABLES = Object.freeze([
 ] as const);
 
 // domain-pending(DIV-DOMCORE-001)
+export interface SeedMemoryContent {
+  readonly excerpt: string;
+  readonly handle: string;
+  readonly predicate: string;
+  /** Literal subject phrase the QA synthesizer emits into served summary text. */
+  readonly subject_literal: string;
+}
+
 export interface SeedQaSnapshotOptions {
   readonly owner_account_id: string;
   readonly memory_count: number;
@@ -83,6 +91,12 @@ export interface SeedQaSnapshotOptions {
    * leak would actually show up in the synthesized text.
    */
   readonly hidden_memory_count?: number;
+  /**
+   * Optional per-day content. Omitted, the historical QA rows are unchanged.
+   * When present, length must equal `memory_count` and `hidden_memory_count`
+   * must be 0: the demo persona reuses this writer without rewording QA rows.
+   */
+  readonly contents?: readonly SeedMemoryContent[];
 }
 
 const fail = (message: string): never => {
@@ -110,6 +124,45 @@ const requireMemoryCount = (value: unknown): number => {
     return fail("memory_count must be a non-negative safe integer");
   }
   return value;
+};
+
+const requireContents = (
+  value: unknown,
+  memoryCount: number,
+  hiddenCount: number,
+): readonly SeedMemoryContent[] | undefined => {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return fail("contents must be an array when provided");
+  if (hiddenCount !== 0) {
+    return fail("contents cannot be combined with hidden_memory_count");
+  }
+  if (value.length !== memoryCount) {
+    return fail("contents length must equal memory_count");
+  }
+  const contents: SeedMemoryContent[] = [];
+  for (const item of value) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) {
+      return fail("contents entries must be plain objects");
+    }
+    const record = item as Record<string, unknown>;
+    const excerpt = record["excerpt"];
+    const handle = record["handle"];
+    const predicate = record["predicate"];
+    const subjectLiteral = record["subject_literal"];
+    if (typeof excerpt !== "string" || excerpt.length === 0
+      || typeof handle !== "string" || handle.length === 0
+      || typeof predicate !== "string" || predicate.length === 0
+      || typeof subjectLiteral !== "string" || subjectLiteral.length === 0) {
+      return fail("contents entries need non-empty excerpt, handle, predicate, and subject_literal");
+    }
+    contents.push(Object.freeze({
+      excerpt,
+      handle,
+      predicate,
+      subject_literal: subjectLiteral,
+    }));
+  }
+  return Object.freeze(contents);
 };
 
 const ensureSchema = (db: Database): void => {
@@ -140,10 +193,13 @@ const DAY_MS = 86_400_000;
 const fixtureInstant = (index: number): string =>
   new Date(ANCHOR_MS - index * DAY_MS).toISOString();
 
-const identity = (token: string): SourceIdentityRef => ({
-  namespace_instance_ref: `namespace:qa:${token}`,
-  local_key: `local:qa:${token}`,
-  producer: { producer_ref: "qa-seed-producer", contract_ref: "qa-seed-contract" },
+/** Day-stepped UTC instant from the fixed QA fixture anchor. No wall clock. */
+export const qaFixtureInstant = fixtureInstant;
+
+const identity = (token: string, family: "qa" | "demo"): SourceIdentityRef => ({
+  namespace_instance_ref: `namespace:${family}:${token}`,
+  local_key: `local:${family}:${token}`,
+  producer: { producer_ref: `${family}-seed-producer`, contract_ref: `${family}-seed-contract` },
   asserted_identity: { domain: null, scope_ref: null },
 });
 
@@ -155,6 +211,7 @@ const buildMemory = (
   dayIndex: number,
   commitSequence: number,
   hidden: boolean,
+  content: SeedMemoryContent | undefined,
 ): {
   readonly event: L1Event;
   readonly evidence: Evidence;
@@ -163,6 +220,7 @@ const buildMemory = (
   readonly commit_id: string;
   readonly sequence: number;
 } => {
+  const family = content === undefined ? "qa" : "demo";
   const token = `${hidden ? "h" : ""}${padIndex(dayIndex)}`;
   const observedAt = fixtureInstant(dayIndex);
   // A non-generic label is exactly what applicationVisibleClosure filters on.
@@ -170,68 +228,74 @@ const buildMemory = (
   const policyLabels = hidden
     ? ["subject:generic", "sensitivity:private", "capture:generic"]
     : [...GENERIC_POLICY_LABELS];
-  const eventRevisionId = `event-revision:qa:${token}`;
-  const evidenceId = `evidence:qa:${token}`;
-  const entityId = `entity:qa:${token}`;
-  const claimRevisionId = `claim:qa:${token}`;
-  const provisionalRevisionId = `provisional:qa:${token}`;
-  const commitId = `commit:qa:${token}`;
-  const predicateId = "predicate:qa:memory";
+  const eventRevisionId = `event-revision:${family}:${token}`;
+  const evidenceId = `evidence:${family}:${token}`;
+  const entityId = `entity:${family}:${token}`;
+  const claimRevisionId = `claim:${family}:${token}`;
+  const provisionalRevisionId = `provisional:${family}:${token}`;
+  const commitId = `commit:${family}:${token}`;
+  const predicateId = `predicate:${family}:memory`;
+  const excerpt = content?.excerpt ?? `qa memory ${token}`;
+  const handle = content?.handle ?? `qa-entity-${token}`;
+  const predicateName = content?.predicate ?? "qa_memory";
+  const subjectValue = content === undefined
+    ? { kind: "entity_ref" as const, ref: entityId }
+    : { kind: "literal" as const, value: content.subject_literal };
 
   const event: L1Event = {
-    event_id: `event:qa:${token}`,
+    event_id: `event:${family}:${token}`,
     event_revision_id: eventRevisionId,
     owner_account_id: ownerAccountId,
-    capture_session_id: `session:qa:${token}`,
-    stream_id: "qa-seed-stream",
+    capture_session_id: `session:${family}:${token}`,
+    stream_id: `${family}-seed-stream`,
     event_kind: "text",
-    payload_schema_ref: "qa-seed-text-v1",
+    payload_schema_ref: `${family}-seed-text-v1`,
     schema_version: "v1",
     payload: { fixture_index: dayIndex, fixture_hidden: hidden },
     event_time: observedAt,
     ingest_time: observedAt,
     source_sequence: commitSequence,
     evidence_addressable_refs: [evidenceId],
-    source_trust: "qa-seed",
+    source_trust: `${family}-seed`,
     policy_labels: [...policyLabels],
-    canonical_redacted_hash: `hash:qa:event:${token}`,
+    canonical_redacted_hash: `hash:${family}:event:${token}`,
   };
 
   const evidence: Evidence = {
     evidence_id: evidenceId,
     event_revision_id: eventRevisionId,
-    source_unit_ref: `unit:qa:${token}`,
-    range: { start: 0, end: 16 },
-    excerpt: `qa memory ${token}`,
-    source_identity_ref: identity(token),
+    source_unit_ref: `unit:${family}:${token}`,
+    range: { start: 0, end: content === undefined ? 16 : excerpt.length },
+    excerpt,
+    source_identity_ref: identity(token, family),
     speaker_rendering: null,
     source_local_mention_ref: null,
     state: "active",
-    source_trust: "qa-seed",
+    source_trust: `${family}-seed`,
     policy_labels: [...policyLabels],
-    source_independence_key: `source:qa:${token}`,
+    source_independence_key: `source:${family}:${token}`,
   };
 
   // domain-pending(DIV-DOMCORE-007)
   const entity: Entity = {
     entity_id: entityId,
     owner_account_id: ownerAccountId,
-    entity_revision_id: `entity-revision:qa:${token}`,
-    handle: `qa-entity-${token}`,
-    labels: ["qa-seed"],
+    entity_revision_id: `entity-revision:${family}:${token}`,
+    handle,
+    labels: [`${family}-seed`],
   };
 
   // domain-pending(DIV-DOMCORE-008)
   const claim: CanonicalClaim = {
-    claim_lineage_id: `lineage:qa:${token}`,
+    claim_lineage_id: `lineage:${family}:${token}`,
     claim_revision_id: claimRevisionId,
     owner_account_id: ownerAccountId,
     predicate_id: predicateId,
-    predicate: "qa_memory",
+    predicate: predicateName,
     arguments: [{
       slot_id: "subject",
       role: "subject",
-      value: { kind: "entity_ref", ref: entityId },
+      value: subjectValue,
     }],
     temporal_scope: {
       observed_at: observedAt,
@@ -250,7 +314,7 @@ const buildMemory = (
           granularity: "instant",
         },
         derivation: {
-          resolver_version: "qa-seed-v1",
+          resolver_version: `${family}-seed-v1`,
           timezone: accountTimezone,
         },
       },
@@ -260,19 +324,19 @@ const buildMemory = (
     source_language: "en",
     scope: { locality: "durable", scope_ref: entityId },
     lifecycle: "canonical",
-    canonical_claim_id: `canonical:qa:${token}`,
+    canonical_claim_id: `canonical:${family}:${token}`,
     source_provisional_revision_ids: [provisionalRevisionId],
   };
 
   return { event, evidence, entity, claim, commit_id: commitId, sequence: commitSequence + 1 };
 };
 
-const sharedPredicate = (ownerAccountId: string): Predicate => ({
-  predicate_id: "predicate:qa:memory",
+const sharedPredicate = (ownerAccountId: string, family: "qa" | "demo"): Predicate => ({
+  predicate_id: `predicate:${family}:memory`,
   owner_account_id: ownerAccountId,
-  predicate_revision_id: "predicate-revision:qa:memory",
-  identity_name: "qa_memory",
-  display_name: "qa_memory",
+  predicate_revision_id: `predicate-revision:${family}:memory`,
+  identity_name: family === "qa" ? "qa_memory" : "noted",
+  display_name: family === "qa" ? "qa_memory" : "noted",
   lifecycle: "canonical",
   slot_ids: ["subject"],
 });
@@ -318,6 +382,8 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
   if (hiddenCount > memoryCount) {
     return fail("hidden_memory_count cannot exceed memory_count, since each hidden memory shares a day with a visible one");
   }
+  const contents = requireContents(options.contents, memoryCount, hiddenCount);
+  const family = contents === undefined ? "qa" : "demo";
 
   ensureSchema(db);
   resetQaSnapshot(db);
@@ -332,7 +398,7 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
     ...Array.from({ length: hiddenCount }, (_, index) => ({ dayIndex: index, hidden: true })),
   ];
 
-  const predicate = sharedPredicate(ownerAccountId);
+  const predicate = sharedPredicate(ownerAccountId, family);
   let parentCommit: string | null = null;
   let headCommitId = "";
   let headSequence = 0;
@@ -340,7 +406,14 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
   const write = db.transaction(() => {
     for (let index = 0; index < plan.length; index += 1) {
       const step = plan[index]!;
-      const memory = buildMemory(ownerAccountId, accountTimezone, step.dayIndex, index, step.hidden);
+      const memory = buildMemory(
+        ownerAccountId,
+        accountTimezone,
+        step.dayIndex,
+        index,
+        step.hidden,
+        step.hidden ? undefined : contents?.[step.dayIndex],
+      );
       const { event, evidence, entity, claim, commit_id: commitId, sequence } = memory;
       const rowToken = `${step.hidden ? "h" : ""}${padIndex(step.dayIndex)}`;
 
@@ -351,10 +424,10 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
         ownerAccountId,
         parentCommit,
         sequence,
-        `idempotency:qa:${rowToken}`,
-        `input:qa:${rowToken}`,
-        `input-version:qa:${rowToken}`,
-        `output:qa:${rowToken}`,
+        `idempotency:${family}:${rowToken}`,
+        `input:${family}:${rowToken}`,
+        `input-version:${family}:${rowToken}`,
+        `output:${family}:${rowToken}`,
         "success",
         JSON.stringify({ commit_id: commitId, fixture_row: rowToken }),
       );
@@ -365,7 +438,7 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
           ownerAccountId,
           predicate.predicate_id,
           JSON.stringify(predicate),
-          "hash:qa:predicate:memory",
+          `hash:${family}:predicate:memory`,
           commitId,
         );
       }
@@ -374,16 +447,16 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
         event.event_revision_id,
         ownerAccountId,
         JSON.stringify(event),
-        `hash:qa:event:${rowToken}`,
+        `hash:${family}:event:${rowToken}`,
         commitId,
       );
 
       db.query("INSERT INTO evidence_revisions VALUES (?, ?, ?, ?, ?, ?)").run(
-        `evidence-revision:qa:${rowToken}`,
+        `evidence-revision:${family}:${rowToken}`,
         ownerAccountId,
         event.event_revision_id,
         JSON.stringify(evidence),
-        `hash:qa:evidence:${rowToken}`,
+        `hash:${family}:evidence:${rowToken}`,
         commitId,
       );
 
@@ -392,7 +465,7 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
         entity.entity_revision_id,
         ownerAccountId,
         JSON.stringify(entity),
-        `hash:qa:entity:${rowToken}`,
+        `hash:${family}:entity:${rowToken}`,
         commitId,
       );
 
@@ -404,7 +477,7 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
         "canonical",
         claim.temporal_scope.observed_at,
         JSON.stringify(claim),
-        `hash:qa:claim:${rowToken}`,
+        `hash:${family}:claim:${rowToken}`,
         commitId,
       );
 

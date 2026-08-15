@@ -214,6 +214,19 @@ export interface LocalServiceOptions {
   readonly conversationProcessorFactory: ListenConversationProcessorFactory;
   /** Dev-server-only seed. Existing Settings fixtures keep entitlement absent. */
   readonly listenDefaultUnmetered?: boolean;
+  /**
+   * Optional post-seed overlay. The demo persona installs this from
+   * `bin/dev-server.ts`; production compositions omit it. The callback must
+   * not be imported from a production entrypoint.
+   */
+  readonly overlaySeed?: (input: {
+    readonly db: Database;
+    readonly stores: LocalServiceStores;
+    readonly ownerAccountId: string;
+    readonly accountTimezone: string;
+  }) => void;
+  /** Reported in seed identity when a persona overlay is installed. */
+  readonly seedPersona?: "demo";
   /** Required provider seam; production LLM integration is a later adapter. */
   readonly generationSource: ChatGenerationSource;
   /** Optional consultation override; omission adapts the existing authorized memory read. */
@@ -542,6 +555,12 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       account_timezone: options.accountTimezone,
     });
     seedServiceStores();
+    options.overlaySeed?.({
+      db: options.db,
+      stores,
+      ownerAccountId: options.ownerAccountId,
+      accountTimezone: options.accountTimezone,
+    });
     producerEvidence.reset();
   };
 
@@ -759,6 +778,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     memory_count: options.memoryCount,
     account_timezone: options.accountTimezone,
     fixture_time_anchor_utc: QA_FIXTURE_TIME_ANCHOR_UTC,
+    ...(options.seedPersona === "demo" ? { persona: "demo" as const } : {}),
   });
 
   // ── The write path ────────────────────────────────────────────────────────

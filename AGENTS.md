@@ -28,3 +28,17 @@ deprecations). Read `docs/implementation-charter.md` there before building.
 - No benchmark data lives in this repo and none may be added — evaluation
   corpora are machine-local under the workspace `data/` dir (gitignored).
 - Sync discipline: `make sync` at start, `make up` when done (workspace root).
+
+## Test it locally
+
+One command from this repo root:
+
+```bash
+bun run app
+```
+
+That reuses `integration/dev-stack.sh --up` when 4851/8788 are already serving, otherwise boots them with `OMI_SEED_PERSONA=demo`, then launches the headed macOS shell (`frontend/shells/macos/scripts/dev-run-macos.sh`, route home, origin `http://127.0.0.1:5290`).
+
+Expect **Demo User** (empty email) and a fictional recent week: Harborline Cafe / Cedar Loop / Fable and Wick people and places, conversations with transcripts in a few folders, tasks (some linked to those conversations), and a short chat history. Chat generation goes through the **local test gateway** on 8788, not a real model.
+
+Persona off (default): omit `OMI_SEED_PERSONA` and every seeded byte stays the historical QA fixture. Persona on: `OMI_SEED_PERSONA=demo`. Stop the stack with `integration/dev-stack.sh --stop`. Headless-safe check: `integration/dev-app.sh --accept`.
