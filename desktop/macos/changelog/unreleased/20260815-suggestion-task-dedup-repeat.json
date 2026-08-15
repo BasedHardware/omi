@@ -1,3 +1,0 @@
-{
-  "change": "Fixed the same due-task nudge being delivered repeatedly in quick succession at Maximum notification frequency"
-}

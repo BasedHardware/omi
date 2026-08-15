@@ -1,1 +1,0 @@
-{"change": "Screen task capture no longer retries permanently rejected sync payloads forever; unusable duplicate-task references now fall back to a new suggestion instead of failing delivery"}
