@@ -13,6 +13,20 @@ import {
   parseTaskPageJson,
   TASK_ITEM_FIELDS,
 } from "@omi-core/ratified-contracts/projections/tasks";
+import {
+  CONVERSATION_ITEM_FIELDS,
+  isTrustedConversationCompletenessHonest,
+  isTrustedConversationPageData,
+  isTrustedConversationWindowHonest,
+  parseConversationPageJson,
+} from "@omi-core/ratified-contracts/projections/conversations";
+import {
+  FOLDER_ITEM_FIELDS,
+  isTrustedFolderCompletenessHonest,
+  isTrustedFolderPageData,
+  isTrustedFolderWindowHonest,
+  parseFolderPageJson,
+} from "@omi-core/ratified-contracts/projections/folders";
 import { isTrustedRecallTraceData, parseRecallTraceJson } from "@omi-core/ratified-contracts/recall/trace";
 import {
   parseWriteOpEnvelopeJson,
@@ -127,6 +141,42 @@ for (const row of tasksCorpus) {
 }
 for (const { case: declared } of [...tasksShape.cases, ...tasksShape.refusalLaws]) {
   assert.ok(tasksCovered.has(declared), `tasks case ${declared} is declared but has no corpus row`);
+}
+
+const conversationsShape = await fixture("conversations-read-shape.json");
+const conversationsCorpus = await fixture("conversations-read-conformance.json");
+assert.ok(conversationsCorpus.length >= conversationsShape.cases.length + conversationsShape.refusalLaws.length,
+  "the conversations corpus must cover at least every declared case and refusal law");
+assert.deepEqual([...CONVERSATION_ITEM_FIELDS], conversationsShape.itemFields,
+  "the shipped module and the shipped schema of record must agree on the conversations fields");
+const conversationsCovered = new Set();
+for (const row of conversationsCorpus) {
+  assert.equal(isTrustedConversationPageData(row.page), row.safe, row.wireCase);
+  assert.equal(parseConversationPageJson(JSON.stringify(row.page)) !== null, row.safe, `${row.wireCase} raw`);
+  if (row.safe) assert.ok(isTrustedConversationWindowHonest(row.page.window), `${row.wireCase} window`);
+  if (row.safe) assert.ok(isTrustedConversationCompletenessHonest(row.page), `${row.wireCase} coverage`);
+  conversationsCovered.add(row.wireCase);
+}
+for (const { case: declared } of [...conversationsShape.cases, ...conversationsShape.refusalLaws]) {
+  assert.ok(conversationsCovered.has(declared), `conversations case ${declared} is declared but has no corpus row`);
+}
+
+const foldersShape = await fixture("folders-read-shape.json");
+const foldersCorpus = await fixture("folders-read-conformance.json");
+assert.ok(foldersCorpus.length >= foldersShape.cases.length + foldersShape.refusalLaws.length,
+  "the folders corpus must cover at least every declared case and refusal law");
+assert.deepEqual([...FOLDER_ITEM_FIELDS], foldersShape.itemFields,
+  "the shipped module and the shipped schema of record must agree on the folders fields");
+const foldersCovered = new Set();
+for (const row of foldersCorpus) {
+  assert.equal(isTrustedFolderPageData(row.page), row.safe, row.wireCase);
+  assert.equal(parseFolderPageJson(JSON.stringify(row.page)) !== null, row.safe, `${row.wireCase} raw`);
+  if (row.safe) assert.ok(isTrustedFolderWindowHonest(row.page.window), `${row.wireCase} window`);
+  if (row.safe) assert.ok(isTrustedFolderCompletenessHonest(row.page), `${row.wireCase} coverage`);
+  foldersCovered.add(row.wireCase);
+}
+for (const { case: declared } of [...foldersShape.cases, ...foldersShape.refusalLaws]) {
+  assert.ok(foldersCovered.has(declared), `folders case ${declared} is declared but has no corpus row`);
 }
 
 async function fixture(name) {

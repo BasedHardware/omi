@@ -82,6 +82,19 @@ const expectedExports = {
     types: "./dist/projections/synthesized.d.ts",
     import: "./dist/projections/synthesized.js",
   },
+  // The ratified CONVERSATIONS / FOLDERS READ wires (DAVID-platform-conversations).
+  // Same reason as every other row: `requireJsonEqual` compares the WHOLE
+  // exports object, so a subpath that quietly appears or disappears in the
+  // vendored tarball fails the gate rather than being absorbed. Key ORDER is
+  // part of that comparison, so these sit where the package declares them.
+  "./projections/conversations": {
+    types: "./dist/projections/conversations.d.ts",
+    import: "./dist/projections/conversations.js",
+  },
+  "./projections/folders": {
+    types: "./dist/projections/folders.d.ts",
+    import: "./dist/projections/folders.js",
+  },
   // The ratified TASKS READ wire (DAVID-tasks-read-epoch-and-ci D1/D2). Same
   // reason as every other row: `requireJsonEqual` compares the WHOLE exports
   // object, so a subpath that quietly appears or disappears in the vendored

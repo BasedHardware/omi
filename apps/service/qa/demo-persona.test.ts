@@ -58,7 +58,7 @@ const snapshotRoutes = async (
 ): Promise<RouteSnapshot> => {
   const memories = await (await request("/v1/memories?limit=25")).text();
   const tasks = await (await request("/v1/tasks?limit=25")).json() as RouteSnapshot["tasks"];
-  const conversations = await (await request("/v1/conversations?limit=50")).json() as RouteSnapshot["conversations"];
+  const conversations = await (await request("/v1/conversations?limit=50&offset=0")).json() as RouteSnapshot["conversations"];
   const folders = await (await request("/v1/folders")).json() as RouteSnapshot["folders"];
   const chat = await (await request("/v1/chat-messages?limit=50")).json() as RouteSnapshot["chat"];
   const settings = await (await request("/v1/settings")).json() as RouteSnapshot["settings"];

@@ -50,7 +50,9 @@ export type RatifiedCorpusName =
   | "page-conformance"
   | "status-matrix"
   | "write-ops-conformance"
-  | "tasks-read-conformance";
+  | "tasks-read-conformance"
+  | "conversations-read-conformance"
+  | "folders-read-conformance";
 
 export interface RatifiedFixtureManifest {
   readonly schemaVersion: number;
@@ -127,6 +129,38 @@ export function readRatifiedTasksReadShape(): {
   readonly refusalLaws: readonly { readonly case: string }[];
 } {
   return JSON.parse(readFileSync(new URL("tasks-read-shape.json", FIXTURE_DIR), "utf8"));
+}
+
+export function readRatifiedConversationsReadShape(): {
+  readonly schemaVersion: number;
+  readonly contractVersion: string;
+  readonly completenessVersion: string;
+  readonly route: string;
+  readonly itemFields: readonly string[];
+  readonly windowStates: readonly string[];
+  readonly completenessStatuses: readonly string[];
+  readonly limitationReasons: readonly string[];
+  readonly missingAppliedFrontierReasons: readonly string[];
+  readonly cases: readonly { readonly case: string }[];
+  readonly refusalLaws: readonly { readonly case: string }[];
+} {
+  return JSON.parse(readFileSync(new URL("conversations-read-shape.json", FIXTURE_DIR), "utf8"));
+}
+
+export function readRatifiedFoldersReadShape(): {
+  readonly schemaVersion: number;
+  readonly contractVersion: string;
+  readonly completenessVersion: string;
+  readonly route: string;
+  readonly itemFields: readonly string[];
+  readonly windowStates: readonly string[];
+  readonly completenessStatuses: readonly string[];
+  readonly limitationReasons: readonly string[];
+  readonly missingAppliedFrontierReasons: readonly string[];
+  readonly cases: readonly { readonly case: string }[];
+  readonly refusalLaws: readonly { readonly case: string }[];
+} {
+  return JSON.parse(readFileSync(new URL("folders-read-shape.json", FIXTURE_DIR), "utf8"));
 }
 
 /**

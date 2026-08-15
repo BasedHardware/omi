@@ -33,6 +33,18 @@ import {
   TASKS_READ_CONTRACT_VERSION,
 } from "../dist/projections/tasks.js";
 import {
+  CONVERSATION_ITEM_FIELDS,
+  CONVERSATIONS_READ_CONTRACT_VERSION,
+  isTrustedConversationPageData,
+  parseConversationPageJson,
+} from "../dist/projections/conversations.js";
+import {
+  FOLDER_ITEM_FIELDS,
+  FOLDERS_READ_CONTRACT_VERSION,
+  isTrustedFolderPageData,
+  parseFolderPageJson,
+} from "../dist/projections/folders.js";
+import {
   isTrustedRecallTraceData,
   MAX_RECALL_TRACE_JSON_CODE_UNITS,
   parseRecallTraceJson,
@@ -553,6 +565,62 @@ test("the tasks schema of record and the module agree, and the corpus covers it"
   }
   // And the other direction: a corpus row naming a case the schema does not
   // declare means the schema stopped describing the wire.
+  for (const wireCase of covered) {
+    assert.ok(
+      [...shape.cases, ...shape.refusalLaws].some((row) => row.case === wireCase),
+      `${wireCase} is exercised by the corpus but undeclared in the schema of record`,
+    );
+  }
+});
+
+test("every conversations corpus row agrees with the page validator, at both boundaries", async () => {
+  const corpus = JSON.parse(await readFile(new URL("../fixtures/conversations-read-conformance.json", import.meta.url), "utf8"));
+  assert.ok(corpus.length >= 30, "conversations corpus shrank — an empty corpus must never read as a pass");
+  assert.ok(corpus.some((row) => row.safe) && corpus.some((row) => !row.safe),
+    "a corpus with no refusals proves only that the validator says yes");
+  for (const row of corpus) {
+    assert.equal(isTrustedConversationPageData(structuredClone(row.page)), row.safe, row.wireCase);
+    assert.equal(parseConversationPageJson(JSON.stringify(row.page)) !== null, row.safe, `${row.wireCase} raw`);
+  }
+});
+
+test("the conversations schema of record and the module agree, and the corpus covers it", async () => {
+  const shape = JSON.parse(await readFile(new URL("../fixtures/conversations-read-shape.json", import.meta.url), "utf8"));
+  const corpus = JSON.parse(await readFile(new URL("../fixtures/conversations-read-conformance.json", import.meta.url), "utf8"));
+  assert.deepEqual([...CONVERSATION_ITEM_FIELDS], shape.itemFields);
+  assert.equal(shape.contractVersion, CONVERSATIONS_READ_CONTRACT_VERSION);
+  const covered = new Set(corpus.map((row) => row.wireCase));
+  for (const { case: declared } of [...shape.cases, ...shape.refusalLaws]) {
+    assert.ok(covered.has(declared), `${declared} is declared in the schema of record but absent from the corpus`);
+  }
+  for (const wireCase of covered) {
+    assert.ok(
+      [...shape.cases, ...shape.refusalLaws].some((row) => row.case === wireCase),
+      `${wireCase} is exercised by the corpus but undeclared in the schema of record`,
+    );
+  }
+});
+
+test("every folders corpus row agrees with the page validator, at both boundaries", async () => {
+  const corpus = JSON.parse(await readFile(new URL("../fixtures/folders-read-conformance.json", import.meta.url), "utf8"));
+  assert.ok(corpus.length >= 30, "folders corpus shrank — an empty corpus must never read as a pass");
+  assert.ok(corpus.some((row) => row.safe) && corpus.some((row) => !row.safe),
+    "a corpus with no refusals proves only that the validator says yes");
+  for (const row of corpus) {
+    assert.equal(isTrustedFolderPageData(structuredClone(row.page)), row.safe, row.wireCase);
+    assert.equal(parseFolderPageJson(JSON.stringify(row.page)) !== null, row.safe, `${row.wireCase} raw`);
+  }
+});
+
+test("the folders schema of record and the module agree, and the corpus covers it", async () => {
+  const shape = JSON.parse(await readFile(new URL("../fixtures/folders-read-shape.json", import.meta.url), "utf8"));
+  const corpus = JSON.parse(await readFile(new URL("../fixtures/folders-read-conformance.json", import.meta.url), "utf8"));
+  assert.deepEqual([...FOLDER_ITEM_FIELDS], shape.itemFields);
+  assert.equal(shape.contractVersion, FOLDERS_READ_CONTRACT_VERSION);
+  const covered = new Set(corpus.map((row) => row.wireCase));
+  for (const { case: declared } of [...shape.cases, ...shape.refusalLaws]) {
+    assert.ok(covered.has(declared), `${declared} is declared in the schema of record but absent from the corpus`);
+  }
   for (const wireCase of covered) {
     assert.ok(
       [...shape.cases, ...shape.refusalLaws].some((row) => row.case === wireCase),

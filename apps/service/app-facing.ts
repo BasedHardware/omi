@@ -139,6 +139,8 @@ import { registerSettingsRoutes, SETTINGS_PATH } from "./routes/settings";
 import { registerTasksOpsRoutes, TASKS_OPS_PATH } from "./routes/tasks-ops";
 import { registerTasksReadRoutes, TASKS_READ_PATH } from "./routes/tasks-read";
 import { prepareTasksRead } from "./composition/tasks-read";
+import { prepareConversationsRead } from "./composition/conversations-read";
+import { prepareFoldersRead } from "./composition/folders-read";
 import {
   createInMemoryConversationsStore,
   type ConversationRecord,
@@ -813,6 +815,41 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       : "caught_up",
   });
 
+  const prepareConversationsReadFor = (principal: DevPrincipal) => prepareConversationsRead({
+    store: conversations,
+    resolveAuthorization: () => ({
+      owner_account_id: principal.uid,
+      app_id: "omi-local-dev-app",
+      key_id: DEV_KEY_ID,
+    }),
+    codecRootSecret,
+    cursorSigningKeyset,
+    cursorTtlSeconds: CURSOR_TTL_SECONDS,
+    readTimestampEpochSeconds: anchorEpochSeconds,
+    // Client mutations apply synchronously. Upsert from the finalizer does not
+    // bump revision, so revision 0 is the honest "no applied writes" even when
+    // finalized rows exist.
+    appliedFrontierState: conversations.readStateRevision(principal.uid) === 0
+      ? "no_applied_writes"
+      : "caught_up",
+  });
+
+  const prepareFoldersReadFor = (principal: DevPrincipal) => prepareFoldersRead({
+    store: folders,
+    resolveAuthorization: () => ({
+      owner_account_id: principal.uid,
+      app_id: "omi-local-dev-app",
+      key_id: DEV_KEY_ID,
+    }),
+    codecRootSecret,
+    cursorSigningKeyset,
+    cursorTtlSeconds: CURSOR_TTL_SECONDS,
+    readTimestampEpochSeconds: anchorEpochSeconds,
+    appliedFrontierState: folders.listFolders(principal.uid).length === 0
+      ? "no_applied_writes"
+      : "caught_up",
+  });
+
   const seedIdentity = () => Object.freeze({
     owner_account_id: options.ownerAccountId,
     memory_count: options.memoryCount,
@@ -861,6 +898,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     store: conversations,
     counter,
     now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
+    prepareRead: prepareConversationsReadFor,
   });
   registerFolderRoutes(app, {
     resolvePrincipal,
@@ -869,6 +907,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     counter,
     now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
     createId: () => `qa-folder-created-${String(nextFolderId++).padStart(3, "0")}`,
+    prepareRead: prepareFoldersReadFor,
   });
   registerTasksOpsRoutes(app, {
     resolvePrincipal,

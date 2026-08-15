@@ -8,6 +8,10 @@
     "status-matrix.json",
     "write-ops-outcomes.json",
     "write-ops-conformance.json",
+    "conversations-read-shape.json",
+    "conversations-read-conformance.json",
+    "folders-read-shape.json",
+    "folders-read-conformance.json",
     "tasks-read-shape.json",
     "tasks-read-conformance.json"
   ]

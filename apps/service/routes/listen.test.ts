@@ -315,7 +315,7 @@ describe("GET /v4/listen WebSocket", () => {
     expect(stores.listen.listSegments(ACCOUNT, SESSION)).toHaveLength(1);
     await waitUntil(() => stores.conversations.readRecord(ACCOUNT, SESSION) !== null);
     expect(stores.conversations.readRecord(ACCOUNT, SESSION)?.status).toBe("completed");
-    const conversationsResponse = await service.app.request("/v1/conversations", {
+    const conversationsResponse = await service.app.request("/v1/conversations?offset=0", {
       headers: { authorization: `Bearer ${service.devToken}` },
     });
     const conversations = await conversationsResponse.json() as readonly {

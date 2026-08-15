@@ -30,7 +30,7 @@
     "logs": "bun integration/dev-logs.ts"
   },
   "dependencies": {
-    "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.8.0-45b128b1.tgz",
+    "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.9.0-e44625eb.tgz",
     "@sinclair/typebox": "^0.34.41",
     "ajv": "^8.17.1",
     "firebase-admin": "14.2.0",

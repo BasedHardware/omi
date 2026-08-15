@@ -1,6 +1,6 @@
 {
   "name": "@omi-core/ratified-contracts",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Reviewed Omi client/backend contract seam",
   "packageManager": "pnpm@10.0.0",
@@ -13,6 +13,14 @@
     "./projections/synthesized": {
       "types": "./dist/projections/synthesized.d.ts",
       "import": "./dist/projections/synthesized.js"
+    },
+    "./projections/conversations": {
+      "types": "./dist/projections/conversations.d.ts",
+      "import": "./dist/projections/conversations.js"
+    },
+    "./projections/folders": {
+      "types": "./dist/projections/folders.d.ts",
+      "import": "./dist/projections/folders.js"
     },
     "./projections/tasks": {
       "types": "./dist/projections/tasks.d.ts",
@@ -30,6 +38,10 @@
   "files": [
     "dist/pagination/cursor.js",
     "dist/pagination/cursor.d.ts",
+    "dist/projections/conversations.js",
+    "dist/projections/conversations.d.ts",
+    "dist/projections/folders.js",
+    "dist/projections/folders.d.ts",
     "dist/projections/synthesized.js",
     "dist/projections/synthesized.d.ts",
     "dist/projections/tasks.js",
@@ -48,6 +60,10 @@
     "fixtures/status-matrix.json",
     "fixtures/write-ops-outcomes.json",
     "fixtures/write-ops-conformance.json",
+    "fixtures/conversations-read-shape.json",
+    "fixtures/conversations-read-conformance.json",
+    "fixtures/folders-read-shape.json",
+    "fixtures/folders-read-conformance.json",
     "fixtures/tasks-read-shape.json",
     "fixtures/tasks-read-conformance.json",
     "PROVENANCE.json"

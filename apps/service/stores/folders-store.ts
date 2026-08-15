@@ -43,8 +43,15 @@ export type FolderPatchOutcome =
   | { readonly updated: true; readonly record: FolderRecord }
   | { readonly updated: false; readonly reason: "not_found" };
 
+/** One stored folder plus its ingest sequence — the ratified cursor's order. */
+export interface OrderedFolderRecord {
+  readonly record: FolderRecord;
+  readonly sequence: number;
+}
+
 export interface FoldersStore extends ConversationFolderReferenceLookup {
   listFolders(accountId: string): readonly FolderRecord[];
+  listOrderedFolders(accountId: string): readonly OrderedFolderRecord[];
   readFolder(accountId: string, folderId: string): FolderRecord | null;
   /** Server fixture/restore seam; preserves every stored field. */
   upsert(accountId: string, record: FolderRecord): FolderRecord;
@@ -78,6 +85,8 @@ export interface InMemoryFoldersStore extends FoldersStore {
 
 export const createInMemoryFoldersStore = (): InMemoryFoldersStore => {
   const accounts = new Map<string, Map<string, FolderRecord>>();
+  const sequences = new Map<string, Map<string, number>>();
+  const nextSequences = new Map<string, number>();
 
   const replaceAccount = (
     accountId: string,
@@ -85,8 +94,16 @@ export const createInMemoryFoldersStore = (): InMemoryFoldersStore => {
   ): void => {
     if (snapshot.records === null) {
       accounts.delete(accountId);
+      sequences.delete(accountId);
+      nextSequences.delete(accountId);
     } else {
       accounts.set(accountId, new Map(snapshot.records.map((record) => [record.id, record])));
+      const assigned = new Map<string, number>();
+      snapshot.records.forEach((record, index) => {
+        assigned.set(record.id, index + 1);
+      });
+      sequences.set(accountId, assigned);
+      nextSequences.set(accountId, snapshot.records.length + 1);
     }
   };
 
@@ -103,6 +120,16 @@ export const createInMemoryFoldersStore = (): InMemoryFoldersStore => {
       return Object.freeze([...(accounts.get(accountId)?.values() ?? [])]);
     },
 
+    listOrderedFolders(accountId: string): readonly OrderedFolderRecord[] {
+      const records = accounts.get(accountId);
+      if (records === undefined) return Object.freeze([]);
+      const assigned = sequences.get(accountId);
+      return Object.freeze([...records.values()].map((record, index) => Object.freeze({
+        record,
+        sequence: assigned?.get(record.id) ?? index + 1,
+      })));
+    },
+
     readFolder(accountId: string, folderId: string): FolderRecord | null {
       return accounts.get(accountId)?.get(folderId) ?? null;
     },
@@ -113,7 +140,15 @@ export const createInMemoryFoldersStore = (): InMemoryFoldersStore => {
 
     upsert(accountId: string, record: FolderRecord): FolderRecord {
       const stored = freezeRecord(record);
-      foldersOf(accountId).set(record.id, stored);
+      const existing = foldersOf(accountId);
+      if (!existing.has(record.id)) {
+        const assigned = sequences.get(accountId) ?? new Map<string, number>();
+        sequences.set(accountId, assigned);
+        const next = nextSequences.get(accountId) ?? 1;
+        assigned.set(record.id, next);
+        nextSequences.set(accountId, next + 1);
+      }
+      existing.set(record.id, stored);
       return stored;
     },
 
@@ -126,6 +161,11 @@ export const createInMemoryFoldersStore = (): InMemoryFoldersStore => {
         is_default: false,
         is_system: false,
       });
+      const assigned = sequences.get(accountId) ?? new Map<string, number>();
+      sequences.set(accountId, assigned);
+      const next = nextSequences.get(accountId) ?? 1;
+      assigned.set(record.id, next);
+      nextSequences.set(accountId, next + 1);
       folders.set(record.id, record);
       return { created: true, record };
     },
@@ -169,6 +209,8 @@ export const createInMemoryFoldersStore = (): InMemoryFoldersStore => {
 
     reset(): void {
       accounts.clear();
+      sequences.clear();
+      nextSequences.clear();
     },
   });
 };

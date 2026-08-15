@@ -10,11 +10,13 @@ import type {
   ConversationsStore,
   ConversationUpsertOutcome,
   ConversationVisibility,
+  OrderedConversationRecord,
 } from "../../../apps/service/stores/conversations-store";
 import { denyAllConversationFolderReferences } from "../../../apps/service/stores/conversations-store";
 import { configureServiceStoreConnection } from "./connection";
 
 interface StoredConversationRow {
+  readonly sequence: number;
   readonly id: string;
   readonly structured_title: string;
   readonly structured_overview: string;
@@ -51,7 +53,7 @@ const toRecord = (row: StoredConversationRow): ConversationRecord => Object.free
 });
 
 const SELECT_FIELDS = `
-  id, structured_title, structured_overview, created_at, updated_at,
+  sequence, id, structured_title, structured_overview, created_at, updated_at,
   started_at, finished_at, source, status, discarded, starred,
   visibility, is_locked, folder_id
 `;
@@ -94,13 +96,20 @@ export class SqliteConversationsStore implements ConversationsStore {
   }
 
   listRecords(accountId: string): readonly ConversationRecord[] {
+    return Object.freeze(this.listOrderedRecords(accountId).map((row) => row.record));
+  }
+
+  listOrderedRecords(accountId: string): readonly OrderedConversationRecord[] {
     const rows = this.db.query(`
       SELECT ${SELECT_FIELDS}
       FROM service_conversation_records
       WHERE account_id = ?
       ORDER BY sequence ASC
     `).all(accountId) as StoredConversationRow[];
-    return Object.freeze(rows.map(toRecord));
+    return Object.freeze(rows.map((row) => Object.freeze({
+      record: toRecord(row),
+      sequence: row.sequence,
+    })));
   }
 
   readRecord(accountId: string, recordId: string): ConversationRecord | null {

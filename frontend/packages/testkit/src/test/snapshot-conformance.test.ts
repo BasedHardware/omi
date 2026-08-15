@@ -8,7 +8,11 @@ import {
   fetchIdSnapshot,
   fetchMemoryIdSnapshot,
 } from "@omi-core/adapters-legacy";
-import { fetchSynthesizedMemoryIdSnapshot } from "@omi-core/adapters-platform";
+import {
+  fetchPlatformConversationIdSnapshot,
+  fetchPlatformFolderIdSnapshot,
+  fetchSynthesizedMemoryIdSnapshot,
+} from "@omi-core/adapters-platform";
 import { checkSnapshotConformance, type SnapshotDescriptor } from "../snapshot-conformance.js";
 
 /**
@@ -110,6 +114,20 @@ const DESCRIPTORS: SnapshotDescriptor[] = [
     completeEvidence:
       "backend/database/folders.py get_folders: folders_ref.order_by('order').stream() with no where/limit/post-filter, returned whole by GET /v1/folders (unpaginated)",
   },
+  {
+    domain: "conversations-platform",
+    fetch: (http) => fetchPlatformConversationIdSnapshot(http),
+    okBody: (ids) => conversationEnvelope(ids),
+    completeEvidence:
+      "@omi-core/ratified-contracts 0.9.0 ConversationRead: the server DECLARES coverage in a versioned completeness envelope (conversations-completeness-v1) carrying declaredFrontier vs newestAppliedFrontier; fetchPlatformConversationIdSnapshot claims complete only when every page of a walk begun at the first page declared status:'complete' AND the walk terminated on the CompleteTerminalWindow variant within maxPages — see contracts/ratified/fixtures/conversations-read-conformance.json",
+  },
+  {
+    domain: "folders-platform",
+    fetch: (http) => fetchPlatformFolderIdSnapshot(http),
+    okBody: (ids) => folderEnvelope(ids),
+    completeEvidence:
+      "@omi-core/ratified-contracts 0.9.0 FolderRead: the server DECLARES coverage in a versioned completeness envelope (folders-completeness-v1) carrying declaredFrontier vs newestAppliedFrontier; fetchPlatformFolderIdSnapshot claims complete only when every page of a walk begun at the first page declared status:'complete' AND the walk terminated on the CompleteTerminalWindow variant within maxPages — see contracts/ratified/fixtures/folders-read-conformance.json",
+  },
 ];
 
 test("every domain's id-snapshot fetcher obeys the rule-12 honesty laws", async () => {
@@ -161,4 +179,66 @@ test("declared evidence that the fetcher never honors is rejected as a dead lice
   const failures = await checkSnapshotConformance([dead]);
   assert.equal(failures.length, 1);
   assert.match(failures[0]!.law, /completeEvidence is declared but the fetcher never achieves complete:true/);
+});
+
+const conversationEnvelope = (ids: readonly string[]): unknown => ({
+  contractVersion: "1.0.0",
+  items: ids.map((id) => ({
+    id,
+    title: "t",
+    overview: "o",
+    createdAt: 1,
+    updatedAt: 1,
+    startedAt: null,
+    finishedAt: null,
+    source: "omi",
+    status: "completed",
+    discarded: false,
+    starred: false,
+    visibility: "private",
+    isLocked: false,
+    folderId: null,
+    revision: "0",
+  })),
+  window: { status: "complete", complete: true, hasMore: false, nextCursor: null },
+  completeness: {
+    version: "conversations-completeness-v1",
+    status: "complete",
+    reasons: [],
+    frontiers: {
+      declaredFrontier: "vk1_declared",
+      newestAppliedFrontier: "vk1_declared",
+      missingAppliedFrontierReason: null,
+    },
+  },
+  absence: ids.length === 0 ? { kind: "query_gap" } : null,
+});
+
+const folderEnvelope = (ids: readonly string[]): unknown => ({
+  contractVersion: "1.0.0",
+  items: ids.map((id) => ({
+    id,
+    name: "n",
+    description: null,
+    color: "#6B7280",
+    icon: "folder",
+    createdAt: 1,
+    updatedAt: 1,
+    order: 0,
+    isDefault: false,
+    isSystem: false,
+    revision: null,
+  })),
+  window: { status: "complete", complete: true, hasMore: false, nextCursor: null },
+  completeness: {
+    version: "folders-completeness-v1",
+    status: "complete",
+    reasons: [],
+    frontiers: {
+      declaredFrontier: "vk1_declared",
+      newestAppliedFrontier: "vk1_declared",
+      missingAppliedFrontierReason: null,
+    },
+  },
+  absence: ids.length === 0 ? { kind: "query_gap" } : null,
 });

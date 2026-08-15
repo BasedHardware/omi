@@ -195,14 +195,49 @@ const WIRE_SEAMS = [
       return types;
     },
     consumers: ["packages/testkit/src/test/platform-tasks-adapter.test.ts"],
-    // The SERVER-side consumer is deliberately not listed, for the same reason
-    // the write-ops seam does not list one: it lives in the sibling `platform`
-    // repository, and reaching across `../../platform/` from this script would
-    // make `pnpm verify` in a core-only checkout fail on a missing sibling —
-    // a worse defect than the one it would catch. The platform's own L0 runs
-    // its conformance file against these bytes out of the INSTALLED tarball,
-    // which is a stronger consumption than a path this script could check.
     consumptionEvidence: ["readRatifiedCorpus", "readRatifiedTasksReadShape"],
+  },
+  {
+    name: "ratified-conversations-read",
+    schemaOfRecord: "contracts/ratified/fixtures/conversations-read-shape.json",
+    corpus: "contracts/ratified/fixtures/conversations-read-conformance.json",
+    declaredFrames(schema) {
+      return [...(schema.cases ?? []), ...(schema.refusalLaws ?? [])].map((row) => ({
+        defName: row.case,
+        type: row.case,
+        emitted: true,
+      }));
+    },
+    corpusFrames(corpus) {
+      const types = new Set();
+      for (const row of corpus ?? []) {
+        if (typeof row?.wireCase === "string") types.add(row.wireCase);
+      }
+      return types;
+    },
+    consumers: ["packages/testkit/src/test/platform-conversations-adapter.test.ts"],
+    consumptionEvidence: ["readRatifiedCorpus", "readRatifiedConversationsReadShape"],
+  },
+  {
+    name: "ratified-folders-read",
+    schemaOfRecord: "contracts/ratified/fixtures/folders-read-shape.json",
+    corpus: "contracts/ratified/fixtures/folders-read-conformance.json",
+    declaredFrames(schema) {
+      return [...(schema.cases ?? []), ...(schema.refusalLaws ?? [])].map((row) => ({
+        defName: row.case,
+        type: row.case,
+        emitted: true,
+      }));
+    },
+    corpusFrames(corpus) {
+      const types = new Set();
+      for (const row of corpus ?? []) {
+        if (typeof row?.wireCase === "string") types.add(row.wireCase);
+      }
+      return types;
+    },
+    consumers: ["packages/testkit/src/test/platform-folders-adapter.test.ts"],
+    consumptionEvidence: ["readRatifiedCorpus", "readRatifiedFoldersReadShape"],
   },
   {
     name: "settings-identity-entitlement",

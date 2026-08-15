@@ -81,7 +81,7 @@ describe("GET /v1/conversations", () => {
       devSecretLabel: "conversation-default-composition-test",
     });
     try {
-      const response = await service.app.request("/v1/conversations", {
+      const response = await service.app.request("/v1/conversations?offset=0", {
         headers: { authorization: `Bearer ${service.devToken}` },
       });
       expect(response.status).toBe(200);
@@ -211,7 +211,7 @@ describe("conversation mutation compatibility conformance", () => {
     }
   });
 
-  test("preserves the compatibility null-body qa_server_error behavior", async () => {
+  test("a null folder body is folder_id_required, never qa_server_error", async () => {
     const { db, request } = boot();
     try {
       const response = await request("/v1/conversations/conversation-a/folder", {
@@ -219,8 +219,8 @@ describe("conversation mutation compatibility conformance", () => {
         headers: { "content-type": "application/json" },
         body: "null",
       });
-      expect(response.status).toBe(500);
-      expect(await body(response)).toEqual({ error: "qa_server_error" });
+      expect(response.status).toBe(400);
+      expect(await body(response)).toEqual({ error: "folder_id_required" });
     } finally {
       db.close();
     }
@@ -272,7 +272,7 @@ describe("conversation mutation compatibility conformance", () => {
   test("a missing folder returns 404 and a route read proves the row is unchanged", async () => {
     const { db, stores, request } = boot();
     try {
-      const beforeResponse = await request("/v1/conversations");
+      const beforeResponse = await request("/v1/conversations?offset=0");
       const before = (await body(beforeResponse) as ConversationRecord[])
         .find((record) => record.id === "conversation-a");
 
@@ -284,7 +284,7 @@ describe("conversation mutation compatibility conformance", () => {
       expect(mutation.status).toBe(404);
       expect(await body(mutation)).toEqual({ error: "folder_not_found" });
 
-      const afterResponse = await request("/v1/conversations");
+      const afterResponse = await request("/v1/conversations?offset=0");
       const after = (await body(afterResponse) as ConversationRecord[])
         .find((record) => record.id === "conversation-a");
       expect(after).toEqual(before);
@@ -317,6 +317,125 @@ describe("conversation mutation compatibility conformance", () => {
       expect(await removed.text()).toBe("");
       expect(stores.conversations.readRecord(OWNER, "conversation-a")).toBeNull();
       expect(stores.conversations.readStateRevision(OWNER)).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("GET /v1/conversations ratified envelope", () => {
+  test("no-query GET is the completeness envelope, not a bare array", async () => {
+    const { db, request } = boot();
+    try {
+      const response = await request("/v1/conversations");
+      expect(response.status).toBe(200);
+      const page = await body(response) as {
+        readonly contractVersion: string;
+        readonly items: readonly { readonly id: string; readonly title: string }[];
+        readonly completeness: { readonly version: string; readonly status: string };
+        readonly window: { readonly status: string; readonly complete: boolean };
+      };
+      expect(page.contractVersion).toBe("1.0.0");
+      expect(page.completeness.version).toBe("conversations-completeness-v1");
+      expect(page.completeness.status).toBe("complete");
+      expect(page.window.complete).toBe(true);
+      expect(page.items.map((item) => item.id)).toEqual(["conversation-a", "conversation-b"]);
+      expect(page.items[0]).toMatchObject({
+        id: "conversation-a",
+        title: "Title conversation-a",
+        folderId: null,
+        revision: "0",
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  test("HMAC cursor walks ingest sequence ASC and terminates complete", async () => {
+    const { db, request } = boot();
+    try {
+      const first = await request("/v1/conversations?limit=1");
+      expect(first.status).toBe(200);
+      const firstPage = await body(first) as {
+        readonly items: readonly { readonly id: string }[];
+        readonly window: {
+          readonly status: string;
+          readonly hasMore: boolean;
+          readonly nextCursor: string | null;
+        };
+      };
+      expect(firstPage.items.map((item) => item.id)).toEqual(["conversation-a"]);
+      expect(firstPage.window.status).toBe("more");
+      expect(firstPage.window.hasMore).toBe(true);
+      expect(typeof firstPage.window.nextCursor).toBe("string");
+
+      const second = await request(
+        `/v1/conversations?limit=1&cursor=${encodeURIComponent(firstPage.window.nextCursor!)}`,
+      );
+      expect(second.status).toBe(200);
+      const secondPage = await body(second) as {
+        readonly items: readonly { readonly id: string }[];
+        readonly window: {
+          readonly status: string;
+          readonly complete: boolean;
+          readonly hasMore: boolean;
+          readonly nextCursor: string | null;
+        };
+      };
+      expect(secondPage.items.map((item) => item.id)).toEqual(["conversation-b"]);
+      expect(secondPage.window.status).toBe("complete");
+      expect(secondPage.window.complete).toBe(true);
+      expect(secondPage.window.hasMore).toBe(false);
+      expect(secondPage.window.nextCursor).toBeNull();
+    } finally {
+      db.close();
+    }
+  });
+
+  test("duplicate or invalid envelope query parameters are 400 bad_request", async () => {
+    const { db, request } = boot();
+    try {
+      for (const path of [
+        "/v1/conversations?limit=5&limit=1",
+        "/v1/conversations?cursor=a&cursor=b",
+        "/v1/conversations?limit=0",
+        "/v1/conversations?limit=101",
+        "/v1/conversations?cursor=not-a-cursor",
+      ]) {
+        const response = await request(path);
+        expect(response.status, path).toBe(400);
+        expect(await body(response), path).toEqual({ error: "bad_request" });
+      }
+    } finally {
+      db.close();
+    }
+  });
+
+  test("an empty account is 200 complete with query_gap, never 404", async () => {
+    const db = new Database(":memory:");
+    const stores = createInMemoryLocalServiceStores();
+    const service = createLocalDevService({
+      db,
+      ownerAccountId: "empty-conversations",
+      memoryCount: 1,
+      accountTimezone: "UTC",
+      devSecretLabel: "conversation-empty-envelope",
+      stores,
+    });
+    stores.conversations.reset();
+    try {
+      const response = await service.app.request("/v1/conversations", {
+        headers: { authorization: `Bearer ${service.devToken}` },
+      });
+      expect(response.status).toBe(200);
+      const page = await body(response) as {
+        readonly items: readonly unknown[];
+        readonly completeness: { readonly status: string };
+        readonly absence: { readonly kind: string } | null;
+      };
+      expect(page.items).toEqual([]);
+      expect(page.completeness.status).toBe("complete");
+      expect(page.absence).toEqual({ kind: "query_gap" });
     } finally {
       db.close();
     }

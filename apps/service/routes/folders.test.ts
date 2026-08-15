@@ -1,6 +1,8 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 
+import { parseFolderPageJson } from "@omi-core/ratified-contracts/projections/folders";
+
 import { createInMemoryLocalServiceStores, createLocalDevService } from "../app-facing";
 import {
   createInMemoryConversationsStore,
@@ -76,7 +78,7 @@ describe("GET /v1/folders", () => {
   test("returns the compatibility unpaginated bare seed array", async () => {
     const { db, request } = boot();
     try {
-      const response = await request("/v1/folders?limit=1&offset=1");
+      const response = await request("/v1/folders");
       expect(response.status).toBe(200);
       expect(await body(response)).toEqual([
         folder("default-folder-qa", { name: "Other", is_default: true, is_system: true }),
@@ -99,6 +101,109 @@ describe("GET /v1/folders", () => {
       const response = await service.app.request("/v1/folders");
       expect(response.status).toBe(401);
       expect(await body(response)).toEqual({ error: "unauthorized" });
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("GET /v1/folders ratified envelope", () => {
+  test("limit or cursor selects the completeness envelope, not the bare array", async () => {
+    const { db, request } = boot();
+    try {
+      const response = await request("/v1/folders?limit=25");
+      expect(response.status).toBe(200);
+      const raw = await response.text();
+      const page = parseFolderPageJson(raw);
+      expect(page).not.toBeNull();
+      expect(page?.completeness.version).toBe("folders-completeness-v1");
+      expect(page?.completeness.status).toBe("complete");
+      expect(page?.window.status).toBe("complete");
+      expect(page?.items.map((item) => item.id)).toEqual([
+        "default-folder-qa",
+        "work-folder-qa",
+      ]);
+      expect(page?.items[0]).toMatchObject({
+        id: "default-folder-qa",
+        name: "Other",
+        isDefault: true,
+        isSystem: true,
+        revision: null,
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  test("HMAC cursor walks ingest sequence ASC and terminates complete", async () => {
+    const { db, request } = boot();
+    try {
+      const first = await request("/v1/folders?limit=1");
+      expect(first.status).toBe(200);
+      const firstPage = parseFolderPageJson(await first.text());
+      expect(firstPage).not.toBeNull();
+      expect(firstPage?.items.map((item) => item.id)).toEqual(["default-folder-qa"]);
+      expect(firstPage?.window.status).toBe("more");
+      expect(firstPage?.window.hasMore).toBe(true);
+      expect(typeof firstPage?.window.nextCursor).toBe("string");
+
+      const second = await request(
+        `/v1/folders?limit=1&cursor=${encodeURIComponent(firstPage!.window.nextCursor!)}`,
+      );
+      expect(second.status).toBe(200);
+      const secondPage = parseFolderPageJson(await second.text());
+      expect(secondPage).not.toBeNull();
+      expect(secondPage?.items.map((item) => item.id)).toEqual(["work-folder-qa"]);
+      expect(secondPage?.window.status).toBe("complete");
+      expect(secondPage?.window.complete).toBe(true);
+      expect(secondPage?.window.hasMore).toBe(false);
+      expect(secondPage?.window.nextCursor).toBeNull();
+    } finally {
+      db.close();
+    }
+  });
+
+  test("an empty account is 200 complete with query_gap, never 404", async () => {
+    const db = new Database(":memory:");
+    const stores = createInMemoryLocalServiceStores();
+    const service = createLocalDevService({
+      db,
+      ownerAccountId: "empty-folders",
+      memoryCount: 1,
+      accountTimezone: "UTC",
+      devSecretLabel: "folder-empty-envelope",
+      stores,
+    });
+    stores.folders.reset();
+    try {
+      const response = await service.app.request("/v1/folders?limit=25", {
+        headers: { authorization: `Bearer ${service.devToken}` },
+      });
+      expect(response.status).toBe(200);
+      const page = parseFolderPageJson(await response.text());
+      expect(page).not.toBeNull();
+      expect(page?.items).toEqual([]);
+      expect(page?.completeness.status).toBe("complete");
+      expect(page?.absence).toEqual({ kind: "query_gap" });
+    } finally {
+      db.close();
+    }
+  });
+
+  test("duplicate or invalid envelope query parameters are 400 bad_request", async () => {
+    const { db, request } = boot();
+    try {
+      for (const path of [
+        "/v1/folders?limit=5&limit=1",
+        "/v1/folders?cursor=a&cursor=b",
+        "/v1/folders?limit=0",
+        "/v1/folders?limit=101",
+        "/v1/folders?cursor=not-a-cursor",
+      ]) {
+        const response = await request(path);
+        expect(response.status, path).toBe(400);
+        expect(await body(response), path).toEqual({ error: "bad_request" });
+      }
     } finally {
       db.close();
     }
@@ -264,7 +369,7 @@ describe("DELETE /v1/folders/:id", () => {
       expect(listedFolders.find((record) => record.id === "source")?.name)
         .toEqual({ label: "old" });
       const listedConversations = await body(
-        await request("/v1/conversations"),
+        await request("/v1/conversations?offset=0"),
       ) as ConversationRecord[];
       expect(listedConversations[0]?.folder_id).toBe("source");
       expect(conversations.readStateRevision(OWNER)).toBe(0);
@@ -331,7 +436,7 @@ describe("DELETE /v1/folders/:id", () => {
       const listedFolders = await body(await request("/v1/folders")) as FolderRecord[];
       expect(listedFolders.map((record) => record.id)).toEqual(["target", "source"]);
       const listedConversations = await body(
-        await request("/v1/conversations"),
+        await request("/v1/conversations?offset=0"),
       ) as ConversationRecord[];
       expect(listedConversations[0]?.folder_id).toBe("source");
       expect(conversations.readStateRevision(OWNER)).toBe(0);
@@ -362,7 +467,7 @@ describe("DELETE /v1/folders/:id", () => {
       );
       expect(removed.status).toBe(204);
       expect(await removed.text()).toBe("");
-      const conversations = await body(await request("/v1/conversations")) as ConversationRecord[];
+      const conversations = await body(await request("/v1/conversations?offset=0")) as ConversationRecord[];
       expect(conversations[0]?.folder_id).toBe("default-folder-qa");
     } finally {
       db.close();

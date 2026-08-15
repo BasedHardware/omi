@@ -15,7 +15,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   LEGACY_ONLY_GENERATION,
-  PLATFORM_MEMORIES_GENERATION,
   PRODUCTION_DOMAINS,
   PRODUCTION_GENERATION_AVAILABILITY,
   describeGenerationRejections,
@@ -41,13 +40,13 @@ test("the availability table is the only thing that licenses a platform selectio
   // gets pointed at a route nobody wrote.
   // APPLIED 2026-08-08: observed  AssertionError: tasks has no platform generation tonight ... 0 !== 1
   assert.deepEqual(PRODUCTION_GENERATION_AVAILABILITY.memories, ["legacy", "platform"]);
-  for (const domain of ["conversations", "folders", "tasks"] as const) {
-    assert.deepEqual(
-      PRODUCTION_GENERATION_AVAILABILITY[domain],
-      ["legacy"],
-      `${domain} is not ratified and must not offer a platform generation`,
-    );
-  }
+  assert.deepEqual(PRODUCTION_GENERATION_AVAILABILITY.conversations, ["legacy", "platform"]);
+  assert.deepEqual(PRODUCTION_GENERATION_AVAILABILITY.folders, ["legacy", "platform"]);
+  assert.deepEqual(
+    PRODUCTION_GENERATION_AVAILABILITY.tasks,
+    ["legacy"],
+    "tasks is not ratified and must not offer a platform generation",
+  );
 
   const resolved = resolveGenerationSelection({ tasks: "platform" });
   assert.equal(resolved.rejected.length, 1, "tasks has no platform generation tonight");
@@ -67,9 +66,9 @@ test("an unavailable request is REPORTED, not just downgraded", () => {
   // stay green while the shell lost every signal that its request was ignored.
   // That is the exact failure this test exists for.
   // APPLIED 2026-08-08: observed  AssertionError: silence here is the dangerous case ... 0 !== 1
-  const resolved = resolveGenerationSelection({ memories: "platform", conversations: "platform" });
+  const resolved = resolveGenerationSelection({ memories: "platform", tasks: "platform" });
   assert.equal(resolved.selection.memories, "platform", "the available one is honored");
-  assert.equal(resolved.selection.conversations, "legacy");
+  assert.equal(resolved.selection.tasks, "legacy");
   assert.equal(resolved.rejected.length, 1, "silence here is the dangerous case");
 
   const lines = describeGenerationRejections(resolved.rejected);
@@ -77,7 +76,7 @@ test("an unavailable request is REPORTED, not just downgraded", () => {
   // Content, not count: the log line must name the domain, what was asked for,
   // and that this run is NOT exercising it. A generic "some config ignored"
   // would satisfy a row-count assertion and help nobody at 3am.
-  assert.match(lines[0]!, /conversations/);
+  assert.match(lines[0]!, /tasks/);
   assert.match(lines[0]!, /platform/);
   assert.match(lines[0]!, /NOT exercising/);
 });
@@ -147,7 +146,12 @@ test("a blanket generation request takes what exists and claims nothing more", (
   const resolved = parseGenerationSelectionFromEntries([["generation", "platform"]]);
   assert.deepEqual(
     resolved.selection,
-    PLATFORM_MEMORIES_GENERATION,
+    {
+      memories: "platform",
+      conversations: "platform",
+      folders: "platform",
+      tasks: "legacy",
+    },
     "exactly the domains that HAVE a platform generation move",
   );
   assert.equal(resolved.selection.tasks, "legacy", "a blanket request must not invent a tasks platform");
