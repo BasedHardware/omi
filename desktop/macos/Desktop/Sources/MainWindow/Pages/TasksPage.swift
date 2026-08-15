@@ -3322,6 +3322,18 @@ class TasksViewModel: ObservableObject {
     calendar.date(bySettingHour: 23, minute: 59, second: 0, of: now)
   }
 
+  /// The standing composer lives in the Today section. Bulk edit and the
+  /// completed view have nothing to add a task to.
+  var showsTodayComposer: Bool {
+    !isMultiSelectMode && !showCompleted
+  }
+
+  /// Empty categories are hidden, except Today while it hosts the composer —
+  /// an empty day must still offer somewhere to type.
+  func rendersSection(_ category: TaskCategory, hasTasks: Bool) -> Bool {
+    hasTasks || (category == .today && showsTodayComposer)
+  }
+
   /// Create an inline task below the specified task
   func createInlineTask(description: String, afterTaskId: String?, forceToday: Bool = false) async {
     let context = contextForInlineCreate()
@@ -3750,14 +3762,12 @@ struct TasksPage: View {
         loadingView
       } else if let error = viewModel.activeViewError, viewModel.activeTasks.isEmpty {
         errorView(error)
-      } else if viewModel.displayTasks.isEmpty && !viewModel.isInlineCreating
+      } else if viewModel.displayTasks.isEmpty
         && suggestedStore.candidates.isEmpty && !suggestedStore.isLoading
       {
         emptyView
       } else {
-        // Board view is hidden — Tasks always uses the list. The list view hosts
-        // the InlineTaskCreationRow, so it renders whenever the user is
-        // inline-creating even if the underlying task list is empty.
+        // Board view is hidden — Tasks always uses the list.
         tasksListView
       }
     }
@@ -3802,9 +3812,9 @@ struct TasksPage: View {
           inlineCreateFocused = true
         }
       } else {
-        // Cancelled — clear text and unfocus
+        // Finished or reset. Focus is left alone: the pinned composer stays
+        // ready for the next task, and Esc drops focus through cancel.
         inlineCreateText = ""
-        inlineCreateFocused = false
       }
     }
   }
@@ -3852,7 +3862,9 @@ struct TasksPage: View {
     }
     let afterId = viewModel.inlineCreateAfterTaskId
     inlineCreateText = ""
-    inlineCreateFocused = false
+    // The pinned composer keeps focus so tasks can be entered back to back;
+    // a row-anchored composer is a one-shot insert and closes.
+    inlineCreateFocused = afterId == nil
     Task {
       await viewModel.createInlineTask(description: text, afterTaskId: afterId, forceToday: forToday)
     }
@@ -4325,21 +4337,9 @@ struct TasksPage: View {
               }
             )
 
-            // Inline creation at top (Cmd+N)
-            if viewModel.isInlineCreating && viewModel.inlineCreateAfterTaskId == nil {
-              InlineTaskCreationRow(
-                text: $inlineCreateText,
-                isFocused: $inlineCreateFocused,
-                onCommit: { _ in commitInlineCreate() },
-                onCancel: { cancelInlineCreate() },
-                onCommitToday: { _ in commitInlineCreate(forToday: true) }
-              )
-              .id("inline-create-top")
-            }
-
             ForEach(TaskCategory.allCases, id: \.self) { category in
               let orderedTasks = viewModel.getOrderedTasks(for: category)
-              if !orderedTasks.isEmpty {
+              if viewModel.rendersSection(category, hasTasks: !orderedTasks.isEmpty) {
                 TaskCategorySection(
                   category: category,
                   orderedTasks: orderedTasks,
@@ -4417,22 +4417,16 @@ struct TasksPage: View {
                   inlineCreateFocused: $inlineCreateFocused,
                   onInlineCommit: { commitInlineCreate() },
                   onInlineCancel: { cancelInlineCreate() },
-                  onInlineCommitToday: { commitInlineCreate(forToday: true) }
+                  onInlineCommitToday: { commitInlineCreate(forToday: true) },
+                  showsSectionComposer: category == .today && viewModel.showsTodayComposer,
+                  sectionComposerText: $inlineCreateText,
+                  sectionComposerFocused: $inlineCreateFocused,
+                  onSectionComposerCommit: { commitInlineCreate(forToday: true) },
+                  onSectionComposerCancel: { cancelInlineCreate() }
                 )
               }
             }
           } else {
-            // Inline creation at top (Cmd+N) — flat view
-            if viewModel.isInlineCreating && viewModel.inlineCreateAfterTaskId == nil {
-              InlineTaskCreationRow(
-                text: $inlineCreateText,
-                isFocused: $inlineCreateFocused,
-                onCommit: { _ in commitInlineCreate() },
-                onCancel: { cancelInlineCreate() },
-                onCommitToday: { _ in commitInlineCreate(forToday: true) }
-              )
-              .id("inline-create-top-flat")
-            }
 
             // Flat list for other sort options, completed view, or multi-select mode
             ForEach(viewModel.displayTasks) { task in
@@ -4691,6 +4685,13 @@ struct TaskCategorySection: View {
   var onInlineCancel: (() -> Void)?
   var onInlineCommitToday: (() -> Void)?
 
+  // Standing section composer (Today only)
+  var showsSectionComposer: Bool = false
+  var sectionComposerText: Binding<String>? = nil
+  var sectionComposerFocused: FocusState<Bool>.Binding? = nil
+  var onSectionComposerCommit: (() -> Void)? = nil
+  var onSectionComposerCancel: (() -> Void)? = nil
+
   @State private var isTopDropTargeted = false
 
   private var visibleTasks: [TaskActionItem] {
@@ -4792,6 +4793,20 @@ struct TaskCategorySection: View {
             }
             return true
           }
+      }
+
+      // Standing composer: first row of the section, so what you type here
+      // belongs to the section you typed it in.
+      if showsSectionComposer, !isCollapsed,
+        let text = sectionComposerText, let focused = sectionComposerFocused
+      {
+        InlineTaskCreationRow(
+          text: text,
+          isFocused: focused,
+          onCommit: { _ in onSectionComposerCommit?() },
+          onCancel: { onSectionComposerCancel?() }
+        )
+        .id("section-composer-\(category.rawValue)")
       }
 
       // Tasks in category with drag-and-drop reordering
@@ -6581,6 +6596,12 @@ struct InlineTaskCreationRow: View {
     text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
+  /// A pinned composer rests as a plain affordance and only dresses up as an
+  /// editor once the user is actually entering a task.
+  private var isActive: Bool {
+    isFocused || !isTextEmpty
+  }
+
   var body: some View {
     HStack(alignment: .center, spacing: OmiSpacing.md) {
       // Circle placeholder (matches TaskRow checkbox)
@@ -6589,7 +6610,8 @@ struct InlineTaskCreationRow: View {
         .frame(width: 20, height: 20)
         .padding(.leading, OmiSpacing.md)
 
-      TextField("New task...", text: $text)
+      TextField("Add a task", text: $text)
+        .accessibilityIdentifier("tasks-composer-field")
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.primary)
@@ -6604,7 +6626,7 @@ struct InlineTaskCreationRow: View {
 
       Spacer()
 
-      if let onCommitToday {
+      if let onCommitToday, isActive {
         Button {
           onCommitToday(text)
         } label: {
@@ -6623,24 +6645,31 @@ struct InlineTaskCreationRow: View {
         .disabled(isTextEmpty)
         .opacity(isTextEmpty ? 0.4 : 1)
         .help("Create task due today")
+        .accessibilityIdentifier("tasks-composer-today")
       }
     }
     .padding(.trailing, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.xs)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(Ink.rowFill)
+        .fill(isActive ? Ink.rowFill : Color.clear)
     )
     .overlay(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
         .stroke(Ink.hairline, lineWidth: 1)
     )
     .overlay(alignment: .leading) {
-      RoundedRectangle(cornerRadius: 2)
-        .fill(Ink.primary)
-        .frame(width: 3)
-        .padding(.vertical, OmiSpacing.xxs)
+      // The accent bar marks an in-progress entry. A resting row is an
+      // affordance, not an editor, so it stays quiet until focused.
+      if isActive {
+        RoundedRectangle(cornerRadius: 2)
+          .fill(Ink.primary)
+          .frame(width: 3)
+          .padding(.vertical, OmiSpacing.xxs)
+      }
     }
+    .contentShape(Rectangle())
+    .onTapGesture { isFocused = true }
   }
 }
 

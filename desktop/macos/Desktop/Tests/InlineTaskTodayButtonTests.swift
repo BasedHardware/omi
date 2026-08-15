@@ -25,6 +25,25 @@ final class InlineTaskTodayButtonTests: XCTestCase {
     XCTAssertEqual(components.minute, 59)
   }
 
+  func testTodaySectionRendersWhileEmptySoTheComposerStaysReachable() {
+    let vm = TasksViewModel()
+
+    XCTAssertTrue(vm.showsTodayComposer)
+    XCTAssertTrue(
+      vm.rendersSection(.today, hasTasks: false),
+      "an empty Today still renders — it hosts the standing composer")
+    XCTAssertFalse(
+      vm.rendersSection(.tomorrow, hasTasks: false),
+      "other empty categories stay hidden")
+
+    vm.multiSelection.enter()
+    XCTAssertFalse(vm.showsTodayComposer)
+    XCTAssertFalse(
+      vm.rendersSection(.today, hasTasks: false),
+      "bulk edit has no composer, so an empty Today has nothing to show")
+    XCTAssertTrue(vm.rendersSection(.today, hasTasks: true))
+  }
+
   func testTaskWithTodayDueAtAppearsInTodayCategory() {
     let store = TasksStore.shared
     store.resetSessionState()
