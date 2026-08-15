@@ -1,0 +1,25 @@
+desktop/context-for-claude/Sources/ContextApp/Engine.swift
+  s_d58145f2e376ea::t_2c421ce6c9d18e 547-560,562,564-565,567,571-586,589,592-593
+  s_d58145f2e376ea::t_d52368ea8d636f 587-588,590-591
+  s_d58145f2e376ea::t_6108c9f5088172 594-595
+desktop/context-for-claude/Tests/ContextAppTests/DiagnosticTraceTests.swift
+  s_d58145f2e376ea::t_6d77d9cb775846 129-200
+  s_d58145f2e376ea::t_714c2018a7950a 1
+  s_d58145f2e376ea::t_a3011995fb8d32 201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "91c65d6087a77d6a7d5239ad929c7990ccb7fc02",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
