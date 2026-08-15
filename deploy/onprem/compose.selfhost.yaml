@@ -299,8 +299,9 @@ services:
   # the backend's OIDC_ISSUER/OIDC_JWKS_URL and the app's OIDC_ISSUER at it.
   #   docker compose --profile auth up -d
   # TLS is mandatory for the deployed issuer (the mobile client refuses non-loopback http — see
-  # SELFHOST_NOTES §OIDC client). Provide a cert reachable at the hostname the DEVICE uses:
-  #   ./keycloak/certs/{kc.crt,kc.key}  (self-signed for testing, or your real cert)
+  # SELFHOST_NOTES §OIDC client). kc-proxy mounts ./certs:/certs and serves /certs/server.crt +
+  # /certs/server.key (kc-proxy.conf); generate them with `./gen-dev-certs.sh` (self-signed for testing)
+  # or drop your real cert at ./certs/server.{crt,key}, reachable at the hostname the DEVICE uses.
   # Realm is imported from the committed example (realm `omi` + public PKCE client `omi-app`).
   # Issuer consistency (proven live): the token `iss` = KC_HOSTNAME; the backend must validate that
   # same value. Set KC_HOSTNAME to the device-reachable https URL, and give the backend a

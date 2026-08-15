@@ -57,7 +57,11 @@ services:
   api-proxy:
     image: nginx:stable-alpine
     profiles: ["auth"]
-    depends_on: [backend]
+    # Long-form like valkey/mongo: wait for the backend to be HEALTHY, not merely started, so the proxy
+    # doesn't briefly 502 on boot (the app retries, but keep parity with the rest of the suite).
+    depends_on:
+      backend:
+        condition: service_healthy
     ports:
       - "${API_HTTPS_PORT:-8444}:8443"
     volumes:

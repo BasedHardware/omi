@@ -16,3 +16,9 @@ services:
     env_file:
       - ./backend.env.base
       - ./backend.env.prod.cloud
+    volumes:
+      # The cloud posture authenticates to Firestore/GCS/Firebase with a Google service-account JSON.
+      # backend.env.prod.cloud points GOOGLE_APPLICATION_CREDENTIALS at /secrets/gcp-sa.json; mount the
+      # (gitignored) key there so Google ADC finds it — base has no /secrets volume (cubic PR 10887
+      # backend.env.prod.cloud.example:21). Drop your SA key at ./secrets/gcp-sa.json before `up`.
+      - ./secrets/gcp-sa.json:/secrets/gcp-sa.json:ro

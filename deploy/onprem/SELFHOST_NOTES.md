@@ -371,22 +371,19 @@ serve → selection falls back to Modulate → `transcription_service_unavailabl
 on-prem deployment serves live STT **only in single-language English** (user pref
 `transcription_preferences.single_language_mode=true`, or `onboarding_mode`).
 
-**On-prem multilingual live STT — now deployment-selectable.** The multilingual self-hosted model
-**`nvidia/parakeet-1-1b-rnnt-multilingual`** (NVIDIA NIM; `backend/parakeet/Dockerfile.nim` targets
-`nvcr.io/nim/nvidia/parakeet-1-1b-rnnt-multilingual`) is registered in `config/stt_provider_policy.py`
-(`APPROVED_STREAMING_PARAKEET_MODELS` + `PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL`) and picked at deploy
-time via **`PARAKEET_STREAM_MODEL`**: set it to that model and `parakeet_supports_language()` reports
-its locales, so live streaming/PTT serve `es`/`it`/`fr`/`de`/`pt`/… (covered by
-`test_streaming_multilingual_model_enables_its_locales`). An unrecognized value falls back to the
-en-only default — a typo cannot silently disable or widen the surface. Deepgram-self-hosted is the
-other policy-enabled streaming option.
+**On-prem streaming/PTT Parakeet is English-only today.** `config/stt_provider_policy.py` fixes the
+model per serving surface (`PARAKEET_MODEL_BY_SURFACE`): **streaming** and **PTT** use
+`nvidia/parakeet-rnnt-1.1b` (`PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL` = `{en}`), while **prerecorded**
+uses `nvidia/parakeet-tdt-0.6b-v3` (25 languages). `parakeet_supports_language(surface, language)` reads
+that fixed map — there is **no** `PARAKEET_STREAM_MODEL` env, no `APPROVED_STREAMING_PARAKEET_MODELS`,
+and no per-deployment streaming-model override. So on-prem live streaming/PTT serves `en` only; a
+non-English live session falls back to Deepgram-self-hosted (or the configured cloud STT) per the
+policy, and prerecorded transcription is what serves the other 25 languages.
 
-**Set `PARAKEET_STREAM_MODEL` in BOTH places.** The backend reads it for *routing*
-(`streaming_parakeet_model()`) and the Parakeet deployment reads it to *load* the model; the two are
-read independently. Setting it on only one side silently mis-routes — the backend would offer a
-language the deployed model cannot serve, or refuse one it actually supports. The compose
-datacenter-alternative sets `PARAKEET_STREAM_MODEL` on the `parakeet` service env; mirror the same
-value in `backend.env`.
+> Planned (NOT wired yet): the multilingual model `nvidia/parakeet-1-1b-rnnt-multilingual` is referenced
+> only as a comment target in `backend/parakeet/Dockerfile.nim`. Making live streaming multilingual would
+> require registering it in `stt_provider_policy.py` (a supported-languages entry + a deploy-time surface
+> override) and the matching NIM deployment — neither exists at this revision.
 
 ### Full live pipeline E2E (all inference services + backend + pusher)
 
