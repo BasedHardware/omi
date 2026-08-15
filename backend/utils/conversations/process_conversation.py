@@ -1419,9 +1419,6 @@ def process_conversation(
         return conversation
 
     def _emit_derived_effects() -> None:
-        def run_or_submit(function: Callable[..., None], *args: Any) -> None:
-            function(*args)
-
         if (
             _calendar_auto_link_enabled()
             and not discarded
@@ -1511,9 +1508,9 @@ def process_conversation(
                 }
                 conversations_db.update_conversation(uid, conversation.id, app_updates)
             if not is_reprocess and not defer_required_enrichment:
-                run_or_submit(save_structured_vector, uid, conversation)
+                submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
                 if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
-                    run_or_submit(save_transcript_chunk_vectors, uid, conversation)
+                    submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
             if not defer_memory_extraction:
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
@@ -1560,7 +1557,7 @@ def process_conversation(
             def _run_webhook():
                 asyncio.run(conversation_created_webhook(uid, conversation))
 
-            run_or_submit(_run_webhook)
+            submit_with_context(postprocess_executor, _run_webhook)
 
     if defer_derived_effects:
         if derived_effects_observer is not None:

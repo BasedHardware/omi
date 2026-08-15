@@ -285,12 +285,12 @@ def test_client_session_id_delegates_identity_fenced_persistence_to_processor(mo
 
 
 def test_completed_desktop_meeting_persists_exact_conversation_arrival(monkeypatch):
-    expected_id = developer._from_segments_conversation_id('uid1', 'meeting-session-1')
+    expected_id = developer.developer_cleanup.from_segments_conversation_id('uid1', 'meeting-session-1')
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
     monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
 
-    def _process(_uid, _language, conversation):
+    def _process(_uid, _language, conversation, **_kwargs):
         conversation.status = ConversationStatus.completed
         conversation.structured.title = 'Design review'
         return conversation
@@ -310,26 +310,29 @@ def test_completed_desktop_meeting_persists_exact_conversation_arrival(monkeypat
 
 
 def test_postprocess_arrival_adapter_failure_does_not_fail_creation(monkeypatch):
-    expected_id = developer._from_segments_conversation_id('uid1', 'meeting-session-1')
+    expected_id = developer.developer_cleanup.from_segments_conversation_id('uid1', 'meeting-session-1')
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
-    persisted = MagicMock()
-    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persisted)
 
-    def _process(_uid, _language, conversation):
+    def _process(_uid, _language, conversation, **_kwargs):
         conversation.status = ConversationStatus.completed
         conversation.structured.title = 'Design review'
         return conversation
 
     monkeypatch.setattr(developer, 'process_conversation', _process)
-    monkeypatch.setattr(developer, 'persist_desktop_meeting_arrival_best_effort', MagicMock())
+    # The inner adapter raising must stay isolated by the best-effort wrapper:
+    # conversation creation returns normally regardless.
+    monkeypatch.setattr(
+        proactive_engine,
+        'persist_desktop_meeting_arrival',
+        MagicMock(side_effect=RuntimeError('adapter down')),
+    )
 
     response = developer._create_conversation_from_segments(
         'uid1', _request(client_session_id='meeting-session-1', conversation_role='meeting')
     )
 
     assert response.id == expected_id
-    persisted.assert_called_once()
 
 
 def test_client_session_id_retry_returns_existing_without_processing(monkeypatch):
@@ -351,7 +354,7 @@ def test_client_session_id_retry_returns_existing_without_processing(monkeypatch
 
 
 def test_completed_desktop_meeting_retry_repairs_missing_arrival(monkeypatch):
-    expected_id = developer._from_segments_conversation_id('uid1', 'meeting-session-1')
+    expected_id = developer.developer_cleanup.from_segments_conversation_id('uid1', 'meeting-session-1')
     monkeypatch.setattr(
         conversations_db,
         'get_conversation',
@@ -383,7 +386,7 @@ def test_completed_desktop_meeting_retry_repairs_missing_arrival(monkeypatch):
 
 
 def test_completed_ambient_retry_cannot_reclassify_conversation_as_meeting(monkeypatch):
-    expected_id = developer._from_segments_conversation_id('uid1', 'ambient-session-1')
+    expected_id = developer.developer_cleanup.from_segments_conversation_id('uid1', 'ambient-session-1')
     monkeypatch.setattr(
         conversations_db,
         'get_conversation',
@@ -551,11 +554,12 @@ def test_endpoint_cleanup_claims_then_deletes_the_same_descriptor(monkeypatch):
 
 def test_from_segments_returns_byok_rate_limit_and_releases_idempotent_claim(monkeypatch):
     """Typed processing errors retain the existing idempotent cleanup path."""
-    expected_id = developer._from_segments_conversation_id('uid1', 'byok-rate-limited-session')
+    expected_id = developer.developer_cleanup.from_segments_conversation_id('uid1', 'byok-rate-limited-session')
     delete = MagicMock()
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
-    monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
+    # The claim release runs through the incarnation-fenced cleanup owner.
+    monkeypatch.setattr(developer.developer_cleanup, 'cleanup_conversation', delete)
     monkeypatch.setattr(
         developer,
         'process_conversation',
@@ -588,7 +592,7 @@ def test_from_segments_returns_byok_rate_limit_and_releases_idempotent_claim(mon
         response.json()['detail']['message']
         == 'The configured provider account is rate limited. Please retry later or check its limits.'
     )
-    delete.assert_called_once_with('uid1', expected_id)
+    delete.assert_called_once_with('uid1', expected_id, None)
 
 
 def test_client_session_id_atomic_claim_winner_processes_once(monkeypatch):
