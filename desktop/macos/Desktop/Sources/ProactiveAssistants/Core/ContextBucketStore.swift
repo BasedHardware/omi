@@ -427,6 +427,33 @@ actor ContextBucketStore {
     }
   }
 
+  /// Completed-visit engagement for one bucket inside the dwell policy's
+  /// rolling window. Read-only and advisory: any failure reports zero
+  /// engagement, which falls back to the standard dwell.
+  func recentEngagementSeconds(bucketID: String, now: Date = Date()) async -> TimeInterval {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return 0 }
+    let lookbackStart = now.addingTimeInterval(-ContextDwellPolicy.engagementLookbackSeconds)
+    let intervals: [(startedAt: Date, endedAt: Date)] =
+      (try? await pool.read { db in
+        try Row.fetchAll(
+          db,
+          sql: """
+            SELECT startedAt, endedAt FROM context_visits
+            WHERE bucketID = ? AND outcome = 'completed'
+              AND endedAt IS NOT NULL AND endedAt >= ?
+            """,
+          arguments: [bucketID, lookbackStart]
+        ).compactMap { row -> (startedAt: Date, endedAt: Date)? in
+          guard let startedAt: Date = row["startedAt"], let endedAt: Date = row["endedAt"] else {
+            return nil
+          }
+          return (startedAt: startedAt, endedAt: endedAt)
+        }
+      }) ?? []
+    return ContextDwellPolicy.cumulativeEngagementSeconds(visitIntervals: intervals, now: now)
+  }
+
   func markVisitSettled(_ fence: ContextVisitFence, at date: Date = Date()) async throws {
     let pool = try await pool(for: fence)
     try await pool.write { db in
