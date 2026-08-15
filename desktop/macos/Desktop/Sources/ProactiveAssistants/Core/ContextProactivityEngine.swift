@@ -257,6 +257,7 @@ actor ContextProactivityEngine {
     }
     var workstreamSection: String? = nil
     var workstreamProvenance: [String: Any]? = nil
+    var pooledFactIDs: Set<String> = []
     if workstreamPoolingEnabled,
       let liveTag = await store.liveWorkstreamTag(for: fence, now: currentFrame.captureTime)
     {
@@ -267,6 +268,7 @@ actor ContextProactivityEngine {
       if !selected.isEmpty {
         workstreamSection = ContextWorkstreamPooling.promptSection(
           tag: liveTag, items: selected, now: currentFrame.captureTime)
+        pooledFactIDs = Set(selected.map(\.factID))
         workstreamProvenance = [
           "tag": liveTag,
           "pooled_fact_ids": selected.map(\.factID),
@@ -282,18 +284,53 @@ actor ContextProactivityEngine {
           .sorted { $0.deliveredAt > $1.deliveredAt }
           .prefix(ContextBucketRecentDelivery.promptCap))
     }
+    let candidatesEnabled = await MainActor.run {
+      ContextBucketsFeature.isProactiveCandidatesEnabled
+    }
+    if candidatesEnabled {
+      let tags = await store.workstreamTags(for: snapshot.bucketID)
+      let armed = await store.armedCandidates(
+        bucketID: snapshot.bucketID, tags: tags, now: currentFrame.captureTime)
+      let recentMessages = recentDeliveries.compactMap(\.message)
+      if let candidate = ContextProactiveCandidateLookup.firstDeliverable(
+        candidates: armed, recentMessages: recentMessages)
+      {
+        await evaluateCandidateAndDeliver(
+          candidate: candidate,
+          deliveryID: deliveryID,
+          fence: fence,
+          snapshot: snapshot,
+          currentFrame: currentFrame,
+          recentDeliveries: recentDeliveries,
+          authorizationSnapshot: authorizationSnapshot,
+          ownerID: ownerID)
+        return
+      }
+    }
     // Read once and use for the whole visit: schema, prompt, and hop admission
     // must agree, and a mid-visit flag flip must not desynchronize them. With
     // the flag off, schema and prompt are byte-identical to the pre-hop build.
     let retrievalHopEnabled = await MainActor.run { ContextBucketsFeature.isRetrievalHopEnabled }
     let prompt = ContextProactivityPromptBuilder.directorStablePrompt(
       snapshot: snapshot, allowLookup: retrievalHopEnabled)
-    let uncachedPrompt =
+    var uncachedPrompt =
       ContextProactivityPromptBuilder.directorVolatilePrompt(
         tasks: taskContext,
         frame: currentFrame,
         recentDeliveries: recentDeliveries)
       + (workstreamSection.map { "\n\n" + $0 } ?? "")
+    if candidatesEnabled {
+      let selected = ContextWorkstreamPooling.selectRecent(
+        await store.recentContextPool(
+          excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime),
+        now: currentFrame.captureTime)
+      let fresh = selected.filter { !pooledFactIDs.contains($0.factID) }
+      if let section = ContextWorkstreamPooling.recentContextPromptSection(
+        items: fresh, now: currentFrame.captureTime)
+      {
+        uncachedPrompt += "\n\n" + section
+      }
+    }
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.fenceFreshness(fence).fresh
@@ -573,6 +610,179 @@ actor ContextProactivityEngine {
     } catch {
       await recordDirectorFailure(deliveryID: deliveryID, error: error)
       // Network and model failures stay user-silent; provenance carries the class.
+    }
+  }
+
+  /// Deterministic candidate + small yes/no gate. `show == false` (or a
+  /// malformed/failed gate) suppresses and returns — the director is not also
+  /// run, so one visit never pays for two decisions.
+  private func evaluateCandidateAndDeliver(
+    candidate: ContextProactiveCandidate,
+    deliveryID: String,
+    fence: ContextVisitFence,
+    snapshot: ContextBucketSnapshot,
+    currentFrame: CapturedFrame,
+    recentDeliveries: [ContextBucketRecentDelivery],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    ownerID: String
+  ) async {
+    let evaluationGate = await MainActor.run { Self.liveDeliveryGateInput() }
+    let evaluationReason = ContextDeliveryBudget.freeGate(input: evaluationGate)
+    guard evaluationReason == .allowed else {
+      log("Context candidate gate suppressed before model: \(evaluationReason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: evaluationReason, stage: .preModel)
+      await terminalize(
+        deliveryID: deliveryID,
+        decisionType: "silence",
+        provenanceJSON: "{\"failure\":\"pre_model_gate\"}",
+        state: "suppressed")
+      return
+    }
+    guard
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      await store.fenceFreshness(fence).fresh
+    else {
+      await terminalize(
+        deliveryID: deliveryID,
+        decisionType: "silence",
+        provenanceJSON: "{\"failure\":\"stale_visit\"}",
+        state: "failed")
+      return
+    }
+    do {
+      let result = try await client.complete(
+        operation: ModelQoS.Proactivity.reasoningOperation,
+        prompt: ContextProactiveCandidateGate.prompt(
+          message: candidate.message,
+          validatedFacts: snapshot.validatedFacts,
+          recentDeliveries: recentDeliveries,
+          now: currentFrame.captureTime),
+        jsonSchema: ContextProactiveCandidateGate.schema,
+        maxCompletionTokens: 120,
+        authorizationSnapshot: authorizationSnapshot)
+      await ContextProactivityTelemetry.record(result)
+      let decision =
+        ContextProactiveCandidateGate.parse(result.content)
+        ?? ContextProactiveCandidateGate.Decision(show: false, reason: "malformed_gate_response")
+      let reason = String(decision.reason.prefix(1_200))
+      var provenance: [String: Any] = [
+        "source": "candidate",
+        "candidate_id": candidate.id,
+        "reason": reason,
+      ]
+      if let tag = candidate.workstreamTag {
+        provenance["workstream"] = tag
+      } else {
+        provenance["workstream"] = NSNull()
+      }
+      let provenanceData = try JSONSerialization.data(
+        withJSONObject: provenance, options: [.sortedKeys])
+      let provenanceJSON = String(data: provenanceData, encoding: .utf8) ?? "{}"
+      guard decision.show else {
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "silence", provenanceJSON: provenanceJSON,
+          message: nil, state: "suppressed")
+        return
+      }
+      let consumed = await store.consumeCandidate(id: candidate.id, now: currentFrame.captureTime)
+      guard consumed else {
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "silence", provenanceJSON: provenanceJSON,
+          message: nil, state: "suppressed")
+        return
+      }
+      let message = String(candidate.message.prefix(600))
+      let title = String(message.prefix(120))
+      try await store.completeDelivery(
+        id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
+        message: message, state: "model_completed")
+      await ContextProactivityTelemetry.recordDirectorDecision("insight")
+      try await store.completeDelivery(
+        id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
+        message: message, state: "policy_approved")
+      guard
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+        await store.fenceFreshness(fence).fresh
+      else {
+        await terminalize(
+          deliveryID: deliveryID,
+          decisionType: "silence",
+          provenanceJSON: "{\"failure\":\"stale_visit\"}",
+          state: "failed")
+        return
+      }
+      let presentationGate = await MainActor.run { Self.liveDeliveryGateInput() }
+      let presentationReason = ContextDeliveryBudget.freeGate(input: presentationGate)
+      guard presentationReason == .allowed else {
+        log("Context candidate suppressed before presentation: \(presentationReason.rawValue)")
+        await ContextProactivityTelemetry.recordGateRejection(
+          reason: presentationReason, stage: .presentation)
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
+          message: message, state: "suppressed")
+        return
+      }
+      let finalPresentationPreflight = await presentationPreflight(ownerID)
+      guard finalPresentationPreflight == .queued else {
+        log("Context candidate suppressed before graduation: presentation_unavailable")
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
+          message: message, state: "suppressed")
+        return
+      }
+      let handoffGate = await MainActor.run { Self.liveDeliveryGateInput() }
+      let handoffReason = ContextDeliveryBudget.freeGate(input: handoffGate)
+      guard handoffReason == .allowed else {
+        await ContextProactivityTelemetry.recordGateRejection(reason: handoffReason, stage: .handoff)
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
+          message: message, state: "suppressed")
+        return
+      }
+      let factIDs = candidate.groundingFactIDs.map { "fact:\($0)" }
+      let presentation = await MainActor.run {
+        let context = FloatingBarNotificationContext(
+          sourceTitle: title,
+          assistantId: "context-director",
+          contextSummary: reason,
+          detail: factIDs.joined(separator: ", "),
+          provenanceRef: deliveryID)
+        return NotificationService.shared.presentContextDirectorNotification(
+          ownerID: ownerID,
+          title: title,
+          message: message,
+          decisionType: "insight",
+          context: context,
+          onPresented: { [weak self] in
+            guard let self else { return }
+            Task {
+              await self.completePresentedDelivery(
+                deliveryID: deliveryID,
+                decisionType: "insight",
+                provenanceJSON: provenanceJSON,
+                message: message,
+                authorizationSnapshot: authorizationSnapshot)
+            }
+          },
+          onDropped: { [weak self] in
+            guard let self else { return }
+            Task {
+              await self.terminalize(
+                deliveryID: deliveryID,
+                decisionType: "silence",
+                provenanceJSON: "{\"failure\":\"notification_dropped\"}",
+                state: "failed")
+            }
+          })
+      }
+      switch presentation {
+      case .presented, .queued:
+        return
+      case .suppressed, .windowUnavailable, .rejectedOwnerChange:
+        return
+      }
+    } catch {
+      await recordDirectorFailure(deliveryID: deliveryID, error: error)
     }
   }
 

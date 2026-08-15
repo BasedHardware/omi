@@ -100,4 +100,47 @@ final class ContextWorkstreamPoolingTests: XCTestCase {
     XCTAssertFalse(unwrapped.contains("fact-id-1"), "ids never reach the model")
     XCTAssertNil(ContextWorkstreamPooling.promptSection(tag: "omi", items: [], now: now))
   }
+
+  func testRecentContextWindowIncludesTheBoundaryAndDropsOlderFacts() {
+    let inside = item("inside", bucket: "b-inside", ageMinutes: 14)
+    let boundary = item("boundary", bucket: "b-boundary", ageMinutes: 15)
+    let justOutside = ContextWorkstreamPoolItem(
+      factID: "just-outside",
+      bucketID: "b-outside",
+      appName: "App",
+      statement: "a concrete fact",
+      notifyWorthiness: 0.7,
+      createdAt: now.addingTimeInterval(-(15 * 60 + 1)))
+    let weak = item("weak", bucket: "b-weak", worthiness: 0.59, ageMinutes: 1)
+    let selected = ContextWorkstreamPooling.selectRecent(
+      [inside, boundary, justOutside, weak], now: now)
+    XCTAssertEqual(Set(selected.map(\.factID)), ["inside", "boundary"])
+    XCTAssertFalse(selected.contains { $0.factID == "just-outside" })
+    XCTAssertFalse(selected.contains { $0.factID == "weak" })
+  }
+
+  func testRecentContextCapsOneFactPerBucketAndThreeTotal() {
+    var candidates: [ContextWorkstreamPoolItem] = []
+    for bucket in 0..<6 {
+      candidates.append(
+        item("new-\(bucket)", bucket: "b-\(bucket)", worthiness: 0.9, ageMinutes: 1))
+      candidates.append(
+        item("old-\(bucket)", bucket: "b-\(bucket)", worthiness: 0.8, ageMinutes: 2))
+    }
+    let selected = ContextWorkstreamPooling.selectRecent(candidates, now: now)
+    XCTAssertEqual(selected.count, 3)
+    XCTAssertEqual(Set(selected.map(\.bucketID)).count, 3)
+    XCTAssertTrue(selected.allSatisfy { $0.factID.hasPrefix("new-") })
+  }
+
+  func testRecentContextPromptSectionUsesTheSpecifiedHeaderAndIsNotCitable() throws {
+    let section = try XCTUnwrap(
+      ContextWorkstreamPooling.recentContextPromptSection(
+        items: [item("fact-id-9", statement: "Hermes PR is blocked on review")], now: now))
+    XCTAssertTrue(section.contains("RECENT CONTEXT FROM OTHER WINDOWS (last 15 min)"))
+    XCTAssertTrue(section.contains("not citable"))
+    XCTAssertTrue(section.contains("Hermes PR is blocked"))
+    XCTAssertFalse(section.contains("fact-id-9"))
+    XCTAssertNil(ContextWorkstreamPooling.recentContextPromptSection(items: [], now: now))
+  }
 }

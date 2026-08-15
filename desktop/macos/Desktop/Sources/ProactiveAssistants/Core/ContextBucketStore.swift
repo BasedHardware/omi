@@ -536,6 +536,179 @@ actor ContextBucketStore {
       }) ?? []
   }
 
+  func workstreamTags(for bucketID: String) async -> [String] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    return
+      (try? await pool.read { db in
+        try ContextWorkstreamTagging.tags(for: bucketID, in: db)
+      }) ?? []
+  }
+
+  func armedCandidates(
+    bucketID: String, tags: [String], now: Date = Date()
+  ) async -> [ContextProactiveCandidate] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    return
+      (try? await pool.read { db in
+        try ContextProactiveCandidateLookup.lookupArmed(
+          bucketID: bucketID, tags: tags, now: now, in: db)
+      }) ?? []
+  }
+
+  func consumeCandidate(id: String, now: Date = Date()) async -> Bool {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return false }
+    return
+      (try? await pool.write { db in
+        try ContextProactiveCandidateLookup.consume(id: id, now: now, in: db)
+      }) ?? false
+  }
+
+  func recentContextPool(
+    excludingBucketID: String, now: Date = Date()
+  ) async -> [ContextWorkstreamPoolItem] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    let cutoff = now.addingTimeInterval(-ContextWorkstreamPooling.recentContextWindow)
+    return
+      (try? await pool.read { db in
+        try Row.fetchAll(
+          db,
+          sql: """
+            SELECT id, bucketID, appName, statement, notifyWorthiness, createdAt
+            FROM bucket_facts
+            WHERE bucketID <> ? AND validityState = 'validated'
+              AND (expiresAt IS NULL OR expiresAt > ?)
+              AND notifyWorthiness >= ?
+              AND createdAt >= ?
+            ORDER BY createdAt DESC LIMIT ?
+            """,
+          arguments: [
+            excludingBucketID, now, ContextWorkstreamPooling.recentContextWorthinessFloor, cutoff,
+            ContextWorkstreamPooling.candidateFetchLimit,
+          ]
+        ).compactMap { row -> ContextWorkstreamPoolItem? in
+          guard let factID: String = row["id"], let bucketID: String = row["bucketID"],
+            let statement: String = row["statement"], let createdAt: Date = row["createdAt"]
+          else { return nil }
+          return ContextWorkstreamPoolItem(
+            factID: factID,
+            bucketID: bucketID,
+            appName: row["appName"] ?? "",
+            statement: statement,
+            notifyWorthiness: row["notifyWorthiness"] ?? 0,
+            createdAt: createdAt)
+        }
+      }) ?? []
+  }
+
+  func runWorkstreamReconcilePass(
+    lastPassAt: Date?, now: Date
+  ) async throws -> ContextWorkstreamReconcileOutcome {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
+    return try await pool.write { db in
+      try ContextProactiveCandidateLookup.expireStale(now: now, in: db)
+      let newestValidated = try Date.fetchOne(
+        db,
+        sql: """
+          SELECT MAX(updatedAt) FROM bucket_facts WHERE validityState = 'validated'
+          """)
+      if let lastPassAt, let newestValidated, newestValidated <= lastPassAt {
+        return .skippedNoNewFacts
+      }
+      let eligible = try ContextWorkstreamBatchSelection.fetchEligible(in: db, now: now)
+      let batchIDs = ContextWorkstreamBatchSelection.applyExploration(
+        rankedIDs: eligible.map(\.bucketID))
+      guard !batchIDs.isEmpty else { return .skippedEmptyBatch }
+      let allFacts = try ContextWorkstreamBatchSelection.fetchFacts(
+        bucketIDs: batchIDs, now: now, in: db)
+      let factsByBucket = Dictionary(grouping: allFacts, by: \.bucketID)
+      let existingTags = try ContextWorkstreamTagging.existingTags(in: db)
+      var groups: [ContextWorkstreamReconcileGroup] = []
+      for bucketID in batchIDs {
+        let facts = ContextWorkstreamBatchSelection.selectFacts(factsByBucket[bucketID] ?? [])
+        guard !facts.isEmpty else { continue }
+        let tags = try ContextWorkstreamTagging.tags(for: bucketID, in: db)
+        let hasHighWorthiness = facts.contains {
+          $0.notifyWorthiness >= ContextWorkstreamBatchSelection.candidateWorthinessFloor
+        }
+        // `&&` is `rethrows` over an autoclosure, so the throwing call cannot sit
+        // on its right-hand side; evaluate it separately.
+        var needsCandidate = false
+        if hasHighWorthiness {
+          needsCandidate = try !ContextProactiveCandidateWriter.hasArmedCandidate(
+            bucketID: bucketID, now: now, in: db)
+        }
+        groups.append(
+          ContextWorkstreamReconcileGroup(
+            bucketID: bucketID,
+            facts: facts,
+            needsCandidate: needsCandidate,
+            workstreamTag: tags.first))
+      }
+      guard !groups.isEmpty else { return .skippedEmptyBatch }
+      return .ready(
+        ContextWorkstreamReconcileBatch(groups: groups, existingTags: existingTags))
+    }
+  }
+
+  func insertWorkstreamAssignments(
+    _ assignments: [ContextWorkstreamTagging.AcceptedAssignment], now: Date
+  ) async throws {
+    guard !assignments.isEmpty else { return }
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
+    try await pool.write { db in
+      for assignment in assignments {
+        try ContextWorkstreamTagging.insertAssignment(
+          bucketID: assignment.bucketID, tag: assignment.tag, now: now, in: db)
+      }
+    }
+  }
+
+  func insertArmedCandidates(
+    _ proposed: [ContextProactiveCandidateWriter.Response.Candidate],
+    groups: [ContextWorkstreamReconcileGroup],
+    now: Date
+  ) async throws {
+    guard !proposed.isEmpty else { return }
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
+    // `let` so the write closure can capture it: a `var` is not Sendable.
+    let groupByID = Dictionary(groups.map { ($0.bucketID, $0) }, uniquingKeysWith: { _, last in last })
+    try await pool.write { db in
+      var seen = Set<String>()
+      for candidate in proposed {
+        let bucketID =
+          ContextWorkstreamTagging.resolveGroup(
+            candidate.bucket, batchIDs: groups.map(\.bucketID))
+          ?? (groupByID[candidate.bucket] != nil ? candidate.bucket : nil)
+        guard let bucketID, seen.insert(bucketID).inserted else { continue }
+        let message = candidate.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty else { continue }
+        let cited = candidate.factIDs.map {
+          $0.hasPrefix("fact:") ? String($0.dropFirst(5)) : $0
+        }.filter { !$0.isEmpty }
+        let factIDs = try ContextProactiveCandidateWriter.validatedFactIDs(
+          cited, bucketID: bucketID, now: now, in: db)
+        guard !cited.isEmpty, Set(factIDs) == Set(cited) else { continue }
+        let trigger = candidate.triggerNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trigger.isEmpty else { continue }
+        try ContextProactiveCandidateWriter.insertArmed(
+          bucketID: bucketID,
+          workstreamTag: groupByID[bucketID]?.workstreamTag,
+          message: String(message.prefix(600)),
+          factIDs: factIDs,
+          triggerNote: String(trigger.prefix(300)),
+          now: now,
+          in: db)
+      }
+    }
+  }
+
   func markVisitSettled(_ fence: ContextVisitFence, at date: Date = Date()) async throws {
     let pool = try await pool(for: fence)
     try await pool.write { db in

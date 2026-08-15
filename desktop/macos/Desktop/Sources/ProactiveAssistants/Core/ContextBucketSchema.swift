@@ -10,6 +10,8 @@ enum ContextBucketSchema {
     "bucket_versions",
     "bucket_entries",
     "bucket_facts",
+    "bucket_workstreams",
+    "proactive_candidates",
     "subject_bindings",
     "proactive_deliveries",
     "context_bucket_migration_meta",
@@ -107,6 +109,44 @@ enum ContextBucketSchema {
         index: "idx_bucket_facts_workstream",
         on: "bucket_facts",
         columns: ["workstreamTag", "createdAt"])
+    }
+    // Durable bucket-level workstream assignments and pre-written notification
+    // candidates. The dormant `bucket_facts.workstreamTag` column is left
+    // untouched: new labels accumulate here so they can be reused across visits.
+    migrator.registerMigration("addWorkstreamAssignmentsAndCandidates") { db in
+      try db.create(table: "bucket_workstreams") { table in
+        table.primaryKey("id", .text)
+        table.column("bucketID", .text).notNull().references("context_buckets", onDelete: .cascade)
+        table.column("tag", .text).notNull()
+        table.column("source", .text).notNull().defaults(to: "reconciler")
+        table.column("assignedAt", .datetime).notNull()
+        table.uniqueKey(["bucketID", "tag"])
+      }
+      try db.create(
+        index: "idx_bucket_workstreams_tag",
+        on: "bucket_workstreams",
+        columns: ["tag", "assignedAt"])
+      try db.create(table: "proactive_candidates") { table in
+        table.primaryKey("id", .text)
+        table.column("bucketID", .text).notNull().references("context_buckets", onDelete: .cascade)
+        table.column("workstreamTag", .text)
+        table.column("message", .text).notNull()
+        table.column("groundingFactIDsJson", .text).notNull()
+        table.column("triggerNote", .text).notNull()
+        table.column("state", .text).notNull().defaults(to: "armed")
+        table.column("createdAt", .datetime).notNull()
+        table.column("expiresAt", .datetime).notNull()
+        table.column("consumedAt", .datetime)
+        table.check(sql: "state IN ('armed','consumed','expired')")
+      }
+      try db.create(
+        index: "idx_proactive_candidates_lookup",
+        on: "proactive_candidates",
+        columns: ["bucketID", "state", "expiresAt"])
+      try db.create(
+        index: "idx_proactive_candidates_workstream",
+        on: "proactive_candidates",
+        columns: ["workstreamTag", "state", "expiresAt"])
     }
   }
 

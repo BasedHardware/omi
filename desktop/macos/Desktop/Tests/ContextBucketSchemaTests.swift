@@ -73,6 +73,44 @@ final class ContextBucketSchemaTests: XCTestCase {
     XCTAssertTrue(indexes.contains("idx_bucket_facts_workstream"))
   }
 
+  func testMigrationCreatesWorkstreamAssignmentsAndCandidateTables() throws {
+    let queue = try migratedQueue()
+    let tables = try queue.read { db in
+      Set(try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'"))
+    }
+    XCTAssertTrue(tables.contains("bucket_workstreams"))
+    XCTAssertTrue(tables.contains("proactive_candidates"))
+    let workstreamColumns = try queue.read { db in
+      try db.columns(in: "bucket_workstreams").map(\.name)
+    }
+    XCTAssertEqual(
+      Set(workstreamColumns),
+      ["id", "bucketID", "tag", "source", "assignedAt"])
+    let candidateColumns = try queue.read { db in
+      try db.columns(in: "proactive_candidates").map(\.name)
+    }
+    XCTAssertEqual(
+      Set(candidateColumns),
+      [
+        "id", "bucketID", "workstreamTag", "message", "groundingFactIDsJson", "triggerNote",
+        "state", "createdAt", "expiresAt", "consumedAt",
+      ])
+    let indexes = try queue.read { db in
+      Set(
+        try String.fetchAll(
+          db, sql: "SELECT name FROM sqlite_master WHERE type = 'index'"))
+    }
+    XCTAssertTrue(indexes.contains("idx_bucket_workstreams_tag"))
+    XCTAssertTrue(indexes.contains("idx_proactive_candidates_lookup"))
+    XCTAssertTrue(indexes.contains("idx_proactive_candidates_workstream"))
+    let factColumns = try queue.read { db in
+      try db.columns(in: "bucket_facts").map(\.name)
+    }
+    XCTAssertTrue(
+      factColumns.contains("workstreamTag"),
+      "the dormant fact-level column must survive this migration")
+  }
+
   func testAnonymousDatabaseUsesSignedOutLegacyOwnerNamespace() throws {
     let suiteName = "ContextBucketSchemaTests.anonymous.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
