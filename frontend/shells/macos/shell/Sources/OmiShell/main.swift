@@ -262,6 +262,7 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
   private let loadURL: URL
   private let http: BridgeHttpHandler?
   private let listen: ListenSocketHandler?
+  private let screenBridge: ScreenBridgeHandler
   private let chatStream: ChatStreamHandler?
   private let chatAttachmentStaging: ChatAttachmentStagingHandler?
   private var tornDown = false
@@ -276,11 +277,14 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
     handlers: NativeHandlers, frame: NSRect, loadURL: URL,
     http: BridgeHttpHandler?, listen: ListenSocketHandler?,
     chatStream: ChatStreamHandler?, chatAttachmentStaging: ChatAttachmentStagingHandler?,
-    ephemeral: Bool = false
+    ephemeral: Bool = false,
+    promptForScreenPermissionOnStart: Bool = true
   ) {
     self.loadURL = loadURL
     self.http = http
     self.listen = listen
+    self.screenBridge = ScreenBridgeHandler(
+      handler: handlers, promptForPermissionOnStart: promptForScreenPermissionOnStart)
     self.chatStream = chatStream
     self.chatAttachmentStaging = chatAttachmentStaging
     self.captureWebViewConsole =
@@ -313,6 +317,9 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
     if let listen {
       config.userContentController.add(listen, name: ListenSocketHandler.channel)
     }
+    // Screen capture is on-device; register even when privileged HTTP is off so
+    // the production page's omiScreenBridge lookup is truthful.
+    config.userContentController.add(screenBridge, name: ScreenBridgeHandler.channel)
     if let chatStream {
       config.userContentController.add(chatStream, name: ChatStreamHandler.channel)
     }
@@ -381,6 +388,7 @@ final class WebViewController: NSObject, WKScriptMessageHandler, WKNavigationDel
     let content = webView.configuration.userContentController
     content.removeScriptMessageHandler(forName: BridgeDispatcher.messageHandlerName)
     content.removeScriptMessageHandler(forName: ListenSocketHandler.channel)
+    content.removeScriptMessageHandler(forName: ScreenBridgeHandler.channel)
     content.removeScriptMessageHandler(forName: ChatStreamHandler.channel)
     content.removeScriptMessageHandler(
       forName: BridgeHttpHandler.channel, contentWorld: .page)
@@ -662,13 +670,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       handlers: handlers, frame: contentRect, loadURL: surfaceLoad.url,
       http: httpHandler, listen: listenSocketHandler,
       chatStream: chatStreamHandler, chatAttachmentStaging: chatAttachmentStagingHandler,
-      ephemeral: fixtureCapture || semanticWindow)
+      ephemeral: fixtureCapture || semanticWindow,
+      promptForScreenPermissionOnStart: env["OMI_CONSUMER_EVIDENCE_PATH"]?.isEmpty != false)
     Task {
       await screenEngine.setStatusSink { [weak controller] event in
         guard let controller else { return }
         DispatchQueue.main.async {
-          controller.webView.evaluateJavaScript(
-            BridgeDispatcher.emitScreenStatus(event), completionHandler: nil)
+          let generic = BridgeDispatcher.emitScreenStatus(event)
+          let production = ScreenBridgeHandler.emitStatus(event)
+          controller.webView.evaluateJavaScript(generic + production, completionHandler: nil)
         }
       }
     }

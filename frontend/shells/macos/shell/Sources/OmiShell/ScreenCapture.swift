@@ -114,7 +114,12 @@ struct ScreenSystemEnvironment: ScreenEnvironmentSource {
   static func requestAccessWhileFrontmost() -> Bool {
     NSApp.activate()
     NSRunningApplication.current.activate()
-    return CGRequestScreenCaptureAccess()
+    FileHandle.standardError.write(
+      Data("screen-tcc: CGRequestScreenCaptureAccess firing preflight=\(preflightGranted())\n".utf8))
+    let granted = CGRequestScreenCaptureAccess()
+    FileHandle.standardError.write(
+      Data("screen-tcc: CGRequestScreenCaptureAccess returned \(granted)\n".utf8))
+    return granted
   }
 
   static func openScreenCaptureSettings() -> Bool {

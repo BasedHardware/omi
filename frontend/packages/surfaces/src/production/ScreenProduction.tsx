@@ -179,6 +179,8 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
   };
 
   const permissionDenied = permission === "denied";
+  const permissionUndetermined = permission === "undetermined";
+  const permissionNeedsAction = bridgeAvailable && (permissionDenied || permissionUndetermined);
   const engineError = engine === "error";
   const recovering = engine === "starting";
   const paused = engine === "paused";
@@ -300,7 +302,7 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
               </button>
               {paused && <span className="screen-capture-badge is-paused">{t(locale, "screen.capturePaused")}</span>}
               {recovering && <span className="screen-capture-badge is-recovering">{t(locale, "screen.recovering")}</span>}
-              {permissionDenied && (
+              {permissionNeedsAction && (
                 <button type="button" className="screen-permission-action" onClick={() => void run(() => store.requestPermission())}>
                   {t(locale, "screen.requestPermission")}
                 </button>
@@ -323,6 +325,9 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
         {permissionDenied && (
           <p className="screen-permission-note" data-permission-badge="denied">{t(locale, "screen.emptyPermissionDeniedTitle")}</p>
         )}
+        {permissionUndetermined && bridgeAvailable && (
+          <p className="screen-permission-note" data-permission-badge="undetermined">{t(locale, "screen.requestPermission")}</p>
+        )}
         {engineError && permission !== "denied" && (
           <p className="screen-engine-error" data-engine-error="true">{t(locale, "lifecycle.error")}</p>
         )}
@@ -333,7 +338,7 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
               icon={SCREEN_EMPTY_ICON}
               title={empty.title}
               detail={empty.detail}
-              action={emptyKind === "permission-denied" && bridgeAvailable ? (
+              action={permissionNeedsAction && (emptyKind === "permission-denied" || emptyKind === "never-enabled") ? (
                 <button type="button" onClick={() => void run(() => store.requestPermission())}>{t(locale, "screen.requestPermission")}</button>
               ) : emptyKind === "never-enabled" && bridgeAvailable ? (
                 <button type="button" onClick={() => void run(() => store.startCapture())}>{t(locale, "screen.start")}</button>

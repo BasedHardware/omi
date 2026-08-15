@@ -242,7 +242,7 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
             </div>
             <div className="nav-utilities" role="group" aria-label={t(locale, "nav.settings")}>
               <a href={productionRouteHref("listen")} className="nav-icon-control" aria-current={active === "listen" ? "page" : undefined} aria-label={t(locale, "nav.microphone")} title={t(locale, "nav.microphone")}><ChromeIcon name="microphone" /></a>
-              <button type="button" className="nav-icon-control" disabled aria-disabled="true" aria-label={t(locale, "nav.screenCapture")} title={t(locale, "nav.screenCapture")}><ChromeIcon name="screen" /></button>
+              <a href={productionRouteHref("rewind")} className="nav-icon-control" aria-current={active === "rewind" ? "page" : undefined} aria-label={t(locale, "nav.screenCapture")} title={t(locale, "nav.screenCapture")}><ChromeIcon name="screen" /></a>
               <button ref={paletteTriggerRef} type="button" className="command-discovery-trigger" onClick={openPalette} aria-haspopup={commandPopupRole} aria-expanded={paletteOpen} title={t(locale, "tasks.shortcuts")}>
                 <span className="nav-label">{t(locale, "tasks.shortcuts")}</span>
                 <kbd>{commandLabel(commandRegistry[0]!, isApplePlatform() ? "apple" : "other")}</kbd>

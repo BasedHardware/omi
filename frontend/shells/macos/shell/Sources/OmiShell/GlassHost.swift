@@ -91,8 +91,10 @@ final class GlassHostView: NSView {
     // The reference bar's left route cluster and right utility cluster remain
     // native-web interactive. The flexible middle is a large, deterministic
     // repositioning handle at every supported window width.
+    // 150pt used to cover the microphone and screen-capture controls: three
+    // 44pt icon buttons plus the Shortcuts trigger exceed 250pt.
     let leftControlsWidth = min(520, max(0, topGlass.bounds.width - 200))
-    let rightControlsWidth: CGFloat = 150
+    let rightControlsWidth: CGFloat = 300
     topBarDragRegion.frame = NSRect(
       x: topGlass.frame.minX + leftControlsWidth,
       y: topGlass.frame.minY,

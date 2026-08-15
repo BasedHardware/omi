@@ -52,10 +52,11 @@ test("the visible navigation island exposes a native drag lane without covering 
   assert.match(source, /window\?\.performDrag\(with: event\)/);
   assert.match(source, /addSubview\(topBarDragRegion, positioned: \.above, relativeTo: webView\)/);
   assert.match(source, /let leftControlsWidth = min\(520,/);
-  assert.match(source, /let rightControlsWidth: CGFloat = 150/);
+  assert.match(source, /let rightControlsWidth: CGFloat = 300/);
   assert.match(source, /topGlass\.bounds\.width - leftControlsWidth - rightControlsWidth/);
-  // red-proof: removing the overlay or expanding it across either control
-  // cluster makes the reference navigation bar non-draggable or non-clickable.
+  // red-proof: shrinking the right reserved width below the utility cluster
+  // (150pt covered the microphone and screen-capture icons) makes those
+  // controls native-dead while still looking live.
 });
 
 test("scratch shell opens at the deterministic comparison frame", async () => {
