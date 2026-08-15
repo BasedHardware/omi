@@ -140,6 +140,55 @@ describe("seedQaSnapshot", () => {
     expect(load(first)().coherent_snapshot_digest).toBe(load(second)().coherent_snapshot_digest);
   });
 
+  test("default fixture excerpts stay the historical QA rows", () => {
+    // red-proof: reword the default excerpt in buildMemory and this equality fails
+    const db = openDb();
+    seedQaSnapshot(db, options({ memory_count: 3 }));
+    const result = load(db)();
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
+    expect((result.durable_snapshot.evidence ?? []).map((row) => row.evidence.excerpt)).toEqual([
+      "qa memory 000000",
+      "qa memory 000001",
+      "qa memory 000002",
+    ]);
+  });
+
+  test("demo contents change the digest the QA-row lock observes", () => {
+    // red-proof of the lock: if this stayed equal, the persona overlay would be
+    // invisible to the unchanged-QA assertion path.
+    const qa = openDb();
+    const demo = openDb();
+    seedQaSnapshot(qa, options({ memory_count: 3 }));
+    seedQaSnapshot(demo, options({
+      memory_count: 3,
+      contents: [
+        {
+          excerpt: "Mira Vale met Jordan Hale at Harborline Cafe.",
+          handle: "mira-vale",
+          predicate: "met Jordan Hale at Harborline Cafe",
+          subject_literal: "Mira Vale",
+        },
+        {
+          excerpt: "Ellis Quinn reserved a Northbridge Library hold.",
+          handle: "ellis-quinn",
+          predicate: "reserved a Northbridge Library hold",
+          subject_literal: "Ellis Quinn",
+        },
+        {
+          excerpt: "Jordan Hale packed rain shells for Cedar Loop.",
+          handle: "jordan-hale",
+          predicate: "packed rain shells for Cedar Loop",
+          subject_literal: "Jordan Hale",
+        },
+      ],
+    }));
+    expect(hashDatabaseContent(demo)).not.toBe(hashDatabaseContent(qa));
+    const demoLoad = load(demo)();
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
+    expect((demoLoad.durable_snapshot.evidence ?? []).map((row) => row.evidence.excerpt)[0])
+      .toContain("Harborline");
+  });
+
   test("fixture time is anchored and account_timezone is required and validated", () => {
     // red-proof: pass account_timezone "Not/A_Real_Zone" and seed throws; change QA_FIXTURE_TIME_ANCHOR_UTC and observed_at assertions fail
     expect(QA_FIXTURE_TIME_ANCHOR_UTC).toBe("2026-08-07T12:00:00.000Z");

@@ -23,7 +23,8 @@
     "qa:contracts": "bun run scripts/qa-contracts.ts",
     "qa:production-deps": "node scripts/verify-production-dependency-closure.mjs",
     "qa:production-qualification": "bun run scripts/validate-production-qualification-manifest.ts",
-    "build:production-deps": "bun run scripts/build-production-dependency-artifact.ts"
+    "build:production-deps": "bun run scripts/build-production-dependency-artifact.ts",
+    "app": "bash integration/dev-app.sh"
   },
   "dependencies": {
     "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.8.0-45b128b1.tgz",

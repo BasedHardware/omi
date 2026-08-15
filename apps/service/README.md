@@ -12,6 +12,8 @@ From the repo root:
 bun run apps/service/bin/dev-server.ts
 ```
 
+For a headed macOS demo with a believable persona, from the repo root: `bun run app` (see the root `AGENTS.md` "Test it locally" section). That command composes this server plus the local test gateway; chat generation is not a real model.
+
 Zero environment variables are required. Supplying `OMI_QA_DB` switches the
 entire registered service—not only Memories—to one file-backed SQLite
 connection. Rebooting with the same file preserves service state; only the
@@ -240,6 +242,7 @@ All are optional.
 |----------|---------|---------|
 | `OMI_PORT` | `4851` | The one fixed app-facing listen port. |
 | `OMI_SEED_OWNER` | `local-dev-user` | Owner account id written into the QA seed. |
+| `OMI_SEED_PERSONA` | unset | When `demo`, overlays the fictional Demo User week on the same seed machinery. Unset keeps every seeded QA byte identical. |
 | `OMI_SEED_MEMORIES` | `12` | Number of visible seeded memories. |
 | `OMI_ACCOUNT_TIMEZONE` | `America/Los_Angeles` | IANA timezone for local-day grouping in the seed and read path. |
 | `OMI_QA_DB` | `:memory:` | SQLite path, or `:memory:` for an ephemeral DB (recommended for cold checkout). |

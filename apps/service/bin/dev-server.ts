@@ -12,6 +12,11 @@ import { createProductionGatewayToolLoop } from "../chat/gateway-tool-compositio
 import { LOOPBACK_HOST, assertPortInRange } from "../net/loopback";
 import { isQaEvidenceRunId } from "../observability/producer-evidence";
 import { QA_FIXTURE_TIME_ANCHOR_UTC } from "../qa/seed";
+import {
+  applyDemoPersonaSeed,
+  DEMO_PERSONA_MEMORY_COUNT,
+  parseSeedPersona,
+} from "../qa/demo-persona";
 import { QA_EVIDENCE_PATH } from "../routes/qa-evidence";
 import { createSqliteLocalServiceStores } from "../../../drivers/sqlite/service-stores";
 
@@ -68,6 +73,7 @@ interface BootConfig {
   readonly devSecretLabel: string;
   readonly runId: string | null;
   readonly readyRecordPath: string | null;
+  readonly seedPersona: "demo" | null;
   readonly llmGateway: Readonly<{
     readonly url: string;
     readonly token: string;
@@ -96,6 +102,14 @@ const readConfig = (): BootConfig => {
     if (!/^[0-9]{1,4}$/.test(rawCount)) fail(`OMI_SEED_MEMORIES must be a number, got "${rawCount}".`);
     memoryCount = Number(rawCount);
   }
+
+  let seedPersona: "demo" | null = null;
+  try {
+    seedPersona = parseSeedPersona(process.env.OMI_SEED_PERSONA);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : "OMI_SEED_PERSONA is invalid.");
+  }
+  if (seedPersona === "demo") memoryCount = DEMO_PERSONA_MEMORY_COUNT;
 
   const accountTimezone = process.env.OMI_ACCOUNT_TIMEZONE || DEFAULT_TIMEZONE;
   try {
@@ -142,6 +156,7 @@ const readConfig = (): BootConfig => {
     devSecretLabel: process.env.OMI_DEV_TOKEN_SECRET || DEV_KEY_MATERIAL_LABEL,
     runId: rawRunId ?? null,
     readyRecordPath: rawReadyRecordPath ?? null,
+    seedPersona,
     llmGateway,
   });
 };
@@ -202,6 +217,9 @@ const main = (): void => {
       devSecretLabel: config.devSecretLabel,
       listenDefaultUnmetered: true,
       generationSource,
+      ...(config.seedPersona === "demo"
+        ? { seedPersona: "demo" as const, overlaySeed: applyDemoPersonaSeed }
+        : {}),
     });
     serviceForGatewayTools = service;
   } catch (error) {
@@ -256,7 +274,8 @@ const main = (): void => {
     `\nomi local backend is up\n\n`
     + `  base URL      ${baseUrl}\n`
     + `  bound to      ${LOOPBACK_HOST} (loopback only - not reachable from the LAN)\n`
-    + `  seed identity ${config.ownerAccountId}, ${config.memoryCount} memories, ${config.accountTimezone}\n`
+    + `  seed identity ${config.ownerAccountId}, ${config.memoryCount} memories, ${config.accountTimezone}`
+    + `${config.seedPersona === "demo" ? ", persona demo (Demo User)" : ""}\n`
     + `  time anchor   ${QA_FIXTURE_TIME_ANCHOR_UTC}\n`
     + `  storage       ${config.databasePath} (SQLite, QA fixture only - never production authority)\n\n`
     + `  dev token\n    ${service.devToken}\n\n`
