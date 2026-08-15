@@ -789,3 +789,96 @@ test("loading and unknown entitlement limits make distinct honest claims", async
   // red-proof: fall loading through to idle or group unknown with unmetered;
   // the rendered title/usage assertions fail independently.
 });
+
+test("Listen Start posts the host capture start verb and Stop posts stop then close", async () => {
+  // red-proof: omitting socket.start() after open, or close() without stop(),
+  // makes the posted-action sequence miss start/stop while the Start control
+  // still looks like it began capture.
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const createFactory = await loadProductionExport(
+    "listen-host-socket.ts",
+    "createProductionListenHostSocketFactory",
+  );
+  const posted = [];
+  const channel = { postMessage(message) { posted.push(JSON.parse(message)); } };
+  const host = { omiListenSocket: channel };
+  const openSocket = createFactory(host);
+  const env = { now: () => 0, random: () => 0.25, fallbackSink: { record() {} }, delay: () => () => {} };
+  const preflight = {
+    snapshot: () => freezeListenPreflightSnapshot({
+      permission: "granted", device: { state: "available", label: "Default microphone" }, recovery: null,
+    }),
+    subscribe: () => () => {},
+    async refresh() {},
+  };
+  const client = createPlatformListenCaptureClient({ env, schema, openSocket, preflight });
+  const store = createPlatformProductionListenStore(client, env);
+  const rendered = await renderComponent(ListenProduction, { store });
+  try {
+    const start = rendered.container.querySelector('[data-consumer-action="start-listen"]');
+    assert.ok(start);
+    assert.equal(start.getAttribute("disabled"), null, "granted preflight enables Start");
+    await rendered.act(async () => start.click());
+    assert.deepEqual(posted.map((row) => row.action), ["open", "start"]);
+    assert.equal(JSON.stringify(posted).toLowerCase().includes("authorization"), false);
+    host.__omiListenSocketEvent("listen-1", { type: "open" });
+    host.__omiListenSocketEvent("listen-1", { type: "message", data: JSON.stringify(readyFrame) });
+    await rendered.act(async () => {});
+    const stop = rendered.container.querySelector(".listen-stop-control");
+    assert.ok(stop, "capturing surface exposes Stop");
+    await rendered.act(async () => stop.click());
+    assert.deepEqual(posted.map((row) => row.action), ["open", "start", "stop", "close"]);
+    assert.equal(posted[3]?.code, 1000);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("platform Listen client starts host capture on connect and reconnect, and stops before close", async () => {
+  const calls = [];
+  class CaptureSocket extends FakeSocket {
+    start() { calls.push(`start:${calls.length}`); }
+    stop() { calls.push("stop"); }
+    close(code = 1000) {
+      calls.push(`close:${code}`);
+      super.close(code);
+    }
+  }
+  let now = 0;
+  const delayed = [];
+  const sockets = [];
+  const env = {
+    fallbackSink: { record() {} },
+    now: () => now,
+    random: () => 0.25,
+    delay(ms, callback) {
+      const pending = { active: true, callback, ms };
+      delayed.push(pending);
+      return () => { pending.active = false; };
+    },
+  };
+  const client = createPlatformListenCaptureClient({
+    env,
+    schema,
+    reconnectDelayMs: 2_000,
+    openSocket() {
+      const socket = new CaptureSocket();
+      sockets.push(socket);
+      return socket;
+    },
+  });
+  await client.start();
+  assert.equal(calls.filter((item) => item.startsWith("start")).length, 1);
+  sockets[0].open();
+  sockets[0].message(JSON.stringify(readyFrame));
+  sockets[0].serverClose(1001);
+  const pending = delayed.find((entry) => entry.active && entry.ms === 2_000);
+  assert.ok(pending);
+  pending.active = false;
+  pending.callback();
+  assert.equal(calls.filter((item) => item.startsWith("start")).length, 2, "reconnect opens a new host capture");
+  await client.stop();
+  assert.ok(calls.includes("stop"));
+  assert.equal(calls.at(-1), "close:1000");
+  assert.ok(calls.lastIndexOf("stop") < calls.lastIndexOf("close:1000"));
+});

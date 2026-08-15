@@ -166,7 +166,7 @@ enum ListenSocketPolicy {
   }
 }
 
-private struct ListenSocketCommand: Decodable {
+struct ListenSocketCommand: Decodable {
   let id: String
   let action: String
   let path: String?
@@ -189,6 +189,10 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
   private var idsByTask: [Int: String] = [:]
   private var webViewsById: [String: WKWebView] = [:]
   private var evidenceAudioSent = Set<String>()
+  private var captureRequestedIds = Set<String>()
+  private var protocolReadyIds = Set<String>()
+  private var capture: ListenMicrophoneCapture?
+  private var captureSocketId: String?
 
   private func listenPreflightPayload() -> [String: Any] {
     let hasInput = AVCaptureDevice.default(for: .audio) != nil
@@ -230,6 +234,9 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
   }
 
   func cancelAll() {
+    tearDownCapture()
+    captureRequestedIds.removeAll()
+    protocolReadyIds.removeAll()
     let tasks = Array(tasksById.values)
     tasksById.removeAll()
     idsByTask.removeAll()
@@ -254,12 +261,21 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
       let operation = command.operation ?? "check"
       switch operation {
       case "request-permission":
-        AVCaptureDevice.requestAccess(for: .audio) { [weak self, weak webView] _ in
-          DispatchQueue.main.async {
-            guard let self, let webView else { return }
-            self.emitPreflight(id: command.id, webView: webView)
+        let hasUsage =
+          Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription") is String
+        if ListenCapturePolicy.canRequestAccess(
+          hasUsageDescription: hasUsage, evidenceAudioEnabled: evidenceAudioEnabled),
+          AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined
+        {
+          AVCaptureDevice.requestAccess(for: .audio) { [weak self, weak webView] _ in
+            DispatchQueue.main.async {
+              guard let self, let webView else { return }
+              self.emitPreflight(id: command.id, webView: webView)
+            }
           }
+          return
         }
+        emitPreflight(id: command.id, webView: webView)
       case "open-settings":
         let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
         _ = NSWorkspace.shared.open(url)
@@ -272,7 +288,23 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
       return
     }
 
+    if command.action == "start" {
+      if evidenceAudioEnabled {
+        logListen("listen-capture: start ignored (evidence audio)")
+        return
+      }
+      captureRequestedIds.insert(command.id)
+      onMain { self.syncCapture(id: command.id) }
+      return
+    }
+
+    if command.action == "stop" {
+      onMain { self.haltCapture(id: command.id) }
+      return
+    }
+
     if command.action == "close" {
+      onMain { self.haltCapture(id: command.id) }
       let closeCode = URLSessionWebSocketTask.CloseCode(rawValue: command.code ?? 1000)
         ?? .normalClosure
       let reason = command.reason?.data(using: .utf8)
@@ -302,6 +334,13 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
     var payload = listenPreflightPayload()
     payload["type"] = "preflight"
     payload["requestId"] = id
+    let tcc = tccName(AVCaptureDevice.authorizationStatus(for: .audio))
+    let permission = payload["permission"] as? String ?? "unavailable"
+    let device = payload["deviceState"] as? String ?? "unavailable"
+    let hasInput = AVCaptureDevice.default(for: .audio) != nil
+    logListen(
+      "listen-preflight: tcc=\(tcc) input=\(hasInput) evidence=\(evidenceAudioEnabled) permission=\(permission) device=\(device)"
+    )
     emit(id: id, payload: payload, webView: webView, callback: "__omiListenPreflightEvent")
   }
 
@@ -333,6 +372,14 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
       guard let self, let task, let webView = self.webViewsById[id] else { return }
       switch result {
       case .success(.string(let text)):
+        if isListenProtocolReady(text) {
+          self.onMain {
+            self.protocolReadyIds.insert(id)
+            if !self.evidenceAudioEnabled {
+              self.syncCapture(id: id)
+            }
+          }
+        }
         if self.evidenceAudioEnabled && !self.evidenceAudioSent.contains(id)
           && isListenProtocolReady(text)
         {
@@ -361,10 +408,75 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
   }
 
   private func forget(id: String, task: URLSessionWebSocketTask) {
+    onMain {
+      self.haltCapture(id: id)
+      self.protocolReadyIds.remove(id)
+    }
     tasksById.removeValue(forKey: id)
     idsByTask.removeValue(forKey: task.taskIdentifier)
     webViewsById.removeValue(forKey: id)
     evidenceAudioSent.remove(id)
+  }
+
+  private func syncCapture(id: String) {
+    guard ListenCapturePolicy.shouldInstallTap(evidenceAudioEnabled: evidenceAudioEnabled) else {
+      return
+    }
+    guard captureRequestedIds.contains(id), protocolReadyIds.contains(id) else { return }
+    guard tasksById[id] != nil else { return }
+    if captureSocketId == id, capture != nil { return }
+    if let current = captureSocketId, current != id {
+      tearDownCapture()
+    }
+    let session = ListenMicrophoneCapture()
+    let started = session.start { [weak self] data in
+      guard let self, let task = self.tasksById[id], !data.isEmpty else { return }
+      task.send(.data(data)) { [weak self, weak task] error in
+        guard error != nil, let self, let task, let webView = self.webViewsById[id]
+        else { return }
+        self.emit(id: id, payload: ["type": "error"], webView: webView)
+        task.cancel(with: .internalServerError, reason: nil)
+      }
+    }
+    if started {
+      capture = session
+      captureSocketId = id
+      logListen("listen-capture: microphone started")
+    } else {
+      logListen("listen-capture: microphone start failed")
+    }
+  }
+
+  private func haltCapture(id: String) {
+    captureRequestedIds.remove(id)
+    if captureSocketId == id {
+      tearDownCapture()
+      logListen("listen-capture: stop")
+    }
+  }
+
+  private func tearDownCapture() {
+    capture?.stop()
+    capture = nil
+    captureSocketId = nil
+  }
+
+  private func tccName(_ status: AVAuthorizationStatus) -> String {
+    switch status {
+    case .notDetermined: return "notDetermined"
+    case .authorized: return "authorized"
+    case .denied: return "denied"
+    case .restricted: return "restricted"
+    @unknown default: return "unknown"
+    }
+  }
+
+  private func logListen(_ line: String) {
+    FileHandle.standardError.write(Data("\(line)\n".utf8))
+  }
+
+  private func onMain(_ body: @escaping () -> Void) {
+    if Thread.isMainThread { body() } else { DispatchQueue.main.async(execute: body) }
   }
 
   private func emit(id: String, payload: [String: Any], webView: WKWebView, callback: String = "__omiListenSocketEvent") {

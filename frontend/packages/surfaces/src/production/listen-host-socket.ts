@@ -145,6 +145,14 @@ class PlatformListenHostSocket implements PlatformListenSocket {
     this.#post({ id: this.#id, action: "close", code, reason });
   }
 
+  start(): void {
+    this.#post({ id: this.#id, action: "start" });
+  }
+
+  stop(): void {
+    this.#post({ id: this.#id, action: "stop" });
+  }
+
   accept(event: ListenHostEvent): void {
     switch (event.type) {
       case "open":

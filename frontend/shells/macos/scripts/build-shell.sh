@@ -1,13 +1,23 @@
 #!/bin/bash
-# Builds the shell with swiftc into an unsigned omi-* .app bundle. No Xcode project,
-# no SwiftPM, no signing/notarization. Never touches /Applications/Omi.app or Omi Beta.
+# Builds the shell with swiftc into an omi-* .app bundle. No Xcode project,
+# no SwiftPM, no notarization. Never touches /Applications/Omi.app or Omi Beta.
 # Bundles the real @omi-core/surfaces dist/ into Contents/Resources/surface/ so the
 # shell's fixed-port loopback can serve it without an external Node process.
 #
+# Signing (optional): if OMI_CODESIGN_IDENTITY is set, or `security find-identity`
+# finds an "Apple Development" identity, the bundle is codesigned so TCC
+# microphone/screen-capture grants persist across rebuilds. Ad-hoc signatures
+# change every compile, so macOS treats each build as a new app and drops the
+# grant. Signing is best-effort and must never fail the build — CI and machines
+# without a development identity still produce an unsigned bundle. Headless
+# evidence runs (OMI_CONSUMER_EVIDENCE_PATH) still bypass real capture; signing
+# must not make them request the microphone.
+#
 # Env:
-#   OMI_BUILD_DIR       output dir (default: ./.build)
-#   OMI_SURFACES_DIST   path to surfaces dist/ (default: sibling core-foundation checkout)
-#   OMI_APP_NAME        bundle folder name without .app (default: omi-core-tasks-shell)
+#   OMI_BUILD_DIR           output dir (default: ./.build)
+#   OMI_SURFACES_DIST       path to surfaces dist/ (default: sibling core-foundation checkout)
+#   OMI_APP_NAME            bundle folder name without .app (default: omi-core-tasks-shell)
+#   OMI_CODESIGN_IDENTITY   optional codesign identity (display name or hash)
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 out="${OMI_BUILD_DIR:-$here/.build}"
@@ -50,7 +60,7 @@ node "$here/codegen/generate.mjs" >/dev/null
 
 swiftc -O \
   -target arm64-apple-macosx13.0 \
-  -framework AppKit -framework WebKit -framework Network -framework Security -framework LocalAuthentication \
+  -framework AppKit -framework WebKit -framework Network -framework Security -framework LocalAuthentication -framework AVFoundation \
   -o "$app/Contents/MacOS/$app_name" \
   "$here"/shell/Sources/OmiShell/*.swift
 
@@ -112,8 +122,40 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleShortVersionString</key><string>0.1</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Omi uses the microphone only while you explicitly capture.</string>
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>Omi captures the screen only while you explicitly share it.</string>
 </dict></plist>
 PLIST
+
+# Optional Apple Development signing so TCC grants survive rebuilds. Never fail
+# the build if signing is unavailable. Do not print identity hashes or env values
+# beyond the identity's display name.
+sign_identity=""
+if [[ -n "${OMI_CODESIGN_IDENTITY:-}" ]]; then
+  sign_identity="$OMI_CODESIGN_IDENTITY"
+else
+  sign_identity="$(
+    security find-identity -v -p codesigning 2>/dev/null \
+      | awk -F'"' '/Apple Development: / { print $2; exit }' || true
+  )"
+fi
+sign_display="$sign_identity"
+if [[ "$sign_identity" =~ ^[A-Fa-f0-9]{40}$ ]]; then
+  sign_display="Apple Development"
+fi
+if [[ -z "$sign_identity" ]]; then
+  echo "unsigned: no Apple Development identity; TCC grants will not persist across rebuilds"
+elif ! command -v codesign >/dev/null 2>&1; then
+  echo "unsigned: codesign unavailable; TCC grants will not persist across rebuilds"
+elif codesign --force --sign "$sign_identity" --timestamp=none "$app/Contents/MacOS/$app_name" >/dev/null 2>&1 \
+  && codesign --force --sign "$sign_identity" --timestamp=none "$app" >/dev/null 2>&1; then
+  echo "signed: ${sign_display} (TCC persistence across rebuilds)"
+else
+  echo "unsigned: codesign failed; TCC grants will not persist across rebuilds"
+fi
+
 echo "built: ${app/#$here/.}"
 echo "surface: $OMI_SURFACES_DIST -> Contents/Resources/surface/"
 echo "origin: http://127.0.0.1:5290/ (fixed; IndexedDB persists across relaunch)"

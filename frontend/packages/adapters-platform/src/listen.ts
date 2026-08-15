@@ -35,6 +35,9 @@ export interface PlatformListenSocket {
   addEventListener(type: "close", listener: (event: PlatformListenSocketCloseEvent) => void): void;
   addEventListener(type: "error", listener: () => void): void;
   close(code?: number, reason?: string): void;
+  /** Host-owned capture. Absent on browser sockets and test fakes. */
+  start?(): void;
+  stop?(): void;
 }
 
 export type PlatformListenSocketFactory = (path: string) => PlatformListenSocket;
@@ -273,6 +276,12 @@ function uuidFromEnv(env: Env): string {
   return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 }
 
+function notifyHostCapture(socket: PlatformListenSocket | null, active: boolean): void {
+  if (socket === null) return;
+  if (active) socket.start?.();
+  else socket.stop?.();
+}
+
 function listenPath(
   path: string,
   handshake: PlatformListenHandshake,
@@ -396,6 +405,7 @@ export function createPlatformListenCaptureClient(
       throw error;
     }
     socket = opened;
+    notifyHostCapture(opened, true);
 
     opened.addEventListener("open", () => {
       if (currentGeneration !== socketGeneration || socket !== opened || !captureRequested) return;
@@ -424,6 +434,7 @@ export function createPlatformListenCaptureClient(
         failureRetryable = false;
         socketGeneration += 1;
         socket = null;
+        notifyHostCapture(opened, false);
         opened.close(1000, "capture stopped at entitlement ceiling");
       }
       notify();
@@ -435,6 +446,7 @@ export function createPlatformListenCaptureClient(
       disconnectedAt = options.env.now();
       handle.ingest.acceptClose(1006);
       failureRetryable = true;
+      notifyHostCapture(opened, false);
       opened.close();
       scheduleReconnect();
     });
@@ -534,6 +546,7 @@ export function createPlatformListenCaptureClient(
       failureRetryable = null;
       terminalCeiling = false;
       clientConversationId = null;
+      notifyHostCapture(closing, false);
       closing?.close(1000, "capture stopped by user");
       notify();
     },
