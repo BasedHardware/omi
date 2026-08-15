@@ -226,10 +226,18 @@ extension ContextBucketStore {
           cooldownSeconds: gate.cooldownSeconds)
       else { return ContextDeliveryAttempt(id: nil, reason: .cooldown) }
       let windowStart = ContextDeliveryBudget.dailyWindowStart(now: now)
+      // The daily budget caps user-visible interruptions. Evaluations that resolved
+      // to silence or failed never reached the user, so they must not spend it — a
+      // day of heavy screen activity would otherwise exhaust the budget on invisible
+      // decisions and read as a dead feature. In-flight attempts still count until
+      // they resolve, so a burst cannot over-reserve past the cap.
       let attemptedInWindow =
         try Int.fetchOne(
           db,
-          sql: "SELECT COUNT(*) FROM proactive_deliveries WHERE attemptedAt >= ?",
+          sql: """
+            SELECT COUNT(*) FROM proactive_deliveries
+            WHERE attemptedAt >= ? AND lifecycleState NOT IN ('suppressed', 'failed')
+            """,
           arguments: [windowStart]) ?? 0
       guard attemptedInWindow < gate.dailyLimit else {
         return ContextDeliveryAttempt(id: nil, reason: .dailyBudget)
