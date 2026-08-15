@@ -148,6 +148,17 @@ enum ContextBucketSchema {
         on: "proactive_candidates",
         columns: ["workstreamTag", "state", "expiresAt"])
     }
+    // Terminal candidate rows (consumed or expired) are never read again once
+    // past their expiry; without cleanup they accumulate for the lifetime of
+    // the database. The lookup/workstream indexes above lead with bucketID or
+    // workstreamTag, neither useful for a table-wide retention sweep, so this
+    // index leads with state instead.
+    migrator.registerMigration("addProactiveCandidatesRetentionIndex") { db in
+      try db.create(
+        index: "idx_proactive_candidates_retention",
+        on: "proactive_candidates",
+        columns: ["state", "expiresAt"])
+    }
   }
 
   static func removeMigratedLegacyDefaults(
@@ -183,6 +194,17 @@ enum ContextBucketSchema {
   static func deleteExpiredDeliveries(in db: Database, now: Date) throws -> Int {
     try db.execute(
       sql: "DELETE FROM proactive_deliveries WHERE expiresAt <= ?",
+      arguments: [now])
+    return db.changesCount
+  }
+
+  /// Terminal `proactive_candidates` rows (consumed, expired, or simply past
+  /// their `expiresAt`) never get read again — without this they accumulate
+  /// indefinitely whenever the reconciler feature is on.
+  @discardableResult
+  static func deleteExpiredProactiveCandidates(in db: Database, now: Date) throws -> Int {
+    try db.execute(
+      sql: "DELETE FROM proactive_candidates WHERE state <> 'armed' OR expiresAt <= ?",
       arguments: [now])
     return db.changesCount
   }

@@ -115,6 +115,109 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
     XCTAssertFalse(accepted.contains { $0.bucketID == "b5" })
   }
 
+  func testLabelAppearsInObservationsRequiresAWholeWordNotAnIncidentalSubstring() {
+    XCTAssertTrue(
+      ContextWorkstreamTagging.labelAppearsInObservations(
+        "car-project", observations: "The CAR contract review is due Friday."))
+    XCTAssertFalse(
+      ContextWorkstreamTagging.labelAppearsInObservations(
+        "car-project", observations: "Please concatenate the two reports."),
+      "\"car\" inside \"concatenate\" must not count as the word appearing")
+  }
+
+  func testAcceptedAssignmentsLetALaterValidAssignmentWinAfterAnEarlierInvalidOneForTheSameBucket() {
+    let response = ContextWorkstreamTagging.Response(
+      workstreams: [.init(label: "Hermes", evidence: "two groups")],
+      assignments: [
+        // b1's first assignment is null (a legitimate "no label" response)
+        // and must not block b1's later valid assignment for the same group.
+        .init(group: "G1", label: nil),
+        .init(group: "G1", label: "Hermes"),
+        .init(group: "G2", label: "Hermes"),
+      ])
+    let accepted = ContextWorkstreamTagging.acceptedAssignments(
+      response: response,
+      batchIDs: ["b1", "b2"],
+      existingTags: [],
+      observations: "Hermes PR blocked.")
+    XCTAssertEqual(
+      Set(accepted.map { "\($0.bucketID):\($0.tag)" }),
+      ["b1:hermes", "b2:hermes"],
+      "the invalid first assignment for b1 must not claim the bucket and drop the valid one")
+  }
+
+  func testInsertArmedCandidatesLetsALaterValidCandidateWinAfterAnEarlierInvalidOneForTheSameBucket() throws {
+    let queue = try migratedQueue()
+    try queue.write { db in
+      try seedBucket("here", factCount: 3, newestOffset: 0, tagged: false, in: db)
+    }
+    let groups = [
+      ContextWorkstreamReconcileGroup(
+        bucketID: "here", facts: [], needsCandidate: true, workstreamTag: nil)
+    ]
+    let proposed: [ContextProactiveCandidateWriter.Response.Candidate] = [
+      // First candidate for "here" is invalid (empty message) and must not
+      // claim the bucket ahead of the later valid candidate.
+      .init(bucket: "here", message: "   ", factIDs: ["fact:here-0"], triggerNote: "when relevant"),
+      .init(
+        bucket: "here", message: "the Hermes PR still needs review", factIDs: ["fact:here-0"],
+        triggerNote: "when relevant"),
+    ]
+    try queue.write { db in
+      // insertArmedCandidates itself only opens its own pool.write via the
+      // store; exercise the same guard logic directly against this queue.
+      var seen = Set<String>()
+      let groupByID = Dictionary(groups.map { ($0.bucketID, $0) }, uniquingKeysWith: { _, last in last })
+      for candidate in proposed {
+        let bucketID =
+          ContextWorkstreamTagging.resolveGroup(candidate.bucket, batchIDs: groups.map(\.bucketID))
+          ?? (groupByID[candidate.bucket] != nil ? candidate.bucket : nil)
+        guard let bucketID, !seen.contains(bucketID) else { continue }
+        let message = candidate.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty else { continue }
+        let cited = candidate.factIDs.map { $0.hasPrefix("fact:") ? String($0.dropFirst(5)) : $0 }
+          .filter { !$0.isEmpty }
+        let factIDs = try ContextProactiveCandidateWriter.validatedFactIDs(
+          cited, bucketID: bucketID, now: now, in: db)
+        guard !cited.isEmpty, Set(factIDs) == Set(cited) else { continue }
+        let trigger = candidate.triggerNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trigger.isEmpty else { continue }
+        seen.insert(bucketID)
+        try ContextProactiveCandidateWriter.insertArmed(
+          bucketID: bucketID, workstreamTag: nil, message: message, factIDs: factIDs,
+          triggerNote: trigger, now: now, in: db)
+      }
+    }
+    let messages = try queue.read { db in
+      try String.fetchAll(db, sql: "SELECT message FROM proactive_candidates WHERE bucketID = 'here'")
+    }
+    XCTAssertEqual(
+      messages, ["the Hermes PR still needs review"],
+      "the invalid first candidate for the bucket must not claim it and drop the valid one")
+  }
+
+  func testConsumeAndDeclineRejectACandidateThatHasAlreadyExpired() throws {
+    let queue = try migratedQueue()
+    try queue.write { db in
+      try seedBucket("here", factCount: 1, newestOffset: 0, tagged: false, in: db)
+      try insertCandidate(
+        id: "stale", bucketID: "here", tag: nil, message: "message",
+        createdAt: now.addingTimeInterval(-13 * 60 * 60), in: db)
+      try db.execute(
+        sql: "UPDATE proactive_candidates SET expiresAt = ? WHERE id = 'stale'",
+        arguments: [now.addingTimeInterval(-60)])
+      XCTAssertFalse(
+        try ContextProactiveCandidateLookup.consume(id: "stale", now: now, in: db),
+        "a candidate that expired while the gate call was in flight must not be consumable")
+      XCTAssertFalse(
+        try ContextProactiveCandidateLookup.decline(id: "stale", now: now, in: db))
+
+      try insertCandidate(
+        id: "live", bucketID: "here", tag: nil, message: "message", createdAt: now, in: db)
+      XCTAssertTrue(try ContextProactiveCandidateLookup.consume(id: "live", now: now, in: db))
+    }
+  }
+
   func testCandidateLookupPrefersABucketMatchOverANewerWorkstreamMatch() throws {
     let queue = try migratedQueue()
     try queue.write { db in

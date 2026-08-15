@@ -349,6 +349,7 @@ actor ContextBucketStore {
     guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
     try await pool.write { db in
       _ = try ContextBucketSchema.deleteExpiredDeliveries(in: db, now: now)
+      _ = try ContextBucketSchema.deleteExpiredProactiveCandidates(in: db, now: now)
       try db.execute(
         sql: "DELETE FROM bucket_facts WHERE expiresAt IS NOT NULL AND expiresAt <= ?",
         arguments: [now])
@@ -566,6 +567,38 @@ actor ContextBucketStore {
       }) ?? false
   }
 
+  /// Retires a gated-down candidate immediately instead of leaving it armed to
+  /// be re-selected — and re-billed for another paid gate call — on every
+  /// subsequent visit until its full 12-hour lifetime elapses.
+  @discardableResult
+  func declineCandidate(id: String, now: Date = Date()) async -> Bool {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return false }
+    return
+      (try? await pool.write { db in
+        try ContextProactiveCandidateLookup.decline(id: id, now: now, in: db)
+      }) ?? false
+  }
+
+  /// Whether every grounding fact behind an armed candidate is still
+  /// validated and unexpired. A candidate can sit armed for up to 12 hours;
+  /// the fact(s) it cited at write time may since have expired or been
+  /// superseded, so this must be rechecked before the candidate is ever
+  /// offered as deliverable.
+  func groundingFactIDsAreCurrentlyValid(
+    _ factIDs: [String], bucketID: String, now: Date = Date()
+  ) async -> Bool {
+    guard !factIDs.isEmpty else { return false }
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return false }
+    return
+      (try? await pool.read { db in
+        let valid = try ContextProactiveCandidateWriter.validatedFactIDs(
+          factIDs, bucketID: bucketID, now: now, in: db)
+        return Set(valid) == Set(factIDs)
+      }) ?? false
+  }
+
   func recentContextPool(
     excludingBucketID: String, now: Date = Date()
   ) async -> [ContextWorkstreamPoolItem] {
@@ -609,8 +642,17 @@ actor ContextBucketStore {
   ) async throws -> ContextWorkstreamReconcileOutcome {
     let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
-    return try await pool.write { db in
+    // Only the expiry sweep needs the writer lock. Everything below it is a
+    // read-only batch selection over up to 14 buckets; running that inside
+    // the same pool.write would hold SQLite's single writer lock for the
+    // whole selection and block a hot-path writeExtraction/delivery
+    // pool.write until it finished, for no atomicity benefit — the tag and
+    // candidate inserts this batch feeds commit later in their own
+    // transactions regardless.
+    try await pool.write { db in
       try ContextProactiveCandidateLookup.expireStale(now: now, in: db)
+    }
+    return try await pool.read { db in
       let newestValidated = try Date.fetchOne(
         db,
         sql: """
@@ -686,7 +728,10 @@ actor ContextBucketStore {
           ContextWorkstreamTagging.resolveGroup(
             candidate.bucket, batchIDs: groups.map(\.bucketID))
           ?? (groupByID[candidate.bucket] != nil ? candidate.bucket : nil)
-        guard let bucketID, seen.insert(bucketID).inserted else { continue }
+        // Membership is checked (not claimed) here: an earlier invalid
+        // candidate for this bucket must not block a later valid one, so
+        // `seen` is only marked once every validation below has passed.
+        guard let bucketID, !seen.contains(bucketID) else { continue }
         let message = candidate.message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty else { continue }
         let cited = candidate.factIDs.map {
@@ -697,6 +742,7 @@ actor ContextBucketStore {
         guard !cited.isEmpty, Set(factIDs) == Set(cited) else { continue }
         let trigger = candidate.triggerNote.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trigger.isEmpty else { continue }
+        seen.insert(bucketID)
         try ContextProactiveCandidateWriter.insertArmed(
           bucketID: bucketID,
           workstreamTag: groupByID[bucketID]?.workstreamTag,

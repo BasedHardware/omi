@@ -291,9 +291,23 @@ actor ContextProactivityEngine {
       let tags = await store.workstreamTags(for: snapshot.bucketID)
       let armed = await store.armedCandidates(
         bucketID: snapshot.bucketID, tags: tags, now: currentFrame.captureTime)
+      // A candidate can sit armed for up to 12 hours; the fact(s) it was
+      // grounded in at write time may since have expired, been rejected, or
+      // been superseded. Revalidate every grounding id against the current
+      // bucket_facts state before treating a candidate as deliverable, so a
+      // decayed candidate falls through to the director instead of gating
+      // and presenting stale text with stale citations.
+      var grounded: [ContextProactiveCandidate] = []
+      for candidate in armed {
+        if await store.groundingFactIDsAreCurrentlyValid(
+          candidate.groundingFactIDs, bucketID: candidate.bucketID, now: currentFrame.captureTime)
+        {
+          grounded.append(candidate)
+        }
+      }
       let recentMessages = recentDeliveries.compactMap(\.message)
       if let candidate = ContextProactiveCandidateLookup.firstDeliverable(
-        candidates: armed, recentMessages: recentMessages)
+        candidates: grounded, recentMessages: recentMessages)
       {
         await evaluateCandidateAndDeliver(
           candidate: candidate,
@@ -657,10 +671,25 @@ actor ContextProactivityEngine {
           validatedFacts: snapshot.validatedFacts,
           recentDeliveries: recentDeliveries,
           now: currentFrame.captureTime),
+        imageData: currentFrame.jpegData,
         jsonSchema: ContextProactiveCandidateGate.schema,
         maxCompletionTokens: 120,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
+      // The gate awaited the model; ownership can be revoked or the visit can
+      // end inside that window, exactly as for the director's own call.
+      // Re-check before parsing or persisting anything.
+      guard
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+        await store.fenceFreshness(fence).fresh
+      else {
+        await terminalize(
+          deliveryID: deliveryID,
+          decisionType: "silence",
+          provenanceJSON: "{\"failure\":\"stale_visit\"}",
+          state: "failed")
+        return
+      }
       let decision =
         ContextProactiveCandidateGate.parse(result.content)
         ?? ContextProactiveCandidateGate.Decision(show: false, reason: "malformed_gate_response")
@@ -679,13 +708,10 @@ actor ContextProactivityEngine {
         withJSONObject: provenance, options: [.sortedKeys])
       let provenanceJSON = String(data: provenanceData, encoding: .utf8) ?? "{}"
       guard decision.show else {
-        try await store.completeDelivery(
-          id: deliveryID, decisionType: "silence", provenanceJSON: provenanceJSON,
-          message: nil, state: "suppressed")
-        return
-      }
-      let consumed = await store.consumeCandidate(id: candidate.id, now: currentFrame.captureTime)
-      guard consumed else {
+        // A declined candidate must not be re-selected (and re-billed for
+        // another paid gate call) on every later visit until it naturally
+        // expires: retire it now instead of leaving it armed.
+        await store.declineCandidate(id: candidate.id, now: currentFrame.captureTime)
         try await store.completeDelivery(
           id: deliveryID, decisionType: "silence", provenanceJSON: provenanceJSON,
           message: nil, state: "suppressed")
@@ -737,6 +763,18 @@ actor ContextProactivityEngine {
         try await store.completeDelivery(
           id: deliveryID, decisionType: "insight", provenanceJSON: provenanceJSON,
           message: message, state: "suppressed")
+        return
+      }
+      // Every gate between the model's `show` decision and here can still
+      // suppress the delivery. Consume the candidate only now, once nothing
+      // ahead of the actual presentation call can drop it silently — so a
+      // suppression above this line leaves the candidate armed for the next
+      // visit instead of losing it for its whole remaining lifetime.
+      let consumed = await store.consumeCandidate(id: candidate.id, now: currentFrame.captureTime)
+      guard consumed else {
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "silence", provenanceJSON: provenanceJSON,
+          message: nil, state: "suppressed")
         return
       }
       let factIDs = candidate.groundingFactIDs.map { "fact:\($0)" }

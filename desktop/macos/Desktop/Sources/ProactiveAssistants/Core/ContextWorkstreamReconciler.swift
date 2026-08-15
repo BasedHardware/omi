@@ -51,6 +51,11 @@ enum ContextWorkstreamBatchSelection {
   static let batchCap = 14
   static let factsPerBucket = 5
   static let candidateWorthinessFloor = 0.6
+  /// SQL-side cap per bucket before `selectFacts` drops scaffolding and takes
+  /// the top `factsPerBucket`. Generous headroom above that final count keeps
+  /// selection behavior unchanged for realistic scaffolding ratios, while
+  /// bounding how much a single dense bucket can pull into memory each pass.
+  static let factFetchCapPerBucket = 20
 
   static func fetchEligible(in db: Database, now: Date) throws -> [ContextWorkstreamEligibleBucket] {
     try Row.fetchAll(
@@ -135,14 +140,25 @@ enum ContextWorkstreamBatchSelection {
     let placeholders = bucketIDs.map { _ in "?" }.joined(separator: ",")
     var arguments: StatementArguments = [now]
     arguments += StatementArguments(bucketIDs)
+    arguments += StatementArguments([factFetchCapPerBucket])
+    // A dense bucket's full validated-fact corpus is unbounded; only the top
+    // `factFetchCapPerBucket` per bucket by worthiness/recency are ever
+    // useful to `selectFacts`, so the cap is applied here in SQL instead of
+    // materializing everything and discarding most of it in Swift.
     return try Row.fetchAll(
       db,
       sql: """
-        SELECT id, bucketID, appName, statement, notifyWorthiness, createdAt
-        FROM bucket_facts
-        WHERE validityState = 'validated'
-          AND (expiresAt IS NULL OR expiresAt > ?)
-          AND bucketID IN (\(placeholders))
+        SELECT id, bucketID, appName, statement, notifyWorthiness, createdAt FROM (
+          SELECT id, bucketID, appName, statement, notifyWorthiness, createdAt,
+            ROW_NUMBER() OVER (
+              PARTITION BY bucketID ORDER BY notifyWorthiness DESC, createdAt DESC
+            ) AS rn
+          FROM bucket_facts
+          WHERE validityState = 'validated'
+            AND (expiresAt IS NULL OR expiresAt > ?)
+            AND bucketID IN (\(placeholders))
+        )
+        WHERE rn <= ?
         ORDER BY notifyWorthiness DESC, createdAt DESC
         """,
       arguments: arguments
@@ -240,10 +256,16 @@ enum ContextWorkstreamTagging {
   }
 
   static func labelAppearsInObservations(_ tag: String, observations: String) -> Bool {
-    let haystack = observations.lowercased()
+    // Whole-word membership, not substring containment: an unbounded
+    // `contains` would let incidental text (e.g. "cat" inside "concatenate")
+    // falsely justify a durable workstream label.
+    let haystackWords = Set(
+      observations.lowercased()
+        .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+        .map(String.init))
     let tokens = tag.split(separator: "-").map(String.init).filter { $0.count >= 2 }
     guard !tokens.isEmpty else { return false }
-    return tokens.contains { haystack.contains($0) }
+    return tokens.contains { haystackWords.contains($0) }
   }
 
   static func acceptedAssignments(
@@ -255,10 +277,15 @@ enum ContextWorkstreamTagging {
     var firstLabelByBucket: [(bucketID: String, tag: String)] = []
     var seenBuckets = Set<String>()
     for assignment in response.assignments {
+      // Membership is checked (not claimed) here: a null or unsanitizable
+      // first assignment for a bucket must not block a later valid one for
+      // the same bucket, so `seenBuckets` is only marked once sanitization
+      // has actually succeeded.
       guard let bucketID = resolveGroup(assignment.group, batchIDs: batchIDs),
-        seenBuckets.insert(bucketID).inserted,
+        !seenBuckets.contains(bucketID),
         let tag = ContextWorkstreamTag.sanitize(assignment.label)
       else { continue }
+      seenBuckets.insert(bucketID)
       firstLabelByBucket.append((bucketID, tag))
     }
     var counts: [String: Int] = [:]
@@ -473,9 +500,25 @@ enum ContextProactiveCandidateLookup {
       sql: """
         UPDATE proactive_candidates
         SET state = 'consumed', consumedAt = ?
-        WHERE id = ? AND state = 'armed'
+        WHERE id = ? AND state = 'armed' AND expiresAt > ?
         """,
-      arguments: [now, id])
+      arguments: [now, id, now])
+    return db.changesCount > 0
+  }
+
+  /// Retires a gated-down candidate immediately by collapsing its expiry,
+  /// rather than leaving it armed to be re-selected — and re-billed for
+  /// another paid gate call — on every later visit until it naturally
+  /// expires.
+  @discardableResult
+  static func decline(id: String, now: Date, in db: Database) throws -> Bool {
+    try db.execute(
+      sql: """
+        UPDATE proactive_candidates
+        SET expiresAt = ?
+        WHERE id = ? AND state = 'armed' AND expiresAt > ?
+        """,
+      arguments: [now, id, now])
     return db.changesCount > 0
   }
 
@@ -593,9 +636,18 @@ actor ContextWorkstreamReconciler {
       case .skippedNoNewFacts, .skippedEmptyBatch:
         return
       case .ready(let batch):
-        try await performTagging(batch: batch, authorizationSnapshot: authorizationSnapshot, now: now)
-        try await performCandidateWriting(
-          batch: batch, authorizationSnapshot: authorizationSnapshot, now: now)
+        // Both stages must fully succeed before the pass is recorded done:
+        // a malformed model response or lost authorization must not advance
+        // `lastPassAt`, or the ten-minute loop would silently stop retrying
+        // this batch.
+        guard
+          let taggedBatch = try await performTagging(
+            batch: batch, authorizationSnapshot: authorizationSnapshot, now: now)
+        else { return }
+        guard
+          try await performCandidateWriting(
+            batch: taggedBatch, authorizationSnapshot: authorizationSnapshot, now: now)
+        else { return }
         lastPassAt = now
       }
     } catch {
@@ -603,13 +655,21 @@ actor ContextWorkstreamReconciler {
     }
   }
 
+  /// Runs tagging and, on success, returns the batch with each newly-tagged
+  /// group's `workstreamTag` refreshed to this pass's assignment — so
+  /// `performCandidateWriting` (which runs right after, in the same pass)
+  /// sees a bucket's brand-new tag instead of the pre-tagging snapshot, and
+  /// the candidate it writes is visible to that tag's sibling buckets.
+  /// Returns nil only on genuine failure (malformed model output or lost
+  /// authorization); an empty-groups batch or a pass with nothing accepted is
+  /// success with the batch unchanged.
   private func performTagging(
     batch: ContextWorkstreamReconcileBatch,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     now: Date
-  ) async throws {
-    guard !batch.groups.isEmpty else { return }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+  ) async throws -> ContextWorkstreamReconcileBatch? {
+    guard !batch.groups.isEmpty else { return batch }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return nil }
     let result = try await client.complete(
       operation: ModelQoS.Proactivity.reasoningOperation,
       prompt: Self.taggingPrompt(batch: batch),
@@ -618,7 +678,7 @@ actor ContextWorkstreamReconciler {
       authorizationSnapshot: authorizationSnapshot)
     guard let parsed = ContextWorkstreamTagging.parse(result.content) else {
       log("ContextWorkstreamReconciler: tagging response malformed")
-      return
+      return nil
     }
     let accepted = ContextWorkstreamTagging.acceptedAssignments(
       response: parsed,
@@ -626,16 +686,29 @@ actor ContextWorkstreamReconciler {
       existingTags: batch.existingTags,
       observations: batch.observations)
     try await store.insertWorkstreamAssignments(accepted, now: now)
+    guard !accepted.isEmpty else { return batch }
+    let newlyTagged = Dictionary(
+      accepted.map { ($0.bucketID, $0.tag) }, uniquingKeysWith: { first, _ in first })
+    let refreshedGroups = batch.groups.map { group -> ContextWorkstreamReconcileGroup in
+      guard group.workstreamTag == nil, let tag = newlyTagged[group.bucketID] else { return group }
+      return ContextWorkstreamReconcileGroup(
+        bucketID: group.bucketID, facts: group.facts, needsCandidate: group.needsCandidate,
+        workstreamTag: tag)
+    }
+    return ContextWorkstreamReconcileBatch(groups: refreshedGroups, existingTags: batch.existingTags)
   }
 
+  /// Returns whether the stage succeeded: true on a no-op (nothing eligible)
+  /// or a completed write, false on malformed model output or lost
+  /// authorization so `runPass` does not advance `lastPassAt`.
   private func performCandidateWriting(
     batch: ContextWorkstreamReconcileBatch,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     now: Date
-  ) async throws {
+  ) async throws -> Bool {
     let eligible = batch.groups.filter(\.needsCandidate)
-    guard !eligible.isEmpty else { return }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+    guard !eligible.isEmpty else { return true }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
     let result = try await client.complete(
       operation: ModelQoS.Proactivity.reasoningOperation,
       prompt: Self.candidatePrompt(groups: eligible),
@@ -644,9 +717,10 @@ actor ContextWorkstreamReconciler {
       authorizationSnapshot: authorizationSnapshot)
     guard let parsed = ContextProactiveCandidateWriter.parse(result.content) else {
       log("ContextWorkstreamReconciler: candidate response malformed")
-      return
+      return false
     }
     try await store.insertArmedCandidates(parsed.candidates, groups: eligible, now: now)
+    return true
   }
 
   static func taggingPrompt(batch: ContextWorkstreamReconcileBatch) -> String {
