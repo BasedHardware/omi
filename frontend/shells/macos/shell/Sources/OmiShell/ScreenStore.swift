@@ -113,6 +113,11 @@ final class ScreenLocalStore: @unchecked Sendable {
       omiBundleId: omiBundleId)
     meta.exclusions = merged
     reindex()
+    // Ordinal is process-local and used to be reset to 0 on every launch, so
+    // the next writer reused chunks/chunk-000001.mp4, deleted it, and left
+    // every historical row pointing at an empty file. Resume past the highest
+    // ordinal already referenced or on disk.
+    chunkOrdinal = Self.highestChunkOrdinal(root: root, rows: rows)
     persistMeta()
     retryPendingDeletes()
   }
@@ -341,6 +346,16 @@ final class ScreenLocalStore: @unchecked Sendable {
     lock.unlock()
   }
 
+  /// Drop one index row. The chunk file is deleted only when no remaining row
+  /// still points at it.
+  func dropFrame(frameRef: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    _ = retireLocked(frameRefs: [frameRef])
+    persistRows()
+    persistMeta()
+  }
+
   private var chunksDir: URL { root.appendingPathComponent("chunks", isDirectory: true) }
   private var indexURL: URL { root.appendingPathComponent("frames.jsonl") }
   private var metaURL: URL { root.appendingPathComponent("meta.json") }
@@ -443,6 +458,28 @@ final class ScreenLocalStore: @unchecked Sendable {
       }
     }
     meta.pendingDeletes = remaining
+  }
+
+  private static func highestChunkOrdinal(root: URL, rows: [ScreenIndexRow]) -> Int {
+    var highest = 0
+    let parse: (String) -> Int? = { name in
+      let base = URL(fileURLWithPath: name).lastPathComponent
+      guard base.hasPrefix("chunk-"), base.hasSuffix(".mp4") else { return nil }
+      let digits = base.dropFirst("chunk-".count).dropLast(".mp4".count)
+      return Int(digits)
+    }
+    for row in rows {
+      if let n = parse(row.chunkPath) { highest = max(highest, n) }
+    }
+    let chunks = root.appendingPathComponent("chunks", isDirectory: true)
+    if let files = try? FileManager.default.contentsOfDirectory(
+      at: chunks, includingPropertiesForKeys: nil)
+    {
+      for url in files {
+        if let n = parse(url.lastPathComponent) { highest = max(highest, n) }
+      }
+    }
+    return highest
   }
 
   private func reindex() {

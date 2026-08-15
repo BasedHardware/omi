@@ -402,6 +402,7 @@ export const EN_MESSAGES = {
   "screen.bridgeUnavailable": "not available here",
   "screen.captureUnavailable": "Capture controls are not available here.",
   "screen.frameImageUnavailable": "Frame image is not available here.",
+  "screen.frameImageHostUnavailable": "On-device frame images are not available in this host.",
   "screen.bytesUnknown": "couldn't read",
   "screen.storageSummary": "{frames} frames • {size}",
   "screen.storageBytesUnknown": "{frames} frames • storage size couldn't be read",

@@ -295,9 +295,7 @@ actor ScreenCaptureEngine {
   }
 
   func frameImage(frameRef: String, maxLongEdge: Int?) throws -> ScreenFrameImageResult {
-    if store.row(frameRef: frameRef) == nil {
-      _ = try ScreenDemoSeed.plantIfKnown(store: store, frameRef: frameRef)
-    }
+    _ = try ScreenDemoSeed.plantIfKnown(store: store, frameRef: frameRef)
     let (image, width, height) = try store.decodeFrame(frameRef: frameRef, maxLongEdge: maxLongEdge)
     guard let encoded = ScreenImaging.pngBase64(image, maxLongEdge: nil) else {
       throw ScreenStoreError.decodeFailed

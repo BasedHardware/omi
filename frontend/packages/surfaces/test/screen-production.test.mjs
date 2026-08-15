@@ -188,14 +188,48 @@ test("bridge-absent degrades capture and frame images without hiding history", a
   try {
     const text = textOf(rendered);
     assert.match(text, /Safari|Harborline|Notes|Cedar/);
-    assert.match(text, /not available here|Capture controls are not available here/);
-    assert.match(text, /Frame image is not available here/);
+    assert.match(text, /Capture controls are not available here/);
+    assert.match(text, /On-device frame images are not available in this host/);
+    assert.doesNotMatch(text, /Frame image is not available here/);
     assert.equal(rendered.container.querySelector(".screen-capture-toggle"), null, "no working capture control is drawn");
     assert.ok(rendered.container.querySelector(".production-disabled-control"));
     assert.equal(rendered.container.querySelector("img.screen-frame-image"), null);
+    assert.ok(rendered.container.querySelector(".screen-frame-host-unavailable"));
+    assert.equal(rendered.container.querySelector(".screen-frame-unavailable"), null);
     assert.equal(rendered.container.querySelector("main")?.getAttribute("data-frame-image"), "unavailable");
+    assert.equal(rendered.container.querySelector("main")?.getAttribute("data-bridge"), "absent");
   } finally {
     await rendered.cleanup();
+  }
+});
+
+test("RED-PROOF missing frame bytes render .screen-frame-unavailable, not an image", async () => {
+  // red-proof: restore the ready fixture's image here, or collapse this
+  // branch into the bridge-absent copy. The control token reads this
+  // paragraph, not the HTTP fetch.
+  const { rendered: missing } = await renderScreen("frame-bytes-missing");
+  try {
+    const text = textOf(missing);
+    assert.equal(missing.container.querySelector("img.screen-frame-image"), null);
+    assert.ok(missing.container.querySelector(".screen-frame-unavailable"));
+    assert.equal(missing.container.querySelector(".screen-frame-host-unavailable"), null);
+    assert.match(text, /Frame image is not available here/);
+    assert.doesNotMatch(text, /On-device frame images are not available in this host/);
+    assert.equal(missing.container.querySelector("main")?.getAttribute("data-frame-image"), "unavailable");
+    assert.equal(missing.container.querySelector("main")?.getAttribute("data-bridge"), "present");
+  } finally {
+    await missing.cleanup();
+  }
+
+  const { rendered: restored } = await renderScreen("ready");
+  try {
+    const img = restored.container.querySelector("img.screen-frame-image");
+    assert.ok(img, "ready Rewind draws the frame image the user sees");
+    assert.match(img.getAttribute("src") ?? "", /^data:image\/png;base64,/);
+    assert.equal(restored.container.querySelector(".screen-frame-unavailable"), null);
+    assert.equal(restored.container.querySelector("main")?.getAttribute("data-frame-image"), "ready");
+  } finally {
+    await restored.cleanup();
   }
 });
 

@@ -17,7 +17,16 @@ enum ScreenDemoSeed {
 
   static func plantIfKnown(store: ScreenLocalStore, frameRef: String) throws -> Bool {
     guard knownIds.contains(frameRef) else { return false }
-    if store.row(frameRef: frameRef) != nil { return true }
+    if store.row(frameRef: frameRef) != nil {
+      do {
+        _ = try store.decodeFrame(frameRef: frameRef, maxLongEdge: 64)
+        return true
+      } catch {
+        // An index hit is not enough: a relaunch that reused chunk-000001
+        // can leave this ref pointing at an empty file. Drop and replant.
+        store.dropFrame(frameRef: frameRef)
+      }
+    }
     let image = syntheticImage(for: frameRef)
     let dhash = ScreenDHash.hex(ScreenImaging.dhash64(image))
     _ = try store.appendFrame(

@@ -393,7 +393,9 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
                     />
                     {ocr && <FrameHighlights blocks={ocr.blocks} matchedIds={matched} />}
                   </div>
-                ) : image.kind === "unavailable" || !bridgeAvailable ? (
+                ) : !bridgeAvailable ? (
+                  <p className="screen-frame-host-unavailable">{t(locale, "screen.frameImageHostUnavailable")}</p>
+                ) : image.kind === "unavailable" ? (
                   <p className="screen-frame-unavailable">{t(locale, "screen.frameImageUnavailable")}</p>
                 ) : image.kind === "loading" ? (
                   <p className="screen-frame-loading">{t(locale, "common.loading")}</p>

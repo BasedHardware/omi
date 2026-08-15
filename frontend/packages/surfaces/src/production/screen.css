@@ -63,6 +63,7 @@
 .screen-engine-error,
 .screen-bridge-note,
 .screen-frame-unavailable,
+.screen-frame-host-unavailable,
 .screen-frame-loading {
   margin: var(--space-sm) 0;
   color: var(--content-secondary);

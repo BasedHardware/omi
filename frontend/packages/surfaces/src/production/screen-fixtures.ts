@@ -26,6 +26,7 @@ export const SCREEN_FIXTURE_STATES = [
   "day-empty",
   "search-miss",
   "bridge-absent",
+  "frame-bytes-missing",
   "recovered",
   "retention-unlimited",
   "bytes-unknown",
@@ -125,6 +126,7 @@ function statusFor(state: ScreenFixtureState): StoreStatus {
     || state === "day-empty"
     || state === "search-miss"
     || state === "bridge-absent"
+    || state === "frame-bytes-missing"
     || state === "recovered"
     || state === "retention-unlimited"
     || state === "bytes-unknown";
@@ -246,9 +248,11 @@ export function fixtureScreenStore(state: ScreenFixtureState): ProductionScreenS
   const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
   let frameImage: ScreenFrameImageState = !bridgeAvailable
     ? { kind: "unavailable" }
-    : timeline.length === 0
-      ? { kind: "absent" }
-      : { kind: "ready", image: { pngBase64: png, width: 1280, height: 800 } };
+    : state === "frame-bytes-missing"
+      ? { kind: "unavailable" }
+      : timeline.length === 0
+        ? { kind: "absent" }
+        : { kind: "ready", image: { pngBase64: png, width: 1280, height: 800 } };
 
   const loadDay = (day: string): void => {
     selectedDay = day;
@@ -256,9 +260,11 @@ export function fixtureScreenStore(state: ScreenFixtureState): ProductionScreenS
     frameCursor = 0;
     frameImage = !bridgeAvailable
       ? { kind: "unavailable" }
-      : timeline.length === 0
-        ? { kind: "absent" }
-        : { kind: "ready", image: { pngBase64: png, width: 1280, height: 800 } };
+      : state === "frame-bytes-missing"
+        ? { kind: "unavailable" }
+        : timeline.length === 0
+          ? { kind: "absent" }
+          : { kind: "ready", image: { pngBase64: png, width: 1280, height: 800 } };
   };
 
   const applySearch = (query: string): void => {

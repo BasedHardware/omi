@@ -198,6 +198,7 @@ test("the in-page driver clicks surface controls and does not call stores", () =
   assert.match(driver, /OUTCOME_TICK_LIMIT = 40/);
   assert.match(driver, /root\?\.querySelectorAll\("\.listen-transcript-row"\)/);
   assert.match(driver, /screen-wait-outcome/);
+  assert.match(driver, /screenFrameSelected/);
   assert.doesNotMatch(driver, /skipped-already-granted/);
   assert.doesNotMatch(driver, /record\(state, "mic", "reached-os"\)/);
   assert.doesNotMatch(driver, /record\(state, "screen", "reached-os"\)/);

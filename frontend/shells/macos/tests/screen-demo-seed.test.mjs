@@ -38,6 +38,52 @@ print("DECODE-KNOWN=\(width)x\(height)")
 print("DECODE-PIXELS=\(image.width > 1 && image.height > 1)")
 print("PLANT-IDEMPOTENT=\(try ScreenDemoSeed.plantIfKnown(store: store, frameRef: known))")
 print("ROWS=\(store.framesStored)")
+store.finishWriter()
+
+let reopened = ScreenLocalStore(root: root, omiBundleId: "me.omi.shell.core-tasks.prototype")
+do {
+  let decoded = try reopened.decodeFrame(frameRef: known, maxLongEdge: 80)
+  print("REOPEN-DECODE=\(decoded.1)x\(decoded.2)")
+} catch {
+  print("REOPEN-DECODE=failed")
+}
+let extra = ScreenDemoSeed.syntheticImage(for: ScreenDemoSeed.cedarId)
+_ = try reopened.appendFrame(
+  image: extra,
+  capturedAt: Date(),
+  appBundleId: "com.example.live",
+  appName: "Live",
+  windowTitle: "after-reopen",
+  dhash: "deadbeefdeadbeef",
+  ocr: nil,
+  allowWrite: true,
+  frameRef: "live-after-reopen")
+reopened.finishWriter()
+do {
+  let decoded = try reopened.decodeFrame(frameRef: known, maxLongEdge: 80)
+  print("AFTER-APPEND-DEMO-DECODE=\(decoded.1)x\(decoded.2)")
+} catch {
+  print("AFTER-APPEND-DEMO-DECODE=failed")
+}
+
+if let row = reopened.row(frameRef: known) {
+  let url = root.appendingPathComponent(row.chunkPath)
+  try! Data().write(to: url)
+}
+let afterZero = ScreenLocalStore(root: root, omiBundleId: "me.omi.shell.core-tasks.prototype")
+do {
+  _ = try afterZero.decodeFrame(frameRef: known, maxLongEdge: 80)
+  print("ZEROED-DECODE=leaked")
+} catch {
+  print("ZEROED-DECODE=failed")
+}
+print("REPLANT-AFTER-ZERO=\(try ScreenDemoSeed.plantIfKnown(store: afterZero, frameRef: known))")
+do {
+  let decoded = try afterZero.decodeFrame(frameRef: known, maxLongEdge: 80)
+  print("REPLANT-DECODE=\(decoded.1)x\(decoded.2)")
+} catch {
+  print("REPLANT-DECODE=failed")
+}
 
 try? FileManager.default.removeItem(at: root)
 print("SEED-EXIT=clean")
@@ -83,6 +129,14 @@ test(
       assert.match(output, /^DECODE-KNOWN=/m);
       assert.match(output, /^DECODE-PIXELS=true$/m);
       assert.match(output, /^PLANT-IDEMPOTENT=true$/m);
+      assert.match(output, /^REOPEN-DECODE=/m);
+      assert.doesNotMatch(output, /^REOPEN-DECODE=failed$/m);
+      assert.match(output, /^AFTER-APPEND-DEMO-DECODE=/m);
+      assert.doesNotMatch(output, /^AFTER-APPEND-DEMO-DECODE=failed$/m);
+      assert.match(output, /^ZEROED-DECODE=failed$/m);
+      assert.match(output, /^REPLANT-AFTER-ZERO=true$/m);
+      assert.match(output, /^REPLANT-DECODE=/m);
+      assert.doesNotMatch(output, /^REPLANT-DECODE=failed$/m);
       assert.match(output, /^SEED-EXIT=clean$/m);
     } finally {
       rmSync(scratch, { recursive: true, force: true });
