@@ -109,16 +109,18 @@ def get_users_endpoints_in_timezones(time_zones: List[str]) -> List[UnifiedPushE
         return []
     store = get_document_store()
     endpoints: List[UnifiedPushEndpoint] = []
-    # A Firestore 'in' filter rejects more than 30 values; chunk like the FCM sibling
-    # (get_users_for_daily_summary) so an hour bucket with >30 timezones still resolves (cubic 10887 B3).
+    # ONE collection-group query per chunk, filtered by the endpoint's own ``time_zone`` — not a per-user
+    # fan-out (query users in the tz, then get_all_endpoints per user = N+1 reads on the DB worker every
+    # hour, cubic PR 10887 database/notifications.py:121). save_endpoint writes the endpoint's time_zone
+    # and the user's together (parity), so for a UnifiedPush user they stay in sync; this returns exactly
+    # the matched endpoints, bounded by matches (an index on the group's d.time_zone — provisioned by
+    # reconcile_mongo_indexes — keeps it off a collection scan). A Firestore 'in' rejects >30 values, so
+    # chunk. Per-chunk isolation: one failing timezone chunk must not abort the morning fan-out.
     unique = list(dict.fromkeys(time_zones))
     for i in range(0, len(unique), 30):
-        # Per-chunk isolation like the FCM sibling _get_users_in_timezones: one failing timezone chunk
-        # must not abort the whole UnifiedPush morning fan-out — log it and keep delivering the rest
-        # (cubic review 4939247683).
         try:
-            for user in store.query('users', filters=[('time_zone', 'in', unique[i : i + 30])]):
-                endpoints.extend(get_all_endpoints(user.id))
+            for doc in store.query_group(_UNIFIEDPUSH_COLLECTION, filters=[('time_zone', 'in', unique[i : i + 30])]):
+                endpoints.append(_endpoint_from_doc(doc))
         except Exception as e:
             logger.error(f'UnifiedPush timezone chunk {i // 30} failed (other chunks unaffected): {e}')
     return endpoints

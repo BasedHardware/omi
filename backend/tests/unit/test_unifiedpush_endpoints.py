@@ -91,12 +91,11 @@ def test_remove_bulk_endpoints_noop_on_empty(fake_store):
 
 
 def test_get_users_endpoints_in_timezones(fake_store):
-    fake_store.set('users/u1', {'time_zone': 'Europe/Rome'})
-    fake_store.set('users/u2', {'time_zone': 'Europe/Rome'})
-    fake_store.set('users/u3', {'time_zone': 'America/New_York'})
-    notification_db.save_endpoint('u1', {'endpoint': 'http://ntfy/1?up=1', 'device_key': 'a'})
-    notification_db.save_endpoint('u2', {'endpoint': 'http://ntfy/2?up=1', 'device_key': 'b'})
-    notification_db.save_endpoint('u3', {'endpoint': 'http://ntfy/3?up=1', 'device_key': 'c'})
+    # save_endpoint carries time_zone (the REST model requires it) and writes it onto the endpoint doc,
+    # so the fan-out is a SINGLE collection-group query on the endpoints' time_zone — no per-user N+1.
+    notification_db.save_endpoint('u1', {'endpoint': 'http://ntfy/1?up=1', 'device_key': 'a', 'time_zone': 'Europe/Rome'})
+    notification_db.save_endpoint('u2', {'endpoint': 'http://ntfy/2?up=1', 'device_key': 'b', 'time_zone': 'Europe/Rome'})
+    notification_db.save_endpoint('u3', {'endpoint': 'http://ntfy/3?up=1', 'device_key': 'c', 'time_zone': 'America/New_York'})
 
     got = notification_db.get_users_endpoints_in_timezones(['Europe/Rome'])
     assert sorted(_urls(got)) == ['http://ntfy/1?up=1', 'http://ntfy/2?up=1']  # NY user excluded
@@ -105,19 +104,18 @@ def test_get_users_endpoints_in_timezones(fake_store):
 def test_timezone_chunk_failure_does_not_abort_other_chunks(fake_store, monkeypatch):
     # The user's timezone lands in the SECOND 30-chunk; the FIRST chunk's query raises. That chunk must
     # be logged and skipped, not abort the whole UnifiedPush morning fan-out (cubic review 4939247683).
-    fake_store.set('users/u9', {'time_zone': 'Zone/33'})
-    notification_db.save_endpoint('u9', {'endpoint': 'http://ntfy/9?up=1', 'device_key': 'z'})
+    notification_db.save_endpoint('u9', {'endpoint': 'http://ntfy/9?up=1', 'device_key': 'z', 'time_zone': 'Zone/33'})
 
-    real_query = fake_store.query
+    real_query_group = fake_store.query_group
     seen = {'n': 0}
 
-    def flaky_query(collection, **kwargs):
+    def flaky_query_group(group, **kwargs):
         seen['n'] += 1
-        if seen['n'] == 1:  # the first 30-timezone chunk's users query
+        if seen['n'] == 1:  # the first 30-timezone chunk's endpoint group query
             raise RuntimeError('chunk 1 store outage')
-        return real_query(collection, **kwargs)
+        return real_query_group(group, **kwargs)
 
-    monkeypatch.setattr(fake_store, 'query', flaky_query)
+    monkeypatch.setattr(fake_store, 'query_group', flaky_query_group)
 
     tzs = [f'Zone/{i}' for i in range(35)]  # 35 > 30 -> two chunks; 'Zone/33' is in the second
     got = notification_db.get_users_endpoints_in_timezones(tzs)

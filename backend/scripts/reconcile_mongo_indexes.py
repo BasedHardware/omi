@@ -55,6 +55,10 @@ MANIFEST_PATH = _resolve_manifest_path()
 # index has no selectivity — the time_zone key is what turns the full scan into an index hit.
 _SUPPLEMENTARY_INDEXES: List[Tuple[str, "MongoIndexKeys"]] = [
     ("users", [("_parent", 1), ("d.time_zone", 1)]),
+    # get_users_endpoints_in_timezones runs a COLLECTION-GROUP query over unifiedpush_endpoints filtered
+    # by time_zone (no _parent scope — the group spans users), so index d.time_zone alone; without it the
+    # hourly UnifiedPush morning fan-out collection-scans every endpoint (cubic PR 10887).
+    ("unifiedpush_endpoints", [("d.time_zone", 1)]),
 ]
 
 # A Mongo index spec: an ordered list of (key, direction) with direction in {1, -1}.
