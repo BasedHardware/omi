@@ -43,9 +43,11 @@ CREDENTIAL_RE = re.compile(
 )
 BEARER_RE = re.compile(r"(?i)(\bbearer\s+)\S+")
 URL_CREDENTIAL_RE = re.compile(
-    r"(?i)([?&](?:access_token|refresh_token|id_token|api_key|key|signature|x-goog-signature)=)[^&\s]+"
+    r"(?i)([?&#](?:access_token|refresh_token|id_token|api_key|key|signature|x-goog-signature)=)[^&#\s]+"
 )
-QUERY_ASSIGNMENT_RE = re.compile(r"([?&][A-Za-z0-9_.%-]+=)[^&\s]+")
+QUERY_ASSIGNMENT_RE = re.compile(
+    r"(?i)([?&#](?:[A-Za-z0-9_.%-]*(?:token|key|secret|sign|auth|credential|password|pass|code)[A-Za-z0-9_.%-]*)=)[^&#\s]+"
+)
 GITHUB_TOKEN_RE = re.compile(r"\b(?:github_pat_|gh[pousr]_)[A-Za-z0-9_]+\b")
 JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
 

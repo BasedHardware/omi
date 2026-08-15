@@ -116,7 +116,7 @@ class RecoveryTests(unittest.TestCase):
                 "FAIL: SERVICE_ACCOUNT_JSON=<redacted>",
                 "ERROR: Cookie: <redacted>",
                 "WARN: Set-Cookie: <redacted>",
-                "FAIL: https://example.test/callback?access_token=<redacted>&mode=<redacted>",
+                "FAIL: https://example.test/callback?access_token=<redacted>&mode=test",
             ],
         )
         self.assertNotIn("super-secret", json.dumps(capsule))
@@ -239,6 +239,8 @@ class RecoveryTests(unittest.TestCase):
         log = (
             b"GET https://example.test/callback?token=supersecret&mode=test\n"
             b"exchange https://example.test/oidc?foo=1&SOME_OIDC_TOKEN=oidc-secret-value\n"
+            b"redirect https://example.test/app#code=oauth-code-secret&state=xyz\n"
+            b"artifacts https://example.test/artifacts?build=42&arch=arm64&flavor=release\n"
             b"auth github_pat_11ABCDEFG0123456789abcdefghijklmnopqrstuv\n"
             b"jwt eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0In0.signature\n"
             b"``` rm -rf / ```\n"
@@ -252,10 +254,14 @@ class RecoveryTests(unittest.TestCase):
         dumped = json.dumps(capsule)
         self.assertNotIn("supersecret", dumped)
         self.assertNotIn("oidc-secret-value", dumped)
+        self.assertNotIn("oauth-code-secret", dumped)
         self.assertNotIn("github_pat_11ABCDEFG0123456789abcdefghijklmnopqrstuv", dumped)
         self.assertNotIn("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", dumped)
         self.assertIn("token=<redacted>", dumped)
         self.assertIn("SOME_OIDC_TOKEN=<redacted>", dumped)
+        self.assertIn("code=<redacted>", dumped)
+        self.assertIn("&mode=test", dumped)
+        self.assertIn("?build=42&arch=arm64&flavor=release", dumped)
         summary = RECOVERY.markdown_summary(capsule)
         self.assertNotIn("``` rm -rf / ```", summary)
         self.assertIn("''' rm -rf / '''", summary)

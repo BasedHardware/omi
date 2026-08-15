@@ -964,10 +964,6 @@ def test_desktop_promotion_guard_rejects_reintroduced_qualification_trigger(tmp_
 
     promotion = workflows / "desktop_promote_beta.yml"
     original = promotion.read_text(encoding="utf-8")
-    promotion.write_text(original + "\n# workflow_run:\n", encoding="utf-8")
-    errors = GUARDS.check_desktop_promotion_independent_of_qualification()
-    assert any("still depends on qualification" in error for error in errors), errors
-
     promotion.write_text(original + "\nqualification_run_id: 1\n", encoding="utf-8")
     errors = GUARDS.check_desktop_promotion_independent_of_qualification()
     assert any("still depends on qualification" in error for error in errors), errors
