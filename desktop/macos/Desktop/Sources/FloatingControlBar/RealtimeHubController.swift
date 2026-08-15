@@ -92,10 +92,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Receipts shadow kernel acceptance only until consumed; on relaunch they are
   /// rebuilt via `RealtimeHubContinuityRestore.kernelOwnsExchange`, never disk.
   let turnPersistenceLedger = RealtimeTurnPersistenceLedger()
-  struct AcceptedSpawnJournalReceipt {
-    let ownerID: String
-    let receipt: RealtimeSpawnJournalReceipt
-  }
+  let streamingJournalWriteLedger = RealtimeStreamingJournalWriteLedger()
+  var streamingJournalFlushTasks: [String: Task<Void, Never>] = [:]
   /// (c) Shadow truth: mirrors a kernel-accepted spawn exchange for this process.
   /// Authoritative owner is the kernel journal / voice-context turn IDs; restore
   /// through `RealtimeHubContinuityRestore` + `RealtimeTurnJournalAuthority`.
@@ -388,6 +386,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     ownerBoundaryGeneration &+= 1
     turnPersistenceLedger.cancelAll()
+    cancelStreamingJournalWrites()
     turnEpoch &+= 1
     realtimePlaybackEpoch &+= 1
     mintGeneration &+= 1
@@ -604,6 +603,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         prefetchedContextIsEmpty: prefetchedVoiceContext.isEmpty,
         hasPendingOwnerWork: pendingSessionRefreshReason != nil
           || !turnPersistenceLedger.pendingContinuityKeys.isEmpty
+          || streamingJournalWriteLedger.hasActiveProjections || !streamingJournalFlushTasks.isEmpty
           || voiceContextSingleFlight.isRunning
           || turnPreparationTask != nil
           || !detachedSessionsAwaitingDrain.isEmpty

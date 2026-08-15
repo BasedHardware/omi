@@ -9,6 +9,12 @@
 export type StoppableTrack = { stop: () => void }
 export type TrackedStream = { getTracks: () => StoppableTrack[] }
 export type Teardownable = { stop: () => void }
+export type PipelineSetupResult = { ok: true } | { ok: false; error: Error }
+export type PipelineHandle = {
+  stop: () => void
+  /** Resolves after the real audio graph is usable, or with its setup error. */
+  ready: Promise<PipelineSetupResult>
+}
 
 /**
  * Wrap an in-flight pipeline `setup` promise in a synchronous handle.
@@ -20,20 +26,25 @@ export type Teardownable = { stop: () => void }
 export function makePipelineHandle(
   stream: TrackedStream,
   setup: Promise<Teardownable>
-): { stop: () => void } {
+): PipelineHandle {
   let stopped = false
   let teardown: (() => void) | null = null
 
-  setup
-    .then((p) => {
+  const ready: Promise<PipelineSetupResult> = setup
+    .then((p): PipelineSetupResult => {
       if (stopped) p.stop()
       else teardown = (): void => p.stop()
+      return { ok: true }
     })
-    .catch(() => {
-      /* setup failed — stop() still releases the tracks below */
-    })
+    .catch(
+      (error: unknown): PipelineSetupResult => ({
+        ok: false,
+        error: error instanceof Error ? error : new Error(String(error))
+      })
+    )
 
   return {
+    ready,
     stop: (): void => {
       if (stopped) return
       stopped = true

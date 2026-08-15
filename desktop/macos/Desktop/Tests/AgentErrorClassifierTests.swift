@@ -6,6 +6,30 @@ import XCTest
 /// observed 30-day chat_agent_error corpus that motivated it.
 final class AgentErrorClassifierTests: XCTestCase {
 
+  /// A missing runtime payload fails identically on every turn. It must not be
+  /// classed as a crash ("the AI engine restarted, try again") — that copy is a
+  /// retry loop against a permanently broken install.
+  func testAMissingRuntimeExtensionIsNotClassedAsARetryableCrash() {
+    for raw in [
+      "Failed to load extension \"/Applications/omi-live.app/Contents/Resources/pi-mono-extension/index.ts\": Extension path does not exist",
+      "Unknown provider \"omi\". Use --list-models to see available providers/models.",
+    ] {
+      let classified = AgentErrorClassifier.classify(raw)
+      XCTAssertEqual(classified.code, .runtimeInstallIncomplete, raw)
+      XCTAssertFalse(classified.retryable, raw)
+      XCTAssertFalse(classified.userMessage.lowercased().contains("try again"), raw)
+      XCTAssertTrue(classified.userMessage.lowercased().contains("reinstall"), raw)
+    }
+  }
+
+  /// A runtime that really did crash stays retryable — the incomplete-payload
+  /// rule must not swallow the ordinary crash bucket it is ordered ahead of.
+  func testAnOrdinaryRuntimeExitStaysRetryable() {
+    let classified = AgentErrorClassifier.classify("pi-mono process exited (code 1)")
+    XCTAssertEqual(classified.code, .runtimeCrashed)
+    XCTAssertTrue(classified.retryable)
+  }
+
   func testBillingExhaustionIsNotRetryableAndNamesTheFix() {
     let classified = AgentErrorClassifier.classify(
       "400 Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."
@@ -16,6 +40,57 @@ final class AgentErrorClassifierTests: XCTestCase {
       classified.userMessage.lowercased().contains("try again"),
       "copy must not prescribe retries for an unretryable billing error")
     XCTAssertTrue(classified.userMessage.contains("credit balance"))
+  }
+
+  /// Reproduced live: the Omi-account proxy answers an exhausted billing lane
+  /// with a bare 402 and no body. That fell through to `unknown`, so the raw
+  /// transport string was shown to the user verbatim *and* marked retryable —
+  /// inviting exactly the retry storm this classifier was built to stop.
+  func testBareHTTP402IsClassifiedAndNeverShownRaw() {
+    for raw in [
+      "HTTP 402 status code (no body)",
+      "402 Payment Required",
+      "Request failed: http/402",
+      "status 402",
+      "status code: 402",
+    ] {
+      let classified = AgentErrorClassifier.classify(raw)
+      XCTAssertEqual(classified.code, .providerBillingExhausted, "unclassified: \(raw)")
+      XCTAssertFalse(classified.retryable, "resending a 402 cannot clear it: \(raw)")
+      XCTAssertFalse(
+        classified.userMessage.contains("402"),
+        "raw transport status must not reach the user: \(raw)")
+      XCTAssertFalse(
+        classified.userMessage.lowercased().contains("try again"),
+        "copy must not prescribe retries for an unretryable billing error: \(raw)")
+    }
+  }
+
+  /// Live pi-mono recycle wraps the 402 as "send again" and parks the status
+  /// on `technicalMessage`. Classifying only `userMessage` is how the billing
+  /// fix never reached the transcript.
+  func testRecycledWorkerWrapStillClassifiesTheTechnicalHTTP402() {
+    let classified = AgentErrorClassifier.classify(
+      AgentRuntimeFailure(
+        code: "adapter_execution_failed",
+        userMessage: "The local agent reset its session after an error. Send your message again.",
+        technicalMessage: "HTTP 402 status code (no body)",
+        retryable: true,
+        recoveryAction: "worker_recycled"
+      )
+    )
+    XCTAssertEqual(classified.code, .providerBillingExhausted)
+    XCTAssertFalse(classified.retryable)
+    XCTAssertFalse(classified.userMessage.lowercased().contains("try again"))
+  }
+
+  /// The status-shaped match must not swallow ordinary numbers that merely
+  /// contain 402 — those still deserve their own classification or fallback.
+  func testBillingRuleDoesNotClaimUnrelatedNumbers() {
+    XCTAssertNotEqual(
+      AgentErrorClassifier.classify("Connection error. after 402 tokens").code,
+      .providerBillingExhausted,
+      "a token count must not be read as Payment Required")
   }
 
   func testAuthExpiryRoutesToReconnectNotGenericError() {
@@ -175,6 +250,7 @@ final class AgentErrorClassifierTests: XCTestCase {
       ("table adapter_bindings has no column named last_delivered_turn_created_at_ms", true, false),
       ("403 \"byok_validation_failed\"", true, false),
       ("Connection error.", true, true),
+      ("HTTP 402 status code (no body)", true, false),
     ]
     for (raw, mustNotBeUnknown, expectedRetryable) in corpus {
       let c = AgentErrorClassifier.classify(raw)

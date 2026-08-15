@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Calendar, Gmail and Sticky Notes imports now use Omi’s managed synthesis instead of a separate desktop model."
+  ]
+}

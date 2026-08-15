@@ -139,6 +139,21 @@ describe('Memories — detail sheet stays in sync after an edit (FIX 1)', () => 
   })
 })
 
+describe('Memories — composer provenance', () => {
+  it('creates a composed memory with the manual category', async () => {
+    await renderPage()
+    fireEvent.click(screen.getByText('New'))
+    fireEvent.change(screen.getByPlaceholderText('Something Omi should remember about you…'), {
+      target: { value: 'I prefer paper notes' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(createMemory).toHaveBeenCalledWith('I prefer paper notes', { category: 'manual' })
+    )
+  })
+})
+
 describe('Memories — a delete commits at most once (FIX 2)', () => {
   it('fires the backend delete exactly once when the pending delete is replaced under StrictMode', async () => {
     // StrictMode (on in main.tsx) double-invokes state updaters in dev. The old

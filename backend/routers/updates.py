@@ -29,8 +29,8 @@ from database.redis_db import delete_generic_cache
 from utils.desktop_update_resolver import live_cache_key, resolve_pointer_release
 from utils.executors import db_executor, run_blocking
 from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
-from utils.qualified_beta_promotion import QualifiedBetaAdmissionError, build_qualified_beta_manifest
-from utils.beta_breakglass_evidence import build_emergency_beta_manifest
+from utils.beta_candidate_evidence import BetaCandidateAdmissionError
+from utils.beta_breakglass_evidence import build_emergency_beta_manifest, build_signed_beta_manifest
 from utils.metrics import (
     DESKTOP_UPDATE_FEED_VALID,
     DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL,
@@ -85,12 +85,12 @@ class DesktopChannelPromotionRequest(BaseModel):
     operation: Literal["promote", "repoint"] = "promote"
 
 
-class QualifiedBetaPromotionRequest(BaseModel):
+class BetaCandidatePromotionRequest(BaseModel):
     """The caller can name one immutable macOS candidate and nothing else."""
 
     model_config = ConfigDict(extra="forbid")
 
-    tag: str = Field(pattern=r"^v[0-9]+\.[0-9]+(?:\.[0-9]+)?\+[1-9][0-9]*-macos$")
+    tag: str = Field(pattern=r"^v[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*-macos$")
 
 
 class BetaAdmissionControlRequest(BaseModel):
@@ -836,14 +836,17 @@ async def get_desktop_appcast_xml(
 ):
     """
     Sparkle appcast XML endpoint for desktop auto-updates.
-    Returns a single feed with both beta and stable channel items.
-    Sparkle clients filter by their configured allowed channels.
 
     identity=beta is requested only by the separately-installable "Omi Beta" app
     (its SUFeedURL carries the parameter): it gets beta-channel items only, with
     beta-identity enclosures, so Sparkle can never replace it with a
-    stable-identity bundle. Legacy stable-identity installs on the beta channel
-    keep the default feed and their current update behavior.
+    stable-identity bundle.
+
+    The default (stable-identity) feed serves only the stable channel. Stable.app
+    must not Sparkle-install beta-channel Omi.zip builds; that leftover path left
+    the same bundle on production APIs with newer Swift. Old Stable clients that
+    still request Sparkle channel=beta therefore freeze until macos-stable
+    surpasses their build.
     """
     try:
         desktop_releases = await _get_live_desktop_releases(platform)
@@ -857,7 +860,8 @@ async def get_desktop_appcast_xml(
 
         for entry in desktop_releases:
             channel = entry["channel"]
-            if identity == "beta" and channel != "beta":
+            wanted_channel = "beta" if identity == "beta" else "stable"
+            if channel != wanted_channel:
                 continue
             if channel in seen_channels:
                 continue
@@ -916,7 +920,7 @@ async def get_desktop_appcast_xml(
 async def download_latest_desktop_release(
     platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
     channel: str = Query(default="stable", pattern="^(beta|stable)$"),
-    identity: str = Query(default="stable", pattern="^(stable|beta)$"),
+    identity: Optional[str] = Query(default=None, pattern="^(stable|beta)$"),
 ):
     """
     Serve the latest desktop release installer as an auto-download landing page.
@@ -924,9 +928,20 @@ async def download_latest_desktop_release(
     channel in the legacy release metadata; the requested channel is strict
     (404 when empty — QA/tooling contract).
     Defaults to stable channel (for macos.omi.me). Use channel=beta for QA.
-    identity=beta serves the separately-installable "Omi Beta" DMG, which runs
-    side-by-side with stable.
+    identity selects which installer that channel serves: identity=beta is the
+    separately-installable "Omi Beta" DMG that runs side-by-side with stable.
+    When identity is absent it follows the channel (channel=beta alone serves
+    the beta-identity DMG — the macos.omi.me/beta redirect contract); pass
+    identity explicitly to request the cross product.
     """
+    if identity is None:
+        # macos.omi.me/beta redirects here with only channel=beta — the URL-map redirect
+        # cannot add identity=beta, and defaulting identity to "stable" made the public
+        # beta link serve the stable-identity omi.dmg (production bundle id, production
+        # services) from the beta pointer. A user who asked for a channel implicitly
+        # asked for that channel's identity; explicit identity=stable&channel=beta stays
+        # available for tooling that genuinely wants the cross product.
+        identity = channel
     if identity == "beta":
         channel = "beta"
     desktop_releases = await _get_live_desktop_releases(platform)
@@ -934,24 +949,12 @@ async def download_latest_desktop_release(
         raise HTTPException(status_code=404, detail=f"No live desktop releases found for platform: {platform}")
 
     if identity == "beta" and platform == "macos":
-        # Serve the side-by-side Omi Beta DMG when the live beta release ships it;
-        # otherwise fall back to the stable-identity installer so the public link
-        # never 404s pre-rollout. The strict identity guard stays on the Sparkle
-        # feed where in-place replacement could corrupt an install's identity.
+        # Serve only the side-by-side Omi Beta DMG. Falling back to omi.dmg would
+        # install the stable-identity app from a "get Beta" link.
         for entry in desktop_releases:
             if entry["channel"] != channel:
                 continue
             installer_url = await _resolve_beta_identity_dmg(entry)
-            if not installer_url:
-                record_fallback(
-                    component='other',
-                    from_mode='desktop_download_beta_identity',
-                    to_mode='desktop_download_stable_identity',
-                    reason='config_incomplete',
-                    outcome='degraded',
-                    log=logger,
-                )
-                installer_url = _get_installer_download_url(entry["release"], platform)
             if installer_url:
                 version = entry["version_info"]["version"]
                 return HTMLResponse(
@@ -1224,9 +1227,9 @@ async def register_desktop_release(request: Dict[str, Any], secret_key: str = He
     return {"success": True, "manifest": manifest}
 
 
-@router.post("/v2/desktop/beta/promote-qualified")
-async def promote_qualified_beta(
-    request: QualifiedBetaPromotionRequest,
+@router.post("/v2/desktop/beta/promote-candidate")
+async def promote_beta_candidate(
+    request: BetaCandidatePromotionRequest,
     authorization: str | None = Header(default=None),
 ):
     """Authenticate, independently admit, then atomically advance macOS Beta only."""
@@ -1234,24 +1237,24 @@ async def promote_qualified_beta(
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
         control = await run_blocking(db_executor, capture_beta_admission, request.tag)
-        manifest = await build_qualified_beta_manifest(request.tag)
+        manifest = await build_signed_beta_manifest(request.tag)
         receipt = await run_blocking(
             db_executor,
             admit_qualified_beta_manifest,
             manifest,
             control_generation=control["control_generation"],
         )
-    except QualifiedBetaAdmissionError:
-        logger.info("qualified_beta_promotion tag=%s result=rejected", request.tag)
-        raise HTTPException(status_code=422, detail="Qualified Beta candidate rejected") from None
+    except BetaCandidateAdmissionError:
+        logger.info("beta_candidate_promotion tag=%s result=rejected", request.tag)
+        raise HTTPException(status_code=422, detail="Beta candidate rejected") from None
     except ValueError:
-        logger.info("qualified_beta_promotion tag=%s result=conflict", request.tag)
-        raise HTTPException(status_code=409, detail="Qualified Beta promotion conflict") from None
+        logger.info("beta_candidate_promotion tag=%s result=conflict", request.tag)
+        raise HTTPException(status_code=409, detail="Beta candidate promotion conflict") from None
     # A prior successful commit can lose its cache deletion. Every committed
     # receipt, including an idempotent retry, repairs only this Beta projection.
     await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
     logger.info(
-        "qualified_beta_promotion tag=%s result=%s", request.tag, "idempotent" if receipt["idempotent"] else "promoted"
+        "beta_candidate_promotion tag=%s result=%s", request.tag, "idempotent" if receipt["idempotent"] else "promoted"
     )
     return {
         "tag": receipt["manifest"]["release_id"],
@@ -1275,11 +1278,11 @@ async def mutate_broken_beta(
         else:
             if not request.normal_path_unavailable:
                 raise HTTPException(
-                    status_code=422, detail="Why normal qualification cannot recover in time is required"
+                    status_code=422, detail="Why normal Beta promotion cannot recover in time is required"
                 )
             manifest = await build_emergency_beta_manifest(request.target_release_id)
             receipt = await run_blocking(db_executor, emergency_rollout_beta, request.model_dump(), manifest)
-    except QualifiedBetaAdmissionError:
+    except BetaCandidateAdmissionError:
         logger.info("beta_breakglass operation=rollout result=evidence_rejected")
         raise HTTPException(status_code=422, detail="Emergency Beta candidate rejected") from None
     except ValueError as exc:
@@ -1298,7 +1301,7 @@ async def mutate_broken_beta(
 
 @router.post("/v2/desktop/beta/candidates/reserve")
 async def reserve_beta_candidate_endpoint(
-    request: QualifiedBetaPromotionRequest,
+    request: BetaCandidatePromotionRequest,
     authorization: str | None = Header(default=None),
 ):
     """Fence an immutable candidate before GitHub makes it canonical."""

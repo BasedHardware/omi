@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { GripVertical, Move, X, RotateCcw } from "lucide-react";
+import { PeriodChangeIndicator } from "@/components/dashboard/period-change-indicator";
+import type { PeriodChange } from "@/lib/period-change";
 
 // 12-column grid with fixed row height so both axes snap to tiles,
 // giving the layout PostHog/Mixpanel-style rectangle behavior.
@@ -23,6 +25,8 @@ export const GRID_ROW_HEIGHT = 90; // px
 export const GRID_GAP = 16; // px — matches Tailwind gap-4
 
 const GHOST_TRAILING_ROWS = 3;
+const CHART_DRAG_MIME = "application/x-omi-chart-id";
+const NO_REVEALED_IDS: readonly string[] = [];
 
 export type ColSpan = 2 | 3 | 4 | 6 | 8 | 9 | 12;
 const COL_VALUES: ColSpan[] = [2, 3, 4, 6, 8, 9, 12];
@@ -41,6 +45,7 @@ export interface ChartItem {
   title: string;
   subtitle?: string;
   icon?: ReactNode;
+  periodChange?: PeriodChange | null;
   variant?: ChartVariant;
   initialLayout?: Partial<ChartLayout>;
   // Defaults to true. Set false on widgets that must always be visible
@@ -53,12 +58,15 @@ interface GridProps {
   storageKey: string;
   items: ChartItem[];
   className?: string;
+  orderRevision?: string;
+  revealOnOrderRevision?: readonly string[];
 }
 
 interface PersistedLayout {
   order: string[];
   layouts: Record<string, ChartLayout>;
   hidden?: string[];
+  orderRevision?: string;
 }
 
 const DEFAULT_LAYOUT: ChartLayout = { cols: 3, rows: 3 };
@@ -114,13 +122,19 @@ function sanitizeLayout(l: Partial<ChartLayout> | undefined, fallback: ChartLayo
   };
 }
 
-function moveBefore(order: string[], draggedId: string, targetId: string): string[] {
+function moveToTarget(order: string[], draggedId: string, targetId: string): string[] {
   if (draggedId === targetId) return order;
+  const draggedIndex = order.indexOf(draggedId);
+  const targetIndex = order.indexOf(targetId);
+  if (draggedIndex === -1 || targetIndex === -1) return order;
+
   const without = order.filter((id) => id !== draggedId);
-  const idx = without.indexOf(targetId);
-  if (idx === -1) return order;
+  const targetIndexWithoutDragged = without.indexOf(targetId);
+  const insertionIndex = draggedIndex < targetIndex
+    ? targetIndexWithoutDragged + 1
+    : targetIndexWithoutDragged;
   const next = [...without];
-  next.splice(idx, 0, draggedId);
+  next.splice(insertionIndex, 0, draggedId);
   return next;
 }
 
@@ -169,7 +183,7 @@ function ChartCard({
   onInteractionChange: (active: boolean) => void;
   onDragStart: (id: string) => void;
   onDragOverCard: (e: DragEvent<HTMLElement>) => void;
-  onDropOnCard: (id: string) => void;
+  onDropOnCard: (targetId: string, draggedId: string | null) => void;
   onDragEnd: () => void;
   onRequestRemove: (id: string, title: string) => void;
 }) {
@@ -239,6 +253,7 @@ function ChartCard({
       className="flex h-6 w-6 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData(CHART_DRAG_MIME, item.id);
         e.dataTransfer.setData("text/plain", item.id);
         onDragStart(item.id);
       }}
@@ -289,6 +304,7 @@ function ChartCard({
     return (
       <div
         ref={cardRef}
+        data-chart-id={item.id}
         className={cn(
           "group relative flex min-w-0 select-none items-end gap-2",
           dragging && "opacity-50",
@@ -296,7 +312,13 @@ function ChartCard({
         )}
         style={sharedStyle}
         onDragOver={onDragOverCard}
-        onDrop={() => onDropOnCard(item.id)}
+        onDrop={(e) => {
+          e.preventDefault();
+          onDropOnCard(
+            item.id,
+            e.dataTransfer.getData(CHART_DRAG_MIME) || e.dataTransfer.getData("text/plain") || null,
+          );
+        }}
       >
         <div className="absolute left-1 top-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           {moveHandle}
@@ -317,6 +339,7 @@ function ChartCard({
     return (
       <Card
         ref={cardRef}
+        data-chart-id={item.id}
         className={cn(
           "group relative flex min-w-0 select-none flex-col gap-1 p-3 transition-shadow",
           dragging && "opacity-50 ring-2 ring-primary/40",
@@ -324,7 +347,13 @@ function ChartCard({
         )}
         style={sharedStyle}
         onDragOver={onDragOverCard}
-        onDrop={() => onDropOnCard(item.id)}
+        onDrop={(e) => {
+          e.preventDefault();
+          onDropOnCard(
+            item.id,
+            e.dataTransfer.getData(CHART_DRAG_MIME) || e.dataTransfer.getData("text/plain") || null,
+          );
+        }}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1">
@@ -332,6 +361,7 @@ function ChartCard({
             <span className="truncate text-xs font-medium text-muted-foreground">{item.title}</span>
           </div>
           <div className="flex items-center gap-1">
+            <PeriodChangeIndicator change={item.periodChange} />
             {item.icon && <span className="shrink-0 text-muted-foreground">{item.icon}</span>}
             <div className="opacity-0 transition-opacity group-hover:opacity-100">{removeButton}</div>
           </div>
@@ -345,6 +375,7 @@ function ChartCard({
   return (
     <Card
       ref={cardRef}
+      data-chart-id={item.id}
       className={cn(
         "relative flex min-w-0 select-none flex-col gap-2 p-4 transition-shadow",
         dragging && "opacity-50 ring-2 ring-primary/40",
@@ -352,7 +383,13 @@ function ChartCard({
       )}
       style={sharedStyle}
       onDragOver={onDragOverCard}
-      onDrop={() => onDropOnCard(item.id)}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropOnCard(
+          item.id,
+          e.dataTransfer.getData(CHART_DRAG_MIME) || e.dataTransfer.getData("text/plain") || null,
+        );
+      }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex items-center gap-2">
@@ -365,7 +402,10 @@ function ChartCard({
             )}
           </div>
         </div>
-        {removeButton}
+        <div className="flex shrink-0 items-center gap-2">
+          <PeriodChangeIndicator change={item.periodChange} />
+          {removeButton}
+        </div>
       </div>
 
       <div className="min-h-0 min-w-0 flex-1">{item.render(layout)}</div>
@@ -375,7 +415,13 @@ function ChartCard({
   );
 }
 
-export function ResizableChartGrid({ storageKey, items, className }: GridProps) {
+export function ResizableChartGrid({
+  storageKey,
+  items,
+  className,
+  orderRevision,
+  revealOnOrderRevision = NO_REVEALED_IDS,
+}: GridProps) {
   const itemIds = useMemo(() => items.map((i) => i.id), [items]);
   const itemMap = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
 
@@ -391,7 +437,8 @@ export function ResizableChartGrid({ storageKey, items, className }: GridProps) 
 
   useEffect(() => {
     const stored = readStored(storageKey);
-    setOrder(mergeOrder(stored?.order, itemIds));
+    const orderChanged = orderRevision != null && stored?.orderRevision !== orderRevision;
+    setOrder(orderChanged ? itemIds : mergeOrder(stored?.order, itemIds));
     setLayouts((cur) => {
       const next: Record<string, ChartLayout> = {};
       for (const item of items) {
@@ -400,33 +447,42 @@ export function ResizableChartGrid({ storageKey, items, className }: GridProps) 
       }
       return next;
     });
-    if (Array.isArray(stored?.hidden)) {
-      const validIds = new Set(itemIds);
-      setHidden(new Set(stored!.hidden!.filter((id) => validIds.has(id))));
-    }
+    const validIds = new Set(itemIds);
+    const promotedIds = orderChanged ? new Set(revealOnOrderRevision) : null;
+    setHidden(new Set(
+      (stored?.hidden ?? []).filter(
+        (id) => validIds.has(id) && !promotedIds?.has(id),
+      ),
+    ));
     setHydrated(true);
-  }, [itemIds, items, storageKey]);
+  }, [itemIds, items, orderRevision, revealOnOrderRevision, storageKey]);
 
   useEffect(() => {
     if (!hydrated) return;
     try {
       localStorage.setItem(
         storageKey,
-        JSON.stringify({ order, layouts, hidden: Array.from(hidden) }),
+        JSON.stringify({
+          order,
+          layouts,
+          hidden: Array.from(hidden),
+          orderRevision,
+        }),
       );
     } catch {
       // localStorage may be unavailable; in-session state still works.
     }
-  }, [hydrated, layouts, order, hidden, storageKey]);
+  }, [hydrated, layouts, order, hidden, orderRevision, storageKey]);
 
   const updateLayout = useCallback((id: string, next: ChartLayout) => {
     setLayouts((cur) => ({ ...cur, [id]: next }));
   }, []);
 
-  const handleDrop = useCallback((targetId: string) => {
-    setOrder((cur) => (draggingId ? moveBefore(cur, draggingId, targetId) : cur));
+  const handleDrop = useCallback((targetId: string, transferredId: string | null) => {
+    const sourceId = transferredId && itemMap.has(transferredId) ? transferredId : draggingId;
+    setOrder((cur) => (sourceId ? moveToTarget(cur, sourceId, targetId) : cur));
     setDraggingId(null);
-  }, [draggingId]);
+  }, [draggingId, itemMap]);
 
   const handleInteraction = useCallback((active: boolean) => {
     setInteractingCount((c) => Math.max(0, c + (active ? 1 : -1)));
@@ -511,7 +567,8 @@ export function ResizableChartGrid({ storageKey, items, className }: GridProps) 
               onInteractionChange={handleInteraction}
               onDragStart={setDraggingId}
               onDragOverCard={(e) => {
-                if (draggingId) {
+                const isChartDrag = Array.from(e.dataTransfer.types).includes(CHART_DRAG_MIME);
+                if (draggingId || isChartDrag) {
                   e.preventDefault();
                   e.dataTransfer.dropEffect = "move";
                 }

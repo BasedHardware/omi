@@ -14,17 +14,50 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# Stub only the dependencies imported directly by vector_db. Firestore and
-# firebase are not part of this module's import path, and replacing their
-# parent packages here prevents later test modules from importing real
-# google.cloud subpackages during collection.
+# Stub heavy deps before importing vector_db / routers.memories. These
+# modules pull in `pinecone`, `google.cloud.firestore`, `firebase_admin`, and
+# `utils.llm.clients.embeddings` at import time, none of which are available
+# (or desirable) in the unit test environment.
 for mod_name in [
     'pinecone',
+    'firebase_admin',
+    'firebase_admin.auth',
+    'google',
+    'google.cloud',
+    'google.cloud.firestore',
 ]:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = types.ModuleType(mod_name)
 
 sys.modules['pinecone'].Pinecone = MagicMock
+
+
+class _FakeFirestoreClient:
+    def collection(self, *a, **kw):
+        return MagicMock()
+
+    def batch(self):
+        return MagicMock()
+
+
+sys.modules['google.cloud.firestore'].Client = _FakeFirestoreClient
+sys.modules['google.cloud.firestore'].ArrayUnion = MagicMock
+sys.modules['google.cloud.firestore'].ArrayRemove = MagicMock
+sys.modules['google.cloud.firestore'].Increment = MagicMock
+sys.modules['google.cloud.firestore'].SERVER_TIMESTAMP = object()
+sys.modules['google.cloud.firestore'].DELETE_FIELD = object()
+sys.modules['google.cloud.firestore'].FieldFilter = MagicMock
+sys.modules['google.cloud.firestore'].Query = MagicMock
+sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+
+# Stub `utils.llm.clients.embeddings` only. Don't overwrite `utils` or
+# `utils.llm` as packages — other real submodules (utils.rate_limit_config,
+# utils.other.endpoints) must remain importable.
+if 'utils.llm.clients' not in sys.modules:
+    clients_stub = types.ModuleType('utils.llm.clients')
+    clients_stub.embeddings = MagicMock()
+    sys.modules['utils.llm.clients'] = clients_stub
+
 
 from database import vector_db  # noqa: E402
 
@@ -32,7 +65,7 @@ from database import vector_db  # noqa: E402
 class TestUpsertMemoryVectorsBatch:
     def _setup_mocks(self, monkeypatch, *, index_none=False):
         fake_index = MagicMock()
-        fake_index.upsert = MagicMock(side_effect=lambda *, vectors, namespace: {'upserted_count': len(vectors)})
+        fake_index.upsert = MagicMock(return_value={'upserted_count': 2})
         monkeypatch.setattr(vector_db, 'index', None if index_none else fake_index)
 
         fake_embeddings = MagicMock()
@@ -72,16 +105,6 @@ class TestUpsertMemoryVectorsBatch:
         assert 'source_commit_id' not in metadata
         assert metadata['projection_version'] == 1
         assert metadata['source_tombstone_state'] == 'active'
-
-    def test_single_upsert_returns_nonwrite_when_pinecone_reports_zero(self, monkeypatch):
-        fake_index, fake_embeddings = self._setup_mocks(monkeypatch)
-        fake_embeddings.embed_query = MagicMock(return_value=[0.1, 0.2])
-        fake_index.upsert.side_effect = None
-        fake_index.upsert.return_value = {'upserted_count': 0}
-
-        written = vector_db.upsert_memory_vector('uid-abc', 'm1', 'hello', 'system')
-
-        assert written is None
 
     def test_batch_upsert_uses_single_embed_and_single_upsert(self, monkeypatch):
         """The whole point of the helper: one embed call + one upsert call."""
@@ -135,21 +158,6 @@ class TestUpsertMemoryVectorsBatch:
         assert 'source_commit_id' not in metadata
         assert 'valid_time' not in metadata
         assert metadata['projection_version'] == 1
-
-    def test_batch_upsert_returns_reported_partial_write_count(self, monkeypatch):
-        fake_index, _ = self._setup_mocks(monkeypatch)
-        fake_index.upsert.side_effect = None
-        fake_index.upsert.return_value = {'upserted_count': 1}
-
-        written = vector_db.upsert_memory_vectors_batch(
-            'uid-abc',
-            [
-                {'memory_id': 'm1', 'content': 'apple', 'category': 'manual'},
-                {'memory_id': 'm2', 'content': 'banana', 'category': 'manual'},
-            ],
-        )
-
-        assert written == 1
 
     def test_batch_upsert_empty_list_is_noop(self, monkeypatch):
         fake_index, fake_embeddings = self._setup_mocks(monkeypatch)
@@ -219,18 +227,23 @@ class TestBatchMemoriesEndpointErrorIsolation:
         return rest if end == -1 else rest[:end]
 
     def test_save_and_upsert_are_separate_steps(self):
-        """The bug was bundling save+upsert in one _persist whose vector failure
-        500s the whole (already-saved) request. They must be separate steps."""
+        """The route delegates one authoritative batch write to MemoryService.
+
+        Vector projection belongs to the canonical outbox, so the HTTP route
+        must not write either the legacy store or Pinecone directly.
+        """
         src = self._batch_fn_source()
         assert 'def _persist' not in src, "save and vector upsert must not be bundled into one fallible step"
-        assert 'save_memories' in src
-        assert 'upsert_memory_vectors_batch' in src
+        assert '.create_external_memory_batch' in src
+        assert 'memory_system=MemorySystem.CANONICAL' in src
+        assert 'memories_db.save_memories' not in src
+        assert 'upsert_memory_vectors_batch' not in src
 
     def test_vector_upsert_failure_is_swallowed(self):
-        """The vector upsert must be wrapped so its failure does not fail the
-        request — proven by the 'memories saved, vectors missing' marker."""
+        """The route disables direct vectors; the retryable outbox owns them."""
         src = self._batch_fn_source()
-        assert 'memories saved, vectors missing' in src
+        assert 'upsert_vectors=False' in src
+        assert 'upsert_memory_vectors_batch' not in src
 
     def test_firestore_write_failure_still_raises_503(self):
         """A genuine Firestore write failure must still surface as a retryable 503."""

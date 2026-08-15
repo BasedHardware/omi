@@ -14,7 +14,7 @@ struct FocusedGoalsSection: View {
       HStack(spacing: 8) {
         Text("Focused goals")
           .scaledFont(size: 11, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
         ForEach(store.focusedGoals.prefix(5), id: \.goalId) { goal in
           Button {
             Task { await onOpenGoal(goal.goalId) }
@@ -24,7 +24,7 @@ struct FocusedGoalsSection: View {
               .lineLimit(1)
               .padding(.horizontal, 9)
               .padding(.vertical, 6)
-              .background(Capsule().fill(OmiColors.backgroundSecondary.opacity(0.8)))
+              .background(Capsule().fill(Ink.rowFill.opacity(0.8)))
           }
           .buttonStyle(.plain)
           .accessibilityIdentifier("focused-goal-\(goal.goalId)")
@@ -33,14 +33,14 @@ struct FocusedGoalsSection: View {
         Button("All goals", action: onShowAll)
           .buttonStyle(.plain)
           .scaledFont(size: 10, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
       .accessibilityIdentifier("focused-goals")
     } else if store.accountGeneration != nil {
       HStack {
         Text("No focused goals")
           .scaledFont(size: 10)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
         Spacer()
         Button(store.goals.isEmpty ? "Add goal" : "Choose focus", action: onShowAll)
           .buttonStyle(.plain)
@@ -76,8 +76,8 @@ struct AllGoalsSheet: View {
           .buttonStyle(.bordered)
         Button("Done", action: onDismiss)
           .buttonStyle(.borderedProminent)
-          .tint(OmiColors.textPrimary)
-          .foregroundColor(.black)
+          .tint(Ink.primary)
+          .foregroundColor(Ink.surface)
       }
 
       ScrollView {
@@ -91,7 +91,7 @@ struct AllGoalsSheet: View {
       if let error = store.error {
         Text(error)
           .scaledFont(size: 10)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
     }
     .padding(20)
@@ -127,16 +127,16 @@ struct AllGoalsSheet: View {
       VStack(alignment: .leading, spacing: 3) {
         Text(goal.title)
           .scaledFont(size: 13, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Text(goal.desiredOutcome)
           .scaledFont(size: 10)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(1)
       }
       Spacer()
       Text(goal.status.rawValue.capitalized)
         .scaledFont(size: 9)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       Button("Open") { Task { await onOpenGoal(goal.goalId) } }
         .buttonStyle(.bordered)
@@ -167,7 +167,7 @@ struct AllGoalsSheet: View {
       }
     }
     .padding(10)
-    .background(RoundedRectangle(cornerRadius: 9).fill(OmiColors.backgroundSecondary.opacity(0.7)))
+    .background(RoundedRectangle(cornerRadius: 9).fill(Ink.rowFill.opacity(0.7)))
   }
 
   private struct GoalFocusTarget: Identifiable {
@@ -181,7 +181,7 @@ struct AllGoalsSheet: View {
         .scaledFont(size: 16, weight: .semibold)
       Text("Your focus set is full. Nothing is archived; the replaced goal moves to All goals.")
         .scaledFont(size: 11)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
       Picker("Replace", selection: $replacementGoalID) {
         ForEach(store.focusedGoals, id: \.goalId) { focused in
           Text(focused.title).tag(focused.goalId)
@@ -198,8 +198,8 @@ struct AllGoalsSheet: View {
           }
         }
         .buttonStyle(.borderedProminent)
-        .tint(OmiColors.textPrimary)
-        .foregroundColor(.black)
+        .tint(Ink.primary)
+        .foregroundColor(Ink.surface)
       }
     }
     .padding(20)
@@ -236,7 +236,7 @@ private struct CanonicalGoalCreateSheet: View {
       if let error, !error.isEmpty {
         Text(error)
           .scaledFont(size: 10)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
       HStack {
         Button("Cancel", action: onDismiss)
@@ -256,8 +256,8 @@ private struct CanonicalGoalCreateSheet: View {
           }
         }
         .buttonStyle(.borderedProminent)
-        .tint(OmiColors.textPrimary)
-        .foregroundColor(.black)
+        .tint(Ink.primary)
+        .foregroundColor(Ink.surface)
         .disabled(
           title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || desiredOutcome.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -287,7 +287,7 @@ struct CanonicalGoalDetailSheet: View {
             .scaledFont(size: 20, weight: .semibold)
           Text(detail.goal.desiredOutcome)
             .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
         }
         Spacer()
         Button("Done", action: onDismiss)
@@ -318,7 +318,7 @@ struct CanonicalGoalDetailSheet: View {
                     .scaledFont(size: 12, weight: .semibold)
                   Text(work.currentStateSummary ?? work.objective)
                     .scaledFont(size: 10)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(Ink.secondary)
                     .lineLimit(2)
                 }
                 Spacer()
@@ -326,7 +326,7 @@ struct CanonicalGoalDetailSheet: View {
                   .buttonStyle(.bordered)
               }
               .padding(10)
-              .background(RoundedRectangle(cornerRadius: 9).fill(OmiColors.backgroundSecondary.opacity(0.7)))
+              .background(RoundedRectangle(cornerRadius: 9).fill(Ink.rowFill.opacity(0.7)))
             }
           }
 
@@ -335,10 +335,10 @@ struct CanonicalGoalDetailSheet: View {
               .scaledFont(size: 12, weight: .semibold)
             ForEach(detail.progressEvents, id: \.eventId) { event in
               HStack(alignment: .top, spacing: 8) {
-                Circle().fill(OmiColors.textTertiary).frame(width: 5, height: 5).padding(.top, 5)
+                Circle().fill(Ink.secondary).frame(width: 5, height: 5).padding(.top, 5)
                 Text(event.summary)
                   .scaledFont(size: 10)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .foregroundColor(Ink.secondary)
               }
             }
           }
@@ -347,13 +347,13 @@ struct CanonicalGoalDetailSheet: View {
 
       Button("Work on this with Omi") { Task { await onStartWork() } }
         .buttonStyle(.borderedProminent)
-        .tint(OmiColors.textPrimary)
-        .foregroundColor(.black)
+        .tint(Ink.primary)
+        .foregroundColor(Ink.surface)
         .accessibilityIdentifier("goal-work-with-omi-\(detail.goal.goalId)")
       if let error, !error.isEmpty {
         Text(error)
           .scaledFont(size: 10)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
     }
     .padding(20)
@@ -363,7 +363,7 @@ struct CanonicalGoalDetailSheet: View {
   private func goalDetailBlock(title: String, text: String) -> some View {
     VStack(alignment: .leading, spacing: 4) {
       Text(title).scaledFont(size: 11, weight: .semibold)
-      Text(text).scaledFont(size: 10).foregroundColor(OmiColors.textSecondary)
+      Text(text).scaledFont(size: 10).foregroundColor(Ink.secondary)
     }
   }
 }

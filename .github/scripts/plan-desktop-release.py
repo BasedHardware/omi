@@ -14,17 +14,22 @@ from pathlib import Path
 
 CODEMAGIC_CHECK_NAME = "Release OMI Desktop (Swift)"
 RELEASE_ELIGIBILITY_CHECK_NAME = "Release Eligibility"
-REQUIRED_SOURCE_CHECK_NAMES = (
-    RELEASE_ELIGIBILITY_CHECK_NAME,
-    "Desktop Swift Build & Tests",
-    "Desktop Swift Release Compile",
-)
+REQUIRED_SOURCE_CHECKS: dict[str, str] = {
+    RELEASE_ELIGIBILITY_CHECK_NAME: ".github/workflows/release-eligibility.yml",
+    "Desktop Swift Build & Tests": ".github/workflows/desktop-swift-ci.yml",
+    "Desktop Swift Release Compile": ".github/workflows/desktop-swift-ci.yml",
+}
+REQUIRED_SOURCE_CHECK_NAMES = tuple(REQUIRED_SOURCE_CHECKS)
+EVENT_DELIVERY_GRACE_SECONDS = 10 * 60
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
-# The exact-SHA aggregate can complete after the former 12-minute boundary on
-# a healthy run. Give the normal 20-minute CI budget time to settle while
-# retaining a bounded, fail-closed source-check gate.
-SOURCE_CHECK_WAIT_SECONDS = 20 * 60
-SOURCE_CHECK_POLL_SECONDS = 30
+# The planner never sleeps on a source gate. It used to poll for up to 90
+# minutes, which outlived the GitHub App installation token minted at job start
+# (those expire after 60 minutes): every poll past expiry failed with "gh: Bad
+# credentials (401)", killing the fallback scan and reporting a credentials
+# error instead of the real gate state (Aug 14 2026, issue #11574). #11575
+# clamped the wait to 45 minutes; evaluating once and deferring to the next
+# hourly tick removes the wait — and the token-lifetime constraint — entirely.
+WATCH_POLL_SECONDS = 30
 MAX_SOURCE_STATUS_POLLS = 20
 # Short debounce so a merge is tagged within ~a minute instead of waiting ten.
 # The one-active-release fence (Codemagic build status on the latest tag) already
@@ -34,16 +39,10 @@ AUTO_RELEASE_QUIET_SECONDS = 60
 DESKTOP_RELEASE_PATHS = (
     "desktop/macos",
     "codemagic.yaml",
-    # The M1 qualification job checks out the immutable candidate tag and
-    # imports this exact lifecycle module. Keep the scope to that tag-bound
-    # runtime surface; other dev-harness and backend changes are not releases.
-    "scripts/dev-harness/dev_harness/qualification.py",
     ".github/scripts/plan-desktop-release.py",
     ".github/scripts/desktop-release-source-identity.py",
     ".github/scripts/publish-desktop-candidate-tag.py",
-    ".github/scripts/verify-pre-tag-readiness.py",
     ".github/workflows/desktop_auto_release.yml",
-    ".github/workflows/desktop_qualify_beta.yml",
     ".github/workflows/desktop-swift-ci.yml",
 )
 
@@ -91,8 +90,6 @@ def releasable_desktop_changes_since(ref: str | None) -> list[str]:
             continue
         if path.startswith("desktop/macos/changelog/"):
             continue
-        if path.startswith("desktop/macos/Backend-Rust/"):
-            continue
         changes.append(path)
     return changes
 
@@ -133,6 +130,84 @@ def latest_releasable_desktop_sha(paths: list[str]) -> str | None:
         return None
 
 
+# A blocked newest SHA must not wedge the train indefinitely: fall back to the
+# newest older releasable SHA whose exact-SHA checks already succeeded, so the
+# last green tree keeps shipping while the tip is being fixed. Bounded so a
+# long-red history cannot turn the planner into a full-history scan.
+FALLBACK_SOURCE_CANDIDATES = 20
+
+
+def releasable_desktop_shas_since(ref: str | None) -> list[str]:
+    """First-parent commits (newest first) that touched releasable desktop paths."""
+    range_arg = "HEAD" if ref is None else f"{ref}..HEAD"
+    try:
+        output = git(
+            [
+                "log",
+                "--first-parent",
+                f"--max-count={FALLBACK_SOURCE_CANDIDATES}",
+                "--format=%H",
+                range_arg,
+                "--",
+                *DESKTOP_RELEASE_PATHS,
+            ]
+        )
+    except subprocess.CalledProcessError:
+        return []
+    return [line for line in output.splitlines() if line]
+
+
+def first_parent_shas_after(blocked_sha: str) -> list[str]:
+    """First-parent commits newer than `blocked_sha` on main, newest first."""
+    try:
+        output = git(
+            [
+                "log",
+                "--first-parent",
+                f"--max-count={FALLBACK_SOURCE_CANDIDATES}",
+                "--format=%H",
+                f"{blocked_sha}..HEAD",
+            ]
+        )
+    except subprocess.CalledProcessError:
+        return []
+    return [line for line in output.splitlines() if line]
+
+
+def newest_green_source_ahead(repository: str, blocked_sha: str) -> tuple[str, str] | None:
+    """Newest commit ABOVE the blocked SHA whose own required checks are green.
+
+    A commit newer than `blocked_sha` on first-parent main contains everything
+    `blocked_sha` contains, so its own exact-SHA checks tested a superset of
+    that tree. When those checks are green, the desktop code in the blocked
+    commit has been proven green by a later run, and the train may ship from
+    that newer SHA. This is what makes a green tip unblock the train, and what
+    stops a single flaky red commit from wedging shipping: the next commit that
+    actually runs desktop CI carries the train forward.
+
+    Only a genuine `ready` gate qualifies — skipped and absent checks are not
+    success, so a non-desktop commit (whose desktop jobs skip) never qualifies.
+    Preferred over `newest_green_fallback_source` because it ships newer, not
+    older, code.
+    """
+    for sha in first_parent_shas_after(blocked_sha):
+        gate = required_source_checks_gate(repository, sha)
+        if gate.state == "ready":
+            return sha, f"newest green SHA ahead of blocked {blocked_sha[:12]}"
+    return None
+
+
+def newest_green_fallback_source(repository: str, latest_tag: str | None, blocked_sha: str) -> tuple[str, str] | None:
+    """Newest older releasable SHA whose required checks all succeeded, if any."""
+    for sha in releasable_desktop_shas_since(latest_tag):
+        if sha == blocked_sha:
+            continue
+        gate = required_source_checks_gate(repository, sha)
+        if gate.state == "ready":
+            return sha, f"newest green releasable SHA behind blocked {blocked_sha[:12]}"
+    return None
+
+
 def check_run_sort_key(check_run: dict[str, object]) -> tuple[tuple[datetime, datetime, int] | None, str | None]:
     """Return a validated, deterministic ordering key for one GitHub check run."""
     check_run_id = check_run.get("id")
@@ -158,7 +233,10 @@ def check_run_sort_key(check_run: dict[str, object]) -> tuple[tuple[datetime, da
     return (timestamps[0], timestamps[1], check_run_id), None
 
 
-def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str | None, str | None, str | None]:
+def github_check_status(
+    repository: str, sha: str, check_name: str
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """Return status, conclusion, html_url, error for the newest matching check run."""
     result = subprocess.run(
         [
             "gh",
@@ -173,35 +251,35 @@ def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str
     )
     if result.returncode != 0:
         error = result.stderr.strip() or result.stdout.strip() or "unknown gh api error"
-        return None, None, error
+        return None, None, None, error
 
     try:
         pages = json.loads(result.stdout)
     except json.JSONDecodeError:
-        return None, None, "gh api returned invalid check-runs JSON"
+        return None, None, None, "gh api returned invalid check-runs JSON"
 
     if not isinstance(pages, list):
-        return None, None, "gh api returned invalid check-runs pages"
+        return None, None, None, "gh api returned invalid check-runs pages"
 
     matching_runs: list[tuple[tuple[datetime, datetime, int], dict[str, object]]] = []
     for page in pages:
         if not isinstance(page, dict):
-            return None, None, "gh api returned an invalid check-runs page"
+            return None, None, None, "gh api returned an invalid check-runs page"
         check_runs = page.get("check_runs")
         if not isinstance(check_runs, list):
-            return None, None, "gh api returned an invalid check-runs payload"
+            return None, None, None, "gh api returned an invalid check-runs payload"
         for check_run in check_runs:
             if not isinstance(check_run, dict):
-                return None, None, "gh api returned an invalid check run"
+                return None, None, None, "gh api returned an invalid check run"
             if check_run.get("name") == check_name:
                 sort_key, sort_key_error = check_run_sort_key(check_run)
                 if sort_key_error:
-                    return None, None, sort_key_error
+                    return None, None, None, sort_key_error
                 assert sort_key is not None
                 matching_runs.append((sort_key, check_run))
 
     if not matching_runs:
-        return None, None, None
+        return None, None, None, None
 
     # `filter=latest` can omit an exact-SHA check run. Request every page and
     # choose the newest matching run ourselves so a later rerun cannot be
@@ -211,57 +289,223 @@ def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str
     latest = max(matching_runs, key=lambda run: run[0])[1]
     status = latest.get("status")
     conclusion = latest.get("conclusion")
+    html_url = latest.get("html_url")
     if status is not None and not isinstance(status, str):
-        return None, None, "gh api returned a check run with an invalid status"
+        return None, None, None, "gh api returned a check run with an invalid status"
     if conclusion is not None and not isinstance(conclusion, str):
-        return None, None, "gh api returned a check run with an invalid conclusion"
-    return status, conclusion, None
+        return None, None, None, "gh api returned a check run with an invalid conclusion"
+    if html_url is not None and not isinstance(html_url, str):
+        html_url = None
+    return status, conclusion, html_url if isinstance(html_url, str) else None, None
 
 
-def codemagic_check_status(repository: str, sha: str) -> tuple[str | None, str | None, str | None]:
-    return github_check_status(repository, sha, CODEMAGIC_CHECK_NAME)
+def github_workflow_state(repository: str, workflow_file: str) -> tuple[str | None, str | None]:
+    """Return (state, error) for a producing workflow file."""
+    result = subprocess.run(
+        ["gh", "api", f"repos/{repository}/actions/workflows/{Path(workflow_file).name}"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        error = result.stderr.strip() or result.stdout.strip() or "unknown gh api error"
+        return None, error
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None, "gh api returned invalid workflow JSON"
+    if not isinstance(payload, dict):
+        return None, "gh api returned an invalid workflow payload"
+    state = payload.get("state")
+    if not isinstance(state, str):
+        return None, "gh api returned a workflow with an invalid state"
+    return state, None
 
 
-def required_source_checks_gate(repository: str, sha: str) -> SourceCheckGate:
-    for check_name in REQUIRED_SOURCE_CHECK_NAMES:
-        status, conclusion, error = github_check_status(repository, sha, check_name)
+def github_workflow_runs_for_sha(
+    repository: str, workflow_file: str, sha: str
+) -> tuple[list[dict[str, object]] | None, str | None]:
+    result = subprocess.run(
+        [
+            "gh",
+            "api",
+            f"repos/{repository}/actions/workflows/{Path(workflow_file).name}/runs?head_sha={sha}",
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        error = result.stderr.strip() or result.stdout.strip() or "unknown gh api error"
+        return None, error
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None, "gh api returned invalid workflow-runs JSON"
+    if not isinstance(payload, dict):
+        return None, "gh api returned an invalid workflow-runs payload"
+    runs = payload.get("workflow_runs")
+    if not isinstance(runs, list):
+        return None, "gh api returned an invalid workflow-runs list"
+    parsed: list[dict[str, object]] = []
+    for run in runs:
+        if isinstance(run, dict):
+            parsed.append(run)
+    return parsed, None
+
+
+def commit_age_seconds(sha: str) -> int | None:
+    try:
+        raw = git(["log", "-1", "--format=%ct", sha])
+        return int(time.time()) - int(raw)
+    except (subprocess.CalledProcessError, ValueError):
+        return None
+
+
+def ci_evidence_recipe(repository: str, sha: str, workflow_file: str) -> str:
+    return (
+        f"gh api repos/{repository}/git/refs -f ref=refs/heads/ci-evidence/{sha} -f sha={sha} "
+        f"&& gh workflow run {workflow_file} --ref ci-evidence/{sha} "
+        f"(delete the branch after the run completes)"
+    )
+
+
+def _newest_workflow_run(runs: list[dict[str, object]]) -> dict[str, object] | None:
+    if not runs:
+        return None
+
+    def sort_key(run: dict[str, object]) -> tuple[int, int]:
+        run_id = run.get("id")
+        numeric_id = run_id if type(run_id) is int else 0
+        created = run.get("created_at")
+        stamp = 0
+        if isinstance(created, str):
+            try:
+                stamp = int(datetime.fromisoformat(created.replace("Z", "+00:00")).timestamp())
+            except ValueError:
+                stamp = 0
+        return stamp, numeric_id
+
+    return max(runs, key=sort_key)
+
+
+def _diagnose_missing_check(
+    repository: str, sha: str, check_name: str, workflow_file: str
+) -> SourceCheckGate:
+    runs, error = github_workflow_runs_for_sha(repository, workflow_file, sha)
+    if error:
+        return SourceCheckGate(
+            "blocked",
+            f"could not read producing runs for {check_name} ({workflow_file}) "
+            f"on source SHA {sha}: {error}",
+        )
+    assert runs is not None
+    run = _newest_workflow_run(runs)
+    if run is not None:
+        status = run.get("status") if isinstance(run.get("status"), str) else "unknown"
+        html_url = run.get("html_url") if isinstance(run.get("html_url"), str) else ""
+        run_id = run.get("id")
+        if status in {"queued", "in_progress", "waiting", "pending", "requested"}:
+            detail = f"producing run is {status}"
+            if html_url:
+                detail += f": {html_url}"
+            return SourceCheckGate(
+                "defer",
+                f"required check {check_name} is missing for exact source SHA {sha}; {detail}",
+            )
+        rerun = f"gh run rerun {run_id}" if type(run_id) is int else "gh run rerun <run-id>"
+        return SourceCheckGate(
+            "blocked",
+            f"required check {check_name} is missing for exact source SHA {sha} after "
+            f"producing workflow {workflow_file} completed"
+            + (f" ({html_url})" if html_url else "")
+            + f"; fix: {rerun}",
+        )
+
+    age = commit_age_seconds(sha)
+    if age is None or age <= EVENT_DELIVERY_GRACE_SECONDS:
+        return SourceCheckGate(
+            "defer",
+            f"required check {check_name} is missing for exact source SHA {sha}; "
+            f"commit age {age if age is not None else 'unknown'}s is within the "
+            f"{EVENT_DELIVERY_GRACE_SECONDS}s event-delivery grace",
+        )
+    recipe = ci_evidence_recipe(repository, sha, workflow_file)
+    return SourceCheckGate(
+        "blocked",
+        f"required check {check_name} cannot exist for exact source SHA {sha}: "
+        f"push events do not replay. Mint evidence with: {recipe}",
+    )
+
+
+def evaluate_source_checks(repository: str, sha: str) -> SourceCheckGate:
+    """Single-pass source gate: ready, defer, or blocked. Never sleeps."""
+    seen_workflows: list[str] = []
+    for workflow_file in REQUIRED_SOURCE_CHECKS.values():
+        if workflow_file in seen_workflows:
+            continue
+        seen_workflows.append(workflow_file)
+        state, error = github_workflow_state(repository, workflow_file)
         if error:
             return SourceCheckGate(
-                "waiting", f"could not read required check {check_name} for source SHA {sha}: {error}"
+                "blocked",
+                f"could not read producer workflow {workflow_file}: {error}",
+            )
+        if state != "active":
+            recipe = ci_evidence_recipe(repository, sha, workflow_file)
+            return SourceCheckGate(
+                "blocked",
+                f"producer workflow {workflow_file} is {state}; "
+                f"fix with `gh workflow enable {workflow_file}` then re-mint evidence: {recipe}",
+            )
+
+    observations: dict[str, tuple[str | None, str | None, str | None, str | None]] = {}
+    for check_name in REQUIRED_SOURCE_CHECK_NAMES:
+        observations[check_name] = github_check_status(repository, sha, check_name)
+
+    missing: list[str] = []
+    for check_name, (status, conclusion, html_url, error) in observations.items():
+        if error:
+            return SourceCheckGate(
+                "blocked",
+                f"could not read required check {check_name} for source SHA {sha}: {error}",
             )
         if status is None:
-            return SourceCheckGate("waiting", f"required check {check_name} is missing for exact source SHA {sha}")
-        if status != "completed":
-            return SourceCheckGate("waiting", f"required check {check_name} for exact source SHA {sha} is {status}")
-        if conclusion != "success":
+            missing.append(check_name)
+            continue
+        if status in {"queued", "in_progress", "waiting", "pending", "requested"}:
+            return SourceCheckGate(
+                "defer",
+                f"required check {check_name} for exact source SHA {sha} is {status}",
+            )
+        if status == "completed" and conclusion != "success":
+            url_suffix = f": {html_url}" if html_url else ""
             return SourceCheckGate(
                 "blocked",
                 f"required check {check_name} for exact source SHA {sha} "
-                f"completed with {conclusion or 'no conclusion'}",
+                f"completed with {conclusion or 'no conclusion'}{url_suffix}",
             )
+        if status == "completed" and conclusion == "success":
+            continue
+        return SourceCheckGate(
+            "defer",
+            f"required check {check_name} for exact source SHA {sha} is {status}",
+        )
+
+    for check_name in missing:
+        gate = _diagnose_missing_check(repository, sha, check_name, REQUIRED_SOURCE_CHECKS[check_name])
+        if gate.state != "ready":
+            return gate
     return SourceCheckGate("ready")
 
 
-def wait_for_required_source_checks(
-    repository: str, sha: str, *, wait_seconds: int, poll_seconds: int
-) -> SourceCheckGate:
-    """Re-evaluate only transient exact-SHA source-check states for a bounded time."""
-    gate = required_source_checks_gate(repository, sha)
-    if gate.state != "waiting" or wait_seconds == 0:
-        return gate
+def required_source_checks_gate(repository: str, sha: str) -> SourceCheckGate:
+    return evaluate_source_checks(repository, sha)
 
-    deadline = time.monotonic() + wait_seconds
-    while True:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return SourceCheckGate(
-                "blocked",
-                f"timed out after {wait_seconds}s waiting for required exact-SHA checks: {gate.reason}",
-            )
-        time.sleep(min(poll_seconds, remaining))
-        gate = required_source_checks_gate(repository, sha)
-        if gate.state != "waiting":
-            return gate
+
+def codemagic_check_status(repository: str, sha: str) -> tuple[str | None, str | None, str | None]:
+    status, conclusion, _html_url, error = github_check_status(repository, sha, CODEMAGIC_CHECK_NAME)
+    return status, conclusion, error
 
 
 def candidate_tags_for_source(sha: str) -> list[str]:
@@ -288,6 +532,41 @@ def github_candidate_release_published(repository: str, tag: str) -> tuple[bool 
     if not isinstance(release, dict) or release.get("tagName") != tag:
         return None, "gh release view did not return the requested tag"
     return release.get("isDraft") is False and isinstance(release.get("publishedAt"), str), None
+
+
+def candidate_publication_age_seconds(repository: str, tag: str) -> int | None:
+    """Age of the candidate's GitHub release, the hourly train's throttle clock.
+
+    Candidate tags are lightweight, so no local timestamp records when the tag
+    was CREATED — `git log --format=%ct <tag>` reads the tagged COMMIT's time,
+    and a tag pushed minutes ago onto an older commit would defeat the
+    throttle entirely. The release's createdAt is the authoritative
+    publication clock. No release yet means the candidate is still building
+    (the one-active-release fence owns that) or its build failed (the train
+    SHOULD cut a replacement), so the throttle deliberately stands aside.
+    """
+    result = subprocess.run(
+        ["gh", "release", "view", tag, "--repo", repository, "--json", "tagName,createdAt"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        release = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(release, dict) or release.get("tagName") != tag:
+        return None
+    created_at = release.get("createdAt")
+    if not isinstance(created_at, str):
+        return None
+    try:
+        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return max(0, int(time.time() - created.timestamp()))
 
 
 def normal_candidate_lifecycle(repository: str, source_sha: str, tag: str) -> tuple[str, str]:
@@ -392,17 +671,20 @@ def set_output(name: str, value: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository", required=True)
-    parser.add_argument("--source-check-wait-seconds", type=int, default=SOURCE_CHECK_WAIT_SECONDS)
-    parser.add_argument("--source-check-poll-seconds", type=int, default=SOURCE_CHECK_POLL_SECONDS)
+    parser.add_argument(
+        "--min-tag-interval-seconds",
+        type=int,
+        default=0,
+        help=(
+            "Defer tagging while the latest desktop tag is younger than this "
+            "(the hourly release train's throttle; 0 disables it for manual dispatch)"
+        ),
+    )
     parser.add_argument("--watch-source-sha")
     parser.add_argument("--watch-max-polls", type=int, default=1)
-    parser.add_argument("--watch-poll-seconds", type=int, default=SOURCE_CHECK_POLL_SECONDS)
+    parser.add_argument("--watch-poll-seconds", type=int, default=WATCH_POLL_SECONDS)
     args = parser.parse_args()
 
-    if args.source_check_wait_seconds < 0:
-        parser.error("--source-check-wait-seconds must be non-negative")
-    if args.source_check_poll_seconds <= 0:
-        parser.error("--source-check-poll-seconds must be positive")
     if args.watch_source_sha:
         if not re.fullmatch(r"[0-9a-f]{40}", args.watch_source_sha):
             parser.error("--watch-source-sha must be a full lowercase SHA")
@@ -418,8 +700,22 @@ def main() -> int:
         )
 
     latest_tag = latest_desktop_tag()
-    changes = releasable_desktop_changes_since(latest_tag)
     set_output("latest_tag", latest_tag or "")
+
+    if args.min_tag_interval_seconds > 0 and latest_tag is not None:
+        latest_candidate_age = candidate_publication_age_seconds(args.repository, latest_tag)
+        if latest_candidate_age is not None and latest_candidate_age < args.min_tag_interval_seconds:
+            remaining = args.min_tag_interval_seconds - latest_candidate_age
+            set_output("source_sha", "")
+            set_output("should_release", "false")
+            set_output(
+                "reason",
+                f"Hourly release train: candidate {latest_tag} published {latest_candidate_age}s ago; "
+                f"next candidate in {remaining}s.",
+            )
+            return 0
+
+    changes = releasable_desktop_changes_since(latest_tag)
 
     if not changes:
         set_output("source_sha", "")
@@ -466,20 +762,35 @@ def main() -> int:
         )
         return 0
 
-    source_check_gate = wait_for_required_source_checks(
-        args.repository,
-        source_sha,
-        wait_seconds=args.source_check_wait_seconds,
-        poll_seconds=args.source_check_poll_seconds,
-    )
-    if source_check_gate.state == "waiting":
+    source_check_gate = evaluate_source_checks(args.repository, source_sha)
+    if source_check_gate.state == "defer":
+        print(f"::warning::{source_check_gate.reason}")
         set_output("should_release", "false")
         set_output("reason", f"Waiting for required exact-SHA checks: {source_check_gate.reason}.")
         return 0
     if source_check_gate.state == "blocked":
-        set_output("should_release", "false")
-        set_output("reason", f"Desktop candidate source gate blocked: {source_check_gate.reason}.")
-        return 0
+        # Prefer a green SHA ABOVE the blocked one — it proves the same desktop
+        # tree and ships newer code — before falling back to an older green SHA.
+        fallback = newest_green_source_ahead(args.repository, source_sha) or newest_green_fallback_source(
+            args.repository, latest_tag, source_sha
+        )
+        if fallback is None:
+            print(f"::error::{source_check_gate.reason}")
+            set_output("should_release", "false")
+            set_output("reason", f"Desktop candidate source gate blocked: {source_check_gate.reason}.")
+            return 1
+        fallback_sha, fallback_note = fallback
+        print(
+            f"::warning::Newest releasable SHA {source_sha} is blocked "
+            f"({source_check_gate.reason}); falling back to {fallback_note}."
+        )
+        source_sha = fallback_sha
+        set_output("source_sha", source_sha)
+        existing_candidate = existing_source_candidate_reason(args.repository, source_sha)
+        if existing_candidate:
+            set_output("should_release", "false")
+            set_output("reason", f"Desktop candidate already exists for fallback source: {existing_candidate}")
+            return 0
 
     active_reason = active_release_reason(args.repository, latest_tag)
     if active_reason:

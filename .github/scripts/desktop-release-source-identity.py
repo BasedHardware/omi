@@ -16,13 +16,10 @@ RELEASE_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$")
 DESKTOP_RELEASE_PATHS = (
     "desktop/macos",
     "codemagic.yaml",
-    "scripts/dev-harness/dev_harness/qualification.py",
     ".github/scripts/plan-desktop-release.py",
     ".github/scripts/desktop-release-source-identity.py",
     ".github/scripts/publish-desktop-candidate-tag.py",
-    ".github/scripts/verify-pre-tag-readiness.py",
     ".github/workflows/desktop_auto_release.yml",
-    ".github/workflows/desktop_qualify_beta.yml",
     ".github/workflows/desktop-swift-ci.yml",
 )
 def require_sha(name: str, value: str) -> str:
@@ -48,8 +45,6 @@ def releasable_desktop_paths(paths: list[str]) -> list[str]:
         if path == "desktop/macos/AGENTS.md":
             continue
         if path.startswith("desktop/macos/changelog/"):
-            continue
-        if path.startswith("desktop/macos/Backend-Rust/"):
             continue
         releasable.append(path)
     return releasable

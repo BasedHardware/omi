@@ -121,42 +121,104 @@ def test_missing_url_returns_422():
         SetUserWebhookUrlRequest()
 
 
-def test_nonempty_url_reenables_delivery_and_resets_failure_health():
-    wtype = users_mod.WebhookType.audio_bytes
-    webhook_url = 'https://example.com/audio?token=replacement'
+def test_valid_url_sets():
     with (
         patch.object(users_mod, 'set_user_webhook_db') as setdb,
-        patch.object(users_mod, 'get_user_webhook_db', return_value=webhook_url),
+        patch.object(users_mod, 'disable_user_webhook_db') as disable,
+        patch.object(users_mod, 'enable_user_webhook_db') as enable,
+        patch.object(users_mod, 'get_user_webhook_db', return_value='http://x'),
+        patch.object(users_mod, 'reset_user_webhook_delivery_health') as reset_health,
+    ):
+        result = users_mod.set_user_webhook_endpoint(
+            wtype='audio_bytes', data=SetUserWebhookUrlRequest(url='http://x'), uid='u1'
+        )
+    assert result['status'] == 'ok'
+    setdb.assert_called_once()
+    enable.assert_called_once_with('u1', 'audio_bytes')
+    reset_health.assert_called_once_with('u1', 'audio_bytes', 'http://x')
+    disable.assert_not_called()
+
+
+def test_empty_url_disables_without_resetting_health():
+    with (
+        patch.object(users_mod, 'set_user_webhook_db') as setdb,
         patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
         patch.object(users_mod, 'reset_user_webhook_delivery_health') as reset_health,
     ):
         result = users_mod.set_user_webhook_endpoint(
-            wtype=wtype, data=SetUserWebhookUrlRequest(url=webhook_url), uid='u1'
+            wtype='audio_bytes', data=SetUserWebhookUrlRequest(url=''), uid='u1'
         )
-
     assert result['status'] == 'ok'
-    setdb.assert_called_once_with('u1', wtype, webhook_url)
-    disable.assert_not_called()
-    enable.assert_called_once_with('u1', wtype)
-    reset_health.assert_called_once_with('u1', wtype, webhook_url)
+    disable.assert_called_once_with('u1', 'audio_bytes')
+    setdb.assert_called_once_with('u1', 'audio_bytes', '')
+    enable.assert_not_called()
+    reset_health.assert_not_called()
 
 
-def test_empty_url_disables_without_resetting_failure_health():
-    wtype = users_mod.WebhookType.audio_bytes
+def test_cleared_audio_bytes_url_keeping_delay_disables():
+    """#11365: the app posts '<url>,<seconds>', so clearing the URL sends ',5' — not ''.
+
+    That is neither '' nor ',', so the endpoint used to re-enable the webhook the user had
+    just switched off, and the toggle came back on after every save.
+    """
     with (
         patch.object(users_mod, 'set_user_webhook_db') as setdb,
         patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
         patch.object(users_mod, 'reset_user_webhook_delivery_health') as reset_health,
     ):
-        result = users_mod.set_user_webhook_endpoint(wtype=wtype, data=SetUserWebhookUrlRequest(url=''), uid='u1')
-
+        result = users_mod.set_user_webhook_endpoint(
+            wtype='audio_bytes', data=SetUserWebhookUrlRequest(url=',5'), uid='u1'
+        )
     assert result['status'] == 'ok'
-    setdb.assert_called_once_with('u1', wtype, '')
-    disable.assert_called_once_with('u1', wtype)
-    reset_health.assert_not_called()
+    disable.assert_called_once_with('u1', 'audio_bytes')
+    setdb.assert_called_once_with('u1', 'audio_bytes', ',5')
     enable.assert_not_called()
+    reset_health.assert_not_called()
+
+
+def test_audio_bytes_url_with_delay_still_enables():
+    with (
+        patch.object(users_mod, 'set_user_webhook_db'),
+        patch.object(users_mod, 'disable_user_webhook_db') as disable,
+        patch.object(users_mod, 'enable_user_webhook_db') as enable,
+        patch.object(users_mod, 'get_user_webhook_db', return_value='http://x,5'),
+        patch.object(users_mod, 'reset_user_webhook_delivery_health'),
+    ):
+        users_mod.set_user_webhook_endpoint(
+            wtype='audio_bytes', data=SetUserWebhookUrlRequest(url='http://x,5'), uid='u1'
+        )
+    enable.assert_called_once_with('u1', 'audio_bytes')
+    disable.assert_not_called()
+
+
+def test_blank_url_disables_for_non_audio_webhooks():
+    with (
+        patch.object(users_mod, 'set_user_webhook_db'),
+        patch.object(users_mod, 'disable_user_webhook_db') as disable,
+        patch.object(users_mod, 'enable_user_webhook_db') as enable,
+        patch.object(users_mod, 'reset_user_webhook_delivery_health'),
+    ):
+        users_mod.set_user_webhook_endpoint(wtype='memory_created', data=SetUserWebhookUrlRequest(url='   '), uid='u1')
+    disable.assert_called_once_with('u1', 'memory_created')
+    enable.assert_not_called()
+
+
+def test_comma_in_non_audio_url_is_not_a_delay_separator():
+    """Only audio_bytes encodes a ',<seconds>' suffix; a query string may contain commas."""
+    with (
+        patch.object(users_mod, 'set_user_webhook_db'),
+        patch.object(users_mod, 'disable_user_webhook_db') as disable,
+        patch.object(users_mod, 'enable_user_webhook_db') as enable,
+        patch.object(users_mod, 'get_user_webhook_db', return_value='https://h/i?ids=1,2'),
+        patch.object(users_mod, 'reset_user_webhook_delivery_health'),
+    ):
+        users_mod.set_user_webhook_endpoint(
+            wtype='realtime_transcript', data=SetUserWebhookUrlRequest(url='https://h/i?ids=1,2'), uid='u1'
+        )
+    enable.assert_called_once_with('u1', 'realtime_transcript')
+    disable.assert_not_called()
 
 
 def test_get_missing_webhook_url_validates_as_nullable_response():

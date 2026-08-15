@@ -15,7 +15,7 @@ flows to the mix path).
 """
 
 import asyncio
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 
 import routers.listen.receiver as receiver
 
@@ -23,7 +23,7 @@ TARGET_SAMPLE_RATE = receiver.TARGET_SAMPLE_RATE
 
 
 def _make_receiver(audio_bytes_send):
-    return SimpleNamespace(
+    recv = SimpleNamespace(
         host=SimpleNamespace(
             request=SimpleNamespace(codec='pcm', sample_rate=TARGET_SAMPLE_RATE, websocket=None),
             use_custom_stt=True,
@@ -35,6 +35,9 @@ def _make_receiver(audio_bytes_send):
         stt_sockets_multi=[None, None],
         channel_mix_buffers=[bytearray(), bytearray()],
     )
+    # Bind the real _capture so the mock exercises actual capture delegation.
+    recv._capture = MethodType(receiver.ListenReceiver._capture, recv)
+    return recv
 
 
 def _frame(channel_id, payload):
@@ -64,3 +67,14 @@ def test_multichannel_mix_still_drains_with_audio_bytes_consumer():
     asyncio.run(_feed(recv, [(0, pcm), (1, pcm)]))
     assert sent, "expected a mixed frame delivered to the audio-bytes consumer"
     assert sum(len(b) for b in recv.channel_mix_buffers) == 0
+
+
+def test_multichannel_client_pcm_reaches_optional_parity_capture():
+    captured = []
+    recv = _make_receiver(audio_bytes_send=None)
+    recv.host.capture_client_audio = captured.append
+    pcm = b'\x01\x02' * 160
+
+    asyncio.run(_feed(recv, [(0, pcm)]))
+
+    assert captured == [pcm]

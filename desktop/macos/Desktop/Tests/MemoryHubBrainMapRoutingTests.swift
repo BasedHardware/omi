@@ -4,7 +4,7 @@ import XCTest
 
 /// The Memory hub's Brain Map destination is the surface users actually reach
 /// from the Memory menu. It previously rendered `MemoryGraphPage`
-/// unconditionally, so canonical-cohort users kept the legacy graph there even
+/// unconditionally, so assertion-backed users kept the legacy graph there even
 /// though the atlas had already shipped behind `MemoryGraphPresentationMode`.
 final class MemoryHubBrainMapRoutingTests: XCTestCase {
 
@@ -124,7 +124,7 @@ final class MemoryHubBrainMapRoutingTests: XCTestCase {
   /// its full `ViewModelContainer`. This asserts on source text instead, so it
   /// proves wiring shape only — the tests above cover the decision itself.
   func testStaticCheckerBrainMapDestinationRoutesThroughPresentationGate() throws {
-    let source = try desktopHomeViewSource()
+    let source = try memoryHubPageSource()
 
     XCTAssertTrue(
       source.contains("private var brainMapPresentationMode: MemoryGraphPresentationMode"),
@@ -174,7 +174,7 @@ final class MemoryHubBrainMapRoutingTests: XCTestCase {
     // discarding the camera, the time cursor, and the selection. The inspector
     // reads the same evidence without leaving the map, so no destination write
     // may survive on the Brain Map's evidence path.
-    let source = try desktopHomeViewSource()
+    let source = try memoryHubPageSource()
     let atlasCall =
       source.components(separatedBy: "CanonicalMemoryAtlasTabView(").last ?? ""
     let atlasBlock = String(atlasCall.prefix(600))
@@ -196,7 +196,7 @@ final class MemoryHubBrainMapRoutingTests: XCTestCase {
     // `memoriesViewModel.memories` is one page of a tier-filtered,
     // device-scoped browse. Resolving citations against it reported evidence as
     // missing while it sat in the local cache.
-    let source = try desktopHomeViewSource()
+    let source = try memoryHubPageSource()
     let atlasBlock = String(
       (source.components(separatedBy: "CanonicalMemoryAtlasTabView(").last ?? "").prefix(1000))
 
@@ -266,14 +266,14 @@ final class MemoryHubBrainMapRoutingTests: XCTestCase {
     )
   }
 
-  private func desktopHomeViewSource() throws -> String {
+  private func memoryHubPageSource() throws -> String {
     let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
     let packageDirectory = testsDirectory.deletingLastPathComponent()
     let sourceURL =
       packageDirectory
       .appendingPathComponent("Sources")
       .appendingPathComponent("MainWindow")
-      .appendingPathComponent("DesktopHomeView.swift")
+      .appendingPathComponent("MemoryHubPage.swift")
     // omi-test-quality: source-inspection -- static contract: SwiftUI exposes no seam to observe which branch of a @ViewBuilder switch rendered, so the hub's gate wiring is asserted statically; the decision itself is covered behaviorally above.
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }

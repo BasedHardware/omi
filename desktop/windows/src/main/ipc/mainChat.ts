@@ -12,7 +12,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { getAppSettings } from '../appSettings'
 import { getAgentRuntimeKernel, controlPlaneOwnerId } from '../agentKernel/controlPlane'
 import { DEFAULT_LOCAL_OWNER_ID } from '../agentKernel/controlTools'
-import { buildDesktopChatSystemPrompt } from '../agentKernel/desktopChatPrompt'
+import { buildDesktopChatSystemPrompt, currentTimePrompt } from '../agentKernel/desktopChatPrompt'
 import { formatTranscriptTail } from '../agentKernel/turnContext'
 import { recordFallback, type RecordFallback } from '../observability/fallback'
 import type { AgentRuntimeKernel } from '../agentKernel/kernel'
@@ -46,6 +46,9 @@ const DESKTOP_CHAT_SYSTEM_PROMPT = buildDesktopChatSystemPrompt({
 export interface MainChatTurnDeps {
   kernel: AgentRuntimeKernel
   ownerId: string
+  /** Optional clock seams for deterministic tests; production uses the host clock. */
+  now?: () => Date
+  timeZone?: () => string
   /** Builds the per-turn <user_context> personalization block (memories / active
    *  tasks / AI profile / name), or '' when there is nothing to add. Optional and
    *  injected so tests stay hermetic; when omitted the turn carries no
@@ -287,9 +290,14 @@ export async function runMainChatTurn(
     const contextBlocks = [personalization, history].filter(
       (block): block is string => typeof block === 'string' && block.length > 0
     )
-    const effectivePrompt = contextBlocks.length
+    const promptWithContext = contextBlocks.length
       ? `${contextBlocks.join('\n\n')}\n\n${args.prompt}`
       : args.prompt
+    const effectivePrompt = currentTimePrompt(
+      promptWithContext,
+      deps.now?.() ?? new Date(),
+      deps.timeZone?.()
+    )
 
     // Record the clean user turn on the kernel transcript (empty assistant text →
     // only the user turn is appended; the run appends the assistant turn at

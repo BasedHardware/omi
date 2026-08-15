@@ -38,9 +38,11 @@ from database.sync_ledger import (
     release_sync_content_claim_after_job_retired,
 )
 from models.conversation_enums import ConversationSource
+from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from utils.analytics import record_usage
 from utils.other import endpoints as auth
+from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.other.storage import (
     get_playback_artifact_signed_url,
     upload_playback_artifact,
@@ -845,18 +847,12 @@ async def sync_local_files(
                 logger.warning('sync: failed to release v1 backfill slot uid=%s error=%s', uid, type(e).__name__)
 
 
-# ---------------------------------------------------------------------------
-# v2 async sync-local-files
-# ---------------------------------------------------------------------------
-# v1 processes segments synchronously (80-180s for large payloads → 504).
-# v2 returns 202 immediately after saving raw files, then runs the full
-# pipeline (decode → VAD → fair-use → STT → LLM) in a background thread.
-# The app polls GET /v2/sync-local-files/{job_id} until the job reaches
-# a terminal status.
-# ---------------------------------------------------------------------------
-
-
-@router.post("/v2/sync-local-files", status_code=202, response_model=SyncJobStartResponse)
+@router.post(  # v2 async sync-local-files
+    "/v2/sync-local-files",
+    status_code=202,
+    response_model=SyncJobStartResponse,
+    responses=SYNC_LOCAL_FILES_V2_RESPONSES,
+)
 @max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
@@ -1641,6 +1637,29 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
 
+        if await run_blocking(db_executor, should_skip_background_account_mutation, uid):
+            await _finalize_sync_job_failure(
+                job_id=job_id,
+                uid=uid,
+                content_id=content_id,
+                error_code='account_cutover',
+                outcome=TranscriptionOutcome.UPSTREAM_ERROR,
+                provider='unknown',
+                model='unknown',
+                lane=sync_lane,
+                run_lock_token=lock_token if ledger_fence_active else None,
+            )
+            await _delete_staged_blobs_async(blob_paths)
+            if sync_lane == SyncLane.BACKFILL.value:
+                await run_blocking(db_executor, release_backfill_slot, uid, job_id)
+            if content_id:
+                release_claim = (
+                    release_sync_content_claim_after_job_retired if ledger_fence_active else release_sync_content_claim
+                )
+                await run_blocking(db_executor, release_claim, uid, content_id, job_id)
+            logger.info('event=sync_transcription_job outcome=skipped reason=account_cutover lane=%s', sync_lane)
+            return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
+
         if not await run_blocking(storage_executor, _download_staged_files, blob_paths):
             # Blobs deleted by the bucket's 1-day lifecycle (deep queue backlog).
             await _finalize_sync_job_failure(
@@ -1903,6 +1922,9 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
         return JSONResponse(status_code=409, content={'status': 'locked'})
 
     try:
+        if await run_blocking(db_executor, should_skip_background_account_mutation, uid):
+            return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
+
         existing = await run_blocking(
             storage_executor, get_playback_artifact_signed_url, uid, conversation_id, audio_file_id
         )
@@ -1973,6 +1995,9 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         return JSONResponse(status_code=409, content={'status': 'locked'})
 
     try:
+        if await run_blocking(db_executor, should_skip_background_account_mutation, uid):
+            return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
+
         conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation or not conversation.get('audio_files'):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'no_audio_files'})

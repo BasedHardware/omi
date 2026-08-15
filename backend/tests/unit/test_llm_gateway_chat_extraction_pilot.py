@@ -234,6 +234,7 @@ def test_strict_schema_normalizes_action_item_extraction_for_openai():
         'concrete_deliverable',
         'candidate_action',
         'target_task_id',
+        'source_segment_ids',
     ]
     assert 'default' not in action_item_schema['properties']['due_at']
     assert {'type': 'null'} in action_item_schema['properties']['due_at']['anyOf']

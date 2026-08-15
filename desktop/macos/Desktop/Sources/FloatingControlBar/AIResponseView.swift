@@ -106,6 +106,21 @@ struct AIResponseView: View {
         return ["thinking", id, text].joined(separator: "\u{1E}")
       case .discoveryCard(let id, let title, let summary, let fullText):
         return ["discovery", id, title, summary, fullText].joined(separator: "\u{1E}")
+      case .questionCard(let id, _, _, _, _, _, _):
+        return ["chatFirstQuestion", id].joined(separator: "\u{1E}")
+      case .taskCard(let id, _):
+        return ["chatFirstTask", id].joined(separator: "\u{1E}")
+      case .goalLink(let id, _, _):
+        return ["chatFirstGoal", id].joined(separator: "\u{1E}")
+      case .captureLink(let id, _, _, _):
+        return ["chatFirstCapture", id].joined(separator: "\u{1E}")
+      case .conversationLink(let id, _, _):
+        return ["chatFirstConversation", id].joined(separator: "\u{1E}")
+      case .memoryLink(let id, _, _):
+        return ["chatFirstMemory", id].joined(separator: "\u{1E}")
+      case .citation(let id, let reference):
+        return ["citation", id, String(reference.ordinal), reference.sourceID]
+          .joined(separator: "\u{1E}")
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):
@@ -160,7 +175,7 @@ struct AIResponseView: View {
             .scaledFont(size: OmiType.caption)
             .foregroundColor(.secondary)
             .frame(width: 30, height: 16)
-            .background(Color.white.opacity(0.1))
+            .background(NotchGlass.ink(.w1))
             .cornerRadius(OmiChrome.stripRadius)
           Text("to clear")
             .scaledFont(size: OmiType.caption)
@@ -172,7 +187,7 @@ struct AIResponseView: View {
 
   // MARK: - Content Blocks Rendering
 
-  /// Renders a ChatMessage's content blocks using the shared components from ChatPage.
+  /// Renders a ChatMessage's content blocks using the shared chat components.
   @ViewBuilder
   private func contentBlocksView(for message: ChatMessage) -> some View {
     if !message.contentBlocks.isEmpty {
@@ -198,6 +213,10 @@ struct AIResponseView: View {
         case .discoveryCard(_, let title, let summary, let fullText):
           DiscoveryCard(title: title, summary: summary, fullText: fullText)
             .frame(maxWidth: .infinity, alignment: .leading)
+        // The floating/notch surface never opts into rich chat-first controls.
+        // Keep journaled blocks inert if an older runtime projects them here.
+        case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
+          EmptyView()
         case .agentSpawn(
           _, let pillId, let sessionId, let runId, let title, let objective, let provider
         ):
@@ -291,13 +310,13 @@ struct AIResponseView: View {
         HStack(alignment: .top, spacing: OmiSpacing.sm) {
           Text(exchange.question ?? "")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(.white)
+            .foregroundColor(NotchGlass.primary)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
-        .background(Color.white.opacity(0.1))
+        .background(NotchGlass.ink(.w1))
         .cornerRadius(OmiChrome.elementRadius)
       }
 
@@ -317,7 +336,7 @@ struct AIResponseView: View {
             ScrollView {
               Text(userInput)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(.white)
+                .foregroundColor(NotchGlass.primary)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -325,7 +344,7 @@ struct AIResponseView: View {
           } else {
             Text(userInput)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(.white)
+              .foregroundColor(NotchGlass.primary)
               .lineLimit(1)
               .truncationMode(.head)
               .textSelection(.enabled)
@@ -345,7 +364,7 @@ struct AIResponseView: View {
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(Color.white.opacity(0.1))
+      .background(NotchGlass.ink(.w1))
       .cornerRadius(OmiChrome.elementRadius)
       .contextMenu {
         Button("Copy") {
@@ -426,10 +445,15 @@ struct AIResponseView: View {
   private var followUpInputView: some View {
     VStack(spacing: 0) {
       HStack(spacing: OmiSpacing.xs) {
+        // `NotchGlass.quiet`, never SwiftUI's `.secondary`. This row is inside the pill, whose ink is
+        // the white-on-black scale (`NotchGlassChrome`); `.secondary` is a semantic label colour that
+        // resolves against whatever colour scheme happens to be in the environment, which is a
+        // different ladder that only *looks* right here because the panel forces `.dark`. One glyph
+        // reading off a second scale is how a surface drifts.
         Button(action: { shareLink() }) {
           Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(showShareFeedback ? .green : .secondary)
+            .foregroundColor(showShareFeedback ? Ink.listeningGreen : NotchGlass.quiet)
         }
         .buttonStyle(.plain)
         .help("Copy share link")
@@ -439,22 +463,22 @@ struct AIResponseView: View {
           HStack(spacing: OmiSpacing.xs) {
             Text("Continue in Omi")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(.white.opacity(0.85))
+              .foregroundColor(NotchGlass.ink(.w85))
             Spacer(minLength: 0)
             Image(systemName: "arrow.up.forward.app")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(.secondary)
+              .foregroundColor(NotchGlass.quiet)
           }
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.xs)
-          .background(Color.white.opacity(0.10))
+          .background(NotchGlass.ink(.w1))
           .cornerRadius(OmiChrome.elementRadius)
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help("Open the Omi app to keep chatting")
       }
-      .chatComposerShell(fill: OmiColors.backgroundSecondary.opacity(0.82))
+      .chatComposerShell(fill: NotchGlass.fill)
     }
   }
 
@@ -466,7 +490,7 @@ struct AIResponseView: View {
 
       Text("Share link copied to your clipboard")
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(.white)
+        .foregroundColor(NotchGlass.primary)
 
       Spacer(minLength: 0)
     }
@@ -633,7 +657,7 @@ struct MessageHoverOverlay<Content: View>: View {
             Button(action: { showInfoPopover.toggle() }) {
               Image(systemName: "info.circle")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(showInfoPopover ? .white : .secondary)
+                .foregroundColor(NotchGlass.controlLabel(isActive: showInfoPopover))
             }
             .buttonStyle(.plain)
             .help("View response context")
@@ -688,99 +712,55 @@ struct MessageHoverOverlay<Content: View>: View {
 
 // MARK: - Metadata Popover
 
-/// Developer popover showing full context used to generate an AI response
+/// Developer popover showing observed turn evidence, not a reconstructed prompt.
 struct MessageMetadataPopover: View {
   let metadata: MessageMetadata
 
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        // Header
         Text("Response Context")
           .font(.headline)
           .foregroundColor(.primary)
 
-        // Key info
-        if let model = metadata.model {
-          metadataRow(label: "Model", value: model)
-        }
-        if metadata.hasScreenshot, let size = metadata.screenshotSizeBytes {
-          let kb = size / 1024
-          let base64Chars = (size * 4 + 2) / 3  // base64 expansion
-          metadataRow(label: "Screenshot", value: "1 image (\(kb) KB, ~\(base64Chars / 1024) KB base64)")
-        } else {
-          metadataRow(label: "Screenshot", value: "None")
-        }
-
-        Divider()
-
-        // Context fed into the prompt
-        Text("Context in Prompt")
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundColor(.primary)
-        metadataRow(label: "User memories/facts", value: "\(metadata.memoriesCount)")
-        metadataRow(label: "Conversation history turns", value: "\(metadata.conversationTurns)")
-        metadataRow(label: "Tasks", value: "\(metadata.tasksCount)")
-        metadataRow(label: "Goals", value: "\(metadata.goalsCount)")
-        metadataRow(label: "Available tools", value: "\(metadata.availableToolsCount)")
-
-        // Tool calls
         if !metadata.toolNames.isEmpty {
-          Divider()
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Tools used (\(metadata.toolNames.count))")
               .scaledFont(size: OmiType.caption, weight: .semibold)
               .foregroundColor(.primary)
-            ForEach(metadata.toolNames, id: \.self) { tool in
-              Text("  \(tool)")
+            ForEach(Array(metadata.toolNames.enumerated()), id: \.offset) { _, tool in
+              Text(tool)
                 .scaledFont(size: OmiType.caption)
                 .foregroundColor(.secondary)
                 .textSelection(.enabled)
             }
-            if metadata.sqlQueryCount > 0 {
-              metadataRow(
-                label: "SQL queries",
-                value: "\(metadata.sqlQueryCount) queries, \(metadata.sqlRowsReturned) rows returned"
-              )
-            }
+          }
+        }
+        if let sql = metadata.sqlSummary {
+          metadataRow(label: "SQL", value: sql)
+        }
+        metadataRow(label: "Screenshot", value: metadata.screenshotSummary)
+
+        if !metadata.sourceOutcomes.isEmpty {
+          Divider()
+          Text("Context admitted")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(.primary)
+          ForEach(metadata.sourceOutcomes) { source in
+            metadataRow(label: source.source, value: source.outcome)
           }
         }
 
-        // Full system prompt — always expanded, scrollable
-        if let prompt = metadata.systemPrompt, !prompt.isEmpty {
-          Divider()
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            HStack {
-              Text("Full System Prompt")
-                .scaledFont(size: OmiType.caption, weight: .semibold)
-                .foregroundColor(.primary)
-              Spacer()
-              Text("\(prompt.count) chars")
-                .scaledFont(size: OmiType.micro)
-                .foregroundColor(.secondary)
-              Button(action: {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(prompt, forType: .string)
-              }) {
-                Image(systemName: "doc.on.doc")
-                  .scaledFont(size: OmiType.micro)
-                  .foregroundColor(.secondary)
-              }
-              .buttonStyle(.plain)
-              .help("Copy prompt")
-            }
-            Text(prompt)
-              .scaledFont(size: OmiType.micro)
-              .foregroundColor(.primary)
-              .textSelection(.enabled)
-              .frame(maxWidth: .infinity, alignment: .leading)
-          }
+        metadataRow(label: "History", value: metadata.historySummary)
+        metadataRow(label: "Offered", value: metadata.offeredToolsSummary)
+        if !metadata.pathSummary.isEmpty {
+          metadataRow(label: "Path", value: metadata.pathSummary)
         }
       }
       .padding()
-      .frame(width: 450)
+      .frame(width: 420)
     }
-    .frame(width: 450, height: 500)
+    .frame(width: 420, height: 420)
   }
 
   private func metadataRow(label: String, value: String) -> some View {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
@@ -387,8 +388,6 @@ class AnalyticsManager {
     _pendingTimedEvents.removeWhere((_, started) => started.isBefore(cutoff));
   }
 
-  void onboardingDeviceConnected() => track('Onboarding Device Connected');
-
   void onboardingCompleted() => track('Onboarding Completed');
 
   void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
@@ -522,9 +521,42 @@ class AnalyticsManager {
     track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
   }
 
-  void deviceConnected() => track('Device Connected', properties: {..._preferences.btDevice.toJson()});
+  void deviceConnected(BtDevice device) {
+    final vendor = device.type.analyticsVendor;
+    track('Device Connected', properties: {...device.toJson(), 'type': device.type.name, 'device_vendor': vendor});
+    setUserProperty('device_vendor', vendor);
+  }
+
+  void devicePaired(String firstPairedAt) {
+    final device = _preferences.btDevice;
+    track(
+      'Device Paired',
+      properties: {...device.toJson(), 'type': device.type.name, 'device_vendor': device.type.analyticsVendor},
+    );
+    _setUserPropertiesBatch({
+      'has_paired_device': true,
+      'first_paired_at': firstPairedAt,
+      'device_vendor': device.type.analyticsVendor,
+    });
+  }
 
   void deviceDisconnected() => track('Device Disconnected');
+
+  void deviceSessionEnded({required BtDevice device, required Duration duration, String? reason, int? hciReasonCode}) {
+    final properties = <String, Object>{
+      'duration_seconds': duration.inMilliseconds / Duration.millisecondsPerSecond,
+      'reason': _knownDeviceValue(reason ?? ''),
+      'device_vendor': device.type.analyticsVendor,
+      'model': _knownDeviceValue(device.modelNumber),
+      'firmware_revision': _knownDeviceValue(device.firmwareRevision),
+    };
+    if (hciReasonCode != null && hciReasonCode >= 0) {
+      properties['hci_reason_code'] = hciReasonCode;
+    }
+    track('Device Session Ended', properties: properties);
+  }
+
+  static String _knownDeviceValue(String value) => value.isEmpty || value == 'Unknown' ? 'unknown' : value;
 
   void memoriesPageCategoryOpened(MemoryCategory category) =>
       track('Fact Page Category Opened', properties: {'category': category.toString().split('.').last});
@@ -807,8 +839,6 @@ class AnalyticsManager {
   void subscriptionCancelAbandoned({required int step, String? reason}) =>
       track('Subscription Cancel Abandoned', properties: {'step': step, 'reason': reason});
 
-  void getFriendClicked() => track('Get Friend Clicked');
-
   void connectFriendClicked() => track('Connect Friend Clicked');
 
   void disconnectFriendClicked() => track('Disconnect Friend Clicked');
@@ -1065,17 +1095,6 @@ class AnalyticsManager {
         'has_photos': hasPhotos,
         'segment_count': segmentCount,
         'photo_count': photoCount,
-      },
-    );
-  }
-
-  void deviceInfoButtonClicked({String? deviceId, String? deviceName, int? batteryLevel}) {
-    track(
-      'Device Info Button Clicked',
-      properties: {
-        if (deviceId != null) 'device_id': deviceId,
-        if (deviceName != null) 'device_name': deviceName,
-        if (batteryLevel != null) 'battery_level': batteryLevel,
       },
     );
   }
@@ -1888,6 +1907,8 @@ class AnalyticsManager {
   // ============================================================================
 
   void connectDevicePageOpened() => track('Connect Device Page Opened');
+
+  void getOmiDeviceClicked() => track('Get Omi Device Clicked');
 
   void connectionGuideOpened() => track('Connection Guide Opened');
 

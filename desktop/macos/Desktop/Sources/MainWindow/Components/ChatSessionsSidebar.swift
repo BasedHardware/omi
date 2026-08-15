@@ -24,7 +24,7 @@ struct ChatSessionsSidebar: View {
       .padding(.vertical, OmiSpacing.md)
 
       Divider()
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFillHover)
 
       // Sessions list
       if chatProvider.isLoadingSessions {
@@ -33,15 +33,15 @@ struct ChatSessionsSidebar: View {
         VStack(spacing: OmiSpacing.md) {
           Image(systemName: "exclamationmark.triangle")
             .scaledFont(size: 24)
-            .foregroundColor(OmiColors.warning)
+            .foregroundColor(Ink.errorRed)
 
           Text("Failed to load chats")
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           Text(error)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .multilineTextAlignment(.center)
             .lineLimit(3)
 
@@ -50,12 +50,12 @@ struct ChatSessionsSidebar: View {
           }) {
             Text("Try Again")
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.backgroundPrimary)
+              .foregroundColor(Ink.surface)
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.vertical, OmiSpacing.sm)
               .background(
                 RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-                  .fill(OmiColors.accent)
+                  .fill(Ink.primary)
               )
           }
           .buttonStyle(.plain)
@@ -69,7 +69,7 @@ struct ChatSessionsSidebar: View {
       }
     }
     .frame(width: sidebarWidth)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.rowFill)
   }
 
   // MARK: - New Chat Button
@@ -89,10 +89,10 @@ struct ChatSessionsSidebar: View {
 
         Spacer()
       }
-      .foregroundColor(OmiColors.accent)
+      .foregroundColor(Ink.primary)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundTertiary)
+      .background(Ink.rowFillHover)
       .cornerRadius(OmiChrome.smallControlRadius)
     }
     .buttonStyle(.plain)
@@ -121,17 +121,17 @@ struct ChatSessionsSidebar: View {
           .scaledFont(size: OmiType.caption, weight: .medium)
         Spacer()
       }
-      .foregroundColor(chatProvider.showStarredOnly ? OmiColors.amber : OmiColors.textSecondary)
+      .foregroundColor(chatProvider.showStarredOnly ? Ink.primary : Ink.secondary)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
           .fill(
-            chatProvider.showStarredOnly ? OmiColors.amber.opacity(0.15) : OmiColors.backgroundTertiary.opacity(0.6))
+            chatProvider.showStarredOnly ? Ink.primary.opacity(0.15) : Ink.rowFillHover)
       )
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(chatProvider.showStarredOnly ? OmiColors.amber.opacity(0.4) : Color.clear, lineWidth: 1)
+          .strokeBorder(chatProvider.showStarredOnly ? Ink.hairline : Color.clear, lineWidth: 1)
       )
     }
     .buttonStyle(.plain)
@@ -144,12 +144,12 @@ struct ChatSessionsSidebar: View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "magnifyingglass")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       TextField("Search chats...", text: $chatProvider.searchQuery)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       if !chatProvider.searchQuery.isEmpty {
         Button(action: {
@@ -157,14 +157,14 @@ struct ChatSessionsSidebar: View {
         }) {
           Image(systemName: "xmark.circle.fill")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
     }
     .padding(.horizontal, OmiSpacing.sm)
     .padding(.vertical, OmiSpacing.sm)
-    .background(OmiColors.backgroundTertiary.opacity(0.6))
+    .background(Ink.rowFillHover)
     .cornerRadius(OmiChrome.elementRadius)
   }
 
@@ -177,7 +177,7 @@ struct ChatSessionsSidebar: View {
           // Group header
           Text(group)
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.lg)
             .padding(.top, OmiSpacing.lg)
             .padding(.bottom, OmiSpacing.sm)
@@ -225,7 +225,7 @@ struct ChatSessionsSidebar: View {
         .scaleEffect(0.8)
       Text("Loading chats...")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .padding(.top, OmiSpacing.sm)
       Spacer()
     }
@@ -236,15 +236,15 @@ struct ChatSessionsSidebar: View {
       Spacer()
       Image(systemName: emptyStateIcon)
         .scaledFont(size: 32)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       Text(emptyStateTitle)
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Text(emptyStateSubtitle)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
       Spacer()
     }
     .padding()
@@ -317,7 +317,7 @@ struct SessionRow: View {
             TextField("Chat title", text: $editedTitle)
               .textFieldStyle(.plain)
               .scaledFont(size: OmiType.body, weight: isSelected ? .semibold : .regular)
-              .foregroundColor(isSelected ? OmiColors.accent : OmiColors.textPrimary)
+              .foregroundColor(isSelected ? Ink.primary : Ink.primary)
               .focused($isTitleFocused)
               .onSubmit {
                 saveTitle()
@@ -328,7 +328,7 @@ struct SessionRow: View {
           } else {
             Text(session.title)
               .scaledFont(size: OmiType.body, weight: isSelected ? .semibold : .regular)
-              .foregroundColor(isSelected ? OmiColors.accent : OmiColors.textPrimary)
+              .foregroundColor(isSelected ? Ink.primary : Ink.primary)
               .lineLimit(1)
           }
 
@@ -337,7 +337,7 @@ struct SessionRow: View {
           {
             Text(preview)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
           }
         }
@@ -357,7 +357,7 @@ struct SessionRow: View {
             Button(action: startEditing) {
               Image(systemName: "pencil")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
             .buttonStyle(.plain)
 
@@ -365,7 +365,7 @@ struct SessionRow: View {
             Button(action: onToggleStar) {
               Image(systemName: session.starred ? "star.fill" : "star")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(session.starred ? .yellow : OmiColors.textTertiary)
+                .foregroundColor(session.starred ? PageGlass.starred : Ink.secondary)
             }
             .buttonStyle(.plain)
 
@@ -373,7 +373,7 @@ struct SessionRow: View {
             Button(action: { showDeleteConfirm = true }) {
               Image(systemName: "trash")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
             .buttonStyle(.plain)
           }
@@ -384,7 +384,7 @@ struct SessionRow: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         isSelected
-          ? OmiColors.backgroundTertiary : (isHovering ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+          ? Ink.rowFillHover : (isHovering ? Ink.rowFill : Color.clear)
       )
       .contentShape(Rectangle())
       .cornerRadius(OmiChrome.elementRadius)

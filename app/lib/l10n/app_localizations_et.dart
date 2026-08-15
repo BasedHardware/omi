@@ -747,11 +747,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Teie plaan uueneb $date.';
-  }
-
-  @override
   String get basicPlan => 'Tasuta plaan';
 
   @override
@@ -2127,16 +2122,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String get editMemory => '✏️ Muuda mälestust';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Kinnita alusena';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Eemalda aluselt';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Alusmälu';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Alati kontekstis';
 
   @override
   String get memoryContentHint => 'Mulle meeldib süüa jäätist...';
@@ -9767,4 +9762,76 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Selle mikrofoniga ei saanud ühendust luua. Veenduge, et see oleks iPhone\'i seadetes ühendatud.';
+
+  @override
+  String get syncStatusTooOld => 'Sünkroonimiseks liiga vana — Omi ei saa seda vastu võtta';
+
+  @override
+  String get planSheetChooseYourPlan => 'Vali oma pakett, et avada piiramatu Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Saadaval Macis, mobiilis ja veebis';
+
+  @override
+  String get popularBadge => 'POPULAARNE';
+
+  @override
+  String get worksOnDesktop => 'Töötab arvutis';
+
+  @override
+  String get noDesktopAccess => 'Ei tööta arvutis';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months kuud / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kuud tasuta',
+      one: '1 kuu tasuta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi on tasuta, kuid tasuta versioonil on piirangud, mis mõjutavad sinu kogemust:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 sekundi viivitus (mitte reaalajas)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Mine üle tasuta versioonile';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Saa tasuta piiramatu juurdepääs';
+
+  @override
+  String get shareDataForTraining => 'Jaga andmeid treenimiseks';
+
+  @override
+  String get yourRequestUnderReview => 'Sinu taotlus on läbivaatamisel';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Päivitys vaaditaan';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => 'Asenna uusin Omi-sovellus jatkaaksesi tilin siirron jälkeen.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Siirto käynnissä';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.';
+
+  @override
+  String get accountCutoverOpenStore => 'Avaa kauppa';
 }

@@ -174,14 +174,14 @@ describe('generateGoalCandidateNow (manual phase 1 — no write)', () => {
     vi.useRealTimers()
   })
 
-  it('retries a transport throw up to 3× then reports invalid_suggestion', async () => {
+  it('does not add an outer retry around the Gemini wire layer', async () => {
     vi.useFakeTimers()
     h.session = { token: 't' }
     h.generateGoalCandidate.mockRejectedValue(new Error('HTTP 500'))
     const p = generateGoalCandidateNow()
-    await vi.advanceTimersByTimeAsync(11_000)
+    await vi.advanceTimersByTimeAsync(1)
     expect(await p).toEqual({ status: 'skipped', reason: 'invalid_suggestion' })
-    expect(h.generateGoalCandidate).toHaveBeenCalledTimes(3)
+    expect(h.generateGoalCandidate).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
   })
 })

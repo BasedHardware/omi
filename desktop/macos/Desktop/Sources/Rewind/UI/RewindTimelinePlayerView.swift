@@ -19,7 +19,7 @@ struct RewindTimelinePlayerView: View {
   var body: some View {
     ZStack {
       // Background
-      Color.black.ignoresSafeArea()
+      Color.clear.ignoresSafeArea()
 
       // Main content
       VStack(spacing: 0) {
@@ -71,6 +71,10 @@ struct RewindTimelinePlayerView: View {
       viewModel.nextFrame()
       return .handled
     }
+    // The one exemption from "hosted content paints no background": this is a player, and a screen
+    // recording letterboxed against a light mat hides where the frame ends. `glassMediaMat` flips the
+    // environment to dark so the same `Ink` ladder resolves light-on-black here.
+    .glassMediaMat()
   }
 
   // MARK: - Top Bar
@@ -82,9 +86,9 @@ struct RewindTimelinePlayerView: View {
       } label: {
         Image(systemName: "xmark")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
           .frame(width: 32, height: 32)
-          .background(Color.white.opacity(0.2))
+          .background(Ink.rowFillHover)
           .clipShape(Circle())
       }
       .buttonStyle(.plain)
@@ -94,7 +98,7 @@ struct RewindTimelinePlayerView: View {
       // Screenshot count
       Text("\(viewModel.currentIndex + 1) / \(viewModel.screenshots.count)")
         .scaledFont(size: OmiType.body, weight: .medium, design: .monospaced)
-        .foregroundColor(.white.opacity(0.8))
+        .foregroundColor(Ink.secondary)
 
       Spacer()
 
@@ -118,10 +122,10 @@ struct RewindTimelinePlayerView: View {
           Text("\(viewModel.playbackSpeed, specifier: "%.1f")x")
         }
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(.white.opacity(0.8))
+        .foregroundColor(Ink.secondary)
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.xs)
-        .background(Color.white.opacity(0.2))
+        .background(Ink.rowFillHover)
         .cornerRadius(OmiChrome.elementRadius)
       }
       .buttonStyle(.plain)
@@ -138,7 +142,7 @@ struct RewindTimelinePlayerView: View {
         ProgressView()
           .progressViewStyle(.circular)
           .scaleEffect(1.5)
-          .tint(.white)
+          .tint(Ink.primary)
       } else if let image = viewModel.currentImage {
         Image(nsImage: image)
           .resizable()
@@ -149,10 +153,10 @@ struct RewindTimelinePlayerView: View {
         VStack(spacing: OmiSpacing.md) {
           Image(systemName: "photo")
             .scaledFont(size: 48)
-            .foregroundColor(.white.opacity(0.5))
+            .foregroundColor(Ink.secondary)
           Text("Failed to load frame")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(.white.opacity(0.5))
+            .foregroundColor(Ink.secondary)
         }
       }
     }
@@ -187,7 +191,7 @@ struct RewindTimelinePlayerView: View {
         in: 0...Double(max(0, viewModel.screenshots.count - 1)),
         step: 1
       )
-      .tint(OmiColors.accent)
+      .tint(Ink.accent)
     }
   }
 
@@ -213,7 +217,7 @@ struct RewindTimelinePlayerView: View {
       } label: {
         Image(systemName: "backward.end.fill")
           .scaledFont(size: OmiType.heading)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
       }
       .buttonStyle(.plain)
       .disabled(viewModel.currentIndex == 0)
@@ -225,7 +229,7 @@ struct RewindTimelinePlayerView: View {
       } label: {
         Image(systemName: "backward.frame.fill")
           .scaledFont(size: 24)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
       }
       .buttonStyle(.plain)
       .disabled(viewModel.currentIndex == 0)
@@ -237,9 +241,9 @@ struct RewindTimelinePlayerView: View {
       } label: {
         Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
           .scaledFont(size: 32)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.surface)
           .frame(width: 64, height: 64)
-          .background(Color.white)
+          .background(Ink.primary)
           .clipShape(Circle())
       }
       .buttonStyle(.plain)
@@ -250,7 +254,7 @@ struct RewindTimelinePlayerView: View {
       } label: {
         Image(systemName: "forward.frame.fill")
           .scaledFont(size: 24)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
       }
       .buttonStyle(.plain)
       .disabled(viewModel.currentIndex >= viewModel.screenshots.count - 1)
@@ -262,7 +266,7 @@ struct RewindTimelinePlayerView: View {
       } label: {
         Image(systemName: "forward.end.fill")
           .scaledFont(size: OmiType.heading)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
       }
       .buttonStyle(.plain)
       .disabled(viewModel.currentIndex >= viewModel.screenshots.count - 1)
@@ -280,7 +284,7 @@ struct RewindTimelinePlayerView: View {
           AppIconView(appName: screenshot.appName, size: 20)
           Text(screenshot.appName)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(.white)
+            .foregroundColor(Ink.primary)
         }
 
         Spacer()
@@ -288,7 +292,7 @@ struct RewindTimelinePlayerView: View {
         // Timestamp
         Text(screenshot.formattedDate)
           .scaledFont(size: OmiType.body, design: .monospaced)
-          .foregroundColor(.white.opacity(0.8))
+          .foregroundColor(Ink.secondary)
       }
     }
   }

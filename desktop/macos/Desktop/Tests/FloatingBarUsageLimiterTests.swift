@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 @testable import Omi_Computer
@@ -65,6 +66,28 @@ final class FloatingBarUsageLimiterTests: XCTestCase {
     limiter.recordQuery()
     XCTAssertTrue(limiter.isLimitReached)
     XCTAssertEqual(limiter.remainingQueries, 0)
+  }
+
+  func testQuotaAndOptimisticMutationsPublishObjectWillChange() throws {
+    let limiter = FloatingBarUsageLimiter()
+    var notificationCount = 0
+    let cancellable = limiter.objectWillChange.sink { _ in notificationCount += 1 }
+    defer { cancellable.cancel() }
+
+    limiter.applyQuota(try makeQuota(plan: "Free", used: 29, limit: 30, percent: 96, allowed: true))
+    XCTAssertGreaterThan(
+      notificationCount,
+      0,
+      "a server quota update must invalidate already-rendered observers")
+    let quotaNotificationCount = notificationCount
+
+    limiter.recordQuery()
+
+    XCTAssertEqual(
+      notificationCount,
+      quotaNotificationCount + 1,
+      "an optimistic query mutation must invalidate observers immediately")
+    XCTAssertTrue(limiter.isLimitReached)
   }
 
   func testServerDeniedBlocks() throws {

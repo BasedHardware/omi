@@ -4,6 +4,7 @@ tier: 2
 description: Real push-to-talk start/release lifecycle through the automation bridge
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/AudioLevelMonitor.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchVoiceMorphMark.swift
   - desktop/macos/Desktop/Sources/Chat/APIClient+HigherModel.swift
   - desktop/macos/Desktop/Sources/Chat/ExternalSurfaceRunAuthority.swift
@@ -23,6 +24,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+PushToTalk.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+StreamingJournal.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeVoiceContextSingleFlight.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+TransportReplacement.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+VoiceOutput.swift
@@ -35,12 +37,15 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeToolAuthority.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarManager+RealtimeStreamingJournal.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/ScreenCaptureManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSettings.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
   - desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/GlobalShortcutManager.swift
   - desktop/macos/Desktop/Sources/VADGateService.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkButtonTrigger.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkMicButton.swift
 preconditions:
   - automation_bridge_ready
 

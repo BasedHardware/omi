@@ -239,6 +239,89 @@ describe("RunToolCapabilityBroker", () => {
     store.close();
   });
 
+  it("classifies create_memory as a coordinator main-chat non-idempotent write", () => {
+    const { store, session, run, attempt } = fixture();
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+
+    expect(capability.allowedToolNames).toContain("create_memory");
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "create-memory-1",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "create_memory",
+      toolInput: { content: "I prefer tea." },
+    });
+    expect(authorized).toMatchObject({
+      canonicalToolName: "create_memory",
+      surfaceKind: "main_chat",
+      executionRole: "coordinator",
+      effectClass: "non_idempotent_write",
+      retryPolicy: "never_auto_retry",
+    });
+    expect(readToolInvocation(store, authorized.invocationId)).toMatchObject({
+      effectClass: "non_idempotent_write",
+      retryPolicy: "never_auto_retry",
+    });
+    store.close();
+  });
+
+  it.each([
+    ["realtime_voice", "coordinator"],
+    ["task_chat", "coordinator"],
+    ["background_agent", "leaf"],
+    ["delegated_agent", "leaf"],
+  ] as const)("does not authorize create_memory from %s/%s", (surfaceKind, executionRole) => {
+    const root = mkdtempSync(join(tmpdir(), "omi-capability-memory-scope-"));
+    roots.push(root);
+    const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner-1",
+      surfaceKind,
+      defaultAdapterId: "acp",
+      executionRole,
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "scope-client",
+      requestId: `scope-request-${surfaceKind}`,
+      status: "running",
+      mode: "act",
+    });
+    const attempt = store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "acp",
+      adapterInstanceId: "scope-worker",
+    });
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    expect(capability.allowedToolNames).not.toContain("create_memory");
+    expectCode(() => broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: `create-memory-${surfaceKind}`,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "create_memory",
+      toolInput: { content: "must not be saved" },
+    }), "tool_not_allowed");
+    store.close();
+  });
+
   it("rejects stale and duplicate Swift results by the exact persisted tuple", () => {
     const { store, session, run, attempt } = fixture();
     const broker = createBroker(store);
@@ -343,6 +426,71 @@ describe("RunToolCapabilityBroker", () => {
     expectCode(() => broker.authorize({ ...base, toolName: "not_a_real_tool" }), "tool_not_manifested");
     expectCode(() => broker.authorize({ ...base, toolName: "spawn_agent" }), "tool_not_allowed");
     store.close();
+  });
+
+  it("authorizes surface-scoped voice tools for swift_realtime runs without leaking them elsewhere", () => {
+    // Regression: realtime-voice runs relay Swift-executed voice tools that no
+    // chat adapter advertises. An adapter-only allowlist rejected every such
+    // tool (ask_higher_model, point_click) with tool_not_allowed in production.
+    const root = mkdtempSync(join(tmpdir(), "omi-capability-"));
+    roots.push(root);
+    const store = new SqliteAgentStore({ databasePath: join(root, "agent.sqlite"), reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner-1",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "pi-mono",
+      executionRole: "coordinator",
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "voice-client",
+      requestId: "voice-request",
+      status: "running",
+      mode: "act",
+      inputJson: JSON.stringify({
+        metadata: { externalSurface: { authority: "swift_realtime", turnId: "turn-1" } },
+      }),
+    });
+    const attempt = store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "pi-mono",
+      adapterInstanceId: "worker",
+    });
+    const broker = createBroker(store);
+    const capability = broker.register({
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+    });
+    expect(capability.surfaceKind).toBe("realtime_voice");
+    expect(capability.allowedToolNames).toContain("ask_higher_model");
+    expect(capability.allowedToolNames).toContain("point_click");
+    const authorized = broker.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: "invoke-voice",
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      activeOwnerId: session.ownerId,
+      toolName: "ask_higher_model",
+      toolInput: { query: "what's the weather in nyc right now?" },
+    });
+    expect(authorized.canonicalToolName).toBe("ask_higher_model");
+    store.close();
+
+    // A plain chat run must not inherit voice-only tools.
+    const chat = fixture();
+    const chatCapability = createBroker(chat.store).register({
+      ownerId: chat.session.ownerId,
+      sessionId: chat.session.sessionId,
+      runId: chat.run.runId,
+      attemptId: chat.attempt.attemptId,
+    });
+    expect(chatCapability.allowedToolNames).not.toContain("ask_higher_model");
+    expect(chatCapability.allowedToolNames).not.toContain("point_click");
+    chat.store.close();
   });
 
   it("keeps capability state internal and revokes it at terminal attempt", () => {

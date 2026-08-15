@@ -412,7 +412,7 @@ final class OnboardingFlowTests: XCTestCase {
     }
     XCTAssertEqual(
       secondBrainSource.components(separatedBy: "isDefaultAction: true").count - 1,
-      6,
+      7,
       "every visible second-brain proceed action must register Return")
     XCTAssertTrue(
       secondBrainSource.contains("Text(\"Continue →\")")
@@ -423,6 +423,44 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertTrue(
       componentsSource.contains("content.keyboardShortcut(.defaultAction)"),
       "SBInkButton must wire opted-in proceed actions to Return")
+  }
+
+  func testDirectPermissionRequestsKeepAVisibleSkipEscape() throws {
+    // omi-test-quality: source-inspection -- the direct request_permission path is private SwiftUI state; verify its rendered escape hatch for every advertised permission.
+    let source = try desktopSourceFile("Onboarding/OnboardingChatView.swift")
+    XCTAssertTrue(
+      source.contains("Button(\"Skip for now\")")
+        && source.contains("pendingPermissionType = nil")
+        && source.contains("chatProvider.sendMessage(\"Skip\")"),
+      "a direct permission request must expose the same visible skip control as quick replies")
+    XCTAssertTrue(
+      source.contains("case \"notifications\": return !appState.hasNotificationPermission")
+        && source.contains("appState.isAccessibilityBroken"),
+      "all advertised permissions must participate in the pending-row escape hatch")
+    XCTAssertTrue(
+      source.contains("if type == \"notifications\" {\n      appState.openNotificationPreferences()"),
+      "notifications must keep a working Settings retry beside Skip for now")
+  }
+
+  func testSecondBrainCaptureDefaultsToMeetingsWithoutShortcutReminder() throws {
+    // omi-test-quality: source-inspection -- static contract: verifies the SwiftUI capture-choice hierarchy and copy
+    let secondBrainSource = try desktopSourceFile("Onboarding/SecondBrain/SBOnboardingView.swift")
+    let defaultChoice = try XCTUnwrap(
+      secondBrainSource.range(of: "model.capture(SBOnboardingModel.defaultCaptureSelection)"))
+    let continuousChoice = try XCTUnwrap(secondBrainSource.range(of: "model.capture(.always)"))
+
+    XCTAssertLessThan(
+      defaultChoice.lowerBound,
+      continuousChoice.lowerBound,
+      "Meeting-only recording must be the first capture choice")
+    XCTAssertTrue(
+      secondBrainSource[defaultChoice.lowerBound..<continuousChoice.lowerBound]
+        .contains(".keyboardShortcut(.defaultAction)"),
+      "Return must choose the meeting-only capture default")
+    XCTAssertFalse(secondBrainSource.contains("reaches me anytime"))
+    XCTAssertTrue(secondBrainSource.contains("Text(\"Only Meetings\")"))
+    XCTAssertTrue(secondBrainSource.contains("Text(\"Always On\")"))
+    XCTAssertFalse(secondBrainSource.contains("from my calendar"))
   }
 
   // Regression: arrow navigation must be computed from persisted step state and

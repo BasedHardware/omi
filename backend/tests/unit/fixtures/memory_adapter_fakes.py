@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
 from models import memory_search_gateway
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_search_gateway import SearchVectorHit
@@ -142,11 +141,14 @@ def stored_item(item: MemoryItem) -> dict:
     return item.model_dump(mode="json")
 
 
-def vector_hit(item: MemoryItem, *, score, projection_commit_id="projection-1") -> SearchVectorHit:
+def vector_hit(item: MemoryItem, *, score, projection_commit_id=None) -> SearchVectorHit:
+    authoritative_projection_commit_id = projection_commit_id
+    if authoritative_projection_commit_id is None:
+        authoritative_projection_commit_id = item.ledger_commit_id or "projection-1"
     return SearchVectorHit(
         memory_id=item.memory_id,
         score=score,
-        projection_commit_id=projection_commit_id,
+        projection_commit_id=authoritative_projection_commit_id,
         vector_updated_at=item.updated_at + timedelta(minutes=1),
         uid=item.uid,
         account_generation=item.account_generation,
@@ -160,19 +162,8 @@ def enabled_rollout_doc(uid: str = "u1", *, grant_consumer: str) -> dict:
     return {
         "schema_version": 1,
         "uid": uid,
-        "mode": MemoryRolloutMode.read.value,
-        "mode_epoch": 7,
-        "cutover_epoch": 7,
         "account_generation": 3,
         "vector_projection_commit_id": "projection-1",
-        "fallback_projection_ready": True,
-        "persistent_memory_writes_started": True,
-        "writes_blocked": False,
-        "stage_gates": {
-            MemoryRolloutStageGate.shadow.value: PASSED,
-            MemoryRolloutStageGate.write.value: PASSED,
-            MemoryRolloutStageGate.read.value: PASSED,
-        },
         "grants": {
             grant_consumer: {
                 "default_memory": True,

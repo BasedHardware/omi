@@ -693,10 +693,7 @@ class TestSyncEndpointPrefsWiring:
         """Private-cloud v1 sync must persist chunks with the user's protection level and finalize audio metadata."""
         source = self._read_sync_source()
         fn_start = source.index('async def sync_local_files(')
-        fn_end = source.index(
-            '# ---------------------------------------------------------------------------\n# v2 async sync-local-files',
-            fn_start,
-        )
+        fn_end = source.index('@router.post(  # v2 async sync-local-files', fn_start)
         fn_body = source[fn_start:fn_end]
 
         assert 'get_user_private_cloud_sync_enabled' in fn_body

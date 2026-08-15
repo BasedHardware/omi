@@ -1,0 +1,7 @@
+{
+  "version": "0.12.164",
+  "date": "2026-08-12",
+  "changes": [
+    "Fixed the free-plan monthly limit not applying to voice conversations, agents, and other AI features — all AI surfaces now share the same limit"
+  ]
+}

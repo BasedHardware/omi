@@ -27,9 +27,10 @@ class BleBridge implements BleFlutterApi {
   final Map<String, DeviceReadyCallback> _deviceReadyCallbacks = {};
   final Map<String, RssiUpdateCallback> _rssiCallbacks = {};
 
-  void Function(String state)? bluetoothStateChangedCallback;
+  final Set<void Function(String state)> _bluetoothStateListeners = {};
   void Function(BlePeripheral peripheral)? peripheralDiscoveredCallback;
   void Function(List<String> peripheralUuids)? stateRestoredCallback;
+  VoidCallback? pairingLostCallback;
 
   final List<void Function(String fileName)> _batchRecordingFinalizedListeners = [];
 
@@ -38,6 +39,14 @@ class BleBridge implements BleFlutterApi {
 
   void removeBatchRecordingFinalizedListener(void Function(String fileName) cb) =>
       _batchRecordingFinalizedListeners.remove(cb);
+
+  /// Registers a listener for adapter-state changes without taking ownership of
+  /// the bridge's other BLE callbacks. Returns a disposer so short-lived UI and
+  /// service consumers cannot leave stale listeners behind.
+  VoidCallback addBluetoothStateListener(void Function(String state) listener) {
+    _bluetoothStateListeners.add(listener);
+    return () => _bluetoothStateListeners.remove(listener);
+  }
 
   void registerPeripheral({
     required String peripheralUuid,
@@ -68,7 +77,9 @@ class BleBridge implements BleFlutterApi {
 
   @override
   void onBluetoothStateChanged(String state) {
-    bluetoothStateChangedCallback?.call(state);
+    for (final listener in List.of(_bluetoothStateListeners)) {
+      listener(state);
+    }
   }
 
   @override
@@ -86,6 +97,7 @@ class BleBridge implements BleFlutterApi {
   void onPeripheralDisconnected(String peripheralUuid, String? error) {
     final key = peripheralUuid.toUpperCase();
     _disconnectCallbacks[key]?.call(false, error);
+    if (error == 'pairing_lost') pairingLostCallback?.call();
   }
 
   @override

@@ -19,7 +19,7 @@ import time
 import wave
 from collections import deque
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import httpx
 import numpy as np
@@ -33,6 +33,7 @@ from database.sync_jobs import (
     RUN_LOCK_HEARTBEAT_SECONDS,
     RUN_LOCK_RENEWAL_SAFETY_SECONDS,
     RUN_LOCK_TTL_SECONDS,
+    FencedSyncJobMutation,
     add_processed_segment,
     add_processed_segment_if_run_owner,
     delete_sync_job_run_lock_epoch,
@@ -116,6 +117,8 @@ from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_w
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
+from utils.sync.merge_audio import store_partial_merge_survivor_audio
+from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL
 
 logger = logging.getLogger(__name__)
@@ -444,12 +447,11 @@ def _raise_sync_terminal_result(result: object) -> None:
         raise result
 
 
-def _require_run_owner(mutation, *, job_id: str) -> Dict | None:
+def _require_run_owner(mutation: FencedSyncJobMutation, *, job_id: str) -> Dict | None:
     """Turn a non-applied Redis CAS result into the worker's stop signal."""
-    if getattr(mutation, 'applied', False):
-        return getattr(mutation, 'job', None)
-    outcome = getattr(getattr(mutation, 'outcome', None), 'value', 'unknown')
-    raise SyncJobRunLeaseLost(f'sync job run lease lost: job={job_id} outcome={outcome}')
+    if mutation.applied:
+        return mutation.job
+    raise SyncJobRunLeaseLost(f'sync job run lease lost: job={job_id} outcome={mutation.outcome.value}')
 
 
 def _update_sync_job_for_run(job_id: str, run_lock_token: str | None, updates: Dict) -> Dict | None:
@@ -1173,24 +1175,20 @@ def process_segment(
             for segment in closest_memory['transcript_segments']:
                 segment['timestamp'] = closest_memory['started_at'].timestamp() + segment['start']
 
-            # Deduplicate: skip new segments whose timestamp range already exists in the conversation
-            # (protects against retry after partial failure returning 207)
-            existing_timestamps = {
-                (round(s['timestamp'], 2), round(s['timestamp'] + (s['end'] - s['start']), 2))
-                for s in closest_memory['transcript_segments']
-            }
-            deduped_segments = []
-            for seg in transcript_segments:
-                seg_key = (round(seg['timestamp'], 2), round(seg['timestamp'] + (seg['end'] - seg['start']), 2))
-                if seg_key not in existing_timestamps:
-                    deduped_segments.append(seg)
+            incoming_count = len(transcript_segments)
+            # Deduplicate before append. Exact absolute ranges cover 207 retries;
+            # text+slop covers live+offline / clock-offset duplicates (#4769).
+            deduped_segments = dedupe_segments_for_merge(
+                closest_memory['started_at'].timestamp(),
+                closest_memory['transcript_segments'],
+                transcript_segments,
+            )
+            dropped_for_dedupe = incoming_count - len(deduped_segments)
             if not deduped_segments:
                 logger.info(f'All segments already exist in conversation {closest_memory["id"]}, skipping merge')
                 with lock:
                     response['updated_memories'].add(closest_memory['id'])
-                # No chunk upload here: this segment is a duplicate (retry or overlap with an
-                # existing/realtime conversation), so its audio is already represented — uploading
-                # again would double the audio in the merge.
+                # No chunk upload: duplicate of existing/realtime audio.
                 _set_deferred_segment_outcome(
                     deferred_outcome,
                     outcome=TranscriptionOutcome.SUCCESS,
@@ -1207,6 +1205,21 @@ def process_segment(
                         retryable=False,
                     )
                 return True
+
+            # Private-cloud audio before conversation-relative rewrite so partial
+            # survivors still have chunk-relative start/end (#4769 David CR).
+            if private_cloud_sync_enabled:
+                if dropped_for_dedupe == 0:
+                    _store_sync_audio_chunk(uid, closest_memory['id'], timestamp, audio_bytes, data_protection_level)
+                else:
+                    store_partial_merge_survivor_audio(
+                        uid=uid,
+                        conversation_id=closest_memory['id'],
+                        file_timestamp=timestamp,
+                        audio_bytes=audio_bytes,
+                        data_protection_level=data_protection_level,
+                        survivors=deduped_segments,
+                    )
 
             # merge and sort segments by start timestamp
             segments = closest_memory['transcript_segments'] + deduped_segments
@@ -1235,11 +1248,6 @@ def process_segment(
             # save with updated finished_at
             with lock:
                 response['updated_memories'].add(closest_memory['id'])
-            # Store the chunk before saving segments so "segment present ⇒ chunk present"
-            # holds — a retry that dedup-skips this segment won't leave its audio missing.
-            # Deterministic chunk path makes the upload overwrite-safe.
-            if private_cloud_sync_enabled:
-                _store_sync_audio_chunk(uid, closest_memory['id'], timestamp, audio_bytes, data_protection_level)
             update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
 
             # Lock existing conversation if credits exhausted
@@ -1298,7 +1306,7 @@ def process_segment(
             turnstile.complete(path)
 
 
-def _reprocess_merged_conversations(uid: str, response: dict, on_fenced=None):
+def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optional[Callable[[], None]] = None):
     """Regenerate summary/structured data for conversations that gained segments this batch.
 
     The merge path in process_segment only appends transcript segments; without this the
@@ -1413,7 +1421,7 @@ def _finalize_sync_audio_files(uid: str, response: dict):
             )
 
 
-def _cleanup_files(file_paths):
+def _cleanup_files(file_paths: Iterable[str]):
     """Helper to clean up temporary files."""
     for path in file_paths:
         try:
@@ -1588,7 +1596,7 @@ async def _run_sync_vad_phase(wav_paths: list, segmented_paths: set) -> tuple[li
     phase_started = time.monotonic()
     vad_errors: list[str] = []
 
-    def _run_vad_bg(path):
+    def _run_vad_bg(path: str):
         local_errors: list[str] = []
         try:
             retrieve_vad_segments(path, segmented_paths, local_errors)
@@ -1618,7 +1626,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     job_id: str,
     uid: str,
     raw_paths: list,
-    source,
+    source: ConversationSource,
     should_lock: bool,
     job_dir: str,
     target_conversation_id: str = None,
@@ -2071,7 +2079,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
             assignment_turnstile = _OrderedTurnstile(segment_list)
 
-            def _process_one_segment(path):
+            def _process_one_segment(path: str):
                 segment_id = segment_ids_by_path.get(path)
                 if path in already_processed or (segment_id and segment_id in durable_processed_segment_ids):
                     # Release the assignment slot — later segments wait on it

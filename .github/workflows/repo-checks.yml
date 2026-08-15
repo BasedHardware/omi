@@ -56,8 +56,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          # The PR event payload's base-branch SHA field is frozen at whatever PR
+          # event last delivered it; a metadata-only edited/labeled/unlabeled event
+          # days later can carry a value main has long since moved past. actions/checkout
+          # already fetched origin/${{ github.base_ref }} live (fetch-depth: 0
+          # above), so diff against that instead of the stale payload field.
           scripts/pr-preflight \
-            --base "${{ github.event.pull_request.base.sha }}" \
+            --base "origin/${{ github.base_ref }}" \
             --repository "${{ github.repository }}" \
             --pr-number "${{ github.event.pull_request.number }}"
 
@@ -143,9 +148,6 @@ jobs:
       - name: Check deployment concurrency policy
         run: python3 .github/scripts/check-deployment-concurrency.py
 
-      - name: Test desktop qualification metadata writer
-        run: python3 desktop/macos/scripts/release-keyvalue.py self-test
-
       - name: Check release process guards
         run: bash scripts/run-release-process-guards.sh
 
@@ -179,6 +181,8 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Keep formatter output reproducible across runner images and local hooks.
+          flutter-version: 3.44.5
           cache: true
 
       - name: Resolve Flutter dependencies for formatting
@@ -191,7 +195,7 @@ jobs:
         run: |
           FILES=$(grep '\.dart$' /tmp/changed-files.txt | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
+            echo "$FILES" | xargs "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" format --line-length 120 --set-exit-if-changed --output=none
           fi
 
       - name: Check Python formatting

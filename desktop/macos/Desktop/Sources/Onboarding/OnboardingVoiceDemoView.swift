@@ -31,88 +31,79 @@ struct OnboardingVoiceDemoView: View {
         Button(action: onSkip) {
           Text("Skip")
             .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.vertical, OmiSpacing.lg)
 
-      Divider()
-        .background(OmiColors.backgroundTertiary)
+      GlassSeparator()
 
       OnboardingProgressBar(stepIndex: stepIndex, totalSteps: totalSteps)
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.top, OmiSpacing.xl)
 
-      Spacer()
-
-      VStack(spacing: OmiSpacing.xxl) {
-        VStack(spacing: OmiSpacing.md) {
-          Text("Hold \(shortcutSettings.pttShortcut.displayLabel) and Ask")
-            .font(.system(size: 24, weight: .bold))
-            .foregroundColor(OmiColors.textPrimary)
-
-          Text("Try asking: What's on my screen?")
-            .font(.system(size: 18, weight: .medium))
-            .foregroundColor(OmiColors.textSecondary)
-            .multilineTextAlignment(.center)
-        }
-
-        if outputReadiness.shouldAskUserToTurnUpVolume {
-          volumeWarning
-            .transition(.opacity)
-        } else if !observedShortcutPress {
+      OnboardingContentWithPinnedActions {
+        VStack(spacing: OmiSpacing.xxl) {
           VStack(spacing: OmiSpacing.md) {
-            Text("Hold the shortcut, speak, then release")
-              .font(.system(size: 13))
-              .foregroundColor(OmiColors.textTertiary)
+            Text("Hold \(shortcutSettings.pttShortcut.displayLabel) and Ask")
+              .inkStyle(InkType.stepHeadline, color: Ink.primary)
+              .multilineTextAlignment(.center)
+              .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: OmiSpacing.xs) {
-              ForEach(Array(shortcutSettings.pttShortcut.displayTokens.enumerated()), id: \.offset) { _, token in
-                keyCap(token)
-              }
-              Text("hold")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(OmiColors.textTertiary)
-            }
+            Text("Try asking: What's on my screen?")
+              .inkStyle(InkType.prose, color: Ink.secondary)
+              .multilineTextAlignment(.center)
+              .fixedSize(horizontal: false, vertical: true)
           }
-          .padding(.top, OmiSpacing.xxs)
-          .transition(.opacity)
-        } else if !showContinue {
-          Text(waitingForResponse ? "Waiting for omi to respond..." : "Listening... release when done")
-            .font(.system(size: 13))
-            .foregroundColor(OmiColors.textTertiary)
+
+          if outputReadiness.shouldAskUserToTurnUpVolume {
+            volumeWarning
+              .transition(.opacity)
+          } else if !observedShortcutPress {
+            VStack(spacing: OmiSpacing.md) {
+              Text("Hold the shortcut, speak, then release")
+                .inkStyle(InkType.statusLabel, color: Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+              HStack(spacing: OmiSpacing.xs) {
+                ForEach(Array(shortcutSettings.pttShortcut.displayTokens.enumerated()), id: \.offset) { _, token in
+                  keyCap(token)
+                }
+                Text("hold")
+                  .inkStyle(InkType.statusLabel, color: Ink.secondary)
+              }
+            }
             .padding(.top, OmiSpacing.xxs)
             .transition(.opacity)
-        }
-      }
-      .padding(.horizontal, OmiSpacing.page)
-
-      Spacer()
-
-      HStack(spacing: OmiSpacing.md) {
-        OnboardingBackButton()
-
-        if showContinue {
-          Button(action: onComplete) {
-            Text("Continue")
-              .font(.system(size: 15, weight: .semibold))
-              .foregroundColor(.black)
-              .frame(maxWidth: 280)
-              .padding(.vertical, OmiSpacing.md)
-              .background(Color.white)
-              .cornerRadius(OmiChrome.smallControlRadius)
+          } else if !showContinue {
+            Text(waitingForResponse ? "Waiting for omi to respond..." : "Listening... release when done")
+              .inkStyle(InkType.statusLabel, color: Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+              .padding(.top, OmiSpacing.xxs)
+              .transition(.opacity)
           }
-          .buttonStyle(.plain)
-          .keyboardShortcut(.defaultAction)
-          .transition(.move(edge: .bottom).combined(with: .opacity))
+
         }
+        .frame(maxWidth: 420)
+      } actions: {
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          if showContinue {
+            Button(action: onComplete) {
+              Text("Continue")
+            }
+            .buttonStyle(InkButtonStyle(kind: .primary))
+            .keyboardShortcut(.defaultAction)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+          }
+        }
+        .frame(maxWidth: 420)
       }
-      .padding(.bottom, OmiSpacing.section)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(OmiColors.backgroundPrimary)
     .onAppear {
       FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
       FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
@@ -121,17 +112,19 @@ struct OnboardingVoiceDemoView: View {
       if let barState = FloatingControlBarManager.shared.barState {
         PushToTalkManager.shared.setup(barState: barState)
       }
+      FloatingControlBarManager.shared.showForOnboardingDemo()
       // Force live transcription for the demo via a transient, never-persisted
       // override so a quit/crash mid-step can't corrupt the saved PTT mode.
       shortcutSettings.pttTranscriptionModeDemoOverride = .live
       Task {
-        await chatProvider.warmupBridge()
+        _ = await chatProvider.warmupBridge()
       }
     }
     .onDisappear {
       shortcutSettings.pttTranscriptionModeDemoOverride = nil
       resetFloatingBarConversation()
       PushToTalkManager.shared.cleanup()
+      FloatingControlBarManager.shared.hideForOnboardingDemo()
     }
     .task {
       await pollOutputReadiness()
@@ -155,34 +148,23 @@ struct OnboardingVoiceDemoView: View {
   private var volumeWarning: some View {
     VStack(spacing: OmiSpacing.md) {
       Text(volumeWarningTitle)
-        .font(.system(size: 15, weight: .semibold))
-        .foregroundColor(OmiColors.textPrimary)
+        .inkStyle(InkType.rowCopy, color: PageGlass.warning)
         .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
 
       Text("Turn up your Mac volume so you can hear Omi respond, then try push-to-talk.")
-        .font(.system(size: 13))
-        .foregroundColor(OmiColors.textTertiary)
+        .inkStyle(InkType.statusLabel, color: Ink.secondary)
         .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
 
       Button(action: refreshOutputReadiness) {
         Text("I turned it up")
-          .font(.system(size: 13, weight: .semibold))
-          .foregroundColor(.black)
-          .padding(.horizontal, OmiSpacing.lg)
-          .padding(.vertical, OmiSpacing.sm)
-          .background(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-              .fill(Color.white)
-          )
       }
-      .buttonStyle(.plain)
+      .buttonStyle(InkButtonStyle(kind: .primary))
     }
     .padding(OmiSpacing.lg)
     .frame(maxWidth: 420)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
-    )
+    .glassCard()
     .padding(.top, OmiSpacing.xxs)
   }
 
@@ -252,20 +234,21 @@ struct OnboardingVoiceDemoView: View {
     }
   }
 
+  /// A keycap on glass: a wash with a hairline outline and an `Ink.primary` glyph. No drop shadow —
+  /// on a light panel a black shadow reads as dirt rather than as depth.
   private func keyCap(_ label: String) -> some View {
     Text(label)
       .font(.system(size: 15, weight: .medium, design: .rounded))
-      .foregroundColor(OmiColors.textPrimary)
+      .foregroundColor(Ink.primary)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundTertiary)
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+          .fill(Ink.rowFill)
           .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-              .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+            RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+              .strokeBorder(Ink.hairline, lineWidth: 1)
           )
-          .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
       )
   }
 }

@@ -53,6 +53,24 @@ final class MemoryAtlasSnapshotCacheTests: XCTestCase {
     XCTAssertEqual(cache.computeCount, 2)
   }
 
+  func testChangingOnlyTheCatalogDoesNotReuseThePreviousAtlas() {
+    let graph = makeGraph(memoryIDsByNode: [:])
+    let first = KnowledgeGraphResponse(
+      nodes: graph.nodes,
+      edges: [],
+      catalogNodes: [KnowledgeGraphNode(id: "memory-a", label: "First", nodeType: .concept)])
+    let second = KnowledgeGraphResponse(
+      nodes: graph.nodes,
+      edges: [],
+      catalogNodes: [KnowledgeGraphNode(id: "memory-b", label: "Second", nodeType: .concept)])
+
+    _ = cache.snapshot(for: first, userName: "David")
+    let refreshed = cache.snapshot(for: second, userName: "David")
+
+    XCTAssertEqual(cache.computeCount, 2)
+    XCTAssertEqual(refreshed.nodes.map(\.id), ["atlas-owner", "memory-b"])
+  }
+
   private func makeGraph(memoryIDsByNode: [String: [String]]) -> KnowledgeGraphResponse {
     let nodes = memoryIDsByNode.keys.sorted().map { id in
       KnowledgeGraphNode(

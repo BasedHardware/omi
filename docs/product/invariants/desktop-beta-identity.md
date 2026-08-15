@@ -16,13 +16,18 @@ Consequences that must hold:
   channel on the beta identity.
 - Every macOS candidate release packages the beta variant (`Omi.Beta.zip`,
   `omi-beta.dmg`) from the same build, signed/notarized, with its own smoke
-  result (`desktop-smoke-result-beta.json`) held to the same qualification
-  contract as stable, and its own appcast EdDSA signature (`betaEdSignature`).
+  result (`desktop-smoke-result-beta.json`) held to the same structural
+  signed-smoke contract as stable plus launch, Keychain, and notification
+  callback probes, and its own appcast EdDSA signature (`betaEdSignature`).
 - The update feed is identity-aware: `identity=beta` serves beta-channel items
   with beta-identity enclosures only, and must never offer a stable-identity
   artifact to the beta app (Sparkle in-place replacement would corrupt the
   install's identity). Releases without beta artifacts are omitted from the
-  beta-identity feed.
+  beta-identity feed. The default (stable-identity) feed serves only the stable
+  channel: Stable.app must not Sparkle-install beta-channel `Omi.zip`. Early
+  access is the separately-installable Omi Beta app, not an in-place channel
+  switch. Stable-identity clients already on a newer-than-stable build freeze
+  until `macos-stable` surpasses them.
 - Single-artifact or same-byte promotion refactors may reorganize how stable is
   promoted, but they must not remove the beta identity, its packaged artifacts,
   or the identity-aware feed. Retiring this invariant is a product decision that
@@ -33,18 +38,22 @@ Consequences that must hold:
 ## Guard tests
 
 - `desktop/macos/Desktop/Tests/AppBuildBetaIdentityTests.swift` — identity,
-  gating, storage, log-path, manual-download identity contracts
+  gating, storage, log-path, identity-bound Sparkle channel, Get Omi Beta URL
 - `desktop/macos/Desktop/Tests/DesktopStorageIdentityTests.swift` — isolated
   "Omi Beta" storage root
-- `.github/scripts/test_check_desktop_auto_beta_candidate.py` — beta smoke held
-  to the stable qualification contract; codemagic beta invocation produces every
-  piece of gate-required evidence
+- `.github/scripts/check-release-process-guards.py` — Codemagic still smokes
+  both identities via `scripts/smoke-signed-desktop-artifact.sh`; the retired
+  qualification lane cannot be reintroduced
 - `backend/tests/unit/test_desktop_updates.py::TestBetaIdentityServing` —
-  identity-aware appcast/download serving, stable feed unchanged
+  identity-aware appcast/download serving
+- `backend/tests/unit/test_desktop_updates.py::TestAppcastEndpoint` —
+  stable-identity feed omits beta-channel items
 
 ## Path globs
 
 - `desktop/macos/Desktop/Sources/AppBuild.swift`
+- `desktop/macos/Desktop/Sources/UpdaterViewModel.swift`
+- `desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+Controls.swift`
 - `desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift`
 - `desktop/macos/scripts/create-omi-beta-variant.sh`
 - `backend/routers/updates.py`

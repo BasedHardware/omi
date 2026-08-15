@@ -4,9 +4,11 @@ import types
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 from routers import users as users_router
+from services.users import data_export
 
 
 class _FakeRequest:
@@ -99,12 +101,14 @@ def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
         (users_router.resolve_deletion_wipe_job_id, ('job-1',)),
         (users_router.try_acquire_job_run_lock, ('account-deletion:uid1',)),
         (users_router.claim_deletion_wipe_for_task, ('uid1',)),
-        (users_router.background_wipe_user_data, ('uid1',)),
+        (users_router.background_wipe_user_data, ('uid1', 0, False)),
         (users_router.release_job_run_lock, ('account-deletion:uid1', 'lock-token')),
     ]
 
 
 def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
+    background_args = []
+
     async def run_blocking(_executor, fn, *args):
         if fn is users_router.resolve_deletion_wipe_job_id:
             return {'outcome': 'resolved', 'uid': 'uid1'}
@@ -113,6 +117,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
         if fn is users_router.claim_deletion_wipe_for_task:
             return 'claimed'
         if fn is users_router.background_wipe_user_data:
+            background_args.append(args)
             return False
         if fn is users_router.release_job_run_lock:
             return None
@@ -129,6 +134,7 @@ def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
 
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'failed_final'}
+    assert background_args == [('uid1', 1, True)]
 
 
 def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):
@@ -385,14 +391,15 @@ def test_run_account_deletion_wipe_preserves_lock_on_cancel(monkeypatch):
     assert released == []
 
 
-def test_export_all_user_data_keeps_streaming_headers():
-    users_router.iter_user_data_export = MagicMock(return_value=iter(['{"ok": true}\n']))
+def test_export_all_user_data_keeps_streaming_headers(monkeypatch):
+    iter_export = MagicMock(return_value=iter(['{"ok": true}\n']))
+    monkeypatch.setattr(users_router, 'iter_user_data_export', iter_export)
 
     response = users_router.export_all_user_data(uid='uid1')
 
     assert response.media_type == 'application/json'
     assert response.headers['content-disposition'] == 'attachment; filename="omi-export.json"'
-    users_router.iter_user_data_export.assert_called_once_with('uid1')
+    iter_export.assert_called_once_with('uid1')
 
     async def _consume():
         parts = []
@@ -401,6 +408,47 @@ def test_export_all_user_data_keeps_streaming_headers():
         return ''.join(parts)
 
     assert asyncio.run(_consume()) == '{"ok": true}\n'
+
+
+def test_export_all_user_data_returns_500_before_streaming_headers_when_memory_preflight_fails(monkeypatch):
+    def _failing_iter(_uid, *, include_archive=True):
+        yield MagicMock(model_dump=MagicMock(return_value={'id': 'mem-ok'}))
+        raise RuntimeError('canonical memory unavailable')
+
+    monkeypatch.setattr(
+        data_export,
+        'MemoryService',
+        MagicMock(return_value=MagicMock(iter_export_memories=_failing_iter)),
+    )
+    app = FastAPI()
+    app.include_router(users_router.router)
+    app.dependency_overrides[users_router.auth.get_current_user_uid] = lambda: 'uid1'
+
+    response = TestClient(app, raise_server_exceptions=False).get('/v1/users/export')
+
+    assert response.status_code == 500
+    assert 'content-disposition' not in response.headers
+
+
+def test_task_assistant_prompt_contract_accepts_shipped_default_size_and_rejects_oversize():
+    accepted = users_router.UpdateAssistantSettingsRequest(
+        task={'analysis_prompt': 'x' * users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH}
+    )
+
+    assert len(accepted.task.analysis_prompt) == users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH
+    with pytest.raises(ValueError):
+        users_router.UpdateAssistantSettingsRequest(
+            task={'analysis_prompt': 'x' * (users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH + 1)}
+        )
+
+
+def test_task_assistant_prompt_contract_counts_unicode_code_points():
+    flag = '🇺🇸'
+    prompt = flag * (users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH // len(flag) + 1)
+
+    assert len(prompt) == users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH + 2
+    with pytest.raises(ValueError):
+        users_router.UpdateAssistantSettingsRequest(task={'analysis_prompt': prompt})
 
 
 def test_update_person_name_missing_returns_404():

@@ -82,7 +82,7 @@ jupyter-events==0.12.1
 jupyter-lsp==2.3.1
 jupyter-server==2.18.2
 jupyter-server-terminals==0.5.4
-jupyterlab==4.5.7
+jupyterlab==4.5.10
 jupyterlab-pygments==0.3.0
 jupyterlab-server==2.28.0
 jupyterlab-widgets==3.0.16
@@ -106,7 +106,7 @@ marshmallow==3.26.2
 matplotlib-inline==0.2.2
 mdurl==0.1.2
 memo==0.2.4
-mistune==3.2.1
+mistune==3.3.0
 monotonic==1.6
 multidict==6.7.1
 mypy-extensions==1.1.0
@@ -162,7 +162,7 @@ rich==15.0.0
 rich-toolkit==0.19.9
 rpds-py==0.30.0
 send2trash==2.1.0
-setuptools==82.0.1
+setuptools==83.0.0
 shellingham==1.5.4
 sigtools==4.0.1
 six==1.17.0

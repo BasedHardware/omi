@@ -9,10 +9,8 @@ are applied after the legacy profile is read and affect only `omi:auto:*` gatewa
 Each override names one configured feature, selects its gateway provider/model, and may set
 provider request options such as `reasoning_effort` or Anthropic `effort`.
 
-Generated lanes normally use `openai.chat_completions`. The `chat_agent` Anthropic override is the explicit
-exception: it uses `anthropic.messages` and advertises streaming + tools because `/v1/messages` preserves the native
-Anthropic agentic contract. The OpenAI-compatible resolver rejects that surface, and the Messages router rejects
-OpenAI-compatible lanes; this prevents the same lane from silently claiming two incompatible protocols.
+Generated lanes use `openai.chat_completions`, including `chat_agent`, which is pinned to the OpenAI-compatible Luna
+route. Anthropic Messages remains a separate provider surface for lanes that explicitly select Anthropic.
 
 ## Runtime credential and readiness contract
 
@@ -44,6 +42,13 @@ describe unsupported parameters remain `capability_mismatch`; invalid requests s
 only in response headers and structured logs, never as Prometheus labels. Pre-route contract failures use
 `llm_gateway_request_rejections_total{api_surface,error_class}`; service authentication failures use
 `llm_gateway_auth_rejections_total{reason}`.
+
+`route_serving_class` is a closed `active|canary|lkg|actual_fallback` contract. `fallback_used=true` requires a
+prior eligible provider failure and a subsequent successful provider/route; merely selecting LKG for shadow,
+disabled, 0%, or an out-of-bucket canary request is `route_serving_class="lkg"` with `fallback_used="false"`.
+Bounded from/to route artifact labels and a non-`none` `fallback_reason` identify real failover without request or
+user identifiers. `llm_gateway_config_info` separately publishes the immutable image tag plus active/LKG route
+artifact IDs and SHA-256 content digests, avoiding build/config identity labels on the high-volume request counter.
 
 ## Usage accounting ledger
 

@@ -631,7 +631,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               Center(
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
-                  child: Image.asset(DeviceUtils.getDeviceImagePathByModel(widget.wal.deviceModel), height: 60),
+                  child: Image.asset(DeviceUtils.getDeviceImagePath(deviceName: widget.wal.deviceModel), height: 60),
                 ),
               ),
               _buildDetailRow(context.l10n.recordingIdLabel, widget.wal.id),

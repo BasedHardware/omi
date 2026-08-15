@@ -182,7 +182,7 @@ run_swift_focus() {
   (
     cd "$DESKTOP_DIR"
     xcrun swift test --package-path Desktop \
-      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|RealtimeScreenEvidenceTests|VoiceTurnReducerTests|VoiceTurnReducerFuzzTests|VoiceTurnCoordinatorTests|VoiceTurnOutputOwnershipTests|VoiceTurnUIProjectionCopyTests|LegacyVoiceJournalImporterTests|RealtimeHubBargeInContinuityTests|RealtimeHubReconnectContractTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|RealtimeProviderToolResultPolicyTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests|TaskThreadProjectionTests|AgentRuntimeBridgeLifecycleTests|AgentRuntimeContractFixtureTests|PiMonoWiringTests'
+      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|PushToTalkButtonTriggerTests|RealtimeScreenEvidenceTests|VoiceTurnReducerTests|VoiceTurnReducerFuzzTests|VoiceTurnCoordinatorTests|VoiceTurnOutputOwnershipTests|VoiceTurnUIProjectionCopyTests|LegacyVoiceJournalImporterTests|RealtimeHubBargeInContinuityTests|RealtimeHubReconnectContractTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|RealtimeProviderToolResultPolicyTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests|TaskThreadProjectionTests|AgentRuntimeBridgeLifecycleTests|AgentRuntimeContractFixtureTests|PiMonoWiringTests'
   )
 }
 
@@ -233,13 +233,6 @@ run_cross_surface_agent_smoke() {
       tests/runtime-adapter-contract-conformance.test.ts \
       tests/relay-tool-result.test.ts \
       tests/spawn-receipt-fixtures.test.ts
-  )
-}
-
-run_cross_surface_rust_smoke() {
-  (
-    cd "$DESKTOP_DIR/Backend-Rust"
-    cargo test retrieval_policy
   )
 }
 
@@ -336,7 +329,6 @@ fi
 if [[ "$RUN_CROSS_SURFACE_SMOKE" -eq 1 ]]; then
   run_step "cross-surface Swift contract smoke" run_cross_surface_swift_smoke
   run_step "cross-surface agent contract smoke" run_cross_surface_agent_smoke
-  run_step "cross-surface Rust retrieval contract smoke" run_cross_surface_rust_smoke
 fi
 
 if [[ "$RUN_GAUNTLET" -eq 1 ]]; then

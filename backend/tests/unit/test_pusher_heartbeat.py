@@ -11,6 +11,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from tests.unit.pusher_websockets_stub import install_websockets_stub
+
+install_websockets_stub()
+
 from websockets.exceptions import ConnectionClosed
 
 pytestmark = pytest.mark.slow
@@ -44,13 +48,7 @@ async def _simulate_pusher_dispatch(frames: list[bytes]) -> dict:
 
     This mirrors the real dispatch at backend/routers/pusher.py:324-451.
     """
-    counts = {
-        "heartbeat": 0,
-        "conversation_id": 0,
-        "transcript": 0,
-        "audio": 0,
-        "unknown": 0,
-    }
+    counts = {"heartbeat": 0, "conversation_id": 0, "transcript": 0, "audio": 0, "unknown": 0}
 
     for data in frames:
         if len(data) < 4:
@@ -295,6 +293,6 @@ def test_heartbeat_frame_is_minimal():
 
 def test_heartbeat_header_does_not_collide_with_existing_headers():
     """Header 100 is distinct from all existing protocol headers."""
-    existing_headers = {101, 102, 103, 104, 105, 201, 202}  # All existing headers
+    existing_headers = {101, 102, 103, 104, 105, 201}  # All existing headers
     heartbeat_header = 100
     assert heartbeat_header not in existing_headers, "Header 100 must not collide with existing protocol headers"

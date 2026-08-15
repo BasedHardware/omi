@@ -4,6 +4,8 @@
 // The host opens ONE persistent desktop stream; when that track dies (display
 // sleep, GPU/driver reset, session change) nothing noticed — the sampler kept
 // drawing a dead <video> and saving frames from it, and capture never recovered.
+// #10737 recurred after that fix because a source can become muted while its
+// track remains live; that state must use the same no-save + reopen path.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, act } from '@testing-library/react'
 import { RewindCaptureHost } from './RewindCaptureHost'
@@ -13,6 +15,7 @@ const RESTART_DELAY_MS = 2000
 
 class FakeTrack extends EventTarget {
   readyState: 'live' | 'ended' = 'live'
+  muted = false
   stop(): void {
     this.readyState = 'ended'
   }
@@ -33,10 +36,18 @@ function fakeStream(track: FakeTrack): MediaStream {
 let tracks: FakeTrack[] = []
 let getUserMedia: ReturnType<typeof vi.fn>
 let saveFrame: ReturnType<typeof vi.fn>
+let captureNowListener: (() => void) | null
+let unsubscribeCaptureNow: ReturnType<typeof vi.fn>
+let captureSourceId: string
 
 beforeEach(() => {
   vi.useFakeTimers()
   tracks = []
+  captureSourceId = 'screen:0:0'
+  captureNowListener = null
+  unsubscribeCaptureNow = vi.fn(() => {
+    captureNowListener = null
+  })
   saveFrame = vi.fn(async () => undefined)
   getUserMedia = vi.fn(async () => {
     const t = new FakeTrack()
@@ -50,7 +61,12 @@ beforeEach(() => {
     rewindGetCaptureDirective: async () => ({ paused: false, intervalMs: INTERVAL_MS }),
     onRewindCaptureDirective: () => () => undefined,
     rewindPrimarySourceId: async () => 'screen:0:0',
-    rewindSaveFrame: saveFrame
+    rewindCaptureSourceId: async () => captureSourceId,
+    rewindSaveFrame: saveFrame,
+    onRewindCaptureNow: (cb: () => void) => {
+      captureNowListener = cb
+      return unsubscribeCaptureNow
+    }
   }
   // jsdom has no media pipeline or 2D canvas: give the host a video that reports
   // a frame size and a canvas that encodes, so the sampling path can run.
@@ -91,7 +107,14 @@ async function tick(ms: number): Promise<void> {
   })
 }
 
-describe('RewindCaptureHost — dead capture track', () => {
+async function requestCaptureNow(): Promise<void> {
+  await act(async () => {
+    captureNowListener?.()
+    await vi.advanceTimersByTimeAsync(0)
+  })
+}
+
+describe('RewindCaptureHost — unavailable capture track', () => {
   it('stops saving frames and reopens the stream when the capture track dies', async () => {
     render(<RewindCaptureHost />)
     await settle()
@@ -106,6 +129,7 @@ describe('RewindCaptureHost — dead capture track', () => {
     await act(async () => {
       tracks[0].die()
     })
+    await requestCaptureNow()
 
     // No blank frames from the dead <video> while the stream is down...
     await tick(INTERVAL_MS)
@@ -118,6 +142,50 @@ describe('RewindCaptureHost — dead capture track', () => {
     saveFrame.mockClear()
     await tick(INTERVAL_MS)
     expect(saveFrame).toHaveBeenCalled()
+  })
+
+  it('stops saving frames and reopens the stream when a live track becomes muted', async () => {
+    render(<RewindCaptureHost />)
+    await settle()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+
+    await tick(INTERVAL_MS)
+    expect(saveFrame).toHaveBeenCalledTimes(1)
+
+    saveFrame.mockClear()
+    await act(async () => {
+      tracks[0].muted = true
+      expect(tracks[0].readyState).toBe('live')
+      tracks[0].dispatchEvent(new Event('mute'))
+    })
+
+    await tick(INTERVAL_MS)
+    expect(saveFrame).not.toHaveBeenCalled()
+
+    await tick(RESTART_DELAY_MS)
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+    saveFrame.mockClear()
+    await tick(INTERVAL_MS)
+    expect(saveFrame).toHaveBeenCalledTimes(1)
+  })
+
+  it('reopens a stream that is already muted when getUserMedia resolves', async () => {
+    getUserMedia.mockImplementationOnce(async () => {
+      const track = new FakeTrack()
+      track.muted = true
+      tracks.push(track)
+      return fakeStream(track)
+    })
+
+    render(<RewindCaptureHost />)
+    await settle()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+    expect(saveFrame).not.toHaveBeenCalled()
+
+    await tick(RESTART_DELAY_MS)
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+    await tick(INTERVAL_MS)
+    expect(saveFrame).toHaveBeenCalledTimes(1)
   })
 
   it('keeps a single sampling loop when the track dies mid-save', async () => {
@@ -273,9 +341,108 @@ describe('RewindCaptureHost — unmount', () => {
     await settle()
     expect(getUserMedia).toHaveBeenCalledTimes(1)
 
+    const unsubscribeCount = unsubscribeCaptureNow.mock.calls.length
     view.unmount()
+    expect(unsubscribeCaptureNow).toHaveBeenCalledTimes(unsubscribeCount + 1)
+    expect(captureNowListener).toBeNull()
     await tick(RESTART_DELAY_MS + INTERVAL_MS)
     expect(getUserMedia).toHaveBeenCalledTimes(1)
     expect(saveFrame).not.toHaveBeenCalled()
+  })
+})
+
+describe('RewindCaptureHost — foreground capture', () => {
+  it('ignores foreground requests while capture is disabled', async () => {
+    const omi = (
+      window as unknown as {
+        omi: {
+          rewindGetSettings: () => Promise<{ captureEnabled: boolean; intervalMs: number }>
+        }
+      }
+    ).omi
+    omi.rewindGetSettings = async () => ({
+      captureEnabled: false,
+      intervalMs: INTERVAL_MS
+    })
+
+    render(<RewindCaptureHost />)
+    await settle()
+    await requestCaptureNow()
+
+    expect(getUserMedia).not.toHaveBeenCalled()
+    expect(saveFrame).not.toHaveBeenCalled()
+  })
+
+  it('captures immediately and restarts the periodic cadence', async () => {
+    render(<RewindCaptureHost />)
+    await settle()
+
+    await requestCaptureNow()
+    expect(saveFrame).toHaveBeenCalledTimes(1)
+
+    await tick(INTERVAL_MS - 1)
+    expect(saveFrame).toHaveBeenCalledTimes(1)
+    await tick(1)
+    expect(saveFrame).toHaveBeenCalledTimes(2)
+  })
+
+  it('reopens the stream on the foreground window display before capturing', async () => {
+    render(<RewindCaptureHost />)
+    await settle()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+
+    captureSourceId = 'screen:1:0'
+    await requestCaptureNow()
+
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+    expect(
+      (
+        getUserMedia.mock.calls[1][0] as {
+          video: { mandatory: { chromeMediaSourceId: string } }
+        }
+      ).video.mandatory.chromeMediaSourceId
+    ).toBe('screen:1:0')
+    expect(tracks[0].readyState).toBe('ended')
+    expect(tracks[1].readyState).toBe('live')
+    expect(saveFrame).toHaveBeenCalledTimes(1)
+    expect(saveFrame).toHaveBeenCalledWith(expect.any(Uint8Array), 'screen:1:0')
+
+    // A queued 'ended' event from the replaced track must not tear down the new
+    // display stream.
+    await act(async () => {
+      tracks[0].die()
+    })
+    await tick(RESTART_DELAY_MS)
+    expect(getUserMedia).toHaveBeenCalledTimes(2)
+    expect(tracks[1].readyState).toBe('live')
+  })
+
+  it('coalesces foreground requests while a save is in flight', async () => {
+    let releaseSave: () => void = () => undefined
+    saveFrame.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseSave = () => resolve()
+        })
+    )
+    render(<RewindCaptureHost />)
+    await settle()
+
+    await requestCaptureNow()
+    expect(saveFrame).toHaveBeenCalledTimes(1)
+
+    await requestCaptureNow()
+    await requestCaptureNow()
+    expect(saveFrame).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      releaseSave()
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(saveFrame).toHaveBeenCalledTimes(2)
+
+    saveFrame.mockClear()
+    await tick(INTERVAL_MS)
+    expect(saveFrame).toHaveBeenCalledTimes(1)
   })
 })

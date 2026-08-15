@@ -4,17 +4,19 @@ import logging
 import random
 import struct
 import time
-import uuid
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Awaitable, Callable, cast, Deque, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, cast, Deque, Dict, List, Optional, Tuple, TYPE_CHECKING
 
-from websockets.legacy.client import WebSocketClientProtocol
 from websockets.exceptions import ConnectionClosed
 
+if TYPE_CHECKING:
+    from websockets.legacy.client import WebSocketClientProtocol
+else:
+    WebSocketClientProtocol = Any
+
 from utils.metrics import PUSHER_CIRCUIT_BREAKER_REJECTIONS, PUSHER_SESSION_DEGRADED
-from utils.observability.fallback import record_fallback
 from utils.pusher import PusherCircuitBreakerOpen, connect_to_trigger_pusher
 
 # Typed wrapper because utils.pusher.connect_to_trigger_pusher uses the untyped
@@ -43,10 +45,6 @@ PUSHER_RECONNECT_MAX_DELAY = 60.0
 PENDING_REQUEST_TIMEOUT = 120
 MAX_RETRIES_PER_REQUEST = 3
 PENDING_REQUEST_RECOVERY_COOLDOWN = 300
-PUSHER_DELIVERY_ACK_TIMEOUT = 5.0
-PUSHER_CLOSE_ACK_TIMEOUT = 10.0
-PUSHER_SOCKET_CLOSE_TIMEOUT = 2.0
-PUSHER_DELIVERY_DRAIN_OPCODE = 107
 
 
 @dataclass
@@ -78,57 +76,29 @@ class ListenPusherSessionDeps:
     monotonic: Callable[[], float] = time.monotonic
 
 
-@dataclass
-class _TranscriptDelivery:
-    delivery_id: str
-    conversation_id: Optional[str]
-    segments: List[Dict[str, Any]]
-    last_sent_ws: Optional[WebSocketClientProtocol] = None
-    last_sent_at: float = 0.0
-
-
-@dataclass
-class _AudioDelivery:
-    delivery_id: str
-    conversation_id: Optional[str]
-    chunks: List[bytes]
-    last_received: Optional[float]
-
-
 class ListenPusherSession:
     def __init__(self, config: ListenPusherSessionConfig, deps: ListenPusherSessionDeps):
         self.config = config
         self.deps = deps
         self.pusher_ws: Optional[WebSocketClientProtocol] = None
         self.pusher_connect_lock = asyncio.Lock()
-        self.pusher_receive_lock = asyncio.Lock()
+        self.transcript_flush_lock = asyncio.Lock()
+        self.audio_flush_lock = asyncio.Lock()
         self.pusher_connected = False
-        self.delivery_ack_supported = False
         self.reconnect_state = PusherReconnectState.CONNECTED
         self.reconnect_attempts = 0
         self.reconnect_task: Optional[asyncio.Task[None]] = None
         self.degraded_since: float = 0.0
         self.segment_buffers: Deque[Dict[str, Any]] = deque(maxlen=config.max_segment_buffer_size)
-        self.segment_buffer_conversation_ids: Deque[Optional[str]] = deque(maxlen=config.max_segment_buffer_size)
-        self.pending_transcript_delivery: Optional[_TranscriptDelivery] = None
-        self.transcript_flush_lock = asyncio.Lock()
         self.last_synced_conversation_id: Optional[str] = None
         self.pending_conversation_requests: Dict[str, Dict[str, Any]] = {}
+        self.pending_request_event = asyncio.Event()
         self.pending_speaker_sample_requests: Deque[Tuple[str, str, List[str]]] = deque(
             maxlen=config.max_pending_speaker_sample_requests
         )
-        self.pending_speaker_sample_delivery_ids: Dict[Tuple[str, str, Tuple[str, ...]], str] = {}
-        self.pending_speaker_sample_sent: Dict[
-            Tuple[str, str, Tuple[str, ...]], Tuple[WebSocketClientProtocol, float]
-        ] = {}
-        self.speaker_sample_send_lock = asyncio.Lock()
         self.audio_chunks: Deque[bytes] = deque()
-        self.audio_chunk_conversation_ids: Deque[Optional[str]] = deque()
-        self.audio_chunk_received_at: Deque[float] = deque()
         self.audio_total_size = 0
         self.audio_buffer_last_received: Optional[float] = None
-        self.pending_audio_delivery: Optional[_AudioDelivery] = None
-        self.audio_flush_lock = asyncio.Lock()
 
     @property
     def uid(self):
@@ -139,150 +109,7 @@ class ListenPusherSession:
         return self.config.session_id
 
     def transcript_send(self, segments: List[Dict[str, Any]]) -> None:
-        conversation_id = self.deps.get_current_conversation_id()
-        pending_size = len(self.pending_transcript_delivery.segments) if self.pending_transcript_delivery else 0
-        live_capacity = max(0, self.config.max_segment_buffer_size - pending_size)
-        dropped = False
-        for segment in segments:
-            if len(self.segment_buffers) >= live_capacity:
-                dropped = True
-                continue
-            self.segment_buffers.append(segment)
-            self.segment_buffer_conversation_ids.append(conversation_id)
-        if dropped:
-            record_fallback(
-                component='pusher',
-                from_mode='listen_transcript_buffer',
-                to_mode='drop_newest',
-                reason='capacity_full',
-                outcome='degraded',
-                log=logger,
-            )
-
-    def _delivery_due(
-        self,
-        last_sent_ws: Optional[WebSocketClientProtocol],
-        last_sent_at: float,
-        pusher_ws: WebSocketClientProtocol,
-    ) -> bool:
-        return last_sent_ws is not pusher_ws or self.deps.monotonic() - last_sent_at >= PUSHER_DELIVERY_ACK_TIMEOUT
-
-    def _ack_pusher_delivery(self, delivery_id: str) -> None:
-        if self.pending_transcript_delivery is not None and self.pending_transcript_delivery.delivery_id == delivery_id:
-            self.pending_transcript_delivery = None
-            return
-        for request in list(self.pending_speaker_sample_requests):
-            person_id, conv_id, segment_ids = request
-            request_key = (person_id, conv_id, tuple(segment_ids))
-            if self.pending_speaker_sample_delivery_ids.get(request_key) != delivery_id:
-                continue
-            self.pending_speaker_sample_requests.remove(request)
-            self.pending_speaker_sample_delivery_ids.pop(request_key, None)
-            self.pending_speaker_sample_sent.pop(request_key, None)
-            return
-
-    async def _retry_pending_speaker_sample_requests(self) -> None:
-        if not self.pusher_connected or not self.pusher_ws or not self.pending_speaker_sample_requests:
-            return
-        async with self.speaker_sample_send_lock:
-            for person_id, conv_id, segment_ids in list(self.pending_speaker_sample_requests):
-                if not self.pusher_connected:
-                    break
-                await self._send_speaker_sample_request(person_id, conv_id, segment_ids)
-
-    def _take_transcript_delivery(self) -> Optional[_TranscriptDelivery]:
-        if self.pending_transcript_delivery is not None:
-            return self.pending_transcript_delivery
-        if not self.segment_buffers:
-            return None
-
-        conversation_id = self.segment_buffer_conversation_ids[0]
-        segments: List[Dict[str, Any]] = []
-        while self.segment_buffers and self.segment_buffer_conversation_ids[0] == conversation_id:
-            segments.append(self.segment_buffers.popleft())
-            self.segment_buffer_conversation_ids.popleft()
-        delivery = _TranscriptDelivery(
-            delivery_id=str(uuid.uuid4()),
-            conversation_id=conversation_id or self.deps.get_current_conversation_id(),
-            segments=segments,
-        )
-        self.pending_transcript_delivery = delivery
-        return delivery
-
-    def _take_audio_delivery(self) -> Optional[_AudioDelivery]:
-        if self.pending_audio_delivery is not None:
-            return self.pending_audio_delivery
-        if not self.audio_chunks:
-            return None
-
-        conversation_id = self.audio_chunk_conversation_ids[0]
-        chunks: List[bytes] = []
-        received_at: List[float] = []
-        total_size = 0
-        while self.audio_chunks and self.audio_chunk_conversation_ids[0] == conversation_id:
-            chunk = self.audio_chunks.popleft()
-            self.audio_chunk_conversation_ids.popleft()
-            received_at.append(self.audio_chunk_received_at.popleft())
-            chunks.append(chunk)
-            total_size += len(chunk)
-
-        delivery = _AudioDelivery(
-            delivery_id=str(uuid.uuid4()),
-            conversation_id=conversation_id or self.deps.get_current_conversation_id(),
-            chunks=chunks,
-            last_received=received_at[-1] if received_at else None,
-        )
-        self.audio_total_size -= total_size
-        self.audio_buffer_last_received = self.audio_chunk_received_at[-1] if self.audio_chunk_received_at else None
-        self.pending_audio_delivery = delivery
-        return delivery
-
-    def _buffer_pending_speaker_sample_request(
-        self,
-        person_id: str,
-        conv_id: str,
-        segment_ids: List[str],
-    ) -> bool:
-        request = (person_id, conv_id, list(segment_ids))
-        request_key = (person_id, conv_id, tuple(segment_ids))
-        if request in self.pending_speaker_sample_requests:
-            return True
-        if self.config.max_pending_speaker_sample_requests <= 0:
-            record_fallback(
-                component='pusher',
-                from_mode='listen_speaker_sample_buffer',
-                to_mode='drop_newest',
-                reason='capacity_full',
-                outcome='degraded',
-                log=logger,
-            )
-            return False
-        if len(self.pending_speaker_sample_requests) >= self.config.max_pending_speaker_sample_requests:
-            record_fallback(
-                component='pusher',
-                from_mode='listen_speaker_sample_buffer',
-                to_mode='drop_newest',
-                reason='capacity_full',
-                outcome='degraded',
-                log=logger,
-            )
-            return False
-        self.pending_speaker_sample_requests.append(request)
-        self.pending_speaker_sample_delivery_ids[request_key] = str(uuid.uuid4())
-        return True
-
-    def _mark_failed_socket_disconnected(
-        self,
-        failed_ws: WebSocketClientProtocol,
-        *,
-        auto_reconnect: bool,
-    ) -> None:
-        if self.pusher_ws is not failed_ws:
-            return
-        if auto_reconnect:
-            self._mark_disconnected()
-        else:
-            self.pusher_connected = False
+        self.segment_buffers.extend(segments)
 
     def _buffer_pending_conversation_request(
         self,
@@ -308,6 +135,7 @@ class ListenPusherSession:
             'finalization_job_id': finalization_job_id or (existing or {}).get('finalization_job_id'),
             'dispatch_generation': dispatch_generation or (existing or {}).get('dispatch_generation'),
         }
+        self.pending_request_event.set()
 
     async def request_conversation_processing(
         self,
@@ -316,8 +144,7 @@ class ListenPusherSession:
         dispatch_generation: Optional[int] = None,
     ):
         """Request pusher to process a conversation through its durable lease."""
-        pusher_ws = self.pusher_ws
-        if not self.pusher_connected or not pusher_ws:
+        if not self.pusher_connected or not self.pusher_ws:
             logger.info(
                 f"Pusher not connected for {conversation_id}, will retry on reconnect {self.uid} {self.session_id}"
             )
@@ -345,197 +172,141 @@ class ListenPusherSession:
                 payload['finalization_job_id'] = pending['finalization_job_id']
                 payload['dispatch_generation'] = pending.get('dispatch_generation') or 1
             data.extend(bytes(json.dumps(payload), "utf-8"))
-            await pusher_ws.send(cast(bytes, data))
+            await self.pusher_ws.send(cast(bytes, data))
             logger.info(f"Sent process_conversation request to pusher: {conversation_id} {self.uid} {self.session_id}")
             return True
-        except asyncio.CancelledError:
-            self._mark_failed_socket_disconnected(
-                pusher_ws,
-                auto_reconnect=self.deps.is_active(),
-            )
-            raise
         except Exception as e:
             logger.error(f"Failed to send process_conversation request: {e} {self.uid} {self.session_id}")
-            self._mark_failed_socket_disconnected(
-                pusher_ws,
-                auto_reconnect=self.deps.is_active(),
-            )
             return False
 
-    async def _transcript_flush(self, auto_reconnect: bool = True):
+    async def _transcript_flush(self):
         async with self.transcript_flush_lock:
-            pusher_ws = self.pusher_ws
-            if not self.pusher_connected or not pusher_ws:
-                return
-
-            delivery = self._take_transcript_delivery()
-            if delivery is None:
-                return
-            if self.delivery_ack_supported and not self._delivery_due(
-                delivery.last_sent_ws, delivery.last_sent_at, pusher_ws
-            ):
-                return
-            try:
-                data = bytearray()
-                data.extend(struct.pack("I", 102))
-                data.extend(
-                    bytes(
-                        json.dumps(
-                            {
-                                "segments": delivery.segments,
-                                "memory_id": delivery.conversation_id,
-                                "delivery_id": delivery.delivery_id,
-                            }
-                        ),
-                        "utf-8",
+            if self.pusher_connected and self.pusher_ws and len(self.segment_buffers) > 0:
+                pending_segments = self.segment_buffers
+                self.segment_buffers = deque(maxlen=self.config.max_segment_buffer_size)
+                try:
+                    data = bytearray()
+                    data.extend(struct.pack("I", 102))
+                    data.extend(
+                        bytes(
+                            json.dumps(
+                                {
+                                    "segments": list(pending_segments),
+                                    "memory_id": self.deps.get_current_conversation_id(),
+                                }
+                            ),
+                            "utf-8",
+                        )
                     )
-                )
-            except Exception as e:
-                logger.error(f"Pusher transcripts serialization failed: {e} {self.uid} {self.session_id}")
-                return
-
-            try:
-                await pusher_ws.send(cast(bytes, data))
-                if self.delivery_ack_supported:
-                    delivery.last_sent_ws = pusher_ws
-                    delivery.last_sent_at = self.deps.monotonic()
-                elif self.pending_transcript_delivery is delivery:
-                    self.pending_transcript_delivery = None
-            except asyncio.CancelledError:
-                # The stable pending delivery remains available to a reconnecting
-                # session even though the caller is being cancelled.
-                self._mark_failed_socket_disconnected(
-                    pusher_ws,
-                    auto_reconnect=self.deps.is_active(),
-                )
-                raise
-            except ConnectionClosed as e:
-                logger.error(f"Pusher transcripts Connection closed: {e} {self.uid} {self.session_id}")
-                self._mark_failed_socket_disconnected(pusher_ws, auto_reconnect=auto_reconnect)
-            except Exception as e:
-                logger.error(f"Pusher transcripts failed: {e} {self.uid} {self.session_id}")
-                self._mark_failed_socket_disconnected(pusher_ws, auto_reconnect=auto_reconnect)
+                    await self.pusher_ws.send(cast(bytes, data))
+                except (asyncio.CancelledError, Exception) as e:
+                    self.segment_buffers = deque(
+                        (*pending_segments, *self.segment_buffers), maxlen=self.config.max_segment_buffer_size
+                    )
+                    if isinstance(e, asyncio.CancelledError):
+                        raise
+                    elif isinstance(e, ConnectionClosed):
+                        logger.error(f"Pusher transcripts Connection closed: {e} {self.uid} {self.session_id}")
+                        self._mark_disconnected()
+                    else:
+                        logger.error(f"Pusher transcripts failed: {e} {self.uid} {self.session_id}")
 
     async def transcript_consume(self):
         while self.deps.is_active():
             await self.deps.sleep(1)
-            if self.pending_transcript_delivery is not None or self.segment_buffers:
-                await self._transcript_flush(auto_reconnect=True)
+            if len(self.segment_buffers) > 0:
+                await self._transcript_flush()
 
     def audio_bytes_send(self, audio_bytes: bytes, received_at: float):
-        max_size = max(0, self.config.max_audio_buffer_size)
-        pending_size = (
-            sum(len(chunk) for chunk in self.pending_audio_delivery.chunks) if self.pending_audio_delivery else 0
-        )
-        live_capacity = max(0, max_size - pending_size)
-        if live_capacity == 0:
-            record_fallback(
-                component='pusher',
-                from_mode='listen_audio_buffer',
-                to_mode='drop_newest',
-                reason='capacity_full',
-                outcome='degraded',
-                log=logger,
-            )
-            return
         chunk = audio_bytes
-        dropped = False
-        if len(chunk) > live_capacity:
-            chunk = chunk[-live_capacity:]
-            dropped = True
-        while self.audio_total_size + len(chunk) > live_capacity and self.audio_chunks:
+        if len(chunk) > self.config.max_audio_buffer_size:
+            chunk = chunk[-self.config.max_audio_buffer_size :]
+        while self.audio_total_size + len(chunk) > self.config.max_audio_buffer_size and self.audio_chunks:
             old = self.audio_chunks.popleft()
-            self.audio_chunk_conversation_ids.popleft()
-            self.audio_chunk_received_at.popleft()
             self.audio_total_size -= len(old)
-            dropped = True
         self.audio_chunks.append(chunk)
-        self.audio_chunk_conversation_ids.append(self.deps.get_current_conversation_id())
-        self.audio_chunk_received_at.append(received_at)
         self.audio_total_size += len(chunk)
         self.audio_buffer_last_received = received_at
-        if dropped:
-            record_fallback(
-                component='pusher',
-                from_mode='listen_audio_buffer',
-                to_mode='drop_oldest',
-                reason='capacity_full',
-                outcome='degraded',
-                log=logger,
-            )
 
-    async def _audio_bytes_flush(self, auto_reconnect: bool = True):
+    async def _audio_bytes_flush(self):
         async with self.audio_flush_lock:
-            pusher_ws = self.pusher_ws
-            if not self.pusher_connected or not pusher_ws:
-                return
-
-            delivery = self._take_audio_delivery()
-            if delivery is None:
-                return
-
-            try:
-                if delivery.conversation_id and delivery.conversation_id != self.last_synced_conversation_id:
+            current_conversation_id = self.deps.get_current_conversation_id()
+            if (
+                self.pusher_ws
+                and current_conversation_id
+                and (
+                    self.last_synced_conversation_id is None
+                    or current_conversation_id != self.last_synced_conversation_id
+                )
+            ):
+                try:
                     data = bytearray()
                     data.extend(struct.pack("I", 103))
-                    data.extend(bytes(delivery.conversation_id, "utf-8"))
-                    await pusher_ws.send(cast(bytes, data))
-                    if self.pusher_ws is pusher_ws:
-                        self.last_synced_conversation_id = delivery.conversation_id
+                    data.extend(bytes(current_conversation_id, "utf-8"))
+                    await self.pusher_ws.send(cast(bytes, data))
+                    self.last_synced_conversation_id = current_conversation_id
+                except ConnectionClosed as e:
+                    logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
+                    self._mark_disconnected()
+                except Exception as e:
+                    logger.error(f"Failed to send conversation_id to pusher: {e} {self.uid} {self.session_id}")
 
-                audio_data = b''.join(delivery.chunks)
-                effective_rate = TARGET_SAMPLE_RATE if self.config.is_multi_channel else self.config.sample_rate
-                buffer_duration_seconds = len(audio_data) / (effective_rate * 2)
-                buffer_start_time = (delivery.last_received or self.deps.now()) - buffer_duration_seconds
-                data = bytearray()
-                data.extend(struct.pack("I", 101))
-                data.extend(struct.pack("d", buffer_start_time))
-                data.extend(audio_data)
-                await pusher_ws.send(cast(bytes, data))
-                if self.pending_audio_delivery is delivery:
-                    self.pending_audio_delivery = None
-            except asyncio.CancelledError:
-                # Keep the route-stamped delivery intact for replay, then honor
-                # structured cancellation.
-                self._mark_failed_socket_disconnected(
-                    pusher_ws,
-                    auto_reconnect=self.deps.is_active(),
-                )
-                raise
-            except ConnectionClosed as e:
-                logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
-                self._mark_failed_socket_disconnected(pusher_ws, auto_reconnect=auto_reconnect)
-            except Exception as e:
-                logger.error(f"Pusher audio_bytes failed: {e} {self.uid} {self.session_id}")
-                self._mark_failed_socket_disconnected(pusher_ws, auto_reconnect=auto_reconnect)
+            if self.pusher_connected and self.pusher_ws and self.audio_total_size > 0:
+                pending_chunks = self.audio_chunks
+                pending_total_size = self.audio_total_size
+                self.audio_chunks = deque()
+                self.audio_total_size = 0
+                try:
+                    effective_rate = TARGET_SAMPLE_RATE if self.config.is_multi_channel else self.config.sample_rate
+                    buffer_duration_seconds = pending_total_size / (effective_rate * 2)
+                    buffer_start_time = (self.audio_buffer_last_received or self.deps.now()) - buffer_duration_seconds
+                    audio_data = b''.join(pending_chunks)
+                    data = bytearray()
+                    data.extend(struct.pack("I", 101))
+                    data.extend(struct.pack("d", buffer_start_time))
+                    data.extend(audio_data)
+                    del audio_data
+                    await self.pusher_ws.send(cast(bytes, data))
+                except (asyncio.CancelledError, Exception) as e:
+                    self.audio_chunks.extendleft(reversed(pending_chunks))
+                    self.audio_total_size += pending_total_size
+                    while self.audio_total_size > self.config.max_audio_buffer_size:
+                        self.audio_total_size -= len(self.audio_chunks.popleft())
+                    if isinstance(e, asyncio.CancelledError):
+                        raise
+                    elif isinstance(e, ConnectionClosed):
+                        logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
+                        self._mark_disconnected()
+                    else:
+                        logger.error(f"Pusher audio_bytes failed: {e} {self.uid} {self.session_id}")
 
     async def audio_bytes_consume(self):
         while self.deps.is_active():
             await self.deps.sleep(1)
-            if self.pending_audio_delivery is not None or self.audio_total_size > 0:
-                await self._audio_bytes_flush(auto_reconnect=True)
+            if self.audio_total_size > 0:
+                await self._audio_bytes_flush()
 
     async def pusher_receive(self):
         """Receive and handle messages from pusher, with timeout-based retry for pending requests."""
         while self.deps.is_active():
-            pusher_ws = self.pusher_ws
-            if not self.pusher_connected or pusher_ws is None:
+            if not self.pending_conversation_requests:
+                self.pending_request_event.clear()
+                try:
+                    await asyncio.wait_for(self.pending_request_event.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    continue
+
+            if not self.pusher_connected or not self.pusher_ws:
                 await self.deps.sleep(0.5)
                 continue
 
             try:
-                async with self.pusher_receive_lock:
-                    msg = cast(bytes, await asyncio.wait_for(pusher_ws.recv(), timeout=5.0))
+                msg = cast(bytes, await asyncio.wait_for(self.pusher_ws.recv(), timeout=5.0))
                 if not msg or len(msg) < 4:
                     continue
                 header_type = struct.unpack('<I', msg[:4])[0]
 
-                if header_type == 202:
-                    result = json.loads(msg[4:].decode("utf-8"))
-                    delivery_id = result.get("delivery_id")
-                    if isinstance(delivery_id, str) and delivery_id:
-                        self._ack_pusher_delivery(delivery_id)
-                elif header_type == 201:
+                if header_type == 201:
                     result = json.loads(msg[4:].decode("utf-8"))
                     conversation_id = result.get("conversation_id")
 
@@ -581,12 +352,10 @@ class ListenPusherSession:
                 break
             except ConnectionClosed as e:
                 logger.error(f"Pusher receive connection closed: {e} {self.uid} {self.session_id}")
-                self._mark_failed_socket_disconnected(pusher_ws, auto_reconnect=True)
+                self._mark_disconnected()
             except Exception as e:
                 logger.error(f"Pusher receive error: {e} {self.uid} {self.session_id}")
                 await self.deps.sleep(0.5)
-
-            await self._retry_pending_speaker_sample_requests()
 
             now = self.deps.now()
             timed_out = [
@@ -619,31 +388,8 @@ class ListenPusherSession:
                 )
 
     async def _flush(self):
-        while self.pusher_connected and (self.pending_audio_delivery is not None or self.audio_chunks):
-            before = (
-                self.pending_audio_delivery.delivery_id if self.pending_audio_delivery else None,
-                len(self.audio_chunks),
-            )
-            await self._audio_bytes_flush(auto_reconnect=False)
-            after = (
-                self.pending_audio_delivery.delivery_id if self.pending_audio_delivery else None,
-                len(self.audio_chunks),
-            )
-            if after == before:
-                break
-        if not self.delivery_ack_supported:
-            while self.pusher_connected and (self.pending_transcript_delivery is not None or self.segment_buffers):
-                before = (
-                    self.pending_transcript_delivery.delivery_id if self.pending_transcript_delivery else None,
-                    len(self.segment_buffers),
-                )
-                await self._transcript_flush(auto_reconnect=False)
-                after = (
-                    self.pending_transcript_delivery.delivery_id if self.pending_transcript_delivery else None,
-                    len(self.segment_buffers),
-                )
-                if after == before:
-                    break
+        await self._audio_bytes_flush()
+        await self._transcript_flush()
 
     def _mark_disconnected(self):
         """Signal pusher disconnection and ensure one reconnect loop is running."""
@@ -762,20 +508,9 @@ class ListenPusherSession:
             )
             if self.pusher_ws is None:
                 return
-            self.delivery_ack_supported = False
-            response_headers = getattr(self.pusher_ws, 'response_headers', None)
-            if response_headers is not None:
-                try:
-                    self.delivery_ack_supported = response_headers.get('X-Omi-Delivery-Ack') == '1'
-                except Exception:
-                    self.delivery_ack_supported = False
             self.pusher_connected = True
             self.reconnect_state = PusherReconnectState.CONNECTED
             self.reconnect_attempts = 0
-            # Conversation routing is socket-local state on pusher. A fresh
-            # connection must receive header 103 before any replayed audio.
-            self.last_synced_conversation_id = None
-            self.pending_speaker_sample_sent.clear()
             if self.pending_conversation_requests:
                 logger.info(
                     f"Reconnected to pusher, re-sending {len(self.pending_conversation_requests)} pending requests {self.uid} {self.session_id}"
@@ -790,85 +525,16 @@ class ListenPusherSession:
                     )
             if self.pending_speaker_sample_requests:
                 buffered = list(self.pending_speaker_sample_requests)
+                self.pending_speaker_sample_requests.clear()
                 logger.info(
                     f"Reconnected to pusher, re-sending {len(buffered)} pending speaker sample requests {self.uid} {self.session_id}"
                 )
                 for person_id, conv_id, segment_ids in buffered:
-                    if not self.pusher_connected:
-                        break
-                    await self._send_speaker_sample_request(person_id, conv_id, segment_ids)
+                    await self.send_speaker_sample_request(person_id, conv_id, segment_ids)
         except PusherCircuitBreakerOpen:
             raise
         except Exception as e:
             logger.error(f"Exception in connect: {e} {self.uid} {self.session_id}")
-
-    async def _drain_delivery_acks(self, deadline: float) -> None:
-        if not self.delivery_ack_supported or not self.pusher_connected or not self.pusher_ws:
-            return
-
-        while self.pusher_connected and self.pusher_ws:
-            remaining = deadline - asyncio.get_running_loop().time()
-            if remaining <= 0:
-                return
-            if self.pending_transcript_delivery is not None or self.segment_buffers:
-                await asyncio.wait_for(
-                    self._transcript_flush(auto_reconnect=False),
-                    timeout=remaining,
-                )
-            remaining = deadline - asyncio.get_running_loop().time()
-            if remaining <= 0:
-                return
-            await asyncio.wait_for(
-                self._retry_pending_speaker_sample_requests(),
-                timeout=remaining,
-            )
-            if (
-                self.pending_transcript_delivery is None
-                and not self.segment_buffers
-                and not self.pending_speaker_sample_requests
-            ):
-                return
-
-            remaining = deadline - asyncio.get_running_loop().time()
-            if remaining <= 0:
-                logger.warning(
-                    'Pusher close acknowledgement deadline elapsed pending_transcript=%s buffered_transcript=%s pending_speaker=%s uid=%s session=%s',
-                    self.pending_transcript_delivery is not None,
-                    len(self.segment_buffers),
-                    len(self.pending_speaker_sample_requests),
-                    self.uid,
-                    self.session_id,
-                )
-                return
-            try:
-                pusher_ws = self.pusher_ws
-
-                async def receive_one() -> bytes:
-                    async with self.pusher_receive_lock:
-                        return cast(bytes, await pusher_ws.recv())
-
-                msg = await asyncio.wait_for(
-                    receive_one(),
-                    timeout=min(remaining, PUSHER_DELIVERY_ACK_TIMEOUT),
-                )
-            except (asyncio.TimeoutError, ConnectionClosed):
-                if asyncio.get_running_loop().time() >= deadline:
-                    return
-                continue
-            if not msg or len(msg) < 4 or struct.unpack('<I', msg[:4])[0] != 202:
-                continue
-            try:
-                result = json.loads(msg[4:].decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                continue
-            delivery_id = result.get('delivery_id')
-            if isinstance(delivery_id, str) and delivery_id:
-                self._ack_pusher_delivery(delivery_id)
-
-    async def _request_delivery_drain(self) -> None:
-        if not self.delivery_ack_supported or not self.pusher_connected or not self.pusher_ws:
-            return
-        await self.pusher_ws.send(struct.pack('I', PUSHER_DELIVERY_DRAIN_OPCODE))
 
     async def close(self, code: int = 1000):
         if self.reconnect_task and not self.reconnect_task.done():
@@ -878,38 +544,9 @@ class ListenPusherSession:
             except asyncio.CancelledError:
                 pass
             self.reconnect_task = None
-        deadline = asyncio.get_running_loop().time() + PUSHER_CLOSE_ACK_TIMEOUT
-
-        async def flush_and_drain() -> None:
-            await self._flush()
-            await self._retry_pending_speaker_sample_requests()
-            await self._request_delivery_drain()
-            await self._drain_delivery_acks(deadline)
-
-        try:
-            await asyncio.wait_for(
-                flush_and_drain(),
-                timeout=max(0.0, deadline - asyncio.get_running_loop().time()),
-            )
-        except asyncio.TimeoutError:
-            logger.warning(
-                'Pusher close delivery deadline elapsed pending_transcript=%s buffered_transcript=%s pending_speaker=%s uid=%s session=%s',
-                self.pending_transcript_delivery is not None,
-                len(self.segment_buffers),
-                len(self.pending_speaker_sample_requests),
-                self.uid,
-                self.session_id,
-            )
-        finally:
-            pusher_ws = self.pusher_ws
-            if pusher_ws is not None:
-                try:
-                    await asyncio.wait_for(
-                        pusher_ws.close(code),
-                        timeout=PUSHER_SOCKET_CLOSE_TIMEOUT,
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning('Pusher socket close deadline elapsed uid=%s session=%s', self.uid, self.session_id)
+        await self._flush()
+        if self.pusher_ws:
+            await self.pusher_ws.close(code)
 
     def is_degraded(self):
         return self.reconnect_state in (PusherReconnectState.DEGRADED, PusherReconnectState.HALF_OPEN_PROBE)
@@ -921,39 +558,14 @@ class ListenPusherSession:
         segment_ids: List[str],
     ):
         """Send speaker sample extraction request to pusher with segment IDs."""
-        async with self.speaker_sample_send_lock:
-            if not self._buffer_pending_speaker_sample_request(person_id, conv_id, segment_ids):
-                return
-            if not self.pusher_connected or not self.pusher_ws:
-                logger.warning(
-                    f"Pusher not connected, buffered speaker sample request: person={person_id}, "
-                    f"{len(segment_ids)} segments ({len(self.pending_speaker_sample_requests)} pending) {self.uid} {self.session_id}"
-                )
-                return
-            await self._send_speaker_sample_request(person_id, conv_id, segment_ids)
-
-    async def _send_speaker_sample_request(
-        self,
-        person_id: str,
-        conv_id: str,
-        segment_ids: List[str],
-    ) -> None:
-        pusher_ws = self.pusher_ws
-        if not self.pusher_connected or not pusher_ws:
-            return
-
-        request = (person_id, conv_id, list(segment_ids))
-        request_key = (person_id, conv_id, tuple(segment_ids))
-        delivery_id = self.pending_speaker_sample_delivery_ids.get(request_key)
-        if delivery_id is None:
-            if not self._buffer_pending_speaker_sample_request(person_id, conv_id, segment_ids):
-                return
-            delivery_id = self.pending_speaker_sample_delivery_ids.get(request_key)
-        if delivery_id is None:
-            return
-        sent = self.pending_speaker_sample_sent.get(request_key)
-        if self.delivery_ack_supported and sent is not None and not self._delivery_due(sent[0], sent[1], pusher_ws):
-            return
+        request = (person_id, conv_id, segment_ids)
+        if not self.pusher_connected or not self.pusher_ws:
+            self.pending_speaker_sample_requests.append(request)
+            logger.warning(
+                f"Pusher not connected, buffered speaker sample request: person={person_id}, "
+                f"{len(segment_ids)} segments ({len(self.pending_speaker_sample_requests)} pending) {self.uid} {self.session_id}"
+            )
+            return False
         try:
             data = bytearray()
             data.extend(struct.pack("I", 105))
@@ -964,35 +576,22 @@ class ListenPusherSession:
                             "person_id": person_id,
                             "conversation_id": conv_id,
                             "segment_ids": segment_ids,
-                            "delivery_id": delivery_id,
                         }
                     ),
                     "utf-8",
                 )
             )
-            await pusher_ws.send(cast(bytes, data))
-            if self.delivery_ack_supported:
-                self.pending_speaker_sample_sent[request_key] = (pusher_ws, self.deps.monotonic())
-            else:
-                try:
-                    self.pending_speaker_sample_requests.remove(request)
-                except ValueError:
-                    pass
-                self.pending_speaker_sample_delivery_ids.pop(request_key, None)
-                self.pending_speaker_sample_sent.pop(request_key, None)
+            await self.pusher_ws.send(cast(bytes, data))
             logger.info(
                 f"Sent speaker sample request to pusher: person={person_id}, {len(segment_ids)} segments {self.uid} {self.session_id}"
             )
-        except asyncio.CancelledError:
-            # Request and delivery id remain buffered for a safe replay.
-            self._mark_failed_socket_disconnected(
-                pusher_ws,
-                auto_reconnect=self.deps.is_active(),
-            )
-            raise
+            return True
         except Exception as e:
+            self.pending_speaker_sample_requests.append(request)
+            if isinstance(e, ConnectionClosed):
+                self._mark_disconnected()
             logger.error(f"Failed to send speaker sample request: {e} {self.uid} {self.session_id}")
-            self._mark_failed_socket_disconnected(pusher_ws, auto_reconnect=True)
+            return False
 
     def is_connected(self):
         return self.pusher_connected
@@ -1002,12 +601,11 @@ class ListenPusherSession:
         while self.deps.is_active():
             if await self.deps.wait_for_event(self.deps.shutdown_event, 20):
                 break
-            pusher_ws = self.pusher_ws
-            if self.pusher_connected and pusher_ws:
+            if self.pusher_connected and self.pusher_ws:
                 try:
-                    await pusher_ws.send(struct.pack("I", 100))
+                    await self.pusher_ws.send(struct.pack("I", 100))
                 except ConnectionClosed:
-                    self._mark_failed_socket_disconnected(pusher_ws, auto_reconnect=True)
+                    self._mark_disconnected()
                 except Exception as e:
                     logger.error(f"Pusher heartbeat send failed: {e} {self.uid} {self.session_id}")
 

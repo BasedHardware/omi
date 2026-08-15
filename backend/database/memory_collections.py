@@ -24,12 +24,24 @@ class MemoryCollections:
         return f"{self.user_root}/memory_operations"
 
     @property
+    def memory_source_replacements(self) -> str:
+        return f"{self.user_root}/memory_source_replacements"
+
+    @property
     def memory_outbox(self) -> str:
         return f"{self.user_root}/memory_outbox"
 
     @property
     def memory_control_state(self) -> str:
         return f"{self.user_root}/memory_control/state"
+
+    @property
+    def legacy_canonical_backfill_checkpoint(self) -> str:
+        return f"{self.user_root}/memory_control/legacy_canonical_backfill"
+
+    @property
+    def historical_graph_enrichment_cursor(self) -> str:
+        return f"{self.user_root}/memory_control/historical_graph_enrichment"
 
     @property
     def memory_apply_control_state(self) -> str:
@@ -40,8 +52,21 @@ class MemoryCollections:
         return f"{self.user_root}/memory_lineage"
 
     @property
+    def memory_historical_overrides(self) -> str:
+        """Canonical suppression records for legacy public memory identities."""
+        return f"{self.user_root}/memory_historical_overrides"
+
+    @property
     def memory_evidence(self) -> str:
         return f"{self.user_root}/memory_evidence"
+
+    @property
+    def memory_graph_assertions(self) -> str:
+        return f"{self.user_root}/memory_graph_assertions"
+
+    @property
+    def memory_review_queue(self) -> str:
+        return f"{self.user_root}/memory_review_queue"
 
     @property
     def memory_runs(self) -> str:
@@ -83,21 +108,17 @@ class MemoryCollections:
     def memory_state_head(self) -> str:
         return f"{self.user_root}/memory_state/head"
 
-    @property
-    def v3_compatibility_projection_state(self) -> str:
-        return f"{self.user_root}/v3_compatibility_projection/state"
-
-    @property
-    def v3_compatibility_projection_items(self) -> str:
-        return f"{self.user_root}/v3_compatibility_projection_items"
-
     def all_collection_paths(self) -> list[str]:
         return [
             self.memory_items,
             self.memory_operations,
+            self.memory_source_replacements,
             self.memory_outbox,
             self.memory_lineage,
+            self.memory_historical_overrides,
             self.memory_evidence,
+            self.memory_graph_assertions,
+            self.memory_review_queue,
             self.memory_runs,
             self.memory_import_runs,
             self.memory_import_artifacts,
@@ -107,7 +128,6 @@ class MemoryCollections:
             self.legacy_fallback,
             self.memory_commits,
             self.memory_state,
-            self.v3_compatibility_projection_items,
         ]
 
 

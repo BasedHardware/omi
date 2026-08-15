@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import copy
+import json
 from typing import Callable
 import os
-import sys
 from datetime import datetime, timedelta, timezone
-from types import ModuleType
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -50,17 +50,26 @@ def _ws_c_import_isolation():
     module_globals["apply_legacy_backfill_remediation_archives"] = apply_legacy_backfill_remediation_archives
     module_globals["build_legacy_backfill_remediation_plan"] = build_legacy_backfill_remediation_plan
     module_globals["classify_legacy_backfill_bucket"] = classify_legacy_backfill_bucket
+    from utils.memory.legacy_backfill_inventory import inventory_legacy_user
+
+    module_globals["inventory_legacy_user"] = inventory_legacy_user
     module_globals["is_active_legacy_row"] = is_active_legacy_row
     module_globals["legacy_backfill_memory_id"] = legacy_backfill_memory_id
     module_globals["reconcile_backfill_counts"] = reconcile_backfill_counts
     from utils.memory.memory_service import MemoryService
     from utils.memory.canonical_required_processing import ProcessedRequiredMemory, process_required_memory_item
-    from utils.memory.short_term_promotion import run_canonical_short_term_promotion
+    from utils.memory.canonical_consolidation import (
+        ConsolidationAgentBatch,
+        ConsolidationAgentDecision,
+        run_canonical_consolidation,
+    )
 
     module_globals["MemoryService"] = MemoryService
     module_globals["ProcessedRequiredMemory"] = ProcessedRequiredMemory
     module_globals["process_required_memory_item"] = process_required_memory_item
-    module_globals["run_canonical_short_term_promotion"] = run_canonical_short_term_promotion
+    module_globals["ConsolidationAgentBatch"] = ConsolidationAgentBatch
+    module_globals["ConsolidationAgentDecision"] = ConsolidationAgentDecision
+    module_globals["run_canonical_consolidation"] = run_canonical_consolidation
     yield
     restore_sys_modules(saved)
 
@@ -71,12 +80,9 @@ from models.memories import MemoryCategory
 from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.canonical_memory_adapter import extraction_memory_id, read_canonical_memories
-from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
 from utils.memory.legacy_backfill import (
-    BackfillCohortGateError,
     LegacyBackfillBucket,
     LegacyBackfillRemediationAction,
-    assert_canonical_cohort_for_backfill,
     both_store_canonical_duplicate_exists,
     live_extraction_memory_id_for_legacy_row,
 )
@@ -86,9 +92,9 @@ from tests.unit.test_ws_b_short_term_lifecycle import (
     _PromotionFakeDb,
     _canonical_db_with_control,
     _seed_canonical_short_term,
-    _set_canonical_cohort,
+    _configure_universal_memory,
 )
-from tests.unit.test_ws_i_write_convergence import _stored_item, _trusted_account_generation
+from tests.unit.fixtures.canonical_memory_fakes import _stored_item, _trusted_account_generation
 
 LEGACY_UID = "uid-legacy-backfill"
 NOW_TS = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
@@ -199,35 +205,12 @@ def _seed_legacy_evidence(db: _PromotionFakeDb, rows: list[dict]) -> None:
                 }
 
 
-@pytest.fixture(autouse=True)
-def _canonical_cohort_for_backfill(monkeypatch, request):
-    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort, set_canonical_cohort
-
-    if "test_gate_blocks_non_whitelisted_uid" in request.node.name:
-        clear_canonical_cohort(monkeypatch)
-        return
-    set_canonical_cohort(monkeypatch, LEGACY_UID)
-
-
 @pytest.fixture
 def _trusted_account(monkeypatch):
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
     )
-
-
-def test_gate_blocks_non_whitelisted_uid(_trusted_account):
-    rows = [_legacy_row(legacy_id="leg-gate", content="Gated fact", conversation_id="conv-gate")]
-    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
-    db = _canonical_db_with_control(LEGACY_UID)
-
-    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
-
-    assert report.cohort_gated is True
-    assert report.written_count == 0
-    assert report.errors == ["cohort_gate: uid not in CANONICAL_MEMORY_USERS (use allow_admin_override=True to bypass)"]
-    assert not any(path.startswith(f"users/{LEGACY_UID}/memory_items/") for path in db.docs)
 
 
 def test_manual_note_id_fallback_enables_both_store_dedup(_trusted_account):
@@ -304,61 +287,23 @@ def test_semantic_duplicate_skipped_in_run(_trusted_account):
     assert len(item_paths) == 1
 
 
-def test_admin_override_without_ack_hard_fails(_trusted_account, monkeypatch):
-    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
-
-    clear_canonical_cohort(monkeypatch)
-    uid = "uid-orphan-override"
-    rows = [_legacy_row(legacy_id="leg-orphan", content="Orphan fact", conversation_id="conv-orphan")]
-    rows[0]["uid"] = uid
-    get_non_filtered_fn, _ = _make_non_filtered_store(rows, uid=uid)
-    db = _canonical_db_with_control(uid)
-
-    report = backfill_user(
-        uid,
-        db_client=db,
-        get_non_filtered_memories_fn=get_non_filtered_fn,
-        allow_admin_override=True,
-        acknowledge_non_canonical_uid=False,
-    )
-
-    assert report.cohort_gated is True
-    assert report.written_count == 0
-    assert "acknowledge_non_canonical_uid" in report.errors[0]
-    assert not any(path.startswith(f"users/{uid}/memory_items/") for path in db.docs)
-
-    with pytest.raises(BackfillCohortGateError, match="acknowledge_non_canonical_uid"):
-        assert_canonical_cohort_for_backfill(uid, allow_admin_override=True, acknowledge_non_canonical_uid=False)
-
-
-def test_admin_override_with_ack_writes_and_logs(_trusted_account, monkeypatch, caplog):
-    import logging
-
-    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
-
-    clear_canonical_cohort(monkeypatch)
-    uid = "uid-orphan-override-ok"
-    rows = [_legacy_row(legacy_id="leg-orphan-ok", content="Orphan ok fact", conversation_id="conv-orphan-ok")]
+def test_explicit_uid_repair_uses_universal_authority(_trusted_account):
+    uid = "uid-explicit-repair"
+    rows = [_legacy_row(legacy_id="leg-repair", content="Repair fact", conversation_id="conv-repair")]
     rows[0]["uid"] = uid
     get_non_filtered_fn, _ = _make_non_filtered_store(rows, uid=uid)
     db = _canonical_db_with_control(uid)
     _seed_legacy_evidence(db, rows)
 
-    with caplog.at_level(logging.WARNING, logger="utils.memory.legacy_backfill"):
-        report = backfill_user(
-            uid,
-            db_client=db,
-            get_non_filtered_memories_fn=get_non_filtered_fn,
-            allow_admin_override=True,
-            acknowledge_non_canonical_uid=True,
-            operator_context="test-operator",
-        )
+    report = backfill_user(
+        uid,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+        operator_context="test-operator",
+    )
 
-    assert report.cohort_gated is False
     assert report.completed is True
     assert report.written_count == 1
-    assert any("legacy backfill cohort override" in record.message for record in caplog.records)
-    assert any(getattr(record, "uid", None) == uid for record in caplog.records)
 
 
 def test_dedup_prevents_doubles_when_live_written(monkeypatch, _trusted_account):
@@ -440,6 +385,11 @@ def test_backfill_copies_legacy_without_mutating_source(_trusted_account):
         assert stored["promotion"]["required"] is False
         assert stored["promotion"]["processing_status"] == "pending_admission"
         assert stored["promotion"]["submission"]["content_hash"]
+        assert stored["promotion"]["source_attribution"] == {
+            "subject_entity_id": None,
+            "subject_attribution": "legacy_assumed",
+            "subject_kind": "unknown",
+        }
         assert stored["content"] == row["content"]
 
     assert get_non_filtered_fn(LEGACY_UID, limit=100, offset=0) == rows
@@ -481,6 +431,184 @@ def test_dry_run_writes_nothing(_trusted_account):
     assert not any(path.startswith(f"users/{LEGACY_UID}/memory_items/") for path in db.docs)
     assert get_non_filtered_fn(LEGACY_UID, limit=10, offset=0) == rows
     assert active_snapshot == rows
+
+
+def test_bulk_inventory_is_read_only_and_never_returns_content(_trusted_account):
+    rows = [
+        _legacy_row(legacy_id="leg-manual", content="User keeps a private launch checklist"),
+        _legacy_row(legacy_id="leg-sensitive", content="User secret token must never be logged"),
+    ]
+    rows[0]["manually_added"] = True
+    get_non_filtered_fn, active_snapshot = _make_non_filtered_store(rows)
+    db = _PromotionFakeDb({})
+
+    report = inventory_legacy_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+    )
+
+    assert report.source_count == 2
+    assert report.bucket_counts[LegacyBackfillBucket.manual_required_promotion.value] == 1
+    assert report.bucket_counts[LegacyBackfillBucket.hold_sensitive.value] == 1
+    assert report.admitted_candidate_count == 1
+    assert report.estimated_tokens > 0
+    serialized = json.dumps(report.__dict__)
+    assert rows[0]["content"] not in serialized
+    assert rows[1]["content"] not in serialized
+    assert db.docs == {}
+    assert active_snapshot == rows
+
+
+def test_capped_backfill_resumes_until_complete(_trusted_account):
+    rows = [
+        _legacy_row(legacy_id=f"leg-cap-{index}", content=f"Capped fact {index}", conversation_id=f"conv-{index}")
+        for index in range(3)
+    ]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+
+    first = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+        max_rows=1,
+    )
+    second = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+        max_rows=1,
+    )
+    third = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+        max_rows=1,
+    )
+
+    assert [first.resumed_from_index, second.resumed_from_index, third.resumed_from_index] == [0, 1, 2]
+    assert first.completed is False
+    assert second.completed is False
+    assert third.completed is True
+    assert third.verified is True
+
+
+def test_capped_backfill_recovers_changed_source_from_missing_destinations(_trusted_account):
+    rows = [_legacy_row(legacy_id="leg-b", content="Existing fact", conversation_id="conv-b")]
+
+    def get_non_filtered(requested_uid, limit=100, offset=0, **_kwargs):
+        assert requested_uid == LEGACY_UID
+        return rows[offset : offset + limit]
+
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+    first = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered,
+        max_rows=1,
+    )
+
+    inserted_before_cursor = _legacy_row(legacy_id="leg-a", content="Inserted fact", conversation_id="conv-a")
+    rows.append(inserted_before_cursor)
+    _seed_legacy_evidence(db, [inserted_before_cursor])
+    resumed = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered,
+        max_rows=1,
+    )
+
+    assert first.completed is True
+    assert resumed.written_count == 1
+    assert resumed.completed is True
+    assert resumed.verified is True
+    item_paths = [path for path in db.docs if path.startswith(f"users/{LEGACY_UID}/memory_items/")]
+    assert len(item_paths) == 2
+
+
+def test_changed_source_recovery_keeps_source_indexes_and_seeds_existing_semantic_keys(_trusted_account):
+    shared_content = "Same semantic fact"
+    rows = [
+        _legacy_row(legacy_id="leg-b", content=shared_content, conversation_id="conv-shared"),
+        _legacy_row(legacy_id="leg-c", content="Pending fact", conversation_id="conv-c"),
+    ]
+
+    def get_non_filtered(requested_uid, limit=100, offset=0, **_kwargs):
+        assert requested_uid == LEGACY_UID
+        return rows[offset : offset + limit]
+
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+    first = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered,
+        max_rows=1,
+    )
+    assert first.completed is False
+
+    inserted_before_cursor = _legacy_row(legacy_id="leg-a", content=shared_content, conversation_id="conv-shared")
+    rows.append(inserted_before_cursor)
+    _seed_legacy_evidence(db, [inserted_before_cursor])
+
+    real_apply = backfill_user.__globals__["_apply_one_legacy_row"]
+    observed_indexes: list[int] = []
+
+    def record_source_index(**kwargs):
+        observed_indexes.append(kwargs["index"])
+        return real_apply(**kwargs)
+
+    with patch("utils.memory.legacy_backfill._apply_one_legacy_row", side_effect=record_source_index):
+        resumed = backfill_user(
+            LEGACY_UID,
+            db_client=db,
+            get_non_filtered_memories_fn=get_non_filtered,
+            max_rows=2,
+        )
+
+    # leg-a is already semantically materialized by leg-b; only leg-c writes,
+    # and it retains index 2 from the sorted current source, not index 0 from
+    # the filtered recovery list.
+    assert observed_indexes == [2]
+    assert resumed.skipped_semantic_duplicate == 1
+    assert resumed.completed is True
+    item_paths = [path for path in db.docs if path.startswith(f"users/{LEGACY_UID}/memory_items/")]
+    assert len(item_paths) == 2
+
+
+def test_continue_on_error_refreshes_control_and_retries_row(_trusted_account):
+    rows = [
+        _legacy_row(legacy_id="leg-retry-1", content="Retry one", conversation_id="conv-retry-1"),
+        _legacy_row(legacy_id="leg-retry-2", content="Retry two", conversation_id="conv-retry-2"),
+    ]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+    real_apply = backfill_user.__globals__["apply_long_term_patch_firestore"]
+    calls = {"count": 0}
+
+    def _fail_once(**kwargs):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise RuntimeError("simulated recoverable head mismatch")
+        return real_apply(**kwargs)
+
+    with patch("utils.memory.legacy_backfill.apply_long_term_patch_firestore", side_effect=_fail_once):
+        report = backfill_user(
+            LEGACY_UID,
+            db_client=db,
+            get_non_filtered_memories_fn=get_non_filtered_fn,
+            continue_on_error=True,
+        )
+
+    assert calls["count"] == 3
+    assert report.errors == []
+    assert report.completed is True
+    assert report.written_count == 2
+    assert report.verified is True
 
 
 def test_bucket_classifier_holds_noise_and_sensitive_rows():
@@ -621,7 +749,7 @@ def test_remediation_plan_preserves_asserted_rows_and_archives_known_noise(_trus
     assert db.docs[f"users/{LEGACY_UID}/memory_items/mem_noise"]["status"] == MemoryItemStatus.active.value
 
 
-def test_remediation_archives_only_planned_noise_through_apply_and_repairs_projections(_trusted_account, monkeypatch):
+def test_remediation_archives_only_planned_noise_through_apply_and_outbox(_trusted_account):
     db = _canonical_db_with_control(LEGACY_UID)
     evidence = MemoryEvidence(
         evidence_id="ev_remediation_noise",
@@ -655,24 +783,6 @@ def test_remediation_archives_only_planned_noise_through_apply_and_repairs_proje
     )
     db.docs[f"users/{LEGACY_UID}/memory_items/{item.memory_id}"] = _stored_item(item)
     db.docs[f"users/{LEGACY_UID}/memory_evidence/{evidence.evidence_id}"] = evidence.model_dump(mode="json")
-    projection_calls: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        "utils.memory.legacy_backfill.sync_atom_keyword_index_for_item",
-        lambda archived, **_: projection_calls.append(("keyword", archived.tier.value)) or True,
-    )
-    monkeypatch.setattr(
-        "utils.memory.legacy_backfill.delete_canonical_memory_vector",
-        lambda uid, memory_id: projection_calls.append(("vector_delete", memory_id)) or True,
-    )
-    monkeypatch.setattr(
-        "utils.memory.legacy_backfill.sync_canonical_memory_vector",
-        lambda archived, **_: projection_calls.append(("vector", archived.tier.value)) or True,
-    )
-    monkeypatch.setattr(
-        "utils.memory.legacy_backfill.invalidate_kg_for_memory_retraction",
-        lambda uid, memory_ids, **_: projection_calls.append(("kg", memory_ids[0])),
-    )
-
     report = apply_legacy_backfill_remediation_archives(
         LEGACY_UID,
         expected_archive_count=1,
@@ -687,12 +797,15 @@ def test_remediation_archives_only_planned_noise_through_apply_and_repairs_proje
     assert archived.status == MemoryItemStatus.active
     assert archived.item_revision == item.item_revision + 1
     assert archived.promotion["remediation"]["action"] == "archive"
-    assert projection_calls == [
-        ("keyword", "archive"),
-        ("vector_delete", item.memory_id),
-        ("vector", "archive"),
-        ("kg", item.memory_id),
+    delete_events = [
+        payload
+        for path, payload in db.docs.items()
+        if path.startswith(f"users/{LEGACY_UID}/memory_outbox/") and payload.get("memory_id") == item.memory_id
     ]
+    assert {event["event_type"]: event["payload"]["action"] for event in delete_events} == {
+        "projection_sync": "delete",
+        "vector_sync": "delete",
+    }
     assert any(
         path.startswith(f"users/{LEGACY_UID}/memory_commits/") for path in db.docs
     ), "remediation must use the canonical apply ledger"
@@ -822,6 +935,85 @@ def test_bucketed_manual_apply_writes_required_promotion_with_legacy_timestamps(
     assert stored["promotion"]["status"] == "pending"
     assert stored["promotion"]["bucket"] == LegacyBackfillBucket.manual_required_promotion.value
     assert stored["promotion"]["legacy_memory_id"] == row["id"]
+    assert stored["promotion"]["source_attribution"] == {
+        "subject_entity_id": None,
+        "subject_attribution": "unknown",
+        "subject_kind": "unknown",
+    }
+    assert stored["subject_entity_id"] is None
+
+
+@pytest.mark.parametrize(
+    ("legacy_id", "row_updates", "expected_bucket", "expected_user_asserted"),
+    [
+        (
+            "leg-stage-all-manual",
+            {"manually_added": True, "category": "manual"},
+            LegacyBackfillBucket.manual_required_promotion,
+            True,
+        ),
+        (
+            "leg-stage-all-reviewed",
+            {"user_review": True},
+            LegacyBackfillBucket.reviewed_long_term,
+            False,
+        ),
+    ],
+)
+def test_stage_all_preserves_durable_classification_for_required_processing(
+    _trusted_account,
+    legacy_id,
+    row_updates,
+    expected_bucket,
+    expected_user_asserted,
+):
+    row = _legacy_row(
+        legacy_id=legacy_id,
+        content="The user prefers launch checklists",
+        conversation_id=f"conv-{legacy_id}",
+    )
+    row.update(row_updates)
+    rows = [row]
+    reader, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+
+    report = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=reader,
+    )
+
+    assert report.completed is True
+    assert report.written_count == 1
+    memory_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
+    item_path = f"users/{LEGACY_UID}/memory_items/{memory_id}"
+    staged = db.docs[item_path]
+    assert staged["promotion"]["required"] is True
+    assert staged["promotion"]["bucket"] == expected_bucket.value
+    assert staged["user_asserted"] is expected_user_asserted
+
+    processed = process_required_memory_item(
+        LEGACY_UID,
+        memory_id,
+        db_client=db,
+        processor=lambda _item: ProcessedRequiredMemory(
+            content="The user prefers launch checklists.",
+            subject_entity_id="user",
+            predicate="prefers",
+            arguments={"thing": "launch checklists"},
+        ),
+        now=datetime.now(timezone.utc),
+    )
+
+    stored = db.docs[item_path]
+    assert processed.processed is True
+    assert stored["subject_entity_id"] == "user"
+    assert stored["promotion"]["source_attribution"] == {
+        "subject_entity_id": "user",
+        "subject_attribution": "user",
+        "subject_kind": "user",
+    }
 
 
 def test_bucketed_reviewed_apply_stages_processing_with_legacy_timestamp(_trusted_account):
@@ -837,19 +1029,13 @@ def test_bucketed_reviewed_apply_stages_processing_with_legacy_timestamp(_truste
     db = _canonical_db_with_control(LEGACY_UID)
     _seed_legacy_evidence(db, rows)
 
-    def _extract_kg(uid, item, *, db_client=None, preserve_item_updated_at=False, **_kwargs):
-        assert preserve_item_updated_at is True
-        db_client.document(f"users/{uid}/memory_items/{item.memory_id}").set({"kg_extracted": True}, merge=True)
-        return CanonicalKgPromotionResult(attempted=True, success=True, node_count=1, edge_count=1)
-
-    with patch("utils.memory.legacy_backfill.extract_kg_for_promoted_memory", side_effect=_extract_kg) as extract_kg:
-        report = backfill_user_bucketed(
-            LEGACY_UID,
-            bucket=LegacyBackfillBucket.reviewed_long_term,
-            dry_run=False,
-            db_client=db,
-            get_non_filtered_memories_fn=get_non_filtered_fn,
-        )
+    report = backfill_user_bucketed(
+        LEGACY_UID,
+        bucket=LegacyBackfillBucket.reviewed_long_term,
+        dry_run=False,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+    )
 
     assert report.completed is True
     assert report.verified is True
@@ -865,7 +1051,76 @@ def test_bucketed_reviewed_apply_stages_processing_with_legacy_timestamp(_truste
     assert stored["promotion"]["processing_status"] == "pending_processing"
     assert stored["promotion"]["submission"]["content_hash"]
     assert stored["promotion"]["bucket"] == LegacyBackfillBucket.reviewed_long_term.value
-    extract_kg.assert_not_called()
+    assert stored["promotion"]["user_review"] is True
+    assert stored["promotion"]["source_attribution"] == {
+        "subject_entity_id": None,
+        "subject_attribution": "unknown",
+        "subject_kind": "unknown",
+    }
+    assert stored["subject_entity_id"] is None
+
+
+@pytest.mark.parametrize(
+    ("bucket", "content", "manual", "reviewed"),
+    [
+        (
+            LegacyBackfillBucket.manual_required_promotion,
+            "Sarah prefers early flights",
+            True,
+            False,
+        ),
+        (
+            LegacyBackfillBucket.reviewed_long_term,
+            "David has a teammate Sarah who prefers early flights",
+            False,
+            True,
+        ),
+    ],
+)
+def test_bucketed_backfill_preserves_known_third_party_subject(
+    _trusted_account,
+    bucket,
+    content,
+    manual,
+    reviewed,
+):
+    row = _legacy_row(
+        legacy_id=f"leg-known-subject-{bucket.value}",
+        content=content,
+        conversation_id="conv-known-subject",
+    )
+    row.update(
+        {
+            "manually_added": manual,
+            "subject_entity_id": "person:sarah",
+            "subject_attribution": "third_party",
+            "subject_kind": "person",
+        }
+    )
+    if reviewed:
+        row["user_review"] = True
+    rows = [row]
+    reader, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+
+    report = backfill_user_bucketed(
+        LEGACY_UID,
+        bucket=bucket,
+        dry_run=False,
+        db_client=db,
+        get_non_filtered_memories_fn=reader,
+    )
+
+    assert report.written_count == 1
+    canonical_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
+    stored = db.docs[f"users/{LEGACY_UID}/memory_items/{canonical_id}"]
+    assert stored["subject_entity_id"] == "person:sarah"
+    assert stored["promotion"]["source_attribution"] == {
+        "subject_entity_id": "person:sarah",
+        "subject_attribution": "third_party",
+        "subject_kind": "person",
+    }
 
 
 def test_bucketed_reviewed_rerun_keeps_pending_item_out_of_kg(_trusted_account):
@@ -880,42 +1135,34 @@ def test_bucketed_reviewed_rerun_keeps_pending_item_out_of_kg(_trusted_account):
     db = _canonical_db_with_control(LEGACY_UID)
     _seed_legacy_evidence(db, rows)
 
-    def _extract_kg(uid, item, *, db_client=None, preserve_item_updated_at=False, **_kwargs):
-        assert preserve_item_updated_at is True
-        db_client.document(f"users/{uid}/memory_items/{item.memory_id}").set({"kg_extracted": True}, merge=True)
-        return CanonicalKgPromotionResult(attempted=True, success=True, node_count=1, edge_count=0)
-
-    with patch("utils.memory.legacy_backfill.extract_kg_for_promoted_memory", side_effect=_extract_kg):
-        first = backfill_user_bucketed(
-            LEGACY_UID,
-            bucket=LegacyBackfillBucket.reviewed_long_term,
-            dry_run=False,
-            db_client=db,
-            get_non_filtered_memories_fn=get_non_filtered_fn,
-        )
+    first = backfill_user_bucketed(
+        LEGACY_UID,
+        bucket=LegacyBackfillBucket.reviewed_long_term,
+        dry_run=False,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+    )
 
     canonical_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
     item_path = f"users/{LEGACY_UID}/memory_items/{canonical_id}"
     assert first.written_count == 1
     assert db.docs[item_path]["kg_extracted"] is False
 
-    with patch("utils.memory.legacy_backfill.extract_kg_for_promoted_memory", side_effect=_extract_kg) as extract_kg:
-        repaired = backfill_user_bucketed(
-            LEGACY_UID,
-            bucket=LegacyBackfillBucket.reviewed_long_term,
-            dry_run=False,
-            db_client=db,
-            get_non_filtered_memories_fn=get_non_filtered_fn,
-        )
+    repaired = backfill_user_bucketed(
+        LEGACY_UID,
+        bucket=LegacyBackfillBucket.reviewed_long_term,
+        dry_run=False,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+    )
 
     assert repaired.written_count == 0
     assert repaired.skipped_already_present == 1
     assert repaired.kg_extraction_failures == 0
     assert db.docs[item_path]["kg_extracted"] is False
-    extract_kg.assert_not_called()
 
 
-def test_stage_all_candidate_can_be_reviewed_processed_and_promoted(_trusted_account):
+def test_stage_all_candidate_can_be_reviewed_processed_and_routed_by_l2(_trusted_account):
     row = _legacy_row(
         legacy_id="leg-stage-upgrade",
         content="The user works on the Omi memory system",
@@ -962,15 +1209,40 @@ def test_stage_all_candidate_can_be_reviewed_processed_and_promoted(_trusted_acc
     )
     assert processed.processed is True
 
-    promoted = run_canonical_short_term_promotion(
-        LEGACY_UID,
-        db_client=db,
-        now=datetime.now(timezone.utc),
-        run_id="legacy-stage-upgrade",
+    stored = db.docs[item_path]
+    evidence_ids = [evidence["evidence_id"] for evidence in stored["evidence"]]
+    decision = ConsolidationAgentDecision(
+        source_memory_id=memory_id,
+        route="promote",
+        reconciliation="create",
+        memory_text=stored["content"],
+        evidence_ids=evidence_ids,
+        subject_entity_id="user",
+        predicate="works_on",
+        arguments={"project": "Omi memory system"},
+        relationship_to_user="owned_work",
+        aboutness="user_owned_project",
+        basis_for_memory="explicit",
+        confidence="high",
+        rationale="Reviewed legacy source was normalized before L2 admission.",
     )
+    with patch(
+        "utils.memory.canonical_consolidation.query_memory_vector_candidates",
+        return_value=SimpleNamespace(hits=[], rejected_count=0),
+    ):
+        promoted = run_canonical_consolidation(
+            LEGACY_UID,
+            db_client=db,
+            now=datetime.now(timezone.utc),
+            run_id="legacy-stage-upgrade",
+            llm_invoke=lambda _prompt: json.dumps(
+                ConsolidationAgentBatch(decisions=[decision]).model_dump(mode="json")
+            ),
+        )
 
     assert promoted.promoted_memory_ids == [memory_id]
     assert db.docs[item_path]["tier"] == MemoryTier.long_term.value
+    assert db.docs[item_path]["graph_ready"] is True
 
 
 def test_resume_completed_checkpoint_keeps_pending_item_out_of_kg(_trusted_account):
@@ -980,39 +1252,31 @@ def test_resume_completed_checkpoint_keeps_pending_item_out_of_kg(_trusted_accou
     db = _canonical_db_with_control(LEGACY_UID)
     _seed_legacy_evidence(db, rows)
 
-    def _extract_kg(uid, item, *, db_client=None, preserve_item_updated_at=False, **_kwargs):
-        assert preserve_item_updated_at is True
-        db_client.document(f"users/{uid}/memory_items/{item.memory_id}").set({"kg_extracted": True}, merge=True)
-        return CanonicalKgPromotionResult(attempted=True, success=True, node_count=1, edge_count=0)
-
-    with patch("utils.memory.legacy_backfill.extract_kg_for_promoted_memory", side_effect=_extract_kg):
-        first = backfill_user(
-            LEGACY_UID,
-            db_client=db,
-            get_non_filtered_memories_fn=get_non_filtered_fn,
-            batch_size=1,
-            resume=False,
-        )
+    first = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+        batch_size=1,
+        resume=False,
+    )
 
     canonical_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
     item_path = f"users/{LEGACY_UID}/memory_items/{canonical_id}"
     assert first.completed is True
     assert db.docs[item_path]["kg_extracted"] is False
 
-    with patch("utils.memory.legacy_backfill.extract_kg_for_promoted_memory", side_effect=_extract_kg) as extract_kg:
-        repaired = backfill_user(
-            LEGACY_UID,
-            db_client=db,
-            get_non_filtered_memories_fn=get_non_filtered_fn,
-            batch_size=1,
-            resume=True,
-        )
+    repaired = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+        batch_size=1,
+        resume=True,
+    )
 
     assert repaired.resumed_from_index == 1
     assert repaired.written_count == 0
     assert repaired.kg_extraction_failures == 0
     assert db.docs[item_path]["kg_extracted"] is False
-    extract_kg.assert_not_called()
 
 
 def test_bucketed_hold_bucket_never_writes(_trusted_account):
@@ -1099,7 +1363,7 @@ def test_count_reconciliation_flags_missing_destination(_trusted_account):
 
 def test_archive_hidden_long_term_visible_in_canonical_read(monkeypatch, _trusted_account):
     uid = "uid-archive-read"
-    _set_canonical_cohort(monkeypatch, uid)
+    _configure_universal_memory(monkeypatch, uid)
     db = _canonical_db_with_control(uid)
     long_term_id = _seed_canonical_short_term(
         db,
@@ -1251,8 +1515,8 @@ def test_fetch_active_legacy_memories_passes_explicit_firestore_client():
     assert calls[0][3] is db_client
 
 
-def test_legacy_read_path_unaffected_for_non_canonical_uid(_trusted_account, monkeypatch):
-    non_canonical_uid = "uid-non-canonical"
+def test_historical_read_path_is_non_mutating_for_arbitrary_uid(_trusted_account, monkeypatch):
+    arbitrary_uid = "uid-arbitrary"
     rows = [_legacy_row(legacy_id="leg-legacy-read", content="Legacy only", conversation_id="conv-lr")]
     get_non_filtered_fn, _ = _make_non_filtered_store(rows)
     db = _canonical_db_with_control(LEGACY_UID)
@@ -1263,25 +1527,25 @@ def test_legacy_read_path_unaffected_for_non_canonical_uid(_trusted_account, mon
     backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
 
     assert _legacy_memory_docs_snapshot(db, LEGACY_UID) == legacy_before
-    assert resolve_memory_system(non_canonical_uid, db_client=db) == MemorySystem.LEGACY
+    assert resolve_memory_system(arbitrary_uid, db_client=db) == MemorySystem.CANONICAL
 
-    non_canonical_rows = [
+    arbitrary_rows = [
         {
             **_legacy_row(legacy_id="leg-nc-1", content="Non-canonical legacy", conversation_id="conv-nc"),
-            "uid": non_canonical_uid,
+            "uid": arbitrary_uid,
         }
     ]
-    _seed_legacy_memories_in_db(db, non_canonical_uid, non_canonical_rows)
-    non_canonical_before = _legacy_memory_docs_snapshot(db, non_canonical_uid)
+    _seed_legacy_memories_in_db(db, arbitrary_uid, arbitrary_rows)
+    arbitrary_before = _legacy_memory_docs_snapshot(db, arbitrary_uid)
 
     monkeypatch.setattr(
         "utils.memory.memory_service.memories_db.get_memories",
         lambda uid, limit, offset=0, **kwargs: _get_memories_from_fake_db(db, uid, limit=limit, offset=offset),
     )
     service = MemoryService(db_client=db)
-    legacy_memories = service.read(non_canonical_uid, limit=10)
+    legacy_memories = service.read(arbitrary_uid, limit=10)
 
-    assert _legacy_memory_docs_snapshot(db, non_canonical_uid) == non_canonical_before
+    assert _legacy_memory_docs_snapshot(db, arbitrary_uid) == arbitrary_before
     assert len(legacy_memories) == 1
     assert legacy_memories[0].content == "Non-canonical legacy"
 

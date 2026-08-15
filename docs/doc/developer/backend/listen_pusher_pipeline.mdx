@@ -6,11 +6,25 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-07-24 (route-stamped replay and effect-completion acknowledgements)
+> Last updated: 2026-07-26 (bounded Pusher delivery, validated frames, and durable finalization ownership)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
+
+The backend-to-Pusher binary protocol accepts only opcodes `100` through `105`.
+Audio frames (`101`) require the four-byte opcode, an eight-byte timestamp, and
+PCM payload; JSON opcodes require an object payload, with transcript, finalization,
+and speaker-sample fields validated before they enter background queues. Malformed
+or unknown frames close the session with a protocol error instead of reaching
+application processing.
+
+Transcript, speaker-sample, audio-webhook, and private-cloud queues are bounded.
+Buffered audio also shares a per-session byte budget, so variable-size payloads
+cannot bypass item-count limits. A failed or cancelled backend-to-Pusher send
+retains the pending item for reconnect replay; buffers are cleared only after the
+send completes. Finalization opcode `104` carries the durable job id and dispatch
+generation, and Pusher claims that Firestore-owned job before processing.
 
 ## 1. Connection + Streaming + Transcription
 
@@ -31,12 +45,29 @@ before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
 utterances before longer ones.
 
+Pre-recorded STT results from providers such as Modulate and Parakeet are
+normalized before they are written as transcript segments. Consecutive entries
+from the same speaker may be merged when their gap is under 30 seconds, but no
+normalized segment may span more than 30 seconds. A provider entry that is
+already longer than 30 seconds is split into contiguous equal-duration slices
+before merging — each slice is at most 30 seconds — and its text is distributed
+evenly across those slices, so timestamps stay proportional to the text they
+carry. A slice is never emitted without text: an entry with fewer words than
+slices is split into as many slices as it has words.
+
 Every `/v4/listen` stream receives a durable, user-scoped `recording_session`
 resource before it creates or resumes a conversation. A client-generated
 `client_conversation_id` remains that resource's ID when present; legacy
-clients receive a server-generated UUID. The resource atomically binds the
-recording to exactly one conversation, so reconnects return the original
-canonical mapping rather than falling back to a user-global Redis pointer.
+clients receive a server-generated UUID. The optional
+`conversation_role=meeting` marker is supplied by desktop after a
+machine-observed call-start boundary; omitted or invalid values remain
+`ambient`. That bounded marker is persisted with the conversation so the
+post-finalization Chat receipt can distinguish meeting notes from ordinary
+always-on ambient chunks without inspecting transcript text.
+
+The resource atomically binds the recording to exactly one conversation, so
+reconnects return the original canonical mapping rather than falling back to a
+user-global Redis pointer.
 
 The backend emits a `conversation_session` event carrying that recording
 identity:
@@ -123,6 +154,15 @@ sequenceDiagram
     end
 ```
 
+### Speech-profile onboarding handshake
+
+Question-based speech-profile sessions connect with `onboarding=enabled`. After
+the mobile listener is subscribed, it sends `{"type":"start_onboarding"}`. The
+backend answers with question index `0` and treats duplicate start messages as
+no-ops, so the first prompt cannot be emitted before the client is able to
+consume it. Subsequent answers or `{"type":"skip_question"}` advance the same
+server-owned question index.
+
 ### Live STT observability
 
 For backend-provider `/v4/listen` sessions, `omi_live_stt_accepted_total`
@@ -138,6 +178,23 @@ environment, outcome, and phase labels. They do not include transcript content,
 user IDs, model revisions, or other high-cardinality request data. Custom-STT
 sessions are excluded because the backend does not own their provider socket or
 provider attempt lifecycle.
+
+### Dev-only parity-pack capture
+
+For local conformance debugging only, the listen runtime may write a restricted
+local cassette. It starts after listen has selected its STT service and accepts
+only an exact Firebase UID from `OMI_PARITY_PACK_ALLOWED_PRINCIPALS`. Capture is
+off unless all of `OMI_ENV_STAGE=dev`, `OMI_PARITY_PACK_CAPTURE=1`, and an
+absolute, outside-repository `OMI_PARITY_PACK_ROOT` are present. No Helm or
+production setting enables it.
+
+When enabled, the receiver records decoded client PCM (including each
+multi-channel PCM stream), successfully forwarded STT audio, and provider
+transcript callbacks. The runtime persists the anonymous cassette during
+teardown. Events and raw audio retained in memory are bounded (1,000 events or
+8 MiB of audio); once either limit is reached, remaining capture events are
+dropped. Capture initialization, observation, and persistence errors are
+isolated from the listen path.
 
 ### Terminal STT provider failure
 
@@ -297,41 +354,7 @@ sequenceDiagram
 
 ## 3.1 Pusher Reconnect & Pending Flush
 
-When pusher reconnects after a disconnection, all buffered conversations are replayed. Every new
-pusher connection declares acknowledgement support with the
-`X-Omi-Delivery-Ack: 1` WebSocket response header. Listen treats this capability as socket-local so
-a rolling deploy can reconnect safely to either an old or new pusher pod.
-
-On an acknowledgement-capable socket, transcript and speaker-sample frames retain one stable
-delivery ID after `send()` returns. Pusher rejects a stable frame without acknowledging it when the
-bounded queue is full. A worker acquires a short Redis processing lease only when it is ready to own
-the local invocation. After that invocation returns, pusher writes a seven-day done marker and
-returns opcode `202`; a replay that finds the done marker skips the invocation and returns the same
-acknowledgement. Speaker extraction reports not-yet-persisted conversation, transcript, or audio
-metadata as retryable, so those outcomes release the lease without an acknowledgement.
-
-Realtime app and developer webhooks receive the stable delivery ID in their idempotency header.
-Opcode `202` proves only that the pusher worker's local integration and webhook invocations
-returned. It is not a downstream HTTP delivery receipt: those helpers retain their existing
-best-effort retry, health, and circuit-breaker policies. The stable key lets a receiver deduplicate
-repeated successful attempts, while the pusher protocol itself provides at-least-once local worker
-invocation rather than exactly-once downstream delivery. A worker crash between an external effect
-and the Redis done write can repeat that effect. Redis outages fail open only when a worker is ready
-to process the frame and emit shared fallback telemetry.
-
-Graceful close sends opcode `107` after flushing tail audio. That asks pusher to flush private-cloud
-audio metadata and bypass the speaker-sample age delay while the acknowledgement socket is still
-open. Listen then performs a ten-second acknowledgement drain and gives socket close its own
-two-second cap. Work still pending when that bounded drain ends is not durable across listen-process
-teardown; stable replay applies while the session object remains alive or reconnecting.
-
-Audio keeps the rolling-compatible opcode `103` plus `101` format. Each buffered audio batch
-captures its conversation route before a socket await, and an explicit send failure or cancellation
-keeps that route-stamped batch for reconnect replay. Audio has no receiver acknowledgement or
-cross-replica deduplication, so an ambiguous local send completion may lose or duplicate bytes.
-Pending and live audio share one configured byte cap; pending and live transcripts likewise share
-one segment cap. Transcript overflow rejects the newest segment instead of evicting previously
-accepted FIFO work. Capacity drops emit fallback telemetry.
+When pusher reconnects after a disconnection, all buffered conversations are replayed.
 
 ```mermaid
 sequenceDiagram
@@ -443,24 +466,6 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 
 ## 6. Event Wire Protocol
 
-### Backend to pusher binary frames
-
-| Opcode | Payload | Retry contract |
-|--------|---------|----------------|
-| `100` | Header only | Heartbeat |
-| `101` | Start timestamp followed by PCM16LE audio | Best effort after the socket-local opcode `103` route; explicit send failures replay, but ambiguous completion has no receiver ACK |
-| `102` | JSON transcript batch with `memory_id` and optional `delivery_id` | Stable delivery is retained until opcode `202` on negotiated sockets |
-| `103` | UTF-8 conversation ID | Sets socket-local audio routing |
-| `104` | JSON durable finalization request | Existing job and generation fencing applies |
-| `105` | JSON speaker-sample request with optional `delivery_id` | Stable delivery is retained until opcode `202` on negotiated sockets |
-| `107` | Header only | Requests bounded receiver drain while the acknowledgement socket remains open |
-| `201` | JSON finalization result | Pusher to backend response |
-| `202` | JSON `{kind, delivery_id}` | Pusher to backend acknowledgement after local worker invocation or a Redis done marker |
-
-Old pusher pods omit the capability response header. Listen then uses the legacy send-success
-behavior for opcodes `102` and `105`, allowing pusher and listen to roll independently without
-retaining frames forever against an old peer.
-
 ### Server → Client (JSON over WS text frames)
 
 | Type | Format | Example |
@@ -502,9 +507,6 @@ retaining frames forever against an old peer.
 | `PENDING_REQUEST_TIMEOUT` | 120s | `routers/listen/conversations.py` | Timeout before retrying a pending request |
 | `MAX_RETRIES_PER_REQUEST` | 3 | `routers/listen/conversations.py` | Max retries before keeping buffered |
 | `PUSHER_MAX_RECONNECT_ATTEMPTS` | 6 | `utils/listen_pusher_session.py` | Reconnect attempts before DEGRADED |
-| `PUSHER_DELIVERY_ACK_TIMEOUT` | 5s | `utils/listen_pusher_session.py` | Retry interval for an unacknowledged stable delivery |
-| `PUSHER_CLOSE_ACK_TIMEOUT` | 10s | `utils/listen_pusher_session.py` | Graceful-close acknowledgement drain |
-| `PUSHER_SOCKET_CLOSE_TIMEOUT` | 2s | `utils/listen_pusher_session.py` | Socket-close deadline after the delivery drain |
 | `MAX_PENDING_REQUESTS` | 100 | `routers/listen/contracts.py` | Max buffered conversations per session |
 
 ## 8. WebSocket Task Supervision

@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import threading
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union, overload
@@ -7,7 +8,6 @@ import httpx
 import numpy as np
 import onnxruntime as ort  # onnxruntime is untyped
 import requests
-from fastapi import HTTPException
 from pydub import AudioSegment  # pydub is untyped
 
 from database import redis_db
@@ -17,6 +17,13 @@ from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
+HOSTED_VAD_CONNECT_TIMEOUT_SECONDS_ENV = 'HOSTED_VAD_CONNECT_TIMEOUT_SECONDS'
+HOSTED_VAD_READ_TIMEOUT_SECONDS_ENV = 'HOSTED_VAD_READ_TIMEOUT_SECONDS'
+DEFAULT_HOSTED_VAD_CONNECT_TIMEOUT_SECONDS = 3.0
+DEFAULT_HOSTED_VAD_READ_TIMEOUT_SECONDS = 30.0
+MAX_HOSTED_VAD_CONNECT_TIMEOUT_SECONDS = 30.0
+MAX_HOSTED_VAD_READ_TIMEOUT_SECONDS = 60.0
+
 
 class VADAudioDecodeError(RuntimeError):
     """Audio could not be decoded for a strict speech-eligibility decision."""
@@ -24,6 +31,57 @@ class VADAudioDecodeError(RuntimeError):
 
 class VADProcessingError(RuntimeError):
     """The local VAD could not make a trustworthy speech decision."""
+
+
+class VADEmptyError(ValueError):
+    """The VAD found no speech segments in the audio."""
+
+
+def _positive_timeout_seconds(env_name: str, default: float, maximum: float) -> float:
+    raw_value = os.getenv(env_name)
+    if raw_value is None:
+        return default
+    try:
+        value = float(raw_value)
+        if math.isfinite(value) and 0 < value <= maximum:
+            return value
+    except ValueError:
+        pass
+    logger.warning(
+        'Invalid or excessive %s=%r; using safe default %.1fs (maximum %.1fs)',
+        env_name,
+        raw_value,
+        default,
+        maximum,
+    )
+    return default
+
+
+def _hosted_vad_timeout_seconds() -> Tuple[float, float]:
+    """Return bounded hosted-VAD connect/read deadlines from current env."""
+
+    return (
+        _positive_timeout_seconds(
+            HOSTED_VAD_CONNECT_TIMEOUT_SECONDS_ENV,
+            DEFAULT_HOSTED_VAD_CONNECT_TIMEOUT_SECONDS,
+            MAX_HOSTED_VAD_CONNECT_TIMEOUT_SECONDS,
+        ),
+        _positive_timeout_seconds(
+            HOSTED_VAD_READ_TIMEOUT_SECONDS_ENV,
+            DEFAULT_HOSTED_VAD_READ_TIMEOUT_SECONDS,
+            MAX_HOSTED_VAD_READ_TIMEOUT_SECONDS,
+        ),
+    )
+
+
+def _hosted_vad_httpx_timeout() -> httpx.Timeout:
+    connect_timeout, read_timeout = _hosted_vad_timeout_seconds()
+    return httpx.Timeout(
+        connect=connect_timeout,
+        read=read_timeout,
+        write=read_timeout,
+        pool=connect_timeout,
+    )
 
 
 def _hosted_vad_fallback_reason(exc: BaseException) -> str:
@@ -160,7 +218,7 @@ def vad_is_empty(
         try:
             with open(file_path, 'rb') as file:
                 files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
-                response = requests.post(hosted_vad_url, files=files, timeout=300)
+                response = requests.post(hosted_vad_url, files=files, timeout=_hosted_vad_timeout_seconds())
                 response.raise_for_status()
                 segments = response.json()  # untyped external JSON response
         except Exception as e:
@@ -319,7 +377,7 @@ async def async_vad_is_empty(
             file_data = await run_blocking(storage_executor, _read_file, file_path)
             files = {'file': (file_path.split('/')[-1], file_data, 'audio/wav')}
             client = get_stt_client()
-            response = await client.post(hosted_vad_url, files=files)
+            response = await client.post(hosted_vad_url, files=files, timeout=_hosted_vad_httpx_timeout())
             response.raise_for_status()
             segments = response.json()  # untyped external JSON response
         except Exception as e:
@@ -340,8 +398,8 @@ async def async_vad_is_empty(
 def apply_vad_for_speech_profile(file_path: str) -> None:
     logger.info(f'apply_vad_for_speech_profile {file_path}')
     voice_segments = vad_is_empty(file_path, return_segments=True)
-    if len(voice_segments) == 0:  # TODO: front error on post-processing, audio sent is bad.
-        raise HTTPException(status_code=400, detail="Audio is empty")
+    if len(voice_segments) == 0:
+        raise VADEmptyError("Audio is empty")
     joined_segments: List[Dict[str, Any]] = []
     for i, segment in enumerate(voice_segments):
         if joined_segments and (segment['start'] - joined_segments[-1]['end']) < 1:

@@ -1,23 +1,137 @@
 name: Desktop Release Doctor
 
 on:
+  schedule:
+    - cron: '23 * * * *'
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'v*-macos release tag to inspect without mutating release state'
-        required: true
 
 permissions:
   contents: read
-  id-token: write
+  issues: write
+  actions: read
+  checks: read
 
 concurrency:
-  group: desktop-release-doctor-${{ inputs.release_tag }}
+  group: desktop-release-doctor
   cancel-in-progress: false
 
 jobs:
-  doctor:
-    environment: prod
+  proactive-health:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release controls
+        uses: actions/checkout@v7
+
+      - name: Measure proactive delivery health
+        id: health
+        env:
+          POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ vars.POSTHOG_PROJECT_ID }}
+          POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+        run: |
+          set -euo pipefail
+          required_config=(POSTHOG_PERSONAL_API_KEY POSTHOG_PROJECT_ID POSTHOG_HOST)
+          missing_config=()
+          for variable in "${required_config[@]}"; do
+            if [[ -z "${!variable:-}" ]]; then
+              missing_config+=("$variable")
+            fi
+          done
+
+          if (( ${#missing_config[@]} > 0 )); then
+            status=unconfigured
+            missing_config_csv="$(IFS=', '; echo "${missing_config[*]}")"
+            printf '%s\n' \
+              'Proactive delivery health: UNCONFIGURED' \
+              "Missing required PostHog configuration: $missing_config_csv." \
+              'Set the POSTHOG_PERSONAL_API_KEY secret and POSTHOG_PROJECT_ID/POSTHOG_HOST variables for this workflow.' \
+              'No health alarm was created or updated.' \
+              > /tmp/proactive-delivery-health.txt
+            python3 - "${missing_config[@]}" > /tmp/proactive-delivery-health.json <<'PY'
+          import json
+          import sys
+
+          print(json.dumps({
+              "metric": "proactive_delivery",
+              "status": "unconfigured",
+              "missing_config": sys.argv[1:],
+              "privacy": {"user_identifiers_included": False, "content_included": False},
+          }, indent=2, sort_keys=True))
+          PY
+          else
+            set +e
+            python3 .github/scripts/desktop_proactive_delivery_health.py \
+              --output /tmp/proactive-delivery-health.json \
+              --summary /tmp/proactive-delivery-health.txt
+            query_exit=$?
+            set -e
+
+            if [[ "$query_exit" -ne 0 ]]; then
+              status=monitor_error
+              printf '%s\n' \
+                'Proactive delivery health: MONITOR_ERROR' \
+                'The bounded PostHog query failed; inspect this workflow run.' \
+                > /tmp/proactive-delivery-health.txt
+              python3 - > /tmp/proactive-delivery-health.json <<'PY'
+          import json
+
+          print(json.dumps({
+              "metric": "proactive_delivery",
+              "status": "monitor_error",
+              "privacy": {"user_identifiers_included": False, "content_included": False},
+          }, indent=2, sort_keys=True))
+          PY
+            else
+              status="$(python3 -c 'import json; print(json.load(open("/tmp/proactive-delivery-health.json", encoding="utf-8"))["status"])')"
+            fi
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          cat /tmp/proactive-delivery-health.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish durable alarm state
+        if: always() && (steps.health.outputs.status == 'unhealthy' || steps.health.outputs.status == 'monitor_error' || steps.health.outputs.status == 'healthy')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEALTH_STATUS: ${{ steps.health.outputs.status }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title='Desktop proactive delivery health alarm'
+          issue_number="$(gh issue list --repo "$REPO" --state open --limit 100 --json number,title --jq '.[] | select(.title == "Desktop proactive delivery health alarm") | .number' | head -n 1)"
+
+          if [[ "$HEALTH_STATUS" == 'healthy' ]]; then
+            if [[ -n "$issue_number" ]]; then
+              gh issue close "$issue_number" --repo "$REPO" --comment "Recovered in $RUN_URL."
+            fi
+            exit 0
+          fi
+
+          {
+            printf 'The PT24H macOS proactive-delivery monitor is **%s**.\n\n' "$HEALTH_STATUS"
+            cat /tmp/proactive-delivery-health.txt
+            printf '\nWorkflow evidence: %s\n' "$RUN_URL"
+          } > /tmp/proactive-delivery-health-issue.md
+          if [[ -n "$issue_number" ]]; then
+            gh issue edit "$issue_number" --repo "$REPO" --body-file /tmp/proactive-delivery-health-issue.md
+          else
+            gh issue create --repo "$REPO" --title "$title" --body-file /tmp/proactive-delivery-health-issue.md
+          fi
+
+      - name: Upload proactive health evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-proactive-delivery-health
+          if-no-files-found: warn
+          path: /tmp/proactive-delivery-health*
+
+      - name: Fail on unhealthy or broken monitoring
+        if: always() && (steps.health.outputs.status == 'unhealthy' || steps.health.outputs.status == 'monitor_error')
+        run: exit 1
+
+  beta-freshness:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout release controls
@@ -25,35 +139,49 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Google Auth
-        uses: google-github-actions/auth@v3
-        with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-
-      - name: Generate advisory release evidence
+      - name: Check desktop beta freshness
+        id: freshness
         env:
           GH_TOKEN: ${{ github.token }}
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          GCS_DESKTOP_UPDATES_BUCKET: ${{ vars.GCS_DESKTOP_UPDATES_BUCKET || 'gs://omi_macos_updates' }}
+        run: |
+          set +e
+          python3 .github/scripts/check-desktop-beta-freshness.py \
+            --repository "${{ github.repository }}" \
+            --summary /tmp/desktop-beta-freshness.txt
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          cat /tmp/desktop-beta-freshness.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish durable freshness alarm
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FRESHNESS_EXIT: ${{ steps.freshness.outputs.exit_code }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          python3 .github/scripts/desktop_release_doctor.py doctor \
-            --release-tag "$RELEASE_TAG" \
-            --project-id "$PROJECT_ID" \
-            --repository "$GITHUB_REPOSITORY" \
-            --gcs-bucket "$GCS_DESKTOP_UPDATES_BUCKET" \
-            --output /tmp/desktop-release-evidence-v1.json \
-            --summary /tmp/desktop-release-doctor.txt \
-            --snapshot-output /tmp/desktop-release-doctor-snapshot-v1.json
-          cat /tmp/desktop-release-doctor.txt >> "$GITHUB_STEP_SUMMARY"
+          title='Desktop beta freshness alarm'
+          issue_number="$(gh issue list --repo "$REPO" --state open --limit 100 --json number,title --jq '.[] | select(.title == "Desktop beta freshness alarm") | .number' | head -n 1)"
 
-      - name: Upload advisory release evidence
-        uses: actions/upload-artifact@v7
-        with:
-          name: desktop-release-doctor-${{ inputs.release_tag }}
-          if-no-files-found: error
-          path: |
-            /tmp/desktop-release-evidence-v1.json
-            /tmp/desktop-release-doctor.txt
-            /tmp/desktop-release-doctor-snapshot-v1.json
+          if [[ "$FRESHNESS_EXIT" == '0' ]]; then
+            if [[ -n "$issue_number" ]]; then
+              gh issue close "$issue_number" --repo "$REPO" --comment "Recovered in $RUN_URL."
+            fi
+            exit 0
+          fi
+
+          {
+            printf 'The desktop beta freshness monitor is **unhealthy**.\n\n'
+            cat /tmp/desktop-beta-freshness.txt 2>/dev/null || printf 'Freshness checker produced no summary; inspect the workflow run.\n'
+            printf '\nWorkflow evidence: %s\n' "$RUN_URL"
+          } > /tmp/desktop-beta-freshness-issue.md
+          if [[ -n "$issue_number" ]]; then
+            gh issue edit "$issue_number" --repo "$REPO" --body-file /tmp/desktop-beta-freshness-issue.md
+          else
+            gh issue create --repo "$REPO" --title "$title" --body-file /tmp/desktop-beta-freshness-issue.md
+          fi
+
+      - name: Fail on stale beta
+        if: always() && steps.freshness.outputs.exit_code != '0'
+        run: exit 1

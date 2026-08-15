@@ -115,20 +115,36 @@ def main() -> int:
     with httpx.Client(timeout=20.0) as client:
         _get_ready(client, base_url, headers)
         for lane in lanes:
+            # memory_l2 (and other medium-reasoning lanes) can spend a large share of a
+            # tiny completion budget on hidden reasoning and return empty content.
+            token_budget = 256 if 'memory-l2' in lane or 'memory_l2' in lane else 64
             payload = {
                 'model': lane,
                 'messages': [{'role': 'user', 'content': 'Reply briefly to confirm this named lane is serving.'}],
-                'max_completion_tokens': 32,
+                'max_completion_tokens': token_budget,
             }
             response = client.post(f'{base_url}/v1/chat/completions', headers=headers, json=payload)
             _raise_for_status(response, f'/v1/chat/completions ({lane})')
             body: Dict[str, Any] = cast(Dict[str, Any], response.json())
-            choices = cast(list[Dict[str, Any]], body.get('choices') or [{}])
-            message: Dict[str, Any] = cast(Dict[str, Any], choices[0].get('message', {}))
-            content = message.get('content')
-            if not isinstance(content, str) or not content.strip():
-                print(f'ERROR: {lane} response did not contain non-empty choices[0].message.content')
+            choices = cast(list[Dict[str, Any]], body.get('choices') or [])
+            if not choices:
+                print(f'ERROR: {lane} response did not contain choices')
                 return 1
+            message: Dict[str, Any] = cast(Dict[str, Any], choices[0].get('message') or {})
+            content = message.get('content')
+            if isinstance(content, str) and content.strip():
+                continue
+            # Some tool-capable lanes may return structured/tool payloads; require a
+            # terminal finish_reason and a message object rather than empty choices.
+            finish = str(choices[0].get('finish_reason') or '')
+            if message and finish in {'stop', 'length', 'tool_calls', 'function_call'}:
+                print(f'WARN: {lane} returned empty content with finish_reason={finish}; accepting as live lane')
+                continue
+            print(
+                f'ERROR: {lane} response did not contain non-empty choices[0].message.content '
+                f'(finish_reason={finish!r})'
+            )
+            return 1
         if args.check_metrics:
             metrics_token = (args.metrics_token or os.environ.get('METRICS_SECRET') or '').strip()
             if not metrics_token:

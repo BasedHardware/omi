@@ -22,6 +22,11 @@ def _enable_realtime_webhook(client, auth_headers):
     assert enabled.status_code == 200, enabled.text
 
 
+def _disable_realtime_webhook(client, auth_headers):
+    disabled = client.post("/v1/users/developer/webhook/realtime_transcript/disable", headers=auth_headers)
+    assert disabled.status_code == 200, disabled.text
+
+
 def _health(fake_redis, uid="123", wtype="realtime_transcript"):
     return {k.decode(): v.decode() for k, v in fake_redis.hgetall(f"dev_webhook_health:{uid}:{wtype}").items()}
 
@@ -74,8 +79,7 @@ def test_realtime_webhook_config_roundtrip_and_delivery_capture(client, auth_hea
 
 def test_realtime_webhook_does_not_call_provider_when_disabled(client, auth_headers, monkeypatch, fake_redis):
     _configure_realtime_webhook(client, auth_headers)
-    disabled = client.post("/v1/users/developer/webhook/realtime_transcript/disable", headers=auth_headers)
-    assert disabled.status_code == 200, disabled.text
+    _disable_realtime_webhook(client, auth_headers)
     health_before = _health(fake_redis)
     requests = []
 
@@ -86,7 +90,10 @@ def test_realtime_webhook_does_not_call_provider_when_disabled(client, auth_head
     _run_realtime_delivery(monkeypatch, handler)
 
     assert requests == []
+    # The user's off toggle must not touch delivery health: skipped deliveries record nothing,
+    # and a user-disable is not the auto-disable flag.
     assert _health(fake_redis) == health_before
+    assert _health(fake_redis)["disabled"] == "0"
 
 
 @pytest.mark.parametrize(

@@ -35,7 +35,7 @@ serviceAccount:
   # Specifies whether a service account should be created
   create: true
   # Automatically mount a ServiceAccount's API credentials?
-  automount: true
+  automount: false
   # Annotations to add to the service account
   annotations: {}
   # The name of the service account to use.
@@ -55,7 +55,13 @@ podLabels: {}
 podSecurityContext: {}
   # fsGroup: 2000
 
-securityContext: {}
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  runAsNonRoot: true
+  runAsUser: 10001
   # capabilities:
   #   drop:
   #   - ALL
@@ -116,6 +122,23 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OPENAI_API_KEY
+  - name: OMI_LLM_GATEWAY_URL
+    value: "http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080"
+  - name: OMI_ENV_STAGE
+    value: "prod"
+  - name: OMI_LLM_GATEWAY_FEATURE_MODE
+    value: "gateway"
+  - name: OMI_LLM_CHAT_AGENT_ROUTE
+    value: "gateway"
+  - name: OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE
+    value: "true"
+  - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
+    value: "false"
+  - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -156,9 +179,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
-  # This is the self-hosted Deepgram credential used only with dg.omi.me.
-  # Hosted Deepgram is disabled by the serving policy and is not injected into
-  # backend-listen or Cloud Run workloads.
+  # Shared Deepgram credential: this deployment reaches self-hosted dg.omi.me,
+  # while backend-listen uses the hosted API with the same key.
   - name: DEEPGRAM_API_KEY
     valueFrom:
       secretKeyRef:
@@ -183,11 +205,6 @@ env:
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local"
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
@@ -268,7 +285,7 @@ env:
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,parakeet"
+    value: "dg-nova-3,modulate-velma-2,parakeet"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:

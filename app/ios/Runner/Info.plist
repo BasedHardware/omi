@@ -95,7 +95,7 @@
 			<string>omi.auth</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>omi</string>
+				<string>$(AUTH_CALLBACK_SCHEME)</string>
 			</array>
 		</dict>
 		<dict>

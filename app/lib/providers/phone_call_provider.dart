@@ -487,7 +487,7 @@ class PhoneCallProvider extends ChangeNotifier {
     Logger.info('PhoneCallProvider: connecting to $wsUrl');
 
     try {
-      var headers = await buildHeaders(requireAuthCheck: true);
+      var headers = await buildHeaders(requireAuthCheck: true, url: wsUrl, forWebSocket: true);
       if (generation != _sessionGeneration || !_sessionEnabled) return;
       _transcriptionSocket = IOWebSocketChannel.connect(
         wsUrl,

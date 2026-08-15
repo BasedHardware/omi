@@ -17,13 +17,13 @@ The Phase 2 runtime has a durable `grants` schema and TypeScript grant types:
 - `operation`
 - `resource_pattern`
 - `effect`: `allow` or `deny`
-- `source`: `legacy_default`, `policy`, `user`, or `system`
+- `source`: `policy`, `user`, or `system`
 - `constraints_json`
 - `created_at_ms`
 - optional `expires_at_ms`
 - optional `revoked_at_ms`
 
-That schema is present, but grants are currently dormant state. There is no live insertion path for `legacy_default`, `policy`, `user`, or `system` grants in the merged Phase 2 runtime.
+That schema is present, but grants are currently dormant state. There is no live insertion path for `policy`, `user`, or `system` grants in the merged Phase 2 runtime.
 
 The intended meaning remains section 6.8: a grant is a recorded capability decision scoped to a session or run. Until implementation work explicitly activates grant writes, UI must not imply that Omi already has user-managed grant records.
 
@@ -55,7 +55,10 @@ That audit payload is logged, but it is not currently appended as a canonical ke
 
 `legacy_high_trust` names the temporary policy mode that auto-resolves ACP permission prompts. It is policy identity and UX copy must not present it as an end-user trust grant.
 
-`legacy_default` is the planned grant source for run-scoped records that describe broad legacy authority once grant writes are implemented. It is not the same thing as `legacy_high_trust`: one is stored grant provenance, the other is the current policy mode.
+`legacy_default` is a retired database provenance value, not a valid source for
+new grant writes. Older runtimes may parse it only long enough to migrate an
+existing row into revoked history. `legacy_high_trust` remains the temporary
+policy mode name and does not imply a stored grant.
 
 ## Design Goals
 
@@ -126,7 +129,7 @@ Approval requests and resolutions remain events as required by section 11.2.
 }
 ```
 
-Legacy automatic ACP approvals should use the same event name when persisted, but with `policy: "legacy_high_trust"`, `automatic: true`, `resolvedBy: "policy"`, and no `grantId` unless a matching `legacy_default` row is actually inserted in the same transaction.
+Legacy automatic ACP approvals should use the same event name when persisted, but with `policy: "legacy_high_trust"`, `automatic: true`, `resolvedBy: "policy"`, and no `grantId`.
 
 ## Grant Write Rules
 
@@ -134,7 +137,7 @@ When grant writes are pulled into implementation scope:
 
 - only the policy module may create, renew, revoke, or consume grants;
 - adapter code may describe a requested capability, but may not choose allow or deny;
-- `legacy_default` rows should be run-scoped and describe existing broad legacy authority;
+- new writes must never use `legacy_default`; any existing rows are migration-only history and must remain revoked;
 - user choices should use `source: "user"`;
 - automatic non-legacy decisions should use `source: "policy"`;
 - operating-system or managed-admin decisions should use `source: "system"`;

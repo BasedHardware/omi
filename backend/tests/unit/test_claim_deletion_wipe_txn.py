@@ -147,6 +147,118 @@ def _run_mark_billing_failed(data):
     return result, txn._sets
 
 
+def _run_mark_completed(data):
+    txn = _make_txn()
+    txn_obj = users_db._mark_user_deletion_wipe_completed_txn
+    raw_fn = getattr(txn_obj, 'to_wrap', txn_obj)
+    snapshot = _make_snapshot(data)
+
+    class FakeDocRef:
+        def get(self, transaction=None):
+            return snapshot
+
+    result = raw_fn(txn, FakeDocRef())
+    return result, txn._sets
+
+
+def _run_record_late_cleanup(data, expected_instance_id='707'):
+    txn = _make_txn()
+    txn_obj = users_db._record_late_agent_vm_cleanup_txn
+    raw_fn = getattr(txn_obj, 'to_wrap', txn_obj)
+    snapshot = _make_snapshot(data)
+
+    class FakeDocRef:
+        def get(self, transaction=None):
+            return snapshot
+
+    result = raw_fn(
+        txn,
+        FakeDocRef(),
+        'omi-agent-late',
+        'us-central1-a',
+        expected_instance_id,
+    )
+    return result, txn._sets
+
+
+def _run_adopt_legacy_late_cleanup(data, expected_instance_id='808'):
+    txn = _make_txn()
+    txn_obj = users_db._adopt_legacy_late_agent_vm_cleanup_txn
+    raw_fn = getattr(txn_obj, 'to_wrap', txn_obj)
+    snapshot = _make_snapshot(data)
+
+    class FakeDocRef:
+        def get(self, transaction=None):
+            return snapshot
+
+    result = raw_fn(
+        txn,
+        FakeDocRef(),
+        'omi-agent-legacyowner',
+        'us-central1-a',
+        expected_instance_id,
+    )
+    return result, txn._updates
+
+
+def test_mark_completed_refuses_outstanding_late_vm_cleanup():
+    result, sets = _run_mark_completed(
+        {'wipe_status': 'running', 'late_agent_vm_cleanup': {'vmName': 'omi-agent-uid', 'zone': 'us-central1-a'}}
+    )
+
+    assert result is False
+    assert sets[0][1]['wipe_status'] == 'failed'
+
+
+def test_mark_completed_commits_without_late_vm_cleanup():
+    result, sets = _run_mark_completed({'wipe_status': 'running'})
+
+    assert result is True
+    assert sets[0][1]['wipe_status'] == 'completed'
+
+
+def test_record_late_cleanup_persists_numeric_instance_fence():
+    result, sets = _run_record_late_cleanup({'wipe_status': 'running'})
+
+    assert result is True
+    assert sets[0][1]['late_agent_vm_cleanup'] == {
+        'vmName': 'omi-agent-late',
+        'zone': 'us-central1-a',
+        'expectedInstanceId': '707',
+    }
+
+
+def test_record_late_cleanup_rejects_malformed_instance_fence():
+    import pytest
+
+    with pytest.raises(ValueError, match='must be numeric'):
+        _run_record_late_cleanup({'wipe_status': 'running'}, 'not-an-id')
+
+
+def test_adopt_legacy_late_cleanup_adds_exact_instance_fence():
+    result, updates = _run_adopt_legacy_late_cleanup(
+        {
+            'wipe_status': 'failed',
+            'late_agent_vm_cleanup': {'vmName': 'omi-agent-legacyowner', 'zone': 'us-central1-a'},
+        }
+    )
+
+    assert result is True
+    assert updates[0][1] == {'late_agent_vm_cleanup.expectedInstanceId': '808'}
+
+
+def test_adopt_legacy_late_cleanup_refuses_a_changed_record():
+    result, updates = _run_adopt_legacy_late_cleanup(
+        {
+            'wipe_status': 'failed',
+            'late_agent_vm_cleanup': {'vmName': 'omi-agent-other', 'zone': 'us-central1-a'},
+        }
+    )
+
+    assert result is False
+    assert updates == []
+
+
 def test_mark_billing_failed_allows_pre_wipe_states():
     result, sets = _run_mark_billing_failed({'uid': 'uid1', 'wipe_status': 'deleting_auth'})
 

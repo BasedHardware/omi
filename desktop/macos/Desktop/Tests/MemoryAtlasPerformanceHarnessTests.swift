@@ -401,12 +401,11 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
   func testMeasureProductionScaleLayout() {
     let graph = makeProductionScaleGraph()
 
-    // Three iterations, not the default ten. Laying out this fixture is now a
-    // relaxation rather than a formula, and ten repeats of it added roughly a
-    // minute to every full run of this suite in a debug build — a high price
-    // for a diagnostic that reports a local number and asserts nothing.
+    // One iteration, not the default ten. This reports a diagnostic local
+    // baseline without letting a non-asserting benchmark consume the isolated
+    // suite's CI timeout budget under a loaded debug runner.
     let options = XCTMeasureOptions()
-    options.iterationCount = 3
+    options.iterationCount = 1
 
     measure(metrics: [XCTClockMetric(), XCTCPUMetric(), XCTMemoryMetric()], options: options) {
       _ = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "Atlas Owner")

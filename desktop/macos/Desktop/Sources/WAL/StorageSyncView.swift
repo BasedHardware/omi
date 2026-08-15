@@ -21,7 +21,7 @@ struct StorageSyncView: View {
       HStack {
         Image(systemName: "arrow.triangle.2.circlepath")
           .scaledFont(size: OmiType.subheading)
-          .foregroundColor(OmiColors.accent)
+          .foregroundColor(Ink.primary)
 
         Text("Storage Sync")
           .scaledFont(size: OmiType.body, weight: .semibold)
@@ -32,12 +32,12 @@ struct StorageSyncView: View {
         if walService.pendingWals.count > 0 {
           Text("\(walService.pendingWals.count) pending")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.sm)
             .padding(.vertical, OmiSpacing.hairline)
             .background(
               Capsule()
-                .fill(OmiColors.backgroundTertiary)
+                .fill(Ink.rowFill)
             )
         }
       }
@@ -66,8 +66,8 @@ struct StorageSyncView: View {
     }
     .padding(OmiSpacing.lg)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(OmiColors.backgroundSecondary)
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+        .fill(Ink.wash)
     )
     .dismissableSheet(isPresented: $showWifiSetup) {
       wifiSetupSheet
@@ -81,11 +81,11 @@ struct StorageSyncView: View {
       // Device icon
       Image(systemName: device.type.iconName)
         .scaledFont(size: 24)
-        .foregroundColor(OmiColors.accent)
+        .foregroundColor(Ink.accent)
         .frame(width: 40, height: 40)
         .background(
           Circle()
-            .fill(OmiColors.accent.opacity(0.15))
+            .fill(Ink.accent.opacity(0.15))
         )
 
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
@@ -96,11 +96,11 @@ struct StorageSyncView: View {
           // Connection status
           HStack(spacing: OmiSpacing.xxs) {
             Circle()
-              .fill(Color.green)
+              .fill(Ink.listeningGreen)
               .frame(width: 6, height: 6)
             Text("Connected")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
           }
 
           // Battery
@@ -124,11 +124,11 @@ struct StorageSyncView: View {
     HStack(spacing: OmiSpacing.md) {
       Image(systemName: "waveform.slash")
         .scaledFont(size: OmiType.heading)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       Text("No device connected")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Spacer()
     }
@@ -142,11 +142,11 @@ struct StorageSyncView: View {
 
       GeometryReader { geometry in
         ZStack(alignment: .leading) {
-          RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-            .fill(OmiColors.backgroundTertiary)
+          RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+            .fill(Ink.rowFill)
 
-          RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-            .fill(OmiColors.accent)
+          RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+            .fill(Ink.primary)
             .frame(width: geometry.size.width * CGFloat(progress.percentComplete / 100))
         }
       }
@@ -159,7 +159,7 @@ struct StorageSyncView: View {
 
         Text("of \(formatBytes(progress.totalBytes))")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Spacer()
 
@@ -167,14 +167,14 @@ struct StorageSyncView: View {
         if progress.bytesPerSecond > 0 {
           Text("\(formatBytes(Int(progress.bytesPerSecond)))/s")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
         }
 
         // ETA
         if let eta = progress.estimatedSecondsRemaining {
           Text("~\(formatDuration(eta))")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
         }
       }
 
@@ -186,24 +186,24 @@ struct StorageSyncView: View {
           Text(wifiSyncService.status.displayName)
             .scaledFont(size: OmiType.caption)
         }
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
       }
     }
     .padding(OmiSpacing.md)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(OmiColors.backgroundTertiary.opacity(0.5))
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+        .fill(Ink.rowFill)
     )
   }
 
   private func errorView(_: String) -> some View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "exclamationmark.triangle.fill")
-        .foregroundColor(.orange)
+        .foregroundColor(SettingsInk.notice)
 
       Text("Storage sync couldn't finish. Try again.")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Spacer()
 
@@ -212,12 +212,12 @@ struct StorageSyncView: View {
         wifiSyncService.errorMessage = nil
       }
       .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundColor(OmiColors.accent)
+      .foregroundColor(Ink.primary)
     }
     .padding(OmiSpacing.sm)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(Color.orange.opacity(0.1))
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+        .fill(SettingsInk.notice.opacity(0.1))
     )
   }
 
@@ -237,10 +237,10 @@ struct StorageSyncView: View {
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .background(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(OmiColors.accent)
+          RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+            .fill(Ink.primary)
         )
-        .foregroundColor(OmiColors.backgroundPrimary)
+        .foregroundColor(Ink.surface)
       }
       .buttonStyle(.plain)
       .disabled(storageSyncService.isSyncing || wifiSyncService.isSyncing)
@@ -257,10 +257,10 @@ struct StorageSyncView: View {
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .background(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(OmiColors.accent, lineWidth: 1)
+          RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+            .stroke(Ink.hairline, lineWidth: 1)
         )
-        .foregroundColor(OmiColors.accent)
+        .foregroundColor(Ink.primary)
       }
       .buttonStyle(.plain)
       .disabled(storageSyncService.isSyncing || wifiSyncService.isSyncing)
@@ -274,11 +274,11 @@ struct StorageSyncView: View {
         }) {
           Image(systemName: "stop.fill")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(.red)
+            .foregroundColor(Ink.errorRed)
             .padding(OmiSpacing.sm)
             .background(
               Circle()
-                .fill(Color.red.opacity(0.15))
+                .fill(Ink.errorRed.opacity(0.15))
             )
         }
         .buttonStyle(.plain)
@@ -292,7 +292,7 @@ struct StorageSyncView: View {
       HStack {
         Text("WiFi Sync Setup")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Spacer()
         DismissButton(action: { showWifiSetup = false })
       }
@@ -300,7 +300,7 @@ struct StorageSyncView: View {
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         Text("Network Name (SSID)")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         TextField("Enter WiFi network name", text: $wifiSsid)
           .textFieldStyle(.roundedBorder)
@@ -309,7 +309,7 @@ struct StorageSyncView: View {
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         Text("Password")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         SecureField("Enter WiFi password", text: $wifiPassword)
           .textFieldStyle(.roundedBorder)
@@ -322,7 +322,7 @@ struct StorageSyncView: View {
           showWifiSetup = false
         }
         .buttonStyle(.plain)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
         Button("Start Sync") {
           showWifiSetup = false
@@ -336,7 +336,7 @@ struct StorageSyncView: View {
     }
     .padding(OmiSpacing.xxl)
     .frame(width: 360, height: 280)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.wash)
   }
 
   // MARK: - Actions
@@ -402,9 +402,9 @@ struct StorageSyncView: View {
   private var batteryColor: Color {
     let level = deviceProvider.batteryLevel
     switch level {
-    case 0..<20: return .red
-    case 20..<40: return .orange
-    default: return .green
+    case 0..<20: return Ink.errorRed
+    case 20..<40: return SettingsInk.notice
+    default: return Ink.listeningGreen
     }
   }
 
@@ -449,13 +449,13 @@ struct StorageSyncIndicator: View {
 
         Text("\(Int(progress.percentComplete))%")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.xxs)
       .background(
         Capsule()
-          .fill(OmiColors.accent.opacity(0.15))
+          .fill(Ink.accent.opacity(0.15))
       )
     } else if walService.pendingWals.count > 0 {
       // Pending indicator
@@ -466,12 +466,12 @@ struct StorageSyncIndicator: View {
         Text("\(walService.pendingWals.count)")
           .scaledFont(size: OmiType.caption, weight: .medium)
       }
-      .foregroundColor(OmiColors.textSecondary)
+      .foregroundColor(Ink.secondary)
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.xxs)
       .background(
         Capsule()
-          .fill(OmiColors.backgroundTertiary)
+          .fill(Ink.rowFill)
       )
     }
   }
@@ -484,6 +484,6 @@ struct StorageSyncIndicator: View {
     StorageSyncView()
       .frame(width: 360)
       .padding()
-      .background(OmiColors.backgroundPrimary)
+      .background(Ink.surface)
   }
 #endif

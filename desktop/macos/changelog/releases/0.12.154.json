@@ -1,0 +1,7 @@
+{
+  "version": "0.12.154",
+  "date": "2026-08-09",
+  "changes": [
+    "Improved macOS beta release reliability when the trusted readiness stack starts slowly"
+  ]
+}

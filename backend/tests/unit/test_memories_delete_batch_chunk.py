@@ -3,8 +3,9 @@
 database.memories.delete_memories and delete_all_memories accumulated every delete into a
 single WriteBatch and committed once. Firestore rejects a batch with more than 500 writes, so
 a user with more than 500 memories made batch.commit() raise, and the delete (including the
-account-deletion path) removed nothing. The fake below models the real 500-write limit by
-raising on an oversized commit, so the pre-fix single-batch code fails here.
+account-deletion path) removed nothing. Both functions now chunk at 499, mirroring
+unlock_all_memories. The fake below models the real 500-write limit by raising on an oversized
+commit, so the pre-fix single-batch code fails here.
 """
 
 import database.memories as memories
@@ -13,23 +14,17 @@ _FIRESTORE_BATCH_LIMIT = 500
 
 
 class _FakeBatch:
-    def __init__(self, commit_sink, record_sink):
+    def __init__(self, commit_sink):
         self._commit_sink = commit_sink
-        self._record_sink = record_sink
         self.deletes = 0
-        self.sets = 0
 
     def delete(self, reference):
         self.deletes += 1
 
-    def set(self, reference, payload):
-        self.sets += 1
-        self._record_sink.append(dict(payload))
-
     def commit(self):
-        if self.deletes + self.sets > _FIRESTORE_BATCH_LIMIT:
+        if self.deletes > _FIRESTORE_BATCH_LIMIT:
             raise ValueError("Firestore batch too large: max 500 writes per commit")
-        self._commit_sink.append((self.deletes, self.sets))
+        self._commit_sink.append(self.deletes)
 
 
 class _FakeDoc:
@@ -56,26 +51,23 @@ class _FakeDb:
     def __init__(self, n_docs, commit_sink):
         self._docs = [_FakeDoc(i) for i in range(n_docs)]
         self._commit_sink = commit_sink
-        self.staged_records = []
 
     def collection(self, _name):
         return _FakeCollection(self._docs)
 
     def batch(self):
-        return _FakeBatch(self._commit_sink, self.staged_records)
+        return _FakeBatch(self._commit_sink)
 
 
 def test_delete_all_memories_chunks_over_firestore_batch_limit():
     commit_sink = []
     fake = _FakeDb(1000, commit_sink)
 
-    result = memories.delete_all_memories("u1", firestore_client=fake)  # must not raise
+    memories.delete_all_memories("u1", firestore_client=fake)  # must not raise
 
-    assert sum(deletes for deletes, _sets in commit_sink) == 1000  # every memory deleted
-    assert sum(sets for _deletes, sets in commit_sink) == 0
-    assert result.committed_count == 1000
+    assert sum(commit_sink) == 1000  # every memory deleted
     assert len(commit_sink) >= 2  # split across batches
-    assert all(deletes + sets <= _FIRESTORE_BATCH_LIMIT for deletes, sets in commit_sink)
+    assert all(c <= _FIRESTORE_BATCH_LIMIT for c in commit_sink)
 
 
 def test_delete_memories_chunks_over_firestore_batch_limit():
@@ -84,31 +76,89 @@ def test_delete_memories_chunks_over_firestore_batch_limit():
 
     memories.delete_memories("u1", firestore_client=fake)  # must not raise
 
-    assert sum(deletes for deletes, _sets in commit_sink) == 1000
-    assert sum(sets for _deletes, sets in commit_sink) == 0
+    assert sum(commit_sink) == 1000
     assert len(commit_sink) >= 2
-    assert all(deletes + sets <= _FIRESTORE_BATCH_LIMIT for deletes, sets in commit_sink)
-
-
-def test_delete_memories_batch_returns_verified_delete_count():
-    commit_sink = []
-    fake = _FakeDb(0, commit_sink)
-
-    result = memories.delete_memories_batch(
-        "u1",
-        [f"mem-{index}" for index in range(1000)],
-        firestore_client=fake,
-    )
-
-    assert result.committed_count == 1000
-    assert commit_sink == [(499, 0), (499, 0), (2, 0)]
+    assert all(c <= _FIRESTORE_BATCH_LIMIT for c in commit_sink)
 
 
 def test_delete_all_memories_small_count_single_commit():
     commit_sink = []
     fake = _FakeDb(3, commit_sink)
 
-    result = memories.delete_all_memories("u1", firestore_client=fake)
+    memories.delete_all_memories("u1", firestore_client=fake)
 
-    assert commit_sink == [(3, 0)]
-    assert result.committed_count == 3
+    assert commit_sink == [3]
+
+
+class _UnlockDoc:
+    def __init__(self, path):
+        self.reference = path
+
+
+class _UnlockQuery:
+    def __init__(self, docs):
+        self._docs = docs
+
+    def stream(self):
+        return iter(self._docs)
+
+
+class _UnlockCollection:
+    def __init__(self, db, path):
+        self._db = db
+        self._path = path
+
+    def document(self, doc_id):
+        return _UnlockDocument(self._db, f"{self._path}/{doc_id}")
+
+    def where(self, *, filter):
+        self._db.filters.append((self._path, filter.field_path, filter.op_string, filter.value))
+        return _UnlockQuery(self._db.docs_by_collection.get(self._path, []))
+
+
+class _UnlockDocument:
+    def __init__(self, db, path):
+        self._db = db
+        self._path = path
+
+    def collection(self, name):
+        return _UnlockCollection(self._db, f"{self._path}/{name}")
+
+
+class _UnlockBatch:
+    def __init__(self, db):
+        self._db = db
+        self._updates = []
+
+    def update(self, reference, payload):
+        self._updates.append((reference, payload))
+
+    def commit(self):
+        self._db.updates.extend(self._updates)
+
+
+class _UnlockDb:
+    def __init__(self):
+        self.docs_by_collection = {
+            "users/u1/memories": [_UnlockDoc("legacy-locked")],
+            "users/u1/memory_items": [_UnlockDoc("canonical-locked")],
+        }
+        self.filters = []
+        self.updates = []
+
+    def collection(self, path):
+        return _UnlockCollection(self, path)
+
+    def batch(self):
+        return _UnlockBatch(self)
+
+
+def test_unlock_all_memories_updates_legacy_and_canonical_lock_fields():
+    fake = _UnlockDb()
+
+    memories.unlock_all_memories("u1", firestore_client=fake)
+
+    assert ("users/u1/memories", "is_locked", "==", True) in fake.filters
+    assert ("users/u1/memory_items", "promotion.is_locked", "==", True) in fake.filters
+    assert ("legacy-locked", {"is_locked": False}) in fake.updates
+    assert ("canonical-locked", {"promotion.is_locked": False}) in fake.updates

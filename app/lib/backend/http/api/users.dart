@@ -321,6 +321,27 @@ Future<bool> getHasConversationSummaryRating(String conversationId) async {
 }
 
 // User language preference API calls
+
+/// Picker options as name -> code, in server order. Null on any failure.
+Future<Map<String, String>?> getAvailableLanguages() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/available-languages',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) return null;
+
+  try {
+    final parsed = wire.GeneratedAvailableLanguagesResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    if (parsed.languages.isEmpty) return null;
+    return {for (final language in parsed.languages) language.name: language.code};
+  } catch (e) {
+    Logger.debug('Error parsing getAvailableLanguages response: $e');
+    return null;
+  }
+}
+
 Future<String?> getUserPrimaryLanguage() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/users/language', headers: {}, method: 'GET', body: '');
   if (response == null) return null;

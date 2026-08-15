@@ -106,17 +106,20 @@ def _emit(
         extra=extra,
     )
     _log_structured(telemetry_event_name, context.uid, properties)
+    emit_posthog_event(context.uid, telemetry_event_name, properties)
 
-    client = _get_posthog_client()
-    if client is None or not context.uid:
+
+def emit_posthog_event(distinct_id: Optional[str], event: str, properties: Dict[str, Any]) -> None:
+    """Capture one server event through the shared fail-open PostHog client."""
+    if not distinct_id:
         return
 
     try:
-        client.capture(distinct_id=context.uid, event=telemetry_event_name, properties=properties)
+        client = _get_posthog_client()
+        if client is not None:
+            client.capture(distinct_id=distinct_id, event=event, properties=properties)
     except Exception as exc:
-        logger.warning(
-            'integration telemetry posthog_emit_failed event=%s error=%s', telemetry_event_name, type(exc).__name__
-        )
+        logger.warning('integration telemetry posthog_emit_failed event=%s error=%s', event, type(exc).__name__)
 
 
 def _properties(

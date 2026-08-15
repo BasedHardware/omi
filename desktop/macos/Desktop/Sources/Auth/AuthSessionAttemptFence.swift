@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// A monotonic capability for asynchronous authentication work.
 ///
@@ -12,35 +13,47 @@ struct AuthSessionAttempt: Equatable, Sendable {
 }
 
 final class AuthSessionAttemptFence: @unchecked Sendable {
-  private let lock = NSLock()
-  private var generation: UInt64 = 0
+  /// Serialises `begin` against `commitIfCurrent` so a newer attempt cannot
+  /// start while a commit's credential/defaults mutation is mid-flight.
+  ///
+  /// **Never taken by the read paths.** A commit's operation can post a
+  /// `UserDefaults` change notification, and notification delivery to
+  /// queue-based observers is synchronous — a background commit can therefore
+  /// legitimately wait on the main thread. If the main thread then needed this
+  /// lock merely to *read* the current attempt (`APIClient.buildHeaders` does,
+  /// on every request), the app deadlocked with a frozen UI: the shipped
+  /// sign-in screen whose buttons answered nothing (#11374 follow-up).
+  private let commitLock = NSLock()
+  /// The generation value, behind its own micro-lock that is never held across
+  /// caller code — readers always complete promptly on any thread.
+  private let generation = OSAllocatedUnfairLock<UInt64>(initialState: 0)
 
   func begin() -> AuthSessionAttempt {
-    lock.withLock {
-      generation &+= 1
-      return AuthSessionAttempt(generation: generation)
+    commitLock.withLock {
+      generation.withLock { value in
+        value &+= 1
+        return AuthSessionAttempt(generation: value)
+      }
     }
   }
 
   func current() -> AuthSessionAttempt {
-    lock.withLock {
-      AuthSessionAttempt(generation: generation)
-    }
+    AuthSessionAttempt(generation: generation.withLock { $0 })
   }
 
   func isCurrent(_ attempt: AuthSessionAttempt) -> Bool {
-    lock.withLock { generation == attempt.generation }
+    generation.withLock { $0 } == attempt.generation
   }
 
   /// Execute a synchronous commit only while `attempt` remains authoritative.
-  /// Holding the lock makes beginning a newer attempt mutually exclusive with
-  /// the credential/defaults mutation itself.
+  /// Holding `commitLock` makes beginning a newer attempt mutually exclusive
+  /// with the credential/defaults mutation itself; reads stay lock-free.
   func commitIfCurrent<T>(
     _ attempt: AuthSessionAttempt,
     _ operation: () throws -> T
   ) rethrows -> T? {
-    try lock.withLock {
-      guard generation == attempt.generation else { return nil }
+    try commitLock.withLock {
+      guard generation.withLock({ $0 }) == attempt.generation else { return nil }
       return try operation()
     }
   }

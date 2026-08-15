@@ -3,6 +3,7 @@ import SwiftUI
 
 enum AppsHeaderMetrics {
   static let searchFieldMaxWidth: CGFloat = 360
+  static let searchFieldMinWidth: CGFloat = 200
   static let controlIconSize: CGFloat = 16
   static let controlHeight: CGFloat = 44
 }
@@ -31,7 +32,10 @@ struct AppsHeaderRow<Search: View, Filters: View, Create: View, Dismiss: View>: 
     ViewThatFits(in: .horizontal) {
       HStack(spacing: OmiSpacing.md) {
         search
-          .frame(maxWidth: AppsHeaderMetrics.searchFieldMaxWidth)
+          .frame(
+            minWidth: AppsHeaderMetrics.searchFieldMinWidth,
+            maxWidth: AppsHeaderMetrics.searchFieldMaxWidth
+          )
         filters
           .fixedSize(horizontal: true, vertical: false)
         create
@@ -40,7 +44,7 @@ struct AppsHeaderRow<Search: View, Filters: View, Create: View, Dismiss: View>: 
 
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         HStack(spacing: OmiSpacing.sm) {
-          search
+          search.frame(minWidth: AppsHeaderMetrics.searchFieldMinWidth)
           dismiss
         }
 
@@ -49,6 +53,20 @@ struct AppsHeaderRow<Search: View, Filters: View, Create: View, Dismiss: View>: 
             .fixedSize(horizontal: true, vertical: false)
           create
         }
+      }
+
+      // The real filter controls have a fixed minimum width. Once they no
+      // longer fit with Create App, give each control group its own row.
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+        HStack(spacing: OmiSpacing.sm) {
+          search
+          dismiss
+        }
+
+        filters
+          .fixedSize(horizontal: true, vertical: false)
+
+        create
       }
     }
   }
@@ -74,13 +92,13 @@ struct FilterToggle: View {
       .frame(height: AppsHeaderMetrics.controlHeight)
       .background(
         Capsule(style: .continuous)
-          .fill(Color.white.opacity(isActive ? 0.14 : 0.06))
+          .fill(isActive ? Ink.rowFillHover : Ink.rowFill)
           .overlay(
             Capsule(style: .continuous)
-              .stroke(Color.white.opacity(isActive ? 0.2 : 0.08), lineWidth: 1)
+              .stroke(isActive ? Ink.hairline : Ink.separator, lineWidth: 1)
           )
       )
-      .foregroundColor(isActive ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .foregroundColor(isActive ? Ink.primary : Ink.secondary)
       .fixedSize(horizontal: true, vertical: false)
     }
     .buttonStyle(.plain)
@@ -104,17 +122,17 @@ struct SmallHeaderButton: View {
           .foregroundColor(color)
         Text(label)
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(1)
       }
       .padding(.horizontal, OmiSpacing.md)
       .frame(height: AppsHeaderMetrics.controlHeight)
       .background(
         Capsule(style: .continuous)
-          .fill(Color.white.opacity(isHovering ? 0.12 : 0.06))
+          .fill(isHovering ? Ink.rowFillHover : Ink.rowFill)
           .overlay(
             Capsule(style: .continuous)
-              .stroke(Color.white.opacity(isHovering ? 0.18 : 0.08), lineWidth: 1)
+              .stroke(isHovering ? Ink.hairline : Ink.separator, lineWidth: 1)
           )
       )
       .fixedSize(horizontal: true, vertical: false)

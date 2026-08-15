@@ -6,6 +6,13 @@ set -e
 # a non-English locale (e.g. de_DE.UTF-8 expects a comma separator).
 export LC_NUMERIC=C
 
+# Codex, launchd, and other non-login shells may not inherit Homebrew's bin
+# directory. Keep the launcher self-contained so tools such as pkg-config are
+# discoverable on both Apple Silicon and Intel Macs.
+# shellcheck source=launcher-bootstrap.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/launcher-bootstrap.sh"
+omi_configure_homebrew_path
+
 # ─── Arguments ─────────────────────────────────────────────────────────
 YOLO_MODE=0
 FORCE_FULL_BUNDLE="${OMI_FORCE_FULL_BUNDLE:-0}"
@@ -54,9 +61,9 @@ Usage: ./run.sh [options]
 Build and run the Omi Desktop dev app with local backend services.
 
 Options (via environment variables):
-  OMI_SKIP_BACKEND=1      Skip starting Rust backend (use remote backend via OMI_DESKTOP_API_URL)
+  OMI_SKIP_BACKEND=1      Skip starting Python backend (use remote backend via OMI_DESKTOP_API_URL)
   OMI_SKIP_TUNNEL=1        Skip Cloudflare tunnel (use OMI_DESKTOP_API_URL from .env directly)
-  PORT=10201                Rust backend port (default: 10201, never use 8080)
+  PORT=10201                Desktop backend port (default: 10201, never use 8080)
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
   OMI_SKIP_AUTH_SEED=1     Do not copy auth/onboarding from Omi Dev into named bundles
   OMI_SKIP_SETTINGS_SEED=1  Do not copy shortcuts/settings from Omi Dev into named bundles
@@ -65,21 +72,21 @@ Options (via environment variables):
   OMI_DEV_EAGER_PERMISSIONS=1  Preserve eager mic/screen/file startup behavior in named bundles
   OMI_PYTHON_API_URL="..."  Python backend URL (explicit override; named bundles default to dev)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
-  OMI_DESKTOP_BACKEND_RELEASE=1  Use an optimized Rust backend locally (debug is the fast default)
   OMI_FORCE_FULL_BUNDLE=1  Rebuild the complete app bundle on this launch
   OMI_SCAN_STALE_BUNDLES=1  Remove stale same-named app bundles under $HOME (recovery only)
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
   OMI_DISABLE_LOCAL_AUTOMATION=1  Run a dev build "clean" with the bridge off
   OMI_AUTOMATION_PORT=47777       Bridge port (set per bundle when running several at once)
+  OMI_AUTOMATION_UI_MODE=quiet    Window presentation for automation: quiet, interactive, or normal
   OMI_FORCE_CANONICAL_MEMORY_ATLAS=1  Non-production-only local QA override for the canonical atlas rollout gate
   OMI_DESKTOP_LOCAL_PROFILE=1     Local harness profile; localhost endpoints/Auth emulator only
 
 Required files:
-  Backend-Rust/.env         Environment variables (copy from ../.env.example)
-  Backend-Rust/google-credentials.json  GCP service account key
+  ../../backend/.env         Environment variables (copy from ../../backend/.env.template)
+  ../../backend/google-credentials.json  GCP service account key
 
 Required tools:
-  cargo, xcrun/swift, python3, npm, node, codesign, cloudflared (unless skipped)
+  xcrun/swift, python3, uv, npm, node, codesign, cloudflared (unless skipped)
 
 Port allocation (avoid 8080 to prevent port conflicts):
   Backend default: 10201
@@ -106,7 +113,7 @@ apply_yolo_env() {
     # `--yolo` supplies remote-development defaults, but must not discard an
     # explicitly targeted backend. Named QA and fault-injection bundles use
     # these overrides to exercise a chosen service revision without requiring
-    # a local Rust backend or .env file.
+    # a local desktop backend or .env file.
     export OMI_DESKTOP_API_URL="${OMI_DESKTOP_API_URL:-https://desktop-backend-dt5lrfkkoa-uc.a.run.app}"
     export OMI_PYTHON_API_URL="${OMI_PYTHON_API_URL:-https://api.omiapi.com}"
     export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
@@ -120,7 +127,7 @@ if [ "$YOLO_MODE" = "1" ]; then
     echo ""
     echo "  WARNING: This connects directly to the dev Cloud Run backends."
     echo "  They currently use production Firebase identities and data stores."
-    echo "  No local Rust backend, no local auth, no tunnel."
+    echo "  No local Python backend, no local auth, no tunnel."
     echo "  This is a temporary shortcut — will be removed once"
     echo "  desktop dev setup friction is fully resolved."
     echo ""
@@ -142,8 +149,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/scripts/fast-dev-bundle.sh"
 # shellcheck source=local-profile-env.sh
 source "$SCRIPT_DIR/scripts/local-profile-env.sh"
-# shellcheck source=rust-backend-dev.sh
-source "$SCRIPT_DIR/scripts/rust-backend-dev.sh"
+# shellcheck source=python-desktop-backend-dev.sh
+source "$SCRIPT_DIR/scripts/python-desktop-backend-dev.sh"
 
 # Timing utilities
 SCRIPT_START_TIME=$(date +%s.%N)
@@ -223,7 +230,7 @@ fi
 
 # Named QA bundles are remote-dev by default. Apply this before any launch
 # preparation so they do not start a local backend or tunnel, and reapply it
-# after sourcing Backend-Rust/.env below so repository-local defaults cannot
+# after sourcing backend/.env below so repository-local defaults cannot
 # silently retarget a QA bundle. Explicit launch environment values above opt
 # out and remain authoritative.
 if [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
@@ -252,6 +259,11 @@ PI_MONO_PACKAGED_NODE_MODULES="$SCRIPT_DIR/.harness/agent-runtime/pi-mono-extens
 APP_DESKTOP_PATH="$HOME/Desktop/$APP_NAME.app"
 APP_DOWNLOADS_PATH="$HOME/Downloads/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
+# Stable self-signed fallback identity for machines with no Apple certificate.
+# See desktop/macos/AGENTS.md → Local Code Signing for how to create it.
+OMI_LOCAL_DEV_SIGN_IDENTITY="Omi Local Dev Signing"
+SIGN_IDENTITY_TEAM_ID=""
+SIGN_IDENTITY_TEAM_ID_RESOLVED_FOR=""
 if [ "$LOCAL_PROFILE" = true ]; then
     if [ "$BUNDLE_ID" = "com.omi.desktop-dev" ] || { [ "$IS_NAMED_BUNDLE" = false ] && [ "$APP_NAME" = "Omi Dev" ]; }; then
         echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 cannot target Omi Dev (com.omi.desktop-dev)."
@@ -286,6 +298,7 @@ if [ "$LOCAL_PROFILE" = true ]; then
 fi
 AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-${AUTOMATION_PORT:-47777}}"
 AUTOMATION_CAPTURE_ROOT="${OMI_AUTOMATION_CAPTURE_ROOT:-$SCRIPT_DIR/.harness/runs}"
+AUTOMATION_UI_MODE="$(derive_omi_automation_ui_mode "$IS_NAMED_BUNDLE" "${OMI_AUTOMATION_UI_MODE:-}")" || exit 2
 # An external harness may request an ownership proof for a detached `open`
 # launch. The token is passed as an app argument (and therefore visible in the
 # spawned process command) and copied into the owner-only launch signal. It is
@@ -296,16 +309,19 @@ if [[ -n "$DESKTOP_LAUNCH_TOKEN" && ! "$DESKTOP_LAUNCH_TOKEN" =~ ^[A-Za-z0-9_-]{
     exit 2
 fi
 AUTOMATION_ARGS=("--automation-port=$AUTOMATION_PORT" "--automation-capture-root=$AUTOMATION_CAPTURE_ROOT")
+if [ "$AUTOMATION_UI_MODE" != "normal" ]; then
+    AUTOMATION_ARGS+=("--automation-ui=$AUTOMATION_UI_MODE")
+fi
 if [ "${OMI_ENABLE_LOCAL_AUTOMATION:-0}" = "1" ]; then
     AUTOMATION_ARGS=(--automation-bridge "${AUTOMATION_ARGS[@]}")
 fi
 
-# Backend configuration (Rust)
-BACKEND_DIR="$(cd "$(dirname "$0")/Backend-Rust" && pwd)"
+# Backend configuration
+BACKEND_DIR="$(cd "$SCRIPT_DIR/../../backend" && pwd)"
 BACKEND_PID=""
 BACKEND_REUSED_PID=""
-BACKEND_PIDFILE="$OMI_DEV_DIR/rust-backend.pid"
-BACKEND_METADATA="$OMI_DEV_DIR/rust-backend.meta"
+BACKEND_PIDFILE="$OMI_DEV_DIR/python-desktop-backend.pid"
+BACKEND_METADATA="$OMI_DEV_DIR/python-desktop-backend.meta"
 TUNNEL_PID=""
 TUNNEL_URL="${TUNNEL_URL:-}"
 AUTH_CACHE=""
@@ -344,10 +360,69 @@ resolve_signing_identity() {
     if [ -z "$SIGN_IDENTITY" ]; then
         SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
     fi
+    if [ -z "$SIGN_IDENTITY" ]; then
+        # A stable self-signed identity keeps this bundle's own TCC grants,
+        # because its designated requirement pins that certificate. Ad-hoc
+        # signing has no such requirement and silently drops Screen Recording,
+        # so prefer this over ad-hoc whenever it exists.
+        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep -F "\"$OMI_LOCAL_DEV_SIGN_IDENTITY\"" | head -1 | sed 's/.*"\(.*\)"/\1/')
+        if [ -n "$SIGN_IDENTITY" ]; then
+            substep "Using local self-signed identity: $SIGN_IDENTITY"
+        fi
+    fi
     if [ -z "$SIGN_IDENTITY" ] && [ "${OMI_ALLOW_ADHOC_SIGN:-0}" = "1" ] && [ "$IS_NAMED_BUNDLE" = true ]; then
         SIGN_IDENTITY="-"
         substep "Using ad-hoc signing for named test bundle ($BUNDLE_ID)"
     fi
+}
+
+# The Team ID codesign will stamp for the resolved identity ("" when the
+# identity carries none). Resolved once per identity: it costs a probe
+# signature, and sign_app_bundle runs on both the fast and full lanes.
+resolve_signing_identity_team_id() {
+    if [ -n "$SIGN_IDENTITY" ] && [ "$SIGN_IDENTITY_TEAM_ID_RESOLVED_FOR" = "$SIGN_IDENTITY" ]; then
+        return
+    fi
+    SIGN_IDENTITY_TEAM_ID="$("$SCRIPT_DIR/scripts/prepare-local-dev-entitlements.sh" \
+        --identity-team-id "$SIGN_IDENTITY")"
+    SIGN_IDENTITY_TEAM_ID_RESOLVED_FOR="$SIGN_IDENTITY"
+}
+
+# Which entitlements a local signature must use. Prints the reason the
+# generated local entitlements are required, or nothing when the checked-in
+# Desktop/Omi.entitlements are correct as they stand.
+#
+# Pure decision over already-gathered metadata so it can be exercised directly;
+# see tests/test-prepare-local-dev-entitlements.sh.
+local_entitlements_fallback_reason() {
+    local signing_mode="$1"
+    local is_named_bundle="$2"
+    local profile_present="$3"
+    local profile_team_id="$4"
+    local identity_team_id="$5"
+
+    if [ "$signing_mode" = "teamless" ]; then
+        # Hardened-runtime library validation cannot match the bundled
+        # frameworks without a Team ID, so this bundle needs the generated
+        # entitlements whether or not it is a named bundle.
+        printf '%s\n' "signing identity has no Team ID; library validation would block the bundled frameworks"
+        return 0
+    fi
+    if [ "$is_named_bundle" = true ]; then
+        printf '%s\n' "named bundle IDs are not covered by Omi Dev's provisioning profile"
+        return 0
+    fi
+    if [ "$profile_present" != true ]; then
+        return 0
+    fi
+    if [ -z "$profile_team_id" ]; then
+        printf '%s\n' "could not extract profile team ID (security cms failed)"
+        return 0
+    fi
+    if [ "$profile_team_id" != "$identity_team_id" ]; then
+        printf '%s\n' "profile team ($profile_team_id) != identity team ($identity_team_id)"
+    fi
+    return 0
 }
 
 fast_bundle_fingerprint() {
@@ -431,14 +506,10 @@ sign_app_bundle() {
     local sign_nested="$2"
     local effective_entitlements="Desktop/Omi.entitlements"
     local profile_path="$bundle/Contents/embedded.provisionprofile"
-    local use_fallback_entitlements=false
+    local local_signing_mode
+    local fallback_reason
 
     resolve_signing_identity
-    "$(dirname "$0")/scripts/prepare-local-dev-entitlements.sh" \
-        --validate-identity \
-        "$SIGN_IDENTITY" \
-        "$IS_NAMED_BUNDLE" \
-        "${OMI_ALLOW_ADHOC_SIGN:-0}"
 
     if [ -z "$SIGN_IDENTITY" ]; then
         echo ""
@@ -449,13 +520,29 @@ sign_app_bundle() {
         echo "       or set OMI_SIGN_IDENTITY to a valid identity:"
         echo "       OMI_SIGN_IDENTITY=\"Apple Development: you@example.com\" ./run.sh"
         echo ""
-        echo "       For named throwaway bundles only, tests may opt into ad-hoc signing:"
+        echo "       With no Apple certificate, create the stable self-signed local"
+        echo "       identity once (see desktop/macos/AGENTS.md → Local Code Signing):"
+        echo "       \"$OMI_LOCAL_DEV_SIGN_IDENTITY\" is picked up automatically."
+        echo ""
+        echo "       For named throwaway bundles only, tests may opt into ad-hoc signing."
+        echo "       It invalidates that bundle's own Screen Recording grant, so Rewind"
+        echo "       captures nothing:"
         echo "       OMI_APP_NAME=\"omi-my-test\" OMI_ALLOW_ADHOC_SIGN=1 ./run.sh"
         echo ""
         exit 1
     fi
 
-    substep "Using identity: $SIGN_IDENTITY"
+    resolve_signing_identity_team_id
+    # One authority for both the launch-safety gate and the entitlement choice:
+    # a configuration that validates is exactly the one whose mode is used.
+    local_signing_mode="$("$SCRIPT_DIR/scripts/prepare-local-dev-entitlements.sh" \
+        --validate-identity \
+        "$SIGN_IDENTITY" \
+        "$SIGN_IDENTITY_TEAM_ID" \
+        "$IS_NAMED_BUNDLE" \
+        "${OMI_ALLOW_ADHOC_SIGN:-0}")"
+
+    substep "Using identity: $SIGN_IDENTITY (team=${SIGN_IDENTITY_TEAM_ID:-none}, mode=$local_signing_mode)"
     if [ "$sign_nested" = true ]; then
         if [ -d "$bundle/Contents/Frameworks/Sparkle.framework" ]; then
             substep "Signing Sparkle framework"
@@ -477,7 +564,7 @@ sign_app_bundle() {
             substep "Signing libwebp"
             codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libwebp.7.dylib"
         fi
-        local node_bin="$bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+        local node_bin="$bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
         if [ -f "$node_bin" ]; then
             substep "Signing bundled node binary"
             codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$node_bin"
@@ -485,32 +572,27 @@ sign_app_bundle() {
     fi
 
     # Named bundles deliberately omit Sign in with Apple because their bundle
-    # IDs are not covered by Omi Dev's provisioning profile.
-    if [ "$IS_NAMED_BUNDLE" = true ]; then
-        substep "Named bundle — stripping applesignin entitlement"
-        use_fallback_entitlements=true
-    elif [ -f "$profile_path" ]; then
-        local identity_team_id profile_team_id profile_plist
-        identity_team_id=$(echo "$SIGN_IDENTITY" | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
+    # IDs are not covered by Omi Dev's provisioning profile, and a teamless
+    # identity additionally needs library validation relaxed.
+    local profile_present=false profile_team_id="" profile_plist
+    if [ -f "$profile_path" ]; then
+        profile_present=true
         profile_plist=$(mktemp /tmp/omi-dev-profile.XXXXXX)
         profile_team_id=$(security cms -D -i "$profile_path" > "$profile_plist" 2>/dev/null && \
             /usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" "$profile_plist" 2>/dev/null || true)
         rm -f "$profile_plist"
-        if [ -z "$profile_team_id" ]; then
-            substep "Could not extract profile team ID (security cms failed); using local entitlements fallback"
-            use_fallback_entitlements=true
-        elif [ "$profile_team_id" != "$identity_team_id" ]; then
-            substep "Profile team ($profile_team_id) != identity team ($identity_team_id); using local entitlements fallback"
-            use_fallback_entitlements=true
-        fi
     fi
 
-    if [ "$use_fallback_entitlements" = true ]; then
-        local local_signing_mode="development"
-        if [ "$SIGN_IDENTITY" = "-" ]; then
-            local_signing_mode="adhoc"
-        fi
-        effective_entitlements="$("$(dirname "$0")/scripts/prepare-local-dev-entitlements.sh" \
+    fallback_reason="$(local_entitlements_fallback_reason \
+        "$local_signing_mode" \
+        "$IS_NAMED_BUNDLE" \
+        "$profile_present" \
+        "$profile_team_id" \
+        "$SIGN_IDENTITY_TEAM_ID")"
+
+    if [ -n "$fallback_reason" ]; then
+        substep "Local entitlements fallback: $fallback_reason"
+        effective_entitlements="$("$SCRIPT_DIR/scripts/prepare-local-dev-entitlements.sh" \
             Desktop/Omi.entitlements \
             "$OMI_DEV_DIR" \
             "$BUNDLE_ID" \
@@ -590,14 +672,14 @@ auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E '
 # Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 # Note: don't pkill cloudflared here — other agents may have tunnels running on this machine
-# Keep an owned local Rust backend alive until a replacement has compiled. The
+# Keep an owned local Python backend alive until a replacement has started. The
 # backend startup path refreshes Firebase keys before it binds, so restarting it
 # for a Swift-only edit adds network-dependent delay and makes a compiler error
 # take down an otherwise healthy development server.
 if [ -n "${OMI_HARNESS_INSTANCE:-}" ]; then
     substep "Keeping harness desktop-backend (OMI_HARNESS_INSTANCE=${OMI_HARNESS_INSTANCE})"
-elif omi_rust_backend_pid_is_alive "$BACKEND_PIDFILE"; then
-    OLD_BACKEND_PID="$(omi_rust_backend_read_pid "$BACKEND_PIDFILE")"
+elif omi_python_desktop_backend_pid_is_alive "$BACKEND_PIDFILE"; then
+    OLD_BACKEND_PID="$(omi_python_desktop_backend_read_pid "$BACKEND_PIDFILE")"
     substep "Deferring recorded backend verification until a candidate is ready (PID: $OLD_BACKEND_PID, port $BACKEND_PORT)"
 else
     if [ -f "$BACKEND_PIDFILE" ] || [ -f "$BACKEND_METADATA" ]; then
@@ -610,7 +692,7 @@ auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSig
 auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 
 # Each non-production app writes to its own bundle-and-launch log path. Never clear a
-# machine-global log here: another named QA or qualification bundle may still be running.
+# machine-global log here: another named QA bundle may still be running.
 
 if [ "$FAST_ONLY" = "1" ]; then
     # --fast-only already proved that the installed bundle fingerprint matches;
@@ -680,14 +762,8 @@ fi
 cd "$BACKEND_DIR"
 
 if [ "$LOCAL_PROFILE" = true ]; then
-    substep "Omi Dev local harness: skipping Backend-Rust/.env copy/source and google-credentials bootstrap"
+    substep "Omi Dev local harness: skipping backend/.env copy/source and google-credentials bootstrap"
 else
-# Copy .env if not present — try sibling dirs, then scaffold from .env.example
-if [ ! -f ".env" ] && [ -f "../../backend/.env" ]; then
-    cp "../../backend/.env" ".env"
-elif [ ! -f ".env" ] && [ -f "../Backend/.env" ]; then
-    cp "../Backend/.env" ".env"
-fi
 if [ ! -f ".env" ] && [ "$YOLO_MODE" != "1" ] && [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" != true ] \
     && { [ "${OMI_SKIP_BACKEND:-0}" != "1" ] || [ -z "${OMI_DESKTOP_API_URL:-}" ]; }; then
     echo ""
@@ -695,7 +771,7 @@ if [ ! -f ".env" ] && [ "$YOLO_MODE" != "1" ] && [ "$NAMED_BUNDLE_DEFAULT_DEV_BA
     echo "No .env file found at $BACKEND_DIR/.env"
     echo ""
     echo "Quick start:"
-    echo "  1. cp .env.example .env"
+    echo "  1. cp .env.template .env"
     echo "  2. Fill in required values (see comments in .env.example)"
     echo "  3. Place google-credentials.json in $BACKEND_DIR/"
     echo "     (GCP service account key with Firestore + Firebase Auth access)"
@@ -714,13 +790,6 @@ if [ ! -f ".env" ] && [ "$YOLO_MODE" != "1" ] && [ "$NAMED_BUNDLE_DEFAULT_DEV_BA
     echo "  ./run.sh --yolo"
     echo "==========================="
     exit 1
-fi
-
-# Symlink google-credentials.json if not present
-if [ ! -f "google-credentials.json" ] && [ -f "../../backend/google-credentials.json" ]; then
-    ln -sf "../../backend/google-credentials.json" "google-credentials.json"
-elif [ ! -f "google-credentials.json" ] && [ -f "../Backend/google-credentials.json" ]; then
-    ln -sf "../Backend/google-credentials.json" "google-credentials.json"
 fi
 
 # Read environment from .env (skip if missing — yolo mode doesn't need it)
@@ -768,21 +837,20 @@ fi
 substep "Firebase project: $FIREBASE_PROJECT_ID | Backend port: $BACKEND_PORT"
 cd - > /dev/null
 
-# ─── Start Rust backend ───────────────────────────────────────────────
+# ─── Start Python backend ─────────────────────────────────────────────
 if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
     cd "$BACKEND_DIR"
-    RUST_BACKEND_PROFILE="$(omi_rust_backend_profile)"
-    RUST_BACKEND_BINARY="$(omi_rust_backend_binary "$BACKEND_DIR" "$RUST_BACKEND_PROFILE")"
+    PYTHON_BACKEND_BINARY="$(omi_python_desktop_backend_binary "$BACKEND_DIR")"
     OLD_BACKEND_PID=""
-    if omi_rust_backend_pid_is_alive "$BACKEND_PIDFILE"; then
-        OLD_BACKEND_PID="$(omi_rust_backend_read_pid "$BACKEND_PIDFILE")"
+    if omi_python_desktop_backend_pid_is_alive "$BACKEND_PIDFILE"; then
+        OLD_BACKEND_PID="$(omi_python_desktop_backend_read_pid "$BACKEND_PIDFILE")"
         # A pidfile alone is never authority to signal a process: PIDs can be
         # reused after a crash. Require the recorded process-start identity
         # before a later replacement may stop it. This intentionally does not
         # require the requested profile/configuration to match: a known-owned
         # debug process must be safely replaceable by an explicit release run.
-        if ! omi_rust_backend_pid_matches_metadata "$BACKEND_METADATA" "$OLD_BACKEND_PID"; then
-            substep "Ignoring unverified Rust backend pidfile (PID: $OLD_BACKEND_PID)"
+        if ! omi_python_desktop_backend_pid_matches_metadata "$BACKEND_METADATA" "$OLD_BACKEND_PID"; then
+            substep "Ignoring unverified Python backend pidfile (PID: $OLD_BACKEND_PID)"
             rm -f "$BACKEND_PIDFILE" "$BACKEND_METADATA"
             OLD_BACKEND_PID=""
         fi
@@ -793,33 +861,22 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
     if [ -n "${OMI_HARNESS_INSTANCE:-}" ]; then
         substep "Reusing harness desktop-backend (instance $OMI_HARNESS_INSTANCE)"
     elif [ -n "$OLD_BACKEND_PID" ] \
-        && omi_rust_backend_metadata_matches "$BACKEND_METADATA" "$RUST_BACKEND_PROFILE" "$RUST_BACKEND_BINARY" "$BACKEND_PORT" \
-        && ! omi_rust_backend_sources_are_stale "$BACKEND_DIR" "$RUST_BACKEND_BINARY" \
-        && ! omi_rust_backend_config_is_newer "$BACKEND_DIR" "$BACKEND_PIDFILE" \
-        && omi_rust_backend_pid_listens_on_port "$OLD_BACKEND_PID" "$BACKEND_PORT" \
-        && omi_rust_backend_health_check "$BACKEND_PORT"; then
+        && omi_python_desktop_backend_metadata_matches "$BACKEND_METADATA" "$BACKEND_PORT" \
+        && ! omi_python_desktop_backend_sources_are_stale "$BACKEND_DIR" "$BACKEND_PIDFILE" \
+        && ! omi_python_desktop_backend_config_is_newer "$BACKEND_DIR" "$BACKEND_PIDFILE" \
+        && omi_python_desktop_backend_pid_listens_on_port "$OLD_BACKEND_PID" "$BACKEND_PORT" \
+        && omi_python_desktop_backend_health_check "$BACKEND_PORT"; then
         BACKEND_REUSED_PID="$OLD_BACKEND_PID"
-        substep "Reusing healthy $RUST_BACKEND_PROFILE Rust backend (PID: $BACKEND_REUSED_PID, port $BACKEND_PORT)"
+        substep "Reusing healthy Python backend (PID: $BACKEND_REUSED_PID, port $BACKEND_PORT)"
     else
-        # Compile before stopping the current owned backend. A Rust compiler
-        # error must leave the developer's last healthy server available.
-        if omi_rust_backend_sources_are_stale "$BACKEND_DIR" "$RUST_BACKEND_BINARY"; then
-            step "Building Rust backend (cargo build --locked, $RUST_BACKEND_PROFILE)..."
-            if [ "$RUST_BACKEND_PROFILE" = "release" ]; then
-                cargo build --locked --release
-            else
-                cargo build --locked
-            fi
-        fi
-
-        if [ ! -x "$RUST_BACKEND_BINARY" ]; then
-            echo "ERROR: Rust backend build did not produce $RUST_BACKEND_BINARY" >&2
+        if [ ! -x "$PYTHON_BACKEND_BINARY" ]; then
+            echo "ERROR: Python backend dependencies are not synced. Run: (cd backend && ./scripts/sync-python-deps.sh)" >&2
             exit 1
         fi
 
         if [ -n "$OLD_BACKEND_PID" ]; then
-            substep "Replacing owned Rust backend after successful build (PID: $OLD_BACKEND_PID)"
-            omi_rust_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
+            substep "Replacing owned Python backend (PID: $OLD_BACKEND_PID)"
+            omi_python_desktop_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
         fi
 
         # Fail loud (don't clobber) if our derived port is held by a different
@@ -839,8 +896,8 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
         chmod 700 "$BACKEND_LOG_DIR"
         BACKEND_LOG_FILE="$BACKEND_LOG_DIR/backend.log"
 
-        step "Starting Rust backend ($RUST_BACKEND_PROFILE)..."
-        "$RUST_BACKEND_BINARY" >>"$BACKEND_LOG_FILE" 2>&1 &
+        step "Starting Python backend..."
+        "$PYTHON_BACKEND_BINARY" desktop_backend:app --host 127.0.0.1 --port "$BACKEND_PORT" >>"$BACKEND_LOG_FILE" 2>&1 &
         BACKEND_PID=$!
         printf '%s\n' "$BACKEND_PID" > "$BACKEND_PIDFILE"
         substep "Backend log: $BACKEND_LOG_FILE"
@@ -848,25 +905,25 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
         step "Waiting for backend to start..."
         BACKEND_READY=0
         for i in {1..30}; do
-            if omi_rust_backend_health_check "$BACKEND_PORT"; then
+            if omi_python_desktop_backend_health_check "$BACKEND_PORT"; then
                 BACKEND_READY=1
                 substep "Backend is ready!"
                 break
             fi
             if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
                 echo "ERROR: Backend failed to start. Check $BACKEND_DIR/.env and credentials."
-                omi_rust_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
+                omi_python_desktop_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
                 exit 1
             fi
             sleep 0.5
         done
         if [ "$BACKEND_READY" != "1" ]; then
             echo "ERROR: Backend did not become healthy on port $BACKEND_PORT. Check $BACKEND_LOG_FILE" >&2
-            omi_rust_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
+            omi_python_desktop_backend_stop_owned "$BACKEND_PIDFILE" "$BACKEND_METADATA"
             exit 1
         fi
-        omi_rust_backend_write_metadata \
-            "$BACKEND_METADATA" "$RUST_BACKEND_PROFILE" "$RUST_BACKEND_BINARY" "$BACKEND_PORT" "$BACKEND_PID"
+        omi_python_desktop_backend_write_metadata \
+            "$BACKEND_METADATA" "$BACKEND_PORT" "$BACKEND_PID"
     fi
     cd - > /dev/null
 else
@@ -989,7 +1046,8 @@ substep "Adding rpath for Frameworks"
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true
 
 # Copy Sparkle framework
-SPARKLE_FRAMEWORK="Desktop/.build/arm64-apple-macosx/debug/Sparkle.framework"
+SWIFTPM_DEBUG_PRODUCTS_DIR="Desktop/.build/debug"
+SPARKLE_FRAMEWORK="$SWIFTPM_DEBUG_PRODUCTS_DIR/Sparkle.framework"
 if [ -d "$SPARKLE_FRAMEWORK" ]; then
     substep "Copying Sparkle framework ($(du -sh "$SPARKLE_FRAMEWORK" 2>/dev/null | cut -f1))"
     rm -rf "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
@@ -997,7 +1055,7 @@ if [ -d "$SPARKLE_FRAMEWORK" ]; then
 fi
 
 # Copy Sentry framework
-SENTRY_FRAMEWORK="Desktop/.build/arm64-apple-macosx/debug/Sentry.framework"
+SENTRY_FRAMEWORK="$SWIFTPM_DEBUG_PRODUCTS_DIR/Sentry.framework"
 if [ -d "$SENTRY_FRAMEWORK" ]; then
     substep "Copying Sentry framework"
     rm -rf "$APP_BUNDLE/Contents/Frameworks/Sentry.framework"
@@ -1005,7 +1063,7 @@ if [ -d "$SENTRY_FRAMEWORK" ]; then
 fi
 
 # Copy onnxruntime framework
-ONNX_FRAMEWORK="Desktop/.build/arm64-apple-macosx/debug/onnxruntime.framework"
+ONNX_FRAMEWORK="$SWIFTPM_DEBUG_PRODUCTS_DIR/onnxruntime.framework"
 if [ -d "$ONNX_FRAMEWORK" ]; then
     substep "Copying onnxruntime framework"
     rm -rf "$APP_BUNDLE/Contents/Frameworks/onnxruntime.framework"
@@ -1050,49 +1108,59 @@ fi
 /usr/libexec/PlistBuddy -c "Set :BUNDLE_ID $BUNDLE_ID" "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist" 2>/dev/null || true
 
 # Copy resource bundle (contains app assets like permissions.gif, herologo.png, etc.)
-RESOURCE_BUNDLE="Desktop/.build/arm64-apple-macosx/debug/Omi Computer_Omi Computer.bundle"
+RESOURCE_BUNDLE="$SWIFTPM_DEBUG_PRODUCTS_DIR/Omi Computer_Omi Computer.bundle"
 if [ -d "$RESOURCE_BUNDLE" ]; then
     substep "Copying resource bundle ($(du -sh "$RESOURCE_BUNDLE" 2>/dev/null | cut -f1))"
     macos_copy_tree "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
+    # SwiftPM places Resources/node at the resource-bundle root, while the
+    # app runtime and signed-artifact audit use the app-style nested layout.
+    # Move the universal runtime within the disposable bundle so we do not
+    # package a second 200+ MiB copy.
+    omi_normalize_packaged_resource_bundle \
+        "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
 fi
 
 substep "Copying agent"
-if [ -d "$AGENT_DIR/dist" ]; then
-    mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
-    macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"
-    cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
-    if [ ! -d "$AGENT_PACKAGED_NODE_MODULES" ]; then
-        echo "ERROR: packaged agent dependencies missing at $AGENT_PACKAGED_NODE_MODULES"
-        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
-        exit 1
-    fi
-    macos_copy_tree "$AGENT_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
-    mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
-    cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
-    cp -f "$AGENT_DIR/src/runtime/node-tools.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
-    cp -f "$AGENT_DIR/src/runtime/omi-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
+if [ ! -d "$AGENT_DIR/dist" ]; then
+    echo "ERROR: built agent runtime missing at $AGENT_DIR/dist"
+    echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+    exit 1
 fi
+mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
+macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"
+cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
+if [ ! -d "$AGENT_PACKAGED_NODE_MODULES" ]; then
+    echo "ERROR: packaged agent dependencies missing at $AGENT_PACKAGED_NODE_MODULES"
+    echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+    exit 1
+fi
+macos_copy_tree "$AGENT_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
 
-substep "Copying pi-mono-extension (for piMono harness)"
-PI_MONO_EXT_DIR="$(dirname "$0")/pi-mono-extension"
-if [ -d "$PI_MONO_EXT_DIR" ]; then
-    if [ ! -d "$PI_MONO_EXT_DIR/node_modules" ]; then
-        substep "Installing pi-mono-extension dependencies"
-        (cd "$PI_MONO_EXT_DIR" && npm ci --no-fund --no-audit)
-    fi
-    mkdir -p "$APP_BUNDLE/Contents/Resources/pi-mono-extension"
-    cp -f "$PI_MONO_EXT_DIR/index.ts" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-    cp -f "$PI_MONO_EXT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-    cp -f "$PI_MONO_EXT_DIR/package-lock.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-    if [ ! -d "$PI_MONO_PACKAGED_NODE_MODULES" ]; then
-        echo "ERROR: packaged pi-mono-extension dependencies missing at $PI_MONO_PACKAGED_NODE_MODULES"
-        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
-        exit 1
-    fi
-    macos_copy_tree "$PI_MONO_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"
-else
-    echo "Warning: pi-mono-extension not found at $PI_MONO_EXT_DIR"
+substep "Copying pi-mono-extension (registers the omi provider)"
+PI_MONO_EXT_DIR="$SCRIPT_DIR/pi-mono-extension"
+if [ ! -d "$PI_MONO_EXT_DIR" ]; then
+    echo "ERROR: pi-mono-extension source missing at $PI_MONO_EXT_DIR"
+    echo "       Without it the packaged runtime cannot resolve the omi provider and"
+    echo "       pi-mono exits 1 on every chat turn."
+    exit 1
 fi
+if [ ! -d "$PI_MONO_EXT_DIR/node_modules" ]; then
+    substep "Installing pi-mono-extension dependencies"
+    (cd "$PI_MONO_EXT_DIR" && npm ci --no-fund --no-audit)
+fi
+mkdir -p "$APP_BUNDLE/Contents/Resources/pi-mono-extension"
+cp -f "$PI_MONO_EXT_DIR/index.ts" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+cp -f "$PI_MONO_EXT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+cp -f "$PI_MONO_EXT_DIR/package-lock.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+if [ ! -d "$PI_MONO_PACKAGED_NODE_MODULES" ]; then
+    echo "ERROR: packaged pi-mono-extension dependencies missing at $PI_MONO_PACKAGED_NODE_MODULES"
+    echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+    exit 1
+fi
+macos_copy_tree "$PI_MONO_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"
+
+substep "Verifying agent runtime payload"
+omi_assert_agent_runtime_payload "$APP_BUNDLE" "bundle assembly"
 
 substep "Copying .env.app"
 if [ "$LOCAL_PROFILE" = true ]; then
@@ -1120,7 +1188,7 @@ if ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
     fi
 fi
 # Bootstrap OMI_PYTHON_API_URL — main Omi Python backend (auth, subscriptions, payments, transcription).
-# Do NOT fall back to OMI_DESKTOP_API_URL — that's the Rust desktop-backend which doesn't serve these routes.
+# Do NOT fall back to OMI_DESKTOP_API_URL — that is the Python desktop backend, which does not serve these routes.
 # If the caller set OMI_PYTHON_API_URL (for example --yolo), it must override copied .env values.
 PYTHON_API_URL="${OMI_PYTHON_API_URL:-}"
 if [ -z "$PYTHON_API_URL" ] && [ -f "$BACKEND_DIR/.env" ]; then
@@ -1138,8 +1206,17 @@ fi
 substep "Set OMI_PYTHON_API_URL=$PYTHON_API_URL"
 fi # end non-local .env.app merge
 
+copy_app_icon() {
+    local icon_source="$SCRIPT_DIR/omi_icon.icns"
+    if [ ! -s "$icon_source" ]; then
+        echo "ERROR: missing app icon at $icon_source" >&2
+        return 1
+    fi
+    cp -f "$icon_source" "$APP_BUNDLE/Contents/Resources/OmiIcon.icns"
+}
+
 substep "Copying app icon"
-cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null || true
+copy_app_icon
 
 substep "Creating PkgInfo"
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
@@ -1186,6 +1263,10 @@ step "Installing to /Applications/..."
 rm -rf "$APP_PATH"
 ditto "$APP_BUNDLE" "$APP_PATH"
 substep "Installed to $APP_PATH"
+# The fast lane trusts the installed bundle on later launches, and it only ever
+# records the fingerprint of a bundle that passed here. Prove the copy landed
+# before that stamp makes this bundle reusable.
+omi_assert_agent_runtime_payload "$APP_PATH" "install"
 
 step "Clearing stale LaunchServices registration..."
 # Unregister first to clear any launch-disabled flag from stale entries,
@@ -1305,6 +1386,7 @@ echo "App:      $APP_PATH"
 echo "API URL:  $EFFECTIVE_API_URL"
 if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
     echo "Automation bridge: http://127.0.0.1:${AUTOMATION_PORT}"
+    echo "Automation UI:     $AUTOMATION_UI_MODE"
 fi
 echo "========================================"
 echo ""
@@ -1328,6 +1410,18 @@ build_launch_env_args() {
     if [ -n "${OMI_FORCE_CANONICAL_MEMORY_ATLAS:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_CANONICAL_MEMORY_ATLAS=$OMI_FORCE_CANONICAL_MEMORY_ATLAS")
     fi
+    if [ -n "${OMI_FORCE_CONTEXT_BUCKETS:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_CONTEXT_BUCKETS=$OMI_FORCE_CONTEXT_BUCKETS")
+    fi
+    # Forward automation token overrides when the caller already pinned them
+    # (e.g. desktop-core-harness.sh). Default token discovery prefers Darwin
+    # user temp in harness clients, matching NSTemporaryDirectory().
+    if [ -n "${OMI_AUTOMATION_TOKEN_FILE:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_AUTOMATION_TOKEN_FILE=$OMI_AUTOMATION_TOKEN_FILE")
+    fi
+    if [ -n "${OMI_AUTOMATION_TOKEN:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_AUTOMATION_TOKEN=$OMI_AUTOMATION_TOKEN")
+    fi
 }
 
 build_launch_env_args
@@ -1337,12 +1431,16 @@ if [ -n "$DESKTOP_LAUNCH_TOKEN" ]; then
     # `-n` guarantees this invocation creates a process carrying the capability
     # token instead of focusing an existing instance of the same app.
     LAUNCH_ARGS=("${AUTOMATION_ARGS[@]}" "--omi-launch-token=$DESKTOP_LAUNCH_TOKEN")
-    if ! open -n ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${LAUNCH_ARGS[@]}"; then
+    OPEN_BACKGROUND_ARGS=()
+    [ "$AUTOMATION_UI_MODE" = "quiet" ] && OPEN_BACKGROUND_ARGS=(-g)
+    if ! open -n "${OPEN_BACKGROUND_ARGS[@]}" ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${LAUNCH_ARGS[@]}"; then
         LAUNCH_TRANSPORT="direct"
         "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${LAUNCH_ARGS[@]}" &
     fi
 elif [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
-    if ! open ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${AUTOMATION_ARGS[@]}"; then
+    OPEN_BACKGROUND_ARGS=()
+    [ "$AUTOMATION_UI_MODE" = "quiet" ] && OPEN_BACKGROUND_ARGS=(-g)
+    if ! open "${OPEN_BACKGROUND_ARGS[@]}" ${LAUNCH_ENV_ARGS[@]+"${LAUNCH_ENV_ARGS[@]}"} "$APP_PATH" --args "${AUTOMATION_ARGS[@]}"; then
         LAUNCH_TRANSPORT="direct"
         "$APP_PATH/Contents/MacOS/$BINARY_NAME" "${AUTOMATION_ARGS[@]}" &
     fi

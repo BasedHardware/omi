@@ -16,7 +16,9 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-_SPEC = importlib.util.spec_from_file_location("desktop_changelog", Path(__file__).with_name("desktop-changelog.py"))
+_SPEC = importlib.util.spec_from_file_location(
+    "desktop_changelog", Path(__file__).with_name("desktop-changelog.py")
+)
 changelog = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(changelog)
 
@@ -69,33 +71,17 @@ class ChangelogRequirementTests(unittest.TestCase):
     def test_internal_release_controls_are_exempt_but_product_source_is_not(self) -> None:
         for path in (
             "desktop/macos/docs/release.md",
-            "desktop/macos/docs/qualification-environment.md",
-            "desktop/macos/scripts/qualify-desktop-beta.sh",
-            "desktop/macos/scripts/qualification-cache-reclaim.py",
-            # #10759 M1 self-clean/watchdog helpers (EXEMPT_DESKTOP_PATHS).
-            "desktop/macos/scripts/qualification-runner-self-clean.py",
-            "desktop/macos/scripts/qualification-watchdog.py",
-            # Sibling qualification-runner helper (EXEMPT_DESKTOP_PATHS).
-            "desktop/macos/scripts/qualification-swift-cache.sh",
-            "desktop/macos/scripts/qualification-lease-command.sh",
             # CI-only flow validation and its shared source inventory do not
             # alter the desktop application users receive.
             "desktop/macos/scripts/desktop-flow-lint.py",
             "desktop/macos/scripts/desktop_flow_contract.py",
-            # Test files are never user-facing app changes (EXEMPT_DESKTOP_PATH_PREFIXES).
-            # #10374's timeout bump touched this file; without the exemption the
-            # post-merge push run of the changelog gate reddened main (#10387).
-            "desktop/macos/tests/test-qualify-desktop-beta-contract.sh",
             "desktop/macos/tests/some-other-desktop-test.sh",
-            # Swift package tests live under Desktop/Tests rather than the
-            # legacy lowercase tests directory.
-            "desktop/macos/Desktop/Tests/PTTInputDeviceProbeTests.swift",
-            "desktop/macos/Desktop/Tests/Services/SyncTests.swift",
-            # Rust backend prefix.
-            "desktop/macos/Backend-Rust/src/main.rs",
             # Generated Swift is derived from the OpenAPI contract, never a
             # user-facing app note (EXEMPT_DESKTOP_PATH_PREFIXES).
             "desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift",
+            # E2E flow definitions are harness test artifacts; #11039 only added a
+            # `covers:` entry and the post-merge push run reddened main.
+            "desktop/macos/e2e/flows/notifications-settings.yaml",
         ):
             with self.subTest(path=path):
                 self.assertFalse(checker.is_desktop_change_requiring_changelog(path))
@@ -108,6 +94,37 @@ class ChangelogRequirementTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertTrue(checker.is_desktop_change_requiring_changelog(path))
+
+    def test_release_lane_accepts_fragments_already_in_the_tree(self) -> None:
+        # Release Eligibility runs on main pushes, where the merged PR's
+        # no-changelog-needed label is invisible (#11373 wedged the release
+        # train exactly this way). The release contract is that the NEXT
+        # RELEASE has notes — fragments already in the tree satisfy it.
+        def fake_git(args: list[str]) -> str:
+            if args[0] == "ls-tree":
+                return "desktop/macos/changelog/unreleased/20260810-fix.json"
+            if args[0] == "show":
+                return '{"change": "Fixed a thing"}'
+            raise AssertionError(f"unexpected git invocation: {args}")
+
+        with unittest.mock.patch.object(checker, "run_git", side_effect=fake_git):
+            self.assertTrue(checker.tree_has_unreleased_fragment("HEAD"))
+
+    def test_release_lane_rejects_an_empty_unreleased_directory(self) -> None:
+        with unittest.mock.patch.object(checker, "run_git", return_value=""):
+            self.assertFalse(checker.tree_has_unreleased_fragment("HEAD"))
+
+    def test_release_lane_still_fails_on_an_invalid_tree_fragment(self) -> None:
+        def fake_git(args: list[str]) -> str:
+            if args[0] == "ls-tree":
+                return "desktop/macos/changelog/unreleased/bad.json"
+            if args[0] == "show":
+                return "{}"
+            raise AssertionError(f"unexpected git invocation: {args}")
+
+        with unittest.mock.patch.object(checker, "run_git", side_effect=fake_git):
+            with self.assertRaises(SystemExit):
+                checker.tree_has_unreleased_fragment("HEAD")
 
 
 if __name__ == "__main__":

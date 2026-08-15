@@ -8,6 +8,7 @@ export type DesktopCoordinatorBundle =
   | "desktop.context.screen_summary"
   | "desktop.context.screenshot_image"
   | "desktop.tasks.readwrite"
+  | "desktop.memories.write"
   | "desktop.artifacts.manage"
   | "desktop.automation.read"
   | "desktop.automation.act_dev_only"
@@ -73,6 +74,7 @@ const TASK_WRITE_TOOLS = new Set([
   "set_user_preferences",
   "complete_onboarding",
 ]);
+const MEMORY_WRITE_TOOLS = new Set(["create_memory"]);
 const SCREEN_IMAGE_TOOLS = new Set(["get_screenshot", "capture_screen"]);
 const SCREEN_SUMMARY_TOOLS = new Set(["semantic_search", "get_work_context"]);
 // Coordinator policy classifies this as a production user-approved operation;
@@ -127,6 +129,7 @@ function bundlesForOmiTool(tool: OmiToolManifestEntry): DesktopCoordinatorBundle
   if (SCREEN_SUMMARY_TOOLS.has(tool.name)) bundles.add("desktop.context.screen_summary");
   if (SCREEN_IMAGE_TOOLS.has(tool.name)) bundles.add("desktop.context.screenshot_image");
   if (TASK_WRITE_TOOLS.has(tool.name)) bundles.add("desktop.tasks.readwrite");
+  if (MEMORY_WRITE_TOOLS.has(tool.name)) bundles.add("desktop.memories.write");
   if (AUTOMATION_READ_TOOLS.has(tool.name)) bundles.add("desktop.automation.read");
   if (PERMISSION_REQUEST_TOOLS.has(tool.name)) bundles.add("desktop.permissions.request");
   if (EXTERNAL_SEND_TOOLS.has(tool.name)) bundles.add("external.write_send");
@@ -170,6 +173,7 @@ function descriptorFromBundles(bundles: readonly DesktopCoordinatorBundle[]): De
     [
       "desktop.agent_control.manage",
       "desktop.tasks.readwrite",
+      "desktop.memories.write",
       "desktop.artifacts.manage",
       "external.write_prepare",
       "external.write_send",
@@ -244,8 +248,18 @@ export function evaluateDesktopToolPolicy(request: DesktopToolPolicyRequest): De
   if (requiresDispatch) {
     const granted = requiredBundles.every((bundle) => hasAllowGrant(request, bundle));
     if (granted) return { decision: "allow", descriptor, requiredBundles, reason: "Scoped allow grant covers the request." };
-    if (requiredBundles.includes("desktop.tasks.readwrite") && request.userExplicitMutation === true) {
-      return { decision: "dispatch_required", descriptor, requiredBundles, reason: "Task mutation still needs a durable approval record." };
+    if (
+      (requiredBundles.includes("desktop.tasks.readwrite") || requiredBundles.includes("desktop.memories.write"))
+      && request.userExplicitMutation === true
+    ) {
+      return {
+        decision: "dispatch_required",
+        descriptor,
+        requiredBundles,
+        reason: requiredBundles.includes("desktop.memories.write")
+          ? "Memory mutation still needs a durable approval record."
+          : "Task mutation still needs a durable approval record.",
+      };
     }
     return { decision: "dispatch_required", descriptor, requiredBundles, reason: "Sensitive action requires dispatch or scoped grant." };
   }

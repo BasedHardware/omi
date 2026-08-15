@@ -2,17 +2,17 @@
   "schema_version": 1,
   "id": "FC-shared-runner-checkout-residue",
   "violated_contract": "A self-hosted release gate must not inspect or reuse mutable repository state from an earlier run before it has established a run-isolated source and cleanup boundary.",
-  "canonical_prevention": "Create an owner-only run stage before repository access, fetch the immutable candidate into a fresh source tree outside the shared Actions workspace, bind always-path cleanup evidence to that deterministic stage, and exercise checkout plus pre-checkout failure behavior against stale shared-workspace residue.",
+  "canonical_prevention": "The dedicated qualification lane is removed. Reintroduction is rejected by the desktop release-process guards.",
   "canonical_prevention_artifact": [
-    ".github/workflows/desktop_qualify_beta.yml",
-    ".github/scripts/test_desktop_release_flow_contract.py"
+    ".github/scripts/check-release-process-guards.py"
   ],
   "evidence_prs": [
     10611
   ],
   "scope_hints": [
-    ".github/workflows/**",
-    ".github/scripts/test_*release*contract.py"
+    ".github/scripts/check-release-process-guards.py",
+    ".github/workflows/**"
   ],
-  "status": "open"
+  "status": "dormant",
+  "dormant_since": "2026-08-10T09:37:50.107774Z"
 }

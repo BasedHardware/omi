@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from google.api_core.exceptions import NotFound
 
-from tests.unit.test_ws_b_short_term_lifecycle import _DocRef as WsBDocRef
-from tests.unit.test_ws_i_write_convergence import _DocRef as WsIDocRef
+from tests.unit.test_ws_b_short_term_lifecycle import _Document as WsBDocRef
+from tests.unit.fixtures.canonical_memory_fakes import _DocRef as WsIDocRef
 
 
 class _MinimalDb:

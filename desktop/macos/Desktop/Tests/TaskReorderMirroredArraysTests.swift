@@ -2,9 +2,10 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// TASK-07: a reorder must keep the three source arrays the displayed task list can
-/// be backed by — `store.incompleteTasks`, `filteredFromDatabase`, `searchResults` —
-/// in agreement. `TasksViewModel.moveTask` writes the new sortOrders to all three via
+/// TASK-07: a reorder must keep the source arrays the displayed task list can
+/// be backed by — `store.incompleteTasks`, `store.completedTasks`,
+/// `filteredFromDatabase`, `searchResults` —
+/// in agreement. `TasksViewModel.moveTask` writes the new sortOrders to all four via
 /// the single `applyReorder` helper; writing to only one diverges when filters/search
 /// are active (BL-030, fixed in #9121). These pin that helper's guarantees: the same
 /// order yields identical sortOrders for shared ids, monotonic with position, disjoint
@@ -22,7 +23,7 @@ final class TaskReorderMirroredArraysTests: XCTestCase {
   }
 
   func testSharedIdsGetIdenticalSortOrderAcrossArrays() {
-    // The three arrays hold overlapping-but-different subsets in shuffled positions,
+    // The four arrays hold overlapping-but-different subsets in shuffled positions,
     // exactly the filters/search-active case BL-030 was about.
     let order = ["a", "b", "c", "d"]
     let categoryIndex = 1
@@ -84,16 +85,147 @@ final class TaskReorderMirroredArraysTests: XCTestCase {
     XCTAssertLessThan(cat0Max, cat1Min, "category 0's band must sit entirely below category 1's")
   }
 
-  /// BL-030 regression guard: `moveTask` must fan the reorder out to ALL THREE mirrored
+  func testDroppingAnEarlierTaskBeforeTargetUsesPostRemovalIndex() {
+    // The row drop points at C in the rendered pre-removal order. Removing A
+    // shifts C left, so inserting at C's old index would incorrectly land A
+    // below C. This is the exact downward-drag regression from the Tasks UI.
+    let renderedOrder = ["a", "b", "c", "d"]
+    guard let targetIndex = renderedOrder.firstIndex(of: "c"),
+      let sourceIndex = renderedOrder.firstIndex(of: "a")
+    else {
+      return XCTFail("test fixture must contain both the source and target")
+    }
+
+    let insertionIndex = TasksViewModel.insertionIndex(
+      beforeTargetAt: targetIndex, removingSourceAt: sourceIndex)
+    let reordered = TasksViewModel.reorderedTaskIDs(
+      renderedOrder, moving: "a", toPostRemovalIndex: insertionIndex)
+
+    XCTAssertEqual(reordered, ["b", "a", "c", "d"])
+  }
+
+  func testReorderUsesRenderedOrderInsteadOfStaleFallbackOrder() {
+    // Persisted fallback ordering can retain ids that are no longer visible and
+    // diverge from server-backed sortOrder. A row drop must mutate the rendered
+    // sequence, otherwise its target coordinate can jump many rows.
+    let renderedOrder = ["current-3", "current-1", "current-2"]
+    let staleFallbackOrder = ["current-1", "removed", "current-2", "current-3"]
+
+    guard let renderedTarget = renderedOrder.firstIndex(of: "current-2"),
+      let renderedSource = renderedOrder.firstIndex(of: "current-3")
+    else {
+      return XCTFail("test fixture must contain both the source and target")
+    }
+    let insertionIndex = TasksViewModel.insertionIndex(
+      beforeTargetAt: renderedTarget, removingSourceAt: renderedSource)
+    let reordered = TasksViewModel.reorderedTaskIDs(
+      renderedOrder, moving: "current-3", toPostRemovalIndex: insertionIndex)
+
+    XCTAssertEqual(reordered, ["current-1", "current-3", "current-2"])
+    XCTAssertFalse(reordered.contains("removed"))
+    XCTAssertNotEqual(reordered, staleFallbackOrder)
+  }
+
+  func testFilteredReorderMergesVisibleMoveIntoFullCategoryOrder() {
+    // A search/filter may display only A and B while the full category has
+    // hidden tasks before, between, and after them. Moving A below B must keep
+    // those hidden rows in their slots and rebase every item, otherwise the
+    // stale hidden sort orders can collide or interleave after clearing it.
+    let fullOrder = ["hidden-before", "visible-a", "hidden-middle", "visible-b", "hidden-after"]
+    let visibleOrder = ["visible-a", "visible-b"]
+
+    let merged = TasksViewModel.mergedReorderedTaskIDs(
+      fullOrder: fullOrder,
+      visibleOrder: visibleOrder,
+      moving: "visible-a",
+      toPostRemovalIndex: 1
+    )
+
+    XCTAssertEqual(
+      merged,
+      ["hidden-before", "visible-b", "hidden-middle", "visible-a", "hidden-after"]
+    )
+
+    var completeCategory = fullOrder.map { item($0) }
+    TasksViewModel.applyReorder(merged, categoryIndex: 0, to: &completeCategory)
+    let sortOrders = merged.compactMap { sortOrder(completeCategory, $0) }
+    XCTAssertEqual(sortOrders.count, merged.count)
+    XCTAssertEqual(Set(sortOrders).count, merged.count, "a filtered reorder must rebase hidden rows too")
+  }
+
+  func testDebouncedPersistenceKeepsDoneAndOffPageReorderedIDs() {
+    // The active Done/search scope can contain a row not present in the first
+    // incomplete-cache page. Persistence must retain that drag order rather
+    // than rebuilding exclusively from incompleteTasks after the debounce.
+    let pendingOrder = ["done-visible", "cached-incomplete"]
+    let currentCacheOrder = ["cached-incomplete", "newly-loaded"]
+
+    let persisted = TasksViewModel.persistedTaskIDs(
+      reorderedIDs: pendingOrder,
+      currentIDs: currentCacheOrder
+    )
+
+    XCTAssertEqual(persisted, ["done-visible", "cached-incomplete", "newly-loaded"])
+    XCTAssertEqual(Set(persisted).count, persisted.count, "persistence must not create duplicate sort-order updates")
+  }
+
+  func testDatabaseBackedPersistenceRebasesOffPageSearchRowsWithoutDisplacingHiddenTasks() {
+    // The drag begins in a search result, then the search can change before
+    // the debounce fires. Persistence therefore receives the post-drop visible
+    // IDs plus the complete SQLite category sequence. Replacing only those
+    // visible slots preserves every unseen row and retains the off-page record.
+    let completeDatabaseOrder = ["hidden-start", "search-row", "hidden-middle", "visible-target"]
+    let reorderedVisibleIDs = ["visible-target", "search-row"]
+
+    let rebased = TasksViewModel.rebaseVisibleTaskIDs(
+      fullOrder: completeDatabaseOrder,
+      reorderedVisibleIDs: reorderedVisibleIDs
+    )
+
+    XCTAssertEqual(rebased, ["hidden-start", "visible-target", "hidden-middle", "search-row"])
+    XCTAssertEqual(Set(rebased).count, completeDatabaseOrder.count)
+    XCTAssertTrue(rebased.contains("search-row"), "the search row must survive after its UI scope changes")
+
+    var completeCategory = completeDatabaseOrder.map { item($0) }
+    TasksViewModel.applyReorder(rebased, categoryIndex: 0, to: &completeCategory)
+    let sortOrders = rebased.compactMap { sortOrder(completeCategory, $0) }
+    XCTAssertEqual(Set(sortOrders).count, completeDatabaseOrder.count, "all hidden rows must be rebased uniquely")
+  }
+
+  func testSuccessfulCommitClearsOnlyTheSnapshotItPersisted() {
+    // A reorder snapshot is needed through its SQLite/backend write, but must
+    // not survive a successful commit: a later indent/reorder would otherwise
+    // prepend it and overwrite an order just received from another device.
+    // If another drag replaces the snapshot while the first write awaits I/O,
+    // retain that newer order for its own sync.
+    let pending: [TaskCategory: [String]] = [
+      .today: ["new-a", "new-b"],
+      .tomorrow: ["tomorrow-a"],
+    ]
+    let committed: [TaskCategory: [String]] = [
+      .today: ["old-a", "old-b"],
+      .tomorrow: ["tomorrow-a"],
+    ]
+
+    let remaining = TasksViewModel.removingCommittedReorderOrders(
+      pending,
+      committedOrders: committed
+    )
+
+    XCTAssertEqual(remaining[.today], ["new-a", "new-b"], "a newer drag must keep its snapshot")
+    XCTAssertNil(remaining[.tomorrow], "the successfully committed snapshot must be cleared")
+  }
+
+  /// BL-030 regression guard: `moveTask` must fan the reorder out to all four mirrored
   /// arrays — dropping any one diverges when filters/search are active. `moveTask` is
   /// `@MainActor` and needs the full store/state, so the fan-out is source-pinned by the
   /// exact call sites (the helper's own correctness is covered behaviourally above).
-  func testMoveTaskFansReorderOutToAllThreeMirroredArrays() throws {
+  func testMoveTaskFansReorderOutToAllFourMirroredArrays() throws {
     let source = try tasksPageSource()
-    for target in ["&incomplete", "&filteredFromDatabase", "&searchResults"] {
+    for target in ["&incomplete", "&completed", "&filteredFromDatabase", "&searchResults"] {
       XCTAssertTrue(
         source.contains("Self.applyReorder(order, categoryIndex: categoryIndex, to: \(target))"),
-        "moveTask must apply the reorder to \(target) so all three mirrored arrays agree (BL-030)")
+        "moveTask must apply the reorder to \(target) so all four mirrored arrays agree (BL-030)")
     }
   }
 

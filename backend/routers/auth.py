@@ -7,7 +7,7 @@ import hashlib
 import time
 import jwt
 from typing import Any, Dict, Optional, cast
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlencode, urlparse, urlsplit, urlunsplit
 from cryptography.hazmat.primitives import serialization
 from jwt.algorithms import RSAAlgorithm
 from fastapi import APIRouter, Request, HTTPException, Form
@@ -217,6 +217,20 @@ def _redirect_scheme(redirect_uri: Optional[str]) -> str:
     if not redirect_uri:
         return "missing"
     return (urlparse(redirect_uri).scheme or "missing").lower()[:64]
+
+
+def _build_callback_redirect_url(redirect_uri: str, code: str, state: Optional[str]) -> str:
+    """Append the one-time callback parameters without losing a URI fragment.
+
+    The value is rendered into the callback page's native link as well as used
+    by its automatic navigation. Rendering it in the HTML keeps the manual
+    fallback usable when a mobile browser blocks inline JavaScript or automatic
+    custom-scheme navigation.
+    """
+    parsed = urlsplit(redirect_uri)
+    callback_query = urlencode({"code": code, **({"state": state} if state else {})})
+    query = f"{parsed.query}&{callback_query}" if parsed.query else callback_query
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
 
 
 def _failure_class(error: Optional[object]) -> str:
@@ -437,6 +451,7 @@ async def auth_callback_google(
             "code": auth_code,
             "state": session_data['state'] or '',
             "redirect_uri": app_redirect_uri,
+            "redirect_url": _build_callback_redirect_url(app_redirect_uri, auth_code, session_data['state']),
         },
     )
 
@@ -538,6 +553,7 @@ async def auth_callback_apple_post(
             "code": auth_code,
             "state": session_data['state'] or '',
             "redirect_uri": app_redirect_uri,
+            "redirect_url": _build_callback_redirect_url(app_redirect_uri, auth_code, session_data['state']),
         },
     )
 

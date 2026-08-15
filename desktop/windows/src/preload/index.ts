@@ -59,7 +59,8 @@ import type {
   XConnectorSession,
   XStatus,
   XSyncResult,
-  XRunState
+  XRunState,
+  SignInProvider
 } from '../shared/types'
 import type { ByokEnrollResult, ByokProvider } from '../shared/byok'
 import type {
@@ -184,7 +185,7 @@ const omi: OmiBridgeApi = {
   kgSearchFiles: (q, fileType?, limit?) => ipcRenderer.invoke('kg:searchFiles', q, fileType, limit),
   kgExecuteSql: (sql) => ipcRenderer.invoke('kg:executeSql', sql),
   readStickyNotes: () => ipcRenderer.invoke('integrations:stickyNotes:read'),
-  signInWithGoogle: () => ipcRenderer.invoke('auth:google:signIn'),
+  signInWithProvider: (provider: SignInProvider) => ipcRenderer.invoke('auth:signIn', provider),
   googleConnect: () => ipcRenderer.invoke('integrations:google:connect'),
   googleDisconnect: () => ipcRenderer.invoke('integrations:google:disconnect'),
   googleStatus: () => ipcRenderer.invoke('integrations:google:status'),
@@ -370,7 +371,9 @@ const omi: OmiBridgeApi = {
   rewindPruneNow: () => ipcRenderer.invoke('rewind:pruneNow'),
   rewindRebuildIndex: () => ipcRenderer.invoke('rewind:rebuildIndex'),
   rewindPrimarySourceId: () => ipcRenderer.invoke('rewind:primarySourceId'),
-  rewindSaveFrame: (data: Uint8Array) => ipcRenderer.invoke('rewind:saveFrame', data),
+  rewindCaptureSourceId: () => ipcRenderer.invoke('rewind:captureSourceId'),
+  rewindSaveFrame: (data: Uint8Array, sourceId: string) =>
+    ipcRenderer.invoke('rewind:saveFrame', data, sourceId),
   screenReadText: () => ipcRenderer.invoke('screen:readNow'),
   codingAgentList: (commandOverrides?: CodingAgentCommandOverrides) =>
     ipcRenderer.invoke('codingAgent:list', commandOverrides),
@@ -484,6 +487,11 @@ const omi: OmiBridgeApi = {
   screenSynthSetState: (patch) => ipcRenderer.invoke('screenSynth:setState', patch),
   screenSynthAdvanceWatermark: (ts) => ipcRenderer.invoke('screenSynth:advanceWatermark', ts),
   screenSynthRecordRun: (run) => ipcRenderer.invoke('screenSynth:recordRun', run),
+  onRewindCaptureNow: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('rewind:capture-now', listener)
+    return () => ipcRenderer.removeListener('rewind:capture-now', listener)
+  },
   onRewindSettings: (cb: (s: RewindSettings) => void) => {
     const listener = (_e: unknown, s: RewindSettings): void => cb(s)
     ipcRenderer.on('rewind:settings', listener)

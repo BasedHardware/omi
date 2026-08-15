@@ -388,6 +388,8 @@ async def emit_stream_error_fallback(
     *,
     label: str,
     error_recorded: bool,
+    reason: Optional[str] = None,
+    route: Optional[str] = None,
 ) -> str:
     """Build the SSE ``done:`` frame for a chat stream that ended without an answer.
 
@@ -403,7 +405,16 @@ async def emit_stream_error_fallback(
     diverges for this turn) and report ``exhausted``. Returns the full
     ``"done: ...\\n\\n"`` frame.
     """
-    logger.error('%s stream ended without an answer for uid=%s (error=%s)', label, uid, error_recorded)
+    resolved_reason = reason or ('stream_error' if error_recorded else 'empty_answer')
+    resolved_route = route or 'unknown'
+    logger.error(
+        '%s stream ended without an answer uid=%s reason=%s route=%s (error=%s)',
+        label,
+        uid,
+        resolved_reason,
+        resolved_route,
+        error_recorded,
+    )
     try:
         fallback = await run_blocking(db_executor, build_stream_error_reply, uid, app_id, chat_session)
         outcome = 'degraded'
@@ -529,34 +540,107 @@ async def process_voice_message_segment_stream(
     )
     callback_data = {}
     answered = False
+    streamed_terminal_error = False
     # Set usage context for streaming (can't use 'with' across yields)
     usage_token = set_usage_context(uid, Features.CHAT)
+
+    async def emit_voice_done_frame(response: str):
+        """Persist (or fail-open) a terminal voice answer and return the done frame."""
+        persist_outcome = 'degraded'
+        try:
+            ai_message, ask_for_nps = await process_message(response, callback_data)
+        except Exception as persist_exc:
+            logger.error(
+                'voice_chat stream terminal answer persistence failed for uid=%s: %s',
+                uid,
+                type(persist_exc).__name__,
+            )
+            persist_outcome = 'exhausted'
+            ai_message = Message(
+                id=str(uuid.uuid4()),
+                text=response,
+                created_at=datetime.now(timezone.utc),
+                sender='ai',
+                app_id=app_id,
+                type='text',
+            )
+            if chat_session:
+                ai_message.chat_session_id = chat_session.id
+            ask_for_nps = False
+        response_message = ResponseMessage(**ai_message.model_dump())
+        response_message.ask_for_nps = ask_for_nps
+        data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+        if callback_data.get('error'):
+            record_fallback(
+                component='other',
+                from_mode='llm_answer',
+                to_mode='canned_reply',
+                reason='other',
+                outcome=persist_outcome,
+            )
+        elif persist_outcome == 'exhausted':
+            record_fallback(
+                component='other',
+                from_mode='llm_answer',
+                to_mode='canned_reply',
+                reason='other',
+                outcome='exhausted',
+            )
+        return f"done: {data}\n\n", ai_message
+
     try:
         async for chunk in execute_graph_chat_stream(
             uid, messages, app, cited=False, callback_data=callback_data, platform=platform
         ):
             if chunk:
+                if chunk.startswith('error: '):
+                    streamed_terminal_error = True
+                    # Flutter returns on error without draining a later done: frame, and
+                    # also overwrites a preceding done: message when a plain-text error:
+                    # arrives. Persist/record the staged failure as done: and suppress the
+                    # error frame so history and UI stay on the typed terminal reply.
+                    response = callback_data.get('answer')
+                    if response and not answered:
+                        done_frame, ai_message = await emit_voice_done_frame(response)
+                        yield done_frame
+                        answered = True
+                        await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
+                        continue
                 data = chunk.replace("\n", "__CRLF__")
                 yield f'{data}\n\n'
 
             else:
                 response = callback_data.get('answer')
-                if response:
-                    ai_message, ask_for_nps = await process_message(response, callback_data)
-                    ai_message_dict = ai_message.model_dump()
-                    response_message = ResponseMessage(**ai_message_dict)
-                    response_message.ask_for_nps = ask_for_nps
-                    data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
-                    yield f"done: {data}\n\n"
+                if response and not answered:
+                    done_frame, ai_message = await emit_voice_done_frame(response)
+                    yield done_frame
                     answered = True
-
-                    # send notification
                     await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
 
         if not answered:
-            yield await emit_stream_error_fallback(
-                uid, app_id, chat_session, label='voice_chat', error_recorded=bool(callback_data.get('error'))
-            )
+            response = callback_data.get('answer')
+            if response:
+                done_frame, ai_message = await emit_voice_done_frame(response)
+                yield done_frame
+                await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
+            else:
+                if streamed_terminal_error:
+                    logger.error(
+                        'voice_chat stream ended without an answer uid=%s reason=%s route=%s (error=%s)',
+                        uid,
+                        callback_data.get('error') or 'stream_failure',
+                        callback_data.get('route') or 'unknown',
+                        True,
+                    )
+                yield await emit_stream_error_fallback(
+                    uid,
+                    app_id,
+                    chat_session,
+                    label='voice_chat',
+                    error_recorded=bool(callback_data.get('error')),
+                    reason=callback_data.get('error'),
+                    route=callback_data.get('route'),
+                )
     finally:
         reset_usage_context(usage_token)
 

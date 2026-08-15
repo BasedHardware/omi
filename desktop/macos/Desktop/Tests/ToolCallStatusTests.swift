@@ -29,10 +29,107 @@ final class ToolCallStatusTests: XCTestCase {
     )
   }
 
-  // MARK: - Tool group presentation
+  // MARK: - Tool activity timeline
 
-  func testRunningToolGroupsStartCollapsedByDefault() {
-    XCTAssertFalse(ToolCallsGroupExpansionPolicy.initiallyExpanded())
+  func testTimelinePreservesEveryToolInOrderAndConnectsAdjacentRows() {
+    let blocks: [ChatContentBlock] = [
+      .text(id: "text", text: "hidden from the tool rail"),
+      .toolCall(id: "same", name: "WebSearch", status: .completed, output: "first"),
+      .toolCall(id: "same", name: "WebFetch", status: .running, output: nil),
+      .toolCall(id: "failed", name: "Bash", status: .failed, output: "boom"),
+    ]
+
+    let items = ToolActivityTimelinePresentation.items(from: blocks)
+
+    XCTAssertEqual(
+      items.map(\.id),
+      ["same:WebSearch:0", "same:WebFetch:0", "failed:Bash:0"]
+    )
+    XCTAssertEqual(items.map(\.connectsToNext), [true, true, false])
+    XCTAssertEqual(items.map(\.block.id), ["same", "same", "failed"])
+  }
+
+  func testTimelineHandlesNoToolRowsAndStatusChangesInvalidateAnimation() {
+    XCTAssertTrue(
+      ToolActivityTimelinePresentation.items(from: [.text(id: "text", text: "answer")]).isEmpty
+    )
+
+    let running = ToolActivityTimelinePresentation.items(from: [
+      .toolCall(id: "tool", name: "WebSearch", status: .running, output: nil)
+    ])
+    let failed = ToolActivityTimelinePresentation.items(from: [
+      .toolCall(id: "tool", name: "WebSearch", status: .failed, output: nil)
+    ])
+    XCTAssertNotEqual(
+      ToolActivityTimelinePresentation.animationToken(for: running),
+      ToolActivityTimelinePresentation.animationToken(for: failed)
+    )
+  }
+
+  func testTimelineIdentitySurvivesFilteringAnEarlierTool() {
+    let spawn = ChatContentBlock.toolCall(
+      id: "spawn", name: "spawn_agent", status: .completed, output: "done")
+    let search = ChatContentBlock.toolCall(
+      id: "search", name: "search_conversations", status: .running, output: nil)
+
+    let before = ToolActivityTimelinePresentation.items(from: [spawn, search])
+    let after = ToolActivityTimelinePresentation.items(from: [search])
+
+    XCTAssertEqual(before[1].id, after[0].id)
+  }
+
+  func testTimelineIdentitySurvivesLateToolUseIdAttachment() {
+    var blocks: [ChatContentBlock] = []
+    ToolCallBlockUpdater.applyToolActivity(
+      to: &blocks,
+      toolName: "Bash",
+      status: .running,
+      toolUseId: nil,
+      input: nil
+    )
+    let initialId = ToolActivityTimelinePresentation.items(from: blocks).first?.id
+
+    ToolCallBlockUpdater.applyToolActivity(
+      to: &blocks,
+      toolName: "Bash",
+      status: .running,
+      toolUseId: "tool-2",
+      input: ["command": "pwd"]
+    )
+
+    XCTAssertEqual(ToolActivityTimelinePresentation.items(from: blocks).first?.id, initialId)
+  }
+
+  func testTimelineDoesNotOfferDisclosureForWhitespaceOnlyDetails() {
+    let whitespaceInput = ToolCallInput(summary: "", details: " \n ")
+
+    XCTAssertFalse(
+      ToolActivityTimelinePresentation.hasExpandableContent(
+        input: whitespaceInput,
+        output: "\t"
+      )
+    )
+    XCTAssertTrue(
+      ToolActivityTimelinePresentation.hasExpandableContent(
+        input: whitespaceInput,
+        output: "result"
+      )
+    )
+  }
+
+  func testTimelineNormalizesExpectedSlowStallsAndNamesEveryStatusForAccessibility() {
+    XCTAssertEqual(
+      ToolActivityTimelinePresentation.displayStatus(toolName: "Bash", status: .stalled),
+      .slow
+    )
+    XCTAssertEqual(
+      ToolActivityTimelinePresentation.displayStatus(toolName: "search_conversations", status: .stalled),
+      .stalled
+    )
+    XCTAssertEqual(
+      ToolCallStatus.allCases.map(ToolActivityTimelinePresentation.accessibilityValue),
+      ["Running", "Still working", "Taking longer than usual", "Completed", "Failed"]
+    )
   }
 
   // MARK: - Stall tracking-id derivation

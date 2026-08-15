@@ -6,7 +6,6 @@ import asyncio
 import json
 from pathlib import Path
 import runpy
-import struct
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,12 +19,13 @@ from models.conversation_enums import ConversationStatus
 from routers.conversation_finalization import _parse_task_payload
 import routers.conversation_finalization as finalization_router
 import routers.pusher as pusher_router
+import utils.pusher_finalization as pusher_finalization
+import utils.pusher_protocol as pusher_protocol
 from utils.conversations import lifecycle as lifecycle_service
 from utils import app_integrations
 from utils import cloud_tasks
 from utils.conversations.finalizer import ConversationFinalizationDisposition, ConversationFinalizationError
 import utils.conversations.finalizer as persisted_finalizer
-from utils.speaker_identification import SpeakerSampleExtractionResult
 
 
 def _prod_backend_sync_runtime_env(monkeypatch):
@@ -443,19 +443,13 @@ class _PusherLifecycleWebSocket:
     def __init__(self, receive_bytes):
         self._receive_bytes = receive_bytes
         self.accepted = False
-        self.accept_headers = None
-        self.sent: list[bytes] = []
         self.client_state = pusher_router.WebSocketState.DISCONNECTED
 
-    async def accept(self, *, headers=None) -> None:
+    async def accept(self) -> None:
         self.accepted = True
-        self.accept_headers = headers
 
     async def receive_bytes(self) -> bytes:
         return await self._receive_bytes()
-
-    async def send_bytes(self, payload: bytes) -> None:
-        self.sent.append(payload)
 
 
 class _PusherJourneyAttempt:
@@ -490,41 +484,6 @@ def _patch_pusher_session_dependencies(monkeypatch) -> None:
 
 async def _inline_run_blocking(_executor, func, *args, **kwargs):
     return func(*args, **kwargs)
-
-
-def _patch_pusher_worker_drain(monkeypatch) -> None:
-    async def supervisor(*, receive_task, **_kwargs):
-        await receive_task
-        return SimpleNamespace(reason='disconnect', task_name='ws:uid-1:receive')
-
-    async def drain(tasks, *, cancel, **_kwargs):
-        tasks = list(tasks)
-        if cancel:
-            for task in tasks:
-                task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    monkeypatch.setattr(pusher_router, 'supervise_tasks', supervisor)
-    monkeypatch.setattr(pusher_router, 'drain_tasks', drain)
-
-
-def _transcript_delivery_frame(delivery_id: str, *, segment_id: str = 'segment-1') -> bytes:
-    payload = {
-        'segments': [{'id': segment_id, 'text': 'hello'}],
-        'memory_id': 'conversation-1',
-        'delivery_id': delivery_id,
-    }
-    return struct.pack('I', 102) + json.dumps(payload).encode('utf-8')
-
-
-def _speaker_delivery_frame(delivery_id: str) -> bytes:
-    payload = {
-        'person_id': 'person-1',
-        'conversation_id': 'conversation-1',
-        'segment_ids': ['segment-1'],
-        'delivery_id': delivery_id,
-    }
-    return struct.pack('I', 105) + json.dumps(payload).encode('utf-8')
 
 
 @pytest.mark.anyio
@@ -725,7 +684,7 @@ async def test_worker_requeues_an_unexpected_failure_after_claim(monkeypatch):
 async def test_pusher_rejects_legacy_finalization_without_a_durable_job():
     websocket = _PusherWebSocket()
 
-    await pusher_router._process_conversation_task('uid-1', 'conversation-1', 'en', websocket)
+    await pusher_finalization.process_conversation_task('uid-1', 'conversation-1', 'en', websocket)
 
     frame_type = int.from_bytes(websocket.sent[0][:4], 'little')
     result = json.loads(websocket.sent[0][4:])
@@ -744,7 +703,7 @@ async def test_pusher_rejects_legacy_finalization_without_a_durable_job():
     ],
 )
 def test_pusher_session_outcome_keeps_normal_disconnects_out_of_failures(close_code, application_failed, outcome):
-    assert pusher_router.pusher_session_outcome(close_code, application_failed=application_failed) == outcome
+    assert pusher_protocol.pusher_session_outcome(close_code, application_failed=application_failed) == outcome
 
 
 @pytest.mark.anyio
@@ -806,306 +765,17 @@ async def test_pusher_dead_peer_timeout_terminalizes_as_failure(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_pusher_acknowledges_transcript_only_after_owned_effects_complete(monkeypatch):
-    _PusherJourneyAttempt.outcomes = []
-    _patch_pusher_session_dependencies(monkeypatch)
-    _patch_pusher_worker_drain(monkeypatch)
-    receive_bytes = AsyncMock(
-        side_effect=[
-            _transcript_delivery_frame('delivery-1'),
-            pusher_router.WebSocketDisconnect(code=1000),
-        ]
-    )
-    websocket = _PusherLifecycleWebSocket(receive_bytes=receive_bytes)
-    events: list[str] = []
-    begin = MagicMock(side_effect=lambda *_args: events.append('begin') or ('claimed', 'lease-1'))
-    complete = MagicMock(side_effect=lambda *_args: events.append('complete') or True)
-
-    async def trigger(*_args, **_kwargs):
-        events.append('app')
-
-    async def webhook(*_args, **_kwargs):
-        events.append('webhook')
-
-    monkeypatch.setattr(pusher_router.redis_db, 'begin_pusher_delivery', begin)
-    monkeypatch.setattr(pusher_router.redis_db, 'complete_pusher_delivery', complete)
-    monkeypatch.setattr(pusher_router, 'trigger_realtime_integrations', trigger)
-    monkeypatch.setattr(pusher_router, 'realtime_transcript_webhook', webhook)
-
-    await pusher_router._websocket_util_trigger(websocket, 'uid-1')
-
-    assert websocket.accept_headers == [(b'x-omi-delivery-ack', b'1')]
-    assert events == ['begin', 'app', 'webhook', 'complete']
-    assert len(websocket.sent) == 1
-    assert int.from_bytes(websocket.sent[0][:4], 'little') == 202
-    assert json.loads(websocket.sent[0][4:]) == {
-        'kind': 'transcript',
-        'delivery_id': 'delivery-1',
-    }
-
-
-@pytest.mark.anyio
-async def test_pusher_unhandled_transcript_worker_failure_leaves_delivery_unacknowledged(monkeypatch):
-    _PusherJourneyAttempt.outcomes = []
-    _patch_pusher_session_dependencies(monkeypatch)
-    _patch_pusher_worker_drain(monkeypatch)
-    receive_bytes = AsyncMock(
-        side_effect=[
-            _transcript_delivery_frame('delivery-1'),
-            pusher_router.WebSocketDisconnect(code=1000),
-        ]
-    )
-    websocket = _PusherLifecycleWebSocket(receive_bytes=receive_bytes)
-    complete = MagicMock(return_value=True)
-    monkeypatch.setattr(
-        pusher_router.redis_db,
-        'begin_pusher_delivery',
-        MagicMock(return_value=('claimed', 'lease-1')),
-    )
-    monkeypatch.setattr(pusher_router.redis_db, 'complete_pusher_delivery', complete)
-    abandon = MagicMock(return_value=True)
-    monkeypatch.setattr(pusher_router.redis_db, 'abandon_pusher_delivery', abandon)
-    monkeypatch.setattr(
-        pusher_router,
-        'trigger_realtime_integrations',
-        AsyncMock(side_effect=RuntimeError('delivery failed')),
-    )
-    webhook = AsyncMock()
-    monkeypatch.setattr(pusher_router, 'realtime_transcript_webhook', webhook)
-
-    await pusher_router._websocket_util_trigger(websocket, 'uid-1')
-
-    complete.assert_not_called()
-    abandon.assert_called_once()
-    webhook.assert_not_awaited()
-    assert websocket.sent == []
-
-
-@pytest.mark.anyio
-async def test_pusher_retryable_speaker_result_releases_lease_without_acknowledging(monkeypatch):
-    _PusherJourneyAttempt.outcomes = []
-    _patch_pusher_session_dependencies(monkeypatch)
-    _patch_pusher_worker_drain(monkeypatch)
-    receive_bytes = AsyncMock(
-        side_effect=[
-            _speaker_delivery_frame('speaker-delivery-1'),
-            struct.pack('I', pusher_router.PUSHER_DELIVERY_DRAIN_OPCODE),
-            pusher_router.WebSocketDisconnect(code=1000),
-        ]
-    )
-    websocket = _PusherLifecycleWebSocket(receive_bytes=receive_bytes)
-    complete = MagicMock(return_value=True)
-    abandon = MagicMock(return_value=True)
-    monkeypatch.setattr(
-        pusher_router.redis_db,
-        'begin_pusher_delivery',
-        MagicMock(return_value=('claimed', 'lease-1')),
-    )
-    monkeypatch.setattr(pusher_router.redis_db, 'complete_pusher_delivery', complete)
-    monkeypatch.setattr(pusher_router.redis_db, 'abandon_pusher_delivery', abandon)
-    extract = AsyncMock(return_value=SpeakerSampleExtractionResult('retryable', 'audio_files_not_ready'))
-    monkeypatch.setattr(pusher_router, 'extract_speaker_samples', extract)
-
-    await pusher_router._websocket_util_trigger(websocket, 'uid-1')
-
-    extract.assert_awaited_once_with(
-        uid='uid-1',
-        person_id='person-1',
-        conversation_id='conversation-1',
-        segment_ids=['segment-1'],
-        sample_rate=8_000,
-        delivery_id='speaker-delivery-1',
-    )
-    complete.assert_not_called()
-    abandon.assert_called_once()
-    assert websocket.sent == []
-
-
-@pytest.mark.anyio
-async def test_pusher_drain_flushes_audio_metadata_before_speaker_extraction(monkeypatch):
-    _PusherJourneyAttempt.outcomes = []
-    _patch_pusher_session_dependencies(monkeypatch)
-    _patch_pusher_worker_drain(monkeypatch)
-    monkeypatch.setattr(pusher_router.users_db, 'get_user_private_cloud_sync_enabled', lambda _uid: True)
-    monkeypatch.setattr(pusher_router.users_db, 'get_data_protection_level', lambda _uid: 'standard')
-    monkeypatch.setattr(pusher_router, 'is_audio_merge_dispatch_enabled', lambda: False)
-    upload_started = asyncio.Event()
-    release_upload = asyncio.Event()
-    extraction_started = asyncio.Event()
-    events: list[str] = []
-
-    def upload_audio(*_args, **_kwargs):
-        raise AssertionError('upload must run through the controlled executor boundary')
-
-    monkeypatch.setattr(pusher_router, 'upload_audio_chunks_batch', upload_audio)
-
-    async def controlled_run_blocking(_executor, func, *args, **kwargs):
-        if func is upload_audio:
-            events.append('upload_started')
-            upload_started.set()
-            await release_upload.wait()
-            events.append('upload_completed')
-            return None
-        return func(*args, **kwargs)
-
-    monkeypatch.setattr(pusher_router, 'run_blocking', controlled_run_blocking)
-    monkeypatch.setattr(
-        pusher_router.conversations_db,
-        'create_audio_files_from_chunks',
-        lambda _uid, _conversation_id: [SimpleNamespace(model_dump=lambda: {'id': 'audio-1'})],
-    )
-
-    def update_conversation(_uid, _conversation_id, payload):
-        assert payload == {'audio_files': [{'id': 'audio-1'}]}
-        events.append('metadata_updated')
-
-    monkeypatch.setattr(pusher_router.conversations_db, 'update_conversation', update_conversation)
-
-    async def extract(**_kwargs):
-        events.append('speaker_extraction')
-        extraction_started.set()
-        return SpeakerSampleExtractionResult('stored', 'sample_stored')
-
-    monkeypatch.setattr(pusher_router, 'extract_speaker_samples', extract)
-    monkeypatch.setattr(
-        pusher_router.redis_db,
-        'begin_pusher_delivery',
-        MagicMock(return_value=('claimed', 'lease-1')),
-    )
-    monkeypatch.setattr(pusher_router.redis_db, 'complete_pusher_delivery', MagicMock(return_value=True))
-
-    receive_bytes = AsyncMock(
-        side_effect=[
-            struct.pack('I', 103) + b'conversation-1',
-            struct.pack('I', 101) + struct.pack('d', 1000.0) + b'\x00\x01' * 16,
-            _speaker_delivery_frame('speaker-delivery-1'),
-            struct.pack('I', pusher_router.PUSHER_DELIVERY_DRAIN_OPCODE),
-            pusher_router.WebSocketDisconnect(code=1000),
-        ]
-    )
-    websocket = _PusherLifecycleWebSocket(receive_bytes=receive_bytes)
-
-    session_task = asyncio.create_task(pusher_router._websocket_util_trigger(websocket, 'uid-1'))
-    await asyncio.wait_for(upload_started.wait(), timeout=1)
-    await asyncio.sleep(0)
-    assert not extraction_started.is_set()
-    release_upload.set()
-    await asyncio.wait_for(session_task, timeout=2)
-
-    assert events == ['upload_started', 'upload_completed', 'metadata_updated', 'speaker_extraction']
-    acknowledgements = [json.loads(frame[4:]) for frame in websocket.sent if int.from_bytes(frame[:4], 'little') == 202]
-    assert acknowledgements == [{'kind': 'speaker_sample', 'delivery_id': 'speaker-delivery-1'}]
-
-
-@pytest.mark.anyio
-async def test_pusher_done_marker_suppresses_cross_socket_duplicate_and_reacks(monkeypatch):
-    _PusherJourneyAttempt.outcomes = []
-    _patch_pusher_session_dependencies(monkeypatch)
-    _patch_pusher_worker_drain(monkeypatch)
-    receive_bytes = AsyncMock(
-        side_effect=[
-            _transcript_delivery_frame('delivery-1'),
-            pusher_router.WebSocketDisconnect(code=1000),
-        ]
-    )
-    websocket = _PusherLifecycleWebSocket(receive_bytes=receive_bytes)
-    monkeypatch.setattr(
-        pusher_router.redis_db,
-        'begin_pusher_delivery',
-        MagicMock(return_value=('done', None)),
-    )
-    complete = MagicMock()
-    integration = AsyncMock()
-    webhook = AsyncMock()
-    monkeypatch.setattr(pusher_router.redis_db, 'complete_pusher_delivery', complete)
-    monkeypatch.setattr(pusher_router, 'trigger_realtime_integrations', integration)
-    monkeypatch.setattr(pusher_router, 'realtime_transcript_webhook', webhook)
-
-    await pusher_router._websocket_util_trigger(websocket, 'uid-1')
-
-    integration.assert_not_awaited()
-    webhook.assert_not_awaited()
-    complete.assert_not_called()
-    assert len(websocket.sent) == 1
-    assert int.from_bytes(websocket.sent[0][:4], 'little') == 202
-
-
-@pytest.mark.anyio
-async def test_pusher_full_stable_queue_rejects_without_evicting_or_acknowledging(monkeypatch):
-    _PusherJourneyAttempt.outcomes = []
-    _patch_pusher_session_dependencies(monkeypatch)
-    _patch_pusher_worker_drain(monkeypatch)
-    monkeypatch.setattr(pusher_router, 'TRANSCRIPT_QUEUE_WARN_SIZE', 1)
-    receive_bytes = AsyncMock(
-        side_effect=[
-            _transcript_delivery_frame('delivery-1', segment_id='first'),
-            _transcript_delivery_frame('delivery-2', segment_id='second'),
-            pusher_router.WebSocketDisconnect(code=1000),
-        ]
-    )
-    websocket = _PusherLifecycleWebSocket(receive_bytes=receive_bytes)
-    begin = MagicMock(return_value=('claimed', 'lease-1'))
-    integration = AsyncMock()
-    monkeypatch.setattr(pusher_router.redis_db, 'begin_pusher_delivery', begin)
-    monkeypatch.setattr(pusher_router.redis_db, 'complete_pusher_delivery', MagicMock(return_value=True))
-    monkeypatch.setattr(pusher_router, 'trigger_realtime_integrations', integration)
-    monkeypatch.setattr(pusher_router, 'realtime_transcript_webhook', AsyncMock())
-
-    await pusher_router._websocket_util_trigger(websocket, 'uid-1')
-
-    assert begin.call_count == 1
-    assert integration.await_count == 1
-    assert integration.await_args.args[1] == [{'id': 'first', 'text': 'hello'}]
-    acknowledgements = [json.loads(frame[4:]) for frame in websocket.sent if int.from_bytes(frame[:4], 'little') == 202]
-    assert acknowledgements == [{'kind': 'transcript', 'delivery_id': 'delivery-1'}]
-
-
-@pytest.mark.anyio
-async def test_pusher_legacy_overflow_cannot_evict_an_accepted_stable_delivery(monkeypatch):
-    _PusherJourneyAttempt.outcomes = []
-    _patch_pusher_session_dependencies(monkeypatch)
-    _patch_pusher_worker_drain(monkeypatch)
-    monkeypatch.setattr(pusher_router, 'TRANSCRIPT_QUEUE_WARN_SIZE', 1)
-    legacy_payload = {
-        'segments': [{'id': 'legacy', 'text': 'legacy'}],
-        'memory_id': 'conversation-1',
-    }
-    receive_bytes = AsyncMock(
-        side_effect=[
-            _transcript_delivery_frame('delivery-1', segment_id='stable'),
-            struct.pack('I', 102) + json.dumps(legacy_payload).encode('utf-8'),
-            pusher_router.WebSocketDisconnect(code=1000),
-        ]
-    )
-    websocket = _PusherLifecycleWebSocket(receive_bytes=receive_bytes)
-    begin = MagicMock(return_value=('claimed', 'lease-1'))
-    integration = AsyncMock()
-    monkeypatch.setattr(pusher_router.redis_db, 'begin_pusher_delivery', begin)
-    monkeypatch.setattr(pusher_router.redis_db, 'complete_pusher_delivery', MagicMock(return_value=True))
-    monkeypatch.setattr(pusher_router, 'trigger_realtime_integrations', integration)
-    monkeypatch.setattr(pusher_router, 'realtime_transcript_webhook', AsyncMock())
-
-    await pusher_router._websocket_util_trigger(websocket, 'uid-1')
-
-    begin.assert_called_once()
-    integration.assert_awaited_once()
-    assert integration.await_args.args[1] == [{'id': 'stable', 'text': 'hello'}]
-    acknowledgements = [json.loads(frame[4:]) for frame in websocket.sent if int.from_bytes(frame[:4], 'little') == 202]
-    assert acknowledgements == [{'kind': 'transcript', 'delivery_id': 'delivery-1'}]
-
-
-@pytest.mark.anyio
 async def test_pusher_claims_the_durable_job_before_finalizing(monkeypatch):
     websocket = _PusherWebSocket()
     claim = MagicMock(return_value={'status': 'claimed', 'lease_epoch': 7, 'attempt_count': 1})
     completed = MagicMock(return_value=True)
     finalizer = AsyncMock()
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(jobs_db, 'claim_finalization_job', claim)
     monkeypatch.setattr(jobs_db, 'mark_finalization_completed', completed)
-    monkeypatch.setattr(pusher_router, 'finalize_persisted_conversation', finalizer)
+    monkeypatch.setattr(pusher_finalization, 'finalize_persisted_conversation', finalizer)
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1134,12 +804,12 @@ async def test_pusher_keeps_a_completed_job_terminal_when_source_result_delivery
     websocket = _PusherWebSocket()
 
     async def closed_send(_payload: bytes) -> None:
-        raise OSError('socket closed before result delivery')
+        raise RuntimeError('Cannot call send once closed')
 
     websocket.send_bytes = closed_send
     completed = MagicMock(return_value=True)
     retryable = MagicMock()
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
@@ -1147,9 +817,9 @@ async def test_pusher_keeps_a_completed_job_terminal_when_source_result_delivery
     )
     monkeypatch.setattr(jobs_db, 'mark_finalization_completed', completed)
     monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
-    monkeypatch.setattr(pusher_router, 'finalize_persisted_conversation', AsyncMock())
+    monkeypatch.setattr(pusher_finalization, 'finalize_persisted_conversation', AsyncMock())
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1160,23 +830,23 @@ async def test_pusher_keeps_a_completed_job_terminal_when_source_result_delivery
 @pytest.mark.anyio
 async def test_pusher_closes_a_fenced_finalization_without_fanout(monkeypatch):
     websocket = _PusherWebSocket()
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
         lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 7, 'attempt_count': 1},
     )
     monkeypatch.setattr(
-        pusher_router,
+        pusher_finalization,
         'finalize_persisted_conversation',
         AsyncMock(return_value=ConversationFinalizationDisposition.fenced),
     )
     normal_completion = MagicMock()
     fenced_completion = MagicMock(return_value=True)
     monkeypatch.setattr(jobs_db, 'mark_finalization_completed', normal_completion)
-    monkeypatch.setattr(pusher_router.lifecycle_service, 'complete_fenced_finalization', fenced_completion)
+    monkeypatch.setattr(pusher_finalization.lifecycle_service, 'complete_fenced_finalization', fenced_completion)
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1189,13 +859,13 @@ async def test_pusher_closes_a_fenced_finalization_without_fanout(monkeypatch):
 async def test_pusher_replays_a_terminal_fenced_job_without_completed_signal(monkeypatch):
     websocket = _PusherWebSocket()
     finalizer = AsyncMock()
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db, 'claim_finalization_job', lambda *args, **kwargs: {'status': 'fenced', 'lease_epoch': None}
     )
-    monkeypatch.setattr(pusher_router, 'finalize_persisted_conversation', finalizer)
+    monkeypatch.setattr(pusher_finalization, 'finalize_persisted_conversation', finalizer)
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1207,19 +877,19 @@ async def test_pusher_replays_a_terminal_fenced_job_without_completed_signal(mon
 async def test_pusher_requeues_an_unexpected_failure_after_claim(monkeypatch):
     websocket = _PusherWebSocket()
     retryable = MagicMock(return_value=True)
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
         lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 1},
     )
     monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
-    monkeypatch.setattr(pusher_router, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
+    monkeypatch.setattr(pusher_finalization, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
     monkeypatch.setattr(
-        pusher_router, 'finalize_persisted_conversation', AsyncMock(side_effect=RuntimeError('raw transcript'))
+        pusher_finalization, 'finalize_persisted_conversation', AsyncMock(side_effect=RuntimeError('raw transcript'))
     )
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1241,22 +911,22 @@ async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monke
     websocket = _PusherWebSocket()
     retryable = MagicMock(return_value=True)
     dead_letter = MagicMock(return_value=True)
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
         lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 5},
     )
     monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
-    monkeypatch.setattr(pusher_router, 'final_attempt_failed', dead_letter)
-    monkeypatch.setattr(pusher_router, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
+    monkeypatch.setattr(pusher_finalization, 'final_attempt_failed', dead_letter)
+    monkeypatch.setattr(pusher_finalization, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
     monkeypatch.setattr(
-        pusher_router,
+        pusher_finalization,
         'finalize_persisted_conversation',
         AsyncMock(side_effect=ConversationFinalizationError('processing_failed')),
     )
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1273,21 +943,21 @@ async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monke
 async def test_pusher_lease_loss_never_terminalizes_a_newer_finalization_owner(monkeypatch):
     websocket = _PusherWebSocket()
     dead_letter = MagicMock(return_value=False)
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
         lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 5},
     )
-    monkeypatch.setattr(pusher_router, 'final_attempt_failed', dead_letter)
-    monkeypatch.setattr(pusher_router, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
+    monkeypatch.setattr(pusher_finalization, 'final_attempt_failed', dead_letter)
+    monkeypatch.setattr(pusher_finalization, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
     monkeypatch.setattr(
-        pusher_router,
+        pusher_finalization,
         'finalize_persisted_conversation',
         AsyncMock(side_effect=ConversationFinalizationError('processing_failed')),
     )
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1302,14 +972,14 @@ async def test_pusher_lease_loss_never_terminalizes_a_newer_finalization_owner(m
 @pytest.mark.anyio
 async def test_pusher_tells_the_live_session_a_dead_lettered_job_is_terminal(monkeypatch):
     websocket = _PusherWebSocket()
-    monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
         lambda *args, **kwargs: {'status': 'dead_letter', 'lease_epoch': None, 'attempt_count': 0},
     )
 
-    await pusher_router._process_conversation_task(
+    await pusher_finalization.process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
@@ -1351,11 +1021,41 @@ async def test_finalizer_never_logs_a_provider_exception_body(monkeypatch, caplo
 
 
 @pytest.mark.anyio
-async def test_completed_conversation_replays_only_the_durable_fanout_boundary(monkeypatch):
+@pytest.mark.parametrize(
+    ('source', 'external_data', 'discarded', 'expected_intent_kwargs'),
+    [
+        ('omi', None, False, {'conversation_id': 'conversation-1', 'summary': 'Captured title'}),
+        (
+            'desktop',
+            {'conversation_role': 'meeting'},
+            False,
+            {'conversation_id': 'conversation-1', 'summary': 'Captured title', 'is_desktop_meeting': True},
+        ),
+        ('desktop', {'conversation_role': 'ambient'}, False, None),
+        (
+            'desktop',
+            {'conversation_role': 'meeting', 'conversation_finalization_reason': 'max_duration_rotation'},
+            False,
+            None,
+        ),
+        ('desktop', {'conversation_role': 'meeting'}, True, None),
+    ],
+)
+async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
+    monkeypatch, source, external_data, discarded, expected_intent_kwargs
+):
     async def inline_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
-    conversation = SimpleNamespace(id='conversation-1', status=ConversationStatus.completed, language='en')
+    conversation = SimpleNamespace(
+        id='conversation-1',
+        status=ConversationStatus.completed,
+        language='en',
+        source=SimpleNamespace(value=source),
+        external_data=external_data,
+        discarded=discarded,
+        structured=SimpleNamespace(title='Captured title', overview='Captured overview'),
+    )
     integrations = AsyncMock(return_value=[])
     monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
     monkeypatch.setattr(
@@ -1375,6 +1075,8 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
     completed = MagicMock(return_value=True)
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', completed)
     monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', integrations)
+    capture_arrival = MagicMock()
+    monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', capture_arrival)
 
     disposition = await persisted_finalizer.finalize_persisted_conversation(
         'uid-1',
@@ -1390,9 +1092,16 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
         idempotency_key='conversation:conversation-1:finalization',
         require_delivery=True,
     )
-    extracted.assert_called_once_with('uid-1', conversation)
+    if discarded:
+        extracted.assert_not_called()
+    else:
+        extracted.assert_called_once_with('uid-1', conversation)
     assert disposition == ConversationFinalizationDisposition.completed
     completed.assert_called_once_with('job-1', 2, 3)
+    if expected_intent_kwargs is None:
+        capture_arrival.assert_not_called()
+    else:
+        capture_arrival.assert_called_once_with('uid-1', **expected_intent_kwargs)
 
 
 @pytest.mark.anyio

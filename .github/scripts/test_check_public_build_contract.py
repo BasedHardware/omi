@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import importlib.util
+import io
 import json
 import sys
 import tempfile
@@ -280,8 +282,7 @@ jobs:
             [
                 ".github/workflows/gcp_fake.yml: gateway-required target must source "
                 "OMI_LLM_GATEWAY_URL from GitHub environment vars",
-                ".github/workflows/gcp_fake.yml: gateway-required target must reject an empty "
-                "OMI_LLM_GATEWAY_URL",
+                ".github/workflows/gcp_fake.yml: gateway-required target must reject an empty " "OMI_LLM_GATEWAY_URL",
             ],
         )
 
@@ -684,6 +685,40 @@ jobs:
         self.assertEqual(errors, [])
         self.assertEqual(fallbacks, {"PRESERVED_RUNTIME_SECRET": "fallback-secret:latest"})
 
+    def test_runtime_preflight_reports_first_create_to_the_deployment_action(self) -> None:
+        output = self.root / "runtime-preflight-output"
+        original_result = RUNTIME_PREFLIGHT.preflight_deployment_result
+        RUNTIME_PREFLIGHT.preflight_deployment_result = lambda **_kwargs: ([], {}, False)
+        try:
+            result = RUNTIME_PREFLIGHT.main(
+                [
+                    "--target",
+                    "fake",
+                    "--project-id",
+                    "fake-project",
+                    "--contract",
+                    str(self.root / "config/public-build-contract.json"),
+                    "--github-output",
+                    str(output),
+                ]
+            )
+        finally:
+            RUNTIME_PREFLIGHT.preflight_deployment_result = original_result
+
+        self.assertEqual(result, 0)
+        self.assertIn("service_exists=false", output.read_text(encoding="utf-8"))
+
+    def test_shared_action_handles_first_creates_and_fails_closed_for_production(self) -> None:
+        deploy = (ROOT / ".github/actions/deploy-public-build/action.yml").read_text(encoding="utf-8")
+        promotion = (ROOT / ".github/actions/public-build-candidate-promotion/action.yml").read_text(encoding="utf-8")
+
+        self.assertIn("steps.runtime-preflight.outputs.service_exists", deploy)
+        self.assertIn("no_traffic: ${{ steps.runtime-preflight.outputs.service_exists == 'true' }}", deploy)
+        self.assertIn("Fail closed for a production first create", deploy)
+        self.assertIn("refusing to create a public Cloud Run service outside development", deploy)
+        self.assertIn("inputs.environment == 'development' && '--allow-unauthenticated' || ''", deploy)
+        self.assertNotIn("first_create", promotion)
+
     def test_runtime_preflight_never_outputs_fallback_bindings_for_a_live_service(self) -> None:
         contract = fixture_contract()
         contract["targets"]["fake"]["deployment"]["preserve_runtime_secrets"] = ["PRESERVED_RUNTIME_SECRET"]
@@ -724,30 +759,70 @@ jobs:
         self.assertEqual(errors, [])
         self.assertEqual(fallbacks, {})
 
-    def test_runtime_preflight_classifies_cloud_run_could_not_be_found_as_first_create(self) -> None:
+    def test_runtime_preflight_treats_an_authenticated_empty_service_list_as_first_create(self) -> None:
         original_run = RUNTIME_PREFLIGHT.subprocess.run
-        RUNTIME_PREFLIGHT.subprocess.run = lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            RUNTIME_PREFLIGHT.subprocess.CalledProcessError(
-                1, "gcloud", stderr="ERROR: Service [fake-service] could not be found"
-            )
-        )
+        RUNTIME_PREFLIGHT.subprocess.run = lambda *_args, **_kwargs: type("Result", (), {"stdout": "[]"})()
         try:
             self.assertIsNone(RUNTIME_PREFLIGHT.load_current_service(target=self.target(), project_id="fake-project"))
         finally:
             RUNTIME_PREFLIGHT.subprocess.run = original_run
 
-    def test_runtime_preflight_classifies_cloud_run_cannot_find_service_as_first_create(self) -> None:
-        # Live gcloud run wording (2026-07): "Cannot find service [omi-web]"
+    def test_runtime_preflight_does_not_infer_first_create_from_describe_text(self) -> None:
+        original_run = RUNTIME_PREFLIGHT.subprocess.run
+        calls: list[list[str]] = []
+
+        def run(command, **_kwargs):
+            calls.append(command)
+            if "list" in command:
+                return type("Result", (), {"stdout": '[{"metadata": {"name": "fake-service"}}]'})()
+            raise RUNTIME_PREFLIGHT.subprocess.CalledProcessError(
+                1, command, stderr="ERROR: Service [fake-service] could not be found"
+            )
+
+        RUNTIME_PREFLIGHT.subprocess.run = run
+        try:
+            with self.assertRaisesRegex(
+                RUNTIME_PREFLIGHT.RuntimePreflightError,
+                "cannot inspect current Cloud Run service fake-service: gcloud command failed: ERROR: Service",
+            ):
+                RUNTIME_PREFLIGHT.load_current_service(target=self.target(), project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT.subprocess.run = original_run
+        self.assertEqual(2, len(calls))
+
+    def test_runtime_preflight_redacts_unknown_gcloud_diagnostic(self) -> None:
         original_run = RUNTIME_PREFLIGHT.subprocess.run
         RUNTIME_PREFLIGHT.subprocess.run = lambda *_args, **_kwargs: (_ for _ in ()).throw(
             RUNTIME_PREFLIGHT.subprocess.CalledProcessError(
-                1,
-                "gcloud",
-                stderr="ERROR: (gcloud.run.services.describe) Cannot find service [omi-web]",
+                1, "gcloud", stderr="backend rejected access_token=should-not-appear"
             )
         )
         try:
-            self.assertIsNone(RUNTIME_PREFLIGHT.load_current_service(target=self.target(), project_id="fake-project"))
+            with self.assertRaises(RUNTIME_PREFLIGHT.RuntimePreflightError) as raised:
+                RUNTIME_PREFLIGHT.load_current_service(target=self.target(), project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT.subprocess.run = original_run
+        self.assertIn("access_token=[REDACTED]", str(raised.exception))
+        self.assertNotIn("should-not-appear", str(raised.exception))
+
+    def test_runtime_preflight_redacts_bearer_and_quoted_credentials(self) -> None:
+        original_run = RUNTIME_PREFLIGHT.subprocess.run
+        diagnostics = (
+            ("Bearer ya29.standalone-secret-token", "standalone-secret-token"),
+            ("Authorization: Bearer ya29.bearer-secret-token", "bearer-secret-token"),
+            ('{"access_token": "ya29.quoted-secret"}', "ya29.quoted-secret"),
+            ('{"authorization": "Bearer ya29.quoted-bearer"}', "ya29.quoted-bearer"),
+        )
+        try:
+            for stderr, secret_fragment in diagnostics:
+                with self.subTest(stderr=stderr):
+                    RUNTIME_PREFLIGHT.subprocess.run = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                        RUNTIME_PREFLIGHT.subprocess.CalledProcessError(1, "gcloud", stderr=stderr)
+                    )
+                    with self.assertRaises(RUNTIME_PREFLIGHT.RuntimePreflightError) as raised:
+                        RUNTIME_PREFLIGHT.load_current_service(target=self.target(), project_id="fake-project")
+                    self.assertNotIn(secret_fragment, str(raised.exception))
+                    self.assertIn("[REDACTED]", str(raised.exception))
         finally:
             RUNTIME_PREFLIGHT.subprocess.run = original_run
 
@@ -979,6 +1054,27 @@ jobs:
             SMOKE.render_candidate = original
 
         self.assertTrue(True)
+
+    def test_browser_smoke_prints_a_sanitized_reason(self) -> None:
+        original = SMOKE.smoke
+
+        def fail_smoke(**_kwargs) -> None:
+            raise SMOKE.BrowserSmokeError("client public-build canary did not become ready")
+
+        SMOKE.smoke = fail_smoke
+        stderr = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(stderr):
+                result = SMOKE.main(["--target", "fake", "--base-url", "https://candidate.example"])
+        finally:
+            SMOKE.smoke = original
+
+        self.assertEqual(result, 1)
+        self.assertIn("reason=client public-build canary did not become ready", stderr.getvalue())
+        self.assertEqual(
+            SMOKE.sanitized_browser_smoke_reason(SMOKE.BrowserSmokeError("secret=not-for-logs")),
+            "unspecified browser smoke failure",
+        )
 
 
 if __name__ == "__main__":

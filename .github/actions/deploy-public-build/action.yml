@@ -1,5 +1,5 @@
 name: Deploy public build
-description: Build, validate, and promote one browser application through a no-traffic Cloud Run candidate.
+description: Build, validate, and promote one browser application through a Cloud Run candidate; existing services use no-traffic and first creates receive initial traffic.
 inputs:
   target:
     description: Canonical public-build target name declared in config/public-build-contract.json.
@@ -41,7 +41,7 @@ outputs:
     description: Cloud Run region deployed from the checked-in target contract.
     value: ${{ steps.contract.outputs.region }}
   revision:
-    description: Exact no-traffic candidate revision promoted by this action.
+    description: Exact candidate revision promoted by this action; existing services start with no traffic and first creates receive initial traffic.
     value: ${{ steps.candidate.outputs.revision }}
   image:
     description: Immutable image reference promoted by this action.
@@ -119,6 +119,15 @@ runs:
           --project-id "${{ inputs.project_id }}" \
           --github-output "$GITHUB_OUTPUT"
 
+    - name: Fail closed for a production first create
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ '${{ inputs.environment }}' != 'development' && '${{ steps.runtime-preflight.outputs.service_exists }}' != 'true' ]]; then
+          echo "refusing to create a public Cloud Run service outside development" >&2
+          exit 1
+        fi
+
     - name: Compute immutable candidate identity
       id: candidate
       shell: bash
@@ -149,16 +158,20 @@ runs:
         tags: ${{ steps.candidate.outputs.image }}
         build-args: ${{ steps.public-build.outputs.build_args }}
 
-    - name: Deploy no-traffic candidate revision
+    - name: Deploy candidate revision
       uses: google-github-actions/deploy-cloudrun@v3
       with:
         service: ${{ steps.contract.outputs.service }}
         region: ${{ steps.contract.outputs.region }}
         image: ${{ steps.candidate.outputs.image }}
-        no_traffic: true
+        # Cloud Run rejects --no-traffic when it creates a service. Development
+        # first creates therefore receive the platform's initial traffic; every
+        # existing service remains an isolated no-traffic candidate.
+        no_traffic: ${{ steps.runtime-preflight.outputs.service_exists == 'true' }}
         flags: >-
           --revision-suffix=${{ steps.candidate.outputs.revision_suffix }}
           --tag=${{ steps.candidate.outputs.tag }}
+          ${{ inputs.environment == 'development' && '--allow-unauthenticated' || '' }}
           ${{ inputs.service_account != '' && format('--service-account={0}', inputs.service_account) || '' }}
           ${{ inputs.network != '' && format('--network={0}', inputs.network) || '' }}
           ${{ inputs.subnet != '' && format('--subnet={0}', inputs.subnet) || '' }}

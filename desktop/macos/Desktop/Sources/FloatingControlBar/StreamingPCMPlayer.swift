@@ -49,6 +49,72 @@ final class StreamingPCMPlaybackQueue<Buffer: AnyObject> {
   }
 }
 
+private final class DeferredConfigurationRecoveryAction: @unchecked Sendable {
+  let action: () -> Void
+
+  init(_ action: @escaping () -> Void) {
+    self.action = action
+  }
+}
+
+final class DeferredConfigurationRecovery: @unchecked Sendable {
+  typealias MainQueueScheduler = @Sendable (@escaping @Sendable () -> Void) -> Void
+
+  private let lock = NSLock()
+  private let onMainQueue: MainQueueScheduler
+  private var isPending = false
+  private var generation = 0
+
+  init(
+    onMainQueue: @escaping MainQueueScheduler = { action in
+      DispatchQueue.main.async(execute: action)
+    }
+  ) {
+    self.onMainQueue = onMainQueue
+  }
+
+  func schedule(action: @escaping () -> Void) {
+    let scheduledGeneration: Int
+    lock.lock()
+    guard !isPending else {
+      lock.unlock()
+      return
+    }
+    isPending = true
+    generation += 1
+    scheduledGeneration = generation
+    lock.unlock()
+
+    let actionBox = DeferredConfigurationRecoveryAction(action)
+    onMainQueue { [weak self, actionBox] in
+      guard self?.isPendingRecovery(generation: scheduledGeneration) == true else { return }
+      actionBox.action()
+      self?.finishPendingRecovery(generation: scheduledGeneration)
+    }
+  }
+
+  func cancel() {
+    lock.lock()
+    generation += 1
+    isPending = false
+    lock.unlock()
+  }
+
+  private func isPendingRecovery(generation scheduledGeneration: Int) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return isPending && generation == scheduledGeneration
+  }
+
+  private func finishPendingRecovery(generation scheduledGeneration: Int) {
+    lock.lock()
+    if generation == scheduledGeneration {
+      isPending = false
+    }
+    lock.unlock()
+  }
+}
+
 /// Plays streamed mono PCM16 audio incrementally (OpenAI Realtime / Gemini Live
 /// output is 24 kHz). Feed chunks with `enqueue(_:)`; they play back-to-back in
 /// arrival order. Used by `RealtimeHubController` to play the realtime model's
@@ -62,6 +128,7 @@ final class StreamingPCMPlayer: @unchecked Sendable {
   private let format: AVAudioFormat
   private var configObserver: NSObjectProtocol?
   private let playbackQueue = StreamingPCMPlaybackQueue<AVAudioPCMBuffer>()
+  private let configurationRecovery = DeferredConfigurationRecovery()
   private(set) var playbackEpoch = 0
   var onPlaybackScheduled: ((Int) -> Void)?
   var onPlaybackIdle: ((Int) -> Void)?
@@ -72,6 +139,18 @@ final class StreamingPCMPlayer: @unchecked Sendable {
       commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)!
     engine.attach(player)
     engine.connect(player, to: engine.mainMixerNode, format: format)
+    // Output-level tap for the notch speaking animation. Tapping the mixer
+    // (not enqueue-time RMS) keeps the visual in sync with what is audibly
+    // playing rather than leading it by the scheduled-queue depth. The tap
+    // callback runs on an audio thread; only the cheap RMS math happens there.
+    engine.mainMixerNode.installTap(
+      onBus: 0, bufferSize: 1024, format: engine.mainMixerNode.outputFormat(forBus: 0)
+    ) { buffer, _ in
+      let level = Self.rmsLevel(of: buffer)
+      DispatchQueue.main.async {
+        AudioLevelMonitor.shared.updateVoicePlaybackLevel(level)
+      }
+    }
     // An audio configuration change (another process grabbing the audio device, a
     // device/sample-rate change, a Bluetooth A2DP↔HFP flip, etc.) STOPS the engine
     // mid-stream — that's what cuts the reply off and can leave the engine in a
@@ -83,15 +162,9 @@ final class StreamingPCMPlayer: @unchecked Sendable {
       forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
     ) { [weak self] _ in
       guard let self = self else { return }
-      log("StreamingPCMPlayer: audio config changed — rebuilding engine")
-      let buffersToReplay = self.playbackQueue.buffersToReplayAfterConfigurationChange()
-      self.player.stop()
-      self.engine.stop()
-      self.engine.disconnectNodeOutput(self.player)
-      self.engine.connect(self.player, to: self.engine.mainMixerNode, format: self.format)
-      _ = self.ensureRunning()
-      for buffer in buffersToReplay {
-        self.schedule(buffer)
+      self.configurationRecovery.schedule { [weak self] in
+        guard let self = self else { return }
+        self.rebuildAfterConfigurationChange()
       }
     }
   }
@@ -123,6 +196,19 @@ final class StreamingPCMPlayer: @unchecked Sendable {
       player.play()
     }
     return player.isPlaying
+  }
+
+  private func rebuildAfterConfigurationChange() {
+    log("StreamingPCMPlayer: audio config changed — rebuilding engine")
+    let buffersToReplay = playbackQueue.buffersToReplayAfterConfigurationChange()
+    player.stop()
+    engine.stop()
+    engine.disconnectNodeOutput(player)
+    engine.connect(player, to: engine.mainMixerNode, format: format)
+    _ = ensureRunning()
+    for buffer in buffersToReplay {
+      schedule(buffer)
+    }
   }
 
   /// `data` = little-endian Int16 PCM, mono, at the configured sample rate.
@@ -167,8 +253,28 @@ final class StreamingPCMPlayer: @unchecked Sendable {
 
   func stop() {
     playbackEpoch += 1
+    configurationRecovery.cancel()
     playbackQueue.clearForExplicitStop()
     player.stop()
     engine.stop()
+    DispatchQueue.main.async {
+      AudioLevelMonitor.shared.updateVoicePlaybackLevel(0)
+    }
+  }
+
+  /// Root-mean-square level of a float PCM buffer across all channels, 0…1.
+  static func rmsLevel(of buffer: AVAudioPCMBuffer) -> Float {
+    guard let channels = buffer.floatChannelData, buffer.frameLength > 0 else { return 0 }
+    let channelCount = Int(buffer.format.channelCount)
+    let frames = Int(buffer.frameLength)
+    var sum: Float = 0
+    for channel in 0..<channelCount {
+      let samples = channels[channel]
+      for frame in 0..<frames {
+        let sample = samples[frame]
+        sum += sample * sample
+      }
+    }
+    return min(1, sqrt(sum / Float(frames * channelCount)))
   }
 }

@@ -19,6 +19,7 @@ final class ChatPromptTimelineHoverLayoutTests: XCTestCase {
       id: "q\($0)",
       prompt: "a question long enough to fill the card's whole width and then some",
       reply: "an answer that is also long enough to wrap onto the card's second line",
+      createdAt: Date(timeIntervalSince1970: 1_700_000_000 + Double($0)),
       fraction: CGFloat($0) / 3
     )
   }
@@ -142,6 +143,7 @@ final class ChatPromptTimelineSourceTests: XCTestCase {
     XCTAssertEqual(sources.map(\.id), ["q1", "q2"])
     XCTAssertEqual(sources[0].prompt, "How do I set up SwiftPM?")
     XCTAssertEqual(sources[0].reply, "Open Xcode, then File > Add Packages.")
+    XCTAssertEqual(sources[0].createdAt, Date(timeIntervalSince1970: 1_700_000_000))
     XCTAssertEqual(sources[1].reply, "It lets you write concurrent code without callbacks.")
   }
 
@@ -181,7 +183,12 @@ final class ChatPromptTimelineSourceTests: XCTestCase {
   }
 
   private func message(_ id: String, _ text: String, _ sender: ChatSender) -> ChatMessage {
-    ChatMessage(id: id, text: text, sender: sender)
+    ChatMessage(
+      id: id,
+      text: text,
+      createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+      sender: sender
+    )
   }
 }
 
@@ -190,7 +197,10 @@ final class ChatPromptTimelineSourceTests: XCTestCase {
 /// measured.
 final class ChatPromptTimelineMarkTests: XCTestCase {
   private let sources = (0..<5).map {
-    ChatPromptSource(id: "q\($0)", prompt: "prompt \($0)", reply: "reply \($0)")
+    ChatPromptSource(
+      id: "q\($0)", prompt: "prompt \($0)", reply: "reply \($0)",
+      createdAt: Date(timeIntervalSince1970: 1_700_000_000 + Double($0))
+    )
   }
 
   func testAFullyMeasuredTranscriptPlacesEveryMarkAtItsRealPosition() {
@@ -266,9 +276,18 @@ final class ChatPromptTimelineMarkTests: XCTestCase {
 /// Which mark is lit, and where ⌘↑ / ⌘↓ go next.
 final class ChatPromptTimelineActiveMarkTests: XCTestCase {
   private let marks = [
-    ChatPromptMark(id: "q0", prompt: "a", reply: "", fraction: 0.0),
-    ChatPromptMark(id: "q1", prompt: "b", reply: "", fraction: 0.4),
-    ChatPromptMark(id: "q2", prompt: "c", reply: "", fraction: 0.8),
+    ChatPromptMark(
+      id: "q0", prompt: "a", reply: "", createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+      fraction: 0.0
+    ),
+    ChatPromptMark(
+      id: "q1", prompt: "b", reply: "", createdAt: Date(timeIntervalSince1970: 1_700_000_001),
+      fraction: 0.4
+    ),
+    ChatPromptMark(
+      id: "q2", prompt: "c", reply: "", createdAt: Date(timeIntervalSince1970: 1_700_000_002),
+      fraction: 0.8
+    ),
   ]
 
   func testTheMarkBeingReadIsTheLastOneAboveTheReadingLine() {
@@ -427,6 +446,21 @@ final class ChatTranscriptGeometrySelectionTests: XCTestCase {
     withExtendedLifetime(subscription) {}
   }
 
+  /// Jump to latest is an outright choice of the newest turn. A pin from a
+  /// prior rail click must not keep lighting a historical prompt at the live edge.
+  func testJumpingToLatestReleasesAPinnedHistoricalPrompt() {
+    let geometry = loadedGeometry()
+    geometry.setContent(height: documentHeight, scrollTop: 0)
+    XCTAssertEqual(geometry.marks.map(\.id), ["q0", "q1", "q2"])
+    geometry.selectMark("q0")
+    XCTAssertEqual(geometry.activeMarkID, "q0")
+
+    geometry.setFollowingLiveEdge(true)
+    geometry.setFollowingLiveEdge(true)
+
+    XCTAssertEqual(geometry.activeMarkID, "q2")
+  }
+
   /// Switching conversations retires the ids a pin was holding.
   func testAChoiceDoesNotSurviveTheConversationItWasMadeIn() {
     let geometry = loadedGeometry()
@@ -435,6 +469,14 @@ final class ChatTranscriptGeometrySelectionTests: XCTestCase {
     geometry.reset()
 
     XCTAssertNil(geometry.activeMarkID)
+  }
+
+  func testTheRailShowsWithoutAReservedGutter() {
+    let geometry = loadedGeometry()
+    geometry.setViewport(viewport, columnWidth: viewport.width)
+
+    XCTAssertEqual(geometry.gutter, 0)
+    XCTAssertTrue(geometry.showsPromptTimeline)
   }
 
   private func loadedGeometry() -> ChatTranscriptGeometry {
@@ -477,6 +519,46 @@ final class ChatPromptTimelineMetricsTests: XCTestCase {
       let middle = ((positions.first ?? 0) + (positions.last ?? 0)) / 2
       XCTAssertEqual(
         middle, railHeight / 2, accuracy: 0.001, "\(count) marks drifted off centre")
+    }
+  }
+
+  /// A resting mark is a hairline, measured against the app's own rule weight rather than judged.
+  ///
+  /// The rail draws in `Ink.primary`, which is near-black on the light-pinned panel, so its resting
+  /// alpha *is* how heavy the mark looks. At the 0.18 this was tuned to on the dark palette it
+  /// composited nearly twice as dark as a real separator, and a hundred of them down the gutter read
+  /// as a dashed second scrollbar — the one thing the rail's doc comment says it must not be.
+  ///
+  /// `separatorColor` is the external anchor: it is AppKit's own answer to "how heavy is a rule",
+  /// it is 0.098 alpha in both appearances, and it moves if Apple moves it.
+  func testARestingMarkIsNoHeavierThanTheAppsOwnRule() {
+    let separatorAlpha = Double(
+      (NSColor.separatorColor.usingColorSpace(.sRGB) ?? .black).alphaComponent)
+
+    XCTAssertLessThanOrEqual(
+      ChatPromptTimelineMetrics.restOpacity, separatorAlpha + 0.001,
+      """
+      A resting mark draws at \(ChatPromptTimelineMetrics.restOpacity) of near-black against a rule \
+      weight of \(separatorAlpha). That is a dashed second scrollbar, not a hairline.
+      """
+    )
+
+    // …and it is still *there*. A hairline that rounds to nothing is a rail nobody can find, which
+    // is the failure in the other direction.
+    XCTAssertGreaterThan(ChatPromptTimelineMetrics.restOpacity, 0.05)
+  }
+
+  /// The cursor's reach has to read, and it reads by contrast against the resting weight — so the
+  /// step is asserted as a ratio rather than as two numbers that can drift apart.
+  func testTheProximityRampLiftsAMarkClearOfItsRestingWeight() {
+    let lift = ChatPromptTimelineMetrics.proximityOpacity / ChatPromptTimelineMetrics.restOpacity
+    XCTAssertGreaterThanOrEqual(lift, 3.0, "the cursor's pull no longer separates a mark")
+
+    for state in [
+      ChatPromptTimelineMetrics.proximityOpacity, ChatPromptTimelineMetrics.hoveredOpacity,
+      ChatPromptTimelineMetrics.activeOpacity,
+    ] {
+      XCTAssertGreaterThan(state, ChatPromptTimelineMetrics.restOpacity)
     }
   }
 
@@ -577,12 +659,22 @@ final class ChatPromptTimelineMetricsTests: XCTestCase {
 
   /// Size means "the cursor is here" and nothing else. Sizing the active mark
   /// too would have the rail reshape itself as the reader scrolls.
+  ///
+  /// The colour assertion is that the two states are the *same* colour, rather
+  /// than that they are any particular one. It used to name `.white`, which was
+  /// only ever correct because the rail sat on a near-black page: on the
+  /// light-pinned glass panel a white rail is invisible (`InkGlass` pins
+  /// `.aqua`, so `labelColor` resolves near-black). Naming the literal made the
+  /// guard a restatement of the implementation; the invariant it was written for
+  /// is that "active" is carried by opacity alone.
   func testTheActiveMarkIsLitRatherThanResized() {
     XCTAssertEqual(
       ChatPromptTimelineMetrics.markWidth(isHovered: false, proximity: 0),
       ChatPromptTimelineMetrics.restWidth)
-    XCTAssertEqual(ChatPromptTimelineMetrics.markColor(isActive: true), .white)
-    XCTAssertEqual(ChatPromptTimelineMetrics.markColor(isActive: false), .white)
+    XCTAssertEqual(
+      ChatPromptTimelineMetrics.markColor(isActive: true),
+      ChatPromptTimelineMetrics.markColor(isActive: false),
+      "active must be carried by opacity, not by a second colour")
   }
 
   /// With the cursor off the rail entirely, every other mark fades to its
@@ -622,39 +714,5 @@ final class ChatPromptTimelineMetricsTests: XCTestCase {
       ChatPromptTimelineMetrics.previewCenterY(
         anchorY: 300, cardHeight: 70, railHeight: railHeight),
       300, accuracy: 0.001)
-  }
-}
-
-@MainActor
-final class ChatPromptTimelineScrollerControllerTests: XCTestCase {
-  func testCustomTimelineHidesAndRestoresTheLegacyVerticalScroller() {
-    let scrollView = NSScrollView()
-    scrollView.hasVerticalScroller = true
-    let controller = ChatPromptTimelineScrollerController()
-
-    controller.attach(to: scrollView)
-    controller.setSuppressed(true)
-
-    XCTAssertFalse(scrollView.hasVerticalScroller)
-    XCTAssertTrue(scrollView.verticalScroller?.isHidden ?? false)
-    XCTAssertEqual(scrollView.verticalScroller?.alphaValue, 0)
-
-    XCTAssertFalse(controller.setSuppressed(true), "duplicate geometry updates must be a no-op")
-
-    controller.setSuppressed(false)
-
-    XCTAssertTrue(scrollView.hasVerticalScroller)
-  }
-
-  func testRestoringPreservesAnInitiallyHiddenScroller() {
-    let scrollView = NSScrollView()
-    scrollView.hasVerticalScroller = false
-    let controller = ChatPromptTimelineScrollerController()
-
-    controller.attach(to: scrollView)
-    controller.setSuppressed(true)
-    controller.restore()
-
-    XCTAssertFalse(scrollView.hasVerticalScroller)
   }
 }

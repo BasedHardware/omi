@@ -16,14 +16,9 @@ interface AppStats {
 interface SubscriptionStats {
   totalSubscriptions: number;
   partial?: boolean;
-  priceIdOne: {
-    count: number;
-    priceId: string;
-  };
-  priceIdTwo: {
-    count: number;
-    priceId: string;
-  };
+  monthly: number;
+  annual: number;
+  trialing: number;
 }
 
 interface AppSubscriptionStats {
@@ -203,8 +198,8 @@ export function DashboardStats() {
               <p className="text-sm text-muted-foreground">Total</p>
             </div>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-              <StatItem color="bg-purple-500" count={subscriptionData.priceIdOne?.count ?? 0} label="Monthly" />
-              <StatItem color="bg-indigo-500" count={subscriptionData.priceIdTwo?.count ?? 0} label="Annual" />
+              <StatItem color="bg-purple-500" count={subscriptionData.monthly ?? 0} label="Monthly" />
+              <StatItem color="bg-indigo-500" count={subscriptionData.annual ?? 0} label="Annual" />
             </div>
           </CardContent>
         </Card>

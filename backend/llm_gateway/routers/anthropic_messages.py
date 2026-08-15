@@ -32,7 +32,7 @@ from llm_gateway.gateway.metrics import (
     time_request,
 )
 from llm_gateway.gateway.request_context import request_id_for
-from llm_gateway.gateway.schemas import RouteArtifact, Surface
+from llm_gateway.gateway.schemas import RouteArtifact, RouteServingClass, Surface
 from llm_gateway.gateway.sse import SSEEventDecoder
 from llm_gateway.routers.dependencies import get_gateway_config
 
@@ -616,6 +616,7 @@ def _observe_message_terminal(
             provider=context.provider,
             model=context.model,
             credential_source=context.credential_source,
+            route_serving_class=RouteServingClass.ACTIVE,
             used_lkg=False,
             fallback_used=False,
             fallback_reason=None,

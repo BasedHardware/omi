@@ -11,6 +11,23 @@ PUSHER_ACTIVE_WS_CONNECTIONS = Gauge(
     'Number of currently active WebSocket connections in pusher',
 )
 
+PUSHER_QUEUE_DROPS = Counter(
+    'pusher_queue_drops_total',
+    'Pusher queue items dropped by bounded queue name',
+    ['queue'],
+)
+
+PUSHER_QUEUE_DROPPED_BYTES = Counter(
+    'pusher_queue_dropped_bytes_total',
+    'Pusher queue bytes dropped by bounded queue name',
+    ['queue'],
+)
+
+PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS = Counter(
+    'pusher_private_cloud_upload_drops_total',
+    'Private cloud audio batches dropped after exhausting upload attempts',
+)
+
 PUSHER_CIRCUIT_BREAKER_STATE = Gauge(
     'pusher_circuit_breaker_state',
     'Pusher circuit breaker state (0=closed, 1=open, 2=half_open)',
@@ -270,6 +287,37 @@ TASK_INTELLIGENCE_ATTRIBUTION_TOTAL = Counter(
     'Privacy-safe task intervention, feedback, and outcome events',
     ['event', 'subject_kind', 'code'],
 )
+
+CHAT_FIRST_PROACTIVE_TOTAL = Counter(
+    'chat_first_proactive_total',
+    'Chat-first proactive engine activity with no user content',
+    ['event', 'source'],
+)
+
+MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL = Counter(
+    'memory_universal_read_origin_total',
+    'Logical memory rows considered by the universal repository by physical origin',
+    ['origin'],
+)
+
+MEMORY_HISTORICAL_SUPPRESSION_TOTAL = Counter(
+    'memory_historical_suppression_total',
+    'Historical rows suppressed by canonical identity or canonical state',
+    ['reason'],
+)
+
+MEMORY_HISTORICAL_MATERIALIZATION_TOTAL = Counter(
+    'memory_historical_materialization_total',
+    'Lazy historical-memory materialization outcomes',
+    ['outcome'],
+)
+
+for _origin in ('canonical', 'historical'):
+    MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL.labels(origin=_origin)
+for _reason in ('canonical_identity', 'canonical_state'):
+    MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason=_reason)
+for _outcome in ('not_needed', 'committed'):
+    MEMORY_HISTORICAL_MATERIALIZATION_TOTAL.labels(outcome=_outcome)
 
 AUTH_FLOW_EVENTS = Counter(
     'auth_flow_events_total',

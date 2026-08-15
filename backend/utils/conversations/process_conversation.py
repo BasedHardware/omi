@@ -12,7 +12,7 @@ from fastapi import HTTPException
 import database._client as db_client_module
 from database import redis_db
 from database.auth import get_user_name
-import database.memories as memories_db
+from utils.conversations.transcript_for_llm import conversation_transcript_for_llm, conversation_transcripts_for_llm
 import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.users as users_db
@@ -21,20 +21,17 @@ import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
 from database.vector_db import (
-    find_similar_memories,
-    upsert_memory_vector,
-    delete_memory_vector,
     upsert_action_item_vectors_batch,
     delete_action_item_vectors_batch,
     find_similar_action_items,
 )
-from utils.llm.memories import resolve_memory_conflict
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from models.app import App, UsageHistoryType
-from models.memories import MemoryDB, Memory, render_memory
+from models.memories import MemoryDB, Memory, MemoryCategory, SubjectAttribution
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
+from models.memory_contracts import L1MemoryArchiveClass, deterministic_contract_id
 from models.workstream_association import AssociationEvidence
 from models.product_memory import MemoryTier
 from models.calendar_context import CalendarMeetingContext
@@ -48,16 +45,14 @@ from models.conversation_enums import ConversationSource, ConversationStatus, Ex
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
-from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem
-from utils.memory.memory_system_pin import memory_system_request_scope
+from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
 from models.other import Person
-from models.structured import Structured
+from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
@@ -71,21 +66,23 @@ from utils.llm.conversation_processing import (
     get_reprocess_transcript_structure,
     extract_action_items,
 )
+from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.llm.conversation_folder import assign_conversation_to_folder
 from utils.analytics import record_usage
 from utils.llm.usage_tracker import track_usage, Features
-from utils.llm.memories import extract_memories_from_text, new_memories_extractor
+from utils.llm.memories import (
+    extract_canonical_l1_memory_candidates,
+    extract_memories_from_text,
+)
+from utils.llm.temporal import date_in_tz
 from utils.conversations.memory_extraction_telemetry import (
     PATH_CANONICAL,
-    PATH_LEGACY,
     ConversationMemoryExtractionResult,
     emit_conversation_memories_extracted,
     source_for_conversation,
 )
-from utils.llm.temporal import date_in_tz
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.goals import extract_and_update_goal_progress
-from utils.llm.knowledge_graph import extract_knowledge_from_memory
 from utils.llm.chat import (
     retrieve_metadata_from_text,
     retrieve_metadata_from_message,
@@ -124,7 +121,20 @@ def _calendar_auto_link_enabled() -> bool:
     return os.getenv('GOOGLE_CALENDAR_AUTO_LINK_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
-def _fetch_dedup_candidates(uid: str, structured: Structured) -> List[Dict[str, Any]]:
+def _dedup_excluded_conversation_ids(conversation: Any) -> set:
+    """The conversation's own id plus any merge-source ids. Items from these
+    conversations must never be dedup candidates: on reprocess/merge they are
+    this conversation's previous items — the LLM would suppress re-extracting
+    them, and the save step then deletes them, silently losing the tasks."""
+    excluded = {getattr(conversation, 'id', None)}
+    external_data = getattr(conversation, 'external_data', None) or {}
+    merge_metadata = external_data.get('merge_metadata') or {}
+    excluded.update(merge_metadata.get('source_conversation_ids') or [])
+    excluded.discard(None)
+    return excluded
+
+
+def _fetch_dedup_candidates(uid: str, structured: Structured, conversation: Any = None) -> List[Dict[str, Any]]:
     """
     Fetch open action items semantically related to this conversation, active
     in the past week, for the LLM extraction prompt to consider as potential
@@ -134,6 +144,8 @@ def _fetch_dedup_candidates(uid: str, structured: Structured) -> List[Dict[str, 
     """
     if not structured or not structured.overview:
         return []
+
+    excluded_conversation_ids = _dedup_excluded_conversation_ids(conversation) if conversation else set()
 
     try:
         similar = find_similar_action_items(uid, structured.overview, threshold=0.6, limit=10)
@@ -146,6 +158,8 @@ def _fetch_dedup_candidates(uid: str, structured: Structured) -> List[Dict[str, 
         eligible: List[Dict[str, Any]] = []
         for item in items:
             if item.get('completed', False):
+                continue
+            if item.get('conversation_id') in excluded_conversation_ids:
                 continue
             last_active = item.get('updated_at') or item.get('created_at')
             if last_active is None or last_active < cutoff:
@@ -207,7 +221,7 @@ def _get_structured(
                         started_at,
                         language_code,
                         tz_str,
-                        existing_action_items=_fetch_dedup_candidates(uid, structured),
+                        existing_action_items=_fetch_dedup_candidates(uid, structured, conversation),
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
                         task_intelligence_capture=task_intelligence_capture,
@@ -235,13 +249,11 @@ def _get_structured(
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {ext_conv.text_source}')
 
         main_conv = cast(Union[Conversation, CreateConversation], conversation)
-        user_name = get_user_name(uid, use_default=False)
-        transcript_text = main_conv.get_transcript(False, people=people, user_name=user_name)  # type: ignore[reportArgumentType]  # conversation.py reverted to main; people/user_name may be Optional
+        transcript_text, action_items_transcript = conversation_transcripts_for_llm(uid, main_conv, people)
 
         # For re-processing, we don't discard, just re-structure.
         if force_process:
             conv_started_at = cast(datetime, main_conv.started_at)
-            structured_conv = cast(Conversation, main_conv)
             # reprocess endpoint
             with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                 structured = get_reprocess_transcript_structure(
@@ -249,18 +261,17 @@ def _get_structured(
                     conv_started_at,
                     language_code,
                     tz_str,
-                    structured_conv.structured.title,
                     photos=main_conv.photos,
                     output_language_code=user_language,
                 )
             with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
                 structured.action_items = extract_action_items(
-                    transcript_text,
+                    action_items_transcript,
                     conv_started_at,
                     language_code,
                     tz_str,
                     photos=main_conv.photos,
-                    existing_action_items=_fetch_dedup_candidates(uid, structured),
+                    existing_action_items=_fetch_dedup_candidates(uid, structured, conversation),
                     output_language_code=user_language,
                     task_intelligence_capture=task_intelligence_capture,
                 )
@@ -292,20 +303,19 @@ def _get_structured(
             )
         with track_usage(uid, Features.CONVERSATION_ACTION_ITEMS):
             structured.action_items = extract_action_items(
-                transcript_text,
+                action_items_transcript,
                 conv_started_at,
                 language_code,
                 tz_str,
                 photos=main_conv.photos,
-                existing_action_items=_fetch_dedup_candidates(uid, structured),
+                existing_action_items=_fetch_dedup_candidates(uid, structured, conversation),
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
                 task_intelligence_capture=task_intelligence_capture,
             )
         return structured, False
     except Exception as e:
-        logger.error(e)
-        raise HTTPException(status_code=500, detail="Error processing conversation, please try again later")
+        raise conversation_processing_http_exception(e) from e
 
 
 def _get_conversation_obj(
@@ -469,9 +479,8 @@ def _trigger_apps(
 
     def execute_app(app: App) -> None:
         with track_usage(uid, Features.CONVERSATION_APPS):
-            result = get_app_result(
-                conversation.get_transcript(False, people=people), conversation.photos, app, language_code=language_code  # type: ignore[reportArgumentType]  # conversation.py reverted to main; people/user_name may be Optional
-            ).strip()
+            transcript = conversation_transcript_for_llm(uid, conversation, people)
+            result = get_app_result(transcript, conversation.photos, app, language_code=language_code).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
@@ -509,14 +518,67 @@ def _update_goal_progress(uid: str, conversation: Conversation) -> None:
         logger.error(f"[GOAL] Error updating progress: {e}")
 
 
+def _parity_transcript_segments(conversation: Conversation) -> list[dict[str, Any]]:
+    segments = getattr(conversation, "transcript_segments", None) or []
+    return [
+        {
+            "start": segment.start,
+            "end": segment.end,
+            "speaker": segment.speaker,
+            "text": (segment.text or "")[:8192],
+        }
+        for segment in segments[:1000]
+    ]
+
+
+def _parity_accepted_memories(memories: List[MemoryDB]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": memory.id,
+            "content": (memory.content or "")[:8192],
+            "category": memory.category.value,
+            "visibility": memory.visibility,
+        }
+        for memory in memories[:100]
+    ]
+
+
 def extract_memories(uid: str, conversation: Conversation) -> None:
     """Extract one conversation's memories through the selected memory system.
 
     Finalization workers use this public boundary while holding their durable
     lease. Keep the private helper below for existing in-module async callers.
     """
-    with track_usage(uid, Features.MEMORIES):
-        result = _extract_memories_inner(uid, conversation)
+    source = source_for_conversation(conversation)
+    parity_capture = SurfaceParityCapture.from_environ(
+        principal_id=uid,
+        session_id=conversation.id,
+        surface="conversation_finalization",
+        source=f"conversation_{source}",
+        provider_lane="memory",
+        route_or_model="memory-extraction",
+        request={
+            "conversation_source": str(source),
+            "segment_count": len(getattr(conversation, "transcript_segments", None) or []),
+            "locked": bool(getattr(conversation, "is_locked", False)),
+        },
+    )
+    parity_capture.observe(
+        "client",
+        {"type": "conversation_transcript", "segments": _parity_transcript_segments(conversation)},
+    )
+    try:
+        with track_usage(uid, Features.MEMORIES):
+            if parity_capture.enabled:
+                result = _extract_memories_inner(uid, conversation, parity_capture=parity_capture)
+            else:
+                result = _extract_memories_inner(uid, conversation)
+        parity_capture.observe(
+            "inbound",
+            {"type": "memory_extraction_result", "count": result.count, "path": result.path},
+        )
+    finally:
+        parity_capture.persist()
     # Product-analytics telemetry (Conversation Memories Extracted): at most one
     # analytics success per (uid, conversation) across retries — zero-extraction
     # (count == 0) and persistence exceptions emit nothing; the durable
@@ -529,35 +591,382 @@ def _extract_memories(uid: str, conversation: Conversation) -> None:
     extract_memories(uid, conversation)
 
 
+def _normalized_l1_subject_label(value: Optional[str]) -> str:
+    return re.sub(r"[\W_]+", " ", (value or "").casefold()).strip()
+
+
+def _source_scoped_l1_subject_id(*, source_id: str, kind: str, label: str) -> str:
+    digest = deterministic_contract_id(
+        "canonical-l1-source-scoped-subject",
+        {
+            "source_id": source_id,
+            "kind": kind,
+            "label": _normalized_l1_subject_label(label),
+        },
+    )
+    return f"source:{digest[:24]}"
+
+
+def _l1_subject_from_matched_segments(
+    *,
+    source_id: str,
+    matched_segments: List[Any],
+) -> Tuple[Optional[str], SubjectAttribution, str]:
+    resolved_subjects: Set[Tuple[str, SubjectAttribution, str]] = set()
+    for segment in matched_segments:
+        if bool(getattr(segment, "is_user", False)):
+            resolved_subjects.add(("user", SubjectAttribution.user, "user"))
+            continue
+        person_id = getattr(segment, "person_id", None)
+        if person_id:
+            resolved_subjects.add((f"person:{person_id}", SubjectAttribution.third_party, "person"))
+            continue
+        raw_speaker = str(getattr(segment, "speaker", "") or "").strip()
+        speaker_id = getattr(segment, "speaker_id", None)
+        speaker_label = raw_speaker or (f"speaker_{speaker_id}" if speaker_id is not None else "")
+        if not speaker_label:
+            return None, SubjectAttribution.unknown, "unknown"
+        resolved_subjects.add(
+            (
+                _source_scoped_l1_subject_id(
+                    source_id=source_id,
+                    kind="speaker",
+                    label=speaker_label,
+                ),
+                SubjectAttribution.third_party,
+                "speaker",
+            )
+        )
+    if len(resolved_subjects) == 1:
+        return next(iter(resolved_subjects))
+    return None, SubjectAttribution.unknown, "unknown"
+
+
+def _l1_quote_matched_segments(evidence_quotes: List[str], segments: List[Any]) -> List[Any]:
+    return [
+        segment
+        for segment in segments
+        if any(
+            f" {_normalized_l1_subject_label(quote)} "
+            in f" {_normalized_l1_subject_label(str(getattr(segment, 'text', '') or ''))} "
+            for quote in evidence_quotes
+            if _normalized_l1_subject_label(quote)
+        )
+    ]
+
+
+def _l1_candidate_subject(
+    *,
+    source_id: str,
+    about: str,
+    speaker_label: Optional[str],
+    evidence_quotes: List[str],
+    user_name: Optional[str],
+    segments: List[Any],
+) -> Tuple[Optional[str], SubjectAttribution, str]:
+    """Resolve one L1 candidate without assigning the whole conversation's subject."""
+    about_norm = _normalized_l1_subject_label(about)
+    speaker_norm = _normalized_l1_subject_label(speaker_label)
+    user_aliases = {"user", "the user", "primary user"}
+    normalized_user_name = _normalized_l1_subject_label(user_name)
+    if normalized_user_name:
+        user_aliases.add(normalized_user_name)
+
+    quote_matched_segments = _l1_quote_matched_segments(evidence_quotes, segments)
+    matched_segments: List[Any] = []
+    source_speaker_labels: Set[str] = set()
+    for segment in segments:
+        raw_speaker = getattr(segment, "speaker", None)
+        speaker_id = getattr(segment, "speaker_id", None)
+        labels = {
+            _normalized_l1_subject_label(raw_speaker),
+            _normalized_l1_subject_label(f"speaker_{speaker_id}") if speaker_id is not None else "",
+            _normalized_l1_subject_label(f"ent_speaker_{speaker_id}") if speaker_id is not None else "",
+        }
+        labels.discard("")
+        source_speaker_labels.update(labels)
+        if speaker_norm and speaker_norm in labels:
+            matched_segments.append(segment)
+            continue
+        if about_norm and any(f" {label} " in f" {about_norm} " for label in labels):
+            matched_segments.append(segment)
+
+    if about_norm in user_aliases:
+        if quote_matched_segments:
+            # Quote-bearing source segments outrank both model-authored
+            # ``about`` and ``speaker_label`` fields. This applies even when
+            # the model invents a user speaker label that happens to match a
+            # different segment elsewhere in the conversation.
+            return _l1_subject_from_matched_segments(
+                source_id=source_id,
+                matched_segments=quote_matched_segments,
+            )
+        if speaker_norm and matched_segments:
+            # A known source speaker is more authoritative than a contradictory
+            # model-authored about=user label.
+            return _l1_subject_from_matched_segments(
+                source_id=source_id,
+                matched_segments=matched_segments,
+            )
+        return "user", SubjectAttribution.user, "user"
+
+    about_names_model_speaker = bool(
+        about_norm and speaker_norm and (about_norm == speaker_norm or f" {speaker_norm} " in f" {about_norm} ")
+    )
+    if quote_matched_segments and about_names_model_speaker:
+        # Identified contacts are rendered into the extraction transcript by
+        # name (for example ``Sarah:``), while the source segment retains the
+        # durable ``person_id``. Bind that model-visible name back to the
+        # uniquely grounded source speaker instead of degrading it to a
+        # source-scoped entity.
+        return _l1_subject_from_matched_segments(
+            source_id=source_id,
+            matched_segments=quote_matched_segments,
+        )
+
+    about_names_source_speaker = any(
+        label == about_norm or f" {label} " in f" {about_norm} " for label in source_speaker_labels
+    )
+    about_is_source_speaker = (
+        not about_norm
+        or about_norm in {"unknown", "unclear", "uncertain"}
+        or about_names_source_speaker
+        or about_norm in {"speaker", "the speaker", "unidentified non primary speaker"}
+    )
+    if about_is_source_speaker:
+        if quote_matched_segments:
+            return _l1_subject_from_matched_segments(
+                source_id=source_id,
+                matched_segments=quote_matched_segments,
+            )
+        if matched_segments:
+            return _l1_subject_from_matched_segments(
+                source_id=source_id,
+                matched_segments=matched_segments,
+            )
+        return None, SubjectAttribution.unknown, "unknown"
+
+    if about_norm and about_norm not in {"unknown", "unclear", "uncertain"}:
+        return (
+            _source_scoped_l1_subject_id(source_id=source_id, kind="about", label=about),
+            SubjectAttribution.third_party,
+            "entity",
+        )
+    if speaker_norm:
+        return (
+            _source_scoped_l1_subject_id(source_id=source_id, kind="speaker", label=speaker_label or speaker_norm),
+            SubjectAttribution.third_party,
+            "speaker",
+        )
+    return None, SubjectAttribution.unknown, "unknown"
+
+
+def _l1_candidate_sensitivity_labels(candidate: Any) -> List[str]:
+    labels = [
+        str(label).strip().lower() for label in (getattr(candidate, "risk_flags", []) or []) if str(label).strip()
+    ]
+    archive_class = getattr(candidate, "archive_class", L1MemoryArchiveClass.general)
+    archive_class_value = getattr(archive_class, "value", archive_class)
+    if archive_class_value == L1MemoryArchiveClass.sensitive.value:
+        # Fail closed when the broad extractor marks an item sensitive without
+        # naming a narrower restricted risk class.
+        labels.append("secret")
+    return list(dict.fromkeys(labels))
+
+
+def _normalized_l1_evidence_quote(value: str) -> str:
+    return re.sub(r"[\W_]+", " ", value.casefold()).strip()
+
+
+def _grounded_l1_evidence_quotes(evidence_quotes: List[str], segments: List[Any]) -> List[str]:
+    """Return quotes only when each has one unambiguous authoritative source segment."""
+    grounded: List[str] = []
+    seen: Set[str] = set()
+    for raw_quote in evidence_quotes:
+        quote = raw_quote.strip()
+        normalized_quote = _normalized_l1_evidence_quote(quote)
+        matched_segments = [
+            segment
+            for segment in segments
+            if normalized_quote
+            and f" {normalized_quote} " in f" {_normalized_l1_evidence_quote(str(getattr(segment, 'text', '') or ''))} "
+        ]
+        if not normalized_quote or len(matched_segments) != 1:
+            return []
+        if normalized_quote in seen:
+            continue
+        seen.add(normalized_quote)
+        grounded.append(quote)
+    return grounded
+
+
+def _canonical_quote_ref(
+    *,
+    quote: str,
+    source_id: str,
+    segments: List[Any],
+) -> Dict[str, Any]:
+    normalized_quote = _normalized_l1_evidence_quote(quote)
+    matched_segments = [
+        segment
+        for segment in segments
+        if f" {normalized_quote} " in f" {_normalized_l1_evidence_quote(str(getattr(segment, 'text', '') or ''))} "
+    ]
+    if len(matched_segments) != 1:
+        raise RuntimeError("canonical conversation quote lost its unique source binding")
+    segment = matched_segments[0]
+    raw_speaker = getattr(segment, "speaker", None)
+    speaker_id = getattr(segment, "speaker_id", None)
+    authoritative_speaker = (
+        str(raw_speaker).strip()
+        if isinstance(raw_speaker, str) and raw_speaker.strip()
+        else f"speaker_{speaker_id}" if speaker_id is not None else None
+    )
+    segment_id = getattr(segment, "id", None)
+    return {
+        "text": quote,
+        "source_id": source_id,
+        **({"segment_id": str(segment_id)} if segment_id else {}),
+        **({"speaker_label": authoritative_speaker, "speaker_scope": "source-local"} if authoritative_speaker else {}),
+    }
+
+
+def _canonical_conversation_write_payload(
+    memory: MemoryDB,
+    *,
+    source_id: str,
+    evidence_quotes: List[str],
+    subject_kind: str,
+    sensitivity_labels: List[str],
+    segments: List[Any],
+) -> Dict[str, Any]:
+    payload = memory.model_dump(mode="json")
+    payload["sensitivity_labels"] = sensitivity_labels
+    payload["subject_kind"] = subject_kind
+    raw_evidence = payload.get("evidence")
+    if not isinstance(raw_evidence, list) or len(raw_evidence) != 1 or not isinstance(raw_evidence[0], dict):
+        raise RuntimeError("canonical conversation capture requires exactly one source evidence item")
+    evidence = cast(Dict[str, Any], raw_evidence[0])
+    evidence.update(
+        {
+            "quote_refs": [
+                _canonical_quote_ref(
+                    quote=quote,
+                    source_id=source_id,
+                    segments=segments,
+                )
+                for quote in evidence_quotes
+            ],
+        }
+    )
+    return payload
+
+
 def _extract_memories_canonical(
-    uid: str, conversation: Conversation, *, db_client: Any
+    uid: str, conversation: Conversation, *, db_client: Any, parity_capture: SurfaceParityCapture | None = None
 ) -> ConversationMemoryExtractionResult:
-    """Canonical-cohort extraction: extract first, then retract-and-write (Q1/Q7)."""
+    """Universal canonical extraction with one atomic source replacement."""
     source = source_for_conversation(conversation)
     memory_service = MemoryService(db_client=db_client)
 
     language = users_db.get_user_language_preference(uid)
-    new_memories: List[Memory] = []
+    capture_candidates: List[Tuple[Memory, List[str], str, List[str], bool]] = []
+
+    # Relative dates in delayed external content must resolve against capture
+    # time, not the worker's current wall clock.  Keep this date grounding on
+    # the universal extractor path as well as the retired legacy path.
+    content_date = None
+    if conversation.started_at is not None:
+        try:
+            content_date = date_in_tz(conversation.started_at, notification_db.get_user_time_zone(uid))
+        except Exception as exc:
+            logger.warning("canonical memory extraction content_date_failed uid=%s reason=%s", uid, exc)
 
     if conversation.source == ConversationSource.external_integration:
         ext_data = conversation.external_data or {}
         text_content = ext_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = ext_data.get('text_source', 'other')
-            new_memories = extract_memories_from_text(uid, text_content, text_source, language=language)
+            capture_candidates = [
+                (memory, [], "unknown", [], False)
+                for memory in extract_memories_from_text(
+                    uid,
+                    text_content,
+                    text_source,
+                    language=language,
+                    content_date=content_date,
+                    strict=True,
+                )
+            ]
     else:
-        new_memories = new_memories_extractor(uid, conversation.transcript_segments, language=language)
+        raw_user_name = get_user_name(uid)
+        user_name = raw_user_name.strip() if isinstance(raw_user_name, str) and raw_user_name.strip() else "the user"
+        extracted_candidates = extract_canonical_l1_memory_candidates(
+            uid,
+            conversation.id,
+            conversation.transcript_segments,
+            user_name=user_name,
+            language=language,
+            strict=True,
+        )
+        for candidate in extracted_candidates:
+            evidence_quotes = _grounded_l1_evidence_quotes(
+                candidate.evidence_quotes,
+                conversation.transcript_segments,
+            )
+            if not evidence_quotes:
+                raise ValueError("canonical memory extraction returned evidence without a unique source binding")
+            subject_entity_id, subject_attribution, subject_kind = _l1_candidate_subject(
+                source_id=conversation.id,
+                about=candidate.about,
+                speaker_label=candidate.speaker_label,
+                evidence_quotes=evidence_quotes,
+                user_name=user_name,
+                segments=conversation.transcript_segments,
+            )
+            capture_candidates.append(
+                (
+                    Memory(
+                        content=candidate.content,
+                        category=(
+                            MemoryCategory.system
+                            if subject_attribution == SubjectAttribution.user
+                            else MemoryCategory.interesting
+                        ),
+                        visibility="private",
+                        subject_entity_id=subject_entity_id,
+                        subject_attribution=subject_attribution,
+                    ),
+                    evidence_quotes,
+                    subject_kind,
+                    _l1_candidate_sensitivity_labels(candidate),
+                    True,
+                )
+            )
 
     is_locked = conversation.is_locked
-    parsed_memories: List[MemoryDB] = []
-    seen_norm: Set[str] = set()
+    parsed_memories: List[Tuple[MemoryDB, List[str], str, List[str]]] = []
+    seen_norm: Set[Tuple[str, str]] = set()
     subject_entity_id, subject_attribution = infer_subject_from_segments(conversation.transcript_segments)
+    # Keep the service boundary bounded even when a provider or test double
+    # bypasses the structured extractor's output cap.
+    from utils.llm.working_observations import MAX_WORKING_OBSERVATION_ITEMS
 
-    for memory in new_memories:
+    for (
+        memory,
+        evidence_quotes,
+        subject_kind,
+        sensitivity_labels,
+        has_candidate_subject,
+    ) in capture_candidates:
         norm = ' '.join((memory.content or '').lower().split())
-        if not norm or norm in seen_norm:
+        candidate_subject_entity_id = memory.subject_entity_id if has_candidate_subject else subject_entity_id
+        proposition_key = (norm, candidate_subject_entity_id or "")
+        if not norm or proposition_key in seen_norm:
             continue
-        seen_norm.add(norm)
+        seen_norm.add(proposition_key)
+        if len(parsed_memories) >= MAX_WORKING_OBSERVATION_ITEMS:
+            break
 
         memory_db_obj = MemoryDB.from_memory(
             memory,
@@ -568,25 +977,56 @@ def _extract_memories_canonical(
             source_type="conversation",
             source_signal="transcription",
             artifact_ref=_transcript_artifact_ref(conversation),
-            extractor_id="new_memories_extractor",
-            subject_entity_id=subject_entity_id,
-            subject_attribution=subject_attribution,
+            extractor_id="canonical_l1_memory_extractor" if has_candidate_subject else "new_memories_extractor",
+            extractor_version="v1",
+            subject_entity_id=candidate_subject_entity_id,
+            subject_attribution=memory.subject_attribution if has_candidate_subject else subject_attribution,
             client_device_id=getattr(conversation, "client_device_id", None),
         )
         memory_db_obj.is_locked = is_locked
-        memory_db_obj.id = extraction_memory_id(uid=uid, source_id=conversation.id, content=memory_db_obj.content)
+        memory_db_obj.id = extraction_memory_id(
+            uid=uid,
+            source_id=conversation.id,
+            content=memory_db_obj.content,
+            subject_entity_id=candidate_subject_entity_id,
+        )
         memory_db_obj.memory_tier = MemoryTier.short_term
-        parsed_memories.append(memory_db_obj)
+        parsed_memories.append((memory_db_obj, evidence_quotes, subject_kind, sensitivity_labels))
 
+    replacement_payloads = [
+        _canonical_conversation_write_payload(
+            memory_db_obj,
+            source_id=conversation.id,
+            evidence_quotes=evidence_quotes,
+            subject_kind=subject_kind,
+            sensitivity_labels=sensitivity_labels,
+            segments=conversation.transcript_segments,
+        )
+        for (
+            memory_db_obj,
+            evidence_quotes,
+            subject_kind,
+            sensitivity_labels,
+        ) in parsed_memories
+    ]
+    memory_service.replace_conversation_memories(
+        uid,
+        conversation.id,
+        replacement_payloads,
+    )
     if len(parsed_memories) == 0:
         logger.info(f"No canonical memories extracted for conversation {conversation.id}")
         return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
 
-    memory_service.retract_conversation_memories(uid, conversation.id)
-
     logger.info(f"Saving {len(parsed_memories)} canonical memories for conversation {conversation.id}")
-    for memory_db_obj in parsed_memories:
-        memory_service.write(uid, memory_db_obj.model_dump(mode="json"))
+    if parity_capture is not None:
+        parity_capture.observe(
+            "inbound",
+            {
+                "type": "accepted_memories",
+                "memories": _parity_accepted_memories([memory for memory, *_ in parsed_memories]),
+            },
+        )
 
     if not is_locked:
         memory_refs = [
@@ -595,11 +1035,11 @@ def _extract_memories_canonical(
                 id=cast(str, memory_db_obj.id),
                 scope=EvidenceScope.canonical,
             )
-            for memory_db_obj in parsed_memories[:49]
+            for memory_db_obj, _, _, _ in parsed_memories[:49]
         ]
-        evidence_summary = '\n'.join(memory.content.strip() for memory in parsed_memories if memory.content.strip())[
-            :2000
-        ]
+        evidence_summary = '\n'.join(
+            memory.content.strip() for memory, _, _, _ in parsed_memories if memory.content.strip()
+        )[:2000]
         try:
             associate_canonical_evidence(
                 uid,
@@ -630,184 +1070,13 @@ def _extract_memories_canonical(
     return ConversationMemoryExtractionResult(count=len(parsed_memories), source=source, path=PATH_CANONICAL)
 
 
-def _extract_memories_inner(uid: str, conversation: Conversation) -> ConversationMemoryExtractionResult:
-    with memory_system_request_scope(uid) as memory_system:
-        db_client = getattr(db_client_module, 'db', None)
-        if memory_system == MemorySystem.CANONICAL:
-            MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
-            return _extract_memories_canonical(uid, conversation, db_client=db_client)
-
-        return _extract_memories_legacy(uid, conversation)
-
-
-def _extract_memories_legacy(uid: str, conversation: Conversation) -> ConversationMemoryExtractionResult:
-    source = source_for_conversation(conversation)
-    language = users_db.get_user_language_preference(uid)
-    new_memories: List[Memory] = []
-
-    # Ground extraction in the date the content was captured, not the processing time, so
-    # relative dates in delayed or backfilled content resolve correctly (cubic on #8501).
-    content_date = None
-    if getattr(conversation, 'started_at', None):
-        try:
-            content_date = date_in_tz(conversation.started_at, notification_db.get_user_time_zone(uid))
-        except Exception as e:
-            logger.warning(f"_extract_memories_inner content_date_failed uid={uid}: {e}")
-
-    # Extract memories based on conversation source
-    if conversation.source == ConversationSource.external_integration:
-        ext_data = conversation.external_data or {}
-        text_content = ext_data.get('text')
-        if text_content and len(text_content) > 0:
-            text_source = ext_data.get('text_source', 'other')
-            new_memories = extract_memories_from_text(
-                uid, text_content, text_source, language=language, content_date=content_date
-            )
-    else:
-        # For regular conversations with transcript segments
-        new_memories = new_memories_extractor(
-            uid, conversation.transcript_segments, language=language, content_date=content_date
-        )
-
-    is_locked = conversation.is_locked
-    parsed_memories: List[MemoryDB] = []
-    # (old_memory_id, new_memory_id) pairs to invalidate after the new memories are saved.
-    invalidations: List[Tuple[str, str]] = []
-    # Cheap exact-duplicate guard within this batch (avoids redundant conflict LLM calls).
-    seen_norm: Set[str] = set()
-    subject_entity_id, subject_attribution = infer_subject_from_segments(conversation.transcript_segments)
-
-    for memory in new_memories:
-        norm = ' '.join((memory.content or '').lower().split())
-        if not norm or norm in seen_norm:
-            continue
-        seen_norm.add(norm)
-
-        # Wider net (lower threshold, more candidates) than before so cross-phrasing
-        # contradictions are caught — "loves ice cream" vs "hates ice cream",
-        # "lives in NYC" vs "lives in LA" — then let the LLM decide what's outdated.
-        similar_matches = find_similar_memories(
-            uid, memory.content, threshold=0.6, limit=8, subject_entity_id=subject_entity_id
-        )
-
-        # Only compare against currently-active memories (never resurface superseded ones).
-        similar_memories: List[Dict[str, Any]] = []
-        for match in similar_matches:
-            memory_data = memories_db.get_memory(uid, match['memory_id'])
-            if memory_data and memory_data.get('invalid_at') is None:
-                existing_subject = memory_data.get('subject_entity_id')
-                if subject_entity_id and existing_subject and subject_entity_id != existing_subject:
-                    continue
-                similar_memories.append(
-                    {
-                        'memory_id': match['memory_id'],
-                        'category': match['category'],
-                        'score': match['score'],
-                        'content': memory_data.get('content', ''),
-                    }
-                )
-
-        supersede_ids: List[str] = []
-        if similar_memories:
-            resolution = resolve_memory_conflict(memory.content, similar_memories, language=language)
-
-            if resolution.action == 'skip':
-                continue
-
-            if resolution.action == 'merge':
-                if resolution.merged_predicate:
-                    memory.predicate = resolution.merged_predicate
-                if resolution.merged_arguments:
-                    memory.arguments = resolution.merged_arguments
-                if resolution.merged_qualifiers:
-                    memory.qualifiers = {**memory.qualifiers, **resolution.merged_qualifiers}
-                if resolution.merged_content:
-                    memory.content = resolution.merged_content
-                elif resolution.merged_predicate or resolution.merged_arguments:
-                    memory.content = render_memory(memory)
-
-            if resolution.action in ('update', 'merge'):
-                for idx in resolution.supersedes or []:
-                    if 1 <= idx <= len(similar_memories):
-                        supersede_ids.append(similar_memories[idx - 1]['memory_id'])
-
-        memory_db_obj = MemoryDB.from_memory(
-            memory,
-            uid,
-            conversation.id,
-            False,
-            source_id=conversation.id,
-            source_type="conversation",
-            source_signal="transcription",
-            artifact_ref=_transcript_artifact_ref(conversation),
-            extractor_id="new_memories_extractor",
-            subject_entity_id=subject_entity_id,
-            subject_attribution=subject_attribution,
-            client_device_id=getattr(conversation, "client_device_id", None),
-        )
-        memory_db_obj.is_locked = is_locked
-        # Corroboration is durability: a fact that updates/merges/supersedes an
-        # existing memory has now been seen more than once, so promote it out of
-        # the short-term tier it was born into.
-        if supersede_ids:
-            memory_db_obj.memory_tier = MemoryTier.long_term
-        parsed_memories.append(memory_db_obj)
-
-        for old_id in supersede_ids:
-            # Guard against superseding the very memory we're about to (re)write — the
-            # merged content can hash to an existing id.
-            if old_id and old_id != memory_db_obj.id:
-                invalidations.append((old_id, memory_db_obj.id))
-
-    if len(parsed_memories) == 0:
-        logger.info(f"No memories extracted for conversation {conversation.id}")
-        return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_LEGACY)
-
-    # Replace conversation-scoped memories only after extraction succeeds.
-    deletion_result = memories_db.delete_memories_for_conversation(uid, conversation.id)
-    for memory_id in deletion_result.get('vector_delete_ids', []):
-        delete_memory_vector(uid, memory_id)
-
-    logger.info(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
-    memories_db.save_memories(uid, [memory_write_payload(fact, MemoryApiExposure.LEGACY) for fact in parsed_memories])
-
-    for memory_db_obj in parsed_memories:
-        upsert_memory_vector(
-            uid,
-            memory_db_obj.id,
-            memory_db_obj.content,
-            memory_db_obj.category.value,
-            subject_entity_id=memory_db_obj.subject_entity_id,
-        )
-
-    # Invalidate (not delete) superseded memories: keep them as history but drop them from
-    # every retrieval path. Removing the vector also pulls them out of semantic search.
-    for old_id, new_id in invalidations:
-        try:
-            memories_db.invalidate_memory(uid, old_id, superseded_by=new_id)
-            delete_memory_vector(uid, old_id)
-            logger.info(f"Invalidated superseded memory {old_id} -> {new_id}")
-        except Exception:
-            logger.exception(f"Failed to invalidate superseded memory {old_id}")
-
-    if len(parsed_memories) > 0:
-        record_usage(uid, memories_created=len(parsed_memories))
-
-        try:
-            user_name = cast(str, get_user_name(uid))
-
-            for memory_db_obj in parsed_memories:
-                if memory_db_obj.kg_extracted or memory_db_obj.is_locked:
-                    continue
-                try:
-                    result = extract_knowledge_from_memory(uid, memory_db_obj.content, memory_db_obj.id, user_name)
-                    if result is not None:
-                        memories_db.set_memory_kg_extracted(uid, memory_db_obj.id)
-                except Exception:
-                    logging.exception(f"Error extracting knowledge graph from memory_id: {memory_db_obj.id}")
-        except Exception:
-            logging.exception("Error extracting knowledge graph from memory.")
-    return ConversationMemoryExtractionResult(count=len(parsed_memories), source=source, path=PATH_LEGACY)
+def _extract_memories_inner(
+    uid: str, conversation: Conversation, *, parity_capture: SurfaceParityCapture | None = None
+) -> ConversationMemoryExtractionResult:
+    db_client = getattr(db_client_module, 'db', None)
+    memory_service = MemoryService(db_client=db_client)
+    memory_service.ensure_canonical_mutation_ready(uid)
+    return _extract_memories_canonical(uid, conversation, db_client=db_client, parity_capture=parity_capture)
 
 
 def _transcript_artifact_ref(conversation: Conversation) -> Dict[str, Any]:
@@ -844,7 +1113,7 @@ def _save_action_items(uid: str, conversation: Conversation):
         return
 
     is_locked = conversation.is_locked
-    if conversation_capture.process_before_legacy(uid, conversation.id, conversation.structured.action_items):
+    if conversation_capture.process_conversation_before_legacy(uid, conversation):
         return
 
     action_items_data: List[Dict[str, Any]] = []
@@ -860,7 +1129,7 @@ def _save_action_items(uid: str, conversation: Conversation):
             'completed_at': action_item.completed_at,
             'conversation_id': conversation.id,
             'is_locked': is_locked,
-            **conversation_capture.canonical_fields(action_item, conversation.id),
+            **conversation_capture.canonical_conversation_fields(action_item, conversation),
         }
         action_items_data.append(action_item_data)
 
@@ -1257,14 +1526,10 @@ def process_conversation(
                 if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
                     submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
             if not defer_memory_extraction:
-                with memory_system_request_scope(uid) as memory_system:
-                    if memory_system == MemorySystem.CANONICAL:
-                        # Canonical writes intentionally fail closed. Do not hide a
-                        # retryable gate/store failure in an unobserved future and
-                        # report this conversation as successfully processed.
-                        _extract_memories(uid, conversation)
-                    else:
-                        submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
+                # Canonical source replacement is universal and intentionally
+                # fail-closed. Do not hide a retryable apply/store failure in an
+                # unobserved future while reporting finalization as successful.
+                _extract_memories(uid, conversation)
             submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
             submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 

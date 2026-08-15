@@ -2,12 +2,11 @@ import Foundation
 
 // MARK: - "Here's what it already knows to do" rows
 
-/// One row in the Home hub's knows-list: the live focus signal, a concrete
-/// task, a proactive insight, or a suggested question to ask.
+/// One row in the Home hub's knows-list: a concrete task, a proactive insight,
+/// or a suggested question to ask.
 enum HomeKnowsRowKind: Equatable {
   case task(id: String)
   case insight(id: String)
-  case focus
   case question
 }
 
@@ -19,7 +18,6 @@ struct HomeKnowsRow: Identifiable, Equatable {
     switch kind {
     case .task(let id): return "task-\(id)"
     case .insight(let id): return "insight-\(id)"
-    case .focus: return "focus"
     case .question: return "question-\(text)"
     }
   }

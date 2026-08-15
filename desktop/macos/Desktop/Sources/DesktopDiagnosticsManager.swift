@@ -437,6 +437,22 @@ final class DesktopDiagnosticsManager {
       ],
       trackRemotely: false)
   }
+
+  /// Terminal shared-capture failure for listen, manual recording, and Quick Note.
+  /// The event intentionally carries only a bounded retry count; the incident attachment is
+  /// produced by the common privacy-redacted Sentry path.
+  func recordTranscriptionSilentCaptureExhausted(recoveryAttempts: Int) {
+    recordUserVisibleIssue(
+      area: "transcription",
+      failureClass: "silent_capture",
+      phase: "audio_capture",
+      extra: [
+        "capture_path": "shared",
+        "recovery_attempts": recoveryAttempts,
+        "recovery_action": "stop_and_surface_error",
+        "recovery_result": "exhausted",
+      ])
+  }
   /// Record one bounded PTT attempt lifecycle snapshot (see
   /// `PTTAttemptLifecycleRecorder`). Routes through the shared ring buffer + Sentry
   /// attachment path. Emitted remotely (PostHog) for EVERY terminal disposition —
@@ -973,7 +989,7 @@ final class DesktopDiagnosticsManager {
     var header = ["# Omi Desktop Diagnostics"]
     header.append("generated_at: \(ISO8601DateFormatter.desktopDiagnostics.string(from: Date()))")
     header.append("privacy: redacted_local_export")
-    for key in ["build", "build_number", "os_version", "device_model", "system_audio_mode"] {
+    for key in ["build", "build_number", "os_version", "device_model", "audio_recording_mode"] {
       if let value = meta[key] {
         header.append("\(key): \(value)")
       }
@@ -1067,8 +1083,8 @@ final class DesktopDiagnosticsManager {
     "conversation", "transcript", "prompt", "response", "message", "memory", "title",
     "window", "screen", "ocr", "clipboard",
   ]
-
   private func redactSensitive(_ line: String, strictCloudRedaction: Bool = false) -> String {
+    if DiagnosticLogRedactionPolicy.shouldSkipRegexRedaction(line) { return "[redacted-oversize-log-line]" }
     let normalized = line.lowercased()
     if strictCloudRedaction, normalized.contains("device=[") {
       return "[redacted-device-bearing-log-line]"
@@ -1251,8 +1267,8 @@ final class DesktopDiagnosticsManager {
       "os_version": osVersionString(),
       "device_model": deviceModel(),
     ]
-    properties["system_audio_mode"] =
-      UserDefaults.standard.string(forKey: "systemAudioCaptureMode") ?? "onlyDuringMeetings"
+    properties["audio_recording_mode"] =
+      UserDefaults.standard.string(forKey: AssistantSettings.audioRecordingModeDefaultsKey) ?? "onlyMeetings"
     return properties
   }
 
@@ -1345,7 +1361,7 @@ final class DesktopDiagnosticsManager {
 
   private func safeIncidentArea(_ area: String) -> String {
     switch area {
-    case "ptt", "chat", "realtime", "crash", "startup": return area
+    case "ptt", "chat", "realtime", "crash", "startup", "transcription": return area
     default: return "other"
     }
   }
@@ -1371,7 +1387,8 @@ final class DesktopDiagnosticsManager {
     "source", "mode", "hub_active",
     "turn_audio_seconds", "voiced_audio_seconds",
     "peak", "rms", "is_near_zero", "watchdog_eligible", "consecutive_silent_turns",
-    "tcc_microphone_granted", "input_device_class", "recovery_action", "recovery_result",
+    "tcc_microphone_granted", "input_device_class", "capture_path", "recovery_attempts",
+    "recovery_action", "recovery_result",
     "osstatus", "keycode", "modifiers",
   ]
 
@@ -1412,6 +1429,7 @@ final class DesktopDiagnosticsManager {
     "auth_storage",
     "state_authority",
     "ptt_input_routing",
+    "account_cutover",
     "other",
   ]
 

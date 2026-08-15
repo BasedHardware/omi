@@ -86,7 +86,7 @@ enum UserFacingErrorPresentation {
         return "Omi is busy right now. Try again in a moment."
       case .unsupportedTierScopedBulkMutation:
         return "That option isn't available yet."
-      case .syncUploadRejected:
+      case .syncUploadRejected, .accountCutoverOfflineQueueBlocked:
         return fallback(for: context)
       case .unauthorized:
         return context.isSignIn

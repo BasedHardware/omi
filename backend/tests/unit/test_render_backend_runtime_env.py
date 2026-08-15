@@ -1,5 +1,6 @@
 """Renderer for backend Cloud Run runtime env."""
 
+import json
 import runpy
 from pathlib import Path
 
@@ -7,6 +8,12 @@ import pytest
 
 _SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'render_backend_runtime_env.py'
 _MODULE = runpy.run_path(str(_SCRIPT), run_name='render_backend_runtime_env')
+_MANIFEST = _MODULE['_load_yaml'](_MODULE['DEFAULT_MANIFEST'])
+
+
+@pytest.fixture(autouse=True)
+def _reuse_parsed_repo_manifest(monkeypatch):
+    monkeypatch.setitem(_MODULE, '_load_yaml', lambda _path: _MANIFEST)
 
 
 def _job_env_block(out: str, job_prefix: str) -> str:
@@ -98,66 +105,63 @@ def test_selected_job_rejects_unknown_name_without_emitting_partial_output(capsy
     assert capsys.readouterr().out == ''
 
 
-def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
-    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
-    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-us-central1-dev-vpc-1-subnet-1')
-    monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
-    monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
-    monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')
-    monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_NAME', 'Claude')
-    monkeypatch.setenv('MCP_OAUTH_CLAUDE_REDIRECT_URIS', 'https://claude.example/callback')
-    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://172.16.63.232')
-    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'dev'])
-    rc = _MODULE['main']()
-    assert rc == 0
-    out = capsys.readouterr().out
-
-    memory_env = _job_env_block(out, 'memory_maintenance_job')
-    assert r'STT_PRERECORDED_MODEL=parakeet\,modulate-velma-2' in out
-    assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true' in memory_env
-    assert 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true' in memory_env
+def test_render_dev_emits_memory_maintenance_job_outputs():
+    jobs = _MANIFEST['environments']['dev']['cloud_run']['jobs']
+    memory_job = jobs['memory-maintenance-job']
+    memory_env = _MODULE['_render_env_vars'](memory_job['env'])
+    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in memory_env
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
-    assert 'MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23' in memory_env
-    assert 'MEMORY_MODE=read' in memory_env
+    assert 'MEMORY_ENABLED_USERS' not in memory_env
+    assert 'MEMORY_ENABLED=on' in memory_env
+    assert 'MEMORY_MODE=' not in memory_env
+    assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED=false' in memory_env
     assert 'TYPESENSE_HOST_PORT=443' in memory_env
 
-    flags_marker = '__BACKEND_RUNTIME_ENV_memory_maintenance_job_flags__'
-    flags_start = out.index(f'memory_maintenance_job_flags<<{flags_marker}')
-    flags_body_start = out.index('\n', flags_start) + 1
-    flags_body_end = out.index(flags_marker, flags_body_start)
-    assert out[flags_body_start:flags_body_end].strip() == '--task-timeout=3600s --cpu=2 --memory=2Gi'
+    rendered_flags = _MODULE['_render_flags'](memory_job['flags'])
+    assert '--task-timeout=3600s' in rendered_flags
+    assert '--cpu=2' in rendered_flags
+    assert '--memory=2Gi' in rendered_flags
+    assert (
+        '--remove-env-vars=MEMORY_ENABLED_USERS,'
+        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,'
+        'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,'
+        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
+    ) in rendered_flags
+    memory_secrets = _MODULE['_render_secrets'](memory_job['secrets'])
+    assert 'OPENAI_API_KEY=OPENAI_API_KEY:latest' in memory_secrets
+    assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in memory_secrets
+    assert 'TYPESENSE_API_KEY=TYPESENSE_API_KEY:latest' in memory_secrets
 
-    assert 'memory_maintenance_job_secrets<<' in out
-    assert 'OPENAI_API_KEY=OPENAI_API_KEY:latest' in out
-    assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in out
-    assert 'TYPESENSE_API_KEY=TYPESENSE_API_KEY:latest' in out
 
-    notifications_env = _job_env_block(out, 'notifications_job')
+def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
+    serialized = json.dumps(_MANIFEST['environments']['dev'], sort_keys=True)
+    assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
+
+    cloud_run = _MANIFEST['environments']['dev']['cloud_run']
+    services = cloud_run['services']
+    for service in services.values():
+        env = service.get('env', {})
+        if 'OMI_PARITY_PACK_CAPTURE' in env:
+            assert env['OMI_PARITY_PACK_CAPTURE']['value'] == '0'
+            assert env['OMI_PARITY_PACK_ALLOWED_PRINCIPALS']['value'] == ''
+
+    notifications_job = cloud_run['jobs']['notifications-job']
+    notifications_env = notifications_job['env']
     forbidden_notifications_vars = {
+        'MEMORY_ENABLED',
         'MEMORY_MODE',
         'MEMORY_ENABLED_USERS',
         'MEMORY_V3_GET_ENABLED',
-        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
-        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'MEMORY_TYPESENSE_COLLECTION',
         'TYPESENSE_HOST',
         'TYPESENSE_HOST_PORT',
         'TYPESENSE_API_KEY',
     }
-    assert all(f'{name}=' not in notifications_env for name in forbidden_notifications_vars)
-    assert 'PINECONE_INDEX_NAME=memories-backend-dev' in notifications_env
-    assert _job_secret_lines(out, 'notifications_job') == {
-        'SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest',
-        'ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest',
-        'OPENAI_API_KEY=OPENAI_API_KEY:latest',
-        'PINECONE_API_KEY=PINECONE_API_KEY:latest',
-    }
-    secret_names_marker = '__BACKEND_RUNTIME_ENV_notifications_job_secret_names__'
-    names_start = out.index(f'notifications_job_secret_names<<{secret_names_marker}')
-    names_body_start = out.index('\n', names_start) + 1
-    names_body_end = out.index(secret_names_marker, names_body_start)
-    assert set(out[names_body_start:names_body_end].strip().split(',')) == {
+    assert forbidden_notifications_vars.isdisjoint(notifications_env)
+    assert notifications_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
+    assert set(notifications_job['secrets']) == {
         'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
@@ -188,15 +192,16 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     assert rc == 0
     out = capsys.readouterr().out
     job_env = _job_env_block(out, 'memory_maintenance_job')
-    assert 'MEMORY_MODE=off' in job_env
-    assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=false' in job_env
-    assert 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=false' in job_env
-    assert 'MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23' not in job_env
+    assert 'MEMORY_ENABLED=off' in job_env
+    assert 'MEMORY_MODE=' not in job_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in job_env
+    assert 'MEMORY_ENABLED_USERS' not in job_env
 
     assert 'DESKTOP_PREVIEW_PUBLISH_KEY=DESKTOP_PREVIEW_PUBLISH_KEY:latest' in _job_secret_lines(out, 'backend')
+    assert 'GOOGLE_MAPS_API_KEY=GOOGLE_MAPS_API_KEY:latest' in _job_secret_lines(out, 'backend_sync')
 
     notifications_env = _job_env_block(out, 'notifications_job')
-    assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED' not in notifications_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED' not in notifications_env
 
 
 def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatch):
@@ -226,6 +231,7 @@ def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatc
     for service in ('backend', 'backend_sync', 'backend_sync_backfill', 'backend_integration'):
         service_env = _job_env_block(output, service)
         assert 'OMI_LLM_GATEWAY_FEATURE_MODE=gateway' in service_env
+        assert 'OMI_LLM_CHAT_AGENT_ROUTE=gateway' in service_env
         assert 'OMI_LLM_GATEWAY_URL=http://172.16.160.108' in service_env
         assert 'OMI_LLM_GATEWAY_URL=http://127.0.0.1:9' not in service_env
 
@@ -255,8 +261,10 @@ def test_notifications_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert 'secrets_update_strategy: overwrite' not in text
     assert (
         '--remove-env-vars=MEMORY_MODE,MEMORY_ENABLED_USERS,MEMORY_V3_GET_ENABLED,'
-        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,'
-        'MEMORY_CANONICAL_CONSOLIDATION_ENABLED,MEMORY_TYPESENSE_COLLECTION,TYPESENSE_HOST,'
+        'MEMORY_CANONICAL_MAINTENANCE_ENABLED,'
+        'MEMORY_CANONICAL_CONSOLIDATION_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,'
+        'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,'
+        'MEMORY_TYPESENSE_COLLECTION,TYPESENSE_HOST,'
         'TYPESENSE_HOST_PORT,TYPESENSE_API_KEY'
     ) in text
 
@@ -278,6 +286,12 @@ def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
     assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job memory-maintenance-job' in text
+    prod_memory_job = _MANIFEST['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
+    prod_job_flags = _MODULE['_render_flags'](prod_memory_job['flags'])
+    assert 'MEMORY_ENABLED_USERS' in prod_job_flags
+    assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED' in prod_job_flags
+    assert 'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS' in prod_job_flags
+    assert 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED' in prod_job_flags
     assert 'Measure runner disk cleanup' in text
     assert 'Duration: $((SECONDS - started_at))s' in text
 
@@ -291,3 +305,43 @@ def test_auto_dev_memory_maintenance_workflow_selects_only_its_job():
     text = workflow.read_text(encoding='utf-8')
     assert 'Measure runner disk cleanup' in text
     assert 'Duration: $((SECONDS - started_at))s' in text
+
+
+def test_backend_service_deploys_remove_retired_canonical_memory_env_vars():
+    from scripts.runtime_env_memory_contract import RETIRED_CANONICAL_MEMORY_ENV
+
+    retired = ','.join(
+        name
+        for name in (
+            'MEMORY_ENABLED_USERS',
+            'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+            'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS',
+            'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+        )
+        if name in RETIRED_CANONICAL_MEMORY_ENV
+    )
+    assert set(retired.split(',')) == set(RETIRED_CANONICAL_MEMORY_ENV)
+    workflow_root = Path(__file__).resolve().parents[3] / '.github/workflows'
+    deploy_action = Path(__file__).resolve().parents[3] / '.github/actions/deploy-backend-stack/action.yml'
+    deploy_action_text = deploy_action.read_text(encoding='utf-8')
+    for workflow_name in ('gcp_backend.yml', 'gcp_backend_auto_dev.yml'):
+        text = (workflow_root / workflow_name).read_text(encoding='utf-8')
+        if './.github/actions/deploy-backend-stack' in text:
+            text += '\n' + deploy_action_text
+        assert text.count(f'--remove-env-vars={retired}') == 1
+        assert text.count(f'--remove-env-vars=HOSTED_PUSHER_API_URL,{retired}') == 2
+
+    action = Path(__file__).resolve().parents[3] / '.github/actions/sync-backfill-lifecycle/action.yml'
+    action_text = action.read_text(encoding='utf-8')
+    assert f'REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL,{retired}' in action_text
+    assert f'--remove-env-vars=HOSTED_PUSHER_API_URL,{retired}' in action_text
+
+    # The memory-maintenance-job is also a Cloud Run deploy that merges env
+    # vars across revisions. Its rendered --remove-env-vars must strip the
+    # same retired set so the stale binding does not survive the universal-
+    # memory change (see #11447, #11472).
+    manifest = _MANIFEST['environments']
+    for env in ('dev', 'prod'):
+        job = manifest[env]['cloud_run']['jobs']['memory-maintenance-job']
+        job_flags = _MODULE['_render_flags'](job['flags'])
+        assert f'--remove-env-vars={retired}' in job_flags, f'memory-maintenance-job for {env} must strip {retired}'

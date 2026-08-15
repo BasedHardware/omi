@@ -95,10 +95,14 @@ def _gateway_mode_env_maps(environment_config: JsonDict) -> list[Mapping[str, ob
             if isinstance(component, Mapping) and isinstance(component.get('env'), Mapping):
                 env_maps.append(cast(Mapping[str, object], component['env']))
     cloud_run = environment_config.get('cloud_run')
-    if isinstance(cloud_run, Mapping) and isinstance(cloud_run.get('services'), Mapping):
-        for service in cloud_run['services'].values():
-            if isinstance(service, Mapping) and isinstance(service.get('env'), Mapping):
-                env_maps.append(cast(Mapping[str, object], service['env']))
+    if isinstance(cloud_run, Mapping):
+        for targets_key in ('services', 'jobs'):
+            targets = cloud_run.get(targets_key)
+            if not isinstance(targets, Mapping):
+                continue
+            for target in targets.values():
+                if isinstance(target, Mapping) and isinstance(target.get('env'), Mapping):
+                    env_maps.append(cast(Mapping[str, object], target['env']))
     return env_maps
 
 

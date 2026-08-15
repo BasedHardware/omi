@@ -571,7 +571,7 @@ class TestPrivateCloudQueueCap:
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'routers', 'pusher.py'), encoding='utf-8') as f:
+        with open(os.path.join(backend_dir, 'utils', 'pusher_protocol.py'), encoding='utf-8') as f:
             src = f.read()
 
         tree = ast.parse(src)
@@ -585,7 +585,7 @@ class TestPrivateCloudQueueCap:
         pytest.fail("PRIVATE_CLOUD_QUEUE_MAX_SIZE constant not found")
 
     def test_overflow_warning_at_all_enqueue_points(self):
-        """All enqueue points must log overflow warning before deque drops oldest."""
+        """All 3 enqueue points must log overflow warning before deque drops oldest."""
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -594,7 +594,7 @@ class TestPrivateCloudQueueCap:
 
         # Count occurrences of the overflow warning pattern
         warning_count = src.count('private_cloud_queue full')
-        assert warning_count == 4, f"Expected 4 overflow warnings, found {warning_count}"
+        assert warning_count == 3, f"Expected 3 overflow warnings, found {warning_count}"
 
     def test_deque_maxlen_drops_oldest(self):
         """Verify deque(maxlen=N) drops oldest item when full."""

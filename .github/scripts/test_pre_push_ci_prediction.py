@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 import unittest
 from pathlib import Path
@@ -12,10 +13,19 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from pre_push_ci_prediction import (  # noqa: E402
     DESKTOP_FLOW_LINT_INPUTS,
+    DESKTOP_RELEASE_PATHSPECS,
     github_outputs,
     resolve_impact,
     select_checks,
 )
+
+_PLANNER_SPEC = importlib.util.spec_from_file_location(
+    "plan_desktop_release_pre_push_contract",
+    REPO_ROOT / ".github/scripts/plan-desktop-release.py",
+)
+assert _PLANNER_SPEC and _PLANNER_SPEC.loader
+planner = importlib.util.module_from_spec(_PLANNER_SPEC)
+_PLANNER_SPEC.loader.exec_module(planner)
 
 
 class PrePushCiPredictionTests(unittest.TestCase):
@@ -110,6 +120,11 @@ class PrePushCiPredictionTests(unittest.TestCase):
         self.assertTrue(plan.includes("desktop-swift-tests"))
         self.assertEqual(github_outputs(plan)["should_run_tests"], "true")
 
+    def test_swift_skip_policy_change_selects_the_expensive_test_phase(self) -> None:
+        plan = self.plan(["desktop/macos/scripts/swift-test-skips.json"])
+        self.assertTrue(plan.includes("desktop-swift-tests"))
+        self.assertEqual(github_outputs(plan)["should_run_tests"], "true")
+
     def test_unknown_component_paths_select_the_normal_component_lane(self) -> None:
         app = self.plan(["app/tooling/unknown-input.txt"])
         desktop = self.plan(["desktop/macos/Resources/unknown-input.txt"])
@@ -128,15 +143,47 @@ class PrePushCiPredictionTests(unittest.TestCase):
             with self.subTest(phase=phase):
                 self.assertTrue(plan.includes(phase))
 
-    def test_release_compile_preserves_pr_and_main_asymmetry(self) -> None:
+    def test_release_compile_runs_on_prs_and_pushes_for_releasable_desktop_changes(self) -> None:
+        # Release-lane-only breaks (whole-module strict concurrency) must die in
+        # PRs: the KG ResolveOutcome Sendable error (#11373/#11374) merged with a
+        # green debug lane and wedged every candidate for three merges.
         paths = ["desktop/macos/Resources/Info.plist"]
-        self.assertFalse(self.plan(paths, event="pull_request").includes("desktop-swift-release-compile"))
+        self.assertTrue(self.plan(paths, event="pull_request").includes("desktop-swift-release-compile"))
         self.assertTrue(self.plan(paths, event="push").includes("desktop-swift-release-compile"))
         self.assertTrue(
             self.plan(["desktop/macos/Desktop/Package.resolved"], event="pull_request").includes(
                 "desktop-swift-release-compile"
             )
         )
+        self.assertFalse(
+            self.plan(["backend/routers/updates.py"], event="pull_request").includes(
+                "desktop-swift-release-compile"
+            )
+        )
+
+    def test_ci_producer_pathspecs_cover_every_planner_desktop_release_path(self) -> None:
+        """Planner release inputs must wake exact-SHA desktop CI, with no silent drift."""
+        self.assertEqual(DESKTOP_RELEASE_PATHSPECS, planner.DESKTOP_RELEASE_PATHS)
+        for pathspec in planner.DESKTOP_RELEASE_PATHS:
+            probe = pathspec if Path(pathspec).suffix else f"{pathspec.rstrip('/')}/Resources/Info.plist"
+            with self.subTest(pathspec=pathspec, probe=probe):
+                plan = self.plan([probe], event="push")
+                self.assertTrue(plan.includes("desktop-ci-only"), probe)
+                self.assertTrue(plan.includes("desktop-swift-release-compile"), probe)
+                outputs = github_outputs(plan)
+                self.assertEqual(outputs["should_run"], "true", probe)
+                self.assertEqual(outputs["should_release_compile"], "true", probe)
+
+    def test_changelog_and_agents_docs_are_not_releasable_ci_inputs(self) -> None:
+        for path in (
+            "desktop/macos/CHANGELOG.json",
+            "desktop/macos/AGENTS.md",
+            "desktop/macos/changelog/unreleased/example.json",
+        ):
+            with self.subTest(path=path):
+                plan = self.plan([path], event="push")
+                self.assertFalse(plan.includes("desktop-ci-only"), path)
+                self.assertFalse(plan.includes("desktop-swift-release-compile"), path)
 
     def test_windows_kgworker_closure_inputs_select_only_the_targeted_test(self) -> None:
         for path in (

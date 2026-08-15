@@ -419,9 +419,7 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
     if not data.get('connected'):
         raise HTTPException(status_code=401, detail="Asana token refresh failed. Please reconnect.")
 
-    access_token = data.get('access_token')
-
-    if not access_token:
+    if not data.get('access_token'):
         raise HTTPException(status_code=401, detail="Asana not authenticated")
 
     try:
@@ -463,9 +461,7 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
     if not data.get('connected'):
         raise HTTPException(status_code=401, detail="Asana token refresh failed. Please reconnect.")
 
-    access_token = data.get('access_token')
-
-    if not access_token:
+    if not data.get('access_token'):
         raise HTTPException(status_code=401, detail="Asana not authenticated")
 
     try:
@@ -503,9 +499,7 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
     if not data.get('connected'):
         raise HTTPException(status_code=401, detail="ClickUp token refresh failed. Please reconnect.")
 
-    access_token = data.get('access_token')
-
-    if not access_token:
+    if not data.get('access_token'):
         raise HTTPException(status_code=401, detail="ClickUp not authenticated")
 
     try:
@@ -545,9 +539,7 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
     if not data.get('connected'):
         raise HTTPException(status_code=401, detail="ClickUp token refresh failed. Please reconnect.")
 
-    access_token = data.get('access_token')
-
-    if not access_token:
+    if not data.get('access_token'):
         raise HTTPException(status_code=401, detail="ClickUp not authenticated")
 
     try:
@@ -587,9 +579,7 @@ async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_u
     if not data.get('connected'):
         raise HTTPException(status_code=401, detail="ClickUp token refresh failed. Please reconnect.")
 
-    access_token = data.get('access_token')
-
-    if not access_token:
+    if not data.get('access_token'):
         raise HTTPException(status_code=401, detail="ClickUp not authenticated")
 
     try:

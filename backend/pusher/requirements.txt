@@ -5,10 +5,10 @@
 fastapi==0.121.0
 uvicorn==0.30.5
 uvloop==0.20.0
-starlette==0.49.1
+starlette==0.49.3
 websockets==12.0
 httpx==0.28.0
-python-multipart==0.0.27
+python-multipart==0.0.31
 
 # Data validation
 pydantic==2.11.10
@@ -22,7 +22,6 @@ firebase-admin==6.5.0
 google-cloud-firestore==2.20.0
 google-cloud-storage==2.18.0
 google-cloud-tasks==2.16.4
-google-cloud-translate==3.20.2
 google-auth==2.32.0
 google-api-python-client==2.139.0
 
@@ -49,7 +48,7 @@ prometheus-client==0.21.1
 anthropic>=0.52.0
 openai==2.38.0
 groq==0.9.0
-langchain==1.2.9
+langchain==1.2.10
 langchain-community==0.4.1
 langchain-core==1.3.3
 langchain-google-genai==3.2.0
@@ -57,7 +56,7 @@ langchain-openai==1.1.14
 langchain-pinecone==0.2.13
 langchain-text-splitters==1.1.2
 langgraph==1.0.10
-langsmith==0.8.0
+langsmith==0.8.5
 
 # Vector databases
 pinecone==7.3.0
@@ -70,10 +69,10 @@ neo4j==5.23.1
 deepgram-sdk==4.8.1
 
 # Security & encryption
-cryptography==46.0.7
+cryptography==48.0.1
 
 # Image processing (via tools/__init__ -> file_tools -> chat_file -> PIL)
-pillow==12.2.0
+pillow==12.3.0
 
 # Utilities
 python-dotenv==1.2.2

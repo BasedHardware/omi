@@ -6,7 +6,6 @@ the same API surface as google.cloud.firestore — collections,
 subcollections, where filters, batch operations, get_all, etc.
 """
 
-import sys
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Optional
@@ -18,6 +17,7 @@ from fake_firestore.document import FakeDocumentReference, NotFound, apply_trans
 # Module-level singleton — set by conftest.py before backend imports.
 _mock_store: Optional[MockFirestore] = None
 _original_document_set = None
+_original_document_delete = None
 _delete_field_noop_patched = False
 
 
@@ -80,6 +80,23 @@ def _patch_delete_field_missing_key_noop():
     _delete_field_noop_patched = True
 
 
+def _patch_document_delete_missing_doc_noop():
+    """Match Firestore: deleting a document that does not exist succeeds."""
+    global _original_document_delete
+    if _original_document_delete is not None:
+        return
+
+    _original_document_delete = FakeDocumentReference.delete
+
+    def _delete(self, timeout: Optional[float] = None) -> None:
+        try:
+            _original_document_delete(self, timeout=timeout)
+        except KeyError:
+            self._written_docs.discard(tuple(self._path))
+
+    FakeDocumentReference.delete = _delete
+
+
 def get_mock_firestore() -> MockFirestore:
     """Return the shared MockFirestore instance. Raises if not initialized."""
     if _mock_store is None:
@@ -92,6 +109,7 @@ def setup_fake_firestore() -> MockFirestore:
     global _mock_store
     _patch_document_merge_preserves_subcollections()
     _patch_delete_field_missing_key_noop()
+    _patch_document_delete_missing_doc_noop()
     _mock_store = MockFirestore()
     return _mock_store
 
@@ -251,11 +269,39 @@ def clear_user_data(uid: str):
         "chat_sessions",
         "folders",
         "hourly_usage",
+        # Universal memory authority. The E2E store is session-scoped, so
+        # omitting these collections leaks apply state and canonical rows from
+        # an earlier test into later legacy-compatibility scenarios.
+        "memory_items",
+        "memory_operations",
+        "memory_source_replacements",
+        "memory_outbox",
+        "memory_control",
+        "memory_state",
+        "memory_lineage",
+        "memory_historical_overrides",
+        "memory_evidence",
+        "memory_graph_assertions",
+        "memory_review_queue",
+        "memory_runs",
+        "memory_import_runs",
+        "memory_import_artifacts",
+        "memory_import_candidates",
+        "non_active_memory_routes",
+        "short_term_lifecycle_transitions",
+        "memory_legacy_fallback",
+        "memory_commits",
     ]:
         docs = list(user_ref.collection(coll_name).stream())
         for d in docs:
             d.reference.delete()
     try:
         user_ref.delete()
+    except Exception:
+        pass
+    # The maintenance inventory is deliberately outside the user document so
+    # account cleanup must remove its content-free marker separately.
+    try:
+        db.collection("canonical_memory_maintenance_registry").document(uid).delete()
     except Exception:
         pass

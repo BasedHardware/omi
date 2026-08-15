@@ -11,8 +11,10 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import re
 import stat
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,16 +31,20 @@ SWIFT_WATCH_INPUTS = (
     "Desktop/ObjCExceptionCatcher",
     "Desktop/CWebP",
 )
-RUST_WATCH_INPUTS = (
-    "Backend-Rust/Cargo.toml",
-    "Backend-Rust/Cargo.lock",
-    "Backend-Rust/rust-toolchain.toml",
-    "Backend-Rust/build.rs",
-    "Backend-Rust/.cargo",
-    "Backend-Rust/src",
-    "Backend-Rust/fixtures",
-    "Backend-Rust/templates",
-    "Backend-Rust/tests",
+PYTHON_WATCH_INPUTS = (
+    "../../backend/desktop_backend.py",
+    "../../backend/routers",
+    "../../backend/database",
+    "../../backend/utils",
+    "../../backend/requirements.txt",
+    "../../backend/pylock.toml",
+)
+
+# `swift test --filter` exits 0 when the filter matches nothing, so the reported
+# test counts — not the exit code — decide whether the selected coverage ran.
+EXECUTED_TEST_COUNT_PATTERNS = (
+    re.compile(r"Executed (\d+) tests?[,\s]"),
+    re.compile(r"Test run with (\d+) tests?"),
 )
 
 
@@ -107,12 +113,12 @@ def test_command_for(desktop_root: Path, language: str, test_filter: str) -> Tes
             ),
             cwd=desktop_root,
         )
-    if language == "rust":
+    if language == "python":
         return TestCommand(
             language=language,
             test_filter=selected_filter,
-            command=("cargo", "test", "--locked", selected_filter),
-            cwd=desktop_root / "Backend-Rust",
+            command=(".venv/bin/python", "-m", "pytest", selected_filter),
+            cwd=desktop_root.parent.parent / "backend",
         )
     raise ValueError(f"unsupported test language: {language!r}")
 
@@ -120,8 +126,8 @@ def test_command_for(desktop_root: Path, language: str, test_filter: str) -> Tes
 def watch_paths(desktop_root: Path, language: str) -> tuple[Path, ...]:
     """Return only source, test, and package inputs for the selected language."""
 
-    relative_inputs = SWIFT_WATCH_INPUTS if language == "swift" else RUST_WATCH_INPUTS
-    if language not in {"swift", "rust"}:
+    relative_inputs = SWIFT_WATCH_INPUTS if language == "swift" else PYTHON_WATCH_INPUTS
+    if language not in {"swift", "python"}:
         raise ValueError(f"unsupported test language: {language!r}")
     resolved_root = desktop_root.resolve()
     return tuple(resolved_root / relative_path for relative_path in relative_inputs)
@@ -170,11 +176,45 @@ def snapshot_paths(paths: Iterable[Path]) -> tuple[tuple[str, str, int, int], ..
     return tuple(entries)
 
 
+def executed_test_count(output: str) -> Optional[int]:
+    """Return the highest executed-test count the runner reported, or None if it reported none."""
+
+    counts = [int(count) for pattern in EXECUTED_TEST_COUNT_PATTERNS for count in pattern.findall(output)]
+    return max(counts) if counts else None
+
+
+def run_streaming(
+    command: Sequence[str],
+    *,
+    cwd: Path,
+    stream: object = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run the test command, echoing its output live while retaining it for inspection."""
+
+    destination = sys.stdout if stream is None else stream
+    captured: list[str] = []
+    with subprocess.Popen(
+        tuple(command),
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    ) as process:
+        assert process.stdout is not None
+        for line in process.stdout:
+            destination.write(line)
+            destination.flush()
+            captured.append(line)
+        returncode = process.wait()
+    return subprocess.CompletedProcess(tuple(command), returncode, "".join(captured), "")
+
+
 def emit_iteration_result(
     test_command: TestCommand,
     iteration: int,
     *,
-    runner: Runner = subprocess.run,
+    runner: Runner = run_streaming,
     clock: Clock = time.monotonic,
     emit: Emitter = print,
 ) -> int:
@@ -183,13 +223,23 @@ def emit_iteration_result(
     emit(f"Iteration {iteration}: running {test_command.language} filter {test_command.test_filter!r}")
     started_at = clock()
     try:
-        result = runner(test_command.command, cwd=test_command.cwd, check=False)
+        result = runner(test_command.command, cwd=test_command.cwd)
     except OSError as error:
         elapsed = clock() - started_at
         emit(f"Iteration {iteration}: ERROR ({error}) in {elapsed:.2f}s")
         return 127
 
     elapsed = clock() - started_at
+    if result.returncode == 0 and test_command.language == "swift":
+        # A green `swift test --filter` proves nothing on its own: it exits 0 both when the
+        # filter matched nothing and when the reporter never said what ran, so require the count.
+        executed = executed_test_count(getattr(result, "stdout", None) or "")
+        if executed is None:
+            emit(f"Iteration {iteration}: FAIL (no executed-test count reported; coverage unproven) in {elapsed:.2f}s")
+            return 1
+        if executed == 0:
+            emit(f"Iteration {iteration}: FAIL (filter {test_command.test_filter!r} matched 0 tests) in {elapsed:.2f}s")
+            return 1
     if result.returncode == 0:
         emit(f"Iteration {iteration}: PASS in {elapsed:.2f}s")
     else:
@@ -247,7 +297,7 @@ def run_watch(
     *,
     poll_interval: float,
     debounce: float,
-    runner: Runner = subprocess.run,
+    runner: Runner = run_streaming,
     snapshotter: Snapshotter = snapshot_paths,
     sleep: Sleeper = time.sleep,
     clock: Clock = time.monotonic,
@@ -292,12 +342,12 @@ def run_watch(
 
 def parser() -> argparse.ArgumentParser:
     argument_parser = argparse.ArgumentParser(
-        description="Run one explicit Swift or Rust desktop regression test with fast feedback.",
+        description="Run one explicit Swift or Python desktop regression test with fast feedback.",
         epilog=(
             "Examples:\n"
             "  python3 scripts/dev-feedback.py --once swift 'ChatTests/testSendsMessage'\n"
             "  python3 scripts/dev-feedback.py --watch swift 'ChatTests/testSendsMessage'\n"
-            "  python3 scripts/dev-feedback.py --watch rust 'handles_timeout'\n\n"
+            "  python3 scripts/dev-feedback.py --watch python 'tests/unit/test_desktop_chat.py'\n\n"
             "This is an opt-in inner loop. Run the existing full component suite before a PR."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -323,14 +373,15 @@ def parser() -> argparse.ArgumentParser:
         default=0.25,
         help="quiet time before rerunning after a save (default: 0.25)",
     )
-    argument_parser.add_argument("language", choices=("swift", "rust"), help="focused test runner")
-    argument_parser.add_argument("test_filter", metavar="FILTER", help="non-empty XCTest or cargo test filter")
+    argument_parser.add_argument("language", choices=("swift", "python"), help="focused test runner")
+    argument_parser.add_argument("test_filter", metavar="FILTER", help="non-empty XCTest or pytest test path")
     return argument_parser
 
 
 def validate_layout(desktop_root: Path, language: str) -> None:
-    expected_file = "Desktop/Package.swift" if language == "swift" else "Backend-Rust/Cargo.toml"
-    if not (desktop_root / expected_file).is_file():
+    expected_path = desktop_root / "Desktop/Package.swift" if language == "swift" else desktop_root.parent.parent / "backend/desktop_backend.py"
+    if not expected_path.is_file():
+        expected_file = "Desktop/Package.swift" if language == "swift" else "backend/desktop_backend.py"
         raise ValueError(f"{expected_file} was not found under desktop root {desktop_root}")
 
 

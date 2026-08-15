@@ -33,6 +33,23 @@ def _scan_agent_proxy_source(scanner: ModuleType, tmp_path: Path, source: str):
     return source_path, scanner.scan_dirs([str(service_dir)])
 
 
+def test_scan_dirs_reads_source_as_utf8(scanner, tmp_path, monkeypatch):
+    source_path = tmp_path / "unicode_source.py"
+    source_path.write_text('"""Unicode source - snowman: \u2603."""\n', encoding="utf-8")
+    real_open = open
+    opened = []
+
+    def tracked_open(path, *args, **kwargs):
+        opened.append((path, kwargs.get("encoding")))
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", tracked_open)
+
+    scanner.scan_dirs([str(tmp_path)])
+
+    assert opened == [(str(source_path), "utf-8")]
+
+
 def test_direct_local_sync_wrapper_is_reported_at_async_call_site(scanner, tmp_path):
     _source_path, results = _scan_source(
         scanner,
@@ -559,8 +576,44 @@ def test_diff_scope_includes_changed_transitive_helper_lines(scanner, tmp_path):
     finding = results["medium_file_io"][0]
     sink_line = finding["calls"][0]["sink_line"]
     scope = {
-        "ranges": {str(source_path): [(sink_line, sink_line)]},
+        "ranges": {scanner._normalize_path(str(source_path)): [(sink_line, sink_line)]},
         "import_changed_files": set(),
     }
 
     assert scanner.finding_in_changed_scope(finding, scope)
+
+
+def test_async_for_consumption_is_not_a_structural_finding(scanner, tmp_path):
+    """An endpoint that drives an async generator suspends and cannot become `def`."""
+    source_path = tmp_path / "streaming_consumer.py"
+    source_path.write_text(
+        textwrap.dedent("""
+            @router.get("/stream")
+            async def consume_stream():
+                async for chunk in produce():
+                    continue
+                return "done"
+            """),
+        encoding="utf-8",
+    )
+
+    results = scanner.scan_dirs([str(source_path)])
+
+    assert results["no_await_should_be_def"] == []
+
+
+def test_async_with_is_not_a_structural_finding(scanner, tmp_path):
+    source_path = tmp_path / "context_consumer.py"
+    source_path.write_text(
+        textwrap.dedent("""
+            @router.get("/context")
+            async def use_context():
+                async with acquire() as handle:
+                    return handle
+            """),
+        encoding="utf-8",
+    )
+
+    results = scanner.scan_dirs([str(source_path)])
+
+    assert results["no_await_should_be_def"] == []

@@ -4,6 +4,15 @@ import XCTest
 
 @MainActor
 final class DashboardIntelligenceStoreTests: XCTestCase {
+  override func setUp() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+    AccountCutoverControlManager.shared.apply(.legacyDefault)
+  }
+
+  override func tearDown() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+  }
+
   func testEmptyProjectionIsAValidCalmState() async {
     let api = FakeDashboardIntelligenceClient()
     api.projection = projection(items: [])
@@ -253,6 +262,24 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
       navigation.consumeIfAvailable(taskIDs: ["task-1"], candidateIDs: []),
       .task("task-1")
     )
+  }
+
+  @MainActor
+  func testNavigationRequestClearsOnRuntimeOwnerChange() async {
+    let navigation = TaskNavigationRequestStore()
+    navigation.request(
+      task: TaskActionItem(
+        id: "task-owner-a",
+        description: "Owner A task",
+        completed: false,
+        createdAt: Date(timeIntervalSince1970: 0)
+      ))
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+    await Task.yield()
+
+    XCTAssertNil(navigation.peek())
+    XCTAssertNil(navigation.pendingTask)
   }
 
   func testExactNavigationTargetsAreHydratedBeforeDashboardAcceptsTheRoute() async {
@@ -743,6 +770,15 @@ private final class MemoryDashboardOutbox: DashboardFeedbackOutboxPersisting {
 
 @MainActor
 final class DashboardFeedbackOutboxOwnerIsolationTests: XCTestCase {
+  override func setUp() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+    AccountCutoverControlManager.shared.apply(.legacyDefault)
+  }
+
+  override func tearDown() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+  }
+
   func testDefaultOwnerTracksAuthenticationChanges() {
     let suite = "DashboardFeedbackOutboxOwnerIsolationTests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!

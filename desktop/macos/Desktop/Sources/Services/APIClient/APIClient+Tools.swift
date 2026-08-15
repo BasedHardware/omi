@@ -8,11 +8,64 @@ extension APIClient {
     let toolName: String
     let resultText: String
     let isError: Bool
+    let sources: [ToolSource]?
 
     enum CodingKeys: String, CodingKey {
       case toolName = "tool_name"
       case resultText = "result_text"
       case isError = "is_error"
+      case sources
+    }
+  }
+
+  struct ToolSource: Decodable, Sendable {
+    let kind: String
+    let sourceID: String
+    let title: String
+    let preview: String
+    let createdAt: String?
+    let momentTimestampMs: Int?
+    let appName: String?
+    let url: String?
+
+    enum CodingKeys: String, CodingKey {
+      case kind, title, preview, url
+      case sourceID = "source_id"
+      case createdAt = "created_at"
+      case momentTimestampMs = "moment_timestamp_ms"
+      case appName = "app_name"
+    }
+
+    init(
+      kind: String,
+      sourceID: String,
+      title: String,
+      preview: String,
+      createdAt: String?,
+      momentTimestampMs: Int?,
+      appName: String?,
+      url: String?
+    ) {
+      self.kind = kind
+      self.sourceID = sourceID
+      self.title = title
+      self.preview = preview
+      self.createdAt = createdAt
+      self.momentTimestampMs = momentTimestampMs
+      self.appName = appName
+      self.url = url
+    }
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      kind = try container.decodeIfPresent(String.self, forKey: .kind) ?? ""
+      sourceID = try container.decodeIfPresent(String.self, forKey: .sourceID) ?? ""
+      title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+      preview = try container.decodeIfPresent(String.self, forKey: .preview) ?? ""
+      createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+      momentTimestampMs = try container.decodeIfPresent(Int.self, forKey: .momentTimestampMs)
+      appName = try container.decodeIfPresent(String.self, forKey: .appName)
+      url = try container.decodeIfPresent(String.self, forKey: .url)
     }
   }
 
@@ -33,6 +86,11 @@ extension APIClient {
   }
 
   struct MemorySearchRequest: Encodable {
+    let query: String
+    let limit: Int
+  }
+
+  struct SearchChunksRequest: Encodable {
     let query: String
     let limit: Int
   }
@@ -122,6 +180,26 @@ extension APIClient {
       includeTranscript: includeTranscript)
     return try await post(
       "v1/tools/conversations/search",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  /// Semantic search over raw transcript chunks — the verbatim layer behind
+  /// `toolSearchConversations`, whose summary matching drops exact dates, names,
+  /// and numbers. Typed sources reuse kind "conversation" with the PARENT
+  /// conversation id, so chunk citations share the summary results' ref
+  /// namespace. Older backends return the same envelope with no sources.
+  func toolSearchConversationChunks(
+    query: String,
+    limit: Int = 5,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ToolResponse {
+    let body = SearchChunksRequest(query: query, limit: limit)
+    return try await post(
+      "v1/tools/conversations/search-chunks",
       body: body,
       customBaseURL: nil,
       expectedOwnerId: expectedOwnerId,

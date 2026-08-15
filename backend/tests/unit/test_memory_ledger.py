@@ -29,7 +29,8 @@ _BACKEND = Path(__file__).resolve().parents[2]
 
 @pytest.fixture(scope="module", autouse=True)
 def _load_modules():
-    """Load the ledger and legacy projection helpers against stubbed Firestore."""
+    """Load fresh database.memory_ledger (+ its database.projection_repair dep) against
+    a stubbed database._client + google.cloud.firestore_v1 chain."""
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
     client_stub.document_id_from_seed = lambda seed: "id-" + str(abs(hash(seed)) % (10**12))
@@ -48,14 +49,11 @@ def _load_modules():
         "google.cloud.firestore_v1": firestore_v1_stub,
     }
     with stub_modules(fakes):
-        projection_repair = load_module_fresh(
-            "database.projection_repair",
-            os.path.join(str(_BACKEND), "database", "projection_repair.py"),
-        )
         memory_ledger = load_module_fresh(
             "database.memory_ledger",
             os.path.join(str(_BACKEND), "database", "memory_ledger.py"),
         )
+        projection_repair = memory_ledger.projection_repair
         globals()["memory_ledger"] = memory_ledger
         globals()["projection_repair"] = projection_repair
         yield
@@ -814,55 +812,6 @@ def test_append_commit_with_builder_exhaustion_never_enqueues_projection(monkeyp
 
     assert database.transaction.call_count == firestore_transaction_retry.DEFAULT_MAX_ATTEMPTS
     assert queued == []
-
-
-def test_enqueue_projection_repairs_chunks_large_commit():
-    commit_sizes = []
-
-    class FakeSnapshot:
-        exists = False
-
-    class FakeDocument:
-        def collection(self, _value):
-            return self
-
-        def document(self, _value):
-            return self
-
-        def get(self):
-            return FakeSnapshot()
-
-    class FakeBatch:
-        def __init__(self):
-            self.write_count = 0
-
-        def set(self, _ref, _payload):
-            self.write_count += 1
-
-        def commit(self):
-            if self.write_count > 500:
-                raise ValueError("Firestore batch too large")
-            commit_sizes.append(self.write_count)
-
-    class FakeDB:
-        def collection(self, _value):
-            return FakeDocument()
-
-        def batch(self):
-            return FakeBatch()
-
-    memory_ids = [f"memory-{index}" for index in range(1000)]
-    repair_ids = projection_repair.enqueue_projection_repairs(
-        "uid-1",
-        {
-            "commit_id": "large-commit",
-            "mutations": [{"type": "retract_fact", "fact_id": memory_id} for memory_id in memory_ids],
-        },
-        firestore_client=FakeDB(),
-    )
-
-    assert len(repair_ids) == 1000
-    assert commit_sizes == [499, 499, 2]
 
 
 def test_process_projection_repairs_applies_queued_vector_repairs(monkeypatch):

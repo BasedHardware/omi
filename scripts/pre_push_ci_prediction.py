@@ -33,7 +33,6 @@ PHASE_ORDER = (
     "app-analysis-tests",
     "app-compile-smoke",
     "desktop-agent-runtime",
-    "desktop-rust",
     "desktop-swift-tests",
     "desktop-swift-release-compile",
     "desktop-swift-notification-release-regression",
@@ -86,6 +85,7 @@ DESKTOP_SWIFT_TEST_INPUTS = {
     "desktop/macos/test.sh",
     "desktop/macos/scripts/run-swift-ci.sh",
     "desktop/macos/scripts/swift-test-suites.sh",
+    "desktop/macos/scripts/swift-test-skips.json",
     "desktop/macos/scripts/swift-test-skip-ratchet.py",
     "desktop/macos/scripts/check_desktop_test_quality.py",
     "desktop/macos/scripts/check-main-actor-xctest-hooks.py",
@@ -122,6 +122,20 @@ def _load_desktop_flow_lint_inputs() -> frozenset[str]:
 
 
 DESKTOP_FLOW_LINT_INPUTS = _load_desktop_flow_lint_inputs()
+
+
+def _load_desktop_release_pathspecs() -> tuple[str, ...]:
+    """Load the planner's releasable pathspecs so exact-SHA CI stays aligned."""
+    path = REPO_ROOT / ".github/scripts/plan-desktop-release.py"
+    spec = importlib.util.spec_from_file_location("plan_desktop_release_for_ci", path)
+    if spec is None or spec.loader is None:  # pragma: no cover - repository corruption
+        raise RuntimeError(f"cannot load desktop release planner from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return tuple(module.DESKTOP_RELEASE_PATHS)
+
+
+DESKTOP_RELEASE_PATHSPECS = _load_desktop_release_pathspecs()
 
 
 def _default_read_text(path: str) -> str | None:
@@ -208,17 +222,23 @@ def _is_app_compile_smoke_input(path: str) -> bool:
     }
 
 
+def _matches_desktop_release_pathspec(path: str, pathspec: str) -> bool:
+    """Match a changed file against one planner git pathspec."""
+    if path == pathspec:
+        return True
+    # Planner directory pathspecs (for example desktop/macos) have no suffix.
+    if Path(pathspec).suffix:
+        return False
+    prefix = pathspec.rstrip("/") + "/"
+    return path.startswith(prefix)
+
+
 def _is_releasable_desktop_path(path: str) -> bool:
-    if path.startswith(("desktop/macos/Backend-Rust/", "desktop/macos/changelog/")):
+    if path.startswith("desktop/macos/changelog/"):
         return False
     if path in {"desktop/macos/CHANGELOG.json", "desktop/macos/AGENTS.md"}:
         return False
-    return path.startswith("desktop/macos/") or path in {
-        "codemagic.yaml",
-        ".github/scripts/plan-desktop-release.py",
-        ".github/workflows/desktop_auto_release.yml",
-        ".github/workflows/desktop-swift-ci.yml",
-    }
+    return any(_matches_desktop_release_pathspec(path, pathspec) for pathspec in DESKTOP_RELEASE_PATHSPECS)
 
 
 def _is_desktop_swift_test_input(path: str) -> bool:
@@ -298,8 +318,6 @@ def resolve_impact(
                 selected.add("desktop-swift-tests")
             if _is_desktop_notification_input(path):
                 selected.add("desktop-swift-notification-release-regression")
-            if path.startswith("desktop/macos/Backend-Rust/"):
-                selected.add("desktop-rust")
             if _is_desktop_agent_runtime_input(path):
                 selected.add("desktop-agent-runtime")
             if path.startswith("desktop/macos/e2e/") or path in DESKTOP_FLOW_LINT_INPUTS:
@@ -331,7 +349,11 @@ def resolve_impact(
     )
     if releasable_desktop:
         selected.add("desktop-ci-only")
-    if releasable_desktop and (event == "push" or package_changed):
+        # Release compile runs on PRs too, not just pushes: strict-concurrency
+        # errors that only manifest under whole-module release optimization
+        # otherwise land on main and wedge the release train (#11373/#11374 —
+        # the KG ResolveOutcome Sendable break shipped through a PR whose debug
+        # lane stayed green and blocked every candidate for three merges).
         selected.add("desktop-swift-release-compile")
 
     return ImpactPlan(frozenset(selected))
@@ -356,7 +378,6 @@ def github_outputs(plan: ImpactPlan) -> dict[str, str]:
         "has_app_compile_smoke": str(plan.includes("app-compile-smoke")).lower(),
         "has_app_dart": str(plan.includes("app-analysis-tests")).lower(),
         "has_desktop_agent_runtime": str(plan.includes("desktop-agent-runtime")).lower(),
-        "has_desktop_rust": str(plan.includes("desktop-rust")).lower(),
         "should_run": str(plan.includes("desktop-ci-only")).lower(),
         "should_run_tests": str(plan.includes("desktop-swift-tests")).lower(),
         "should_release_compile": str(plan.includes("desktop-swift-release-compile")).lower(),
