@@ -4,3 +4,4 @@ dist/
 .DS_Store
 *.local.ts
 /data/
+/.local/
