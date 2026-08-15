@@ -387,6 +387,24 @@ class _Query:
             else:
                 doc_id = cur.get("id", "")
             return {"values": [cur.get(f) for f in real], "id": doc_id}
+        if isinstance(cur, (list, tuple)):
+            # Firestore positional cursor: values align 1:1 with the order_by clauses. A value at a
+            # ``__name__`` position (or a trailing DocumentReference for the implicit document-name
+            # tiebreak) is the id keyset; the rest are the payload order values. e.g.
+            # enrich_historical_memory_graph pages with ``start_after([updated_at, coll.document(id)])``
+            # over ``order_by('updated_at').order_by('__name__')``. Treating the whole list as one value
+            # (the old bare-value fallback) mis-keyed the cursor and broke pagination past page 1 (cubic
+            # PR 10887 #378).
+            order_fields = [f for f, _ in self._order_by]
+            values: List[Any] = []
+            doc_id: Any = ""
+            for i, v in enumerate(cur):
+                field = order_fields[i] if i < len(order_fields) else None
+                if field == "__name__" or (field is None and isinstance(v, _DocRef)):
+                    doc_id = v.id if isinstance(v, _DocRef) else (getattr(v, "id", None) or str(v).rsplit("/", 1)[-1])
+                else:
+                    values.append(v)
+            return {"values": values, "id": doc_id}
         # a bare cursor value (single-field): pair it with an empty id lower bound
         return {"values": [cur], "id": ""}
 

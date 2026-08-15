@@ -169,6 +169,30 @@ def test_group_query_order_by_streams_ordered_and_rejects_field_order_plus_keyse
         list(q.start_after("users/u1/events/e1").stream())
 
 
+def test_positional_list_start_after_cursor_paginates():
+    # cubic PR 10887 #378: enrich_historical_memory_graph pages with a Firestore POSITIONAL cursor
+    #   .order_by('updated_at', DESC).order_by('__name__', DESC).start_after([updated_at, coll.document(id)])
+    # The facade must align the list 1:1 with the order_by clauses (updated_at -> values, the trailing
+    # DocRef -> id keyset), not treat the whole list as a single value (which mis-keyed the cursor and
+    # leaked the _DocRef into the store query -> BSON encode crash on Mongo). Verified live on Mongo.
+    c = _client()
+    for i in range(1, 6):
+        c.document(f"users/u1/memory_items/m{i}").set({"updated_at": i})
+
+    def page(start=None):
+        q = c.collection("users/u1/memory_items").order_by("updated_at", "DESCENDING").order_by("__name__", "DESCENDING")
+        if start is not None:
+            q = q.start_after(start)
+        return [s.id for s in q.limit(2).stream()]
+
+    p1 = page()
+    assert p1 == ["m5", "m4"]
+    p2 = page(start=[4, c.document("users/u1/memory_items/m4")])  # [updated_at, DocRef] positional cursor
+    assert p2 == ["m3", "m2"]
+    p3 = page(start=[2, c.document("users/u1/memory_items/m2")])
+    assert p3 == ["m1"]
+
+
 def test_group_query_name_filter_with_docref_bound_matches_full_path():
     # cubic PR 10887 #338: a collection-group __name__ filter matches _id, which IS the full document
     # path (query_group spans parents, no collection to prefix). The facade must forward a _DocRef bound
