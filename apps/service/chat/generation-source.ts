@@ -9,6 +9,10 @@ import {
   runGatewaySseRequest,
 } from "./gateway-sse";
 import {
+  stampForGatewayEngine,
+  type GatewayEngineIdentity,
+} from "./gateway-engine-identity";
+import {
   startGatewayReadOnlyToolLoop,
   validateGatewayReadOnlyToolLoop,
   type GatewayReadOnlyToolLoopOptions,
@@ -205,6 +209,12 @@ export interface GatewayChatGenerationSourceOptions {
     (input: ChatGenerationSourceInput) => GatewayReadOnlyToolLoopOptions | undefined;
   /** Test seam: skip wall-clock backoff while keeping the retry budget. */
   readonly retrySleep?: (ms: number) => Promise<void>;
+  /**
+   * Boot-time identity from the configured gateway's `/ready`. Omitted identity
+   * stays unknown; `real-provider` is derived only from a declared
+   * `real_model_proxy: true` on that body.
+   */
+  readonly engineIdentity?: GatewayEngineIdentity;
 }
 
 const SAFE_GATEWAY_LANE = /^omi:auto:[a-z0-9][a-z0-9-]{0,95}$/u;
@@ -458,17 +468,20 @@ export const createGatewayChatGenerationSource = (
     },
   });
   // Gateway reachability is not evidence that a provider was contacted. An
-  // injected transport is named separately, but neither transport may mint a
-  // real-provider capability without a source/run-bound gateway receipt.
-  return registerTrustedChatGenerationSourceCapability(source, options.fetch === undefined ? {
-    tier: "unknown",
-    adapter: "omi-llm-gateway",
-    deterministic: false,
-  } : {
-    tier: "unknown",
-    adapter: "omi-llm-gateway-injected-transport",
-    deterministic: false,
-  }, TRUSTED_CAPABILITY_TOKEN);
+  // injected transport is named separately. real-provider is minted only from
+  // a /ready body that declared real_model_proxy: true — never from a live
+  // socket, an injected fetch, or a missing schema.
+  const stamp = options.engineIdentity === undefined
+    ? {
+      tier: "unknown" as const,
+      adapter: options.fetch === undefined ? "omi-llm-gateway" : "omi-llm-gateway-injected-transport",
+      deterministic: false as const,
+    }
+    : stampForGatewayEngine(
+      options.engineIdentity,
+      options.fetch === undefined ? "default" : "injected",
+    );
+  return registerTrustedChatGenerationSourceCapability(source, stamp, TRUSTED_CAPABILITY_TOKEN);
 };
 
 /**

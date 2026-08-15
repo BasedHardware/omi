@@ -79,7 +79,7 @@ Grep these, not prose.
 
 | Slug | Level | When |
 |---|---|---|
-| `service.boot` | info | Process started. Fields: `persona` (`demo`\|`qa`), `stt_engine` (`scripted`\|`mlx-whisper`), `gateway_kind` (`none`\|`configured`), `port`, `storage` (`:memory:`\|`file`). Never keys or origins. |
+| `service.boot` | info | Process started. Fields: `persona` (`demo`\|`qa`), `stt_engine` (`scripted`\|`mlx-whisper`), `gateway_kind` (`none`\| the gateway's `/ready` `schema` \| `unknown`), `gateway_model` (the `/ready` `model` when present), `port`, `storage` (`:memory:`\|`file`). Never keys or origins. A configured gateway that does not answer `/ready`, or answers without a schema, is `unknown` — never guessed, never defaulted to real. |
 | `service.ready` | info | Listener is accepting requests |
 | `service.shutdown` | info | SIGINT/SIGTERM teardown |
 | `service.boot.refused` | error | Boot aborted. Field: `reason` (closed code below) |

@@ -9,6 +9,11 @@ import {
   createGatewayRequiredChatGenerationSource,
 } from "../chat/generation-source";
 import {
+  bootGatewayKind,
+  bootGatewayModel,
+  probeGatewayEngineIdentity,
+} from "../chat/gateway-engine-identity";
+import {
   DevSttConfigError,
   resolveDevSttConfig,
 } from "../listen/mlx-whisper-boot";
@@ -218,11 +223,14 @@ const openDatabase = (path: string): Database => {
   }
 };
 
-const main = (): void => {
+const main = async (): Promise<void> => {
   const config = readConfig();
   const db = openDatabase(config.databasePath);
   const stores = createSqliteLocalServiceStores(db);
 
+  const engineIdentity = config.llmGateway === null
+    ? null
+    : await probeGatewayEngineIdentity(config.llmGateway.url);
   let serviceForGatewayTools: ReturnType<typeof createLocalDevService> | null = null;
   const generationSource = config.llmGateway === null
     ? createGatewayRequiredChatGenerationSource()
@@ -230,6 +238,7 @@ const main = (): void => {
       gatewayUrl: config.llmGateway.url,
       laneId: config.llmGateway.laneId,
       serviceToken: config.llmGateway.token,
+      ...(engineIdentity === null ? {} : { engineIdentity }),
       // Gateway tools are composed only for an explicitly configured gateway.
       // The closure binds the already-built authenticated app, so the tool
       // cannot bypass the canonical `/v1/tasks` authorization/read path.
@@ -353,13 +362,15 @@ const main = (): void => {
     + `  served-request count prints below whenever it changes.\n`
     + `  if it stays at 0 while the app shows memories, the app is NOT talking to this backend.\n\n`,
   );
+  const gatewayModel = bootGatewayModel(engineIdentity);
   appendRuntimeLog({
     proc: "service",
     level: "info",
     event: "service.boot",
     persona: config.seedPersona === "demo" ? "demo" : "qa",
     stt_engine: config.stt.kind,
-    gateway_kind: config.llmGateway === null ? "none" : "configured",
+    gateway_kind: bootGatewayKind(engineIdentity),
+    ...(gatewayModel === null ? {} : { gateway_model: gatewayModel }),
     port: config.port,
     storage: config.databasePath === ":memory:" ? ":memory:" : "file",
   });
@@ -399,4 +410,4 @@ const main = (): void => {
   process.on("SIGTERM", shutdown);
 };
 
-main();
+void main();

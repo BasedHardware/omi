@@ -1095,6 +1095,156 @@ test("successful gateway turn shows Context preview, a local test gateway, and n
   }
 });
 
+test("canned gateway receipt keeps Local test gateway, the canned answer, and never the real-provider label", async () => {
+  // red-proof: mapping omi.local-test-gateway.v1 to the real-provider branch, or
+  // dropping the canned adapter match, makes this fail. Paired with
+  // apps/service/chat/chat-provenance.test.ts which boots the canned gateway.
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const now = Date.UTC(2026, 7, 7, 12, 0, 0);
+  const cannedText = "Local test gateway answered.";
+  const store = {
+    status: () => status(),
+    subscribe() { return () => {}; },
+    async refresh() {},
+    async history() {
+      return {
+        messages: [{
+          role: "assistant",
+          text: cannedText,
+          delivery: {
+            kind: "canonical",
+            serverId: "canned-gateway-assistant",
+            clientMessageId: null,
+            generationOutcome: "completed",
+          },
+          attachments: [],
+          agentRun: {
+            state: "complete",
+            events: [
+              {
+                sequence: 1, createdAt: now, kind: "capability_receipt",
+                safeSummary: "Loopback gateway declared",
+                details: { tier: "unknown", adapter: "omi.local-test-gateway.v1", deterministic: false },
+              },
+              {
+                sequence: 2, createdAt: now + 1, kind: "terminal",
+                safeSummary: "Response complete",
+                details: {
+                  terminalOutcome: "completed",
+                  terminalCode: "completed",
+                  retryable: false,
+                  recoveryAction: null,
+                },
+              },
+            ],
+          },
+        }],
+        hasOlder: false,
+        olderCursor: null,
+      };
+    },
+    async loadOlder() { return { messages: [], hasOlder: false, olderCursor: null }; },
+    async send() {},
+    capabilities() {
+      return { maxAttachmentsPerMessage: 2, maxAttachmentBytes: 10_000, allowedAttachmentMimeTypes: ["application/pdf"] };
+    },
+    stagingAvailable() { return false; },
+    async stageAttachment() { return null; },
+    async scanAttachment() { return "clean"; },
+    async deadLetters() { return []; },
+    async discardDeadLetter() {},
+    async cancel() {},
+    async resolveApproval() {},
+  };
+  const rendered = await renderComponent(ChatProduction, { store });
+  try {
+    const label = rendered.container.querySelector(".chat-agent-capability");
+    assert.ok(label);
+    assert.equal(label.textContent, EN_MESSAGES["chat.agentLocalTestGateway"]);
+    assert.equal(rendered.container.querySelector(".chat-message-text")?.textContent, cannedText);
+    assert.equal(rendered.container.textContent.includes(EN_MESSAGES["chat.agentProvider"]), false);
+    assert.equal(rendered.container.textContent.includes("External model response ("), false);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("real-provider receipt names the model and is not Local test gateway", async () => {
+  // red-proof: keep the pre-provenance adapter mapping that always rendered
+  // "Local test gateway" for omi-llm-gateway-shaped receipts; this chip must
+  // become the named real-provider label once tier is real-provider.
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const now = Date.UTC(2026, 7, 7, 12, 0, 0);
+  const store = {
+    status: () => status(),
+    subscribe() { return () => {}; },
+    async refresh() {},
+    async history() {
+      return {
+        messages: [{
+          role: "assistant",
+          text: "Not the canned gateway string.",
+          delivery: {
+            kind: "canonical",
+            serverId: "real-gateway-assistant",
+            clientMessageId: null,
+            generationOutcome: "completed",
+          },
+          attachments: [],
+          agentRun: {
+            state: "complete",
+            events: [
+              {
+                sequence: 1, createdAt: now, kind: "capability_receipt",
+                safeSummary: "Loopback gateway declared",
+                details: {
+                  tier: "real-provider",
+                  adapter: "omi.local-model-gateway.v1/glm-4.7",
+                  deterministic: false,
+                },
+              },
+              {
+                sequence: 2, createdAt: now + 1, kind: "terminal",
+                safeSummary: "Response complete",
+                details: {
+                  terminalOutcome: "completed",
+                  terminalCode: "completed",
+                  retryable: false,
+                  recoveryAction: null,
+                },
+              },
+            ],
+          },
+        }],
+        hasOlder: false,
+        olderCursor: null,
+      };
+    },
+    async loadOlder() { return { messages: [], hasOlder: false, olderCursor: null }; },
+    async send() {},
+    capabilities() {
+      return { maxAttachmentsPerMessage: 2, maxAttachmentBytes: 10_000, allowedAttachmentMimeTypes: ["application/pdf"] };
+    },
+    stagingAvailable() { return false; },
+    async stageAttachment() { return null; },
+    async scanAttachment() { return "clean"; },
+    async deadLetters() { return []; },
+    async discardDeadLetter() {},
+    async cancel() {},
+    async resolveApproval() {},
+  };
+  const rendered = await renderComponent(ChatProduction, { store });
+  try {
+    const label = rendered.container.querySelector(".chat-agent-capability");
+    assert.ok(label);
+    assert.equal(label.textContent, "External model response (glm-4.7)");
+    assert.equal(label.textContent.includes(EN_MESSAGES["chat.agentLocalTestGateway"]), false);
+    assert.notEqual(rendered.container.querySelector(".chat-message-text")?.textContent, "Local test gateway answered.");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("pending approval shows Allow, Deny, and Cancel that call resolveApproval", async () => {
   const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
   const now = Date.UTC(2026, 7, 7, 12, 0, 0);

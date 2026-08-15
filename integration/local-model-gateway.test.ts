@@ -165,9 +165,14 @@ test("loopback model gateway authenticates, rewrites the lane, and pipes SSE inc
     const ready = await waitForReady(readyPath);
     expect(ready.disclosure).toBe("local real-model proxy");
     expect(ready.real_model_proxy).toBe(true);
+    expect(ready.model).toBe("glm-4.7");
     expect(ready.provider_host).toBe("127.0.0.1");
     expect(ready.production_model).toBeUndefined();
     expect(String(ready.url)).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    const httpReady = await (await fetch(`${ready.url}/ready`)).json() as Record<string, unknown>;
+    expect(httpReady.schema).toBe("omi.local-model-gateway.v1");
+    expect(httpReady.real_model_proxy).toBe(true);
+    expect(httpReady.model).toBe("glm-4.7");
     const denied = await fetch(`${ready.url}/v1/chat/completions`, { method: "POST" });
     expect(denied.status).toBe(401);
     const wrongLane = await fetch(`${ready.url}/v1/chat/completions`, {

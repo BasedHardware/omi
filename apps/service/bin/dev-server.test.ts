@@ -306,6 +306,14 @@ test("dev-server entrypoint completes a gateway-backed chat turn with default me
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
+      const url = new URL(request.url);
+      if (request.method === "GET" && (url.pathname === "/ready" || url.pathname === "/")) {
+        return Response.json({
+          schema: "omi.local-test-gateway.v1",
+          disclosure: "local test gateway",
+          production_model: false,
+        });
+      }
       const body = await request.json() as Record<string, unknown>;
       const messagesJson = JSON.stringify(body.messages);
       if (!messagesJson.includes("memory_projection")) {
@@ -357,7 +365,8 @@ test("dev-server entrypoint completes a gateway-backed chat turn with default me
     expect(agentEvents).toContainEqual(expect.objectContaining({
       kind: "capability_receipt",
       details: expect.objectContaining({
-        adapter: "omi-llm-gateway",
+        adapter: "omi.local-test-gateway.v1",
+        tier: "unknown",
       }),
     }));
     const contextReceipt = agentEvents.find((event) => event.kind === "context_receipt");
