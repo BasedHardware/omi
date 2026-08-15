@@ -13,8 +13,19 @@ enum FloatingBarNotificationPreviewPolicy {
   ///   (present, then re-hide). Previews-muted does not silence this path:
   ///   only the notification toggle decides, and a muted-preview + disabled-bar
   ///   combination still owes a visible surface.
-  static func shouldShowInBarPreview(previewsEnabled: Bool, floatingBarEnabled: Bool) -> Bool {
-    previewsEnabled || !floatingBarEnabled
+  /// - Bar disabled + an explicit `deliverSystemBanner` caller → skip the card so the
+  ///   banner it asked for is not swallowed. The temp-show path is a card on a bar the
+  ///   user turned off: it auto-dismisses after seconds and leaves nothing behind, which
+  ///   is not a surface for a functional notice that must reach a user away from the app.
+  ///   The screen-recording repair notice is delivered once per broken-capture episode
+  ///   (`screenCaptureResetShownKey`, cleared only on recovery), so a missed card is the
+  ///   whole notice. With the bar enabled the card stays authoritative and the
+  ///   no-duplicate-surface rule is unchanged.
+  static func shouldShowInBarPreview(
+    previewsEnabled: Bool, floatingBarEnabled: Bool, deliverSystemBanner: Bool
+  ) -> Bool {
+    if deliverSystemBanner && !floatingBarEnabled { return false }
+    return previewsEnabled || !floatingBarEnabled
   }
 
   /// The system-banner fallback only fires when the user explicitly muted in-bar
