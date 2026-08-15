@@ -3,46 +3,10 @@ import { createRoot } from "react-dom/client";
 import { FIXTURE_STATES as MEMORY_STATES } from "../production/memory-fixtures.js";
 import { CONVERSATION_FIXTURE_STATES } from "../production/conversation-fixtures.js";
 import { FIXTURE_STATES as TASK_STATES } from "../production/task-fixtures.js";
-import { PROPOSITION_FIXTURE_STATES } from "../production/proposition-fixtures.js";
-import { CHAT_FIXTURE_STATES } from "../production/chat-fixtures.js";
-import { SETTINGS_FIXTURE_STATES } from "../production/settings-fixtures.js";
-import { POLISH_EVIDENCE_STATES } from "../production/polish-evidence-fixtures.js";
+import { LAB_LOCALES, MATRIX_SURFACES, SURFACES, type SurfaceDefinition } from "./catalog.js";
 import "./surface-lab.css";
 
-type SurfaceId = "memories" | "memories-platform" | "conversations" | "conversation-detail" | "folders" | "tasks" | "chat" | "listen" | "settings";
 type PreviewMode = "mobile" | "desktop" | "compare";
-
-type SurfaceDefinition = {
-  id: SurfaceId;
-  label: string;
-  description: string;
-  states: readonly string[];
-  polishDomain?: keyof typeof POLISH_EVIDENCE_STATES;
-};
-
-const SURFACES: readonly SurfaceDefinition[] = [
-  { id: "memories", label: "Memories", description: "Saved context, editing, provenance, and sync recovery", states: MEMORY_STATES },
-  { id: "conversations", label: "Conversations", description: "Library rows, filters, locks, and discarded records", states: CONVERSATION_FIXTURE_STATES },
-  { id: "conversation-detail", label: "Conversation detail", description: "Selected-row summary, organization, and visibility", states: CONVERSATION_FIXTURE_STATES },
-  { id: "tasks", label: "Tasks", description: "Today, Tomorrow, Later, keyboard flow, and queue recovery", states: TASK_STATES },
-  // The platform generation is a separate record class, not the legacy surface with
-  // fields hidden — propositions with lineage, no editing, honest recall completeness.
-  { id: "memories-platform", label: "Memories (platform)", description: "Synthesized propositions, lineage, and honest recall completeness", states: PROPOSITION_FIXTURE_STATES },
-  { id: "chat", label: "Chat", description: "Server-authoritative mirror, streaming, echo reconcile, and attachment cap", states: CHAT_FIXTURE_STATES },
-  { id: "settings", label: "Settings", description: "Identity, appearance, and the entitlement upsell", states: SETTINGS_FIXTURE_STATES },
-  { id: "folders", label: "Folders", description: "Read-only organization and filtered conversation entry", states: POLISH_EVIDENCE_STATES.folders, polishDomain: "folders" },
-  { id: "listen", label: "Listen", description: "Capture preflight, backlog, transcript, and recovery truth", states: POLISH_EVIDENCE_STATES.listen, polishDomain: "listen" },
-];
-
-const MATRIX_SURFACES: readonly SurfaceDefinition[] = [
-  { id: "memories-platform", label: "Memories", description: "Canonical polish lifecycle evidence", states: POLISH_EVIDENCE_STATES.memories, polishDomain: "memories" },
-  { id: "tasks", label: "Tasks", description: "Canonical polish lifecycle evidence", states: POLISH_EVIDENCE_STATES.tasks, polishDomain: "tasks" },
-  { id: "conversations", label: "Conversations", description: "Canonical polish lifecycle evidence", states: POLISH_EVIDENCE_STATES.conversations, polishDomain: "conversations" },
-  { id: "folders", label: "Folders", description: "Canonical polish lifecycle evidence", states: POLISH_EVIDENCE_STATES.folders, polishDomain: "folders" },
-  { id: "chat", label: "Chat", description: "Canonical polish lifecycle evidence", states: POLISH_EVIDENCE_STATES.chat, polishDomain: "chat" },
-  { id: "listen", label: "Listen", description: "Canonical polish lifecycle evidence", states: POLISH_EVIDENCE_STATES.listen, polishDomain: "listen" },
-  { id: "settings", label: "Settings", description: "Canonical polish lifecycle evidence", states: POLISH_EVIDENCE_STATES.settings, polishDomain: "settings" },
-];
 
 const MATRIX_MODE = new URLSearchParams(location.search).get("matrix") === "1";
 const SURFACE_CATALOG = MATRIX_MODE ? MATRIX_SURFACES : SURFACES;
@@ -97,7 +61,7 @@ function SurfaceLab(): React.JSX.Element {
     return requested && selected.states.includes(requested) ? requested : defaultState(selected);
   });
   const [mode, setMode] = useState<PreviewMode>(() => selectedMode(initial.get("mode")));
-  const [locale, setLocale] = useState(() => initial.get("locale")?.trim() || "en-US");
+  const [locale, setLocale] = useState(() => initial.get("locale")?.trim() || LAB_LOCALES[0]!);
 
   const updateAddress = (nextSurface: SurfaceDefinition, nextState: string, nextMode: PreviewMode, nextLocale: string): void => {
     const params = new URLSearchParams({ lab: "1", surface: nextSurface.id, state: nextState, mode: nextMode, locale: nextLocale, ...(MATRIX_MODE ? { matrix: "1" } : {}) });
@@ -122,6 +86,7 @@ function SurfaceLab(): React.JSX.Element {
     setLocale(nextLocale);
     updateAddress(surface, state, mode, nextLocale);
   };
+  const chooseLocaleDefault = (): string => LAB_LOCALES[0] ?? "en-US";
 
   return (
     <main className="surface-lab">
@@ -149,7 +114,10 @@ function SurfaceLab(): React.JSX.Element {
           </div>
           <label>
             Locale
-            <input value={locale} onChange={(event) => chooseLocale(event.target.value || "en-US")} spellCheck="false" />
+            <input value={locale} onChange={(event) => chooseLocale(event.target.value || chooseLocaleDefault())} spellCheck="false" list="surface-lab-locales" />
+            <datalist id="surface-lab-locales">
+              {LAB_LOCALES.map((item) => <option key={item} value={item} />)}
+            </datalist>
           </label>
         </div>
       </section>
