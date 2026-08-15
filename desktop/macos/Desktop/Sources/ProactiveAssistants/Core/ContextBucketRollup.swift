@@ -185,12 +185,14 @@ enum ContextProactivityPromptBuilder {
     snapshot: ContextBucketSnapshot,
     tasks: [ContextDirectorTaskContext],
     frame: CapturedFrame,
-    recentDeliveries: [ContextBucketRecentDelivery] = []
+    recentDeliveries: [ContextBucketRecentDelivery] = [],
+    timeZone: TimeZone = .current
   ) -> String {
     """
     \(directorStablePrompt(snapshot: snapshot))
 
-    \(directorVolatilePrompt(tasks: tasks, frame: frame, recentDeliveries: recentDeliveries))
+    \(directorVolatilePrompt(
+      tasks: tasks, frame: frame, recentDeliveries: recentDeliveries, timeZone: timeZone))
     """
   }
 
@@ -244,7 +246,9 @@ enum ContextProactivityPromptBuilder {
       request is insight or suggest; never infer an owner or due date and never create a task
       candidate from actionability alone.
       Do not re-deliver a point already delivered for this bucket unless the validated facts
-      add something materially new. Prefer silence over restating.\(lookup)
+      add something materially new. Prefer silence over restating.
+      Timestamps supplied below are already in the user's local time zone. When a message
+      mentions a date or time, use that local form as written; never convert to or mention UTC.\(lookup)
 
       \(stableBucket)
       """
@@ -253,7 +257,8 @@ enum ContextProactivityPromptBuilder {
   static func directorVolatilePrompt(
     tasks: [ContextDirectorTaskContext],
     frame: CapturedFrame,
-    recentDeliveries: [ContextBucketRecentDelivery] = []
+    recentDeliveries: [ContextBucketRecentDelivery] = [],
+    timeZone: TimeZone = .current
   ) -> String {
     let actionableCutoff = frame.captureTime.addingTimeInterval(
       ContextDirectorTaskSelection.futureHorizon)
@@ -261,9 +266,9 @@ enum ContextProactivityPromptBuilder {
       guard let dueAt = task.dueAt else { return "- \(task.description)" }
       if dueAt > actionableCutoff {
         return
-          "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))\n  Reference only: already exists; do not resurface or create it yet."
+          "- \(task.description)\n  Due at: \(localTimestamp(dueAt, timeZone: timeZone))\n  Reference only: already exists; do not resurface or create it yet."
       }
-      return "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))"
+      return "- \(task.description)\n  Due at: \(localTimestamp(dueAt, timeZone: timeZone))"
     }
     let taskContext = taskLines.joined(separator: "\n")
     var prompt = """
@@ -273,7 +278,7 @@ enum ContextProactivityPromptBuilder {
       == CURRENT FRAME METADATA ==
       App: \(frame.appName)
       Window: \(frame.windowTitle ?? "")
-      Captured at (UTC): \(utcTimestamp(frame.captureTime))
+      Captured at: \(localTimestamp(frame.captureTime, timeZone: timeZone))
       """
     if let recent = recentDeliveriesSection(recentDeliveries, now: frame.captureTime) {
       prompt += "\n\n\(recent)"
@@ -320,10 +325,16 @@ enum ContextProactivityPromptBuilder {
     return String(collapsed.prefix(ContextBucketRecentDelivery.summaryCharacterLimit))
   }
 
-  private static func utcTimestamp(_ date: Date) -> String {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+  /// Times shown to the director are the user's wall-clock times: the model quotes
+  /// supplied timestamps verbatim into user-visible messages, and a user should
+  /// never read "04:00 UTC" for their own midnight deadline. Single format
+  /// authority for every timestamp a director prompt carries; the retrieval-hop
+  /// section reuses it so retrieved rows cannot reintroduce UTC.
+  static func localTimestamp(_ date: Date, timeZone: TimeZone) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = timeZone
+    formatter.dateFormat = "yyyy-MM-dd HH:mm zzz"
     return formatter.string(from: date)
   }
 }

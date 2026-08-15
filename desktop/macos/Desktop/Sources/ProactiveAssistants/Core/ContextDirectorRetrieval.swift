@@ -76,11 +76,15 @@ enum ContextDirectorRetrievalHop {
   /// sits below `ScreenDerivedContent.untrustedPreamble` at the top of the
   /// stable prompt. The static instruction lines come first so no retrieved
   /// byte can precede the label that frames it as quoted data.
-  static func promptSection(query: String, items: [ContextRetrievedItem]) -> String? {
+  static func promptSection(
+    query: String, items: [ContextRetrievedItem], timeZone: TimeZone = .current
+  ) -> String? {
     guard !items.isEmpty else { return nil }
     let lines = items.prefix(perSourceResultLimit * retrievedNamespaces.count).map { item -> String in
       var line = "- \(item.ref)"
-      if let createdAt = item.createdAt, !createdAt.isEmpty { line += " (\(createdAt))" }
+      if let createdAt = item.createdAt, !createdAt.isEmpty {
+        line += " (\(localizedCreatedAt(createdAt, timeZone: timeZone)))"
+      }
       if !item.title.isEmpty { line += " \(item.title):" }
       return line + " \(item.preview)"
     }
@@ -92,6 +96,22 @@ enum ContextDirectorRetrievalHop {
       Lookup query: \(query)
       \(lines.joined(separator: "\n"))
       """
+  }
+
+  /// Backend `createdAt` arrives as UTC ISO-8601. The stable prompt promises the
+  /// model that every timestamp below it is already local, so a retrieved row must
+  /// not smuggle a `...Z` instant back in; parseable values are re-rendered through
+  /// the director's one timestamp format. An unparseable string passes through
+  /// verbatim — it was never a machine timestamp the model could misread as one.
+  private static func localizedCreatedAt(_ createdAt: String, timeZone: TimeZone) -> String {
+    let withFractional = ISO8601DateFormatter()
+    withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let plain = ISO8601DateFormatter()
+    plain.formatOptions = [.withInternetDateTime]
+    guard let date = withFractional.date(from: createdAt) ?? plain.date(from: createdAt) else {
+      return createdAt
+    }
+    return ContextProactivityPromptBuilder.localTimestamp(date, timeZone: timeZone)
   }
 
   static func isRetrievedNamespaceRef(_ ref: String) -> Bool {

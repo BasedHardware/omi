@@ -187,6 +187,30 @@ final class ContextProactivityRetrievalHopTests: XCTestCase {
       "static instruction lines precede retrieved content, never the reverse")
   }
 
+  func testPromptSectionRendersCreatedAtInTheUsersLocalZoneNeverUTC() throws {
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+    let items = ContextDirectorRetrievalHop.items(fromSources: [source()], kind: "conversation")
+    let section = try XCTUnwrap(
+      ContextDirectorRetrievalHop.promptSection(
+        query: "last omi release", items: items, timeZone: timeZone))
+    // The stable prompt promises every timestamp below it is already local, so
+    // the backend's UTC instant must be re-rendered, not quoted with its Z.
+    XCTAssertTrue(section.contains("(2026-08-01 06:00 EDT)"), section)
+    XCTAssertFalse(section.contains("2026-08-01T10:00:00Z"))
+  }
+
+  func testPromptSectionPassesUnparseableCreatedAtThroughVerbatim() throws {
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+    let items = [
+      ContextRetrievedItem(
+        ref: "conversation:conv-1", title: "Release chat", preview: "beta live",
+        createdAt: "yesterday afternoon")
+    ]
+    let section = try XCTUnwrap(
+      ContextDirectorRetrievalHop.promptSection(query: "q", items: items, timeZone: timeZone))
+    XCTAssertTrue(section.contains("(yesterday afternoon)"))
+  }
+
   func testRetrievedSectionStaysBelowTheUntrustedPreambleAndOutOfTheCachedPrefix() throws {
     let snapshot = makeSnapshot()
     let stable = ContextProactivityPromptBuilder.directorStablePrompt(
