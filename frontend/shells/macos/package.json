@@ -6,6 +6,6 @@
   "type": "module",
   "scripts": {
     "build": "echo \"shell-macos: Swift build is scripts/build-shell.sh (needs a macOS toolchain); not part of pnpm -r build\"",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node ../../scripts/run-node-test.mjs tests/*.test.mjs"
   }
 }

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { after } from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
@@ -11,8 +13,10 @@ import { dependencyDistFingerprint } from "./dependency-dist-state.mjs";
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(packageRoot, "../../..");
 const dependencyDistCheck = resolve(repoRoot, "integration/check-surfaces-dependency-dist.mjs");
+const require = createRequire(import.meta.url);
 
 let viteServer;
+let closingHarness;
 let verifiedDependencyFingerprint;
 
 function assertDependencyDistIsCurrent() {
@@ -41,9 +45,25 @@ async function server() {
     appType: "custom",
     logLevel: "silent",
     optimizeDeps: { noDiscovery: true },
-    server: { middlewareMode: true },
+    server: {
+      middlewareMode: true,
+      hmr: false,
+      watch: null,
+      preTransformRequests: false,
+    },
   });
   return viteServer;
+}
+
+async function stopEsbuildService() {
+  try {
+    const vitePkg = dirname(require.resolve("vite/package.json"));
+    const esbuildEntry = require.resolve("esbuild", { paths: [vitePkg] });
+    const esbuild = await import(pathToFileURL(esbuildEntry).href);
+    if (typeof esbuild.stop === "function") await esbuild.stop();
+  } catch {
+    // vite never started an esbuild service in this file.
+  }
 }
 
 export async function loadCheckedExport(moduleName, exportName, { assertCurrent, loadModule }) {
@@ -144,7 +164,21 @@ export async function renderComponent(Component, props) {
 }
 
 export async function closeRenderHarness() {
-  if (!viteServer) return;
-  await viteServer.close();
-  viteServer = undefined;
+  if (closingHarness) return closingHarness;
+  closingHarness = (async () => {
+    const server = viteServer;
+    viteServer = undefined;
+    try {
+      if (server) await server.close();
+    } finally {
+      if (server) await stopEsbuildService();
+    }
+  })();
+  try {
+    await closingHarness;
+  } finally {
+    closingHarness = undefined;
+  }
 }
+
+after(closeRenderHarness, { timeout: 15_000 });

@@ -8,7 +8,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -b",
-    "test": "node --test 'dist/**/*.test.js'",
+    "test": "node ../../scripts/run-node-test.mjs 'dist/**/*.test.js'",
     "lint": "echo testkit:no-lint-yet"
   },
   "dependencies": {

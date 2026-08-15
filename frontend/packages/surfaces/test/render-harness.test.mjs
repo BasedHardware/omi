@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { loadCheckedExport, renderComponent } from "./render-harness.mjs";
@@ -48,4 +49,13 @@ test("a component that throws while rendering does not leak jsdom globals", asyn
   await assert.rejects(renderComponent(ThrowsMidRender, {}), /M6 render explosion/);
 
   for (const name of names) assertDescriptorRestored(name, before.get(name));
+});
+
+test("render harness teardown always stops vite and the esbuild service", async () => {
+  const source = await readFile(new URL("./render-harness.mjs", import.meta.url), "utf8");
+  assert.match(source, /hmr:\s*false/);
+  assert.match(source, /watch:\s*null/);
+  assert.match(source, /preTransformRequests:\s*false/);
+  assert.match(source, /esbuild\.stop/);
+  assert.match(source, /after\(closeRenderHarness,\s*\{\s*timeout:\s*15_000\s*\}\)/);
 });
