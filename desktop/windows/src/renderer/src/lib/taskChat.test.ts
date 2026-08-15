@@ -72,9 +72,7 @@ describe('transcript persistence', () => {
   })
 
   it('caps the stored transcript at TASK_CHAT_MAX_MESSAGES, keeping the newest', () => {
-    const long = Array.from({ length: TASK_CHAT_MAX_MESSAGES + 10 }, (_, i) =>
-      msg('user', `m${i}`)
-    )
+    const long = Array.from({ length: TASK_CHAT_MAX_MESSAGES + 10 }, (_, i) => msg('user', `m${i}`))
     saveTaskChat('b-1', long)
     const stored = loadTaskChat('b-1')
     expect(stored).toHaveLength(TASK_CHAT_MAX_MESSAGES)

@@ -90,7 +90,7 @@ export type TaskDetailAction = 'toggleCompletion' | 'edit' | 'investigate' | 'de
  *  editing is a section, not an action — editable only while the task is active
  *  (mac hides the whole section for completed tasks). */
 export function availableActions(
-  task: ActionItemRecord,
+  _task: ActionItemRecord,
   opts: { hasChat: boolean }
 ): TaskDetailAction[] {
   const actions: TaskDetailAction[] = ['toggleCompletion', 'edit']

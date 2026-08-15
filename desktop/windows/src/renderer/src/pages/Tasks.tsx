@@ -1,11 +1,40 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ListChecks, Check, RefreshCw, Plus, Trash2, Calendar, X, Loader2 } from 'lucide-react'
+import {
+  ListChecks,
+  Check,
+  RefreshCw,
+  Plus,
+  Trash2,
+  Calendar,
+  X,
+  Loader2,
+  Flag,
+  Sun,
+  CheckSquare,
+  Square
+} from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { fetchAllActionItems } from '../lib/actionItems'
 import { PageHeader } from '../components/layout/PageHeader'
 import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
 import { EmptyState } from '../components/ui/EmptyState'
+import { TaskDetailPanel } from '../components/tasks/TaskDetailPanel'
+import { TaskChatPanel } from '../components/tasks/TaskChatPanel'
+import {
+  EMPTY_SELECTION,
+  applySelectionClick,
+  clearSelection,
+  selectAll,
+  type TaskSelection
+} from '../lib/taskSelection'
+import {
+  bulkDelete,
+  bulkReschedule,
+  bulkSetCompleted,
+  describeBulkResult
+} from '../lib/taskBulkOps'
+import { PRIORITY_TINT, normalizePriority, todayDueAtMs } from '../lib/taskFields'
 import { toast } from '../lib/toast'
 import type { ActionItemRecord } from '../../../shared/types'
 import type { Conversation as CloudConversation } from '../lib/omiApi.generated'
@@ -125,6 +154,10 @@ const BUCKET_LABEL: Record<Bucket, string> = {
   nodate: 'No due date'
 }
 
+// Priority filter chips (mac parity: TaskFilterTag.priorityHigh/Medium/Low —
+// exact, case-sensitive match on the stored value, like mac's tag matching).
+type PriorityFilter = 'any' | 'high' | 'medium' | 'low'
+
 // Move the keyboard selection across the flat, rendered task order. Clamps at the
 // ends (no wrap) and, when nothing is selected yet, Down picks the first row and Up
 // the last — mirroring Mac's `moveSelection` (TasksPage.swift).
@@ -147,16 +180,30 @@ export function Tasks(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [filter, setFilter] = useState<'all' | 'open' | 'done'>('open')
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('any')
 
+  // The Today-section composer (mac parity: #11600's showsTodayComposer). Text
+  // only — Enter always creates the task due today (23:59 local) and the composer
+  // stays open for back-to-back entry. Hidden in the done view and while selecting.
   const [composing, setComposing] = useState(false)
   const [draft, setDraft] = useState('')
-  const [draftDue, setDraftDue] = useState('')
   const [saving, setSaving] = useState(false)
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState('')
   const [dueEditingId, setDueEditingId] = useState<number | null>(null)
   const [busy, setBusy] = useState<Set<number>>(new Set())
+
+  // Trailing panels — mutually exclusive, like mac's detail/chat exclusivity.
+  const [detailTaskId, setDetailTaskId] = useState<number | null>(null)
+  const [chatTaskId, setChatTaskId] = useState<number | null>(null)
+
+  // Multi-select mode (mac parity: TaskMultiSelection). An explicit mode, entered
+  // by the Select toggle; row clicks then drive the selection model.
+  const [selectMode, setSelectMode] = useState(false)
+  const [selection, setSelection] = useState<TaskSelection>(EMPTY_SELECTION)
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [rescheduleOpen, setRescheduleOpen] = useState(false)
 
   // Keyboard-navigation selection (mac parity). The highlighted row a keyboard
   // user is driving; independent of the mouse hover/edit state above.
@@ -271,17 +318,16 @@ export function Tasks(): React.JSX.Element {
     }
   }
 
+  // Enter in the Today composer: create due TODAY (mac's todayDueAt, 23:59 local)
+  // and keep the composer open for back-to-back entry (#11600's commitTodayComposer).
   const saveNew = async (): Promise<void> => {
     const text = draft.trim()
     if (!text || saving) return
     setSaving(true)
     try {
-      const dueAt = dateInputToMs(draftDue)
-      await window.omi.tasksCreate({ description: text, ...(dueAt != null ? { dueAt } : {}) })
+      await window.omi.tasksCreate({ description: text, dueAt: todayDueAtMs() })
       // `onTasksChanged` surfaces the new (optimistic) row — no reload needed.
-      setComposing(false)
       setDraft('')
-      setDraftDue('')
     } catch (e) {
       toast('Could not create task', { tone: 'error', body: apiError(e) })
     } finally {
@@ -304,15 +350,41 @@ export function Tasks(): React.JSX.Element {
     setEditingId(t.id)
   }
 
+  // Detail panel opening refuses while selecting (mac: openDetail is refused in
+  // multi-select mode) and closes the chat panel — the two are mutually exclusive.
+  const openDetail = (t: ActionItemRecord): void => {
+    if (selectMode) return
+    setChatTaskId(null)
+    setDetailTaskId(t.id)
+  }
+
+  const openInvestigate = (t: ActionItemRecord): void => {
+    setDetailTaskId(null)
+    setChatTaskId(t.id)
+  }
+
+  const exitSelectMode = (): void => {
+    setSelectMode(false)
+    setSelection(clearSelection())
+    setRescheduleOpen(false)
+  }
+
   const openCount = useMemo(() => items.filter((t) => !t.completed).length, [items])
   const doneCount = items.length - openCount
 
+  const matchesPriority = useCallback(
+    (t: ActionItemRecord): boolean => priorityFilter === 'any' || t.priority === priorityFilter,
+    [priorityFilter]
+  )
+
   const visible = useMemo(
     () =>
-      items.filter((t) =>
-        filter === 'all' ? true : filter === 'open' ? !t.completed : t.completed
+      items.filter(
+        (t) =>
+          (filter === 'all' ? true : filter === 'open' ? !t.completed : t.completed) &&
+          matchesPriority(t)
       ),
-    [items, filter]
+    [items, filter, matchesPriority]
   )
 
   // For open/all: group open items by due bucket. For done/all: a flat
@@ -326,7 +398,7 @@ export function Tasks(): React.JSX.Element {
       nodate: []
     }
     for (const t of items) {
-      if (t.completed) continue
+      if (t.completed || !matchesPriority(t)) continue
       groups[bucketOf(t)].push(t)
     }
     for (const b of BUCKET_ORDER) {
@@ -337,18 +409,24 @@ export function Tasks(): React.JSX.Element {
         return c.createdAt - a.createdAt
       })
     }
-    return BUCKET_ORDER.filter((b) => groups[b].length > 0).map((b) => ({
-      bucket: b,
-      items: groups[b]
-    }))
-  }, [items, filter])
+    // The Today section renders while the composer is open even when it has no
+    // rows yet (#11600's rendersSection), so the composer has a home.
+    return BUCKET_ORDER.filter((b) => groups[b].length > 0 || (b === 'today' && composing)).map(
+      (b) => ({
+        bucket: b,
+        items: groups[b]
+      })
+    )
+  }, [items, filter, matchesPriority, composing])
 
   const doneItems = useMemo(() => {
     if (filter === 'open') return []
     // No completed_at on the local row; updatedAt is stamped when a task is toggled
     // complete, so it's the faithful "most recently done" proxy.
-    return items.filter((t) => t.completed).sort((a, c) => c.updatedAt - a.updatedAt)
-  }, [items, filter])
+    return items
+      .filter((t) => t.completed && matchesPriority(t))
+      .sort((a, c) => c.updatedAt - a.updatedAt)
+  }, [items, filter, matchesPriority])
 
   // The flat keyboard-navigation order: exactly what renders, top to bottom — the
   // open buckets (in BUCKET_ORDER) followed by the completed list. Mirrors Mac's
@@ -357,6 +435,44 @@ export function Tasks(): React.JSX.Element {
     () => [...openGroups.flatMap((g) => g.items), ...doneItems],
     [openGroups, doneItems]
   )
+
+  const selectedTasks = useMemo(
+    () => navOrder.filter((t) => selection.selected.has(t.id)),
+    [navOrder, selection]
+  )
+
+  const runBulk = async (
+    verb: string,
+    op: (tasks: ActionItemRecord[]) => Promise<import('../lib/taskBulkOps').BulkResult>
+  ): Promise<void> => {
+    if (bulkBusy || selectedTasks.length === 0) return
+    setBulkBusy(true)
+    try {
+      const result = await op(selectedTasks)
+      toast(describeBulkResult(verb, result), {
+        tone: result.failures.length > 0 ? 'error' : 'success'
+      })
+      if (result.failures.length === 0) exitSelectMode()
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const bulkCompleteSelected = (): Promise<void> =>
+    runBulk('Completed', (tasks) => bulkSetCompleted(tasks, true))
+
+  const bulkDeleteSelected = async (): Promise<void> => {
+    if (selectedTasks.length === 0) return
+    // Mac confirms first: "Delete N tasks? This cannot be undone."
+    const n = selectedTasks.length
+    if (!window.confirm(`Delete ${n} ${n === 1 ? 'task' : 'tasks'}? This cannot be undone.`)) return
+    await runBulk('Deleted', (tasks) => bulkDelete(tasks))
+  }
+
+  const bulkRescheduleSelected = async (value: string): Promise<void> => {
+    setRescheduleOpen(false)
+    await runBulk('Rescheduled', (tasks) => bulkReschedule(tasks, dateInputToMs(value)))
+  }
 
   // Scroll the keyboard-selected row into view. Runs after render, so the row for a
   // just-set id (e.g. the neighbour picked on delete) exists when we query for it.
@@ -374,6 +490,15 @@ export function Tasks(): React.JSX.Element {
   const changeFilter = (f: 'all' | 'open' | 'done'): void => {
     setFilter(f)
     setKeyboardSelectedTaskId(null)
+    // Scope change clears the bulk selection too (mac: clearMultiSelectionForScopeChange).
+    setSelection(clearSelection())
+    if (f === 'done') setComposing(false)
+  }
+
+  const changePriorityFilter = (p: PriorityFilter): void => {
+    setPriorityFilter(p)
+    setKeyboardSelectedTaskId(null)
+    setSelection(clearSelection())
   }
 
   // Latest values the document keydown handler reads. Kept in a ref so the listener
@@ -388,6 +513,10 @@ export function Tasks(): React.JSX.Element {
     items,
     busy,
     composing,
+    selectMode,
+    selectionActive: selection.selected.size > 0,
+    detailOpen: detailTaskId != null,
+    chatOpen: chatTaskId != null,
     toggleItem,
     deleteItem,
     startEdit
@@ -399,6 +528,10 @@ export function Tasks(): React.JSX.Element {
       items,
       busy,
       composing,
+      selectMode,
+      selectionActive: selection.selected.size > 0,
+      detailOpen: detailTaskId != null,
+      chatOpen: chatTaskId != null,
       toggleItem,
       deleteItem,
       startEdit
@@ -424,10 +557,19 @@ export function Tasks(): React.JSX.Element {
 
       const ctrl = e.ctrlKey || e.metaKey
 
-      // Ctrl+N — open the new-task composer (Windows equivalent of Mac's inline create).
+      // Ctrl+N — open the Today composer (mac: Cmd+N → beginTopInlineCreation).
       if (ctrl && (e.key === 'n' || e.key === 'N')) {
         e.preventDefault()
+        setSelectMode(false)
+        setSelection(clearSelection())
         setComposing(true)
+        return
+      }
+
+      // Ctrl+A in select mode — select every rendered row (mac: Cmd+A selectAll).
+      if (ctrl && (e.key === 'a' || e.key === 'A') && s.selectMode) {
+        e.preventDefault()
+        setSelection(selectAll(s.navOrder.map((t) => t.id)))
         return
       }
 
@@ -469,6 +611,11 @@ export function Tasks(): React.JSX.Element {
         const task = s.items.find((x) => x.id === s.selectedId)
         if (!task) return
         e.preventDefault()
+        if (s.selectMode) {
+          // In select mode Space toggles selection membership (mac: toggleFocused).
+          setSelection((sel) => applySelectionClick([], sel, task.id, { ctrl: true, shift: false }))
+          return
+        }
         void s.toggleItem(task)
         return
       }
@@ -485,8 +632,24 @@ export function Tasks(): React.JSX.Element {
         return
       }
       if (e.key === 'Escape') {
-        // Only consume Esc when we actually deselect; otherwise let the global
-        // handler take it (Esc→Home). preventDefault tells it we handled it.
+        // Mac's escape hierarchy (TasksPage.handleEscapeKey + handleEscape):
+        // chat/detail panel → multi-select → composer (its input handles its own
+        // Esc while focused) → keyboard deselect → fall through (global Esc→Home).
+        if (s.chatOpen) {
+          e.preventDefault()
+          setChatTaskId(null)
+          return
+        }
+        if (s.detailOpen) {
+          e.preventDefault()
+          setDetailTaskId(null)
+          return
+        }
+        if (s.selectMode) {
+          e.preventDefault()
+          exitSelectMode()
+          return
+        }
         if (s.selectedId != null) {
           e.preventDefault()
           setKeyboardSelectedTaskId(null)
@@ -499,6 +662,10 @@ export function Tasks(): React.JSX.Element {
     return () => document.removeEventListener('keydown', handler)
   }, [])
 
+  const detailTask =
+    detailTaskId != null ? (items.find((t) => t.id === detailTaskId) ?? null) : null
+  const chatTask = chatTaskId != null ? (items.find((t) => t.id === chatTaskId) ?? null) : null
+
   const renderRow = (t: ActionItemRecord): React.JSX.Element => {
     // A freshly-created row has backendId:null for a sub-second window until its
     // background POST + markSynced lands; treat that like the in-flight busy state
@@ -507,27 +674,56 @@ export function Tasks(): React.JSX.Element {
     const conv = t.conversationId ? convs[t.conversationId] : undefined
     const overdue = isOverdue(t)
     const isSelected = keyboardSelectedTaskId === t.id
+    const isBulkSelected = selection.selected.has(t.id)
+    const priority = normalizePriority(t.priority)
     return (
       <li
         key={t.id}
         data-task-id={t.id}
         data-selected={isSelected ? 'true' : undefined}
+        data-bulk-selected={isBulkSelected ? 'true' : undefined}
+        onClick={(e) => {
+          if (!selectMode) return
+          // Row clicks drive the selection model in select mode; controls inside
+          // the row (buttons/links/inputs) keep their own behavior.
+          if ((e.target as HTMLElement | null)?.closest('a, input, [data-row-control]')) return
+          setSelection((sel) =>
+            applySelectionClick(
+              navOrder.map((x) => x.id),
+              sel,
+              t.id,
+              { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }
+            )
+          )
+        }}
         className={`surface-card group flex items-start gap-3 p-4 ${
           isSelected ? 'ring-1 ring-white/40' : ''
+        } ${isBulkSelected ? 'bg-white/10 ring-1 ring-white/30' : ''} ${
+          selectMode ? 'cursor-pointer select-none' : ''
         }`}
       >
-        <button
-          onClick={() => void toggleItem(t)}
-          disabled={isBusy}
-          aria-label={t.completed ? 'Mark as not done' : 'Mark as done'}
-          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all duration-200 ${
-            t.completed
-              ? 'border-white/30 bg-white/15 text-white'
-              : 'border-white/20 hover:border-white/45'
-          } ${isBusy ? 'opacity-50' : ''}`}
-        >
-          {t.completed && <Check className="h-3.5 w-3.5" />}
-        </button>
+        {selectMode ? (
+          <span
+            aria-label={isBulkSelected ? 'Selected' : 'Not selected'}
+            className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center text-white/70"
+          >
+            {isBulkSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+          </span>
+        ) : (
+          <button
+            data-row-control
+            onClick={() => void toggleItem(t)}
+            disabled={isBusy}
+            aria-label={t.completed ? 'Mark as not done' : 'Mark as done'}
+            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all duration-200 ${
+              t.completed
+                ? 'border-white/30 bg-white/15 text-white'
+                : 'border-white/20 hover:border-white/45'
+            } ${isBusy ? 'opacity-50' : ''}`}
+          >
+            {t.completed && <Check className="h-3.5 w-3.5" />}
+          </button>
+        )}
 
         <div className="min-w-0 flex-1">
           {editingId === t.id ? (
@@ -544,15 +740,23 @@ export function Tasks(): React.JSX.Element {
             />
           ) : (
             <button
+              data-row-control
               onClick={() => {
+                if (selectMode) return
                 if (isBusy) return
                 startEdit(t)
               }}
-              title="Click to edit"
+              title={selectMode ? undefined : 'Click to edit'}
               className={`block w-full text-left text-sm leading-relaxed ${
                 t.completed ? 'text-white/40 line-through' : 'text-white/90'
               }`}
             >
+              {priority && (
+                <Flag
+                  aria-label={`${priority} priority`}
+                  className={`mr-1.5 inline h-3 w-3 align-baseline ${PRIORITY_TINT[priority]}`}
+                />
+              )}
               {t.description}
             </button>
           )}
@@ -574,6 +778,7 @@ export function Tasks(): React.JSX.Element {
                 />
                 {t.dueAt != null && (
                   <button
+                    data-row-control
                     onMouseDown={(e) => {
                       e.preventDefault()
                       void updateItem(t, { clearDueAt: true })
@@ -588,8 +793,9 @@ export function Tasks(): React.JSX.Element {
               </span>
             ) : (
               <button
+                data-row-control
                 onClick={() => {
-                  if (!isBusy) setDueEditingId(t.id)
+                  if (!selectMode && !isBusy) setDueEditingId(t.id)
                 }}
                 className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 transition-colors hover:bg-white/5 ${
                   t.dueAt != null
@@ -617,187 +823,316 @@ export function Tasks(): React.JSX.Element {
           </div>
         </div>
 
-        <button
-          onClick={() => void deleteItem(t)}
-          disabled={isBusy}
-          className="mt-0.5 shrink-0 rounded-md p-1 text-white/30 opacity-0 transition-all hover:bg-white/5 hover:text-rose-300/80 group-hover:opacity-100 disabled:opacity-0"
-          title="Delete task"
-          aria-label="Delete task"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        {!selectMode && (
+          <button
+            data-row-control
+            data-testid={`task-details-${t.id}`}
+            onClick={() => openDetail(t)}
+            className="mt-0.5 shrink-0 rounded-md p-1 text-white/30 opacity-0 transition-all hover:bg-white/5 hover:text-white/80 group-hover:opacity-100"
+            title="Task details"
+            aria-label="Task details"
+          >
+            <ListChecks className="h-4 w-4" />
+          </button>
+        )}
+        {!selectMode && (
+          <button
+            data-row-control
+            onClick={() => void deleteItem(t)}
+            disabled={isBusy}
+            className="mt-0.5 shrink-0 rounded-md p-1 text-white/30 opacity-0 transition-all hover:bg-white/5 hover:text-rose-300/80 group-hover:opacity-100 disabled:opacity-0"
+            title="Delete task"
+            aria-label="Delete task"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
       </li>
     )
   }
 
-  return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        title="Tasks"
-        titleSlot={<TasksGoalsToggle />}
-        subtitle={loading ? 'Loading…' : `${openCount} open · ${doneCount} done`}
-        actions={
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-black/20 p-1">
-              {(['open', 'done', 'all'] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => changeFilter(f)}
-                  className={`rounded-xl px-3 py-1.5 text-xs font-medium capitalize transition-all duration-200 ${
-                    filter === f
-                      ? 'bg-white/15 text-white'
-                      : 'text-white/55 hover:bg-white/5 hover:text-white/80'
-                  }`}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setComposing((c) => !c)}
-              className="btn-primary px-3 py-2"
-              title="Add a task"
-            >
-              <Plus className="h-4 w-4" />
-              New
-            </button>
-            <button
-              onClick={onRefresh}
-              disabled={refreshing || loading}
-              className="btn-ghost px-3 py-2 disabled:opacity-50"
-              title="Refresh"
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-        }
+  // The Today-section composer row (#11600): first row of Today, aligned with the
+  // rows, text only, Enter creates due-today and keeps composing.
+  const composerRow = (
+    <li className="surface-card flex items-center gap-3 p-4">
+      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
+        <Sun className="h-4 w-4 text-white/35" />
+      </span>
+      <input
+        data-testid="tasks-composer-field"
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            void saveNew()
+          } else if (e.key === 'Escape') {
+            setComposing(false)
+            setDraft('')
+          }
+        }}
+        placeholder="Add a task"
+        disabled={saving}
+        className="min-w-0 flex-1 border-0 bg-transparent text-sm text-white placeholder:text-white/35 focus:outline-none"
       />
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
-        {composing && (
-          <div className="mx-auto mb-5 max-w-3xl">
-            <div className="surface-card p-4">
-              <input
-                autoFocus
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    void saveNew()
-                  } else if (e.key === 'Escape') {
+      {saving ? (
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-white/40" />
+      ) : (
+        <button
+          data-testid="tasks-composer-close"
+          onClick={() => {
+            setComposing(false)
+            setDraft('')
+          }}
+          className="shrink-0 rounded-md p-1 text-white/30 hover:bg-white/5 hover:text-white/70"
+          aria-label="Close composer"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
+    </li>
+  )
+
+  const showTodayComposer = composing && filter !== 'done' && !selectMode
+
+  return (
+    <div className="flex h-full min-h-0">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <PageHeader
+          title="Tasks"
+          titleSlot={<TasksGoalsToggle />}
+          subtitle={loading ? 'Loading…' : `${openCount} open · ${doneCount} done`}
+          actions={
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-black/20 p-1">
+                {(['open', 'done', 'all'] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => changeFilter(f)}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-medium capitalize transition-all duration-200 ${
+                      filter === f
+                        ? 'bg-white/15 text-white'
+                        : 'text-white/55 hover:bg-white/5 hover:text-white/80'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-black/20 p-1">
+                {(['any', 'high', 'medium', 'low'] as const).map((p) => (
+                  <button
+                    key={p}
+                    data-testid={`tasks-priority-filter-${p}`}
+                    onClick={() => changePriorityFilter(p)}
+                    className={`rounded-xl px-2.5 py-1.5 text-xs font-medium capitalize transition-all duration-200 ${
+                      priorityFilter === p
+                        ? 'bg-white/15 text-white'
+                        : 'text-white/55 hover:bg-white/5 hover:text-white/80'
+                    }`}
+                    title={p === 'any' ? 'Any priority' : `${p} priority`}
+                  >
+                    {p === 'any' ? 'Any' : p}
+                  </button>
+                ))}
+              </div>
+              <button
+                data-testid="tasks-select-toggle"
+                onClick={() => {
+                  if (selectMode) exitSelectMode()
+                  else {
                     setComposing(false)
-                    setDraft('')
-                    setDraftDue('')
+                    setDetailTaskId(null)
+                    setChatTaskId(null)
+                    setSelectMode(true)
                   }
                 }}
-                placeholder="What needs to get done?"
-                className="input-field"
-              />
-              <div className="mt-3 flex items-center gap-2">
-                <label className="flex items-center gap-1.5 text-xs text-white/45">
-                  <Calendar className="h-3.5 w-3.5" />
-                  <input
-                    type="date"
-                    value={draftDue}
-                    onChange={(e) => setDraftDue(e.target.value)}
-                    className="rounded-md border border-white/20 bg-black/30 px-2 py-1 text-xs text-white [color-scheme:dark] focus:border-white/50 focus:outline-none"
-                  />
-                </label>
-                <button
-                  onClick={() => {
-                    setComposing(false)
-                    setDraft('')
-                    setDraftDue('')
-                  }}
-                  className="btn-ghost ml-auto px-3 py-2"
-                  disabled={saving}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={saveNew}
-                  disabled={saving || !draft.trim()}
-                  className="btn-primary px-4 py-2 disabled:opacity-40"
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add task'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {loading && (
-          <ul className="mx-auto max-w-3xl space-y-2">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <li key={i} className="surface-card flex items-start gap-3 p-4">
-                <div className="skeleton mt-0.5 h-5 w-5 shrink-0 rounded-md" />
-                <div className="flex-1 space-y-2">
-                  <div className="skeleton h-4 w-3/4" />
-                  <div className="skeleton h-3 w-1/3" />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {error && (
-          <div className="surface-panel mb-5 px-4 py-3 text-sm text-white/60">
-            <p className="text-white/80">Couldn’t load your tasks.</p>
-            <div className="mt-2 flex items-center gap-3">
+                className={`px-3 py-2 ${selectMode ? 'btn-primary' : 'btn-ghost'}`}
+                title={selectMode ? 'Done selecting' : 'Select tasks'}
+              >
+                {selectMode ? 'Done' : 'Select'}
+              </button>
               <button
                 onClick={() => {
-                  setError(null)
-                  setLoading(true)
-                  void readTasks()
+                  if (selectMode) return
+                  setComposing((c) => !c)
                 }}
-                className="btn-ghost px-3 py-1.5 text-xs"
+                className="btn-primary px-3 py-2"
+                title="Add a task"
               >
-                <RefreshCw className="h-3.5 w-3.5" />
-                Try again
+                <Plus className="h-4 w-4" />
+                New
               </button>
-              <span className="text-xs text-white/35">{error}</span>
+              <button
+                onClick={onRefresh}
+                disabled={refreshing || loading}
+                className="btn-ghost px-3 py-2 disabled:opacity-50"
+                title="Refresh"
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          }
+        />
+
+        {selectMode && (
+          <div
+            data-testid="tasks-selection-bar"
+            className="flex items-center gap-2 border-b border-white/10 bg-black/25 px-6 py-2 lg:px-10"
+          >
+            <span data-testid="tasks-selected-count" className="text-xs text-white/70">
+              {selectedTasks.length} selected
+            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                data-testid="tasks-bulk-complete"
+                onClick={() => void bulkCompleteSelected()}
+                disabled={bulkBusy || selectedTasks.length === 0}
+                className="btn-ghost px-3 py-1.5 text-xs disabled:opacity-40"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Complete
+              </button>
+              {rescheduleOpen ? (
+                <input
+                  type="date"
+                  autoFocus
+                  data-testid="tasks-bulk-reschedule-date"
+                  onChange={(e) => void bulkRescheduleSelected(e.target.value)}
+                  onBlur={() => setRescheduleOpen(false)}
+                  className="rounded-md border border-white/20 bg-black/30 px-2 py-1 text-xs text-white [color-scheme:dark] focus:border-white/50 focus:outline-none"
+                />
+              ) : (
+                <button
+                  data-testid="tasks-bulk-reschedule"
+                  onClick={() => setRescheduleOpen(true)}
+                  disabled={bulkBusy || selectedTasks.length === 0}
+                  className="btn-ghost px-3 py-1.5 text-xs disabled:opacity-40"
+                >
+                  <Calendar className="h-3.5 w-3.5" />
+                  Reschedule
+                </button>
+              )}
+              <button
+                data-testid="tasks-bulk-delete"
+                onClick={() => void bulkDeleteSelected()}
+                disabled={bulkBusy || selectedTasks.length === 0}
+                className="btn-ghost px-3 py-1.5 text-xs text-rose-300/80 hover:text-rose-300 disabled:opacity-40"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete {selectedTasks.length > 0 ? selectedTasks.length : ''}
+              </button>
             </div>
           </div>
         )}
 
-        {!loading && !error && items.length === 0 && !composing && (
-          <EmptyState
-            icon={ListChecks}
-            title="No tasks yet"
-            description="Action items from your conversations show up here, alongside any tasks you add. Click New to create one."
-          />
-        )}
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
+          {loading && (
+            <ul className="mx-auto max-w-3xl space-y-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <li key={i} className="surface-card flex items-start gap-3 p-4">
+                  <div className="skeleton mt-0.5 h-5 w-5 shrink-0 rounded-md" />
+                  <div className="flex-1 space-y-2">
+                    <div className="skeleton h-4 w-3/4" />
+                    <div className="skeleton h-3 w-1/3" />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
 
-        {!loading && items.length > 0 && visible.length === 0 && (
-          <div className="flex flex-col items-center justify-center pt-16 text-center text-white/55">
-            <Check className="mb-3 h-10 w-10 opacity-40" />
-            <p className="text-sm">All caught up.</p>
-          </div>
-        )}
+          {error && (
+            <div className="surface-panel mb-5 px-4 py-3 text-sm text-white/60">
+              <p className="text-white/80">Couldn’t load your tasks.</p>
+              <div className="mt-2 flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setError(null)
+                    setLoading(true)
+                    void readTasks()
+                  }}
+                  className="btn-ghost px-3 py-1.5 text-xs"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Try again
+                </button>
+                <span className="text-xs text-white/35">{error}</span>
+              </div>
+            </div>
+          )}
 
-        {!loading && (openGroups.length > 0 || doneItems.length > 0) && (
-          <div className="mx-auto max-w-3xl space-y-6">
-            {openGroups.map((g) => (
-              <section key={g.bucket}>
-                <h2 className="mb-2 flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-white/40">
-                  {BUCKET_LABEL[g.bucket]}
-                  <span className="text-white/25">{g.items.length}</span>
-                </h2>
-                <ul className="space-y-2">{g.items.map(renderRow)}</ul>
-              </section>
-            ))}
-            {doneItems.length > 0 && (
-              <section>
-                <h2 className="mb-2 flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-white/40">
-                  Completed
-                  <span className="text-white/25">{doneItems.length}</span>
-                </h2>
-                <ul className="space-y-2">{doneItems.map(renderRow)}</ul>
-              </section>
-            )}
-          </div>
-        )}
+          {!loading && !error && items.length === 0 && !showTodayComposer && (
+            <EmptyState
+              icon={ListChecks}
+              title="No tasks yet"
+              description="Action items from your conversations show up here, alongside any tasks you add. Click New to create one."
+            />
+          )}
+
+          {!loading && items.length > 0 && visible.length === 0 && !showTodayComposer && (
+            <div className="flex flex-col items-center justify-center pt-16 text-center text-white/55">
+              <Check className="mb-3 h-10 w-10 opacity-40" />
+              <p className="text-sm">All caught up.</p>
+            </div>
+          )}
+
+          {!loading && (openGroups.length > 0 || doneItems.length > 0 || showTodayComposer) && (
+            <div className="mx-auto max-w-3xl space-y-6">
+              {openGroups.map((g) => (
+                <section key={g.bucket}>
+                  <h2 className="mb-2 flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-white/40">
+                    {BUCKET_LABEL[g.bucket]}
+                    <span className="text-white/25">{g.items.length}</span>
+                  </h2>
+                  <ul className="space-y-2">
+                    {g.bucket === 'today' && showTodayComposer && composerRow}
+                    {g.items.map(renderRow)}
+                  </ul>
+                </section>
+              ))}
+              {doneItems.length > 0 && (
+                <section>
+                  <h2 className="mb-2 flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-wide text-white/40">
+                    Completed
+                    <span className="text-white/25">{doneItems.length}</span>
+                  </h2>
+                  <ul className="space-y-2">{doneItems.map(renderRow)}</ul>
+                </section>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {chatTask ? (
+        <TaskChatPanel
+          key={chatTask.backendId ?? chatTask.id}
+          task={chatTask}
+          onClose={() => setChatTaskId(null)}
+        />
+      ) : detailTask ? (
+        <TaskDetailPanel
+          task={detailTask}
+          conversationTitle={
+            detailTask.conversationId ? convs[detailTask.conversationId]?.title : undefined
+          }
+          busy={busy.has(detailTask.id) || !detailTask.backendId}
+          hasChat={!!detailTask.backendId}
+          onClose={() => setDetailTaskId(null)}
+          onToggle={(t) => void toggleItem(t)}
+          onEdit={(t) => {
+            setDetailTaskId(null)
+            startEdit(t)
+          }}
+          onDelete={(t) => {
+            setDetailTaskId(null)
+            void deleteItem(t)
+          }}
+          onInvestigate={openInvestigate}
+          onPriorityChange={(t, p) => void updateItem(t, { priority: p })}
+        />
+      ) : null}
     </div>
   )
 }

@@ -94,7 +94,10 @@ describe('bulkSetCompleted', () => {
 describe('bulkDelete / bulkReschedule / bulkSetPriority', () => {
   it('deletes every synced row', async () => {
     const ops = opsMock()
-    const result = await bulkDelete([rec({ id: 1, backendId: 'a' }), rec({ id: 2, backendId: 'b' })], ops)
+    const result = await bulkDelete(
+      [rec({ id: 1, backendId: 'a' }), rec({ id: 2, backendId: 'b' })],
+      ops
+    )
     expect(ops.del).toHaveBeenCalledTimes(2)
     expect(result.done).toBe(2)
   })
@@ -112,7 +115,11 @@ describe('bulkDelete / bulkReschedule / bulkSetPriority', () => {
 
   it('sets priority on every synced row', async () => {
     const ops = opsMock()
-    await bulkSetPriority([rec({ id: 1, backendId: 'a' }), rec({ id: 2, backendId: 'b' })], 'high', ops)
+    await bulkSetPriority(
+      [rec({ id: 1, backendId: 'a' }), rec({ id: 2, backendId: 'b' })],
+      'high',
+      ops
+    )
     expect(ops.update).toHaveBeenCalledTimes(2)
     expect(ops.update).toHaveBeenCalledWith({ backendId: 'a', fields: { priority: 'high' } })
   })
