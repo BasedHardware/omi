@@ -4,6 +4,7 @@ import { FIXTURE_STATES as TASK_STATES } from "../production/task-fixtures.js";
 import { PROPOSITION_FIXTURE_STATES } from "../production/proposition-fixtures.js";
 import { CHAT_FIXTURE_STATES } from "../production/chat-fixtures.js";
 import { SETTINGS_FIXTURE_STATES } from "../production/settings-fixtures.js";
+import { SCREEN_FIXTURE_STATES } from "../production/screen-fixtures.js";
 import { POLISH_EVIDENCE_STATES } from "../production/polish-evidence-fixtures.js";
 
 export type SurfaceId =
@@ -15,7 +16,8 @@ export type SurfaceId =
   | "tasks"
   | "chat"
   | "listen"
-  | "settings";
+  | "settings"
+  | "rewind";
 
 export type LabPlatform = "mobile" | "desktop";
 export type LabCatalogName = "lab" | "matrix";
@@ -48,6 +50,7 @@ export const SURFACES: readonly SurfaceDefinition[] = [
   { id: "settings", label: "Settings", description: "Identity, appearance, and the entitlement upsell", states: SETTINGS_FIXTURE_STATES },
   { id: "folders", label: "Folders", description: "Read-only organization and filtered conversation entry", states: POLISH_EVIDENCE_STATES.folders, polishDomain: "folders" },
   { id: "listen", label: "Listen", description: "Capture preflight, backlog, transcript, and recovery truth", states: POLISH_EVIDENCE_STATES.listen, polishDomain: "listen" },
+  { id: "rewind", label: "Rewind", description: "Screen timeline, playback, extracted text, and empty kinds", states: SCREEN_FIXTURE_STATES },
 ];
 
 export const MATRIX_SURFACES: readonly SurfaceDefinition[] = [

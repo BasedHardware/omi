@@ -63,7 +63,7 @@ function writeRun(dir, entries) {
 }
 
 test("generated manifest enumerates every lab surface state platform locale and polish flag", async () => {
-  const [lab, catalog, memories, conversations, tasks, propositions, chat, settings, polish] = [
+  const [lab, catalog, memories, conversations, tasks, propositions, chat, settings, screen, polish] = [
     read("src/lab/main.tsx"),
     read("src/lab/catalog.ts"),
     read("src/production/memory-fixtures.ts"),
@@ -72,6 +72,7 @@ test("generated manifest enumerates every lab surface state platform locale and 
     read("src/production/proposition-fixtures.ts"),
     read("src/production/chat-fixtures.ts"),
     read("src/production/settings-fixtures.ts"),
+    read("src/production/screen-fixtures.ts"),
     read("src/production/polish-evidence-fixtures.ts"),
   ];
   const manifest = await generateManifest("http://127.0.0.1:4650");
@@ -87,6 +88,7 @@ test("generated manifest enumerates every lab surface state platform locale and 
     ["settings", quotedStrings(settings, "SETTINGS_FIXTURE_STATES"), false],
     ["folders", polishDomainStates(polish, "folders"), true],
     ["listen", polishDomainStates(polish, "listen"), true],
+    ["rewind", quotedStrings(screen, "SCREEN_FIXTURE_STATES"), false],
   ];
   const matrix = [
     ["memories-platform", polishDomainStates(polish, "memories"), true],

@@ -117,9 +117,8 @@
 .task-actions { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: var(--space-xs); }
 .task-actions button { font-size: var(--type-button-size); }
 
-.tasks-empty-state { padding: var(--space-xxxl) var(--space-md); text-align: center; color: var(--content-tertiary); }
-.tasks-empty-state strong { display: block; margin-bottom: var(--space-sm); color: var(--content-primary); }
-.tasks-empty-state p { margin: 0; }
+.tasks-empty-state { display: grid; justify-items: center; }
+.tasks-empty-state .production-empty-state { margin: var(--space-xxl) auto; }
 
 .tasks-dead-panel { margin-top: var(--space-xl); padding: var(--space-lg); border: 1px solid var(--danger); border-radius: var(--radius-section); }
 .tasks-dead-panel h2 { margin-top: 0; font-size: var(--type-heading-size); }
@@ -129,12 +128,7 @@
 .tasks-mobile-fab { display: none; }
 
 html[data-platform="desktop"] .tasks-production-shell {
-  max-width: 1200px;
-  padding: var(--space-xxxl);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-window);
-  background: var(--surface-raised);
-  box-shadow: 0 var(--space-md) var(--space-xxxl) var(--surface-scrim);
+  max-width: none;
 }
 
 html[data-platform="desktop"] .task-card { grid-template-columns: minmax(0, 1fr) auto; padding: var(--space-sm) var(--space-md); }
@@ -233,27 +227,32 @@ html[data-platform="desktop"] .tasks-group-heading > .production-icon {
   width: 19px;
   color: var(--content-secondary);
 }
-html[data-platform="desktop"] .tasks-group h2 { font-family: var(--type-title-family); font-size: 17px; letter-spacing: -.25px; }
+html[data-platform="desktop"] .tasks-group h2 {
+  font-family: var(--type-heading-family);
+  font-size: var(--type-heading-size);
+  font-weight: var(--type-heading-weight);
+  letter-spacing: var(--type-heading-tracking);
+}
 html[data-platform="desktop"] .tasks-group-count { display: none; }
 html[data-platform="desktop"] .task-card {
   grid-template-columns: minmax(0,1fr) auto;
-  gap: 6px;
-  min-height: 44px;
-  padding: 5px 8px 5px 18px;
+  gap: var(--space-sm);
+  min-height: var(--row-min-height);
+  padding: var(--space-sm) var(--space-md);
   border-color: transparent;
-  border-radius: 10px;
+  border-radius: var(--radius-element);
   background: transparent;
 }
 html[data-platform="desktop"] .task-card:hover,
 html[data-platform="desktop"] .task-card.is-selected { border-color: transparent; background: var(--surface-hover); }
 html[data-platform="desktop"] .task-card-main { align-items: center; gap: 10px; }
 html[data-platform="desktop"] .task-check { flex-basis: var(--min-tap-target); width: var(--min-tap-target); min-width: var(--min-tap-target); min-height: var(--min-tap-target); padding: 0; border-color: var(--border); background: var(--glass-surface-soft); font-size: 12px; }
-html[data-platform="desktop"] .task-description { font-size: 14px; line-height: 1.3; }
+html[data-platform="desktop"] .task-description { font-size: var(--type-row-size); line-height: var(--type-row-line); }
 html[data-platform="desktop"] .task-meta { display: none; }
 html[data-platform="desktop"] .task-actions { align-items: center; opacity: 0; transition: opacity 120ms ease; }
 html[data-platform="desktop"] .task-card:hover .task-actions,
 html[data-platform="desktop"] .task-card:focus-within .task-actions { opacity: 1; }
-html[data-platform="desktop"] .task-actions button { min-height: var(--min-tap-target); padding: 2px 7px; font-size: 10px; }
+html[data-platform="desktop"] .task-actions button { min-height: var(--min-tap-target); padding: var(--space-xs) var(--space-sm); font-size: var(--type-label-size); }
 html[data-platform="desktop"] .tasks-shortcuts {
   position: fixed;
   right: 50%;

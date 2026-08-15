@@ -29,14 +29,11 @@
 }
 
 .screen-day-toggle,
-.screen-capture-toggle,
 .screen-permission-action,
 .screen-rebuild,
 .screen-day-jumps button,
-.screen-playback button,
 .screen-extracted header button,
-.screen-result-group-header,
-.screen-result-hit {
+.screen-result-group-header {
   min-height: var(--min-tap-target);
   padding: 0 var(--space-md);
   border: 1px solid var(--border);
@@ -61,16 +58,27 @@
 .screen-day-span,
 .screen-permission-note,
 .screen-engine-error,
-.screen-bridge-note,
+.screen-bridge-note {
+  margin: var(--space-sm) 0;
+  color: var(--content-secondary);
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+}
+
 .screen-frame-unavailable,
 .screen-frame-host-unavailable,
 .screen-frame-loading {
-  margin: var(--space-sm) 0;
-  color: var(--content-secondary);
+  margin: 0;
+}
+
+.screen-playback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
 }
 
 .screen-day-jumps,
-.screen-playback,
 .screen-day-list {
   display: flex;
   flex-wrap: wrap;
@@ -83,9 +91,10 @@
   padding: 0;
 }
 
-.screen-capture-toggle.is-green { color: var(--success); border-color: var(--success); }
-.screen-capture-toggle.is-red { color: var(--danger); border-color: var(--danger); }
-.screen-capture-toggle.is-amber { color: var(--warning); border-color: var(--warning); }
+.screen-capture-toggle {
+  min-height: var(--min-tap-target);
+  padding: 0 var(--space-md);
+}
 
 .screen-capture-badge {
   display: inline-flex;
@@ -106,15 +115,31 @@
   gap: var(--space-lg);
 }
 
+.screen-timeline {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding-block: var(--space-sm) 0;
+  background: var(--surface-raised);
+}
+
+html[data-platform="desktop"][data-native-glass="true"] .screen-timeline {
+  background: var(--native-glass-fill);
+}
+
+html[data-platform="desktop"][data-color-mode="dark"] .screen-timeline {
+  background: var(--surface-raised);
+}
+
 .screen-results {
   display: grid;
   gap: var(--space-md);
 }
 
 .screen-result-group {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-section);
-  background: var(--surface-raised);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .screen-result-group.is-selected {
@@ -124,12 +149,25 @@
 .screen-result-group ul {
   list-style: none;
   margin: 0;
-  padding: var(--space-sm);
+  padding: 0;
+  display: grid;
+  gap: var(--space-xs);
 }
 
 .screen-result-hit {
   width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  border-radius: var(--radius-element);
+  background: transparent;
   text-align: left;
+  font-size: var(--type-row-size);
+  line-height: var(--type-row-line);
+}
+
+.screen-result-hit:hover,
+.screen-result-hit:focus-visible {
+  background: var(--surface-hover);
 }
 
 .screen-result-hit mark {
@@ -162,21 +200,32 @@
 
 .screen-frame-stage {
   position: relative;
-  min-height: 12rem;
-  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  min-height: calc(var(--row-min-height) * 3);
+  max-height: calc(var(--row-min-height) * 5);
+  border: 0;
   border-radius: var(--radius-section);
-  background: var(--surface-raised);
+  background: var(--surface-elevated);
   overflow: hidden;
+}
+
+.screen-frame-stage .production-empty-state {
+  margin: 0;
+  padding: var(--space-xl) var(--space-lg);
 }
 
 .screen-frame-image-wrap {
   position: relative;
+  max-width: 100%;
+  max-height: calc(var(--row-min-height) * 5);
 }
 
 .screen-frame-image {
   display: block;
-  width: 100%;
-  height: auto;
+  max-width: 100%;
+  max-height: calc(var(--row-min-height) * 5);
+  object-fit: contain;
 }
 
 .screen-highlights {
@@ -195,10 +244,11 @@
 }
 
 .screen-extracted {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-section);
-  padding: var(--space-md);
-  background: var(--surface-raised);
+  padding: var(--space-md) 0 0;
+  border: 0;
+  border-block-start: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
 }
 
 .screen-extracted header {
@@ -210,7 +260,10 @@
 
 .screen-extracted h2 {
   margin: 0;
-  font-size: var(--type-body-size);
+  font-family: var(--type-heading-family);
+  font-size: var(--type-heading-size);
+  font-weight: var(--type-heading-weight);
+  line-height: var(--type-heading-line);
 }
 
 .screen-extracted-text {

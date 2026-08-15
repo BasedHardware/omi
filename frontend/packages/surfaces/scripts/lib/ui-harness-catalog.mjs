@@ -42,6 +42,7 @@ function resolveStates(expression, files) {
     PROPOSITION_FIXTURE_STATES: () => fixtureArray(files.propositions, "PROPOSITION_FIXTURE_STATES"),
     CHAT_FIXTURE_STATES: () => fixtureArray(files.chat, "CHAT_FIXTURE_STATES"),
     SETTINGS_FIXTURE_STATES: () => fixtureArray(files.settings, "SETTINGS_FIXTURE_STATES"),
+    SCREEN_FIXTURE_STATES: () => fixtureArray(files.screen, "SCREEN_FIXTURE_STATES"),
   };
   const reader = table[expression];
   if (!reader) throw new Error(`unknown lab state source ${expression}`);
@@ -74,6 +75,7 @@ function readCatalogFiles() {
     propositions: readFileSync(resolve(src, "proposition-fixtures.ts"), "utf8"),
     chat: readFileSync(resolve(src, "chat-fixtures.ts"), "utf8"),
     settings: readFileSync(resolve(src, "settings-fixtures.ts"), "utf8"),
+    screen: readFileSync(resolve(src, "screen-fixtures.ts"), "utf8"),
     polish: readFileSync(resolve(src, "polish-evidence-fixtures.ts"), "utf8"),
   };
 }

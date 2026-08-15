@@ -339,8 +339,8 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
       <section className="desktop-page-panel">
       <ProductionPageHeader className="tasks-header" eyebrow={translate("tasks.title")} title={translate("tasks.title")} description={translate("tasks.subtitle")} actions={<div className="tasks-header-actions">
           <ProductionSearchField className="tasks-search" label={translate("tasks.filterSavedPlaceholder")} placeholder={translate("tasks.filterSavedPlaceholder")} value={query} onValueChange={setQuery} />
-          <button className="tasks-add-trigger" type="button" aria-expanded={createOpen} aria-label={createOpen ? translate("common.cancel") : translate("tasks.newTask")} onClick={() => { setCreateOpen((open) => !open); if (!createOpen) requestAnimationFrame(() => draftRef.current?.focus()); }}><ProductionIcon name={createOpen ? "close" : "plus"} /></button>
-          <button className="tasks-settings-trigger" type="button" disabled aria-label={translate("nav.settings")}><ProductionIcon name="more" /></button>
+          <button className={`tasks-add-trigger ${createOpen ? "control-tertiary" : "control-primary"}`} type="button" aria-expanded={createOpen} aria-label={createOpen ? translate("common.cancel") : translate("tasks.newTask")} onClick={() => { setCreateOpen((open) => !open); if (!createOpen) requestAnimationFrame(() => draftRef.current?.focus()); }}><ProductionIcon name={createOpen ? "close" : "plus"} /></button>
+          <button className="tasks-settings-trigger control-tertiary" type="button" disabled aria-label={translate("nav.settings")}><ProductionIcon name="more" /></button>
         </div>} />
       <ProductionDataSourceBadge source={source} locale={locale} />
       <ProductionLifecycleRegion
@@ -366,7 +366,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
           <input type="date" value={dueDraft} onChange={(event) => setDueDraft(event.target.value)} aria-label={translate("tasks.dueDateLabel")} />
           <small className="task-date-hint">{translate("tasks.dueDateHint")}</small>
         </label>
-        <button type="button" onClick={() => void add()} disabled={!draft.trim()}>{translate("tasks.add")}</button>
+        <button type="button" className="control-primary" onClick={() => void add()} disabled={!draft.trim()}>{translate("tasks.add")}</button>
         <button type="button" className="tasks-create-cancel" onClick={() => setCreateOpen(false)}>{translate("common.cancel")}</button>
       </section>
       <div className="tasks-shortcuts" aria-label={translate("tasks.shortcuts")}>
@@ -378,18 +378,22 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
         <span><kbd>{translate("tasks.keyOutdent")}</kbd> {translate("tasks.shortcutOutdent")}</span>
       </div>
       {status.refresh.phase === "initial-loading" ? (
-        <p className="tasks-empty-state">{translate("common.loading")}</p>
+        <div className="tasks-empty-state">
+          <ProductionEmptyState icon="loading" title={translate("common.loading")} />
+        </div>
       ) : status.refresh.phase === "ready" && rows.length === 0 ? (
         <div data-empty-kind="empty-projection">
           <ProductionEmptyState
             icon={TASK_EMPTY_ICON}
             title={translate("tasks.emptyTitle")}
             detail={translate("tasks.emptyBody")}
-            action={<button type="button" onClick={openCreate}>{translate("tasks.newTask")}</button>}
+            action={<button type="button" className="control-primary" onClick={openCreate}>{translate("tasks.newTask")}</button>}
           />
         </div>
       ) : status.refresh.phase === "unavailable" && rows.length === 0 ? (
-        <p className="tasks-empty-state">{translate("lifecycle.unavailable")}</p>
+        <div className="tasks-empty-state">
+          <ProductionEmptyState icon="alert" title={translate("lifecycle.unavailable")} />
+        </div>
       ) : emptyKind === "filtered-out" ? (
         <p className="tasks-empty-state" data-empty-kind="filtered-out">{translate("common.noResults")}</p>
       ) : (

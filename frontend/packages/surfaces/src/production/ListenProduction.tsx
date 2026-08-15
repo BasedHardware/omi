@@ -6,7 +6,7 @@ import type { ProductionListenStore } from "./ProductionListenStore.js";
 import type { CaptureState } from "./capture-state.js";
 import { backlogHours, describeCapture } from "./capture-state.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, type ProductionAnnouncementScheduler, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionEmptyState, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, type ProductionAnnouncementScheduler, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { boundedRenderedTranscript } from "./consumer-observation.js";
 import "./listen.css";
 
@@ -369,7 +369,9 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
         )}
         <ProductionLiveAnnouncement message={listenAnnouncement} {...(announcementScheduler ? { scheduler: announcementScheduler } : {})} />
         {presentedCapture.kind === "capturing" && segments.length === 0 && (
-          <p className="listen-transcript-waiting">{t(locale, "listen.transcriptWaiting")}</p>
+          <div className="listen-transcript-waiting">
+            <ProductionEmptyState icon="microphone" title={t(locale, "listen.transcriptWaiting")} />
+          </div>
         )}
         {segments.length > 0 && (
           <section
@@ -415,7 +417,7 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
           {description.canStart && (
             <button
               type="button"
-              className="listen-primary-control"
+              className="listen-primary-control control-primary"
               data-consumer-action="start-listen"
               aria-label={t(locale, "listen.start")}
               disabled={!captureReady}
@@ -428,7 +430,7 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
           {description.canStop && (
             <button
               type="button"
-              className="listen-primary-control listen-stop-control"
+              className="listen-primary-control listen-stop-control control-danger"
               aria-label={t(locale, "listen.stop")}
               onClick={() => void run(() => store.stop())}
             >
@@ -437,7 +439,7 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
           )}
           <button
             type="button"
-            className="listen-announcement-control"
+            className="listen-announcement-control control-tertiary"
             aria-pressed={announceTranscript}
             onClick={() => setAnnounceTranscript((current) => !current)}
           >

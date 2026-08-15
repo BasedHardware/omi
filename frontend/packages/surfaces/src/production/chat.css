@@ -3,19 +3,12 @@
 }
 
 .chat-empty-state {
-  padding: var(--space-xxxl) var(--space-md);
-  text-align: center;
-  color: var(--content-tertiary);
+  display: grid;
+  justify-items: center;
 }
 
-.chat-empty-state strong {
-  display: block;
-  margin-bottom: var(--space-sm);
-  color: var(--content-primary);
-}
-
-.chat-empty-state p {
-  margin: 0;
+.chat-empty-state .production-empty-state {
+  margin: var(--space-xxl) auto;
 }
 
 .chat-thread {
@@ -76,11 +69,11 @@ html[data-platform="mobile"] .chat-jump-latest {
 }
 
 .chat-message {
-  padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--surface-raised);
-  box-shadow: 0 var(--space-xs) var(--space-lg) var(--surface-scrim);
+  padding: var(--space-sm) 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .chat-message.is-user {
@@ -89,7 +82,6 @@ html[data-platform="mobile"] .chat-jump-latest {
 
 .chat-message.is-assistant {
   margin-inline-end: var(--space-xl);
-  background: var(--surface-elevated);
 }
 
 .chat-message.is-pending {
@@ -97,11 +89,13 @@ html[data-platform="mobile"] .chat-jump-latest {
 }
 
 .chat-message.is-failed {
-  border-color: var(--danger);
+  border-inline-start: var(--focus-ring-width) solid var(--danger);
+  padding-inline-start: var(--space-md);
 }
 
 .chat-message.is-streaming {
-  border-color: var(--focus);
+  border-inline-start: var(--focus-ring-width) solid var(--focus);
+  padding-inline-start: var(--space-md);
 }
 
 .chat-message-meta {
@@ -337,7 +331,6 @@ html[data-platform="desktop"] main[data-route="chat"] .chat-composer {
   background: var(--surface-raised);
 }
 
-.chat-attach,
 .chat-send {
   min-height: var(--min-tap-target);
 }
@@ -348,12 +341,8 @@ html[data-platform="desktop"] main[data-route="chat"] .chat-composer {
   cursor: not-allowed;
 }
 
-html[data-platform="desktop"] .chat-thread {
-  gap: var(--space-lg);
-}
-
-html[data-platform="desktop"] .chat-message {
-  box-shadow: 0 var(--space-xs) var(--space-xl) var(--surface-scrim);
+.chat-attach {
+  min-height: var(--min-tap-target);
 }
 
 html[data-platform="mobile"] .chat-header > div:first-child {

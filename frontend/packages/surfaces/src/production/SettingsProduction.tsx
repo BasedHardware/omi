@@ -234,7 +234,7 @@ export function SettingsProduction({ store, screenStore, fixture, locale = "en",
               <p className="settings-state-copy">{t(locale, "settings.unavailableBody")}</p>
               <button
                 type="button"
-                className="settings-retry"
+                className="settings-retry control-primary"
                 onClick={() => void run(() => store.refresh())}
                 aria-label={t(locale, "common.retry")}
               >
@@ -262,7 +262,7 @@ export function SettingsProduction({ store, screenStore, fixture, locale = "en",
                   </div>
                   <button
                     type="button"
-                    className="settings-sign-out"
+                    className="settings-sign-out control-tertiary"
                     disabled={signingOut}
                     aria-busy={signingOut || undefined}
                     onClick={() => void signOut()}
@@ -284,7 +284,7 @@ export function SettingsProduction({ store, screenStore, fixture, locale = "en",
               <ProductionDisabledControl
                 label={t(locale, "settings.signIn")}
                 explanation={t(locale, "settings.signInUnavailable")}
-                className="settings-sign-in"
+                className="settings-sign-in control-primary"
                 focusable={true}
               />
               <p className="settings-disabled-explanation">{t(locale, "settings.signInUnavailable")}</p>
@@ -353,7 +353,7 @@ export function SettingsProduction({ store, screenStore, fixture, locale = "en",
                 {planNotice.upgrade === "route" && (
                   <button
                     type="button"
-                    className="settings-upgrade"
+                    className="settings-upgrade control-primary"
                     onClick={() => onUpgrade?.(entitlement.limitKey)}
                     aria-label={t(locale, "settings.upgrade")}
                   >

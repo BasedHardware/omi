@@ -303,19 +303,20 @@ html[data-platform="desktop"] .conversation-filter button[aria-pressed="true"] {
 }
 html[data-platform="desktop"] .conversation-list { max-width: none; gap: 24px; }
 html[data-platform="desktop"] .conversation-day-group > h2 {
-  margin: 0 0 21px 2px;
+  margin: 0 0 var(--space-md) var(--space-xs);
   color: var(--content-secondary);
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -.1px;
+  font-family: var(--type-heading-family);
+  font-size: var(--type-heading-size);
+  font-weight: var(--type-heading-weight);
+  letter-spacing: var(--type-heading-tracking);
 }
 html[data-platform="desktop"] .conversation-row {
-  grid-template-columns: 38px minmax(0,1fr) 34px;
-  min-height: 68px;
-  gap: 11px;
-  padding: 10px 10px;
+  grid-template-columns: var(--min-tap-target) minmax(0,1fr) var(--min-tap-target);
+  min-height: var(--row-min-height);
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-element);
   background: transparent;
 }
 html[data-platform="desktop"] .conversation-row:first-of-type { border: 0; }
@@ -329,9 +330,13 @@ html[data-platform="desktop"] .conversation-avatar {
   background: var(--glass-surface-soft);
   opacity: .62;
 }
-html[data-platform="desktop"] .conversation-row-title { font-size: 14px; font-weight: 560; line-height: 1.25; }
-html[data-platform="desktop"] .conversation-row-meta { margin-top: 2px; font-size: 10px; }
+html[data-platform="desktop"] .conversation-row-title { font-size: var(--type-row-size); font-weight: var(--type-row-weight); line-height: var(--type-row-line); }
+html[data-platform="desktop"] .conversation-row-meta { margin-top: var(--space-xs); font-size: var(--type-meta-size); }
 html[data-platform="desktop"] .conversation-row-actions button { min-width: var(--min-tap-target); width: var(--min-tap-target); min-height: var(--min-tap-target); font-size: 17px; }
 html[data-platform="desktop"] .conversation-detail { max-width: 860px; gap: 15px; }
-html[data-platform="desktop"] .conversation-detail-header h2 { font-family: var(--type-title-family); font-size: 28px; letter-spacing: -.75px; }
+html[data-platform="desktop"] .conversation-detail-header h2 {
+  font-family: var(--type-title-family);
+  font-size: var(--type-title-size);
+  letter-spacing: var(--type-title-tracking);
+}
 html[data-platform="desktop"] .conversation-summary { padding: 18px; border-color: var(--control-border); border-radius: 14px; background: var(--glass-surface-soft); }
