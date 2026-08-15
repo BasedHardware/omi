@@ -3,6 +3,7 @@ import { Database } from "bun:sqlite";
 import { writeFileSync } from "node:fs";
 
 import { createLocalDevService } from "../app-facing";
+import { appendRuntimeLog } from "../observability/runtime-log";
 import {
   createGatewayChatGenerationSource,
   createGatewayRequiredChatGenerationSource,
@@ -67,8 +68,13 @@ const DEFAULT_MEMORY_COUNT = 12;
 const DEFAULT_TIMEZONE = "America/Los_Angeles";
 
 
-const fail = (message: string): never => {
-  // Legible, actionable, and free of any user content.
+const fail = (message: string, reason: string): never => {
+  appendRuntimeLog({
+    proc: "service",
+    level: "error",
+    event: "service.boot.refused",
+    reason,
+  });
   process.stderr.write(`\nomi dev-server: ${message}\n\n`);
   process.exit(1);
 };
@@ -96,7 +102,7 @@ const readConfig = (): BootConfig => {
   const rawPort = process.env.OMI_PORT;
   let port = DEFAULT_PORT;
   if (rawPort !== undefined && rawPort.length > 0) {
-    if (!/^[0-9]{2,5}$/.test(rawPort)) fail(`OMI_PORT must be a number, got "${rawPort}".`);
+    if (!/^[0-9]{2,5}$/.test(rawPort)) fail(`OMI_PORT must be a number, got "${rawPort}".`, "invalid_port");
     port = Number(rawPort);
   }
   try {
@@ -104,13 +110,14 @@ const readConfig = (): BootConfig => {
   } catch {
     fail(
       `port ${port} is not allocated to this service. Use one bounded app-facing port.`,
+      "port_unallocated",
     );
   }
 
   const rawCount = process.env.OMI_SEED_MEMORIES;
   let memoryCount = DEFAULT_MEMORY_COUNT;
   if (rawCount !== undefined && rawCount.length > 0) {
-    if (!/^[0-9]{1,4}$/.test(rawCount)) fail(`OMI_SEED_MEMORIES must be a number, got "${rawCount}".`);
+    if (!/^[0-9]{1,4}$/.test(rawCount)) fail(`OMI_SEED_MEMORIES must be a number, got "${rawCount}".`, "invalid_seed_count");
     memoryCount = Number(rawCount);
   }
 
@@ -118,7 +125,7 @@ const readConfig = (): BootConfig => {
   try {
     seedPersona = parseSeedPersona(process.env.OMI_SEED_PERSONA);
   } catch (error) {
-    fail(error instanceof Error ? error.message : "OMI_SEED_PERSONA is invalid.");
+    fail(error instanceof Error ? error.message : "OMI_SEED_PERSONA is invalid.", "invalid_persona");
   }
   if (seedPersona === "demo") memoryCount = DEMO_PERSONA_MEMORY_COUNT;
 
@@ -130,25 +137,26 @@ const readConfig = (): BootConfig => {
       `OMI_ACCOUNT_TIMEZONE "${accountTimezone}" is not a valid IANA timezone. `
       + `Example: America/Los_Angeles. The zone is required because memories are `
       + `grouped into days in LOCAL time, so a UTC-only fixture drifts by host.`,
+      "invalid_timezone",
     );
   }
 
   const rawRunId = process.env.OMI_RUN_ID;
   const rawReadyRecordPath = process.env.OMI_DEV_READY_RECORD;
   if ((rawRunId === undefined) !== (rawReadyRecordPath === undefined)) {
-    fail("OMI_RUN_ID and OMI_DEV_READY_RECORD must be supplied together.");
+    fail("OMI_RUN_ID and OMI_DEV_READY_RECORD must be supplied together.", "run_id_ready_record_mismatch");
   }
   if (rawRunId !== undefined && !isQaEvidenceRunId(rawRunId)) {
-    fail("OMI_RUN_ID must be a bounded, non-reserved QA run id.");
+    fail("OMI_RUN_ID must be a bounded, non-reserved QA run id.", "invalid_run_id");
   }
   if (rawReadyRecordPath !== undefined && rawReadyRecordPath.length === 0) {
-    fail("OMI_DEV_READY_RECORD must be a non-empty host-owned path.");
+    fail("OMI_DEV_READY_RECORD must be a non-empty host-owned path.", "empty_ready_record_path");
   }
 
   const gatewayUrl = process.env.OMI_LLM_GATEWAY_URL?.trim() ?? "";
   const gatewayToken = process.env.OMI_LLM_GATEWAY_SERVICE_TOKEN?.trim() ?? "";
   if ((gatewayUrl.length === 0) !== (gatewayToken.length === 0)) {
-    fail("OMI_LLM_GATEWAY_URL and OMI_LLM_GATEWAY_SERVICE_TOKEN must be supplied together.");
+    fail("OMI_LLM_GATEWAY_URL and OMI_LLM_GATEWAY_SERVICE_TOKEN must be supplied together.", "gateway_config_incomplete");
   }
   const llmGateway = gatewayUrl.length === 0 ? null : Object.freeze({
     url: gatewayUrl,
@@ -174,7 +182,7 @@ const readConfig = (): BootConfig => {
       OMI_STT_VENV: process.env.OMI_STT_VENV,
     });
   } catch (error) {
-    if (error instanceof DevSttConfigError) fail(error.message);
+    if (error instanceof DevSttConfigError) fail(error.message, "invalid_stt");
     throw error;
   }
 
@@ -205,6 +213,7 @@ const openDatabase = (path: string): Database => {
       `cannot open the QA database at "${path}". `
       + `Check the directory exists and is writable, or unset OMI_QA_DB to use `
       + `an in-memory database (the default, and what a cold checkout should use).`,
+      "database_unopenable",
     );
   }
 };
@@ -274,7 +283,7 @@ const main = (): void => {
     serviceForGatewayTools = service;
   } catch (error) {
     void transcriptionSource?.dispose();
-    return fail(`failed to seed QA data: ${error instanceof Error ? error.message : "unknown error"}`);
+    return fail(`failed to seed QA data: ${error instanceof Error ? error.message : "unknown error"}`, "seed_failed");
   }
 
   let server: { stop: (closeActive?: boolean) => void };
@@ -297,9 +306,10 @@ const main = (): void => {
         `port ${config.port} is already in use. Something else is listening.\n`
         + `  Find it:  lsof -nP -iTCP:${config.port} -sTCP:LISTEN\n`
         + `  Stop the existing listener before booting the one service door.`,
+        "bind_in_use",
       );
     }
-    return fail(`failed to bind ${LOOPBACK_HOST}:${config.port}.`);
+    return fail(`failed to bind ${LOOPBACK_HOST}:${config.port}.`, "bind_failed");
   }
 
   const baseUrl = `http://${LOOPBACK_HOST}:${config.port}`;
@@ -320,7 +330,7 @@ const main = (): void => {
       server.stop(true);
       void transcriptionSource?.dispose();
       db.close();
-      return fail("could not write the host-owned readiness record.");
+      return fail("could not write the host-owned readiness record.", "readiness_write_failed");
     }
   }
   process.stdout.write(
@@ -343,6 +353,22 @@ const main = (): void => {
     + `  served-request count prints below whenever it changes.\n`
     + `  if it stays at 0 while the app shows memories, the app is NOT talking to this backend.\n\n`,
   );
+  appendRuntimeLog({
+    proc: "service",
+    level: "info",
+    event: "service.boot",
+    persona: config.seedPersona === "demo" ? "demo" : "qa",
+    stt_engine: config.stt.kind,
+    gateway_kind: config.llmGateway === null ? "none" : "configured",
+    port: config.port,
+    storage: config.databasePath === ":memory:" ? ":memory:" : "file",
+  });
+  appendRuntimeLog({
+    proc: "service",
+    level: "info",
+    event: "service.ready",
+    port: config.port,
+  });
 
   // Runtime served-count visibility for a human watching the demo. This is the
   // wave-9 detector: a bridge that reported itself active while serving zero
@@ -362,6 +388,7 @@ const main = (): void => {
 
   const shutdown = (): void => {
     clearInterval(heartbeat);
+    appendRuntimeLog({ proc: "service", level: "info", event: "service.shutdown" });
     server.stop(true);
     void transcriptionSource?.dispose();
     db.close();
