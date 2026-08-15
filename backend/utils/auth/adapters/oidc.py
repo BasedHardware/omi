@@ -9,9 +9,15 @@ OIDC Authorization-Code+PKCE directly, which needs neither (ADR-0034 §3). Anony
 so ``Principal.is_anonymous`` is always False here.
 
 Env — verification: ``OIDC_ISSUER`` (e.g. http://keycloak:8080/realms/omi), ``OIDC_JWKS_URL``
-(default ``{issuer}/protocol/openid-connect/certs``), ``OIDC_AUDIENCE`` (optional; aud is verified
-only when set). Admin API: ``OIDC_ADMIN_API_URL`` (e.g. .../admin/realms/omi), ``OIDC_ADMIN_TOKEN_URL``,
-``OIDC_ADMIN_CLIENT_ID``, ``OIDC_ADMIN_CLIENT_SECRET``.
+(default ``{issuer}/protocol/openid-connect/certs``), ``OIDC_AUDIENCE`` (**required** — verify_token
+fail-closes without it, to prevent cross-client token confusion), ``OIDC_SIGNING_ALGS`` (optional,
+comma-separated; default ``RS256`` — set for a provider that signs with ES256/PS256/EdDSA). Admin API:
+``OIDC_ADMIN_API_URL`` (e.g. .../admin/realms/omi), ``OIDC_ADMIN_TOKEN_URL``, ``OIDC_ADMIN_CLIENT_ID``,
+``OIDC_ADMIN_CLIENT_SECRET``.
+
+Profile operations target the provider's Admin API and its representation (Keycloak's user JSON:
+firstName/lastName, attributes, federatedIdentities). Token *verification* is provider-agnostic, but
+profile reads/writes are Keycloak-shaped — a different provider needs its own admin mapping (ADR-0034 §3).
 """
 
 from __future__ import annotations
@@ -40,6 +46,14 @@ def _issuer() -> str:
 
 def _jwks_url() -> str:
     return (os.getenv("OIDC_JWKS_URL") or "").strip() or f"{_issuer()}/protocol/openid-connect/certs"
+
+
+def _signing_algs() -> list[str]:
+    """Permitted JWT signing algorithms. Default RS256 (Keycloak/Auth0's default); override via
+    ``OIDC_SIGNING_ALGS`` (comma-separated) for a provider that signs with ES256/PS256/EdDSA — otherwise
+    valid tokens on those algorithms are silently rejected (cubic PR 10887 oidc.py:82)."""
+    raw = (os.getenv("OIDC_SIGNING_ALGS") or "RS256").strip()
+    return [a.strip() for a in raw.split(",") if a.strip()] or ["RS256"]
 
 
 def _get_jwks_client() -> Any:
@@ -79,7 +93,7 @@ class OIDCAuthProvider:
             decoded: Dict[str, Any] = jwt.decode(
                 bearer,
                 signing_key.key,
-                algorithms=["RS256"],
+                algorithms=_signing_algs(),
                 audience=audience,
                 issuer=_issuer(),
                 # require exp + sub explicitly: PyJWT verifies exp only when PRESENT, so a token minted
@@ -94,6 +108,11 @@ class OIDCAuthProvider:
             raise errors.JWKSUnavailable(str(exc))
         except jwt.InvalidTokenError as exc:
             raise errors.InvalidToken(str(exc))
+        except errors.AuthError:
+            # A configuration error surfaced inside the try (e.g. _issuer()/_jwks_url() with OIDC_ISSUER
+            # unset) is permanent — let it propagate as-is instead of the broad handler below reclassifying
+            # it as JWKSUnavailable (a transient/retryable class) (cubic PR 10887 oidc.py:84).
+            raise
         except Exception as exc:  # JWKS fetch/transport failures
             raise errors.JWKSUnavailable(str(exc))
 
