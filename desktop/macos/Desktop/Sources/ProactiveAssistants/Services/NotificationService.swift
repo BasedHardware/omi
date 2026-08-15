@@ -276,6 +276,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         switch Self.openAction(assistantId: assistantId, title: title) {
         case .resetScreenCapture:
           self.handleScreenCaptureResetAction(source: "notification_click")
+        case .openMainChat:
+          // The same reveal-and-land-on-chat path the floating bar's
+          // "Continue in Omi" affordance uses; the chat transcript there
+          // carries the meeting-notes card with the conversation link.
+          AppDelegate.summonWindowTarget()?.openMainAppChat()
         case .none:
           break
         }
@@ -324,6 +329,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     case none
     /// The screen-recording repair, which is an action rather than a page.
     case resetScreenCapture
+    /// The main-window chat surface, where the meeting-notes card (with its
+    /// conversation link) was materialized.
+    case openMainChat
   }
 
   /// Resolve the tap destination from the notification's provenance.
@@ -333,6 +341,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// change with its own suppression-state migration.
   static func openAction(assistantId: String, title: String) -> OpenAction {
     if title == screenCaptureResetTitle { return .resetScreenCapture }
+    if assistantId == MeetingActionItemBannerPolicy.assistantID { return .openMainChat }
     return .none
   }
 
