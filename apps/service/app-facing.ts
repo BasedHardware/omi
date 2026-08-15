@@ -52,6 +52,10 @@ import {
 import { DEFAULT_READ_ITEM_GRANULARITY } from "../../core/retrieve/granularity";
 import { createServedCounter, type ServedCounter } from "./observability/served-count";
 import {
+  attachServiceRequestLog,
+  bearerTokenFromAuthorization,
+} from "./observability/request-log";
+import {
   attributeServedReads,
   createServedReadAttribution,
   READ_CLIENT_ID_HEADER,
@@ -260,6 +264,8 @@ export interface LocalServiceOptions {
   readonly attachmentContentReference?: () => string;
   /** Server-owned id seam for the dated legacy action-items create route. */
   readonly actionItemId?: () => string;
+  /** Override the JSONL request log directory. Tests isolate here; production uses OMI_DEV_STACK_RUNDIR. */
+  readonly runtimeLogDir?: string;
 }
 
 /** The service stores and the tasks atomic write boundary, grouped at composition. */
@@ -984,6 +990,13 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
   app.notFound(() => {
     counter.recordNonDomainRequest();
     return new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: JSON_HEADERS });
+  });
+  attachServiceRequestLog(app, {
+    ...(options.runtimeLogDir === undefined ? {} : { dir: options.runtimeLogDir }),
+    resolveOwnerAccountId: (request) => {
+      const token = bearerTokenFromAuthorization(request.headers.get("authorization"));
+      return token === null ? null : resolvePrincipal(token)?.uid ?? null;
+    },
   });
 
   return Object.freeze({

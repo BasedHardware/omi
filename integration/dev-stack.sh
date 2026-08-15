@@ -67,6 +67,12 @@ GATEWAY_IDENTITY_FILE="$RUNDIR/local-test-gateway-start-identity"
 GATEWAY_PID=""
 GATEWAY_START_IDENTITY=""
 mkdir -p "$RUNDIR"
+RUNTIME_LOG="$HERE/../apps/service/observability/runtime-log.ts"
+runtime_log() {
+  local level="$1" event="$2"
+  shift 2
+  bun "$RUNTIME_LOG" --append --proc service --level "$level" --event "$event" "$@" >/dev/null 2>&1 || true
+}
 
 stop_gateway_process() {
   local gateway_pid="$1"
@@ -127,6 +133,7 @@ stop_owned_gateways() {
 }
 
 if (( STOP_ONLY )); then
+  runtime_log info dev-stack.stop
   stop_owned_gateways
   node "$OWNER_TOOL" stop --record "$OWNERFILE"
   exit $?
@@ -137,7 +144,11 @@ if (( DOCTOR_ONLY )); then
 fi
 
 RUN_ID="${REQUESTED_RUN_ID:-run-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
-node "$HERE/lib/evidence-cli.mjs" validate-run-id --run-id "$RUN_ID" >/dev/null || exit $?
+if ! node "$HERE/lib/evidence-cli.mjs" validate-run-id --run-id "$RUN_ID" >/dev/null; then
+  rc=$?
+  runtime_log warn dev-stack.refused --reason invalid_run_id
+  exit "$rc"
+fi
 RUN_STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 RUN_DIR="$RUNDIR/runs/$RUN_ID"
 LOG_DIR="$RUN_DIR/logs"
@@ -153,14 +164,17 @@ SERVICE_LOG_PIPE="$RUN_DIR/service-log.pipe"
 SERVICE_LOG_READY="$RUN_DIR/service-log-sanitizer-ready"
 mkdir -p "$RUNDIR/runs"
 if ! mkdir "$RUN_DIR" 2>/dev/null; then
+  runtime_log warn dev-stack.refused --reason run_dir_exists
   echo "ERROR: raw run id $RUN_ID already owns a run directory; refusing to reuse or overwrite prior evidence." >&2
   exit 1
 fi
 if ! mkdir "$LOG_DIR"; then
   rmdir "$RUN_DIR" 2>/dev/null || true
+  runtime_log warn dev-stack.refused --reason log_dir_unwritable
   echo "ERROR: could not create the exclusive run log directory." >&2
   exit 1
 fi
+runtime_log info dev-stack.start --field "run_id=$RUN_ID"
 
 LEAVE_RUNNING=0
 OWNER_WRITTEN=0
@@ -261,7 +275,10 @@ if (( MODE_UP == 0 )); then
     occupied=1
   fi
 fi
-(( occupied == 0 )) || exit 1
+(( occupied == 0 )) || {
+  runtime_log warn dev-stack.refused --reason port_occupied
+  exit 1
+}
 
 printf 'run %s\n' "$RUN_ID"
 printf 'service %s with one run-scoped SQLite database\n' "$SERVICE_REL"
@@ -300,6 +317,7 @@ if (( gateway_ready == 0 )); then
   else
     echo "ERROR: local test gateway emitted no readiness candidate on ${GATEWAY_URL}." >&2
   fi
+  runtime_log error dev-stack.refused --reason gateway_not_ready
   exit 1
 fi
 mkfifo "$SERVICE_LOG_PIPE" || { echo "ERROR: could not create the service log sanitizer pipe." >&2; exit 1; }
@@ -333,6 +351,7 @@ done
 if (( ready == 0 )); then
   echo "ERROR: direct platform service emitted no valid readiness candidate within 20s." >&2
   tail -15 "$LOG_DIR/service.log" >&2
+  runtime_log error dev-stack.refused --reason service_not_ready
   exit 1
 fi
 
@@ -373,6 +392,7 @@ OWNER_WRITTEN=1
 
 if (( MODE_UP )); then
   LEAVE_RUNNING=1
+  runtime_log info dev-stack.ready --field "run_id=$RUN_ID"
   if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
     printf 'service-ready run=%s pid=%s owner=%s local-model-gateway=%s\n' "$RUN_ID" "$SERVICE_PID" "$OWNERFILE" "$GATEWAY_URL"
   else

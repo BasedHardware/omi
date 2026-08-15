@@ -50,6 +50,14 @@ After domain traffic arrives, a `[served]` heartbeat line prints whenever counts
 
 Stop with Ctrl-C (`omi dev-server: stopped`).
 
+## Telemetry
+
+Every HTTP request, boot, refusal, and shutdown is appended as JSONL under
+`${OMI_DEV_STACK_RUNDIR:-/tmp/omi-dev-stack}/logs/`. Read it with
+`bun run logs` or `integration/dev-logs.sh`. `bun run logs --errors` names 4xx/5xx
+paths. Tokens, message bodies, and memory content are never written. See
+[`docs/telemetry.md`](../../docs/telemetry.md).
+
 ### Boot acceptance (for launchers)
 
 `bin/boot-acceptance.ts` spawns the real dev server on port **4851**, drives it over HTTP, and prints one JSON verdict line to stdout. Exit 0 only when every check passes:
