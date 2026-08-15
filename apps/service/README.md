@@ -252,6 +252,47 @@ All are optional.
 | `OMI_LLM_GATEWAY_URL` | unset | Internal gateway origin. Set with `OMI_LLM_GATEWAY_SERVICE_TOKEN` to use gateway-backed Chat generation. |
 | `OMI_LLM_GATEWAY_SERVICE_TOKEN` | unset | Service-to-service gateway token. Never printed or persisted by the dev server. |
 | `OMI_LLM_GATEWAY_LANE` | `omi:auto:chat-agent` | Semantic gateway lane; provider/model names are rejected by the source adapter. |
+| `OMI_STT_ENGINE` | unset | When `mlx-whisper`, the listen socket uses on-device MLX Whisper. Unset keeps the scripted local adapter. Hermetic tests never set this. |
+| `OMI_STT_MODEL` | `mlx-community/whisper-large-v3-turbo` | Hugging Face MLX model id (or a local path). Used only when `OMI_STT_ENGINE=mlx-whisper`. |
+| `OMI_STT_VENV` | `.local/stt/venv` | Project-local venv created by `scripts/stt-bootstrap.sh`. |
+
+## On-device listen transcription (opt-in)
+
+The `/v4/listen` seam (`TranscriptionSource`) is provider-agnostic. The registered local composition still defaults to `createScriptedTranscriptionSource` so a cold checkout and every hermetic test stay deterministic. A real engine is **opt-in for the human app path**.
+
+### Bootstrap (once per machine / checkout)
+
+Host `python3` on this tree is 3.14. MLX does not assume a 3.14 wheel, so bootstrap pins **Python 3.12 via `uv`** into a gitignored project-local venv. It also pre-downloads the default model.
+
+```bash
+# from the repo root; idempotent; never invoked by tests
+scripts/stt-bootstrap.sh
+```
+
+That creates:
+
+- `.local/stt/venv` — Python 3.12 + `mlx-whisper`
+- `.local/stt/hf-cache` — model weights (do not commit)
+- `.local/stt/bootstrap.json` — a stamp the dev server uses to fail closed
+
+Default model: **`mlx-community/whisper-large-v3-turbo`** (~1.6 GB). It is the speed-optimized large-v3 distill: on Apple Silicon a 3 s window transcribes well inside the ~10 s first-text target, with much better accuracy than tiny/base, and it fits an M-series Max. Override with `OMI_STT_MODEL` and re-run bootstrap.
+
+### Enable
+
+```bash
+OMI_STT_ENGINE=mlx-whisper bun run apps/service/bin/dev-server.ts
+```
+
+`bin/dev-server.ts` is the only process that constructs `createMlxWhisperTranscriptionSource`. Production entrypoints and `createLocalService` never import it. If the env asks for `mlx-whisper` and the venv or model is missing, boot prints a precise refusal pointing at `scripts/stt-bootstrap.sh` and exits 1.
+
+The service owns a long-lived Python worker (`apps/service/listen/mlx-whisper-worker.py`). The worker loads the model once, reads JSON-lines on stdin, writes JSON-lines on stdout, and **exits when stdin hits EOF**, so a dead parent cannot leave an orphan. Mic audio is 16 kHz mono `pcm16` (or `linear16`). Other listen codecs are rejected with a typed error rather than silently mis-decoded.
+
+### Honest limits (dev-grade)
+
+- Whisper is **chunked**, not word-streaming. The adapter buffers ~3 s windows (silence- and idle-flushed) and emits one segment per nonempty window.
+- First text is expected within ~10 s of continuous speech (window fill + on-device inference), not tens of milliseconds.
+- `consumedSeconds` is the PCM duration of the window that produced the segment, so entitlement metering stays truthful. It is not wall-clock.
+- This is a local/dev engine. Cloud STT later is configuration behind the same seam, not a new listen route.
 
 ## Troubleshooting
 
@@ -339,6 +380,7 @@ an explicit emulator opt-in and does not weaken deployed mode.
   deployment credentials, MCP API-key adapter, or cohort. Conversations and the
   other local domains remain SQLite-only here.
 - **Gateway-required Chat model composition.** The registered service uses the authenticated LLM gateway semantic lane and fails closed when gateway configuration is absent. Provider/model selection and credentials remain gateway-owned; deterministic scripted generation is limited to explicit hermetic tests.
+- **On-device listen STT is opt-in and chunked.** Unset `OMI_STT_ENGINE` keeps the scripted adapter. `mlx-whisper` is a local/dev engine with ~3 s windows, not word-level streaming, and is not a production speech service.
 - **Provisional served-memory selection.** The composition serves temporal **leaf** nodes (one synthesized memory per local day). That aligns with a timeline UI and the seeded fixture layout, but it is a QA composition choice, not a ratified product rule (`composition/memory-read.ts` documents this).
 - **No field negotiation** for optional response fields such as citations or provenance — clients receive the full ratified wire shape.
 - **Dev auth is a seam, not an auth system.** A fixed, committed signing label issues bearer tokens for loopback testing. A real deployment replaces this entire mechanism.

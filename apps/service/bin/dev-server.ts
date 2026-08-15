@@ -7,6 +7,11 @@ import {
   createGatewayChatGenerationSource,
   createGatewayRequiredChatGenerationSource,
 } from "../chat/generation-source";
+import {
+  DevSttConfigError,
+  resolveDevSttConfig,
+} from "../listen/mlx-whisper-boot";
+import { createMlxWhisperTranscriptionSource } from "../listen/mlx-whisper-transcription-source";
 import { createGetActionItemsToolLoop } from "../chat/action-items-tool";
 import { createProductionGatewayToolLoop } from "../chat/gateway-tool-composition";
 import { LOOPBACK_HOST, assertPortInRange } from "../net/loopback";
@@ -79,6 +84,7 @@ interface BootConfig {
     readonly token: string;
     readonly laneId: string;
   }> | null;
+  readonly stt: ReturnType<typeof resolveDevSttConfig>;
 }
 
 const readConfig = (): BootConfig => {
@@ -145,6 +151,18 @@ const readConfig = (): BootConfig => {
     laneId: process.env.OMI_LLM_GATEWAY_LANE?.trim() || "omi:auto:chat-agent",
   });
 
+  let stt: ReturnType<typeof resolveDevSttConfig>;
+  try {
+    stt = resolveDevSttConfig({
+      OMI_STT_ENGINE: process.env.OMI_STT_ENGINE,
+      OMI_STT_MODEL: process.env.OMI_STT_MODEL,
+      OMI_STT_VENV: process.env.OMI_STT_VENV,
+    });
+  } catch (error) {
+    if (error instanceof DevSttConfigError) fail(error.message);
+    throw error;
+  }
+
   return Object.freeze({
     port,
     ownerAccountId: process.env.OMI_SEED_OWNER || DEFAULT_OWNER,
@@ -158,6 +176,7 @@ const readConfig = (): BootConfig => {
     readyRecordPath: rawReadyRecordPath ?? null,
     seedPersona,
     llmGateway,
+    stt,
   });
 };
 
@@ -206,6 +225,16 @@ const main = (): void => {
       },
     });
   let service: ReturnType<typeof createLocalDevService>;
+  const transcriptionSource = config.stt.kind === "mlx-whisper"
+    ? createMlxWhisperTranscriptionSource({
+      subprocess: {
+        pythonPath: config.stt.pythonPath,
+        workerPath: config.stt.workerPath,
+        model: config.stt.model,
+        hfHome: config.stt.hfHome,
+      },
+    })
+    : null;
   try {
     service = createLocalDevService({
       db,
@@ -217,12 +246,14 @@ const main = (): void => {
       devSecretLabel: config.devSecretLabel,
       listenDefaultUnmetered: true,
       generationSource,
+      ...(transcriptionSource === null ? {} : { transcriptionSource }),
       ...(config.seedPersona === "demo"
         ? { seedPersona: "demo" as const, overlaySeed: applyDemoPersonaSeed }
         : {}),
     });
     serviceForGatewayTools = service;
   } catch (error) {
+    void transcriptionSource?.dispose();
     return fail(`failed to seed QA data: ${error instanceof Error ? error.message : "unknown error"}`);
   }
 
@@ -239,6 +270,7 @@ const main = (): void => {
       websocket: service.websocket,
     });
   } catch (error) {
+    void transcriptionSource?.dispose();
     const message = error instanceof Error ? error.message : "";
     if (/EADDRINUSE|address already in use/i.test(message)) {
       return fail(
@@ -266,6 +298,7 @@ const main = (): void => {
       })}\n`, { encoding: "utf8", mode: 0o600 });
     } catch {
       server.stop(true);
+      void transcriptionSource?.dispose();
       db.close();
       return fail("could not write the host-owned readiness record.");
     }
@@ -277,7 +310,10 @@ const main = (): void => {
     + `  seed identity ${config.ownerAccountId}, ${config.memoryCount} memories, ${config.accountTimezone}`
     + `${config.seedPersona === "demo" ? ", persona demo (Demo User)" : ""}\n`
     + `  time anchor   ${QA_FIXTURE_TIME_ANCHOR_UTC}\n`
-    + `  storage       ${config.databasePath} (SQLite, QA fixture only - never production authority)\n\n`
+    + `  storage       ${config.databasePath} (SQLite, QA fixture only - never production authority)\n`
+    + `  stt           ${config.stt.kind === "mlx-whisper"
+      ? "mlx-whisper (on-device, chunked windows; dev-grade)"
+      : "scripted (unset OMI_STT_ENGINE)"}\n\n`
     + `  dev token\n    ${service.devToken}\n\n`
     + `  try it\n`
     + `    TOKEN='${service.devToken}'\n`
@@ -307,6 +343,7 @@ const main = (): void => {
   const shutdown = (): void => {
     clearInterval(heartbeat);
     server.stop(true);
+    void transcriptionSource?.dispose();
     db.close();
     process.stdout.write("\nomi dev-server: stopped\n");
     process.exit(0);

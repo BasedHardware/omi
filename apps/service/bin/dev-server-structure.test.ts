@@ -32,6 +32,13 @@ test("dev-server routes generation through the gateway or fails closed without o
   expect(appFacingSource).not.toContain("createScriptedChatGenerationSource");
 });
 
+test("dev-server STT is opt-in mlx-whisper and app-facing stays scripted", () => {
+  expect(source).toContain("OMI_STT_ENGINE");
+  expect(source).toContain("createMlxWhisperTranscriptionSource");
+  expect(appFacingSource).toContain("createScriptedTranscriptionSource()");
+  expect(appFacingSource).not.toContain("createMlxWhisperTranscriptionSource");
+});
+
 test("producer evidence has one composition site: the registered local service", async () => {
   const root = new URL("../../../", import.meta.url);
   const callers: string[] = [];
