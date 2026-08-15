@@ -336,12 +336,10 @@ def search_memories_tool(
         display_tz = timezone.utc
 
     try:
-        matches = MemoryService(db_client=firestore_db).search(
-            uid,
-            query,
-            limit=limit,
-            candidate_limit=limit * 3 if (scope_start_dt or scope_end_dt) else None,
-        )
+        search_kwargs = {'limit': limit}
+        if scope_start_dt or scope_end_dt:
+            search_kwargs['candidate_limit'] = limit * 3
+        matches = MemoryService(db_client=firestore_db).search(uid, query, **search_kwargs)
         matches = [match for match in matches if not match.memory.is_locked]
         if scope_start_dt or scope_end_dt:
             matches = [
