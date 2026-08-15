@@ -47,17 +47,20 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          # Keep the planner's internal wait below the 105-minute job ceiling,
-          # preserving 15 minutes for checkout/token/planner overhead even when
-          # a repository variable is accidentally configured higher.
+          # Keep the planner's internal wait inside the Omi Bot installation
+          # token's 60-minute life: polls past expiry — including the
+          # newest-green fallback scan — fail with 401 and wedge the train
+          # (issue #11574). The planner clamps too; this keeps the log honest
+          # when a repository variable is configured higher. A Swift CI run
+          # that needs longer defers to the next hourly tick.
           requested_timeout="${CI_GATE_TIMEOUT_SECONDS}"
           if ! [[ "${requested_timeout}" =~ ^[0-9]+$ ]]; then
             echo "Invalid DESKTOP_CI_GATE_TIMEOUT_SECONDS=${requested_timeout}" >&2
             exit 1
           fi
-          if (( requested_timeout > 5400 )); then
-            echo "Clamping source-check wait from ${requested_timeout}s to 5400s for the 105m job ceiling"
-            requested_timeout=5400
+          if (( requested_timeout > 2700 )); then
+            echo "Clamping source-check wait from ${requested_timeout}s to 2700s for the 60m token life"
+            requested_timeout=2700
           fi
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}" \

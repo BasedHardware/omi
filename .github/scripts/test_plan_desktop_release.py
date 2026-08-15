@@ -354,6 +354,19 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         with patch.dict(os.environ, {planner.CI_GATE_TIMEOUT_ENV: ""}, clear=False):
             self.assertEqual(planner.default_source_check_wait_seconds(), planner.SOURCE_CHECK_WAIT_SECONDS)
 
+    def test_source_check_wait_is_clamped_to_the_installation_token_life(self) -> None:
+        # Aug 14 2026 (issue #11574): the 90-minute gate outlived the 60-minute
+        # Omi Bot installation token, so late polls AND the newest-green
+        # fallback scan all returned "gh: Bad credentials (401)" and every
+        # hourly run went red. No configuration source may exceed the ceiling.
+        self.assertEqual(
+            planner.clamp_source_check_wait_seconds(90 * 60),
+            planner.TOKEN_SAFE_WAIT_CEILING_SECONDS,
+        )
+        self.assertEqual(planner.clamp_source_check_wait_seconds(600), 600)
+        self.assertLessEqual(planner.SOURCE_CHECK_WAIT_SECONDS, planner.TOKEN_SAFE_WAIT_CEILING_SECONDS)
+        self.assertLess(planner.TOKEN_SAFE_WAIT_CEILING_SECONDS, 60 * 60)
+
     def test_extended_wait_admits_observed_late_exact_sha_success(self) -> None:
         # Run 30179919353 timed out at the former 12-minute boundary, then its
         # final exact-SHA aggregate completed successfully 5m40s later. Model
@@ -506,14 +519,14 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertNotIn("break_glass", workflow)
         self.assertIn("source_sha: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertIn("ref: ${{ steps.recheck.outputs.source_sha }}", workflow)
-        self.assertEqual(planner.SOURCE_CHECK_WAIT_SECONDS, 90 * 60)
+        self.assertEqual(planner.SOURCE_CHECK_WAIT_SECONDS, 45 * 60)
         self.assertEqual(workflow.count('--source-check-wait-seconds "${CI_GATE_TIMEOUT_SECONDS}"'), 2)
         self.assertEqual(workflow.count('--source-check-wait-seconds "${requested_timeout}"'), 1)
         self.assertEqual(workflow.count("--source-check-poll-seconds 30"), 3)
         self.assertIn("CI_GATE_TIMEOUT_SECONDS:", workflow)
         self.assertIn("vars.DESKTOP_CI_GATE_TIMEOUT_SECONDS || '5400'", workflow)
         self.assertIn("timeout-minutes: 105", workflow)
-        self.assertIn("if (( requested_timeout > 5400 )); then", workflow)
+        self.assertIn("if (( requested_timeout > 2700 )); then", workflow)
         self.assertIn("Surface planner non-release decision", workflow)
         self.assertIn("::error::Desktop release planner blocked:", workflow)
         self.assertIn("::warning::Desktop release planner skipped tagging:", workflow)
