@@ -26,13 +26,15 @@ export async function openHomeSearchSources(
 ): Promise<{
   sources: HomeSearchSources;
   memoriesGeneration: "legacy" | "platform";
+  conversationsGeneration: "legacy" | "platform";
 }> {
   const memoriesGeneration = stores.selection.memories;
+  const conversationsGeneration = stores.selection.conversations;
   const [memories, conversations] = await Promise.all([
     openHomeMemoryProjection(stores),
     openHomeConversationProjection(stores),
   ]);
-  return { sources: { memories, conversations }, memoriesGeneration };
+  return { sources: { memories, conversations }, memoriesGeneration, conversationsGeneration };
 }
 
 async function openHomeMemoryProjection(

@@ -531,7 +531,7 @@ test("openHomeSearchSources on a platform selection never opens the legacy memor
     async refresh() {},
     label: name,
   });
-  const { sources, memoriesGeneration } = await openHomeSearchSources({
+  const { sources, memoriesGeneration, conversationsGeneration } = await openHomeSearchSources({
     selection: { memories: "platform", conversations: "platform", folders: "platform", tasks: "legacy" },
     async openMemories() { calls.memories += 1; return stub("legacy-memories"); },
     async openSynthesizedMemories() { calls.synthesized += 1; return stub("synthesized"); },
@@ -539,6 +539,7 @@ test("openHomeSearchSources on a platform selection never opens the legacy memor
     async openPlatformConversations() { calls.platformConversations += 1; return stub("platform-conversations"); },
   });
   assert.equal(memoriesGeneration, "platform");
+  assert.equal(conversationsGeneration, "platform");
   assert.deepEqual(calls, { memories: 0, synthesized: 1, conversations: 0, platformConversations: 1 });
   assert.equal(typeof sources.memories.list, "function");
   assert.equal(typeof sources.conversations.list, "function");

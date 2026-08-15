@@ -172,3 +172,70 @@ test("conversation dead letters render product copy and never backend summaries"
     await rendered.cleanup();
   }
 });
+
+function sourceStub(name) {
+  return {
+    async list() { return []; },
+    status() { return { refresh: { phase: "ready", hasSavedData: false }, pendingWrites: 0, deadLetters: [] }; },
+    subscribe() { return () => {}; },
+    async refresh() {},
+    async deadLetters() { return []; },
+    async discardDeadLetter() {},
+    async patch() {},
+    async delete() {},
+    label: name,
+  };
+}
+
+test("openConversationRouteSources on a platform selection never opens the legacy stores", async () => {
+  const openConversationRouteSources = await loadProductionExport("conversation-sources.ts", "openConversationRouteSources");
+  const calls = { conversations: 0, platformConversations: 0, folders: 0, platformFolders: 0 };
+  const { conversationsGeneration, foldersGeneration } = await openConversationRouteSources({
+    selection: { memories: "platform", conversations: "platform", folders: "platform", tasks: "legacy" },
+    async openConversations() { calls.conversations += 1; return sourceStub("legacy-conversations"); },
+    async openPlatformConversations() { calls.platformConversations += 1; return sourceStub("platform-conversations"); },
+    async openFolders() { calls.folders += 1; return sourceStub("legacy-folders"); },
+    async openPlatformFolders() { calls.platformFolders += 1; return sourceStub("platform-folders"); },
+  });
+  assert.equal(conversationsGeneration, "platform");
+  assert.equal(foldersGeneration, "platform");
+  assert.deepEqual(calls, { conversations: 0, platformConversations: 1, folders: 0, platformFolders: 1 });
+  // red-proof: routing Conversations through openConversations() under a platform
+  // selection hits the legacy offset list this service dual-serves, and paints
+  // "Showing saved data. Couldn't refresh."
+});
+
+test("openConversationRouteSources on a legacy selection stays on the legacy stores", async () => {
+  const openConversationRouteSources = await loadProductionExport("conversation-sources.ts", "openConversationRouteSources");
+  const calls = { conversations: 0, platformConversations: 0, folders: 0, platformFolders: 0 };
+  const { conversationsGeneration, foldersGeneration } = await openConversationRouteSources({
+    selection: { memories: "legacy", conversations: "legacy", folders: "legacy", tasks: "legacy" },
+    async openConversations() { calls.conversations += 1; return sourceStub("legacy-conversations"); },
+    async openPlatformConversations() { calls.platformConversations += 1; return sourceStub("platform-conversations"); },
+    async openFolders() { calls.folders += 1; return sourceStub("legacy-folders"); },
+    async openPlatformFolders() { calls.platformFolders += 1; return sourceStub("platform-folders"); },
+  });
+  assert.equal(conversationsGeneration, "legacy");
+  assert.equal(foldersGeneration, "legacy");
+  assert.deepEqual(calls, { conversations: 1, platformConversations: 0, folders: 1, platformFolders: 0 });
+});
+
+test("Conversations still shows the failure notice when refresh genuinely fails", async () => {
+  const rendered = await renderConversation("saved-failed");
+  try {
+    await rendered.act(async () => {
+      for (let index = 0; index < 6; index += 1) await Promise.resolve();
+    });
+    const main = rendered.container.querySelector('main[data-route="conversations"]');
+    assert.equal(main?.getAttribute("data-surface-state"), "saved-but-refresh-failed");
+    assert.equal(
+      rendered.container.querySelector(".status-notice")?.textContent,
+      EN_MESSAGES["lifecycle.savedFailed"],
+    );
+    assert.ok(rendered.container.querySelector(".conversation-row"), "saved rows remain visible beside the failure notice");
+  } finally {
+    await rendered.cleanup();
+  }
+  // red-proof: omitting the lifecycle region, or mapping saved-but-refresh-failed
+  // to ready, hides "Showing saved data. Couldn't refresh." while rows remain.
+});

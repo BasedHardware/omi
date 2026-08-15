@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "@omi-core/i18n";
 import type { Folder } from "@omi-core/contracts";
-import type { ProductionFolderStore } from "./ProductionStores.js";
+import type { ProductionFolderStore, ProductionPlatformFolderStore } from "./ProductionStores.js";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionEmptyState, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionNotice, ProductionPageHeader, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { ProductionIcon } from "./ProductionIcon.js";
@@ -10,7 +10,7 @@ import "./folders.css";
 const FOLDER_NOTICE_TONE = "info" as const;
 const FOLDER_EMPTY_ICON = "library" as const;
 
-export function foldersConversationHref(search: string, folderId?: Folder["id"]): string {
+export function foldersConversationHref(search: string, folderId?: string): string {
   const params = new URLSearchParams(search);
   params.delete("conversation");
   params.delete("qa");
@@ -22,7 +22,7 @@ export function foldersConversationHref(search: string, folderId?: Folder["id"])
 }
 
 export function FoldersProduction({ store, locale = "en", onReady, source = { kind: "live", origin: "bridge" }, fixture }: {
-  store: ProductionFolderStore;
+  store: ProductionFolderStore | ProductionPlatformFolderStore;
   locale?: string;
   onReady?: () => void;
   source?: SurfaceDataSource;
@@ -37,7 +37,8 @@ export function FoldersProduction({ store, locale = "en", onReady, source = { ki
 
   const reload = useCallback(async (): Promise<void> => {
     try {
-      setFolders(await store.list());
+      // Field-identical across generations except `id` branding; same seam as conversations.
+      setFolders([...(await store.list())] as Folder[]);
       setFailed(false);
     } catch {
       setFailed(true);

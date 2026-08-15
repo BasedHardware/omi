@@ -2,7 +2,12 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import type { Conversation, Folder } from "@omi-core/contracts";
 import { formatDate, formatDuration, t } from "@omi-core/i18n";
 import { CONVERSATION_FIXED_NOW, type ConversationFixtureState } from "./conversation-fixtures.js";
-import type { ProductionConversationStore, ProductionFolderStore } from "./ProductionStores.js";
+import type {
+  ProductionConversationStore,
+  ProductionFolderStore,
+  ProductionPlatformConversationStore,
+  ProductionPlatformFolderStore,
+} from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { listEmptyKind } from "./list-empty-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
@@ -13,6 +18,8 @@ import "./conversations.css";
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
 type ConversationFilter = "all" | "starred" | `folder:${string}`;
+type ConversationsRouteStore = ProductionConversationStore | ProductionPlatformConversationStore;
+type ConversationsFoldersStore = ProductionFolderStore | ProductionPlatformFolderStore;
 const CONVERSATION_EMPTY_ICON = "conversations" as const;
 
 function visibilityLabel(value: Conversation["visibility"], locale: Locale): string {
@@ -95,7 +102,7 @@ function ConversationRow({ conversation, locale, run, store, fixture }: {
   conversation: Conversation;
   locale: Locale;
   run: RunOperation;
-  store: ProductionConversationStore;
+  store: ConversationsRouteStore;
   fixture?: ConversationFixtureState | undefined;
 }): React.JSX.Element {
   const canPatch = !conversation.isLocked && !conversation.discarded;
@@ -134,7 +141,7 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
   folders: Folder[];
   locale: Locale;
   run: RunOperation;
-  store: ProductionConversationStore;
+  store: ConversationsRouteStore;
   fixture?: ConversationFixtureState | undefined;
 }): React.JSX.Element {
   const [titleDraft, setTitleDraft] = useState(conversation.title);
@@ -270,8 +277,8 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
 }
 
 export function ConversationsProduction({ store, foldersStore, fixture, detailId, initialFolderId, locale = "en", onReady }: {
-  store: ProductionConversationStore;
-  foldersStore: ProductionFolderStore;
+  store: ConversationsRouteStore;
+  foldersStore: ConversationsFoldersStore;
   fixture?: ConversationFixtureState | undefined;
   detailId?: string | undefined;
   initialFolderId?: string | undefined;
@@ -280,7 +287,7 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
 }): React.JSX.Element {
   const [rows, setRows] = useState<Conversation[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
-  const [dead, setDead] = useState<Awaited<ReturnType<ProductionConversationStore["deadLetters"]>>>([]);
+  const [dead, setDead] = useState<Awaited<ReturnType<ConversationsRouteStore["deadLetters"]>>>([]);
   const [status, setStatus] = useState(store.status());
   const [operationError, setOperationError] = useState<string | null>(null);
   const [filter, setFilter] = useState<ConversationFilter>(() => initialFolderId ? `folder:${initialFolderId}` : "all");
@@ -292,9 +299,12 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
   const reload = useCallback(async (): Promise<void> => {
     try {
       const [nextRows, nextDead, nextFolders] = await Promise.all([store.list(), store.deadLetters(), foldersStore.list()]);
-      setRows(nextRows);
+      // Both generations are field-identical except `id` branding. The platform
+      // store already treats items as Conversation on write; this is that same
+      // seam, not a fabricated field.
+      setRows([...nextRows] as Conversation[]);
       setDead(nextDead);
-      setFolders(nextFolders);
+      setFolders([...nextFolders] as Folder[]);
     } catch {
       setOperationError(t(locale, "lifecycle.error"));
     }
