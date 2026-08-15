@@ -103,10 +103,15 @@ enum BucketFactValidator {
   static let bookkeepingIdentifierPattern = #"^(fact|f|ftn|visit|screenshot)[-:_ ]?\d+$"#
 
   static func acceptedIdentifiers(_ identifiers: [String], evidenceText: String) -> [String] {
-    identifiers.filter { identifier in
+    // Case-fold only the containment check, never the identifier itself: a
+    // model-emitted handle like `pr-123` must still count as present when the
+    // on-screen quote reads `PR-123`, but the accepted value keeps the case
+    // the model actually produced.
+    let lowercasedEvidence = evidenceText.lowercased()
+    return identifiers.filter { identifier in
       identifier.range(
         of: bookkeepingIdentifierPattern, options: [.regularExpression, .caseInsensitive]
-      ) == nil && evidenceText.contains(identifier)
+      ) == nil && lowercasedEvidence.contains(identifier.lowercased())
     }
   }
 }

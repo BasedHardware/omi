@@ -332,6 +332,18 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       [])
   }
 
+  func testAcceptedIdentifiersMatchCaseInsensitivelyButKeepTheOriginalCasing() {
+    XCTAssertEqual(
+      BucketFactValidator.acceptedIdentifiers(
+        ["pr-123"], evidenceText: "PR-123 is the launch blocker."),
+      ["pr-123"],
+      "a differently-cased on-screen quote must not discard an otherwise-valid identifier")
+    XCTAssertEqual(
+      BucketFactValidator.acceptedIdentifiers(
+        ["NIK"], evidenceText: "nik asked for the demo recording."),
+      ["NIK"])
+  }
+
   func testExtractionSchemaOmitsWorkstream() throws {
     let properties = try XCTUnwrap(
       ContextBucketRollupWriter.schema["properties"] as? [String: Any])
