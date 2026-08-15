@@ -28,6 +28,8 @@ export type ChatDelivery =
       readonly clientMessageId: string;
       readonly source: "observer" | "provider" | "transport";
       readonly retryable: boolean;
+      /** Provider failure code when the terminal named one. Absent for observer/transport. */
+      readonly code?: string;
     };
 
 export type ChatMessage = {

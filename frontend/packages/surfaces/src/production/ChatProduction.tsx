@@ -58,6 +58,30 @@ function deliveryLabel(message: ChatMessage, locale: Locale): string | null {
   return null;
 }
 
+function failedReasonClass(
+  message: ChatMessage,
+): "provider-unavailable" | "timed-out" | null {
+  if (message.delivery.kind !== "failed") return null;
+  if (message.delivery.source === "transport") return null;
+  const terminal = [...(message.agentRun?.events ?? [])].reverse()
+    .find((event) => event.kind === "terminal");
+  const code = message.delivery.kind === "failed"
+    ? (message.delivery.code ?? (terminal?.kind === "terminal" ? terminal.details.terminalCode : undefined))
+    : undefined;
+  if (code === "generation_timeout") return "timed-out";
+  if (message.delivery.source === "provider") return "provider-unavailable";
+  return null;
+}
+
+function failedMessageText(message: ChatMessage, locale: Locale): string {
+  if (message.text) return message.text;
+  if (message.delivery.kind !== "failed") return "";
+  const reason = failedReasonClass(message);
+  if (reason === "timed-out") return t(locale, "chat.failedTimedOut");
+  if (reason === "provider-unavailable") return t(locale, "chat.failedProviderUnavailable");
+  return t(locale, "chat.responseUnavailable");
+}
+
 function chatAnnouncement(messages: readonly ChatMessage[], locale: Locale): string | null {
   const latest = [...messages].reverse()[0];
   if (!latest) return null;
@@ -619,6 +643,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                 const cancelled = message.delivery.kind === "canonical" &&
                   message.delivery.generationOutcome === "cancelled";
                 const failedDelivery = message.delivery.kind === "failed" ? message.delivery : null;
+                const failureClass = failedReasonClass(message);
                 const hasRecoverySource = failedDelivery !== null && messages.some((candidate) =>
                   candidate.role === "user" &&
                   candidate.delivery.kind === "canonical" &&
@@ -632,6 +657,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                     key={messageKey(message)}
                     className={`chat-message is-${message.role}${message.delivery.kind === "failed" ? " is-failed" : ""}${message.delivery.kind === "echo" ? " is-pending" : ""}${busy ? " is-streaming" : ""}${cancelled ? " is-cancelled" : ""}`}
                     data-delivery={message.delivery.kind}
+                    data-failure-class={failureClass ?? undefined}
                     aria-busy={busy || undefined}
                   >
                     <div className="chat-message-meta">
@@ -639,9 +665,9 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                       {statusLabel && <span className="chat-delivery-label">{statusLabel}</span>}
                     </div>
                     <p className="chat-message-text">
-                      {message.text || (message.delivery.kind === "failed"
-                        ? t(locale, "chat.responseUnavailable")
-                        : "")}
+                      {message.delivery.kind === "failed"
+                        ? failedMessageText(message, locale)
+                        : message.text}
                     </p>
                     {failedDelivery?.source === "transport" && (
                       <div className="chat-failure-recovery" data-recovery="unsupported-stream">
