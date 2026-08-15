@@ -20,6 +20,13 @@ struct BucketExtraction: Codable, Equatable, Sendable {
 
   let narrative: String
   let facts: [Fact]
+  /// Proposed browser destination key, `unknown/…` when the model abstains.
+  ///
+  /// Optional so a response predating this field still decodes: synthesized
+  /// `Decodable` uses `decodeIfPresent` for optionals, where a non-optional would
+  /// throw on the missing key. `var` with a default also keeps the memberwise
+  /// initializer source-compatible for existing callers.
+  var destination: String? = nil
 }
 
 enum BucketFactValidity: String {
@@ -152,14 +159,26 @@ enum ContextProactivityPromptBuilder {
   }
 
   static func extractionPrompt(appName: String, windowTitle: String?, evidenceRef: String) -> String {
-    """
-    \(ScreenDerivedContent.untrustedPreamble)
-    Produce a 150-400 token ambient narrative and discrete factual records. Facts are
-    proposals; include an identifier, surviving evidence text, and evidence ref for each.
-    App: \(appName)
-    Window: \(windowTitle ?? "")
-    Evidence ref: \(evidenceRef)
-    """
+    let base = """
+      \(ScreenDerivedContent.untrustedPreamble)
+      Produce a 150-400 token ambient narrative and discrete factual records. Facts are
+      proposals; include an identifier, surviving evidence text, and evidence ref for each.
+      App: \(appName)
+      Window: \(windowTitle ?? "")
+      Evidence ref: \(evidenceRef)
+      """
+    // Browser-scoped by design. Unscoped destination labelling was measured at 6%
+    // precision: the model answers `telegram` for every thread and collapses
+    // unrelated private conversations into one bucket. Native-app title identity is
+    // already correct, so it is left alone.
+    guard ContextDestinationKey.isBrowser(appName: appName), let windowTitle,
+      !windowTitle.isEmpty
+    else {
+      return base + "\n\nSet \"destination\" to \"\(ContextDestinationKey.abstention)\"."
+    }
+    // The fragment sits below `untrustedPreamble`, so the window title it quotes
+    // stays framed as untrusted data rather than instruction.
+    return base + "\n\n" + ContextDestinationKey.promptFragment(title: windowTitle)
   }
 
   static func directorPrompt(
@@ -695,6 +714,7 @@ actor ContextBucketRollupWriter {
         rawContextKey: "\(frame.appName)\n\(frame.windowTitle ?? "")",
         normalizedContextKey: ContextTitleNormalizer.identityKey(
           appName: frame.appName, windowTitle: frame.windowTitle) ?? "")
+      await applyDestinationIfEligible(extraction: extraction, frame: frame, fence: fence)
     } catch {
       switch error as? ProactiveLaneClientError {
       case .http(let status, _) where status == 429:
@@ -704,6 +724,26 @@ actor ContextBucketRollupWriter {
       default:
         log("Context bucket extraction failed silently: \(error.localizedDescription)")
       }
+    }
+  }
+
+  /// Applies a model-proposed browser destination, if it survives every gate.
+  ///
+  /// Deliberately non-throwing: a rejected or failed destination must never lose
+  /// the extraction that already succeeded. Falling through leaves the context on
+  /// its existing per-title identity, which is the safe direction.
+  private func applyDestinationIfEligible(
+    extraction: BucketExtraction, frame: CapturedFrame, fence: ContextVisitFence
+  ) async {
+    guard await ContextBucketsFeature.isDestinationRoutingEnabled,
+      ContextDestinationKey.isBrowser(appName: frame.appName),
+      let windowTitle = frame.windowTitle,
+      let subjectID = ContextDestinationKey.sanitize(extraction.destination, title: windowTitle)
+    else { return }
+    do {
+      _ = try await store.applyDestination(subjectID, for: fence)
+    } catch {
+      log("Context bucket destination binding failed silently: \(error.localizedDescription)")
     }
   }
 
@@ -731,8 +771,11 @@ actor ContextBucketRollupWriter {
             "additionalProperties": false,
           ],
         ],
+        "destination": ["type": "string"],
       ],
-      "required": ["narrative", "facts"],
+      // Strict structured output requires every declared property to be listed as
+      // required, so non-browser contexts are instructed to abstain instead.
+      "required": ["narrative", "facts", "destination"],
       "additionalProperties": false,
     ]
   }

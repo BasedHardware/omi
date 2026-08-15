@@ -44,4 +44,22 @@ enum ContextBucketsFeature {
     guard AppBuild.isBetaProductionBundle else { return false }
     return !PostHogManager.shared.isFeatureEnabled(killSwitchFlagName)
   }
+
+  /// Groups browser tabs of one website into a single bucket instead of one bucket
+  /// per tab title.
+  ///
+  /// Separate from `isEnabled` and separately stoppable: this is the only path that
+  /// can make two different reference hashes share a bucket, so it needs its own
+  /// remote stop that does not take the whole pipeline down with it. Same inverted
+  /// fail-open semantics as the pipeline kill switch.
+  @MainActor static var isDestinationRoutingEnabled: Bool {
+    guard isEnabled else { return false }
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localDestinationOverrideName] != "0"
+    }
+    return !PostHogManager.shared.isFeatureEnabled(destinationKillSwitchFlagName)
+  }
+
+  static let destinationKillSwitchFlagName = "context_buckets_destination_kill"
+  private static let localDestinationOverrideName = "OMI_FORCE_BUCKET_DESTINATIONS"
 }

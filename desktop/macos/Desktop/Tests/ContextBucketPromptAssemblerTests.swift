@@ -18,14 +18,18 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       visitID: 99, contextGeneration: 3, poolEpoch: 4, bucketID: "bucket", startedAt: Date(timeIntervalSince1970: 1))
 
     let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
-    let expected = [
-      ScreenDerivedContent.untrustedPreamble,
-      "Produce a 150-400 token ambient narrative and discrete factual records. Facts are",
-      "proposals; include an identifier, surviving evidence text, and evidence ref for each.",
-      "App: Xcode",
-      "Window: PR-123",
-      "Evidence ref: screenshot:42",
-    ].joined(separator: "\n")
+    let expected =
+      [
+        ScreenDerivedContent.untrustedPreamble,
+        "Produce a 150-400 token ambient narrative and discrete factual records. Facts are",
+        "proposals; include an identifier, surviving evidence text, and evidence ref for each.",
+        "App: Xcode",
+        "Window: PR-123",
+        "Evidence ref: screenshot:42",
+      ].joined(separator: "\n")
+      // Xcode is not a browser, so destination routing must not be offered here —
+      // only the abstention that satisfies the strict-schema required field.
+      + "\n\nSet \"destination\" to \"\(ContextDestinationKey.abstention)\"."
 
     XCTAssertEqual(prompt, expected)
   }
@@ -37,7 +41,11 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
 
     let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
 
-    XCTAssertTrue(prompt.hasSuffix("App: Safari\nWindow: \nEvidence ref: visit:123"))
+    // Safari is a browser, but a blank window title carries no destination signal,
+    // so this must still fall through to abstention rather than inviting a guess.
+    XCTAssertTrue(prompt.contains("App: Safari\nWindow: \nEvidence ref: visit:123"))
+    XCTAssertTrue(prompt.hasSuffix("Set \"destination\" to \"\(ContextDestinationKey.abstention)\"."))
+    XCTAssertFalse(prompt.contains("page-group"))
   }
 
   func testDirectorPromptContainsSafetyPreambleBucketTasksAndFrameMetadata() {
