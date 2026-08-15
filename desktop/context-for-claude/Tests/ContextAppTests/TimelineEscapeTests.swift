@@ -26,7 +26,7 @@ final class TimelineEscapeTests: XCTestCase {
 
     func testEscapeClosesTheTimeline() throws {
         var closes = 0
-        let window = presentWindow { closes += 1 }
+        let window = try presentWindow { closes += 1 }
 
         NSApp.sendEvent(try key(53))
         XCTAssertEqual(closes, 1, "Escape is the way out the user went looking for and did not find")
@@ -52,7 +52,7 @@ final class TimelineEscapeTests: XCTestCase {
     /// so an idle field editor passes the key up the responder chain to the window.
     func testAFocusedButIdleFieldEditorStillLetsEscapeOut() throws {
         var closes = 0
-        let window = presentWindow { closes += 1 }
+        let window = try presentWindow { closes += 1 }
 
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 80, height: 22))
         window.contentView?.addSubview(field)
@@ -84,7 +84,7 @@ final class TimelineEscapeTests: XCTestCase {
     func testNoTextStateCanHoldEscapeForever() throws {
         for state in TextState.allCases {
             var closes = 0
-            let window = presentWindow { closes += 1 }
+            let window = try presentWindow { closes += 1 }
             let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 80, height: 22))
             window.contentView?.addSubview(field)
             XCTAssertTrue(window.makeFirstResponder(field), "\(state): the field never took focus")
@@ -126,7 +126,7 @@ final class TimelineEscapeTests: XCTestCase {
     /// the only layer above `performKeyEquivalent:`, so this passes there and fails on any route below it.
     func testContentThatClaimsEscapeCannotKeepTheWindowsExit() throws {
         var closes = 0
-        let window = presentWindow { closes += 1 }
+        let window = try presentWindow { closes += 1 }
         let greedy = EscapeEatingView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
         window.contentView = greedy
 
@@ -174,7 +174,7 @@ final class TimelineEscapeTests: XCTestCase {
     ///
     /// Ordered front and made key, because `NSApp.sendEvent` routes a key event to the *key window* and
     /// a window that is merely constructed receives nothing.
-    private func presentWindow(onEscape: @escaping () -> Void) -> RewindWindowFrame {
+    private func presentWindow(onEscape: @escaping () -> Void) throws -> RewindWindowFrame {
         let window = RewindWindowFrame(
             contentRect: NSRect(x: 100, y: 100, width: 200, height: 200),
             styleMask: [.titled, .closable, .resizable],
@@ -182,6 +182,31 @@ final class TimelineEscapeTests: XCTestCase {
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)
         addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
+
+        // **Key status is a precondition here, not the claim** — that the timeline becomes key is
+        // `TimelineKeyStatusTests`' assertion, guarded there against a control window so a real
+        // regression fails rather than skips. What this must not do is press a key at a window that
+        // cannot receive one and report the silence as a broken handler, which is how every press
+        // below would read: `closes == 0`, indistinguishable from the bug.
+        //
+        // Nothing is softened. On a machine that can key a window at all, the `XCTAssertTrue` runs and
+        // a timeline that is not key fails exactly as loudly as before.
+        if !window.isKeyWindow {
+            try KeyWindowPrecondition.skipIfNoWindowCanBecomeKey(
+                notVerified: """
+                    that Escape closes the timeline, that no text state can hold the key forever, and \
+                    that content claiming Escape cannot keep the window's exit. The window was built \
+                    and ordered front; no press was delivered, because `NSApp.sendEvent` routes to the \
+                    key window and this process has none.
+                    """)
+        }
+        XCTAssertTrue(
+            window.isKeyWindow,
+            """
+            the window under test is not key while a plain control panel in this same process took key \
+            status without trouble, so `NSApp.sendEvent` routes nowhere — that is the 1.0.4 defect \
+            (`TimelineKeyStatusTests`) and not a limit of this environment.
+            """)
         return window
     }
 

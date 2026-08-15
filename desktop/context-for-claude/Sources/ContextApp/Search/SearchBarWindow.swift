@@ -422,6 +422,13 @@ final class SearchBarWindow {
     /// of this event is idempotent for the same reason.
     static func dismiss() {
         SearchPanelWatch.report(.closed)
+        // **The Escape route dies with the panel that owned it.** `ActivityDetailEscape` is a
+        // process-wide hold armed by a view and released by that view's `onDisappear` — and a hosting
+        // view in a window being closed has no reason to run one. A hold left behind makes the *next*
+        // panel's Escape run a route into a surface that is no longer on screen: the key does nothing
+        // and the panel stays up. The surface clears it on appear too; this is the same statement made
+        // at teardown, where it does not depend on anything being mounted again to be true.
+        ActivityDetailEscape.shared.release()
         guard let window = current else { return }
         current = nil
         if let keyObserver {
@@ -650,7 +657,19 @@ private final class SearchPanel: NSPanel {
                     // it, which is deliberate (see above) and means every Escape rule on this window
                     // has to live at this one point. `consume()` both answers and clears, so the
                     // second press closes the panel.
-                    guard !ActivityDetailEscape.shared.consume() else { return }
+                    //
+                    // **Said out loud, at `milestone`.** A hold left behind by a panel that was
+                    // dismissed with a detail open makes this key do nothing visible at all — the
+                    // route runs against a surface that is no longer on screen and the panel stays
+                    // up — which is exactly the "Escape worked earlier in this session and does not
+                    // now" report. Which of the two things happened is not inferable from the
+                    // outside, so the panel states it, and at the one level that survives long
+                    // enough to be read back (see `Log.swift`).
+                    let wentBackToTheSpine = ActivityDetailEscape.shared.consume()
+                    ContextLog.milestone(
+                        "Escape taken at the search panel (back to the spine: \(wentBackToTheSpine))",
+                        "search")
+                    guard !wentBackToTheSpine else { return }
                     SearchBarWindow.dismiss()
                 }
                 return

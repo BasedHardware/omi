@@ -42,6 +42,12 @@ final class TimelineKeyStatusTests: XCTestCase {
     }
 
     /// **The timeline becomes key when it is presented.** The shipped failure, stated as a claim.
+    ///
+    /// The two halves are separated on purpose. `canBecomeKey`/`canBecomeMain` are facts about the
+    /// window this app builds and are measurable anywhere; `isKeyWindow`/`isMainWindow` need a process
+    /// that can route the keyboard at all. Only the second pair is gated, and it is gated on a
+    /// *control* window rather than on this one — see `KeyWindowPrecondition` for why asking the
+    /// window under test would skip exactly when the 1.0.4 defect is present.
     func testPresentingTheTimelineMakesItTheKeyWindow() throws {
         let window = try presentTheTimeline()
 
@@ -49,9 +55,25 @@ final class TimelineKeyStatusTests: XCTestCase {
             window.canBecomeKey,
             "the timeline refuses key status outright, so nothing typed at it can ever reach it")
         XCTAssertTrue(
+            window.canBecomeMain,
+            "the timeline refuses main status, which is a titled window with grey traffic lights")
+
+        // Only on the branch that was about to fail, and it decides which failure it is. On a machine
+        // that can key a window at all this is not reached and nothing below is softened.
+        if !window.isKeyWindow {
+            try KeyWindowPrecondition.skipIfNoWindowCanBecomeKey(
+                notVerified: """
+                    that `RewindWindow.present` produces a window which is actually key and main. The \
+                    window's own claims about itself were checked and hold; whether AppKit granted \
+                    them was not — that is the 1.0.4 report, with the traffic lights drawn grey.
+                    """)
+        }
+
+        XCTAssertTrue(
             window.isKeyWindow,
             """
-            the timeline is on screen and is not the key window (app active: \(NSApp.isActive)). \
+            the timeline is on screen and is not the key window (app active: \(NSApp.isActive)), \
+            while a plain control panel in this same process took key status without trouble. \
             AppKit delivers key events to the key window, so `RewindWindowFrame.sendEvent` is never \
             called and Escape does nothing — the 1.0.4 report, with the traffic lights drawn grey.
             """)
@@ -67,6 +89,14 @@ final class TimelineKeyStatusTests: XCTestCase {
     /// exercises the delivery that was missing as well as the handling that was not.
     func testEscapeClosesTheTimelineThroughTheApplicationsOwnDispatch() throws {
         let window = try presentTheTimeline()
+
+        if !window.isKeyWindow {
+            try KeyWindowPrecondition.skipIfNoWindowCanBecomeKey(
+                notVerified: """
+                    that Escape reaches the timeline through `NSApp.sendEvent` and closes it. The \
+                    window came up; whether a real key press can arrive at it was not measured.
+                    """)
+        }
         XCTAssertTrue(window.isKeyWindow, "nothing below is measured unless the timeline is key")
 
         NSApp.sendEvent(try escape(in: window))
@@ -132,6 +162,17 @@ final class TimelineKeyStatusTests: XCTestCase {
             forName: NSWindow.willCloseNotification, object: window, queue: .main
         ) { _ in closed += 1 }
         addTeardownBlock { NotificationCenter.default.removeObserver(token) }
+
+        // The field-editor half above is a fact about AppKit and holds anywhere; only the press needs
+        // a routable keyboard.
+        if !window.isKeyWindow {
+            try KeyWindowPrecondition.skipIfNoWindowCanBecomeKey(
+                notVerified: """
+                    that Escape leaves the real timeline with a field editor focused, and that it is \
+                    this app's `dismiss()` rather than AppKit's `close()` that puts the window away. \
+                    The field editor was installed and confirmed; the press was not delivered.
+                    """)
+        }
 
         NSApp.sendEvent(try escape(in: window))
 

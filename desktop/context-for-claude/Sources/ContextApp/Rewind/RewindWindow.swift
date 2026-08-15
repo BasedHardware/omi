@@ -370,13 +370,25 @@ final class RewindWindowFrame: NSPanel {
     /// anything editable appears — so one untouched control disabled the only keyboard exit for the life
     /// of the window. See `midEditText` for what replaced it and how narrow it now is.
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown, event.keyCode == Self.escapeKeyCode, midEditText == nil {
-            // **The one line that makes the next live test a measurement rather than a guess.** Every
-            // round of this bug so far has been argued from a window that logs nothing, so a repro could
-            // never separate "the key never arrived" from "it arrived and the dismissal failed". If this
-            // appears in `log show` and the window is still up, the fault is downstream of here; if the
-            // window is up and this is absent, the key never reached the window at all.
-            ContextLog.info("Escape taken at the timeline window; dismissing", "rewind")
+        if event.type == .keyDown, event.keyCode == Self.escapeKeyCode {
+            // **The two lines that make the next live test a measurement rather than a guess, and
+            // `milestone` rather than `info` because the last one was not readable.** Every round of
+            // this bug has been argued from a window that logs nothing, so a repro could never
+            // separate "the key never arrived" from "it arrived and the dismissal failed" — and the
+            // line written to settle it went out at `info`, which `Log.swift` documents as invisible
+            // to `log show` without `--info` and evicted from the ring buffer in minutes. An absent
+            // `info` line proves nothing about the key; an absent `milestone` line does.
+            //
+            // Both branches speak, so the three outcomes are distinguishable on the next run: the
+            // window declined the key, the window took it and the dismissal failed, or neither line
+            // is there and the key never reached this window at all.
+            guard midEditText == nil else {
+                ContextLog.milestone(
+                    "Escape reached the timeline window; a composition is holding it", "rewind")
+                super.sendEvent(event)
+                return
+            }
+            ContextLog.milestone("Escape taken at the timeline window; dismissing", "rewind")
             MainActor.assumeIsolated { onEscape() }
             return
         }

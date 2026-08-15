@@ -379,7 +379,10 @@ struct ShortcutRecorderField: View {
     let cancelRecording: () -> Void
     let clear: () -> Void
 
-    @State private var monitor: Any?
+    /// Which arming of the shared monitor is this field's. Not the monitor itself: the token is the
+    /// only thing a view is allowed to hold, so a view that goes away without disarming leaks
+    /// nothing that `ShortcutRecorderMonitor` cannot reclaim on its own.
+    @State private var armed: ShortcutRecorderMonitor.Armed?
 
     var body: some View {
         HStack(spacing: 4) {
@@ -455,19 +458,17 @@ struct ShortcutRecorderField: View {
         return (chord ?? fallback).displayString
     }
 
+    /// **Only the window the recorder is in, and never for longer than the recorder exists.**
+    ///
+    /// `addLocalMonitorForEvents` is a *process* monitor and every branch below returns `nil` — so an
+    /// armed recorder used to swallow every keystroke in every window of this app. Concretely: while
+    /// the field said "…", ⌘W would not close the timeline and **⌘Q would not quit**, because Quit
+    /// was captured here, then rejected as a reserved chord, and the user was shown a rejection
+    /// message for a key they meant for the application. `ShortcutRecorderMonitor` owns both halves
+    /// of that now: which window may be heard, and that an abandoned monitor removes itself rather
+    /// than waiting on a SwiftUI lifecycle callback this view cannot guarantee will run.
     private func arm() {
-        disarm()
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
-            // **Only the window the recorder is in.** `addLocalMonitorForEvents` is a *process*
-            // monitor, and every branch below returns `nil` — so an armed recorder used to swallow
-            // every keystroke in every window of this app. Concretely: while the field said "…",
-            // ⌘W would not close the timeline and **⌘Q would not quit**, because Quit was captured
-            // here, then rejected as a reserved chord, and the user was shown a rejection message
-            // for a key they meant for the application.
-            guard
-                ShortcutRecorderScope.belongsToTheRecorder(
-                    event.window, settingsWindow: SettingsWindow.window)
-            else { return event }
+        armed = ShortcutRecorderMonitor.shared.arm { event in
             // Escape abandons the recording rather than binding ⎋, which nothing should be bound to.
             // Named rather than `53`, and it is the same constant `GlobalShortcuts.Recorded`
             // refuses on the other path — two spellings of one key code is how the recorder and the
@@ -486,8 +487,8 @@ struct ShortcutRecorderField: View {
     }
 
     private func disarm() {
-        if let monitor { NSEvent.removeMonitor(monitor) }
-        monitor = nil
+        if let armed { ShortcutRecorderMonitor.shared.disarm(armed) }
+        armed = nil
     }
 }
 
