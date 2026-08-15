@@ -36,7 +36,12 @@ export type ProductionCommandId =
   | "save-memory"
   | "cancel-memory"
   | "send-chat"
-  | "close-command-palette";
+  | "close-command-palette"
+  | "rewind-frame-prev"
+  | "rewind-frame-next"
+  | "rewind-group-prev"
+  | "rewind-group-next"
+  | "unwind-rewind";
 
 export type TextEntryPolicy = "ignore" | "allow" | "text-only";
 /** Whether a command may run while focus is inside an interactive control. */
@@ -197,6 +202,50 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       chord: { key: "Enter" },
       routeScope: "chat",
       textEntryPolicy: "text-only",
+      repeatPolicy: "ignore",
+    }),
+    handlerCommand({
+      id: "rewind-frame-prev",
+      labelKey: "nav.rewind",
+      chord: { key: "ArrowLeft" },
+      routeScope: "rewind",
+      textEntryPolicy: "ignore",
+      interactiveControlPolicy: "ignore",
+      repeatPolicy: "allow",
+    }),
+    handlerCommand({
+      id: "rewind-frame-next",
+      labelKey: "nav.rewind",
+      chord: { key: "ArrowRight" },
+      routeScope: "rewind",
+      textEntryPolicy: "ignore",
+      interactiveControlPolicy: "ignore",
+      repeatPolicy: "allow",
+    }),
+    handlerCommand({
+      id: "rewind-group-prev",
+      labelKey: "screen.results",
+      chord: { key: "ArrowUp" },
+      routeScope: "rewind",
+      textEntryPolicy: "ignore",
+      interactiveControlPolicy: "ignore",
+      repeatPolicy: "allow",
+    }),
+    handlerCommand({
+      id: "rewind-group-next",
+      labelKey: "screen.results",
+      chord: { key: "ArrowDown" },
+      routeScope: "rewind",
+      textEntryPolicy: "ignore",
+      interactiveControlPolicy: "ignore",
+      repeatPolicy: "allow",
+    }),
+    handlerCommand({
+      id: "unwind-rewind",
+      labelKey: "common.back",
+      chord: { key: "Escape" },
+      routeScope: "rewind",
+      textEntryPolicy: "allow",
       repeatPolicy: "ignore",
     }),
     {

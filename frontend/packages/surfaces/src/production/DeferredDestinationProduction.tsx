@@ -4,11 +4,10 @@ import type { ProductionRoute } from "./command-registry.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import { ProductionLifecycleRegion, ProductionPageHeader } from "./ProductionPrimitives.js";
 
-export type DeferredProductionDestination = Extract<ProductionRoute, "apps" | "rewind" | "brain-map">;
+export type DeferredProductionDestination = Extract<ProductionRoute, "apps" | "brain-map">;
 
-const titleKey = (destination: DeferredProductionDestination): "nav.apps" | "nav.rewind" | "nav.brainMap" => {
+const titleKey = (destination: DeferredProductionDestination): "nav.apps" | "nav.brainMap" => {
   if (destination === "apps") return "nav.apps";
-  if (destination === "rewind") return "nav.rewind";
   return "nav.brainMap";
 };
 

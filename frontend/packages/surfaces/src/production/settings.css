@@ -324,6 +324,39 @@ html[data-platform="desktop"] .settings-header > div > p:last-child {
   display: none;
 }
 
-html[data-platform="desktop"] .settings-production-shell .desktop-page-panel {
-  padding: var(--space-lg);
+.settings-storage-summary,
+.settings-battery-note {
+  margin: 0;
+  color: var(--content-secondary);
+}
+
+.settings-exclusions h3 {
+  margin: 0 0 var(--space-sm);
+  font-size: var(--type-body-size);
+}
+
+.settings-exclusions ul {
+  list-style: none;
+  margin: 0 0 var(--space-sm);
+  padding: 0;
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.settings-exclusions li,
+.settings-exclusion-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.settings-exclusion-add input {
+  min-height: var(--min-tap-target);
+  flex: 1 1 12rem;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  color: var(--content-primary);
 }

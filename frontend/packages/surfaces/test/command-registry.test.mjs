@@ -170,6 +170,7 @@ test("registry IDs stay unique and every integrated handler has one definition",
   for (const id of [
     "focus-home-search", "new-task", "navigate-task", "delete-task", "indent-task", "outdent-task",
     "save-memory", "cancel-memory", "send-chat",
+    "rewind-frame-prev", "rewind-frame-next", "rewind-group-prev", "rewind-group-next", "unwind-rewind",
   ]) assert.ok(ids.includes(id), `${id} handler cannot drift outside the registry`);
 });
 

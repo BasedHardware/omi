@@ -8,6 +8,7 @@ export const CONSUMER_EVIDENCE_ROUTES = [
   "listen",
   "chat",
   "settings",
+  "rewind",
 ] as const;
 
 export type ConsumerEvidenceRoute = typeof CONSUMER_EVIDENCE_ROUTES[number];

@@ -55,9 +55,17 @@ export function productionRouteHref(route: ProductionRoute): string {
   params.delete("state");
   params.delete("conversation");
   params.delete("folder");
+  params.delete("frame");
   params.delete("presentation");
   params.delete("return");
   params.set("route", route);
+  return `?${params.toString()}`;
+}
+
+/** Chat citations that point at a frame open this exact Rewind entry. No citation source emits one yet. */
+export function productionRewindFrameHref(frameId: string): string {
+  const params = new URLSearchParams(productionRouteHref("rewind").slice(1));
+  params.set("frame", frameId);
   return `?${params.toString()}`;
 }
 

@@ -16,12 +16,12 @@ function documentWith(attributes, body = "") {
   return new JSDOM(`<!doctype html><main ${pairs}>${body}</main>`).window.document;
 }
 
-test("rendered semantic observation accepts exactly the seven closed live routes", async () => {
+test("rendered semantic observation accepts the closed live routes", async () => {
   const read = await loadProductionExport(
     "consumer-observation.ts",
     "readRenderedConsumerObservation",
   );
-  for (const route of ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings"]) {
+  for (const route of ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings", "rewind"]) {
     const transcript = route === "listen" ? { "data-consumer-transcript": "rendered words" } : {};
     const observation = read(documentWith({
       "data-production-shell": "true",
