@@ -1,0 +1,34 @@
+desktop/context-for-claude/Sources/ContextApp/Rewind/RewindWindow.swift
+  s_d58145f2e376ea::t_5b9b96e38eee51 266-271
+  s_d58145f2e376ea::t_3065856a5fd7e6 397-406
+  s_d58145f2e376ea::t_6a09d96db207a7 407-409
+  s_70272de972d0bc::t_4418f21d734bbf 349,351,353-365,367-387,389-395,410-416,420-422
+desktop/context-for-claude/Tests/ContextAppTests/TimelineEscapeTests.swift
+  s_d58145f2e376ea::t_e5113c8c4d0a5b 113-127,130-131,134-159
+  s_d58145f2e376ea::t_b730439c0cb1e7 92,104,112
+  s_d58145f2e376ea::t_92f18b22118e7e 72,74-91,93-103,105-111,160-168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "eac43509798cd2f9376e20024b7ea62c014e7e34",
+  "prompts": {},
+  "sessions": {
+    "s_70272de972d0bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a78b8487212b27a17",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
