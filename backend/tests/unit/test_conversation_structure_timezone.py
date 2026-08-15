@@ -333,14 +333,20 @@ class TestStructureFunctionsTimezone:
             assert "respond in user local timezone" not in text
 
 
-def test_gpt56_cache_buckets_are_fixed_and_never_include_request_content():
-    keys = {conv_proc._cache_bucket_key('omi-transcript-structure', now=offset * 15) for offset in range(8)}
-
-    assert keys == {
-        'omi-transcript-structure-v1-b0',
-        'omi-transcript-structure-v1-b1',
-        'omi-transcript-structure-v1-b2',
-        'omi-transcript-structure-v1-b3',
-    }
+def test_gpt56_cache_keys_are_stable_versioned_and_never_include_request_content():
+    assert conv_proc.TRANSCRIPT_STRUCTURE_CACHE_KEY == 'omi-transcript-structure-v1'
+    assert conv_proc.ACTION_ITEMS_CACHE_KEY == 'omi-extract-actions-v1'
     assert conv_proc._has_gpt56_cacheable_static_prefix('static ' * 1_100)
     assert not conv_proc._has_gpt56_cacheable_static_prefix('short prefix')
+
+
+def test_gpt56_explicit_cache_requires_gateway_and_rollout_flag(monkeypatch):
+    monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.delenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
+    assert not conv_proc._gpt56_explicit_cache_enabled()
+
+    monkeypatch.setenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'true')
+    assert conv_proc._gpt56_explicit_cache_enabled()
+
+    monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: False)
+    assert not conv_proc._gpt56_explicit_cache_enabled()

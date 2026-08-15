@@ -256,7 +256,10 @@ def supports_prompt_cache(model: str) -> bool:
 
 def supports_cache_retention(model: str) -> bool:
     """Whether a model supports 24h OpenAI prompt-cache retention (prompt_cache_retention='24h')."""
-    return bool(model) and model.startswith(_CACHE_RETENTION_MODEL_PREFIXES)
+    # GPT-5.6 uses the explicit cache contract (prompt_cache_options + a
+    # breakpoint) rather than the legacy prompt_cache_retention field. Sending
+    # both contracts in the same request is rejected by the provider.
+    return bool(model) and not model.startswith('gpt-5.6') and model.startswith(_CACHE_RETENTION_MODEL_PREFIXES)
 
 
 def is_structured_output_feature(feature: str) -> bool:

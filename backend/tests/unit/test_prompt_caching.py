@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.conversation_photo import ConversationPhoto
 from utils.llm.conversation_processing import (
+    ACTION_ITEMS_CACHE_KEY,
+    TRANSCRIPT_STRUCTURE_CACHE_KEY,
     _build_conversation_context,
     _gpt56_cacheable_system_message,
     extract_action_items,
@@ -282,7 +284,7 @@ class TestPromptCacheRetention:
         assert mc.supports_prompt_cache("gpt-5.9-turbo"), "renamed gpt-5 should support prompt_cache_key"
         assert mc.supports_cache_retention("gpt-5.9-turbo"), "renamed gpt-5 should support 24h retention"
         assert mc.supports_prompt_cache("gpt-5.6-luna")
-        assert mc.supports_cache_retention("gpt-5.6-luna")
+        assert not mc.supports_cache_retention("gpt-5.6-luna"), "GPT-5.6 uses explicit 30m cache options"
         # Retired product models are no longer treated as active cache targets.
         assert not mc.supports_prompt_cache("gpt-4.1-mini")
         assert not mc.supports_cache_retention("gpt-4.1-mini")
@@ -300,25 +302,22 @@ class TestPromptCacheRetention:
     def test_prompt_cache_key_in_structure_function(self):
         """The structure path keeps a fixed, non-user-derived cache routing key."""
         source = inspect.getsource(get_transcript_structure)
-        assert "_cache_bucket_key('omi-transcript-structure')" in source
+        assert 'TRANSCRIPT_STRUCTURE_CACHE_KEY' in source
         assert "cache_key = 'omi-transcript-structure'" in source
 
     def test_prompt_cache_key_in_action_items_function(self):
         """The action-items path keeps a fixed, non-user-derived cache routing key."""
         source = inspect.getsource(extract_action_items)
-        assert "_cache_bucket_key('omi-extract-actions')" in source
+        assert 'ACTION_ITEMS_CACHE_KEY' in source
         assert "cache_key = 'omi-extract-actions'" in source
 
     def test_distinct_cache_keys_per_function(self):
         """Each function must have a distinct cache_key to avoid cache conflation."""
         source_structure = inspect.getsource(get_transcript_structure)
         source_actions = inspect.getsource(extract_action_items)
-        key_structure = re.search(r"_cache_bucket_key\('([^']+)'\)", source_structure)
-        key_actions = re.search(r"_cache_bucket_key\('([^']+)'\)", source_actions)
-        assert key_structure and key_actions, "Both functions must have cache_key"
-        assert key_structure.group(1) != key_actions.group(
-            1
-        ), f"Cache keys must be distinct: structure={key_structure.group(1)}, actions={key_actions.group(1)}"
+        assert 'TRANSCRIPT_STRUCTURE_CACHE_KEY' in source_structure
+        assert 'ACTION_ITEMS_CACHE_KEY' in source_actions
+        assert TRANSCRIPT_STRUCTURE_CACHE_KEY != ACTION_ITEMS_CACHE_KEY
 
 
 def test_explicit_cache_system_message_preserves_parser_schema_braces():

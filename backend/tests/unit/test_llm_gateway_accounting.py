@@ -17,11 +17,42 @@ from llm_gateway.gateway.accounting import (
     ProviderUsage,
     anthropic_usage_from_response,
     build_accounting_event,
+    cache_requested_for_openai_request,
     cache_write_ttl_for_anthropic_request,
     image_usage,
     openai_usage_from_response,
     vertex_usage_from_response,
 )
+
+
+def test_openai_cache_request_detection_matches_explicit_contract() -> None:
+    breakpoint_messages = [
+        {
+            'role': 'system',
+            'content': [
+                {
+                    'type': 'text',
+                    'text': 'static instructions',
+                    'prompt_cache_breakpoint': {'mode': 'explicit'},
+                }
+            ],
+        }
+    ]
+
+    assert cache_requested_for_openai_request(
+        {
+            'prompt_cache_key': 'omi-transcript-structure-v1',
+            'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'},
+            'messages': breakpoint_messages,
+        }
+    )
+    assert not cache_requested_for_openai_request(
+        {
+            'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'},
+            'messages': [{'role': 'system', 'content': 'unique transcript'}],
+        }
+    )
+    assert cache_requested_for_openai_request({'prompt_cache_key': 'legacy-key', 'messages': []})
 
 
 def test_openai_usage_distinguishes_cache_hit_miss_and_unobserved_cache() -> None:
