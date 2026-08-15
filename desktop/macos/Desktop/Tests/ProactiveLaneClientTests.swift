@@ -24,6 +24,15 @@ final class ProactiveLaneClientTests: XCTestCase {
     XCTAssertEqual(ContextProactivityTelemetry.boundedProviderModel("attacker-controlled-model"), "other")
   }
 
+  func testTelemetryDirectorDecisionIsBounded() {
+    for allowed in ["suggest", "insight", "task_candidate", "resurface", "silence"] {
+      XCTAssertEqual(ContextProactivityTelemetry.boundedDirectorDecision(allowed), allowed)
+    }
+    XCTAssertEqual(
+      ContextProactivityTelemetry.boundedDirectorDecision("model-invented-decision"), "other",
+      "decision strings come from model output and must collapse to a bounded set")
+  }
+
   func testClientErrorsExposeOnlyStableSafeClassifications() {
     XCTAssertEqual(ProactiveLaneClientError.invalidResponse.localizedDescription, "proactive_invalid_response")
     XCTAssertEqual(

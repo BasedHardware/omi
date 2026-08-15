@@ -747,7 +747,10 @@ actor ContextBucketRollupWriter {
       guard
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
         await store.fenceIsValid(fence)
-      else { return }
+      else {
+        await ContextProactivityTelemetry.recordExtractionOutcome(.staleContext)
+        return
+      }
       _ = try await store.writeExtraction(
         extraction,
         for: fence,
@@ -755,15 +758,19 @@ actor ContextBucketRollupWriter {
         rawContextKey: "\(frame.appName)\n\(frame.windowTitle ?? "")",
         normalizedContextKey: ContextTitleNormalizer.identityKey(
           appName: frame.appName, windowTitle: frame.windowTitle) ?? "")
+      await ContextProactivityTelemetry.recordExtractionOutcome(.success)
       await applyDestinationIfEligible(extraction: extraction, frame: frame, fence: fence)
     } catch {
       switch error as? ProactiveLaneClientError {
       case .http(let status, _) where status == 429:
+        await ContextProactivityTelemetry.recordExtractionOutcome(.quotaSkip)
         return
       case .quotaCooldown(_):
+        await ContextProactivityTelemetry.recordExtractionOutcome(.quotaSkip)
         return
       default:
         log("Context bucket extraction failed silently: \(error.localizedDescription)")
+        await ContextProactivityTelemetry.recordExtractionOutcome(.failure)
       }
     }
   }

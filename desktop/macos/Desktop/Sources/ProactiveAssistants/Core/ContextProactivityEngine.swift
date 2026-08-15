@@ -141,6 +141,7 @@ actor ContextProactivityEngine {
     let preflightReason = ContextDeliveryBudget.freeGate(input: gate)
     guard preflightReason == .allowed else {
       log("Context director suppressed before preparation: \(preflightReason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: preflightReason, stage: .preflight)
       return
     }
     guard
@@ -168,6 +169,7 @@ actor ContextProactivityEngine {
     let attemptReason = ContextDeliveryBudget.freeGate(input: attemptGate)
     guard attemptReason == .allowed else {
       log("Context director suppressed before attempt: \(attemptReason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: attemptReason, stage: .attempt)
       return
     }
 
@@ -177,6 +179,7 @@ actor ContextProactivityEngine {
     } catch { return }
     guard attempt.reason == .allowed, let deliveryID = attempt.id else {
       log("Context director suppressed: \(attempt.reason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: attempt.reason, stage: .reservation)
       return
     }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
@@ -223,6 +226,7 @@ actor ContextProactivityEngine {
     let evaluationReason = ContextDeliveryBudget.freeGate(input: evaluationGate)
     guard evaluationReason == .allowed else {
       log("Context director suppressed before model: \(evaluationReason.rawValue)")
+      await ContextProactivityTelemetry.recordGateRejection(reason: evaluationReason, stage: .preModel)
       await terminalize(
         deliveryID: deliveryID,
         decisionType: "silence",
@@ -336,6 +340,7 @@ actor ContextProactivityEngine {
       try await store.completeDelivery(
         id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
         message: decision.message, state: "model_completed")
+      await ContextProactivityTelemetry.recordDirectorDecision(decision.decision)
       if decision.decision == "silence" {
         try await store.completeDelivery(
           id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
@@ -373,6 +378,8 @@ actor ContextProactivityEngine {
       let presentationReason = ContextDeliveryBudget.freeGate(input: presentationGate)
       guard presentationReason == .allowed else {
         log("Context director suppressed before presentation: \(presentationReason.rawValue)")
+        await ContextProactivityTelemetry.recordGateRejection(
+          reason: presentationReason, stage: .presentation)
         try await store.completeDelivery(
           id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
           message: decision.message, state: "suppressed")
@@ -415,7 +422,9 @@ actor ContextProactivityEngine {
       // free gate once more at the actual handoff so master-off, snooze, paywall,
       // or another proactive presentation wins the race.
       let handoffGate = await MainActor.run { Self.liveDeliveryGateInput() }
-      guard ContextDeliveryBudget.freeGate(input: handoffGate) == .allowed else {
+      let handoffReason = ContextDeliveryBudget.freeGate(input: handoffGate)
+      guard handoffReason == .allowed else {
+        await ContextProactivityTelemetry.recordGateRejection(reason: handoffReason, stage: .handoff)
         try await store.completeDelivery(
           id: deliveryID, decisionType: decision.decision, provenanceJSON: provenanceJSON,
           message: decision.message, state: "suppressed")
@@ -522,7 +531,9 @@ actor ContextProactivityEngine {
     // paid call so disabling notifications, snoozing, or becoming paywalled
     // mid-hop never spends more director budget.
     let hopGate = await MainActor.run { Self.liveDeliveryGateInput() }
-    guard ContextDeliveryBudget.freeGate(input: hopGate) == .allowed else {
+    let hopReason = ContextDeliveryBudget.freeGate(input: hopGate)
+    guard hopReason == .allowed else {
+      await ContextProactivityTelemetry.recordGateRejection(reason: hopReason, stage: .retrievalHop)
       return abandoned(items, failure: "pre_model_gate")
     }
     do {

@@ -30,6 +30,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/WorkHistoryHandleExtractor.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/WorkHistoryIndex.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/InsightSQLPrivacy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationSettingsSyncCoordinator.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/TaskContextualResurfacingService.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindCaptureExclusion.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/StagedTaskStorage.swift

@@ -1,0 +1,3 @@
+{
+  "change": "Notification settings now keep syncing in the background after a failed save, so the toggle you see stays aligned with the server"
+}

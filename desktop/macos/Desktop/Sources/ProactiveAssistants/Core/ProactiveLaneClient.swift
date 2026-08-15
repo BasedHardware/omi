@@ -346,4 +346,87 @@ enum ContextProactivityTelemetry {
         ])
     }
   }
+
+  /// Bounded terminal outcome of one screen extraction attempt. Attempts are the
+  /// sum over outcomes; quota skips and successes are subsets. The event carries
+  /// outcome only — no app, title, bucket, narrative, or fact data.
+  static func recordExtractionOutcome(_ outcome: ExtractionOutcome) async {
+    await MainActor.run {
+      PostHogManager.shared.track(
+        "context_bucket_extraction",
+        properties: ["outcome": outcome.rawValue])
+    }
+  }
+
+  enum ExtractionOutcome: String, Sendable {
+    case success
+    case quotaSkip = "quota_skip"
+    case staleContext = "stale_context"
+    case failure
+  }
+
+  /// Director decisions come from model output, so they pass through this
+  /// allowlist before entering telemetry: only the schema's enum values are
+  /// reportable, anything else collapses to "other".
+  static func boundedDirectorDecision(_ value: String) -> String {
+    switch value {
+    case "suggest", "insight", "task_candidate", "resurface", "silence": value
+    default: "other"
+    }
+  }
+
+  /// One event per settled director evaluation. Decision type only — title,
+  /// message, reasoning, refs, and fact IDs never enter telemetry.
+  static func recordDirectorDecision(_ decision: String) async {
+    await MainActor.run {
+      PostHogManager.shared.track(
+        "context_director_decision",
+        properties: ["decision": boundedDirectorDecision(decision)])
+    }
+  }
+
+  /// The engine's fixed free-gate sites. An enum rather than a call-site string
+  /// so a future caller cannot ship unbounded text as a stage.
+  enum GateStage: String, Sendable {
+    case preflight
+    case attempt
+    case reservation
+    case preModel = "pre_model"
+    case presentation
+    case handoff
+    case retrievalHop = "retrieval_hop"
+  }
+
+  /// A free-gate rejection at one of the engine's fixed gate sites. Both values
+  /// are bounded enums — no bucket, owner, or content data.
+  static func recordGateRejection(reason: ContextDeliveryGateReason, stage: GateStage) async {
+    await MainActor.run {
+      PostHogManager.shared.track(
+        "context_delivery_gate_rejected",
+        properties: ["reason": reason.rawValue, "stage": stage.rawValue])
+    }
+  }
+
+  /// Notification-settings drift between the local gate (authoritative) and the
+  /// server mirror, observed by the sync coordinator. Metadata only: two bools,
+  /// two clamped frequency levels, and the pending-sync flag — no identifiers.
+  static func recordSettingsDrift(
+    localEnabled: Bool,
+    serverEnabled: Bool,
+    localFrequency: Int,
+    serverFrequency: Int,
+    pendingSync: Bool
+  ) async {
+    await MainActor.run {
+      PostHogManager.shared.track(
+        "notification_settings_drift",
+        properties: [
+          "local_enabled": localEnabled,
+          "server_enabled": serverEnabled,
+          "local_frequency": min(max(localFrequency, 0), 5),
+          "server_frequency": min(max(serverFrequency, 0), 5),
+          "pending_sync": pendingSync,
+        ])
+    }
+  }
 }
