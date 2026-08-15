@@ -421,27 +421,32 @@ actor ContextProactivityEngine {
           message: decision.message, state: "suppressed")
         return
       }
+      // The bounded hop is the last writer of `decision`, so hand the main actor
+      // the settled value rather than this actor's mutable binding: the callbacks
+      // below outlive the handoff, and capturing the variable makes their reads
+      // race with any later write to it.
+      let presentedDecision = decision
       let presentation = await MainActor.run {
         let context = FloatingBarNotificationContext(
-          sourceTitle: decision.title,
+          sourceTitle: presentedDecision.title,
           assistantId: "context-director",
-          contextSummary: decision.reasoning,
+          contextSummary: presentedDecision.reasoning,
           detail: (entryRefs + retrievedRefs).joined(separator: ", "),
           provenanceRef: deliveryID)
         return NotificationService.shared.presentContextDirectorNotification(
           ownerID: ownerID,
-          title: decision.title,
-          message: decision.message,
-          decisionType: decision.decision,
+          title: presentedDecision.title,
+          message: presentedDecision.message,
+          decisionType: presentedDecision.decision,
           context: context,
           onPresented: { [weak self] in
             guard let self else { return }
             Task {
               await self.completePresentedDelivery(
                 deliveryID: deliveryID,
-                decisionType: decision.decision,
+                decisionType: presentedDecision.decision,
                 provenanceJSON: provenanceJSON,
-                message: decision.message,
+                message: presentedDecision.message,
                 authorizationSnapshot: authorizationSnapshot)
             }
           },
