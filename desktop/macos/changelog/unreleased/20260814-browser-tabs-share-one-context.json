@@ -1,3 +1,0 @@
-{
-  "change": "Browser tabs on the same website now build up one shared context instead of a separate one per tab title"
-}

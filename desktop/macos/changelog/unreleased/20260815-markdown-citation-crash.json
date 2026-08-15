@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a crash on macOS 15 when a chat answer with source citations was shown in the transcript"
-}
