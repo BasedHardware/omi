@@ -9,9 +9,15 @@ struct BucketExtraction: Codable, Equatable, Sendable {
     let evidenceRefs: [String]
     let confidence: Double
     let notifyWorthiness: Double
+    /// Proposed workstream label, `unknown` when the model abstains.
+    ///
+    /// Optional so a response predating this field still decodes (same
+    /// `decodeIfPresent` reasoning as `destination` below); `var` with a
+    /// default keeps the memberwise initializer source-compatible.
+    var workstream: String? = nil
 
     enum CodingKeys: String, CodingKey {
-      case statement, identifiers, confidence
+      case statement, identifiers, confidence, workstream
       case evidenceText = "evidence_text"
       case evidenceRefs = "evidence_refs"
       case notifyWorthiness = "notify_worthiness"
@@ -153,16 +159,36 @@ struct ContextDirectorTaskContext: Equatable, Sendable {
 }
 
 enum ContextProactivityPromptBuilder {
-  static func extractionPrompt(frame: CapturedFrame, fence: ContextVisitFence) -> String {
+  static func extractionPrompt(
+    frame: CapturedFrame, fence: ContextVisitFence, workstreamVocabulary: [String] = []
+  ) -> String {
     let evidenceRef = frame.screenshotId.map { "screenshot:\($0)" } ?? "visit:\(fence.visitID)"
-    return extractionPrompt(appName: frame.appName, windowTitle: frame.windowTitle, evidenceRef: evidenceRef)
+    return extractionPrompt(
+      appName: frame.appName, windowTitle: frame.windowTitle, evidenceRef: evidenceRef,
+      workstreamVocabulary: workstreamVocabulary)
   }
 
-  static func extractionPrompt(appName: String, windowTitle: String?, evidenceRef: String) -> String {
+  static func extractionPrompt(
+    appName: String, windowTitle: String?, evidenceRef: String,
+    workstreamVocabulary: [String] = []
+  ) -> String {
+    // Closed-vocabulary bias: reusing an active label is what makes context from
+    // different apps collide in one workstream, so existing labels are quoted and
+    // coining a new one is framed as the exception.
+    let activeLabels =
+      workstreamVocabulary.isEmpty
+      ? "none yet"
+      : workstreamVocabulary.map { ContextDestinationKey.singleLine($0, limit: 40) }
+        .joined(separator: ", ")
     let base = """
       \(ScreenDerivedContent.untrustedPreamble)
       Produce a 150-400 token ambient narrative and discrete factual records. Facts are
       proposals; include an identifier, surviving evidence text, and evidence ref for each.
+      Also set each fact's "workstream": the durable project or activity its content belongs
+      to, judged by the content itself rather than by which app is open. Strongly prefer one
+      of the active labels: \(activeLabels). Only when none fits, coin one new short
+      kebab-case label for a durable project, or answer "unknown" for generic activity you
+      cannot place.
       App: \(appName)
       Window: \(ContextDestinationKey.singleLine(windowTitle ?? "", limit: 160))
       Evidence ref: \(evidenceRef)
@@ -459,15 +485,16 @@ extension ContextBucketStore {
               INSERT INTO bucket_facts
                 (id, bucketID, entryID, appName, statement, identifiersJson, evidenceText,
                  evidenceRefsJson, validityState, dispositionState, confidence,
-                 notifyWorthiness, createdAt, updatedAt)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?)
+                 notifyWorthiness, workstreamTag, createdAt, updatedAt)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?, ?)
               """,
             arguments: [
               UUID().uuidString.lowercased(), bucketID, entryID, appName, statement,
               String(data: try evidenceEncoder.encode(identifiers), encoding: .utf8) ?? "[]",
               evidenceText,
               String(data: try evidenceEncoder.encode(evidenceRefs), encoding: .utf8) ?? "[]",
-              validity.rawValue, min(max(fact.confidence, 0), 1), worthiness, now, now,
+              validity.rawValue, min(max(fact.confidence, 0), 1), worthiness,
+              ContextWorkstreamTag.sanitize(fact.workstream), now, now,
             ])
           if validity == .validated {
             existingFactIdentities.append(
@@ -747,7 +774,8 @@ actor ContextBucketRollupWriter {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.fenceIsValid(fence)
     else { return }
-    let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
+    let prompt = ContextProactivityPromptBuilder.extractionPrompt(
+      frame: frame, fence: fence, workstreamVocabulary: await store.activeWorkstreamTags())
     do {
       let result = try await client.complete(
         operation: ModelQoS.Proactivity.extractionOperation,
@@ -838,10 +866,14 @@ actor ContextBucketRollupWriter {
               "evidence_refs": ["type": "array", "items": ["type": "string"]],
               "confidence": ["type": "number"],
               "notify_worthiness": ["type": "number"],
+              "workstream": ["type": "string"],
             ],
+            // Strict structured output requires every declared property listed as
+            // required, so the prompt tells the model to answer "unknown" when it
+            // cannot place a fact in a workstream.
             "required": [
               "statement", "identifiers", "evidence_text", "evidence_refs", "confidence",
-              "notify_worthiness",
+              "notify_worthiness", "workstream",
             ],
             "additionalProperties": false,
           ],

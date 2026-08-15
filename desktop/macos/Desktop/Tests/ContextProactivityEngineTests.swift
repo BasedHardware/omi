@@ -378,67 +378,6 @@ final class ContextProactivityEngineTests: XCTestCase {
     }
   }
 
-  func testCumulativeEngagementShortensDwellForARepeatedlyRevisitedBucket() {
-    let now = Date(timeIntervalSince1970: 1_725_000_000)
-    // Five 10-second visits within the last three minutes: 50s of engagement.
-    let engaged = (0..<5).map { index -> (startedAt: Date, endedAt: Date) in
-      let end = now.addingTimeInterval(TimeInterval(-20 * index) - 5)
-      return (startedAt: end.addingTimeInterval(-10), endedAt: end)
-    }
-    let engagedSeconds = ContextDwellPolicy.cumulativeEngagementSeconds(
-      visitIntervals: engaged, now: now)
-    XCTAssertEqual(engagedSeconds, 50, accuracy: 0.001)
-    XCTAssertEqual(
-      ContextDwellPolicy.dwellNanoseconds(
-        base: 8_000_000_000, cumulativeEngagementSeconds: engagedSeconds),
-      ContextDwellPolicy.shortenedDwellNanoseconds,
-      "a bucket the user keeps returning to earns the shortened dwell")
-
-    // Two sparse 5-second visits: 10s of engagement keeps the standard dwell.
-    let sparse = [0, 100].map { offset -> (startedAt: Date, endedAt: Date) in
-      let end = now.addingTimeInterval(TimeInterval(-offset) - 5)
-      return (startedAt: end.addingTimeInterval(-5), endedAt: end)
-    }
-    let sparseSeconds = ContextDwellPolicy.cumulativeEngagementSeconds(
-      visitIntervals: sparse, now: now)
-    XCTAssertEqual(sparseSeconds, 10, accuracy: 0.001)
-    XCTAssertEqual(
-      ContextDwellPolicy.dwellNanoseconds(
-        base: 8_000_000_000, cumulativeEngagementSeconds: sparseSeconds),
-      8_000_000_000)
-  }
-
-  func testCumulativeEngagementClipsToTheRollingWindowAndNeverLengthensTheDwell() {
-    let now = Date(timeIntervalSince1970: 1_725_000_000)
-    // A long visit that ended before the window contributes nothing; one that
-    // straddles the window start counts only its in-window portion.
-    let outside = [
-      (
-        startedAt: now.addingTimeInterval(-400),
-        endedAt: now.addingTimeInterval(-ContextDwellPolicy.engagementLookbackSeconds - 1)
-      )
-    ]
-    XCTAssertEqual(
-      ContextDwellPolicy.cumulativeEngagementSeconds(visitIntervals: outside, now: now), 0)
-
-    let straddling = [
-      (
-        startedAt: now.addingTimeInterval(-ContextDwellPolicy.engagementLookbackSeconds - 100),
-        endedAt: now.addingTimeInterval(-ContextDwellPolicy.engagementLookbackSeconds + 8)
-      )
-    ]
-    XCTAssertEqual(
-      ContextDwellPolicy.cumulativeEngagementSeconds(visitIntervals: straddling, now: now),
-      8, accuracy: 0.001)
-
-    // The engagement bonus can only shorten: a caller-configured dwell below
-    // the shortened value (tests use zero) is never raised, and settle is
-    // never skipped outright by policy.
-    XCTAssertEqual(
-      ContextDwellPolicy.dwellNanoseconds(base: 0, cumulativeEngagementSeconds: 500), 0)
-    XCTAssertGreaterThan(ContextDwellPolicy.shortenedDwellNanoseconds, 0)
-  }
-
   func testDepartureEvaluationTriggersOnlyAtTheWorthinessThresholdWithTheFlagOn() {
     XCTAssertFalse(
       ContextDepartureEvaluationPolicy.triggers(
@@ -805,35 +744,86 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
     try await super.tearDown()
   }
 
-  func testRecentEngagementSumsOnlyCompletedVisitsInsideTheRollingWindow() async throws {
+  func testWorkstreamTagsPersistPoolAcrossBucketsAndResolveTheLiveTag() async throws {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
     let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     let pool = try XCTUnwrap(database)
     try await seedBucket(in: pool, now: now)
     try await pool.write { db in
-      // Five 10-second completed visits within three minutes, one stale
-      // completed visit outside the window, one recent discarded visit.
-      for index in 0..<5 {
-        let end = now.addingTimeInterval(TimeInterval(-20 * index) - 5)
-        try Self.insertVisit(
-          db, id: Int64(index + 1), poolEpoch: poolEpoch, outcome: "completed",
-          startedAt: end.addingTimeInterval(-10), endedAt: end)
-      }
+      try db.execute(
+        sql: """
+          INSERT INTO context_buckets (id, subjectKind, subjectID, createdAt, updatedAt)
+          VALUES ('bucket-b', 'task', 'workstream-sibling', ?, ?)
+          """,
+        arguments: [now, now])
       try Self.insertVisit(
-        db, id: 6, poolEpoch: poolEpoch, outcome: "completed",
-        startedAt: now.addingTimeInterval(-400), endedAt: now.addingTimeInterval(-390))
-      try Self.insertVisit(
-        db, id: 7, poolEpoch: poolEpoch, outcome: "discarded",
-        startedAt: now.addingTimeInterval(-30), endedAt: now.addingTimeInterval(-1))
+        db, id: 1, poolEpoch: poolEpoch, outcome: "completed",
+        startedAt: now.addingTimeInterval(-13), endedAt: now)
+      try db.execute(
+        sql: """
+          INSERT INTO context_visits
+            (id, contextGeneration, poolEpoch, bucketID, appName, rawContextKey,
+             normalizedContextKey, referenceHash, startedAt, endedAt, outcome, createdAt, updatedAt)
+          VALUES (2, 1, ?, 'bucket-b', 'Sibling App', 'raw', 'normalized', 'reference-b', ?, ?,
+                  'completed', ?, ?)
+          """,
+        arguments: [poolEpoch, now.addingTimeInterval(-60), now.addingTimeInterval(-40), now, now])
     }
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket",
+      startedAt: now.addingTimeInterval(-13))
+    let siblingFence = ContextVisitFence(
+      visitID: 2, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket-b",
+      startedAt: now.addingTimeInterval(-60))
 
-    let engagement = await ContextBucketStore.shared.recentEngagementSeconds(
-      bucketID: "bucket", now: now)
-    XCTAssertEqual(engagement, 50, accuracy: 0.001)
-    XCTAssertEqual(
-      ContextDwellPolicy.dwellNanoseconds(
-        base: 8_000_000_000, cumulativeEngagementSeconds: engagement),
-      ContextDwellPolicy.shortenedDwellNanoseconds)
+    func fact(_ statement: String, workstream: String?, worthiness: Double, visit: Int64)
+      -> BucketExtraction.Fact
+    {
+      BucketExtraction.Fact(
+        statement: statement,
+        identifiers: ["identity"],
+        evidenceText: "evidence",
+        evidenceRefs: ["visit:\(visit)"],
+        confidence: 1,
+        notifyWorthiness: worthiness,
+        workstream: workstream)
+    }
+    // "Omi App" must survive sanitization as "omi-app"; the sibling writes one
+    // poolable fact, one below the worthiness floor, and one scaffolding-shaped
+    // statement that the selector must drop.
+    _ = try await ContextBucketStore.shared.writeExtraction(
+      BucketExtraction(
+        narrative: "own narrative",
+        facts: [fact("own visit fact", workstream: "Omi App", worthiness: 0.7, visit: 1)]),
+      for: fence, appName: "Test App", rawContextKey: "raw", normalizedContextKey: "normalized",
+      now: now)
+    _ = try await ContextBucketStore.shared.writeExtraction(
+      BucketExtraction(
+        narrative: "sibling narrative",
+        facts: [
+          fact("sibling poolable fact", workstream: "omi app", worthiness: 0.8, visit: 2),
+          fact("sibling weak fact", workstream: "omi-app", worthiness: 0.1, visit: 2),
+          fact(
+            "Identifier proposal: visit:2", workstream: "omi-app", worthiness: 0.9, visit: 2),
+        ]),
+      for: siblingFence, appName: "Sibling App", rawContextKey: "raw",
+      normalizedContextKey: "normalized", now: now.addingTimeInterval(-30))
+
+    let liveTag = await ContextBucketStore.shared.liveWorkstreamTag(for: fence, now: now)
+    XCTAssertEqual(liveTag, "omi-app")
+    let activeTags = await ContextBucketStore.shared.activeWorkstreamTags(now: now)
+    XCTAssertEqual(activeTags, ["omi-app"])
+
+    let candidates = await ContextBucketStore.shared.workstreamPool(
+      tag: "omi-app", excludingBucketID: "bucket", now: now)
+    let selected = ContextWorkstreamPooling.select(candidates, now: now)
+    XCTAssertEqual(selected.map(\.statement), ["sibling poolable fact"])
+    XCTAssertEqual(selected.map(\.bucketID), ["bucket-b"])
+    let section = try XCTUnwrap(
+      ContextWorkstreamPooling.promptSection(tag: "omi-app", items: selected, now: now))
+    XCTAssertTrue(section.contains("RELATED WORKSTREAM CONTEXT (omi-app)"))
+    XCTAssertTrue(section.contains("sibling poolable fact"))
+    XCTAssertFalse(section.contains("fact:"), "pooled facts must never expose citable refs")
   }
 
   func testWriteExtractionReportsTheMaximumWorthinessOfNewlyValidatedFactsOnly() async throws {

@@ -96,6 +96,18 @@ enum ContextBucketSchema {
         on: "context_visits",
         columns: ["primaryHandleType", "primaryHandleValue"])
     }
+    migrator.registerMigration("addBucketFactWorkstreamTag") { db in
+      try db.alter(table: "bucket_facts") { table in
+        // Sanitized workstream label proposed by the extraction model, nil when
+        // it abstained or the proposal failed sanitization. Facts written before
+        // this column exist as nil and simply never pool.
+        table.add(column: "workstreamTag", .text)
+      }
+      try db.create(
+        index: "idx_bucket_facts_workstream",
+        on: "bucket_facts",
+        columns: ["workstreamTag", "createdAt"])
+    }
   }
 
   static func removeMigratedLegacyDefaults(

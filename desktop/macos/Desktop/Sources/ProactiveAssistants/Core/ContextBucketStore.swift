@@ -427,31 +427,133 @@ actor ContextBucketStore {
     }
   }
 
-  /// Completed-visit engagement for one bucket inside the dwell policy's
-  /// rolling window. Read-only and advisory: any failure reports zero
-  /// engagement, which falls back to the standard dwell.
-  func recentEngagementSeconds(bucketID: String, now: Date = Date()) async -> TimeInterval {
+  /// Active workstream labels for the extraction prompt's closed vocabulary,
+  /// most recently used first. Read-only and advisory: failure means an empty
+  /// vocabulary, which only weakens label reuse for one extraction.
+  func activeWorkstreamTags(now: Date = Date(), limit: Int = 12) async -> [String] {
     let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let pool else { return 0 }
-    let lookbackStart = now.addingTimeInterval(-ContextDwellPolicy.engagementLookbackSeconds)
-    let intervals: [(startedAt: Date, endedAt: Date)] =
+    guard let pool else { return [] }
+    return
+      (try? await pool.read { db in
+        try String.fetchAll(
+          db,
+          sql: """
+            SELECT workstreamTag FROM bucket_facts
+            WHERE workstreamTag IS NOT NULL AND validityState = 'validated'
+              AND (expiresAt IS NULL OR expiresAt > ?)
+            GROUP BY workstreamTag ORDER BY MAX(createdAt) DESC LIMIT ?
+            """,
+          arguments: [now, max(0, limit)])
+      }) ?? []
+  }
+
+  /// The workstream to pool for this evaluation: the visit's own validated fact
+  /// tags first, else the bucket's overwhelming-majority tag. Nil (no pooling)
+  /// on any failure or ambiguity — the safe direction.
+  func liveWorkstreamTag(for fence: ContextVisitFence, now: Date = Date()) async -> String? {
+    guard let bucketID = fence.bucketID else { return nil }
+    let (pool, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool, generation == fence.poolEpoch else { return nil }
+    return try? await pool.read { db in
+      let ownRows = try Row.fetchAll(
+        db,
+        sql: """
+          SELECT f.workstreamTag AS tag, COUNT(*) AS n FROM bucket_facts f
+          JOIN bucket_entries e ON f.entryID = e.id
+          WHERE e.visitID = ? AND f.bucketID = ? AND f.validityState = 'validated'
+            AND f.workstreamTag IS NOT NULL
+          GROUP BY f.workstreamTag
+          """,
+        arguments: [fence.visitID, bucketID])
+      let bucketRows = try Row.fetchAll(
+        db,
+        sql: """
+          SELECT workstreamTag AS tag, COUNT(*) AS n FROM bucket_facts
+          WHERE bucketID = ? AND validityState = 'validated' AND workstreamTag IS NOT NULL
+            AND (expiresAt IS NULL OR expiresAt > ?)
+          GROUP BY workstreamTag
+          """,
+        arguments: [bucketID, now])
+      func counts(_ rows: [Row]) -> [String: Int] {
+        rows.reduce(into: [:]) { result, row in
+          if let tag: String = row["tag"] { result[tag] = row["n"] }
+        }
+      }
+      return ContextWorkstreamPooling.liveTag(
+        ownTagCounts: counts(ownRows), bucketTagCounts: counts(bucketRows))
+    } ?? nil
+  }
+
+  /// Candidate facts for the related-workstream section: validated, unexpired,
+  /// same tag, other buckets, above the worthiness floor. Ranking and the
+  /// per-bucket diversity cap happen in `ContextWorkstreamPooling.select`.
+  func workstreamPool(
+    tag: String, excludingBucketID: String, now: Date = Date()
+  ) async -> [ContextWorkstreamPoolItem] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    return
       (try? await pool.read { db in
         try Row.fetchAll(
           db,
           sql: """
-            SELECT startedAt, endedAt FROM context_visits
-            WHERE bucketID = ? AND outcome = 'completed'
-              AND endedAt IS NOT NULL AND endedAt >= ?
+            SELECT id, bucketID, appName, statement, notifyWorthiness, createdAt
+            FROM bucket_facts
+            WHERE workstreamTag = ? AND bucketID <> ? AND validityState = 'validated'
+              AND (expiresAt IS NULL OR expiresAt > ?)
+              AND notifyWorthiness >= ?
+            ORDER BY createdAt DESC LIMIT ?
             """,
-          arguments: [bucketID, lookbackStart]
-        ).compactMap { row -> (startedAt: Date, endedAt: Date)? in
-          guard let startedAt: Date = row["startedAt"], let endedAt: Date = row["endedAt"] else {
-            return nil
-          }
-          return (startedAt: startedAt, endedAt: endedAt)
+          arguments: [
+            tag, excludingBucketID, now, ContextWorkstreamPooling.worthinessFloor,
+            ContextWorkstreamPooling.candidateFetchLimit,
+          ]
+        ).compactMap { row -> ContextWorkstreamPoolItem? in
+          guard
+            let factID: String = row["id"], let bucketID: String = row["bucketID"],
+            let statement: String = row["statement"], let createdAt: Date = row["createdAt"]
+          else { return nil }
+          return ContextWorkstreamPoolItem(
+            factID: factID,
+            bucketID: bucketID,
+            appName: row["appName"] ?? "",
+            statement: statement,
+            notifyWorthiness: row["notifyWorthiness"] ?? 0,
+            createdAt: createdAt)
         }
       }) ?? []
-    return ContextDwellPolicy.cumulativeEngagementSeconds(visitIntervals: intervals, now: now)
+  }
+
+  /// Recent deliveries from sibling buckets of the same workstream. With
+  /// pooling, the same cross-app point is reachable from every bucket carrying
+  /// the tag, so bucket-scoped dedup alone would re-deliver it once per
+  /// entry point.
+  func recentDeliveredForWorkstream(
+    tag: String,
+    excludingBucketID: String,
+    now: Date = Date(),
+    limit: Int = ContextBucketRecentDelivery.promptCap
+  ) async -> [ContextBucketRecentDelivery] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    let cap = max(0, min(limit, ContextBucketRecentDelivery.promptCap))
+    guard cap > 0 else { return [] }
+    return
+      (try? await pool.read { db in
+        try ContextBucketRecentDelivery.fetchAll(
+          db,
+          sql: """
+            SELECT decisionType, message, deliveredAt FROM proactive_deliveries
+            WHERE bucketID <> ?
+              AND bucketID IN (SELECT DISTINCT bucketID FROM bucket_facts WHERE workstreamTag = ?)
+              AND lifecycleState = 'delivered'
+              AND deliveredAt IS NOT NULL
+              AND expiresAt > ?
+            ORDER BY deliveredAt DESC
+            LIMIT ?
+            """,
+          arguments: [excludingBucketID, tag, now, cap])
+      }) ?? []
   }
 
   func markVisitSettled(_ fence: ContextVisitFence, at date: Date = Date()) async throws {
