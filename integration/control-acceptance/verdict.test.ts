@@ -252,21 +252,37 @@ test("the driver is sent with its newlines, so a line comment ends at its line",
   assert.throws(() => new Function(sent.replace(/\s+/g, " ")));
 });
 
-test("L3 keeps --assert, and states why the control harness is not yet a step", () => {
+test("L3 keeps --assert, and control-acceptance is either a real step or an explained hold", () => {
   assert.match(lanes, /integration\/dev-stack\.sh --assert/);
   assert.match(lanes, /node integration\/control-acceptance\/run\.mjs/);
-  // Held out, not softened: if it is ever wired in as an executable step, that
-  // must be a deliberate edit, and the note explaining the hold must go with it.
   const l3 = lanes.slice(lanes.indexOf("  L3: {"));
   const stepCommands = [...l3.matchAll(/^\s*command: "(.+)",$/gm)].map((m) => m[1]);
-  const holdNoted = /NOT YET A GATE/.test(l3) && /CONTROL home=failure-notice/.test(l3);
+  const holdNoted = /NOT YET A GATE/.test(l3);
   const wiredIn = stepCommands.some((c) => c.includes("control-acceptance/run.mjs"));
   assert.equal(
     wiredIn,
     !holdNoted,
     "control-acceptance is either a real L3 step or an explained hold — never a silent absence",
   );
-  assert.match(l3, /no platform conversations adapter/);
+  if (!holdNoted) return;
+  const mentions = [...l3.matchAll(/CONTROL ([a-z.]+)=([a-z-]+)/g)];
+  assert.ok(mentions.length > 0, "a hold must name CONTROL slug=verdict as its current red");
+  for (const [, slug, verdict] of mentions) {
+    assert.equal(
+      isPass(slug, verdict),
+      false,
+      `hold names passing token CONTROL ${slug}=${verdict}`,
+    );
+  }
+  // red-proof: restore `CONTROL home=failure-notice` as the hold reason.
+  // Home currently passes as `ready`; a hold that still names it is stale.
+  assert.equal(
+    mentions.some(([, slug]) => slug === "home"),
+    false,
+    "hold must not name Home: CONTROL home=ready is a pass, so that reason is stale",
+  );
+  assert.match(l3, /CONTROL screen=frame-unavailable/);
+  assert.match(l3, /screen=frame-rendered/);
 });
 
 function listenRoot({ semantic, transcript, rows }) {

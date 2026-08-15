@@ -199,27 +199,16 @@ export const LANES = {
       // control test — it reports mic, screen, chat and every chrome route.
       // It is held out of L3 because it is currently RED on one true positive:
       //
-      //     CONTROL home=failure-notice
+      //     CONTROL screen=frame-unavailable
       //
-      // Home blends memories and conversations. David has ruled that the new
-      // UI may use only the new backend, and no platform conversations adapter
-      // exists yet (`frontend/packages/adapters-platform/src/` has no
-      // conversations module). Home cannot go green until that adapter is
-      // built.
+      // Rewind's capture control did not draw a decoded frame. That is a
+      // sibling lane. Home is no longer why this is held: the same harness
+      // quoted home ready against this tree. Naming Home's old failure-notice
+      // here would be a stale reason, and a stale hold is how a temporary
+      // hold becomes permanent.
       //
-      // The memories half is the same parked ruling as before: Home sources
-      // memories through `openMemories()`, the legacy editable store, and the
-      // legacy memory wire is `/v3/memories` — a path this service does not
-      // serve (it serves `/v1/memories`). Conversations on the legacy side are
-      // `/v1/conversations` on both sides, but the platform client has nothing
-      // to consume them with.
-      //
-      // Closing it is a product build, not a landing-time fix, so the step is
-      // held out rather than have its Home assertion weakened to make a broken
-      // surface look green — which is the exact failure this harness was built
-      // to end.
-      //
-      // Wire it in as a second step here the moment that adapter lands.
+      // Wire it in as a second step here the moment the harness prints
+      // screen=frame-rendered.
     ],
   },
 };
