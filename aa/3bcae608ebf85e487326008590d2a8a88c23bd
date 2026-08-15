@@ -1,0 +1,27 @@
+web/admin/app/(protected)/dashboard/classic/page.tsx
+  s_34650e4ce9f8ec::t_bbc8424c6c942d 2321
+  s_34650e4ce9f8ec::t_f29b19a7712b1c 682
+web/admin/app/api/omi/stats/activation/route.ts
+  s_34650e4ce9f8ec::t_3d3e3c20a98e34 75-78
+  s_34650e4ce9f8ec::t_891f41d37d8c22 98-99
+  s_34650e4ce9f8ec::t_7c7d72c04e62db 108-117
+  s_34650e4ce9f8ec::t_91b749b905bf85 127-131,133-135
+web/admin/lib/__tests__/activation-route.test.ts
+  s_34650e4ce9f8ec::t_8b887ebc59d8a5 170,180-181,183,185-203
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "aa3bcae608ebf85e487326008590d2a8a88c23bd",
+  "prompts": {},
+  "sessions": {
+    "s_34650e4ce9f8ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "caa15e01-aaae-4c85-8ad2-05945ef2f011",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
