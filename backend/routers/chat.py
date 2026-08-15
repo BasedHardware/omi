@@ -257,7 +257,7 @@ def _build_quota_exceeded_reply(
     return ResponseMessage(**ai_msg.model_dump(), ask_for_nps=False)
 
 
-def _record_chat_quota_question_safe(
+def _record_chat_quota_question(
     uid: str,
     *,
     idempotency_key: str,
@@ -265,9 +265,32 @@ def _record_chat_quota_question_safe(
     message_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
     platform: Optional[str] = None,
-):
+) -> None:
+    """Persist the free-plan question counter. Callers that are about to invoke a
+    billable provider must treat failures as request failures (fail-closed)."""
+    llm_usage_db.record_chat_quota_question(
+        uid,
+        idempotency_key=idempotency_key,
+        source=source,
+        message_id=message_id,
+        chat_session_id=chat_session_id,
+        platform=platform,
+    )
+
+
+def _record_chat_quota_question_best_effort(
+    uid: str,
+    *,
+    idempotency_key: str,
+    source: str,
+    message_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    platform: Optional[str] = None,
+) -> None:
+    """Best-effort counter write for paths where the billable work already happened
+    (e.g. voice stream after a visible ``message:`` frame)."""
     try:
-        llm_usage_db.record_chat_quota_question(
+        _record_chat_quota_question(
             uid,
             idempotency_key=idempotency_key,
             source=source,
@@ -351,14 +374,26 @@ def send_message(
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
     chat_db.add_message(uid, message.model_dump())
-    _record_chat_quota_question_safe(
-        uid,
-        idempotency_key=f'v2_messages:{message.id}',
-        source='v2_messages',
-        message_id=message.id,
-        chat_session_id=message.chat_session_id,
-        platform=x_app_platform,
-    )
+    # Fail-closed before any billable LLM / goal work: a Firestore outage must not
+    # leave Free-plan turns uncounted while the provider still runs.
+    try:
+        _record_chat_quota_question(
+            uid,
+            idempotency_key=f'v2_messages:{message.id}',
+            source='v2_messages',
+            message_id=message.id,
+            chat_session_id=message.chat_session_id,
+            platform=x_app_platform,
+        )
+    except Exception as exc:
+        logger.exception('Failed to record chat quota question source=v2_messages uid=%s', uid)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                'error': 'quota_accounting_unavailable',
+                'message': 'Usage accounting is temporarily unavailable. Please retry.',
+            },
+        ) from exc
 
     # Check for goal progress (background) — rate-limited to one call per user per 5 min
     if try_acquire_goal_extraction_lock(uid):
@@ -744,7 +779,7 @@ def create_voice_message_stream(
                         message_data = json.loads(base64.b64decode(payload).decode('utf-8'))
                         await run_blocking(
                             db_executor,
-                            _record_chat_quota_question_safe,
+                            _record_chat_quota_question_best_effort,
                             uid,
                             idempotency_key=f"v2_voice_messages:{message_data.get('id') or first_wav}",
                             source='v2_voice_messages',
