@@ -59,6 +59,42 @@ FEAT-MEM-002, FC-AUTH-003, FEAT-AUTH-011, and COORD-contract-evolution-policy.
 `DIV-DOMCORE-001` and `DIV-DOMCORE-008` and `DIV-DOMCORE-006` remain open;
 their code-level spellings carry mechanical rename markers.
 
+## 0.9.0 - ratified conversations and folders READ wires (`additive`)
+
+`0.9.0` adds TWO export subpaths, `./projections/conversations` and
+`./projections/folders`, plus their schemas of record and conformance
+corpora. No existing export, field, shape or validator changed, so every
+client built against `0.8.0` keeps working unchanged with no new obligation
+- which is what makes this `additive` under COORD-contract-evolution-policy.md
+§1. The precedent is `0.6.0` (`./projections/tasks`) and `0.3.0`
+(`./write/ops`).
+
+Ruling of record: the platform-conversations lane brief (David). Conversations
+and folders were absent from the ratified surface; the service already served
+both. This bump ratifies the v1 item the service serves, flattened the way
+the existing frontend drafts already do, plus `revision` on conversations
+(backed by the store's `state_revision`). Pagination is the HMAC keyset
+cursor over ingest `sequence` and the memories-style completeness envelope
+(complete-terminal / more-continuation). Empty list is `200` with `complete`
+status, never 404.
+
+Deliberate deltas from the legacy adapter:
+
+- `interrupted` conversations stay visible.
+- The `Object.hasOwn(null)` → 500 `qa_server_error` path is not ratified.
+- Transcript access is out of scope.
+- Dangling `folderId` after folder deletion is legal.
+- There is no maximum-folder cap.
+- No client create. Polling is the v1 freshness mechanism.
+
+The item id is the storage id already served, not a reader-scoped opaque
+ref, so a platform read and a legacy read of one origin return the same
+records. Writes stay the four per-field PATCHes and `DELETE ?cascade=false`
+(conversations) and the four verbs already served (folders). Moving either
+onto the write-ops envelope rides with memories-write later.
+
+Rollback is a re-vendor of `0.8.0`.
+
 ## 0.8.0 - ratified task writes use the domain vocabulary (additive)
 
 0.8.0 changes only the serialized task op bags in

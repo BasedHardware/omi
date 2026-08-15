@@ -201,6 +201,23 @@ const PORT_REGISTRY: readonly PortRegistryRow[] = [
       + "served under two different public ids with every assertion green.",
   },
   {
+    portType: "ConversationsReadPorts",
+    composedIn: ["apps/service/composition/conversations-read.ts"],
+    reason:
+      "Registered on the first construction site. Conversations share the HMAC cursor "
+      + "module and completeness discipline with tasks, but item ids are storage ids "
+      + "already served — a second composition would mint different cursor bindings "
+      + "for the same rows.",
+  },
+  {
+    portType: "FoldersReadPorts",
+    composedIn: ["apps/service/composition/folders-read.ts"],
+    reason:
+      "Registered on the first construction site. Folders share the cursor module with "
+      + "conversations and must not grow a second construction that would bind the "
+      + "same ingest sequence under different reader codecs.",
+  },
+  {
     portType: "AuthorizedSourceImpactReader",
     composedIn: ["apps/service/composition/source-impact.ts"],
     reason:

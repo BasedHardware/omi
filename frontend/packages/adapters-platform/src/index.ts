@@ -3,6 +3,8 @@ export * from "./account-epoch.js";
 export * from "./chat-agent-run.js";
 export * from "./chat-generation.js";
 export * from "./chat.js";
+export * from "./conversations.js";
+export * from "./folders.js";
 export * from "./listen.js";
 export * from "./memories.js";
 export * from "./screen.js";

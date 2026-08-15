@@ -29,6 +29,24 @@ import {
   type TaskRead,
 } from "@omi-core/ratified-contracts/projections/tasks";
 import {
+  CONVERSATION_ITEM_FIELDS,
+  CONVERSATIONS_READ_CONTRACT_VERSION,
+  isTrustedConversationPageData,
+  parseConversationFrontier,
+  parseConversationItemId,
+  parseConversationPageJson,
+  type ConversationRead,
+} from "@omi-core/ratified-contracts/projections/conversations";
+import {
+  FOLDER_ITEM_FIELDS,
+  FOLDERS_READ_CONTRACT_VERSION,
+  isTrustedFolderPageData,
+  parseFolderFrontier,
+  parseFolderItemId,
+  parseFolderPageJson,
+  type FolderRead,
+} from "@omi-core/ratified-contracts/projections/folders";
+import {
   isTrustedRecallTraceData,
   parseRecallTraceJson,
   parseRecallTraceRef,
@@ -424,3 +442,91 @@ const invalidTaskIncompleteReason: TaskRead.IncompleteCoverage = {
   frontiers: taskPage.completeness.frontiers,
 };
 void invalidTaskIncompleteReason;
+
+const conversationId = parseConversationItemId("quiet-chat-qa");
+const conversationFrontier = parseConversationFrontier("frontier-v1:conversations-declared");
+const folderHandle = parseFolderItemId("work-folder-qa");
+const folderFrontier = parseFolderFrontier("frontier-v1:folders-declared");
+if (!conversationId || !conversationFrontier || !folderHandle || !folderFrontier) {
+  throw new Error("fixture domain ids must parse");
+}
+
+const conversationPage: ConversationRead.Page = {
+  contractVersion: CONVERSATIONS_READ_CONTRACT_VERSION,
+  items: [{
+    id: conversationId,
+    title: "QA bridge check",
+    overview: "A deterministic conversation for shell acceptance.",
+    createdAt: 1754222400000,
+    updatedAt: 1754568000000,
+    startedAt: 1754567400000,
+    finishedAt: 1754568000000,
+    source: "omi",
+    status: "completed",
+    discarded: false,
+    starred: false,
+    visibility: "private",
+    isLocked: false,
+    folderId: "work-folder-qa",
+    revision: "4",
+  }],
+  window: { status: "complete", complete: true, hasMore: false, nextCursor: null },
+  completeness: {
+    version: "conversations-completeness-v1",
+    status: "complete",
+    reasons: [],
+    frontiers: {
+      declaredFrontier: conversationFrontier,
+      newestAppliedFrontier: conversationFrontier,
+      missingAppliedFrontierReason: null,
+    },
+  },
+  absence: null,
+};
+if (!parseConversationPageJson(JSON.stringify(conversationPage))) {
+  throw new Error("conversations page fixture must parse");
+}
+if (!isTrustedConversationPageData(conversationPage)) {
+  throw new Error("conversations page fixture must be trusted");
+}
+if (CONVERSATION_ITEM_FIELDS.length !== 15) throw new Error("conversations item field count drifted");
+
+const folderPage: FolderRead.Page = {
+  contractVersion: FOLDERS_READ_CONTRACT_VERSION,
+  items: [{
+    id: folderHandle,
+    name: "Work",
+    description: "QA work items",
+    color: "#007AFF",
+    icon: "briefcase",
+    createdAt: 1754222400000,
+    updatedAt: 1754568000000,
+    order: 0,
+    isDefault: false,
+    isSystem: false,
+    revision: null,
+  }],
+  window: { status: "complete", complete: true, hasMore: false, nextCursor: null },
+  completeness: {
+    version: "folders-completeness-v1",
+    status: "complete",
+    reasons: [],
+    frontiers: {
+      declaredFrontier: folderFrontier,
+      newestAppliedFrontier: folderFrontier,
+      missingAppliedFrontierReason: null,
+    },
+  },
+  absence: null,
+};
+if (!parseFolderPageJson(JSON.stringify(folderPage))) {
+  throw new Error("folders page fixture must parse");
+}
+if (!isTrustedFolderPageData(folderPage)) {
+  throw new Error("folders page fixture must be trusted");
+}
+if (FOLDER_ITEM_FIELDS.length !== 11) throw new Error("folders item field count drifted");
+
+// @ts-expect-error a complete conversations window cannot advertise a continuation cursor.
+const invalidConversationComplete: ConversationRead.Page = { ...conversationPage, window: { status: "complete", complete: true, hasMore: false, nextCursor: cursor } };
+void invalidConversationComplete;

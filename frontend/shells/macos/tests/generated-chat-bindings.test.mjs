@@ -112,8 +112,8 @@ test("ratified package release version is not the executable app wire version", 
   try {
     const packageFile = join(fixture.fixtureCore, "contracts/ratified/package.json");
     const source = readFileSync(packageFile, "utf8");
-    assert.match(source, /"version": "0\.8\.0"/);
-    writeFileSync(packageFile, source.replace('"version": "0.8.0"', '"version": "99.0.0"'));
+    assert.match(source, /"version": "0\.9\.0"/);
+    writeFileSync(packageFile, source.replace('"version": "0.9.0"', '"version": "99.0.0"'));
     const result = checkFixture(fixture);
     assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
   } finally {

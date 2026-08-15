@@ -1,27 +1,31 @@
 {
   "schemaVersion": 2,
-  "publicationStatus": "upstream-branch-qa-evidence",
+  "publicationStatus": "local-qa-evidence",
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.8.0",
-    "dependency": "file:./vendor/contracts/omi-core-ratified-contracts-0.8.0-45b128b1.tgz"
+    "version": "0.9.0",
+    "dependency": "file:./vendor/contracts/omi-core-ratified-contracts-0.9.0-e44625eb.tgz"
   },
   "artifact": {
     "compatibility": "additive",
-    "path": "vendor/contracts/omi-core-ratified-contracts-0.8.0-45b128b1.tgz",
-    "sha256": "45b128b10949f83352073a3e047ad956a8b059cc633dde6f57d3a54e715de603",
-    "sha512": "ba98310ac2dcabdda9a046aeac12e1bdfe942d81b2ce97c88423b853e349a71e099601e6378dbdf8d116e2ae808b7eef02c6b28dd64d4769b2246f69d48f50a8",
-    "integrity": "sha512-upgxCsLcq92poEaurBLhvf6ULYGyzpfIhCO4U+NJpx4JlgHmN429+NEW4q6Ai37vAsayjdZNR2myJG9p1I9QqA==",
+    "path": "vendor/contracts/omi-core-ratified-contracts-0.9.0-e44625eb.tgz",
+    "sha256": "e44625ebc09889c3190ca6c3a16dd9944fc98abceb8b6727a7568dbcd56d161f",
+    "sha512": "e3e5b49ae9318ef346f812930ac4664ac9c0ba2ab6998152b33d09602eb221e6a24d531bc6e198dfdfda6f17d4a24240ba8b20d7e942ed3b8741c7ef3dad5ddf",
+    "integrity": "sha512-4+W0mukxjvNG+BKTCsRmSsnAuiq2mYFSsz0JYC6yIeaiTVMbxuGY39/abxfUokJAuosg1+lC7TuHQcfvPa1d3w==",
     "metadataPath": "vendor/contracts/ARTIFACT.json",
-    "metadataSha256": "d2d8613d6420b4a15ac90f507cf8356cc9f4b9a421f229ad4cc23bedb59d20a6",
+    "metadataSha256": "69903e330a0030c4db3b2918ee79bbef21347b33f652c225ddd77ef256967a80",
     "provenancePath": "vendor/contracts/PROVENANCE.json",
-    "provenanceSha256": "29d32be3cd43343b6649f395a2bdcf79493666f142b55b717fe7c36bba964e54",
-    "sourceDigest": "d7c345d3903e9e144c496337a5199589e15d6566b2fcd34bcc3241270889588f",
+    "provenanceSha256": "229ad8c9ce119b782cc9961d7ae996f81bfc5ac75a7045e3287313db097ffb9b",
+    "sourceDigest": "b524fe3af1075ad5e10e2a627503eb8ab9274772494996df1d95216c66221e47",
     "files": [
       "package/PROVENANCE.json",
       "package/README.md",
       "package/dist/pagination/cursor.d.ts",
       "package/dist/pagination/cursor.js",
+      "package/dist/projections/conversations.d.ts",
+      "package/dist/projections/conversations.js",
+      "package/dist/projections/folders.d.ts",
+      "package/dist/projections/folders.js",
       "package/dist/projections/synthesized.d.ts",
       "package/dist/projections/synthesized.js",
       "package/dist/projections/tasks.d.ts",
@@ -32,6 +36,10 @@
       "package/dist/wire/json.js",
       "package/dist/write/ops.d.ts",
       "package/dist/write/ops.js",
+      "package/fixtures/conversations-read-conformance.json",
+      "package/fixtures/conversations-read-shape.json",
+      "package/fixtures/folders-read-conformance.json",
+      "package/fixtures/folders-read-shape.json",
       "package/fixtures/manifest.json",
       "package/fixtures/page-conformance.json",
       "package/fixtures/read-page-windows.json",
@@ -47,14 +55,14 @@
   },
   "source": {
     "repository": "BasedHardware/omi",
-    "path": "core/contracts/ratified",
-    "ref": "refs/heads/core/foundation",
-    "commit": "b4bde0852ae442982a17ac68e0c5a808c2c63cb7",
+    "path": "frontend/contracts/ratified",
+    "ref": "refs/heads/lane/platform-conversations",
+    "commit": "f17a5dd94eb62cf20a1787e2a621265a34430a8c",
     "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
-    "upstreamBranchPushed": true,
+    "upstreamBranchPushed": false,
     "mergedToMain": false,
     "registryPublished": false,
-    "evidence": "The exact 0.8.0 source commit is pushed to BasedHardware/omi on refs/heads/core/foundation, a real non-main branch, and confirmed there by git ls-remote before this hash was written — COORD-contract-evolution-policy.md's W5 amendment: never record a hash the remote has not confirmed. PROVENANCE.json cites FABLE-R26-task-field-vocabulary-signed, whose amendment A1 is this bump's authority, signed by David in person. The bump is additive — only the write-ops conformance corpus moves title to description and done to completed; no export, type, validator, wire outcome, or prior-client obligation changes — so rollback is a re-vendor of 0.7.0. It is not merged to main, registry-published, or adopted in production."
+    "evidence": "0.9.0 is authored in this worktree under frontend/contracts/ratified and vendored here. The lane brief (DAVID-platform-conversations) authorizes changing vendor/contracts/** and the ratified corpus for conversations and folders only. The bump is additive \u2014 two new export subpaths and their fixture corpora; no existing export, type, validator, or prior-client obligation changes \u2014 so rollback is a re-vendor of 0.8.0. It is not merged to main, registry-published, or adopted in production."
   },
   "toolchain": {
     "artifactBuild": {

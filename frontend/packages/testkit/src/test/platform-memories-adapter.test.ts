@@ -155,6 +155,10 @@ test("the ratified fixture manifest names exactly the corpora this suite runs", 
   assert.deepEqual(
     [...manifest.files].sort(),
     [
+      "conversations-read-conformance.json",
+      "conversations-read-shape.json",
+      "folders-read-conformance.json",
+      "folders-read-shape.json",
       "page-conformance.json",
       "read-page-windows.json",
       "recall-completeness.json",
@@ -166,13 +170,12 @@ test("the ratified fixture manifest names exactly the corpora this suite runs", 
       // `write-ops-conformance.test.ts`, in this same suite, and the
       // `ratified-write-ops` row in `core/scripts/check-wire-conformance.mjs`
       // is what mechanically requires that consumer to exist and read them.
-      // The tasks READ seam's two files, named here for the same reason and
-      // under the same rule: this list is exact so that a corpus added
-      // upstream cannot go unrun by anybody. Their consumer is
-      // `platform-tasks-adapter.test.ts` in this suite, and the
-      // `ratified-tasks-read` row in `core/scripts/check-wire-conformance.mjs`
-      // is what mechanically requires that consumer to exist and read them.
-      // The list is compared SORTED, so position is not decorative.
+      // The tasks, conversations, and folders READ seams are named here for
+      // the same reason: this list is exact so that a corpus added upstream
+      // cannot go unrun by anybody. Consumers:
+      // `platform-tasks-adapter.test.ts`,
+      // `platform-conversations-adapter.test.ts`,
+      // `platform-folders-adapter.test.ts`.
       "tasks-read-conformance.json",
       "tasks-read-shape.json",
       "write-ops-conformance.json",

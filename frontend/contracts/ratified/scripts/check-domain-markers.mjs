@@ -23,11 +23,13 @@ for (const relative of governedFiles) {
   }
 }
 
-const forbidden = ["conversations", "FEAT-CONV-012"];
+const forbidden = ["FEAT-CONV-012"];
 for (const relative of governedFiles) {
   const source = readFileSync(resolve(root, relative), "utf8");
   for (const term of forbidden) assert.ok(!source.includes(term), `${relative} crossed forbidden open surface ${term}`);
 }
+const synthesized = readFileSync(resolve(root, "src/projections/synthesized.ts"), "utf8");
+assert.ok(!synthesized.includes("conversations"), "synthesized.ts crossed the conversations namespace");
 
 const boundary = readFileSync(resolve(root, "scripts/package-boundary.mjs"), "utf8");
 assert.match(boundary, /domain-pending\(DIV-DOMCORE-003\)[\s\S]{0,160}legacy editable Memory/);

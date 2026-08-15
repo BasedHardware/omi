@@ -17,6 +17,18 @@ import {
   parseSynthesizedText,
 } from "@omi-core/ratified-contracts/projections/synthesized";
 import {
+  CONVERSATIONS_READ_CONTRACT_VERSION,
+  CONVERSATION_ITEM_FIELDS,
+  isTrustedConversationPageData,
+  parseConversationPageJson,
+} from "@omi-core/ratified-contracts/projections/conversations";
+import {
+  FOLDERS_READ_CONTRACT_VERSION,
+  FOLDER_ITEM_FIELDS,
+  isTrustedFolderPageData,
+  parseFolderPageJson,
+} from "@omi-core/ratified-contracts/projections/folders";
+import {
   TASKS_READ_CONTRACT_VERSION,
   TASK_ITEM_FIELDS,
   isTrustedTaskPageData,
@@ -502,6 +514,10 @@ describe("ratified package runtime boundary", () => {
         "status-matrix.json",
         "write-ops-outcomes.json",
         "write-ops-conformance.json",
+        "conversations-read-shape.json",
+        "conversations-read-conformance.json",
+        "folders-read-shape.json",
+        "folders-read-conformance.json",
         "tasks-read-shape.json",
         "tasks-read-conformance.json",
       ],

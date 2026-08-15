@@ -7,10 +7,12 @@ import type {
   FolderPatchOutcome,
   FolderRecord,
   FoldersStore,
+  OrderedFolderRecord,
 } from "../../../apps/service/stores/folders-store";
 import { configureServiceStoreConnection } from "./connection";
 
 interface StoredFolderRow {
+  readonly sequence: number;
   readonly id: string;
   readonly name_json: string;
   readonly description_json: string;
@@ -40,7 +42,7 @@ const toRecord = (row: StoredFolderRow): FolderRecord => Object.freeze({
 });
 
 const SELECT_FIELDS = `
-  id, name_json, description_json, color_json, icon_json,
+  sequence, id, name_json, description_json, color_json, icon_json,
   created_at, updated_at, order_json, is_default, is_system
 `;
 
@@ -70,13 +72,20 @@ export class SqliteFoldersStore implements FoldersStore {
   }
 
   listFolders(accountId: string): readonly FolderRecord[] {
+    return Object.freeze(this.listOrderedFolders(accountId).map((row) => row.record));
+  }
+
+  listOrderedFolders(accountId: string): readonly OrderedFolderRecord[] {
     const rows = this.db.query(`
       SELECT ${SELECT_FIELDS}
       FROM service_folder_records
       WHERE account_id = ?
       ORDER BY sequence ASC
     `).all(accountId) as StoredFolderRow[];
-    return Object.freeze(rows.map(toRecord));
+    return Object.freeze(rows.map((row) => Object.freeze({
+      record: toRecord(row),
+      sequence: row.sequence,
+    })));
   }
 
   readFolder(accountId: string, folderId: string): FolderRecord | null {

@@ -5,9 +5,14 @@ import type {
   ChatAttachmentStagingPort,
   DeadLetter,
   Folder,
+  FolderPatch,
   HttpClient,
   Memory,
   MemoryPatch,
+  PlatformConversationCoverageState,
+  PlatformConversationItem,
+  PlatformFolderCoverageState,
+  PlatformFolderItem,
   PlatformTaskCoverageState,
   PlatformTaskItem,
   StorageBridge,
@@ -22,6 +27,8 @@ import {
   ConversationsStore,
   FoldersStore,
   MemoriesStore,
+  PlatformConversationsStore,
+  PlatformFoldersStore,
   PlatformTasksStore,
   SynthesizedMemoriesStore,
   TasksStore,
@@ -182,6 +189,25 @@ export type ProductionPlatformTaskStore = ObservableStore & {
   loadMore(): Promise<void>;
 };
 
+export type ProductionPlatformConversationStore = WriteAwareStore & {
+  list(): Promise<readonly PlatformConversationItem[]>;
+  coverage(): PlatformConversationCoverageState;
+  hasMore(): boolean;
+  loadMore(): Promise<void>;
+  patch(id: Conversation["id"], patch: ConversationPatch): Promise<void>;
+  delete(id: Conversation["id"]): Promise<void>;
+};
+
+export type ProductionPlatformFolderStore = WriteAwareStore & {
+  list(): Promise<readonly PlatformFolderItem[]>;
+  coverage(): PlatformFolderCoverageState;
+  hasMore(): boolean;
+  loadMore(): Promise<void>;
+  create(name: string, opts?: { description?: string; color?: string; icon?: string }): Promise<void>;
+  patch(id: Folder["id"], patch: FolderPatch): Promise<void>;
+  delete(id: Folder["id"], moveToFolderId?: Folder["id"]): Promise<void>;
+};
+
 /**
  * A factory that can serve either generation, per domain.
  *
@@ -210,6 +236,16 @@ export type PlatformProductionStoreFactory = ProductionStoreFactory & {
    * rollback is the same line, which is what D2's parity bought.
    */
   openPlatformTasks(): Promise<ProductionPlatformTaskStore>;
+  /**
+   * Named platform conversations store. `openConversations()` stays on the
+   * legacy adapter until the next lane repoints Home.
+   */
+  openPlatformConversations(): Promise<ProductionPlatformConversationStore>;
+  /**
+   * Named platform folders store. `openFolders()` stays on the legacy adapter
+   * until the next lane repoints Home.
+   */
+  openPlatformFolders(): Promise<ProductionPlatformFolderStore>;
   /** Named live Chat seam. C3b3 owns routing a production surface to it. */
   openChat(): Promise<ProductionChatStore>;
 };
@@ -264,6 +300,10 @@ export function createPlatformProductionStoreFactory(
     openSynthesizedMemories: () =>
       SynthesizedMemoriesStore.open(bridge, env, transports.platformHttp),
     openPlatformTasks: () => PlatformTasksStore.open(bridge, env, transports.platformHttp),
+    openPlatformConversations: () =>
+      PlatformConversationsStore.open(bridge, env, transports.platformHttp),
+    openPlatformFolders: () =>
+      PlatformFoldersStore.open(bridge, env, transports.platformHttp),
     openChat: () => {
       if (transports.platformStream === undefined) {
         throw new Error("live Chat unavailable: platform stream bridge is not installed");

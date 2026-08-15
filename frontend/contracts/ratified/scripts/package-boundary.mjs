@@ -71,6 +71,17 @@ const provenance = JSON.parse(provenanceBytes);
  * defines, and a client that never reads the field is unaffected by its
  * absence.
  *
+ * 0.9.0 is additive. DAVID-platform-conversations ratifies two NEW export
+ * subpaths (`./projections/conversations` and `./projections/folders`) plus
+ * their schema-of-record and conformance corpora. No existing export, field,
+ * shape, or validator changes. Every client built against 0.8.0 keeps working
+ * unchanged with no new obligation, which is §1's definition — the same
+ * classification 0.3.0 (`./write/ops`) and 0.6.0 (`./projections/tasks`) used
+ * when adding a namespace.
+ *
+ * §8 rollback: re-vendor 0.8.0. Nothing is persisted in a shape these
+ * contracts define that an older client must read.
+ *
  * 0.8.0 is additive. FABLE-R26-task-field-vocabulary-signed A1 changes only
  * the serialized task op bags in the write conformance corpus: title becomes
  * description and done becomes completed. No export, type, validator, wire
@@ -87,10 +98,14 @@ if (COMPATIBILITY_CLASS !== "additive" && COMPATIBILITY_CLASS !== "breaking") {
   throw new Error("compatibility class must be exactly 'additive' or 'breaking'");
 }
 
-const expectedExports = ["./pagination/cursor", "./projections/synthesized", "./projections/tasks", "./recall/trace", "./write/ops"];
+const expectedExports = ["./pagination/cursor", "./projections/conversations", "./projections/folders", "./projections/synthesized", "./projections/tasks", "./recall/trace", "./write/ops"];
 const expectedManifestFiles = [
   "dist/pagination/cursor.js",
   "dist/pagination/cursor.d.ts",
+  "dist/projections/conversations.js",
+  "dist/projections/conversations.d.ts",
+  "dist/projections/folders.js",
+  "dist/projections/folders.d.ts",
   "dist/projections/synthesized.js",
   "dist/projections/synthesized.d.ts",
   "dist/projections/tasks.js",
@@ -109,6 +124,10 @@ const expectedManifestFiles = [
   "fixtures/status-matrix.json",
   "fixtures/write-ops-outcomes.json",
   "fixtures/write-ops-conformance.json",
+  "fixtures/conversations-read-shape.json",
+  "fixtures/conversations-read-conformance.json",
+  "fixtures/folders-read-shape.json",
+  "fixtures/folders-read-conformance.json",
   "fixtures/tasks-read-shape.json",
   "fixtures/tasks-read-conformance.json",
   "PROVENANCE.json",
@@ -118,6 +137,10 @@ const expectedTarFiles = [
   "package/README.md",
   "package/dist/pagination/cursor.d.ts",
   "package/dist/pagination/cursor.js",
+  "package/dist/projections/conversations.d.ts",
+  "package/dist/projections/conversations.js",
+  "package/dist/projections/folders.d.ts",
+  "package/dist/projections/folders.js",
   "package/dist/projections/synthesized.d.ts",
   "package/dist/projections/synthesized.js",
   "package/dist/projections/tasks.d.ts",
@@ -128,11 +151,15 @@ const expectedTarFiles = [
   "package/dist/wire/json.js",
   "package/dist/write/ops.d.ts",
   "package/dist/write/ops.js",
+  "package/fixtures/conversations-read-conformance.json",
+  "package/fixtures/conversations-read-shape.json",
+  "package/fixtures/folders-read-conformance.json",
+  "package/fixtures/folders-read-shape.json",
   "package/fixtures/manifest.json",
+  "package/fixtures/page-conformance.json",
   "package/fixtures/read-page-windows.json",
   "package/fixtures/recall-completeness.json",
   "package/fixtures/recall-trace.json",
-  "package/fixtures/page-conformance.json",
   "package/fixtures/status-matrix.json",
   "package/fixtures/tasks-read-conformance.json",
   "package/fixtures/tasks-read-shape.json",
@@ -143,7 +170,7 @@ const expectedTarFiles = [
 
 assertEqual(Object.keys(manifest.exports).sort(), expectedExports, "export allowlist");
 assertEqual(manifest.files, expectedManifestFiles, "manifest file allowlist");
-if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.8.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
+if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.9.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
 if (provenance.package.name !== manifest.name || provenance.package.version !== manifest.version) throw new Error("package provenance identity mismatch");
 
 const declaration = readFileSync(resolve(root, "dist/projections/synthesized.d.ts"), "utf8");
@@ -208,6 +235,40 @@ if (domainTaskFields.length !== 13) throw new Error(`domain Task declares ${doma
 const wireTaskFields = [...taskDeclarationCode.matchAll(/^\s{8}(\w+):/gm)].map((match) => match[1]);
 for (const field of domainTaskFields) {
   if (!wireTaskFields.includes(field)) throw new Error(`tasks read wire is missing domain field \`${field}\` — D2 requires full parity`);
+}
+
+const stripComments = (source) => source
+  .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "))
+  .replace(/\/\/[^\n]*/g, "");
+
+const conversationDeclarationCode = stripComments(readFileSync(resolve(root, "dist/projections/conversations.d.ts"), "utf8"));
+if (/\bid:\s*RecordId\b/.test(conversationDeclarationCode)) throw new Error("conversations item id is typed as RecordId — the wire brands a storage handle, it does not import the domain id type");
+const domainConversationSource = readFileSync(resolve(root, "../src/domain/conversations.ts"), "utf8");
+const domainConversationBody = domainConversationSource.slice(
+  domainConversationSource.indexOf("export interface Conversation {"),
+  domainConversationSource.indexOf("\n}", domainConversationSource.indexOf("export interface Conversation {")),
+);
+if (!domainConversationBody.startsWith("export interface Conversation {")) throw new Error("could not locate the domain Conversation interface — the parity check is stale");
+const domainConversationFields = [...domainConversationBody.matchAll(/^\s{2}(\w+)[?]?:/gm)].map((match) => match[1]).sort();
+if (domainConversationFields.length !== 15) throw new Error(`domain Conversation declares ${domainConversationFields.length} fields, not the fifteen the flattened v1 item ratifies`);
+const wireConversationFields = [...conversationDeclarationCode.matchAll(/^\s{8}(\w+):/gm)].map((match) => match[1]);
+for (const field of domainConversationFields) {
+  if (!wireConversationFields.includes(field)) throw new Error(`conversations read wire is missing domain field \`${field}\``);
+}
+
+const folderDeclarationCode = stripComments(readFileSync(resolve(root, "dist/projections/folders.d.ts"), "utf8"));
+if (/\bid:\s*RecordId\b/.test(folderDeclarationCode)) throw new Error("folders item id is typed as RecordId — the wire brands a storage handle, it does not import the domain id type");
+const domainFolderSource = readFileSync(resolve(root, "../src/domain/folders.ts"), "utf8");
+const domainFolderBody = domainFolderSource.slice(
+  domainFolderSource.indexOf("export interface Folder {"),
+  domainFolderSource.indexOf("\n}", domainFolderSource.indexOf("export interface Folder {")),
+);
+if (!domainFolderBody.startsWith("export interface Folder {")) throw new Error("could not locate the domain Folder interface — the parity check is stale");
+const domainFolderFields = [...domainFolderBody.matchAll(/^\s{2}(\w+)[?]?:/gm)].map((match) => match[1]).sort();
+if (domainFolderFields.length !== 11) throw new Error(`domain Folder declares ${domainFolderFields.length} fields, not the eleven the v1 item ratifies`);
+const wireFolderFields = [...folderDeclarationCode.matchAll(/^\s{8}(\w+):/gm)].map((match) => match[1]);
+for (const field of domainFolderFields) {
+  if (!wireFolderFields.includes(field)) throw new Error(`folders read wire is missing domain field \`${field}\``);
 }
 
 const traceDeclaration = readFileSync(resolve(root, "dist/recall/trace.d.ts"), "utf8");

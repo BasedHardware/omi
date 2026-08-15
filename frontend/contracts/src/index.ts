@@ -12,6 +12,8 @@ export * from "./domain/chat.js";
 export * from "./domain/conversations.js";
 export * from "./domain/folders.js";
 export * from "./domain/memories.js";
+export * from "./domain/platform-conversations.js";
+export * from "./domain/platform-folders.js";
 export * from "./domain/platform-tasks.js";
 export * from "./domain/settings.js";
 export * from "./domain/synthesized-memories.js";

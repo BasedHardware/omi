@@ -2,7 +2,18 @@
 // domain-pending(UNK-DOMCORE-002)
 import type { Hono } from "hono";
 
+import {
+  APP_CONTRACT_VERSION_HEADER,
+  isWellFormedContractVersion,
+  resolveDeclaredContractVersion,
+} from "@omi-core/ratified-contracts/projections/synthesized";
+
 import type { DevPrincipal } from "../auth/dev-token";
+import type { PreparedConversationsRead } from "../composition/conversations-read";
+import {
+  UnprojectableConversationRecordError,
+  readConversationsPage,
+} from "../composition/conversations-read";
 import type { ServedCounter } from "../observability/served-count";
 import type {
   ConversationPatchOutcome,
@@ -14,12 +25,21 @@ const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
   "content-type": "application/json; charset=utf-8",
 });
+const ENVELOPE_JSON_HEADERS = Object.freeze({
+  "cache-control": "no-store",
+  "content-type": "application/json",
+});
 const EMPTY_HEADERS = Object.freeze({ "cache-control": "no-store" });
+
+const BAD_REQUEST_BODY = JSON.stringify({ error: "bad_request" });
+const INTERNAL_BODY = JSON.stringify({ error: "internal_server_error" });
 
 export const CONVERSATIONS_PATH = "/v1/conversations";
 const CONVERSATION_PREFIX = `${CONVERSATIONS_PATH}/`;
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 5_000;
+const DEFAULT_PAGE_LIMIT = 25;
+const MAX_PAGE_LIMIT = 100;
 
 export interface ConversationRouteDependencies {
   readonly resolvePrincipal: (token: string) => DevPrincipal | null;
@@ -27,6 +47,8 @@ export interface ConversationRouteDependencies {
   readonly counter: ServedCounter;
   /** The composition root owns the clock. QA uses the prototype's fixed instant. */
   readonly now: () => string;
+  /** Builds the prepared ratified read for one principal. */
+  readonly prepareRead: (principal: DevPrincipal) => PreparedConversationsRead;
 }
 
 const jsonResponse = (value: unknown, status = 200): Response =>
@@ -105,11 +127,17 @@ export const registerConversationRoutes = (
       deps.counter.recordDomainRead("denied");
       return errorResponse(400, "invalid_url");
     }
-    const limit = parseLimit(url.searchParams.get("limit"), DEFAULT_LIMIT);
-    const offset = parseLimit(url.searchParams.get("offset"), 0);
-    const records = deps.store.listRecords(principal.uid);
-    deps.counter.recordDomainRead("served");
-    return jsonResponse(records.slice(offset, offset + limit));
+    // Dual-serve: `offset` present keeps the legacy bare array so Home and
+    // adapters-legacy keep working until the next lane deletes them. Absence
+    // of `offset` is the ratified envelope (`limit`/`cursor`).
+    if (url.searchParams.has("offset")) {
+      const limit = parseLimit(url.searchParams.get("limit"), DEFAULT_LIMIT);
+      const offset = parseLimit(url.searchParams.get("offset"), 0);
+      const records = deps.store.listRecords(principal.uid);
+      deps.counter.recordDomainRead("served");
+      return jsonResponse(records.slice(offset, offset + limit));
+    }
+    return serveConversationsEnvelope(context.req.raw, principal, deps);
   });
 
   app.patch(`${CONVERSATIONS_PATH}/*`, async (context) => {
@@ -164,9 +192,12 @@ export const registerConversationRoutes = (
         } catch {
           return errorResponse(400, "invalid_json");
         }
-        // `Object.hasOwn(null, ...)` throws in the prototype and is caught by
-        // its outer handler as qa_server_error. Preserve that visible wart.
-        if (!Object.hasOwn(body as object, "folder_id")) {
+        // Intended wire: a missing or non-object body is `folder_id_required`,
+        // never the prototype's `Object.hasOwn(null)` → 500 `qa_server_error`.
+        if (body === null || typeof body !== "object" || Array.isArray(body)) {
+          return errorResponse(400, "folder_id_required");
+        }
+        if (!Object.hasOwn(body, "folder_id")) {
           return errorResponse(400, "folder_id_required");
         }
         const folderId = (body as { readonly folder_id: unknown }).folder_id;
@@ -201,3 +232,78 @@ export const registerConversationRoutes = (
     return new Response(null, { status: 204, headers: EMPTY_HEADERS });
   });
 };
+
+const parseEnvelopeQuery = (
+  rawLimit: string | undefined,
+  rawCursor: string | undefined,
+  duplicated: boolean,
+): { readonly limit: number; readonly cursor: string | null } | null => {
+  if (duplicated) return null;
+  let limit = DEFAULT_PAGE_LIMIT;
+  if (rawLimit !== undefined) {
+    if (!/^[0-9]{1,3}$/.test(rawLimit)) return null;
+    limit = Number(rawLimit);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE_LIMIT) return null;
+  }
+  const cursor = rawCursor === undefined || rawCursor.length === 0 ? null : rawCursor;
+  return { limit, cursor };
+};
+
+const hasDuplicateQueryParameters = (rawUrl: string): boolean => {
+  let parameters: URLSearchParams;
+  try {
+    parameters = new URL(rawUrl).searchParams;
+  } catch {
+    return true;
+  }
+  for (const name of ["limit", "cursor"]) {
+    if (parameters.getAll(name).length > 1) return true;
+  }
+  return false;
+};
+
+const serveConversationsEnvelope = (
+  request: Request,
+  principal: DevPrincipal,
+  deps: ConversationRouteDependencies,
+): Response => {
+  const declaredContractVersionHeader = request.headers.get(APP_CONTRACT_VERSION_HEADER) ?? undefined;
+  deps.counter.recordDeclaredContractVersion({
+    atFloor: typeof declaredContractVersionHeader !== "string"
+      || !isWellFormedContractVersion(declaredContractVersionHeader.trim()),
+  });
+  void resolveDeclaredContractVersion(declaredContractVersionHeader);
+
+  const url = new URL(request.url);
+  const page = parseEnvelopeQuery(
+    url.searchParams.get("limit") ?? undefined,
+    url.searchParams.get("cursor") ?? undefined,
+    hasDuplicateQueryParameters(request.url),
+  );
+  if (page === null) {
+    deps.counter.recordDomainRead("denied");
+    return new Response(BAD_REQUEST_BODY, { status: 400, headers: ENVELOPE_JSON_HEADERS });
+  }
+
+  try {
+    const prepared = deps.prepareRead(principal);
+    const result = readConversationsPage({ limit: page.limit, cursor: page.cursor }, prepared);
+    deps.counter.recordDomainRead("served");
+    return new Response(result.canonical_json, { status: 200, headers: ENVELOPE_JSON_HEADERS });
+  } catch (error) {
+    if (error instanceof UnprojectableConversationRecordError) {
+      deps.counter.recordDomainRead("failed");
+      return new Response(INTERNAL_BODY, { status: 500, headers: ENVELOPE_JSON_HEADERS });
+    }
+    if (isInvalidCursor(error)) {
+      deps.counter.recordDomainRead("denied");
+      return new Response(BAD_REQUEST_BODY, { status: 400, headers: ENVELOPE_JSON_HEADERS });
+    }
+    deps.counter.recordDomainRead("failed");
+    return new Response(INTERNAL_BODY, { status: 500, headers: ENVELOPE_JSON_HEADERS });
+  }
+};
+
+const isInvalidCursor = (error: unknown): boolean =>
+  typeof error === "object" && error !== null
+  && (error as { code?: unknown }).code === "invalid_cursor";

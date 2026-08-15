@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.8.0"
+    "version": "0.9.0"
   },
   "repository": "BasedHardware/omi",
   "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
@@ -21,7 +21,8 @@
     "COORD-cross-generation-writes",
     "COORD-fable-rulings-wave2",
     "DAVID-tasks-read-epoch-and-ci",
-    "FABLE-R26-task-field-vocabulary-signed"
+    "FABLE-R26-task-field-vocabulary-signed",
+    "DAVID-platform-conversations"
   ],
   "compiler": {
     "name": "typescript",
@@ -30,18 +31,38 @@
   "inputs": [
     {
       "path": "fixtures/clean-consumer/conformance.mjs",
-      "sha256": "05404bfab65b43623f38c87a1a1ec7ad0c80d5b7133b8eeaa8e491db167a35de",
-      "bytes": 9074
+      "sha256": "9f76fa0c4789e294bdbe02c6e69e2e6ddb3e4b1f63e5a008bfd3ad63bcf1a627",
+      "bytes": 11958
     },
     {
       "path": "fixtures/clean-consumer/consumer.ts",
-      "sha256": "fa4ac48f893ede966d2374c5e19d783d89886027446fadb12d2ba21f19ce78c6",
-      "bytes": 19902
+      "sha256": "98e1c141b29eb7c49cb9043f8146e5d4d018e72ff1544c397554f18db592f152",
+      "bytes": 23465
     },
     {
       "path": "fixtures/clean-consumer/tsconfig.json",
       "sha256": "d4aa4e8b31dcbec3294d703a579ca0c463d6548cf56c516204934901bedb8e63",
       "bytes": 171
+    },
+    {
+      "path": "fixtures/conversations-read-conformance.json",
+      "sha256": "543848a41992a0eb50f112d0187d636c6bacf567ae6702ab391281f8bf4e04bf",
+      "bytes": 54003
+    },
+    {
+      "path": "fixtures/conversations-read-shape.json",
+      "sha256": "516d03ffd2459b1abe9043c2e820970db4fa2b5ac22aa7c62f6b0fe24c5dca96",
+      "bytes": 3270
+    },
+    {
+      "path": "fixtures/folders-read-conformance.json",
+      "sha256": "08d1ebb39f21fd862b5ea663d628cd09ce8e84289af39ac7c777a45724906071",
+      "bytes": 43241
+    },
+    {
+      "path": "fixtures/folders-read-shape.json",
+      "sha256": "92f7bec39fc74b32622a4519f0efbe858c6abc7b7f3f5cfc11706d3f2618128b",
+      "bytes": 3064
     },
     {
       "path": "fixtures/forbidden-public-fields.mjs",
@@ -50,8 +71,8 @@
     },
     {
       "path": "fixtures/manifest.json",
-      "sha256": "0da729c355c84ee74e99455fb71fead757d24a5a956f78b0cbd81c69b6a00b40",
-      "bytes": 313
+      "sha256": "ec1f4df3f9545cbf2a2f3d7c34aef2eb84647957f6c2ff1dcfece227ab87f19c",
+      "bytes": 461
     },
     {
       "path": "fixtures/page-conformance.json",
@@ -100,8 +121,8 @@
     },
     {
       "path": "package.json",
-      "sha256": "726906eb7dc26f1643acefd83dc1e4838dd876eaa55ab763576cf17eba7e4ccf",
-      "bytes": 2412
+      "sha256": "2ed8ad06f9bfc81b3af957bda56f74909ea294bec87a8071907a7bef9145f5cd",
+      "bytes": 3042
     },
     {
       "path": "pnpm-lock.yaml",
@@ -110,13 +131,13 @@
     },
     {
       "path": "README.md",
-      "sha256": "a5574d89bf29c24a4a687fed163e0e411ff410c034cf1b23fdfb91e60280cc35",
-      "bytes": 11846
+      "sha256": "3f5cf48bf553b278661653e7b874f6f3413776b0c09ff71eb5ddd58ca99e8649",
+      "bytes": 13661
     },
     {
       "path": "scripts/check-domain-markers.mjs",
-      "sha256": "5e46a993bdf029c87b5157529f95d5338e66eee627339e035c7bfd9fdb553a81",
-      "bytes": 2205
+      "sha256": "e22c5fdaf1d148f3699c968ac144a9e4dbe743821da5a75bf9464b2531fbb9ef",
+      "bytes": 2384
     },
     {
       "path": "scripts/clean.mjs",
@@ -125,13 +146,13 @@
     },
     {
       "path": "scripts/package-boundary.mjs",
-      "sha256": "188c5eaf7c4ee692f887ad91fca8e296b17d56ed6d00f2859f5a5bc8030c7085",
-      "bytes": 16082
+      "sha256": "5cb4700709e09689e15f29e22af651e0b4182ebe685c30701634ed0bbe8da02e",
+      "bytes": 20369
     },
     {
       "path": "scripts/provenance.mjs",
-      "sha256": "8348e93122f9a8a2505d75a9fca4b4cb590e277a8de3c56ad6c65d36e63429df",
-      "bytes": 5122
+      "sha256": "968dd3512fe7012d63f20024861bf450e02c74c05e783f2e5d2d40a03fa9f636",
+      "bytes": 5940
     },
     {
       "path": "scripts/verify-ci.mjs",
@@ -142,6 +163,16 @@
       "path": "src/pagination/cursor.ts",
       "sha256": "b112180e017c4ea4f62dd531e2a57e3a14f29848abf4436378cf0be64f9fe894",
       "bytes": 508
+    },
+    {
+      "path": "src/projections/conversations.ts",
+      "sha256": "a89ba9b18395607b148b1e2899a2c9c6ac59717a59054e092b17c05774a16d7c",
+      "bytes": 18346
+    },
+    {
+      "path": "src/projections/folders.ts",
+      "sha256": "ad72346d1704a085c406b9cbfdd627ce6fc4947d39a78ce0e8c78698111b112c",
+      "bytes": 15711
     },
     {
       "path": "src/projections/synthesized.ts",
@@ -170,8 +201,8 @@
     },
     {
       "path": "test/contracts.test.mjs",
-      "sha256": "ade7dcb1c74a5c9c20e7d48a7f5384d5192a5a844bf41500c4f919e17cb78cb1",
-      "bytes": 36294
+      "sha256": "8a06a47af17d02c7805ea44e68a3733e2607e9012666600d1a4be974c059476b",
+      "bytes": 40070
     },
     {
       "path": "tsconfig.base.json",
@@ -184,5 +215,5 @@
       "bytes": 133
     }
   ],
-  "sourceDigest": "d7c345d3903e9e144c496337a5199589e15d6566b2fcd34bcc3241270889588f"
+  "sourceDigest": "b524fe3af1075ad5e10e2a627503eb8ab9274772494996df1d95216c66221e47"
 }

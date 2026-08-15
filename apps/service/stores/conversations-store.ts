@@ -81,9 +81,21 @@ export interface ConversationFolderReassignmentOutcome {
   readonly state_revision: number | null;
 }
 
+/**
+ * One stored conversation plus its ingest sequence. The sequence is the
+ * ordering key the ratified cursor walks (`ORDER BY sequence ASC` in sqlite,
+ * Map insertion order in memory). It is store-owned and never a wire field.
+ */
+export interface OrderedConversationRecord {
+  readonly record: ConversationRecord;
+  readonly sequence: number;
+}
+
 export interface ConversationsStore {
   /** Stable insertion order, matching the legacy collection's array order. */
   listRecords(accountId: string): readonly ConversationRecord[];
+  /** Same rows as `listRecords`, carrying the ingest sequence the cursor needs. */
+  listOrderedRecords(accountId: string): readonly OrderedConversationRecord[];
   readRecord(accountId: string, recordId: string): ConversationRecord | null;
   /** Server-originated ingest seam. There is deliberately no client create route. */
   upsert(accountId: string, record: ConversationRecord): ConversationUpsertOutcome;
@@ -145,6 +157,8 @@ export const createInMemoryConversationsStore = (
 ): InMemoryConversationsStore => {
   const accounts = new Map<string, Map<string, ConversationRecord>>();
   const revisions = new Map<string, number>();
+  const sequences = new Map<string, Map<string, number>>();
+  const nextSequences = new Map<string, number>();
 
   const replaceAccount = (
     accountId: string,
@@ -152,8 +166,16 @@ export const createInMemoryConversationsStore = (
   ): void => {
     if (snapshot.records === null) {
       accounts.delete(accountId);
+      sequences.delete(accountId);
+      nextSequences.delete(accountId);
     } else {
       accounts.set(accountId, new Map(snapshot.records.map((record) => [record.id, record])));
+      const assigned = new Map<string, number>();
+      snapshot.records.forEach((record, index) => {
+        assigned.set(record.id, index + 1);
+      });
+      sequences.set(accountId, assigned);
+      nextSequences.set(accountId, snapshot.records.length + 1);
     }
     if (snapshot.revision === null) revisions.delete(accountId);
     else revisions.set(accountId, snapshot.revision);
@@ -196,6 +218,16 @@ export const createInMemoryConversationsStore = (
       return Object.freeze([...records.values()]);
     },
 
+    listOrderedRecords(accountId: string): readonly OrderedConversationRecord[] {
+      const records = accounts.get(accountId);
+      if (records === undefined) return Object.freeze([]);
+      const assigned = sequences.get(accountId);
+      return Object.freeze([...records.values()].map((record, index) => Object.freeze({
+        record,
+        sequence: assigned?.get(record.id) ?? index + 1,
+      })));
+    },
+
     readRecord(accountId: string, recordId: string): ConversationRecord | null {
       return accounts.get(accountId)?.get(recordId) ?? null;
     },
@@ -205,7 +237,15 @@ export const createInMemoryConversationsStore = (
         return { stored: false, reason: "folder_not_found" };
       }
       const stored = freezeRecord(record);
-      recordsOf(accountId).set(record.id, stored);
+      const existing = recordsOf(accountId);
+      if (!existing.has(record.id)) {
+        const assigned = sequences.get(accountId) ?? new Map<string, number>();
+        sequences.set(accountId, assigned);
+        const next = nextSequences.get(accountId) ?? 1;
+        assigned.set(record.id, next);
+        nextSequences.set(accountId, next + 1);
+      }
+      existing.set(record.id, stored);
       return { stored: true, record: stored };
     },
 
@@ -312,6 +352,8 @@ export const createInMemoryConversationsStore = (
     reset(): void {
       accounts.clear();
       revisions.clear();
+      sequences.clear();
+      nextSequences.clear();
     },
   });
 };

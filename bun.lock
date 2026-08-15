@@ -5,7 +5,7 @@
     "": {
       "name": "omi-placement-platform",
       "dependencies": {
-        "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.8.0-45b128b1.tgz",
+        "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.9.0-e44625eb.tgz",
         "@sinclair/typebox": "^0.34.41",
         "ajv": "^8.17.1",
         "firebase-admin": "14.2.0",
@@ -98,7 +98,7 @@
 
     "@nodable/entities": ["@nodable/entities@3.0.0", "", {}, "sha512-8L9xFeTYKhm49xfIypoe2W5wV1m/3Z58kT+7kR9A8OyFxcPduI4VmxaUMQyKYrRjUoLLSXv6EKKID5Tvj9cUVw=="],
 
-    "@omi-core/ratified-contracts": ["@omi-core/ratified-contracts@./vendor/contracts/omi-core-ratified-contracts-0.8.0-45b128b1.tgz", {}, "sha512-upgxCsLcq92poEaurBLhvf6ULYGyzpfIhCO4U+NJpx4JlgHmN429+NEW4q6Ai37vAsayjdZNR2myJG9p1I9QqA=="],
+    "@omi-core/ratified-contracts": ["@omi-core/ratified-contracts@./vendor/contracts/omi-core-ratified-contracts-0.9.0-e44625eb.tgz", {}, "sha512-4+W0mukxjvNG+BKTCsRmSsnAuiq2mYFSsz0JYC6yIeaiTVMbxuGY39/abxfUokJAuosg1+lC7TuHQcfvPa1d3w=="],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.1", "", {}, "sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q=="],
 

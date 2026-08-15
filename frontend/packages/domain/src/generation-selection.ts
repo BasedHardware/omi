@@ -3,9 +3,8 @@
  *
  * Two backend generations now coexist: `legacy` (the old wire, through
  * `packages/adapters-legacy`) and `platform` (the contracts-native wire,
- * through `packages/adapters-platform`). Board ruling PR-1 puts memories on
- * the platform generation and leaves tasks, conversations and folders on
- * legacy tonight, because only the memory read path is ratified.
+ * through `packages/adapters-platform`). Memories, conversations, and folders
+ * are ratified on platform; tasks stay legacy until their write path is.
  *
  * The surfaces must not know which generation they are on — that is what the
  * `ProductionStores` ports are for. The SHELL knows, and it must be able to
@@ -50,9 +49,10 @@ export const PRODUCTION_GENERATION_AVAILABILITY: Readonly<
 > = {
   // Ratified: @omi-core/ratified-contracts 0.1.1, memory READ path.
   memories: ["legacy", "platform"],
-  // Not ratified. `adapters-legacy` only.
-  conversations: ["legacy"],
-  folders: ["legacy"],
+  // Ratified: @omi-core/ratified-contracts 0.9.0, conversations READ envelope.
+  conversations: ["legacy", "platform"],
+  // Ratified: @omi-core/ratified-contracts 0.9.0, folders READ envelope.
+  folders: ["legacy", "platform"],
   tasks: ["legacy"],
 };
 
@@ -166,9 +166,10 @@ export function resolveGenerationSelection(requested: unknown): ResolvedGenerati
  *
  * Recognized keys are `generation.<domain>` and the bare `<domain>`, so a host
  * can namespace or not. `generations=platform` (no domain) is the shorthand
- * for "every domain that HAS this generation uses it" — which today means
- * memories only, and which reports a rejection for nothing, because asking for
- * the best available is not the same as asking for something unavailable.
+ * for "every domain that HAS this generation uses it" — today memories,
+ * conversations, and folders — and which reports a rejection for nothing,
+ * because asking for the best available is not the same as asking for
+ * something unavailable.
  */
 export function parseGenerationSelectionFromEntries(
   entries: Iterable<readonly [string, string]>,

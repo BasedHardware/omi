@@ -9,6 +9,8 @@ const inputs = [
   "tsconfig.json",
   "README.md",
   "src/pagination/cursor.ts",
+  "src/projections/conversations.ts",
+  "src/projections/folders.ts",
   "src/projections/synthesized.ts",
   "src/projections/tasks.ts",
   "src/recall/trace.ts",
@@ -25,6 +27,10 @@ const inputs = [
   "fixtures/status-matrix.json",
   "fixtures/write-ops-outcomes.json",
   "fixtures/write-ops-conformance.json",
+  "fixtures/conversations-read-shape.json",
+  "fixtures/conversations-read-conformance.json",
+  "fixtures/folders-read-shape.json",
+  "fixtures/folders-read-conformance.json",
   "fixtures/tasks-read-shape.json",
   "fixtures/tasks-read-conformance.json",
   "fixtures/manifest.json",
@@ -67,6 +73,14 @@ const provenance = {
   // is those documents' own filename prefix, not a required namespace, and
   // stamping COORD- onto a David-signed record would misattribute who signed it.
   //
+  // 0.9.0 adds "DAVID-platform-conversations" — the lane brief that ratifies
+  // the conversations and folders READ wires the service already serves:
+  // flattened v1 items plus revision, HMAC keyset cursor over ingest sequence,
+  // memories-style completeness envelope, dangling folder_id legal, no folder
+  // cap, interrupted conversations visible, no client create, polling as v1
+  // freshness. Cited by the ruling slug the brief is; the COORD- prefix is
+  // those documents' own filename prefix, not a required namespace.
+  //
   // 0.8.0 adds "FABLE-R26-task-field-vocabulary-signed" — amendment A1 orders
   // the ratified write corpus onto the signed task-domain vocabulary before
   // write-door enforcement may land. The exact document slug is the ruling id;
@@ -86,7 +100,7 @@ const provenance = {
   // POST /v1/{domain}/ops, B6 tasks-first but domain-generic). Per the
   // evolution policy §3 a bump is valid only if this array gains a ratified
   // ruling id the previous version did not carry; that is what this line is.
-  rulings: ["ADR-004", "ADR-008", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011", "COORD-contract-evolution-policy", "COORD-write-path-rulings", "COORD-cross-generation-writes", "COORD-fable-rulings-wave2", "DAVID-tasks-read-epoch-and-ci", "FABLE-R26-task-field-vocabulary-signed"],
+  rulings: ["ADR-004", "ADR-008", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011", "COORD-contract-evolution-policy", "COORD-write-path-rulings", "COORD-cross-generation-writes", "COORD-fable-rulings-wave2", "DAVID-tasks-read-epoch-and-ci", "FABLE-R26-task-field-vocabulary-signed", "DAVID-platform-conversations"],
   compiler: { name: "typescript", version: manifest.devDependencies.typescript },
   inputs: entries,
   sourceDigest,

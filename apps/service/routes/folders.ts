@@ -1,6 +1,17 @@
 import type { Hono } from "hono";
 
+import {
+  APP_CONTRACT_VERSION_HEADER,
+  isWellFormedContractVersion,
+  resolveDeclaredContractVersion,
+} from "@omi-core/ratified-contracts/projections/synthesized";
+
 import type { DevPrincipal } from "../auth/dev-token";
+import type { PreparedFoldersRead } from "../composition/folders-read";
+import {
+  UnprojectableFolderRecordError,
+  readFoldersPage,
+} from "../composition/folders-read";
 import type { ServedCounter } from "../observability/served-count";
 import type {
   FolderDeletionOutcome,
@@ -12,9 +23,17 @@ const JSON_HEADERS = Object.freeze({
   "cache-control": "no-store",
   "content-type": "application/json; charset=utf-8",
 });
+const ENVELOPE_JSON_HEADERS = Object.freeze({
+  "cache-control": "no-store",
+  "content-type": "application/json",
+});
 const EMPTY_HEADERS = Object.freeze({ "cache-control": "no-store" });
+const BAD_REQUEST_BODY = JSON.stringify({ error: "bad_request" });
+const INTERNAL_BODY = JSON.stringify({ error: "internal_server_error" });
 export const FOLDERS_PATH = "/v1/folders";
 const FOLDER_PREFIX = `${FOLDERS_PATH}/`;
+const DEFAULT_PAGE_LIMIT = 25;
+const MAX_PAGE_LIMIT = 100;
 
 export interface FolderRouteDependencies {
   readonly resolvePrincipal: (token: string) => DevPrincipal | null;
@@ -23,6 +42,8 @@ export interface FolderRouteDependencies {
   readonly counter: ServedCounter;
   readonly now: () => string;
   readonly createId: () => string;
+  /** Builds the prepared ratified read for one principal. */
+  readonly prepareRead: (principal: DevPrincipal) => PreparedFoldersRead;
 }
 
 const jsonResponse = (value: unknown, status = 200): Response =>
@@ -89,8 +110,12 @@ export const registerFolderRoutes = (
       deps.counter.recordDomainRead("denied");
       return errorResponse(401, "unauthorized");
     }
-    // The prototype ignores limit/offset and returns one unpaginated bare array.
-    // Preserve that visible wart rather than borrowing conversations pagination.
+    const url = requestUrl(context.req.raw);
+    // Dual-serve: no `limit`/`cursor` keeps the unpaginated bare array so
+    // adapters-legacy keeps working. Either parameter is the ratified envelope.
+    if (url !== null && (url.searchParams.has("limit") || url.searchParams.has("cursor"))) {
+      return serveFoldersEnvelope(context.req.raw, principal, deps);
+    }
     const folders = deps.store.listFolders(principal.uid);
     deps.counter.recordDomainRead("served");
     return jsonResponse(folders);
@@ -195,3 +220,78 @@ export const registerFolderRoutes = (
     }
   });
 };
+
+const parseEnvelopeQuery = (
+  rawLimit: string | undefined,
+  rawCursor: string | undefined,
+  duplicated: boolean,
+): { readonly limit: number; readonly cursor: string | null } | null => {
+  if (duplicated) return null;
+  let limit = DEFAULT_PAGE_LIMIT;
+  if (rawLimit !== undefined) {
+    if (!/^[0-9]{1,3}$/.test(rawLimit)) return null;
+    limit = Number(rawLimit);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE_LIMIT) return null;
+  }
+  const cursor = rawCursor === undefined || rawCursor.length === 0 ? null : rawCursor;
+  return { limit, cursor };
+};
+
+const hasDuplicateQueryParameters = (rawUrl: string): boolean => {
+  let parameters: URLSearchParams;
+  try {
+    parameters = new URL(rawUrl).searchParams;
+  } catch {
+    return true;
+  }
+  for (const name of ["limit", "cursor"]) {
+    if (parameters.getAll(name).length > 1) return true;
+  }
+  return false;
+};
+
+const serveFoldersEnvelope = (
+  request: Request,
+  principal: DevPrincipal,
+  deps: FolderRouteDependencies,
+): Response => {
+  const declaredContractVersionHeader = request.headers.get(APP_CONTRACT_VERSION_HEADER) ?? undefined;
+  deps.counter.recordDeclaredContractVersion({
+    atFloor: typeof declaredContractVersionHeader !== "string"
+      || !isWellFormedContractVersion(declaredContractVersionHeader.trim()),
+  });
+  void resolveDeclaredContractVersion(declaredContractVersionHeader);
+
+  const url = new URL(request.url);
+  const page = parseEnvelopeQuery(
+    url.searchParams.get("limit") ?? undefined,
+    url.searchParams.get("cursor") ?? undefined,
+    hasDuplicateQueryParameters(request.url),
+  );
+  if (page === null) {
+    deps.counter.recordDomainRead("denied");
+    return new Response(BAD_REQUEST_BODY, { status: 400, headers: ENVELOPE_JSON_HEADERS });
+  }
+
+  try {
+    const prepared = deps.prepareRead(principal);
+    const result = readFoldersPage({ limit: page.limit, cursor: page.cursor }, prepared);
+    deps.counter.recordDomainRead("served");
+    return new Response(result.canonical_json, { status: 200, headers: ENVELOPE_JSON_HEADERS });
+  } catch (error) {
+    if (error instanceof UnprojectableFolderRecordError) {
+      deps.counter.recordDomainRead("failed");
+      return new Response(INTERNAL_BODY, { status: 500, headers: ENVELOPE_JSON_HEADERS });
+    }
+    if (isInvalidCursor(error)) {
+      deps.counter.recordDomainRead("denied");
+      return new Response(BAD_REQUEST_BODY, { status: 400, headers: ENVELOPE_JSON_HEADERS });
+    }
+    deps.counter.recordDomainRead("failed");
+    return new Response(INTERNAL_BODY, { status: 500, headers: ENVELOPE_JSON_HEADERS });
+  }
+};
+
+const isInvalidCursor = (error: unknown): boolean =>
+  typeof error === "object" && error !== null
+  && (error as { code?: unknown }).code === "invalid_cursor";
