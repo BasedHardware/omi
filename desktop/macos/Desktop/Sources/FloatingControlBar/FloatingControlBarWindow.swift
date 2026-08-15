@@ -1803,7 +1803,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     // forever, so every later request for the same size returns here and the window never grows.
     // That is how a suggestion card ends up drawn at collapsed pill width. Trust the pending
     // target only while the window is still on its way there.
-    if alreadyAnimatingToTarget, wasResizable == makeResizable, isResizingProgrammatically {
+    if FloatingControlBarGeometry.shouldSkipResize(
+      pendingAnimationTarget: pendingFrameAnimationTarget,
+      targetFrame: targetFrame,
+      resizableUnchanged: wasResizable == makeResizable,
+      isResizingProgrammatically: isResizingProgrammatically,
+      framesEquivalent: Self.framesEquivalent)
+    {
       return
     }
     if alreadyAnimatingToTarget, !isResizingProgrammatically {

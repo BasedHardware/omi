@@ -428,6 +428,45 @@ final class FloatingBarGeometryTests: XCTestCase {
       notch.height)
   }
 
+  /// Regression: a dropped animation completion left `pendingFrameAnimationTarget` set, and
+  /// every later resize to that same size was skipped — the notification card was then drawn
+  /// inside the collapsed pill frame. Reproduced by asking for the same target twice with no
+  /// resize in flight the second time.
+  func testAResizeIsNotSkippedWhenTheAnimationThatClaimedItIsNoLongerRunning() {
+    let target = NSRect(x: 0, y: 0, width: 556, height: 203)
+    let equivalent: (NSRect, NSRect) -> Bool = { $0 == $1 }
+
+    // While the animation runs, a duplicate request is genuinely redundant.
+    XCTAssertTrue(
+      FloatingControlBarGeometry.shouldSkipResize(
+        pendingAnimationTarget: target, targetFrame: target,
+        resizableUnchanged: true, isResizingProgrammatically: true,
+        framesEquivalent: equivalent))
+
+    // Completion never arrived: the stale target must not swallow the next request.
+    XCTAssertFalse(
+      FloatingControlBarGeometry.shouldSkipResize(
+        pendingAnimationTarget: target, targetFrame: target,
+        resizableUnchanged: true, isResizingProgrammatically: false,
+        framesEquivalent: equivalent),
+      "a pending target with no animation in flight is stale and must not block the resize")
+
+    // A different size is never redundant.
+    XCTAssertFalse(
+      FloatingControlBarGeometry.shouldSkipResize(
+        pendingAnimationTarget: target,
+        targetFrame: NSRect(x: 0, y: 0, width: 392, height: 67),
+        resizableUnchanged: true, isResizingProgrammatically: true,
+        framesEquivalent: equivalent))
+
+    // A resizability change must still be applied.
+    XCTAssertFalse(
+      FloatingControlBarGeometry.shouldSkipResize(
+        pendingAnimationTarget: target, targetFrame: target,
+        resizableUnchanged: false, isResizingProgrammatically: true,
+        framesEquivalent: equivalent))
+  }
+
   func testNotchHoverMenuAlwaysReservesRoomForTheControlPanel() {
     XCTAssertEqual(
       FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 0),
