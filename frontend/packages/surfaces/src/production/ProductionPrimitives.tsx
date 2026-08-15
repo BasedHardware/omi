@@ -435,6 +435,9 @@ export function ProductionEmptyState({
   detail,
   action,
 }: {
+  // Glyph selector, not copy. Closed union so a sentence cannot typecheck here;
+  // that is why the i18n scanner allow-lists the `icon` attribute instead of
+  // demanding t(), which would translate the lookup key and break the glyph.
   icon?: ProductionIconName;
   title: string;
   detail?: string;
