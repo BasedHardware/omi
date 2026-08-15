@@ -97,7 +97,8 @@ extension ChatToolExecutor {
     guard !contentTokens.isEmpty else { return false }
     let promptTokens = Set(memoryGroundingTokens(userText))
     let overlap = contentTokens.filter { promptTokens.contains($0) }
-    let required = contentTokens.count <= 2
+    let required =
+      contentTokens.count <= 2
       ? 1
       : max(2, Int(ceil(Double(contentTokens.count) * 0.5)))
     return overlap.count >= required
