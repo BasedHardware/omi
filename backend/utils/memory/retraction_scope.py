@@ -13,7 +13,7 @@ nothing to retract in the first place. These are the unfenced reads that decide.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional, Set
 
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from models.product_memory import MemoryItemStatus
@@ -30,8 +30,32 @@ def canonical_intake_is_fenced() -> bool:
         return True
 
 
+def historical_source_conversation_ids(uid: str, *, memory_service: MemoryService) -> Set[str]:
+    """Conversation ids referenced by the user's live historical memories.
+
+    One pass, reusable. Merge deletes several sources in a row and would
+    otherwise rescan the whole history per source; the heavy cohort reaches
+    ~6.3k live rows (13 pages), so that is 13 page reads per source instead of
+    13 for the whole merge.
+    """
+    referenced: Set[str] = set()
+    for record in memory_service.history.iter_all_live(uid):
+        memory = record.memory
+        if memory.conversation_id:
+            referenced.add(memory.conversation_id)
+        for evidence in memory.evidence:
+            if evidence.source_type == "conversation" and evidence.source_id:
+                referenced.add(evidence.source_id)
+    return referenced
+
+
 def source_retraction_is_a_noop(
-    uid: str, conversation_id: str, *, memory_service: MemoryService, db_client: Any
+    uid: str,
+    conversation_id: str,
+    *,
+    memory_service: MemoryService,
+    db_client: Any,
+    historical_source_ids: Optional[Set[str]] = None,
 ) -> bool:
     """Whether retracting this source would tombstone nothing at all.
 
@@ -53,6 +77,9 @@ def source_retraction_is_a_noop(
     if any(item.status != MemoryItemStatus.tombstoned for item in canonical_items):
         return False
 
+    if historical_source_ids is not None:
+        return conversation_id not in historical_source_ids
+
     for record in memory_service.history.iter_all_live(uid):
         memory = record.memory
         if memory.conversation_id == conversation_id:
@@ -65,17 +92,33 @@ def source_retraction_is_a_noop(
     return True
 
 
-def retraction_can_be_skipped(uid: str, conversation_id: str, *, memory_service: MemoryService, db_client: Any) -> bool:
+def retraction_can_be_skipped(
+    uid: str,
+    conversation_id: str,
+    *,
+    memory_service: MemoryService,
+    db_client: Any,
+    historical_source_ids: Optional[Set[str]] = None,
+) -> bool:
     """Skip retraction only while the fence is closed and there is nothing to retract.
 
     With intake enabled, retraction works and a source write can land between
     this check and the delete, so the caller must always retract and let a real
     failure abort. The ``and`` short-circuits, so the history scan never runs on
     the healthy path.
+
+    The fence is re-read after the scope reads. A fence that closed *during*
+    them means a canonical write may have been in flight against the old
+    deployment mode and could commit after the reads observed an empty scope, so
+    the skip is refused and the caller retracts as before.
     """
-    return canonical_intake_is_fenced() and source_retraction_is_a_noop(
+    if not canonical_intake_is_fenced():
+        return False
+    is_noop = source_retraction_is_a_noop(
         uid,
         conversation_id,
         memory_service=memory_service,
         db_client=db_client,
+        historical_source_ids=historical_source_ids,
     )
+    return is_noop and canonical_intake_is_fenced()

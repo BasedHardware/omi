@@ -43,9 +43,26 @@ from tests.unit.memory_import_isolation import (
     snapshot_sys_modules,
 )
 
+_ORIGINAL_ATTRS: dict[tuple[str, str], object] = {}
+
+
+def _remember(module_name: str, attr: str) -> None:
+    key = (module_name, attr)
+    if key in _ORIGINAL_ATTRS:
+        return
+    module = sys.modules.get(module_name)
+    if module is not None and hasattr(module, attr):
+        _ORIGINAL_ATTRS[key] = getattr(module, attr)
+
 
 def _install_merge_conversations_stubs() -> list[str]:
     touched = install_ws_i_heavy_import_stubs()
+    for _mod, _attr in (
+        ("database.conversations", "delete_conversation"),
+        ("database.conversations", "delete_conversation_photos"),
+        ("database.action_items", "delete_action_items_for_conversation"),
+    ):
+        _remember(_mod, _attr)
     conversations_mod = sys.modules["database.conversations"]
     conversations_mod.delete_conversation = MagicMock()
     conversations_mod.delete_conversation_photos = MagicMock()
@@ -64,7 +81,10 @@ def _install_merge_conversations_stubs() -> list[str]:
 
 @pytest.fixture(scope="module", autouse=True)
 def _merge_conversations_import_isolation():
-    saved = snapshot_sys_modules(["database._client"])
+    # retraction_scope is imported inside the tests below, so it binds whatever
+    # database.conversations stub is installed at that moment. Snapshot it too
+    # or the binding survives this module and breaks neighbours.
+    saved = snapshot_sys_modules(["database._client", "utils.memory.retraction_scope", "database.conversations"])
     install_database_client_stub()
     touched = _install_merge_conversations_stubs()
     saved.update(snapshot_sys_modules(touched))
@@ -72,6 +92,19 @@ def _merge_conversations_import_isolation():
 
     globals()["_delete_conversation_and_related_data"] = _delete_conversation_and_related_data
     yield
+    # The stubs above replace *attributes* on real modules, which
+    # restore_sys_modules cannot undo. Left in place they break any later suite
+    # that calls the real database.conversations helpers — CI only escapes this
+    # because collection is alphabetical. Restore them explicitly.
+    for module_name, attr in (
+        ("database.conversations", "delete_conversation"),
+        ("database.conversations", "delete_conversation_photos"),
+        ("database.action_items", "delete_action_items_for_conversation"),
+    ):
+        module = sys.modules.get(module_name)
+        original = _ORIGINAL_ATTRS.get((module_name, attr))
+        if module is not None and original is not None:
+            setattr(module, attr, original)
     restore_sys_modules(saved)
 
 
@@ -242,3 +275,87 @@ def test_an_active_canonical_item_is_never_a_noop():
     with patch.object(rs, "fetch_authoritative_product_memory_items_for_source", return_value=[item]):
         assert rs.source_retraction_is_a_noop("uid-any", "conv-1", memory_service=service, db_client=None) is False
         service.history.iter_all_live.assert_not_called()
+
+
+def test_end_to_end_fenced_empty_source_is_skipped_through_the_real_helper():
+    """The headline regression, with nothing about the decision mocked.
+
+    Every other test here stubs `retraction_can_be_skipped` to a fixed boolean,
+    so a helper that got the fence or the emptiness check backwards would ship
+    with them all green. This drives the real
+    `canonical_intake_is_fenced` -> `source_retraction_is_a_noop` ->
+    `retraction_can_be_skipped` chain, stubbing only the two data reads.
+    """
+    from utils.memory import retraction_scope as rs
+
+    service = _fenced_service()
+    service.history.iter_all_live.return_value = iter([])
+    delete_conversation = sys.modules["database.conversations"].delete_conversation
+    delete_conversation.reset_mock()
+
+    with patch.dict(os.environ, {"MEMORY_MODE": "off", "MEMORY_ENABLED": ""}, clear=False):
+        with patch.object(rs, "fetch_authoritative_product_memory_items_for_source", return_value=[]):
+            with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+                _delete_conversation_and_related_data("uid-any", "conv-1")
+
+    service.retract_conversation_memories.assert_not_called()
+    delete_conversation.assert_called_once()
+
+
+def test_end_to_end_intake_on_retracts_even_though_the_source_is_empty():
+    """Mirror of the above with the fence open: the skip must not engage."""
+    from utils.memory import retraction_scope as rs
+
+    service = MagicMock()
+    service.history.iter_all_live.return_value = iter([])
+
+    with patch.dict(os.environ, {"MEMORY_MODE": "write", "MEMORY_ENABLED": ""}, clear=False):
+        with patch.object(rs, "fetch_authoritative_product_memory_items_for_source", return_value=[]):
+            with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+                _delete_conversation_and_related_data("uid-any", "conv-1")
+
+    service.retract_conversation_memories.assert_called_once_with("uid-any", "conv-1")
+
+
+def test_a_precomputed_history_set_replaces_the_per_source_scan():
+    from utils.memory import retraction_scope as rs
+
+    service = MagicMock()
+    with patch.object(rs, "fetch_authoritative_product_memory_items_for_source", return_value=[]):
+        assert (
+            rs.source_retraction_is_a_noop(
+                "uid-any", "conv-1", memory_service=service, db_client=None, historical_source_ids=set()
+            )
+            is True
+        )
+        assert (
+            rs.source_retraction_is_a_noop(
+                "uid-any", "conv-1", memory_service=service, db_client=None, historical_source_ids={"conv-1"}
+            )
+            is False
+        )
+    service.history.iter_all_live.assert_not_called()
+
+
+def test_a_fence_that_closes_during_the_scope_reads_refuses_the_skip():
+    # A canonical write may have been in flight against the open fence and can
+    # still commit after the reads observed an empty scope.
+    from utils.memory import retraction_scope as rs
+
+    service = MagicMock()
+    with patch.object(rs, "canonical_intake_is_fenced", side_effect=[True, False]):
+        with patch.object(rs, "source_retraction_is_a_noop", return_value=True):
+            assert rs.retraction_can_be_skipped("uid-any", "conv-1", memory_service=service, db_client=None) is False
+
+
+def test_historical_source_conversation_ids_collects_both_reference_shapes():
+    from utils.memory import retraction_scope as rs
+
+    service = MagicMock()
+    service.history.iter_all_live.return_value = iter(
+        [
+            _record(conversation_id="conv-a"),
+            _record(evidence=[_evidence("conversation", "conv-b"), _evidence("screen", "conv-c")]),
+        ]
+    )
+    assert rs.historical_source_conversation_ids("uid-any", memory_service=service) == {"conv-a", "conv-b"}

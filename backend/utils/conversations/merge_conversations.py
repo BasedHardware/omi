@@ -12,7 +12,7 @@ import copy
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 import database.conversations as conversations_db
 from database._client import db as firestore_db
@@ -22,7 +22,11 @@ from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from models.structured import Structured
 from utils.memory.memory_service import MemoryService
-from utils.memory.retraction_scope import retraction_can_be_skipped
+from utils.memory.retraction_scope import (
+    canonical_intake_is_fenced,
+    historical_source_conversation_ids,
+    retraction_can_be_skipped,
+)
 from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.conversations import lifecycle as lifecycle_service
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
@@ -346,7 +350,16 @@ def perform_merge_async(
             # If not reprocessing, just mark as completed
             lifecycle_service.complete(uid, new_conversation_id)
 
-        # 9. Delete ALL source conversations and their related data
+        # 9. Delete ALL source conversations and their related data.
+        # One history pass for the whole merge: the per-source scan would
+        # otherwise repeat it for every source, and the heavy cohort reaches
+        # ~6.3k live rows. Only needed while the fence is closed, which is the
+        # only state where the scan runs at all.
+        historical_source_ids = (
+            historical_source_conversation_ids(uid, memory_service=MemoryService(db_client=firestore_db))
+            if canonical_intake_is_fenced()
+            else None
+        )
         for conv in sorted_convs:
 
             def mark_source_deletion_started() -> None:
@@ -357,6 +370,7 @@ def perform_merge_async(
                 uid,
                 conv["id"],
                 on_authoritative_retraction=mark_source_deletion_started,
+                historical_source_ids=historical_source_ids,
             )
 
         # 10. Send FCM notification
@@ -576,6 +590,7 @@ def _delete_conversation_and_related_data(
     conversation_id: str,
     *,
     on_authoritative_retraction: Optional[Callable[[], None]] = None,
+    historical_source_ids: Optional[Set[str]] = None,
 ) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -594,7 +609,11 @@ def _delete_conversation_and_related_data(
     try:
         memory_service = MemoryService(db_client=firestore_db)
         skip_retraction = retraction_can_be_skipped(
-            uid, conversation_id, memory_service=memory_service, db_client=firestore_db
+            uid,
+            conversation_id,
+            memory_service=memory_service,
+            db_client=firestore_db,
+            historical_source_ids=historical_source_ids,
         )
         if not skip_retraction:
             if on_authoritative_retraction is None:

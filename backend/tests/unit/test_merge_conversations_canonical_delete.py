@@ -21,9 +21,35 @@ from tests.unit.memory_import_isolation import (
     snapshot_sys_modules,
 )
 
+_ORIGINAL_ATTRS: dict[tuple[str, str], object] = {}
+_STUBBED_ATTRS = (
+    ("database.conversations", "delete_conversation"),
+    ("database.conversations", "delete_conversation_photos"),
+    ("database.action_items", "delete_action_items_for_conversation"),
+)
+
+
+def _remember_original_attrs() -> None:
+    for module_name, attr in _STUBBED_ATTRS:
+        key = (module_name, attr)
+        if key in _ORIGINAL_ATTRS:
+            continue
+        module = sys.modules.get(module_name)
+        if module is not None and hasattr(module, attr):
+            _ORIGINAL_ATTRS[key] = getattr(module, attr)
+
+
+def _restore_original_attrs() -> None:
+    for module_name, attr in _STUBBED_ATTRS:
+        module = sys.modules.get(module_name)
+        original = _ORIGINAL_ATTRS.get((module_name, attr))
+        if module is not None and original is not None:
+            setattr(module, attr, original)
+
 
 def _install_merge_conversations_stubs() -> list[str]:
     touched = install_ws_i_heavy_import_stubs()
+    _remember_original_attrs()
     conversations_mod = sys.modules["database.conversations"]
     conversations_mod.delete_conversation = MagicMock()
     conversations_mod.delete_conversation_photos = MagicMock()
@@ -52,6 +78,11 @@ def _merge_conversations_import_isolation():
 
     globals()["_delete_conversation_and_related_data"] = _delete_conversation_and_related_data
     yield
+    # These stubs replace *attributes* on real modules; restore_sys_modules
+    # cannot undo that, so without this any later suite calling the real
+    # database.conversations helpers fails. CI only escapes it because
+    # collection is alphabetical and this file sorts after them.
+    _restore_original_attrs()
     restore_sys_modules(saved)
 
 
