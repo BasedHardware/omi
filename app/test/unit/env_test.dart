@@ -149,6 +149,52 @@ void main() {
       }
     });
 
+    test('local dev accepts loopback and every private-network range, including CGNAT', () {
+      for (final endpoint in [
+        'http://127.0.0.1:8000/',
+        'http://localhost:8000/',
+        'http://10.0.0.5:8000/',
+        'http://172.16.0.5:8000/',
+        'http://172.31.255.254:8000/',
+        'http://192.168.1.20:8000/',
+        // 100.64.0.0/10 (RFC 6598, carrier-grade NAT) is the range Tailscale
+        // assigns. A physical device cannot reach the local harness any other
+        // way — the harness binds loopback only by design — so rejecting this
+        // range stranded the app on a blank splash with no diagnostic.
+        'http://100.64.0.1:8000/',
+        'http://100.105.2.5:8000/',
+        'http://100.127.255.254:8000/',
+      ]) {
+        Env.validateStartupRouting(
+          productionFamily: false,
+          configuredProfile: AppEnvironmentProfile.localDev,
+          configuredApiBaseUrl: endpoint,
+        );
+      }
+    });
+
+    test('local dev still rejects public endpoints and the edges just outside CGNAT', () {
+      for (final endpoint in [
+        'https://api.omi.me/',
+        'https://api.omiapi.com/',
+        // 100.63.x and 100.128.x sit immediately outside 100.64.0.0/10 and must
+        // stay rejected — widening this must not degrade into "any 100.x host".
+        'http://100.63.255.255:8000/',
+        'http://100.128.0.1:8000/',
+        'http://8.8.8.8:8000/',
+      ]) {
+        expect(
+          () => Env.validateStartupRouting(
+            productionFamily: false,
+            configuredProfile: AppEnvironmentProfile.localDev,
+            configuredApiBaseUrl: endpoint,
+          ),
+          throwsStateError,
+          reason: endpoint,
+        );
+      }
+    });
+
     test('local prod accepts loopback, private-network, and tunnel endpoints in debug builds', () {
       for (final endpoint in [
         'http://127.0.0.1:8000/',

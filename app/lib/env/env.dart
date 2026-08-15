@@ -184,6 +184,12 @@ abstract class Env {
     return first == 10 ||
         (first == 172 && second >= 16 && second <= 31) ||
         (first == 192 && second == 168) ||
+        // 100.64.0.0/10 — RFC 6598 shared address space, the range Tailscale
+        // assigns. Included because a physical device has no other route to a
+        // developer's local harness: the harness binds loopback only by design,
+        // so the device cannot use 127.x, and a plain LAN address does not reach
+        // it either. Bounded to the real /10 — 100.63.x and 100.128.x are public.
+        (first == 100 && second >= 64 && second <= 127) ||
         (first == 127);
   }
 
