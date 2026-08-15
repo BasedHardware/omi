@@ -14,6 +14,7 @@
     "Fixed glass panels losing their rounded-corner clipping",
     "When meeting notes finish processing, a notification now recommends your open action items from the meeting and clicking it takes you to the conversation",
     "Notification settings now keep syncing in the background after a failed save, so the toggle you see stays aligned with the server",
+    "Fixed a crash when granting Screen Recording for the first time during onboarding",
     "Omi Beta is a separate app you install beside Omi. Switching an update channel no longer turns this app into a beta build",
     "Fixed the same due-task nudge being delivered repeatedly in quick succession at Maximum notification frequency",
     "Screen task capture no longer retries permanently rejected sync payloads forever; unusable duplicate-task references now fall back to a new suggestion instead of failing delivery"
