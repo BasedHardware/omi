@@ -1799,7 +1799,7 @@ struct DashboardPage: View {
   }
 
   private func toggleListening() {
-    CaptureListeningLogic.toggleListening(
+    CaptureListeningLogic.cycleListening(
       appState: appState, audioRecordingModeRaw: $audioRecordingModeRaw,
       isTogglingListening: $isTogglingListening)
   }
