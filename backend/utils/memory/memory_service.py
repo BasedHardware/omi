@@ -1115,6 +1115,14 @@ class _CanonicalCursorStream:
         except HTTPException:
             raise
         except Exception as exc:
+            # Surface the underlying failure class/message so a Firestore
+            # FAILED_PRECONDITION (missing composite) is distinguishable from a
+            # uid/cursor ValueError in logs. No uid or memory content here.
+            logger.exception(
+                "canonical list scan page failed: %s: %s",
+                type(exc).__name__,
+                exc,
+            )
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
         self._slots = [
             (

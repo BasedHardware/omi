@@ -1242,3 +1242,37 @@ def test_read_canonical_scan_page_uses_keyset_order_and_filters(monkeypatch):
     )
     assert next_exhausted is True
     assert [memory.id if memory else None for memory, _ in next_slots] == ["visible-2"]
+
+
+def test_canonical_scan_failure_logs_underlying_exception_and_503s(service_mod, caplog):
+    """The opaque 503 wrap must leave the underlying failure in logs.
+
+    A Firestore FAILED_PRECONDITION (missing composite) and a uid/cursor
+    ValueError must be distinguishable in logs even though the client always
+    sees ``Canonical memory unavailable``.
+    """
+    import logging
+
+    from fastapi import HTTPException
+
+    service = service_mod.MemoryService(db_client=_Db())
+    service_mod.read_canonical_scan_page = MagicMock(
+        side_effect=RuntimeError("FAILED_PRECONDITION: The query requires an index")
+    )
+    service_mod.read_canonical_memories = MagicMock(
+        side_effect=AssertionError("read_page must not full-fetch canonical memories")
+    )
+    service.history.read_updated_scan_page = MagicMock(return_value=([], True))
+    service.history.read_created_scan_page = MagicMock(return_value=([], True))
+    service.canonical_statuses = MagicMock(return_value={})
+
+    with caplog.at_level(logging.ERROR, logger=service_mod.__name__):
+        with pytest.raises(HTTPException) as exc_info:
+            service.read_page("uid-test", limit=2, cursor=None)
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Canonical memory unavailable"
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert "canonical list scan page failed" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "FAILED_PRECONDITION" in caplog.text
