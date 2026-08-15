@@ -167,7 +167,7 @@ describe("computeActivation", () => {
     expect(result.activated).toBe(600);
   });
 
-  it("reports unreadable users instead of scoring them as not activated", async () => {
+  it("drops unreadable users from the denominator instead of scoring them as not activated", async () => {
     getDb.mockReturnValue(
       fakeDb([
         { uid: "ok", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [1] },
@@ -177,7 +177,29 @@ describe("computeActivation", () => {
 
     const result = await computeActivation(60);
 
+    // Counting the unreadable user would report 50% -- the same "absence of
+    // evidence read as evidence of absence" mistake this metric exists to undo.
     expect(result.erroredUsers).toBe(1);
+    expect(result.signups).toBe(1);
     expect(result.activated).toBe(1);
+    expect(result.rate).toBe(100);
+  });
+
+  it("keeps a week's rate honest when only some of its users are unreadable", async () => {
+    getDb.mockReturnValue(
+      fakeDb([
+        { uid: "a", signupOs: "macos", signupDaysAgo: 30, conversationOffsetsDays: [1] },
+        { uid: "b", signupOs: "macos", signupDaysAgo: 30 },
+        { uid: "c", signupOs: "macos", signupDaysAgo: 30, throwOnRead: true },
+        { uid: "d", signupOs: "macos", signupDaysAgo: 30, throwOnRead: true },
+      ]),
+    );
+
+    const result = await computeActivation(60);
+
+    expect(result.erroredUsers).toBe(2);
+    expect(result.weeks).toHaveLength(1);
+    expect(result.weeks[0].signups).toBe(2);
+    expect(result.weeks[0].rate).toBe(50);
   });
 });

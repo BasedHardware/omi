@@ -72,8 +72,10 @@ export async function computeActivation(
     cursor = snap.docs[snap.docs.length - 1];
   }
 
-  const activated = new Array<boolean>(cohort.length).fill(false);
-  let erroredUsers = 0;
+  // `null` means the read failed. It must stay distinct from `false`: scoring an
+  // unreadable user as "did not activate" is the same mistake this whole metric
+  // exists to undo, just one layer down.
+  const activated = new Array<boolean | null>(cohort.length).fill(null);
   let next = 0;
 
   async function worker(): Promise<void> {
@@ -93,9 +95,8 @@ export async function computeActivation(
           .get();
         activated[i] = agg.data().count > 0;
       } catch {
-        // One unreadable user must not void the whole cohort; it is reported
-        // instead, so a partial read can never masquerade as a low rate.
-        erroredUsers += 1;
+        // Left null: reported via erroredUsers and dropped from the cohort, so
+        // a partial read shrinks the sample instead of depressing the rate.
       }
     }
   }
@@ -104,10 +105,16 @@ export async function computeActivation(
     Array.from({ length: Math.min(CONCURRENCY, cohort.length) }, worker),
   );
 
-  const members: ActivationCohortMember[] = cohort.map((m, i) => ({
-    signupAt: m.signupAt.toISOString(),
-    activated: activated[i],
-  }));
+  const members: ActivationCohortMember[] = [];
+  let erroredUsers = 0;
+  cohort.forEach((m, i) => {
+    const result = activated[i];
+    if (result === null) {
+      erroredUsers += 1;
+      return;
+    }
+    members.push({ signupAt: m.signupAt.toISOString(), activated: result });
+  });
 
   return { ...rollUpActivationCohort(members), erroredUsers };
 }
@@ -117,10 +124,15 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
 
   try {
-    const days = Math.min(
-      parseInt(request.nextUrl.searchParams.get("days") || "60", 10),
-      180,
+    // A non-numeric `days` would otherwise reach Firestore as NaN date
+    // arithmetic and 500 the route.
+    const requestedDays = parseInt(
+      request.nextUrl.searchParams.get("days") || "60",
+      10,
     );
+    const days = Number.isFinite(requestedDays)
+      ? Math.min(Math.max(requestedDays, 1), 180)
+      : 60;
     const key = activationCacheKey(days);
 
     const cached =

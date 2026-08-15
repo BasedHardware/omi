@@ -679,7 +679,7 @@ export default function AnalyticsPage() {
   // for the window before the activation route has a cached payload.
   const weeklyActivationData = useMemo(
     () =>
-      activationStats?.weeks?.length
+      activationStats
         ? activationStats.weeks.slice(-12)
         : maturedWeeklyActivation(activationData).slice(-12),
     [activationStats, activationData],
@@ -2318,7 +2318,7 @@ export default function AnalyticsPage() {
         </div>
       ),
     },
-  ], [vm, profitability]);
+  ], [vm, profitability, activationStats]);
 
   const notificationsHeader: ChartItem = {
     id: "header-notifications",
