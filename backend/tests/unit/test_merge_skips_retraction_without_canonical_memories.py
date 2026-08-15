@@ -287,16 +287,23 @@ def test_end_to_end_fenced_empty_source_is_skipped_through_the_real_helper():
     `retraction_can_be_skipped` chain, stubbing only the two data reads.
     """
     from utils.memory import retraction_scope as rs
+    from utils.memory.v3.account_generation_source import V3AccountGenerationFailureReason
 
     service = _fenced_service()
     service.history.iter_all_live.return_value = iter([])
     delete_conversation = sys.modules["database.conversations"].delete_conversation
     delete_conversation.reset_mock()
 
+    # No memory_state/head is the normal prod shape for an account with no
+    # canonical memories — the third read the real chain makes.
+    absent_head = MagicMock()
+    absent_head.read_error_reason = V3AccountGenerationFailureReason.MISSING_STATE_HEAD
+
     with patch.dict(os.environ, {"MEMORY_MODE": "off", "MEMORY_ENABLED": ""}, clear=False):
         with patch.object(rs, "fetch_authoritative_product_memory_items_for_source", return_value=[]):
-            with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
-                _delete_conversation_and_related_data("uid-any", "conv-1")
+            with patch.object(rs, "read_memory_v3_trusted_account_generation", return_value=absent_head):
+                with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+                    _delete_conversation_and_related_data("uid-any", "conv-1")
 
     service.retract_conversation_memories.assert_not_called()
     delete_conversation.assert_called_once()
@@ -392,10 +399,60 @@ def test_a_missing_state_head_is_a_stable_epoch_not_a_mismatch():
     # Most accounts have no memory_state/head while intake is fenced; that
     # absence must not read as "something changed" and block every skip.
     from utils.memory import retraction_scope as rs
+    from utils.memory.v3.account_generation_source import V3AccountGenerationFailureReason
 
     absent = MagicMock()
-    absent.read_error_reason = MagicMock(value="missing_state_head")
+    absent.read_error_reason = V3AccountGenerationFailureReason.MISSING_STATE_HEAD
     with patch.object(rs, "read_memory_v3_trusted_account_generation", return_value=absent):
         first = rs.canonical_commit_epoch("uid-any", db_client=None)
         second = rs.canonical_commit_epoch("uid-any", db_client=None)
-    assert first == second == ("unavailable", "missing_state_head")
+    assert first == second == ("missing_state_head",)
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "READ_FAILED",
+        "MALFORMED_STATE_HEAD",
+        "UNSUPPORTED_SCHEMA",
+        "UID_MISMATCH",
+        "SOURCE_MISMATCH",
+        "MALFORMED_ACCOUNT_GENERATION",
+    ],
+)
+def test_an_unknowable_epoch_is_none_not_a_comparable_value(reason):
+    # Two identical failures must never compare equal and read as "unchanged".
+    from utils.memory import retraction_scope as rs
+    from utils.memory.v3.account_generation_source import V3AccountGenerationFailureReason
+
+    failed = MagicMock()
+    failed.read_error_reason = getattr(V3AccountGenerationFailureReason, reason)
+    with patch.object(rs, "read_memory_v3_trusted_account_generation", return_value=failed):
+        assert rs.canonical_commit_epoch("uid-any", db_client=None) is None
+
+
+def test_a_transient_state_head_read_failure_refuses_the_skip():
+    # The outage case: both epoch reads fail the same way. Equality on two
+    # unknowns would have handed back a skip during exactly the window where
+    # nothing about canonical state can be trusted.
+    from utils.memory import retraction_scope as rs
+
+    service = MagicMock()
+    with patch.object(rs, "canonical_intake_is_fenced", return_value=True):
+        with patch.object(rs, "source_retraction_is_a_noop", return_value=True):
+            with patch.object(rs, "canonical_commit_epoch", return_value=None):
+                assert (
+                    rs.retraction_can_be_skipped("uid-any", "conv-1", memory_service=service, db_client=None) is False
+                )
+
+
+def test_an_epoch_that_becomes_unknowable_after_the_reads_refuses_the_skip():
+    from utils.memory import retraction_scope as rs
+
+    service = MagicMock()
+    with patch.object(rs, "canonical_intake_is_fenced", return_value=True):
+        with patch.object(rs, "source_retraction_is_a_noop", return_value=True):
+            with patch.object(rs, "canonical_commit_epoch", side_effect=[("missing_state_head",), None]):
+                assert (
+                    rs.retraction_can_be_skipped("uid-any", "conv-1", memory_service=service, db_client=None) is False
+                )

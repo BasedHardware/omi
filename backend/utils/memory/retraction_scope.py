@@ -19,7 +19,10 @@ from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from models.product_memory import MemoryItemStatus
 from utils.memory.memory_service import MemoryService
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items_for_source
-from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
+from utils.memory.v3.account_generation_source import (
+    V3AccountGenerationFailureReason,
+    read_memory_v3_trusted_account_generation,
+)
 
 
 def canonical_intake_is_fenced() -> bool:
@@ -93,18 +96,25 @@ def source_retraction_is_a_noop(
     return True
 
 
-def canonical_commit_epoch(uid: str, *, db_client: Any) -> Tuple[Any, ...]:
+def canonical_commit_epoch(uid: str, *, db_client: Any) -> Optional[Tuple[Any, ...]]:
     """A value that changes whenever canonical state for ``uid`` advances.
 
     ``memory_state/head`` is written by the canonical apply boundary, so its
-    generation/sequence/commit id move on every committed canonical write. Most
-    accounts have no head at all while intake is fenced; that absence is itself
-    a stable value, and its failure reason is included so "no head" and "read
-    failed" are never conflated.
+    generation/sequence/commit id move on every committed canonical write.
+
+    Returns ``None`` when the epoch cannot be established. Only a *missing* head
+    is a knowable stable state — that is the normal shape for an account with no
+    canonical memories, which is the case this module exists to allow. Every
+    other failure, a transient read error most of all, means the epoch is
+    unknown: comparing two unknowns for equality would read as "nothing changed"
+    and hand back a skip during exactly the outage where we can least justify
+    one. Callers must treat ``None`` as "do not skip".
     """
     trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
     if trusted.read_error_reason is not None:
-        return ("unavailable", trusted.read_error_reason.value)
+        if trusted.read_error_reason is V3AccountGenerationFailureReason.MISSING_STATE_HEAD:
+            return ("missing_state_head",)
+        return None
     return (trusted.account_generation, trusted.commit_sequence, trusted.head_commit_id)
 
 
@@ -130,7 +140,9 @@ def retraction_can_be_skipped(
       skip rather than acting on a snapshot taken under the old mode;
     * the canonical commit epoch is captured before and compared after, so a
       write that was already in flight against the pre-fence mode and commits
-      during the reads is caught even though the fence never moved.
+      during the reads is caught even though the fence never moved. An epoch
+      that cannot be established at either end refuses the skip rather than
+      comparing two unknowns and calling them equal.
 
     Neither makes check-and-delete atomic — that needs a transaction spanning
     the memory store and the conversation document. They bound the window to
@@ -139,6 +151,8 @@ def retraction_can_be_skipped(
     if not canonical_intake_is_fenced():
         return False
     epoch_before = canonical_commit_epoch(uid, db_client=db_client)
+    if epoch_before is None:
+        return False
     is_noop = source_retraction_is_a_noop(
         uid,
         conversation_id,
@@ -148,4 +162,5 @@ def retraction_can_be_skipped(
     )
     if not is_noop or not canonical_intake_is_fenced():
         return False
-    return canonical_commit_epoch(uid, db_client=db_client) == epoch_before
+    epoch_after = canonical_commit_epoch(uid, db_client=db_client)
+    return epoch_after is not None and epoch_after == epoch_before
