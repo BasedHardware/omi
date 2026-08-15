@@ -11,6 +11,10 @@ export const metadata: Metadata = {
     description: 'Unlock the full potential with Unlimited.',
     type: 'website',
   },
+  other: {
+    'apple-itunes-app': 'app-id=6502156163',
+    'google-play-app': 'app-id=com.friend.ios',
+  },
 };
 
 function isMobileDevice(userAgent: string): boolean {

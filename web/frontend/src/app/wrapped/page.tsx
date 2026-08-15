@@ -11,6 +11,10 @@ export const metadata: Metadata = {
     description: 'See your personalized Omi Wrapped for 2025.',
     type: 'website',
   },
+  other: {
+    'apple-itunes-app': 'app-id=6502156163',
+    'google-play-app': 'app-id=com.friend.ios',
+  },
 };
 
 function isMobileDevice(userAgent: string): boolean {

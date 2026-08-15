@@ -62,12 +62,14 @@ describe('wrapped / unlimited acquisition parity contract', () => {
     assert.match(wrappedSource, /getOmiPlatformDeepLink/);
     assert.match(wrappedSource, /Open in Omi/);
     assert.match(wrappedSource, /['"]wrapped['"]/);
+    assert.match(wrappedSource, /apple-itunes-app/);
     assert.doesNotMatch(wrappedSource, /Get the Omi App/);
   });
 
   it('uses platform deep-links on /unlimited instead of iOS-only omi://', () => {
     assert.match(unlimitedSource, /getOmiPlatformDeepLink/);
     assert.match(unlimitedSource, /['"]unlimited['"]/);
+    assert.match(unlimitedSource, /apple-itunes-app/);
     assert.doesNotMatch(unlimitedSource, /omi:\/\/h\.omi\.me\/unlimited/);
   });
 
