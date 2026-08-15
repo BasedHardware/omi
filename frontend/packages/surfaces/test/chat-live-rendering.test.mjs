@@ -849,6 +849,51 @@ test("observer and provider failures render as non-streaming assistant failures"
   }
 });
 
+test("failed generations render the reason class and a retry affordance", async () => {
+  // red-proof: ChatProduction.tsx failedMessageText falling through to a generic
+  // "Response unavailable." for every provider code, or omitting the retry
+  // button, fails the timeout copy / data-failure-class / recovery assertions.
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  domain.rows = [row("reason-human", "human", "Question")];
+  domain.deliveries = [{
+    generationId: "timeout-generation",
+    clientMessageId: "reason-human",
+    terminal: { kind: "failed", error: { code: "generation_timeout", retryable: true } },
+  }];
+  const rendered = await renderComponent(ChatProduction, {
+    store: createProductionChatStore(domain),
+  });
+  try {
+    let failed = rendered.container.querySelector(".chat-message.is-failed");
+    assert.ok(failed, "timeout failure is a real assistant message");
+    assert.equal(failed.getAttribute("data-failure-class"), "timed-out");
+    assert.equal(failed.textContent.includes(EN_MESSAGES["chat.failedTimedOut"]), true);
+    assert.ok(failed.querySelector(".chat-failure-recovery button"), "timeout stays retryable");
+
+    await rendered.act(async () => {
+      domain.deliveries = [{
+        generationId: "provider-generation",
+        clientMessageId: "reason-human",
+        terminal: { kind: "failed", error: { code: "generation_provider_failed", retryable: true } },
+      }];
+      domain.notify();
+      await Promise.resolve();
+    });
+    failed = rendered.container.querySelector(".chat-message.is-failed");
+    assert.ok(failed);
+    assert.equal(failed.getAttribute("data-failure-class"), "provider-unavailable");
+    assert.equal(failed.textContent.includes(EN_MESSAGES["chat.failedProviderUnavailable"]), true);
+    assert.ok(failed.querySelector(".chat-failure-recovery button"));
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("unsupported native streaming renders bounded recovery guidance instead of an active run", async () => {
   const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
   const createProductionChatStore = await loadProductionExport(

@@ -186,6 +186,7 @@ async function projectedHistory(store: ChatMessagesStore): Promise<readonly Chat
             clientMessageId: failure.clientMessageId,
             source: "provider",
             retryable: failure.terminal.error.retryable,
+            code: failure.terminal.error.code,
           },
           attachments: [],
           ...(timelineByGeneration.get(failure.generationId) === undefined ? {} : {
