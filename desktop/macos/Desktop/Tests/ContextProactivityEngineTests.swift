@@ -275,6 +275,229 @@ final class ContextProactivityEngineTests: XCTestCase {
     XCTAssertEqual(json["error_type"] as? String, "timed_out")
   }
 
+  func testVisitFreshnessRunsToCompletionOnlyWithinTheDeliveryValidityWindow() throws {
+    let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: 1, bucketID: "bucket-a", startedAt: now)
+
+    try queue.write { db in
+      try db.execute(
+        sql: "UPDATE context_visits SET outcome = 'active', endedAt = NULL WHERE id = 1")
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now),
+        ContextVisitFreshness(fresh: true, endedAt: nil),
+        "an active visit is always fresh")
+
+      try db.execute(
+        sql: "UPDATE context_visits SET outcome = 'completed', endedAt = ? WHERE id = 1",
+        arguments: [now.addingTimeInterval(-5)])
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now),
+        ContextVisitFreshness(fresh: true, endedAt: now.addingTimeInterval(-5)),
+        "a departure five seconds ago must not kill the in-flight evaluation")
+
+      try db.execute(
+        sql: "UPDATE context_visits SET endedAt = ? WHERE id = 1",
+        arguments: [now.addingTimeInterval(-ContextDeliveryBudget.deliveryValidityWindowSeconds)])
+      XCTAssertTrue(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now).fresh,
+        "the validity window boundary is inclusive")
+
+      try db.execute(
+        sql: "UPDATE context_visits SET endedAt = ? WHERE id = 1",
+        arguments: [now.addingTimeInterval(-120)])
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now),
+        ContextVisitFreshness(fresh: false, endedAt: now.addingTimeInterval(-120)),
+        "an evaluation that drags past the window after departure dies at its next guard")
+
+      try db.execute(
+        sql: "UPDATE context_visits SET endedAt = NULL WHERE id = 1")
+      XCTAssertFalse(
+        try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now).fresh,
+        "a completed visit with no recorded departure time fails closed")
+    }
+  }
+
+  func testVisitFreshnessRejectsDiscardedAndInterruptedOutcomesHoweverRecent() throws {
+    let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: 1, bucketID: "bucket-a", startedAt: now)
+
+    try queue.write { db in
+      for outcome in ["discarded", "interrupted"] {
+        try db.execute(
+          sql: "UPDATE context_visits SET outcome = ?, endedAt = ? WHERE id = 1",
+          arguments: [outcome, now.addingTimeInterval(-1)])
+        XCTAssertFalse(
+          try ContextBucketStore.visitFreshness(in: db, fence: fence, now: now).fresh,
+          "a \(outcome) visit never earned a delivery, however recent")
+      }
+    }
+  }
+
+  func testVisitFreshnessFailsClosedWhenTheFenceIdentityDoesNotMatch() throws {
+    let queue = try contextBucketDatabase()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+
+    try queue.read { db in
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(
+          in: db,
+          fence: ContextVisitFence(
+            visitID: 1, contextGeneration: 99, poolEpoch: 1, bucketID: "bucket-a", startedAt: now),
+          now: now),
+        .stale)
+      XCTAssertEqual(
+        try ContextBucketStore.visitFreshness(
+          in: db,
+          fence: ContextVisitFence(
+            visitID: 999, contextGeneration: 1, poolEpoch: 1, bucketID: "bucket-a", startedAt: now),
+          now: now),
+        .stale)
+    }
+  }
+
+  func testSnapshotBucketResolutionSurvivesACompletedVisitButNotADiscardedOne() throws {
+    let queue = try contextBucketDatabase()
+
+    try queue.write { db in
+      // The fixture seeds visit 1 as completed: the snapshot path must still
+      // resolve its bucket so a run-to-completion evaluation can assemble.
+      XCTAssertEqual(
+        try ContextBucketVisitResolver.persistedBucketID(
+          in: db, visitID: 1, contextGeneration: 1, poolEpoch: 1),
+        "bucket-a")
+
+      try db.execute(sql: "UPDATE context_visits SET outcome = 'discarded' WHERE id = 1")
+      XCTAssertNil(
+        try ContextBucketVisitResolver.persistedBucketID(
+          in: db, visitID: 1, contextGeneration: 1, poolEpoch: 1))
+    }
+  }
+
+  func testCumulativeEngagementShortensDwellForARepeatedlyRevisitedBucket() {
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+    // Five 10-second visits within the last three minutes: 50s of engagement.
+    let engaged = (0..<5).map { index -> (startedAt: Date, endedAt: Date) in
+      let end = now.addingTimeInterval(TimeInterval(-20 * index) - 5)
+      return (startedAt: end.addingTimeInterval(-10), endedAt: end)
+    }
+    let engagedSeconds = ContextDwellPolicy.cumulativeEngagementSeconds(
+      visitIntervals: engaged, now: now)
+    XCTAssertEqual(engagedSeconds, 50, accuracy: 0.001)
+    XCTAssertEqual(
+      ContextDwellPolicy.dwellNanoseconds(
+        base: 8_000_000_000, cumulativeEngagementSeconds: engagedSeconds),
+      ContextDwellPolicy.shortenedDwellNanoseconds,
+      "a bucket the user keeps returning to earns the shortened dwell")
+
+    // Two sparse 5-second visits: 10s of engagement keeps the standard dwell.
+    let sparse = [0, 100].map { offset -> (startedAt: Date, endedAt: Date) in
+      let end = now.addingTimeInterval(TimeInterval(-offset) - 5)
+      return (startedAt: end.addingTimeInterval(-5), endedAt: end)
+    }
+    let sparseSeconds = ContextDwellPolicy.cumulativeEngagementSeconds(
+      visitIntervals: sparse, now: now)
+    XCTAssertEqual(sparseSeconds, 10, accuracy: 0.001)
+    XCTAssertEqual(
+      ContextDwellPolicy.dwellNanoseconds(
+        base: 8_000_000_000, cumulativeEngagementSeconds: sparseSeconds),
+      8_000_000_000)
+  }
+
+  func testCumulativeEngagementClipsToTheRollingWindowAndNeverLengthensTheDwell() {
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+    // A long visit that ended before the window contributes nothing; one that
+    // straddles the window start counts only its in-window portion.
+    let outside = [
+      (
+        startedAt: now.addingTimeInterval(-400),
+        endedAt: now.addingTimeInterval(-ContextDwellPolicy.engagementLookbackSeconds - 1)
+      )
+    ]
+    XCTAssertEqual(
+      ContextDwellPolicy.cumulativeEngagementSeconds(visitIntervals: outside, now: now), 0)
+
+    let straddling = [
+      (
+        startedAt: now.addingTimeInterval(-ContextDwellPolicy.engagementLookbackSeconds - 100),
+        endedAt: now.addingTimeInterval(-ContextDwellPolicy.engagementLookbackSeconds + 8)
+      )
+    ]
+    XCTAssertEqual(
+      ContextDwellPolicy.cumulativeEngagementSeconds(visitIntervals: straddling, now: now),
+      8, accuracy: 0.001)
+
+    // The engagement bonus can only shorten: a caller-configured dwell below
+    // the shortened value (tests use zero) is never raised, and settle is
+    // never skipped outright by policy.
+    XCTAssertEqual(
+      ContextDwellPolicy.dwellNanoseconds(base: 0, cumulativeEngagementSeconds: 500), 0)
+    XCTAssertGreaterThan(ContextDwellPolicy.shortenedDwellNanoseconds, 0)
+  }
+
+  func testDepartureEvaluationTriggersOnlyAtTheWorthinessThresholdWithTheFlagOn() {
+    XCTAssertFalse(
+      ContextDepartureEvaluationPolicy.triggers(
+        maximumValidatedWorthiness: 0.59, flagEnabled: true))
+    XCTAssertTrue(
+      ContextDepartureEvaluationPolicy.triggers(
+        maximumValidatedWorthiness: 0.6, flagEnabled: true))
+    XCTAssertFalse(
+      ContextDepartureEvaluationPolicy.triggers(
+        maximumValidatedWorthiness: 1.0, flagEnabled: false),
+      "the feature flag gates the departure path entirely")
+  }
+
+  func testDirectorFrameBoundRejectsTheNextContextsScreenAfterDeparture() {
+    let startedAt = Date(timeIntervalSince1970: 1_725_000_000)
+    let endedAt = startedAt.addingTimeInterval(13)
+
+    XCTAssertFalse(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: startedAt.addingTimeInterval(-1),
+        storedAt: startedAt,
+        startedAt: startedAt,
+        endedAt: nil),
+      "a frame captured before the visit began never grounds it")
+    XCTAssertTrue(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: startedAt.addingTimeInterval(30),
+        storedAt: startedAt.addingTimeInterval(30),
+        startedAt: startedAt,
+        endedAt: nil),
+      "an active visit keeps today's behavior: any frame at or after startedAt")
+    XCTAssertTrue(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: startedAt.addingTimeInterval(10),
+        storedAt: startedAt.addingTimeInterval(10),
+        startedAt: startedAt,
+        endedAt: endedAt),
+      "a frame captured and tracked during the visit grounds its departed evaluation")
+    // The switch tick: the next context's frame is CAPTURED milliseconds before
+    // the transition writes endedAt, so capture time cannot exclude it — but it
+    // is only STORED after the transition persisted the departure.
+    XCTAssertFalse(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: endedAt.addingTimeInterval(-0.005),
+        storedAt: endedAt.addingTimeInterval(0.010),
+        startedAt: startedAt,
+        endedAt: endedAt),
+      "the next context's frame on the switch tick must not ground the departed visit")
+    XCTAssertFalse(
+      AssistantCoordinator.frameMayGroundDirector(
+        captureTime: endedAt.addingTimeInterval(
+          ContextDeliveryBudget.departedFrameCaptureEpsilonSeconds + 1),
+        storedAt: endedAt.addingTimeInterval(
+          ContextDeliveryBudget.departedFrameCaptureEpsilonSeconds + 1),
+        startedAt: startedAt,
+        endedAt: endedAt),
+      "a frame captured after departure plus epsilon is the next context's screen")
+  }
+
   private func provenanceObject(_ json: String) throws -> [String: Any] {
     let object = try JSONSerialization.jsonObject(with: Data(json.utf8))
     return try XCTUnwrap(object as? [String: Any])
@@ -565,5 +788,148 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
   private func provenanceObject(_ json: String) throws -> [String: Any] {
     let object = try JSONSerialization.jsonObject(with: Data(json.utf8))
     return try XCTUnwrap(object as? [String: Any])
+  }
+}
+
+final class ContextDepartureEvaluationStoreTests: XCTestCase {
+  private var fixture: RewindStorageTestIsolation.Fixture?
+
+  override func setUp() async throws {
+    try await super.setUp()
+    fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "departure-evaluation-store")
+  }
+
+  override func tearDown() async throws {
+    await RewindStorageTestIsolation.tearDown(userDir: fixture?.userDir)
+    fixture = nil
+    try await super.tearDown()
+  }
+
+  func testRecentEngagementSumsOnlyCompletedVisitsInsideTheRollingWindow() async throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    try await seedBucket(in: pool, now: now)
+    try await pool.write { db in
+      // Five 10-second completed visits within three minutes, one stale
+      // completed visit outside the window, one recent discarded visit.
+      for index in 0..<5 {
+        let end = now.addingTimeInterval(TimeInterval(-20 * index) - 5)
+        try Self.insertVisit(
+          db, id: Int64(index + 1), poolEpoch: poolEpoch, outcome: "completed",
+          startedAt: end.addingTimeInterval(-10), endedAt: end)
+      }
+      try Self.insertVisit(
+        db, id: 6, poolEpoch: poolEpoch, outcome: "completed",
+        startedAt: now.addingTimeInterval(-400), endedAt: now.addingTimeInterval(-390))
+      try Self.insertVisit(
+        db, id: 7, poolEpoch: poolEpoch, outcome: "discarded",
+        startedAt: now.addingTimeInterval(-30), endedAt: now.addingTimeInterval(-1))
+    }
+
+    let engagement = await ContextBucketStore.shared.recentEngagementSeconds(
+      bucketID: "bucket", now: now)
+    XCTAssertEqual(engagement, 50, accuracy: 0.001)
+    XCTAssertEqual(
+      ContextDwellPolicy.dwellNanoseconds(
+        base: 8_000_000_000, cumulativeEngagementSeconds: engagement),
+      ContextDwellPolicy.shortenedDwellNanoseconds)
+  }
+
+  func testWriteExtractionReportsTheMaximumWorthinessOfNewlyValidatedFactsOnly() async throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    try await seedBucket(in: pool, now: now)
+    try await pool.write { db in
+      try Self.insertVisit(
+        db, id: 1, poolEpoch: poolEpoch, outcome: "completed",
+        startedAt: now.addingTimeInterval(-13), endedAt: now)
+    }
+    let fence = ContextVisitFence(
+      visitID: 1,
+      contextGeneration: 1,
+      poolEpoch: poolEpoch,
+      bucketID: "bucket",
+      startedAt: now.addingTimeInterval(-13))
+
+    let result = try await ContextBucketStore.shared.writeExtraction(
+      BucketExtraction(
+        narrative: "narrative",
+        facts: [
+          BucketExtraction.Fact(
+            statement: "validated commitment",
+            identifiers: ["deadline"],
+            evidenceText: "evidence",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.6),
+          // Higher worthiness, but no identifier: needs_review, so it must not
+          // count toward the departure-evaluation admission signal.
+          BucketExtraction.Fact(
+            statement: "unidentified claim",
+            identifiers: [],
+            evidenceText: "evidence",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.9),
+        ]),
+      for: fence,
+      appName: "Test App",
+      rawContextKey: "raw",
+      normalizedContextKey: "normalized",
+      now: now)
+
+    let writeResult = try XCTUnwrap(result)
+    XCTAssertEqual(writeResult.maximumValidatedWorthiness, 0.6, accuracy: 0.000_001)
+    XCTAssertTrue(
+      ContextDepartureEvaluationPolicy.triggers(
+        maximumValidatedWorthiness: writeResult.maximumValidatedWorthiness, flagEnabled: true))
+
+    let below = try await ContextBucketStore.shared.writeExtraction(
+      BucketExtraction(
+        narrative: "narrative two",
+        facts: [
+          BucketExtraction.Fact(
+            statement: "mild update",
+            identifiers: ["status"],
+            evidenceText: "evidence",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.59)
+        ]),
+      for: fence,
+      appName: "Test App",
+      rawContextKey: "raw",
+      normalizedContextKey: "normalized",
+      now: now.addingTimeInterval(1))
+    let belowResult = try XCTUnwrap(below)
+    XCTAssertFalse(
+      ContextDepartureEvaluationPolicy.triggers(
+        maximumValidatedWorthiness: belowResult.maximumValidatedWorthiness, flagEnabled: true))
+  }
+
+  private func seedBucket(in pool: DatabasePool, now: Date) async throws {
+    try await pool.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO context_buckets (id, subjectKind, subjectID, createdAt, updatedAt)
+          VALUES ('bucket', 'task', 'departure-evaluation', ?, ?)
+          """,
+        arguments: [now, now])
+    }
+  }
+
+  private static func insertVisit(
+    _ db: Database, id: Int64, poolEpoch: Int, outcome: String, startedAt: Date, endedAt: Date?
+  ) throws {
+    try db.execute(
+      sql: """
+        INSERT INTO context_visits
+          (id, contextGeneration, poolEpoch, bucketID, appName, rawContextKey,
+           normalizedContextKey, referenceHash, startedAt, endedAt, outcome, createdAt, updatedAt)
+        VALUES (?, 1, ?, 'bucket', 'Test App', 'raw', 'normalized', ?, ?, ?, ?, ?, ?)
+        """,
+      arguments: [id, poolEpoch, "reference-\(id)", startedAt, endedAt, outcome, startedAt, startedAt])
   }
 }

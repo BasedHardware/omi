@@ -585,7 +585,15 @@ def get_memories(
                 include_archive=include_archive,
             )
         except HTTPException as exc:
-            if exc.status_code != 503 or exc.detail != "Memory cursor unavailable":
+            # First page must succeed whenever the legacy offset read can serve
+            # it. The cursor path 503s on a missing cursor secret
+            # ("Memory cursor unavailable"); the canonical keyset scan wraps any
+            # underlying failure as "Canonical memory unavailable". Both fall
+            # back to read(); unrelated errors (4xx, other 503s) propagate.
+            if exc.status_code != 503 or exc.detail not in (
+                "Memory cursor unavailable",
+                "Canonical memory unavailable",
+            ):
                 raise
         else:
             if page.next_cursor:

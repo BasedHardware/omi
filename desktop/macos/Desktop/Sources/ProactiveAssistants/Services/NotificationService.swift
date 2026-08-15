@@ -10,33 +10,6 @@ private struct UNCompletionHandlerBox: @unchecked Sendable {
   init(_ value: @escaping (UNNotificationPresentationOptions) -> Void) { self.value = value }
 }
 
-/// Serializes notification-settings PATCHes so every mutation — user slider/toggle
-/// changes and the launch migration alike — reaches the backend in request order.
-/// An unordered send could let an earlier mutation land last and clear the
-/// pending-sync journal against a state the server never stored.
-@MainActor
-final class NotificationSettingsSyncQueue {
-  static let shared = NotificationSettingsSyncQueue()
-
-  private var tail: Task<Void, Never>?
-
-  /// `enabled: nil` leaves the master toggle untouched server-side (used by the
-  /// launch migration, which only moves the frequency).
-  func enqueue(enabled: Bool?, frequency: Int, revision: Int) {
-    let previous = tail
-    tail = Task {
-      await previous?.value
-      do {
-        _ = try await APIClient.shared.updateNotificationSettings(
-          enabled: enabled, frequency: frequency)
-        NotificationService.completeNotificationSettingsSync(revision: revision)
-      } catch {
-        logError("Failed to update notification settings", error: error)
-      }
-    }
-  }
-}
-
 /// Sound options for notifications
 enum NotificationSound {
   case `default`
@@ -77,8 +50,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
   /// UserDefaults key mirroring the user's `notification_frequency` setting from the backend.
   /// 0=Off (default), 1=Minimal, 2=Low, 3=Balanced, 4=High, 5=Maximum.
-  /// The Settings page writes this on load and on slider change; `sendNotification`
-  /// reads it synchronously to throttle proactive notifications.
+  /// `NotificationSettingsSyncCoordinator` writes this on hydrate and on slider change;
+  /// `sendNotification` reads it synchronously to throttle proactive notifications.
   nonisolated static let frequencyDefaultsKey = "notification_frequency"
   static let settingsPendingSyncDefaultsKey = "notification_settings_pending_sync"
   static let settingsSyncRevisionDefaultsKey = "notification_settings_sync_revision"
@@ -92,10 +65,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   nonisolated static let balancedFrequencyLevel = 3
 
   /// UserDefaults key mirroring the master `notifications_enabled` toggle from the backend.
-  /// The Settings page writes it on load and on toggle change; `sendNotification` reads it
-  /// synchronously so proactive notifications are suppressed the moment the user turns the
-  /// master Notifications switch off — without waiting for a backend round-trip. Defaults to
-  /// `true` when the key is absent (first run before the Settings page hydrates).
+  /// `NotificationSettingsSyncCoordinator` writes it on hydrate and on toggle change;
+  /// `sendNotification` reads it synchronously so proactive notifications are suppressed
+  /// the moment the user turns the master Notifications switch off — without waiting for
+  /// a backend round-trip. Defaults to `true` when the key is absent (first run before
+  /// the coordinator hydrates).
   static let masterEnabledDefaultsKey = "notifications_enabled"
 
   /// Default level used when the key has never been written (e.g. first run before
@@ -276,6 +250,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         switch Self.openAction(assistantId: assistantId, title: title) {
         case .resetScreenCapture:
           self.handleScreenCaptureResetAction(source: "notification_click")
+        case .openMainChat:
+          // The same reveal-and-land-on-chat path the floating bar's
+          // "Continue in Omi" affordance uses; the chat transcript there
+          // carries the meeting-notes card with the conversation link.
+          AppDelegate.summonWindowTarget()?.openMainAppChat()
         case .none:
           break
         }
@@ -324,6 +303,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     case none
     /// The screen-recording repair, which is an action rather than a page.
     case resetScreenCapture
+    /// The main-window chat surface, where the meeting-notes card (with its
+    /// conversation link) was materialized.
+    case openMainChat
   }
 
   /// Resolve the tap destination from the notification's provenance.
@@ -333,6 +315,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// change with its own suppression-state migration.
   static func openAction(assistantId: String, title: String) -> OpenAction {
     if title == screenCaptureResetTitle { return .resetScreenCapture }
+    if assistantId == MeetingActionItemBannerPolicy.assistantID { return .openMainChat }
     return .none
   }
 
@@ -938,13 +921,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   static func migrateToBalancedDefaultIfNeeded() {
     guard let target = applyBalancedDefaultMigration(defaults: .standard) else { return }
     log("NotificationService: applied balanced-by-default migration (frequency=\(target))")
-    // Route the backend push through the pending-sync journal and the shared send
-    // queue: a failed push (offline, signed out during onboarding) is retried by the
-    // next Settings load instead of the stale server value hydrating back over the
-    // local re-enable, and a slow launch push can never land after — and overwrite —
-    // a frequency change the user makes right after startup.
+    // Route the backend push through the pending-sync journal and the durable
+    // coordinator: a failed push is retried with bounded backoff until the server
+    // confirms, instead of waiting for a Settings load, and a slow launch push can
+    // never land after — and overwrite — a frequency change the user makes right
+    // after startup.
     let revision = beginNotificationSettingsSync()
-    NotificationSettingsSyncQueue.shared.enqueue(enabled: nil, frequency: target, revision: revision)
+    NotificationSettingsSyncCoordinator.shared.enqueue(
+      enabled: nil, frequency: target, revision: revision)
   }
 
   /// Local half of the balanced-by-default migration, split from the backend push so the
@@ -968,7 +952,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
   /// Whether the master Notifications toggle is on. Reads the mirrored UserDefaults key,
   /// defaulting to `true` when absent so notifications are not accidentally suppressed
-  /// before the Settings page has hydrated from the backend.
+  /// before the coordinator has hydrated from the backend. The delivery gate never
+  /// consults the network.
   static func areNotificationsEnabled(defaults: UserDefaults = .standard) -> Bool {
     guard defaults.object(forKey: Self.masterEnabledDefaultsKey) != nil else {
       return true

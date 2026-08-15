@@ -10,6 +10,18 @@ struct ContextVisitFence: Equatable, Sendable {
   let startedAt: Date
 }
 
+/// Whether an in-flight director evaluation may still act for a visit, plus the
+/// visit's departure time once it has one. A visit is fresh while `active`, and
+/// stays fresh for `ContextDeliveryBudget.deliveryValidityWindowSeconds` after a
+/// `completed` departure so an evaluation the user already paid for can run to
+/// completion. `discarded` and `interrupted` outcomes are never fresh.
+struct ContextVisitFreshness: Equatable, Sendable {
+  let fresh: Bool
+  let endedAt: Date?
+
+  static let stale = ContextVisitFreshness(fresh: false, endedAt: nil)
+}
+
 struct ContextBucketSnapshot: Equatable, Sendable {
   let bucketID: String
   let versionID: Int64
@@ -64,6 +76,12 @@ enum ContextBucketGarbageCollection {
 /// Resolves the durable bucket for a visit identity. Extracted so subject/bucket
 /// consistency after explicit rebinding is testable without the singleton store.
 enum ContextBucketVisitResolver {
+  /// The durable bucket identity this visit persisted, guarding against a
+  /// mid-visit destination rebinding. Liveness is deliberately not enforced
+  /// here — that is `ContextBucketStore.visitFreshness`'s job — so a visit that
+  /// completed moments ago can still resolve its bucket while an in-flight
+  /// evaluation runs to completion. Discarded and interrupted visits stay
+  /// unresolvable.
   static func persistedBucketID(
     in db: Database,
     visitID: Int64,
@@ -74,7 +92,8 @@ enum ContextBucketVisitResolver {
       db,
       sql: """
         SELECT bucketID FROM context_visits
-        WHERE id = ? AND contextGeneration = ? AND poolEpoch = ? AND outcome = 'active'
+        WHERE id = ? AND contextGeneration = ? AND poolEpoch = ?
+          AND outcome IN ('active', 'completed')
         """,
       arguments: [visitID, contextGeneration, poolEpoch])
   }
@@ -186,6 +205,39 @@ actor ContextBucketStore {
   static let shared = ContextBucketStore()
 
   private init() {}
+
+  /// Binds this visit's reference hash to a shared browser destination.
+  ///
+  /// Called once per novel browser title; afterwards `resolveBucketID` reads the
+  /// stored binding and every later visit resolves deterministically with no model
+  /// call. Caching the decision on the reference-hash primary key is what keeps
+  /// identity stable — the model is a one-time router, never a per-visit classifier.
+  ///
+  /// Returns the bucket the destination resolved to, or nil when nothing changed.
+  @discardableResult
+  func applyDestination(_ subjectID: String, for fence: ContextVisitFence) async throws -> String? {
+    guard let currentBucketID = fence.bucketID else { return nil }
+    let pool = try await poolForDestination(fence)
+    return try await pool.write { db -> String? in
+      let referenceHash = try String.fetchOne(
+        db, sql: "SELECT referenceHash FROM context_visits WHERE id = ?",
+        arguments: [fence.visitID])
+      guard let referenceHash else { return nil }
+      return try ContextDestinationBinder.apply(
+        in: db,
+        referenceHash: referenceHash,
+        currentBucketID: currentBucketID,
+        subjectID: subjectID)
+    }
+  }
+
+  private func poolForDestination(_ fence: ContextVisitFence) async throws -> DatabasePool {
+    let (pool, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool, generation == fence.poolEpoch else {
+      throw ContextBucketStoreError.databaseUnavailable
+    }
+    return pool
+  }
 
   func startVisit(
     appName: String,
@@ -330,6 +382,76 @@ actor ContextBucketStore {
     } catch {
       return false
     }
+  }
+
+  /// Run-to-completion admission for the director pipeline: fresh while the
+  /// visit is active, and for a bounded window after a completed departure.
+  /// Every stage of an in-flight evaluation re-checks this, so an evaluation
+  /// that drags past the window after departure still dies at its next guard.
+  static func visitFreshness(
+    in db: Database, fence: ContextVisitFence, now: Date
+  ) throws -> ContextVisitFreshness {
+    guard
+      let row = try Row.fetchOne(
+        db,
+        sql: """
+          SELECT outcome, endedAt FROM context_visits
+          WHERE id = ? AND contextGeneration = ? AND poolEpoch = ?
+          """,
+        arguments: [fence.visitID, fence.contextGeneration, fence.poolEpoch])
+    else { return .stale }
+    let outcome: String = row["outcome"]
+    let endedAt: Date? = row["endedAt"]
+    switch outcome {
+    case "active":
+      return ContextVisitFreshness(fresh: true, endedAt: endedAt)
+    case "completed":
+      let cutoff = now.addingTimeInterval(-ContextDeliveryBudget.deliveryValidityWindowSeconds)
+      let withinWindow = endedAt.map { $0 >= cutoff } ?? false
+      return ContextVisitFreshness(fresh: withinWindow, endedAt: endedAt)
+    default:
+      // discarded/interrupted: the visit never earned a delivery, however recent.
+      return ContextVisitFreshness(fresh: false, endedAt: endedAt)
+    }
+  }
+
+  func fenceFreshness(_ fence: ContextVisitFence, now: Date = Date()) async -> ContextVisitFreshness {
+    let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool, poolEpoch == fence.poolEpoch else { return .stale }
+    do {
+      return try await pool.read { db in
+        try Self.visitFreshness(in: db, fence: fence, now: now)
+      }
+    } catch {
+      return .stale
+    }
+  }
+
+  /// Completed-visit engagement for one bucket inside the dwell policy's
+  /// rolling window. Read-only and advisory: any failure reports zero
+  /// engagement, which falls back to the standard dwell.
+  func recentEngagementSeconds(bucketID: String, now: Date = Date()) async -> TimeInterval {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return 0 }
+    let lookbackStart = now.addingTimeInterval(-ContextDwellPolicy.engagementLookbackSeconds)
+    let intervals: [(startedAt: Date, endedAt: Date)] =
+      (try? await pool.read { db in
+        try Row.fetchAll(
+          db,
+          sql: """
+            SELECT startedAt, endedAt FROM context_visits
+            WHERE bucketID = ? AND outcome = 'completed'
+              AND endedAt IS NOT NULL AND endedAt >= ?
+            """,
+          arguments: [bucketID, lookbackStart]
+        ).compactMap { row -> (startedAt: Date, endedAt: Date)? in
+          guard let startedAt: Date = row["startedAt"], let endedAt: Date = row["endedAt"] else {
+            return nil
+          }
+          return (startedAt: startedAt, endedAt: endedAt)
+        }
+      }) ?? []
+    return ContextDwellPolicy.cumulativeEngagementSeconds(visitIntervals: intervals, now: now)
   }
 
   func markVisitSettled(_ fence: ContextVisitFence, at date: Date = Date()) async throws {

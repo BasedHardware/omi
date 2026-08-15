@@ -178,6 +178,7 @@ memories_db.get_memories_by_ids = MagicMock(return_value=[])
 vector_db = _stub_module("database.vector_db")
 vector_db.query_vectors = MagicMock(return_value=[])
 vector_db.find_similar_memories = MagicMock(return_value=[])
+vector_db.search_transcript_chunks = MagicMock(return_value=[])
 
 # Stub database.action_items
 action_items_db = _stub_module("database.action_items")
@@ -325,6 +326,8 @@ def reset_conversation_search_stubs():
     search_mod.merge_conversation_search_ids.side_effect = _merge_conversation_search_ids
     transcript_chunks_mod.hydrate_chunk_texts.reset_mock()
     transcript_chunks_mod.hydrate_chunk_texts.side_effect = _hydrate_chunk_texts
+    vector_db.search_transcript_chunks.reset_mock()
+    vector_db.search_transcript_chunks.return_value = []
 
 
 endpoints_mod = _stub_module("utils.other.endpoints")
@@ -1118,6 +1121,113 @@ class TestRouterEndpoints:
         body = resp.json()
         assert body["is_error"] is True
         assert "Error" in body["result_text"]
+
+    def test_search_chunks_endpoint_returns_typed_sources(self):
+        """Route wiring: /search-chunks serializes typed sources through the envelope."""
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': 1722500000, 'score': 0.9},
+        ]
+        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows: [
+            {
+                **r,
+                'text': '[Conversation on 01 Aug 2024, 08:53]\nUser: the beta shipped',
+                'conversation_title': 'Release chat',
+                'conversation_started_at': datetime(2024, 8, 1, 8, 53, tzinfo=timezone.utc),
+            }
+            for r in rows
+        ]
+        resp = self.client.post("/v1/tools/conversations/search-chunks", json={"query": "beta"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "search_conversation_chunks"
+        assert "User: the beta shipped" in body["result_text"]
+        assert body["sources"] == [
+            {
+                "kind": "conversation",
+                "source_id": "conv-a",
+                "title": "Release chat",
+                "preview": "[Conversation on 01 Aug 2024, 08:53] User: the beta shipped",
+                "created_at": "2024-08-01T08:13:20+00:00",
+                "moment_timestamp_ms": None,
+                "app_name": None,
+                "url": None,
+            }
+        ]
+
+
+# ===========================================================================
+# Tests: search-chunks typed sources (verbatim retrieval layer)
+# ===========================================================================
+class TestSearchConversationChunksSources:
+    """The chunks endpoint must emit sources shaped exactly like its siblings:
+    kind 'conversation' + PARENT conversation id (shared ref namespace, no client
+    citation-validation changes), a single-line verbatim preview, and an ISO date."""
+
+    def _call(self, query="beta release"):
+        body = router_mod.SearchChunksRequest(query=query)
+        result = router_mod.search_conversation_chunks(body, uid="test-uid")
+        # Validate through the response model so field bounds (preview <= 600,
+        # created_at <= 80) are enforced exactly as FastAPI serialization would.
+        return router_mod.ToolResponse.model_validate(result)
+
+    def _hydrate_with(self, **fields):
+        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows: [{**r, **fields} for r in rows]
+
+    def test_sources_carry_parent_conversation_id_and_dedupe_by_conversation(self):
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 2, 'created_at': 1722500000, 'score': 0.91},
+            {'conversation_id': 'conv-a', 'chunk_index': 3, 'created_at': 1722500000, 'score': 0.88},
+            {'conversation_id': 'conv-b', 'chunk_index': 0, 'created_at': 1722600000, 'score': 0.70},
+        ]
+        self._hydrate_with(text='User: verbatim evidence', conversation_title='Standup')
+        response = self._call()
+        assert not response.is_error
+        # All three excerpts render, but sources dedupe to one per conversation,
+        # best-scored chunk first.
+        assert response.result_text.count("Excerpt") == 3
+        assert [(s.kind, s.source_id) for s in response.sources] == [
+            ("conversation", "conv-a"),
+            ("conversation", "conv-b"),
+        ]
+        assert response.sources[0].title == "Standup"
+        assert response.sources[0].created_at == "2024-08-01T08:13:20+00:00"
+
+    def test_preview_is_single_line_and_capped_at_600(self):
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': 1722500000, 'score': 0.9},
+        ]
+        self._hydrate_with(text="line one\nSpeaker 2: line two\n" + ("x" * 700))
+        response = self._call()
+        preview = response.sources[0].preview
+        assert "\n" not in preview
+        assert "line one Speaker 2: line two" in preview
+        assert len(preview) == 600
+
+    def test_created_at_falls_back_to_conversation_start_when_chunk_ts_missing(self):
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': 0, 'score': 0.9},
+        ]
+        self._hydrate_with(
+            text='User: hello',
+            conversation_started_at=datetime(2026, 8, 14, 22, 0, tzinfo=timezone.utc),
+        )
+        response = self._call()
+        assert response.sources[0].created_at == "2026-08-14T22:00:00+00:00"
+
+    def test_missing_title_falls_back_without_error(self):
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': None, 'score': 0.9},
+        ]
+        self._hydrate_with(text='User: hello')
+        response = self._call()
+        assert response.sources[0].title == "Conversation"
+        assert response.sources[0].created_at is None
+
+    def test_no_results_returns_empty_sources(self):
+        vector_db.search_transcript_chunks.return_value = []
+        response = self._call()
+        assert response.sources == []
+        assert "No transcript excerpts found" in response.result_text
 
 
 # ===========================================================================

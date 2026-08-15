@@ -731,16 +731,12 @@ extension SettingsContentView {
     vocabularyList = AssistantSettings.shared.transcriptionVocabulary
     let transcriptionVocabularyRevisionAtLoadStart =
       AssistantSettings.shared.transcriptionVocabularyRevision
-    let notificationSettingsRevisionAtLoadStart = UserDefaults.standard.integer(
-      forKey: NotificationService.settingsSyncRevisionDefaultsKey)
-    let notificationSettingsPendingAtLoadStart =
-      NotificationService.hasPendingNotificationSettingsSync()
     vadGateEnabled = AssistantSettings.shared.vadGateEnabled
     Task {
       do {
         // Load all settings in parallel
         async let dailySummaryTask = APIClient.shared.getDailySummarySettings()
-        async let notificationsTask = APIClient.shared.getNotificationSettings()
+        async let notificationsReconcile: Void = NotificationSettingsSyncCoordinator.shared.reconcile()
         async let languageTask = APIClient.shared.getUserLanguage()
         async let recordingTask = APIClient.shared.getRecordingPermission()
         async let cloudSyncTask = APIClient.shared.getPrivateCloudSync()
@@ -749,9 +745,9 @@ extension SettingsContentView {
         // Sync assistant settings from server in parallel
         async let assistantSyncTask: () = SettingsSyncManager.shared.syncFromServer()
 
-        let (dailySummary, notifications, language, recording, cloudSync, transcription, _) = try await (
+        let (dailySummary, _, language, recording, cloudSync, transcription, _) = try await (
           dailySummaryTask,
-          notificationsTask,
+          notificationsReconcile,
           languageTask,
           recordingTask,
           cloudSyncTask,
@@ -764,36 +760,9 @@ extension SettingsContentView {
           dailySummaryHour = dailySummary.hour
           dailySummaryTime = SettingsControlMetrics.dailySummaryDate(
             forHour: dailySummary.hour, referenceDate: Date())
-          let notificationSettingsRevisionNow = UserDefaults.standard.integer(
-            forKey: NotificationService.settingsSyncRevisionDefaultsKey)
-          let notificationSettingsPendingNow =
-            NotificationService.hasPendingNotificationSettingsSync()
-          if NotificationService.shouldPreserveLocalNotificationSettings(
-            revisionAtLoadStart: notificationSettingsRevisionAtLoadStart,
-            currentRevision: notificationSettingsRevisionNow,
-            pendingAtLoadStart: notificationSettingsPendingAtLoadStart,
-            pendingNow: notificationSettingsPendingNow)
-          {
-            // A newer local change may have raced this GET, or the app may have
-            // quit before its previous PATCH completed. Preserve the local
-            // mirror and retry the complete pair instead of hydrating stale
-            // server values over the user's choice.
-            notificationsEnabled = NotificationService.areNotificationsEnabled()
-            notificationFrequency = NotificationService.currentFrequencyLevel()
-            if notificationSettingsPendingNow {
-              let retryEnabled = notificationsEnabled
-              let retryFrequency = notificationFrequency
-              updateNotificationSettings(enabled: retryEnabled, frequency: retryFrequency)
-            }
-          } else {
-            notificationsEnabled = notifications.enabled
-            notificationFrequency = notifications.frequency
-            // Mirror to UserDefaults so NotificationService can gate/throttle without a backend roundtrip.
-            UserDefaults.standard.set(
-              notifications.enabled, forKey: NotificationService.masterEnabledDefaultsKey)
-            UserDefaults.standard.set(
-              notifications.frequency, forKey: NotificationService.frequencyDefaultsKey)
-          }
+          // Local UserDefaults remain the gate. The coordinator owns GET/hydrate/retry.
+          notificationsEnabled = NotificationService.areNotificationsEnabled()
+          notificationFrequency = NotificationService.currentFrequencyLevel()
           userLanguage = language.language
           recordingPermissionEnabled = recording.enabled
           privateCloudSyncEnabled = cloudSync.enabled

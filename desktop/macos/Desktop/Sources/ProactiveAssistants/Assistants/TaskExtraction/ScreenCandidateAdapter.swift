@@ -390,9 +390,86 @@ struct CanonicalScreenCandidateDelivery {
   }
 }
 
+/// Retry classification for canonical capture outbox delivery failures.
+///
+/// Transport failures and server-side conditions (5xx, 401 auth refresh, 409
+/// generation mismatch, 429 throttling) are transient: the same payload can
+/// succeed later, so the outbox row must stay retryable. Validation-class
+/// rejections (400/413/415/422) are deterministic — the payload itself can
+/// never succeed — so retrying them forever only wedges the queue behind
+/// permanently rejected rows.
+enum CandidateOutboxRetryPolicy {
+  /// Permanent validation rejections tolerated before a row is poisoned.
+  /// More than one attempt guards against a backend contract briefly rejecting
+  /// a valid payload mid-deploy; three failures on a deterministic 4xx is
+  /// conclusive.
+  static let maxPermanentRejections = 3
+
+  static func isPermanentRejection(statusCode: Int) -> Bool {
+    switch statusCode {
+    case 400, 413, 415, 422: return true
+    default: return false
+    }
+  }
+
+  static func isPermanentRejection(_ error: Error) -> Bool {
+    guard case APIError.httpError(let statusCode, _) = error else { return false }
+    return isPermanentRejection(statusCode: statusCode)
+  }
+
+  /// Transient failures stay retryable forever; validation-class rejections
+  /// are counted per row and the row is poisoned after a small number of
+  /// attempts so a permanently rejected capture cannot wedge the outbox drain.
+  static func handleDeliveryFailure(_ error: Error, localID: Int64) async {
+    guard isPermanentRejection(error),
+      let outcome = try? await StagedTaskStorage.shared.recordCanonicalOutboxRejection(id: localID)
+    else {
+      logError("Task: Candidate outbox delivery failed; will retry", error: error)
+      return
+    }
+    switch outcome {
+    case .willRetry(let rejections):
+      logError(
+        "Task: Candidate outbox delivery rejected by validation (attempt \(rejections)/\(maxPermanentRejections)); will retry",
+        error: error
+      )
+    case .poisoned(let rejections):
+      logError(
+        "Task: Candidate outbox delivery rejected by validation \(rejections) times; poisoned row \(localID) and stopped retrying",
+        error: error
+      )
+    }
+  }
+}
+
 enum ScreenCandidateAdapter {
   static func idempotencyKey(deviceID: String, localID: Int64) -> String {
     "screen:\(deviceID):\(localID)"
+  }
+
+  /// Canonical task references must be backend StableIds
+  /// (`^[A-Za-z0-9][A-Za-z0-9._:-]*$`, 1–128 chars; keep in sync with
+  /// `backend/models/task_intelligence.py`). The extraction model is asked for
+  /// a task id in `duplicate_of`/`refines_task` but sometimes echoes the
+  /// task's *title* instead. Forwarding that string as `task_id` makes
+  /// POST /v1/candidates fail Pydantic validation (HTTP 422) on every outbox
+  /// retry, forever. Treat any non-conforming reference as absent so the
+  /// capture policy decides create/complete/ignore without a bogus target.
+  static func canonicalTaskReference(_ raw: String?) -> String? {
+    guard let raw, !raw.isEmpty, raw.count <= 128 else { return nil }
+    for (index, scalar) in raw.unicodeScalars.enumerated() {
+      let isAlphanumeric =
+        (scalar >= "A" && scalar <= "Z")
+        || (scalar >= "a" && scalar <= "z")
+        || (scalar >= "0" && scalar <= "9")
+      if index == 0 {
+        guard isAlphanumeric else { return nil }
+      } else {
+        guard isAlphanumeric || scalar == "." || scalar == "_" || scalar == ":" || scalar == "-"
+        else { return nil }
+      }
+    }
+    return raw
   }
 
   static func facts(for task: ExtractedTask) -> ScreenCaptureFacts {
@@ -407,8 +484,8 @@ enum ScreenCandidateAdapter {
       publicBroadcast: task.publicBroadcast ?? false,
       directMention: task.directMention ?? false,
       alreadyDone: task.alreadyDone ?? (kind == "already_done"),
-      duplicateOf: task.duplicateOf,
-      refinesTask: task.refinesTask,
+      duplicateOf: canonicalTaskReference(task.duplicateOf),
+      refinesTask: canonicalTaskReference(task.refinesTask),
       captureConfidence: task.confidence,
       ownershipConfidence: task.ownershipConfidence ?? 0.5
     )

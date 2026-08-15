@@ -951,3 +951,19 @@ def test_firmware_release_metadata_reports_status_when_shell_has_no_output(tmp_p
     )
 
     assert GUARDS.check_firmware_release_metadata() == ["firmware release body smoke failed: exit 9"]
+
+
+def test_desktop_promotion_guard_rejects_reintroduced_qualification_trigger(tmp_path, monkeypatch):
+    workflows = tmp_path / ".github/workflows"
+    workflows.mkdir(parents=True)
+    for name in ("desktop_promote_beta.yml", "desktop_recover_beta.yml"):
+        shutil.copy2(REPO_ROOT / ".github/workflows" / name, workflows / name)
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    assert GUARDS.check_desktop_promotion_independent_of_qualification() == []
+
+    promotion = workflows / "desktop_promote_beta.yml"
+    original = promotion.read_text(encoding="utf-8")
+    promotion.write_text(original + "\nqualification_run_id: 1\n", encoding="utf-8")
+    errors = GUARDS.check_desktop_promotion_independent_of_qualification()
+    assert any("still depends on qualification" in error for error in errors), errors

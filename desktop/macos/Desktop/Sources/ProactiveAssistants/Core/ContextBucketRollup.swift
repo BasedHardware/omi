@@ -20,6 +20,13 @@ struct BucketExtraction: Codable, Equatable, Sendable {
 
   let narrative: String
   let facts: [Fact]
+  /// Proposed browser destination key, `unknown/…` when the model abstains.
+  ///
+  /// Optional so a response predating this field still decodes: synthesized
+  /// `Decodable` uses `decodeIfPresent` for optionals, where a non-optional would
+  /// throw on the missing key. `var` with a default also keeps the memberwise
+  /// initializer source-compatible for existing callers.
+  var destination: String? = nil
 }
 
 enum BucketFactValidity: String {
@@ -152,31 +159,75 @@ enum ContextProactivityPromptBuilder {
   }
 
   static func extractionPrompt(appName: String, windowTitle: String?, evidenceRef: String) -> String {
-    """
-    \(ScreenDerivedContent.untrustedPreamble)
-    Produce a 150-400 token ambient narrative and discrete factual records. Facts are
-    proposals; include an identifier, surviving evidence text, and evidence ref for each.
-    App: \(appName)
-    Window: \(windowTitle ?? "")
-    Evidence ref: \(evidenceRef)
-    """
+    let base = """
+      \(ScreenDerivedContent.untrustedPreamble)
+      Produce a 150-400 token ambient narrative and discrete factual records. Facts are
+      proposals; include an identifier, surviving evidence text, and evidence ref for each.
+      App: \(appName)
+      Window: \(ContextDestinationKey.singleLine(windowTitle ?? "", limit: 160))
+      Evidence ref: \(evidenceRef)
+      """
+    // Browser-scoped by design. Unscoped destination labelling was measured at 6%
+    // precision: the model answers `telegram` for every thread and collapses
+    // unrelated private conversations into one bucket. Native-app title identity is
+    // already correct, so it is left alone.
+    guard ContextDestinationKey.isBrowser(appName: appName), let windowTitle,
+      !windowTitle.isEmpty
+    else {
+      return base + "\n\nSet \"destination\" to \"\(ContextDestinationKey.abstention)\"."
+    }
+    // The fragment sits below `untrustedPreamble`, so the window title it quotes
+    // stays framed as untrusted data rather than instruction.
+    return base + "\n\n" + ContextDestinationKey.promptFragment(title: windowTitle)
   }
 
   static func directorPrompt(
     snapshot: ContextBucketSnapshot,
     tasks: [ContextDirectorTaskContext],
     frame: CapturedFrame,
-    recentDeliveries: [ContextBucketRecentDelivery] = []
+    recentDeliveries: [ContextBucketRecentDelivery] = [],
+    timeZone: TimeZone = .current
   ) -> String {
     """
     \(directorStablePrompt(snapshot: snapshot))
 
-    \(directorVolatilePrompt(tasks: tasks, frame: frame, recentDeliveries: recentDeliveries))
+    \(directorVolatilePrompt(
+      tasks: tasks, frame: frame, recentDeliveries: recentDeliveries, timeZone: timeZone))
     """
   }
 
-  static func directorStablePrompt(snapshot: ContextBucketSnapshot) -> String {
+  /// The lookup instruction is static text: it must be identical for the first
+  /// and second director calls of a visit so both share one cached prefix, and
+  /// it therefore describes both states ("when that section is present…"). It is
+  /// gated on `allowLookup` so the flag-off prompt stays byte-identical to today.
+  /// Wording is load-bearing and was tuned against live data, not guessed.
+  ///
+  /// The first draft asked only about "a question that is actually part of this
+  /// context". Measured against the reasoning model on the case this feature
+  /// exists for — the user drafting a message whose answer sits elsewhere in
+  /// their history — that fired **3 times out of 8**, so the hop missed its own
+  /// motivating case most of the time. Naming the writing-a-question case
+  /// explicitly took it to **8/8**.
+  ///
+  /// Broadening did not cost anything. Across 60 real bucket snapshots of
+  /// ordinary work context it still requests a lookup **0 times**, so no second
+  /// director call is bought in normal use, and two controls — a question the
+  /// supplied facts already answer, and a context asking nothing — stayed at 0/3
+  /// under both wordings. A worked example was also tried and changed nothing,
+  /// so it is deliberately omitted rather than carried on the cached prefix.
+  static let directorLookupInstruction = """
+    If this context contains a question, request, or reference whose answer is not present in
+    the supplied facts — including a question the user is currently writing — set lookup_query to
+    one short search phrase naming the missing thing. Otherwise set lookup_query to "". Still return
+    your best decision alongside it: the lookup buys at most one re-evaluation with a RETRIEVED
+    CONTEXT section appended, and when that section is already present below, any further
+    lookup_query is ignored. Refs from that section (conversation:…, memory:…) may be cited in
+    bucket_entry_refs only when the section supplies them.
+    """
+
+  static func directorStablePrompt(snapshot: ContextBucketSnapshot, allowLookup: Bool = false) -> String {
     let stableBucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
+    let lookup = allowLookup ? "\n" + directorLookupInstruction : ""
     return """
       \(ScreenDerivedContent.untrustedPreamble)
       Decide whether interrupting now adds concrete value. Return silence unless the validated
@@ -196,6 +247,8 @@ enum ContextProactivityPromptBuilder {
       candidate from actionability alone.
       Do not re-deliver a point already delivered for this bucket unless the validated facts
       add something materially new. Prefer silence over restating.
+      Timestamps supplied below are already in the user's local time zone. When a message
+      mentions a date or time, use that local form as written; never convert to or mention UTC.\(lookup)
 
       \(stableBucket)
       """
@@ -204,7 +257,8 @@ enum ContextProactivityPromptBuilder {
   static func directorVolatilePrompt(
     tasks: [ContextDirectorTaskContext],
     frame: CapturedFrame,
-    recentDeliveries: [ContextBucketRecentDelivery] = []
+    recentDeliveries: [ContextBucketRecentDelivery] = [],
+    timeZone: TimeZone = .current
   ) -> String {
     let actionableCutoff = frame.captureTime.addingTimeInterval(
       ContextDirectorTaskSelection.futureHorizon)
@@ -212,9 +266,9 @@ enum ContextProactivityPromptBuilder {
       guard let dueAt = task.dueAt else { return "- \(task.description)" }
       if dueAt > actionableCutoff {
         return
-          "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))\n  Reference only: already exists; do not resurface or create it yet."
+          "- \(task.description)\n  Due at: \(localTimestamp(dueAt, timeZone: timeZone))\n  Reference only: already exists; do not resurface or create it yet."
       }
-      return "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))"
+      return "- \(task.description)\n  Due at: \(localTimestamp(dueAt, timeZone: timeZone))"
     }
     let taskContext = taskLines.joined(separator: "\n")
     var prompt = """
@@ -224,7 +278,7 @@ enum ContextProactivityPromptBuilder {
       == CURRENT FRAME METADATA ==
       App: \(frame.appName)
       Window: \(frame.windowTitle ?? "")
-      Captured at (UTC): \(utcTimestamp(frame.captureTime))
+      Captured at: \(localTimestamp(frame.captureTime, timeZone: timeZone))
       """
     if let recent = recentDeliveriesSection(recentDeliveries, now: frame.captureTime) {
       prompt += "\n\n\(recent)"
@@ -271,10 +325,16 @@ enum ContextProactivityPromptBuilder {
     return String(collapsed.prefix(ContextBucketRecentDelivery.summaryCharacterLimit))
   }
 
-  private static func utcTimestamp(_ date: Date) -> String {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+  /// Times shown to the director are the user's wall-clock times: the model quotes
+  /// supplied timestamps verbatim into user-visible messages, and a user should
+  /// never read "04:00 UTC" for their own midnight deadline. Single format
+  /// authority for every timestamp a director prompt carries; the retrieval-hop
+  /// section reuses it so retrieved rows cannot reintroduce UTC.
+  static func localTimestamp(_ date: Date, timeZone: TimeZone) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = timeZone
+    formatter.dateFormat = "yyyy-MM-dd HH:mm zzz"
     return formatter.string(from: date)
   }
 }
@@ -290,7 +350,16 @@ enum ContextBucketCompactionPolicy {
   }
 }
 
+/// What a departure extraction just persisted, beyond the published version:
+/// the highest notify-worthiness among the facts it newly validated, which is
+/// the departure-evaluation policy's admission signal.
+struct BucketExtractionWriteResult: Equatable, Sendable {
+  let versionID: Int64
+  let maximumValidatedWorthiness: Double
+}
+
 extension ContextBucketStore {
+  @discardableResult
   func writeExtraction(
     _ extraction: BucketExtraction,
     for fence: ContextVisitFence,
@@ -298,125 +367,130 @@ extension ContextBucketStore {
     rawContextKey: String,
     normalizedContextKey: String,
     now: Date = Date()
-  ) async throws -> Int64? {
+  ) async throws -> BucketExtractionWriteResult? {
     guard let bucketID = fence.bucketID else { return nil }
     let pool = try await poolForRollup(fence)
     let evidenceEncoder = JSONEncoder()
     let safeNarrative = String(extraction.narrative.prefix(2_400))
-    let result: (versionID: Int64, paraphraseObserved: Bool) = try await pool.write { db in
-      guard
-        let visit = try Row.fetchOne(
-          db,
-          sql: """
-            SELECT lastScreenshotID FROM context_visits
-            WHERE id = ? AND contextGeneration = ? AND poolEpoch = ? AND outcome = 'completed'
-            """,
-          arguments: [fence.visitID, fence.contextGeneration, fence.poolEpoch])
-      else { throw ContextBucketStoreError.staleFence }
-
-      var allowedEvidenceRefs: Set<String> = ["visit:\(fence.visitID)"]
-      if let screenshotID: Int64 = visit["lastScreenshotID"] {
-        allowedEvidenceRefs.insert("screenshot:\(screenshotID)")
-      }
-
-      let entryID = UUID().uuidString.lowercased()
-      let entryRefs = Array(
-        extraction.facts.prefix(20)
-          .flatMap { BucketFactValidator.resolvableEvidenceRefs($0.evidenceRefs, allowed: allowedEvidenceRefs) }
-          .prefix(40))
-      try db.execute(
-        sql: """
-          INSERT INTO bucket_entries
-            (id, bucketID, visitID, appName, rawContextKey, normalizedContextKey,
-             narrative, evidenceRefsJson, tokenCount, createdAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          """,
-        arguments: [
-          entryID, bucketID, fence.visitID, appName, rawContextKey, normalizedContextKey,
-          safeNarrative,
-          String(data: try evidenceEncoder.encode(entryRefs), encoding: .utf8) ?? "[]",
-          ContextBucketPromptAssembler.estimatedTokens(safeNarrative), now,
-        ])
-
-      var maximumWorthiness = 0.0
-      var paraphraseObserved = false
-      var existingFactIdentities = try Row.fetchAll(
-        db,
-        sql: """
-          SELECT statement, identifiersJson FROM bucket_facts
-          WHERE bucketID = ? AND validityState = 'validated'
-            AND (expiresAt IS NULL OR expiresAt > ?)
-          ORDER BY id DESC LIMIT 250
-          """,
-        arguments: [bucketID, now]
-      ).compactMap { row -> BucketFactValidator.ExistingFactIdentity? in
+    let result: (versionID: Int64, paraphraseObserved: Bool, maximumWorthiness: Double) =
+      try await pool.write { db in
         guard
-          let existingStatement = row["statement"] as String?,
-          let encodedIdentifiers = row["identifiersJson"] as String?,
-          let data = encodedIdentifiers.data(using: .utf8),
-          let existingIdentifiers = try? JSONDecoder().decode([String].self, from: data)
-        else { return nil }
-        return BucketFactValidator.ExistingFactIdentity(
-          statement: existingStatement, identifiers: existingIdentifiers)
-      }
-      for fact in extraction.facts.prefix(20) {
-        let statement = String(fact.statement.prefix(500))
-        let evidenceText = String(fact.evidenceText.prefix(1_000))
-        let evidenceRefs = BucketFactValidator.resolvableEvidenceRefs(
-          Array(fact.evidenceRefs.prefix(10)), allowed: allowedEvidenceRefs)
-        let identifiers = fact.identifiers.prefix(8).map {
-          String($0.prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        .filter { !$0.isEmpty }
-        paraphraseObserved =
-          paraphraseObserved
-          || BucketFactValidator.hasParaphraseMatch(
-            statement: statement, identifiers: identifiers, existingFacts: existingFactIdentities)
-        let duplicate =
-          try Bool.fetchOne(
+          let visit = try Row.fetchOne(
             db,
-            sql: "SELECT EXISTS(SELECT 1 FROM bucket_facts WHERE bucketID = ? AND statement = ?)",
-            arguments: [bucketID, statement]) ?? false
-        let validity = BucketFactValidator.validity(
-          identifiers: identifiers,
-          evidenceText: evidenceText,
-          evidenceRefs: evidenceRefs,
-          duplicate: duplicate)
-        let worthiness = validity == .validated ? min(max(fact.notifyWorthiness, 0), 1) : 0
-        maximumWorthiness = max(maximumWorthiness, worthiness)
+            sql: """
+              SELECT lastScreenshotID FROM context_visits
+              WHERE id = ? AND contextGeneration = ? AND poolEpoch = ? AND outcome = 'completed'
+              """,
+            arguments: [fence.visitID, fence.contextGeneration, fence.poolEpoch])
+        else { throw ContextBucketStoreError.staleFence }
+
+        var allowedEvidenceRefs: Set<String> = ["visit:\(fence.visitID)"]
+        if let screenshotID: Int64 = visit["lastScreenshotID"] {
+          allowedEvidenceRefs.insert("screenshot:\(screenshotID)")
+        }
+
+        let entryID = UUID().uuidString.lowercased()
+        let entryRefs = Array(
+          extraction.facts.prefix(20)
+            .flatMap { BucketFactValidator.resolvableEvidenceRefs($0.evidenceRefs, allowed: allowedEvidenceRefs) }
+            .prefix(40))
         try db.execute(
           sql: """
-            INSERT INTO bucket_facts
-              (id, bucketID, entryID, appName, statement, identifiersJson, evidenceText,
-               evidenceRefsJson, validityState, dispositionState, confidence,
-               notifyWorthiness, createdAt, updatedAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?)
+            INSERT INTO bucket_entries
+              (id, bucketID, visitID, appName, rawContextKey, normalizedContextKey,
+               narrative, evidenceRefsJson, tokenCount, createdAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
           arguments: [
-            UUID().uuidString.lowercased(), bucketID, entryID, appName, statement,
-            String(data: try evidenceEncoder.encode(identifiers), encoding: .utf8) ?? "[]",
-            evidenceText,
-            String(data: try evidenceEncoder.encode(evidenceRefs), encoding: .utf8) ?? "[]",
-            validity.rawValue, min(max(fact.confidence, 0), 1), worthiness, now, now,
+            entryID, bucketID, fence.visitID, appName, rawContextKey, normalizedContextKey,
+            safeNarrative,
+            String(data: try evidenceEncoder.encode(entryRefs), encoding: .utf8) ?? "[]",
+            ContextBucketPromptAssembler.estimatedTokens(safeNarrative), now,
           ])
-        if validity == .validated {
-          existingFactIdentities.append(
-            BucketFactValidator.ExistingFactIdentity(statement: statement, identifiers: identifiers))
+
+        var maximumWorthiness = 0.0
+        var paraphraseObserved = false
+        var existingFactIdentities = try Row.fetchAll(
+          db,
+          sql: """
+            SELECT statement, identifiersJson FROM bucket_facts
+            WHERE bucketID = ? AND validityState = 'validated'
+              AND (expiresAt IS NULL OR expiresAt > ?)
+            ORDER BY id DESC LIMIT 250
+            """,
+          arguments: [bucketID, now]
+        ).compactMap { row -> BucketFactValidator.ExistingFactIdentity? in
+          guard
+            let existingStatement = row["statement"] as String?,
+            let encodedIdentifiers = row["identifiersJson"] as String?,
+            let data = encodedIdentifiers.data(using: .utf8),
+            let existingIdentifiers = try? JSONDecoder().decode([String].self, from: data)
+          else { return nil }
+          return BucketFactValidator.ExistingFactIdentity(
+            statement: existingStatement, identifiers: existingIdentifiers)
         }
+        for fact in extraction.facts.prefix(20) {
+          let statement = String(fact.statement.prefix(500))
+          let evidenceText = String(fact.evidenceText.prefix(1_000))
+          let evidenceRefs = BucketFactValidator.resolvableEvidenceRefs(
+            Array(fact.evidenceRefs.prefix(10)), allowed: allowedEvidenceRefs)
+          let identifiers = fact.identifiers.prefix(8).map {
+            String($0.prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
+          }
+          .filter { !$0.isEmpty }
+          paraphraseObserved =
+            paraphraseObserved
+            || BucketFactValidator.hasParaphraseMatch(
+              statement: statement, identifiers: identifiers, existingFacts: existingFactIdentities)
+          let duplicate =
+            try Bool.fetchOne(
+              db,
+              sql: "SELECT EXISTS(SELECT 1 FROM bucket_facts WHERE bucketID = ? AND statement = ?)",
+              arguments: [bucketID, statement]) ?? false
+          let validity = BucketFactValidator.validity(
+            identifiers: identifiers,
+            evidenceText: evidenceText,
+            evidenceRefs: evidenceRefs,
+            duplicate: duplicate)
+          let worthiness = validity == .validated ? min(max(fact.notifyWorthiness, 0), 1) : 0
+          maximumWorthiness = max(maximumWorthiness, worthiness)
+          try db.execute(
+            sql: """
+              INSERT INTO bucket_facts
+                (id, bucketID, entryID, appName, statement, identifiersJson, evidenceText,
+                 evidenceRefsJson, validityState, dispositionState, confidence,
+                 notifyWorthiness, createdAt, updatedAt)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?)
+              """,
+            arguments: [
+              UUID().uuidString.lowercased(), bucketID, entryID, appName, statement,
+              String(data: try evidenceEncoder.encode(identifiers), encoding: .utf8) ?? "[]",
+              evidenceText,
+              String(data: try evidenceEncoder.encode(evidenceRefs), encoding: .utf8) ?? "[]",
+              validity.rawValue, min(max(fact.confidence, 0), 1), worthiness, now, now,
+            ])
+          if validity == .validated {
+            existingFactIdentities.append(
+              BucketFactValidator.ExistingFactIdentity(statement: statement, identifiers: identifiers))
+          }
+        }
+        try db.execute(
+          sql: "UPDATE context_buckets SET notifyWorthiness = MAX(notifyWorthiness, ?), updatedAt = ? WHERE id = ?",
+          arguments: [maximumWorthiness, now, bucketID])
+        let versionID = try Self.publishVersion(in: db, bucketID: bucketID, now: now)
+        try db.execute(
+          sql: "UPDATE bucket_entries SET bucketVersionID = ? WHERE id = ?",
+          arguments: [versionID, entryID])
+        return (
+          versionID: versionID, paraphraseObserved: paraphraseObserved,
+          maximumWorthiness: maximumWorthiness
+        )
       }
-      try db.execute(
-        sql: "UPDATE context_buckets SET notifyWorthiness = MAX(notifyWorthiness, ?), updatedAt = ? WHERE id = ?",
-        arguments: [maximumWorthiness, now, bucketID])
-      let versionID = try Self.publishVersion(in: db, bucketID: bucketID, now: now)
-      try db.execute(
-        sql: "UPDATE bucket_entries SET bucketVersionID = ? WHERE id = ?",
-        arguments: [versionID, entryID])
-      return (versionID: versionID, paraphraseObserved: paraphraseObserved)
-    }
     if result.paraphraseObserved {
       await ContextProactivityTelemetry.recordFactIdentityShadow()
     }
-    return result.versionID
+    return BucketExtractionWriteResult(
+      versionID: result.versionID, maximumValidatedWorthiness: result.maximumWorthiness)
   }
 
   func purgeExcludedApp(_ appName: String, now: Date = Date()) async throws -> Set<String> {
@@ -687,23 +761,64 @@ actor ContextBucketRollupWriter {
       guard
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
         await store.fenceIsValid(fence)
-      else { return }
-      _ = try await store.writeExtraction(
+      else {
+        await ContextProactivityTelemetry.recordExtractionOutcome(.staleContext)
+        return
+      }
+      let writeResult = try await store.writeExtraction(
         extraction,
         for: fence,
         appName: frame.appName,
         rawContextKey: "\(frame.appName)\n\(frame.windowTitle ?? "")",
         normalizedContextKey: ContextTitleNormalizer.identityKey(
           appName: frame.appName, windowTitle: frame.windowTitle) ?? "")
+      await ContextProactivityTelemetry.recordExtractionOutcome(.success)
+      await applyDestinationIfEligible(extraction: extraction, frame: frame, fence: fence)
+      // Departure-triggered evaluation: only a fact this extraction newly
+      // validated at or above the worthiness threshold buys an immediate
+      // director look at the departed bucket, grounded on the same departing
+      // frame this extraction used. The engine re-runs every delivery gate and
+      // the freshness window bounds how long after departure it can act.
+      if let writeResult,
+        ContextDepartureEvaluationPolicy.triggers(
+          maximumValidatedWorthiness: writeResult.maximumValidatedWorthiness,
+          flagEnabled: await MainActor.run(body: { ContextBucketsFeature.isDepartureEvaluationEnabled }))
+      {
+        await ContextProactivityEngine.shared.evaluateAfterDeparture(
+          fence: fence, departingFrame: frame)
+      }
     } catch {
       switch error as? ProactiveLaneClientError {
       case .http(let status, _) where status == 429:
+        await ContextProactivityTelemetry.recordExtractionOutcome(.quotaSkip)
         return
       case .quotaCooldown(_):
+        await ContextProactivityTelemetry.recordExtractionOutcome(.quotaSkip)
         return
       default:
         log("Context bucket extraction failed silently: \(error.localizedDescription)")
+        await ContextProactivityTelemetry.recordExtractionOutcome(.failure)
       }
+    }
+  }
+
+  /// Applies a model-proposed browser destination, if it survives every gate.
+  ///
+  /// Deliberately non-throwing: a rejected or failed destination must never lose
+  /// the extraction that already succeeded. Falling through leaves the context on
+  /// its existing per-title identity, which is the safe direction.
+  private func applyDestinationIfEligible(
+    extraction: BucketExtraction, frame: CapturedFrame, fence: ContextVisitFence
+  ) async {
+    guard await ContextBucketsFeature.isDestinationRoutingEnabled,
+      ContextDestinationKey.isBrowser(appName: frame.appName),
+      let windowTitle = frame.windowTitle,
+      let subjectID = ContextDestinationKey.sanitize(extraction.destination, title: windowTitle)
+    else { return }
+    do {
+      _ = try await store.applyDestination(subjectID, for: fence)
+    } catch {
+      log("Context bucket destination binding failed silently: \(error.localizedDescription)")
     }
   }
 
@@ -731,8 +846,11 @@ actor ContextBucketRollupWriter {
             "additionalProperties": false,
           ],
         ],
+        "destination": ["type": "string"],
       ],
-      "required": ["narrative", "facts"],
+      // Strict structured output requires every declared property to be listed as
+      // required, so non-browser contexts are instructed to abstain instead.
+      "required": ["narrative", "facts", "destination"],
       "additionalProperties": false,
     ]
   }

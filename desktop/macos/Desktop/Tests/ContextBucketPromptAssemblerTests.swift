@@ -18,14 +18,18 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       visitID: 99, contextGeneration: 3, poolEpoch: 4, bucketID: "bucket", startedAt: Date(timeIntervalSince1970: 1))
 
     let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
-    let expected = [
-      ScreenDerivedContent.untrustedPreamble,
-      "Produce a 150-400 token ambient narrative and discrete factual records. Facts are",
-      "proposals; include an identifier, surviving evidence text, and evidence ref for each.",
-      "App: Xcode",
-      "Window: PR-123",
-      "Evidence ref: screenshot:42",
-    ].joined(separator: "\n")
+    let expected =
+      [
+        ScreenDerivedContent.untrustedPreamble,
+        "Produce a 150-400 token ambient narrative and discrete factual records. Facts are",
+        "proposals; include an identifier, surviving evidence text, and evidence ref for each.",
+        "App: Xcode",
+        "Window: PR-123",
+        "Evidence ref: screenshot:42",
+      ].joined(separator: "\n")
+      // Xcode is not a browser, so destination routing must not be offered here —
+      // only the abstention that satisfies the strict-schema required field.
+      + "\n\nSet \"destination\" to \"\(ContextDestinationKey.abstention)\"."
 
     XCTAssertEqual(prompt, expected)
   }
@@ -37,10 +41,15 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
 
     let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
 
-    XCTAssertTrue(prompt.hasSuffix("App: Safari\nWindow: \nEvidence ref: visit:123"))
+    // Safari is a browser, but a blank window title carries no destination signal,
+    // so this must still fall through to abstention rather than inviting a guess.
+    XCTAssertTrue(prompt.contains("App: Safari\nWindow: \nEvidence ref: visit:123"))
+    XCTAssertTrue(prompt.hasSuffix("Set \"destination\" to \"\(ContextDestinationKey.abstention)\"."))
+    XCTAssertFalse(prompt.contains("page-group"))
   }
 
-  func testDirectorPromptContainsSafetyPreambleBucketTasksAndFrameMetadata() {
+  func testDirectorPromptContainsSafetyPreambleBucketTasksAndFrameMetadata() throws {
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
     let capturedAt = Date(timeIntervalSince1970: 1_700_000_000)
     let dueAt = Date(timeIntervalSince1970: 1_700_003_600)
     let snapshot = ContextBucketSnapshot(
@@ -58,7 +67,8 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
         ContextDirectorTaskContext(description: "Review PR-123", dueAt: dueAt),
         ContextDirectorTaskContext(description: "Send release notes", dueAt: nil),
       ],
-      frame: frame)
+      frame: frame,
+      timeZone: timeZone)
     let bucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
     let expected = [
       ScreenDerivedContent.untrustedPreamble,
@@ -79,16 +89,18 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       "candidate from actionability alone.",
       "Do not re-deliver a point already delivered for this bucket unless the validated facts",
       "add something materially new. Prefer silence over restating.",
+      "Timestamps supplied below are already in the user's local time zone. When a message",
+      "mentions a date or time, use that local form as written; never convert to or mention UTC.",
       "",
       bucket,
       "",
       "== OPEN OR OVERDUE TASKS ==",
-      "- Review PR-123\n  Due at (UTC): 2023-11-14T23:13:20.000Z\n- Send release notes",
+      "- Review PR-123\n  Due at: 2023-11-14 18:13 EST\n- Send release notes",
       "",
       "== CURRENT FRAME METADATA ==",
       "App: Terminal",
       "Window: deploy.sh",
-      "Captured at (UTC): 2023-11-14T22:13:20.000Z",
+      "Captured at: 2023-11-14 17:13 EST",
     ].joined(separator: "\n")
 
     XCTAssertEqual(prompt, expected)
@@ -99,7 +111,8 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     XCTAssertFalse(prompt.contains("== RECENTLY DELIVERED FOR THIS BUCKET =="))
   }
 
-  func testDirectorPromptIncludesBoundedRecentDeliveriesForThisBucket() {
+  func testDirectorPromptIncludesBoundedRecentDeliveriesForThisBucket() throws {
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
     let capturedAt = Date(timeIntervalSince1970: 1_700_000_000)
     let snapshot = ContextBucketSnapshot(
       bucketID: "bucket", versionID: 1, version: 1, header: "header",
@@ -119,7 +132,8 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
           decisionType: "insight",
           message: "Status changed",
           deliveredAt: capturedAt.addingTimeInterval(-26 * 60)),
-      ])
+      ],
+      timeZone: timeZone)
     let bucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
     let expected = [
       ScreenDerivedContent.untrustedPreamble,
@@ -140,6 +154,8 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       "candidate from actionability alone.",
       "Do not re-deliver a point already delivered for this bucket unless the validated facts",
       "add something materially new. Prefer silence over restating.",
+      "Timestamps supplied below are already in the user's local time zone. When a message",
+      "mentions a date or time, use that local form as written; never convert to or mention UTC.",
       "",
       bucket,
       "",
@@ -149,7 +165,7 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       "== CURRENT FRAME METADATA ==",
       "App: Notes",
       "Window: ",
-      "Captured at (UTC): 2023-11-14T22:13:20.000Z",
+      "Captured at: 2023-11-14 17:13 EST",
       "",
       "== RECENTLY DELIVERED FOR THIS BUCKET ==",
       "- resurface (1m ago): Keep the investigation open",
@@ -157,6 +173,22 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     ].joined(separator: "\n")
 
     XCTAssertEqual(prompt, expected)
+  }
+
+  func testDirectorPromptKeepsLocalDateWhenUTCHasAlreadyRolledToTheNextDay() throws {
+    // 2026-08-11T03:59:00Z is 2026-08-10 23:59 in New York (DST on). This is the
+    // #11392 failure shape: a due-tonight task whose UTC date reads as tomorrow.
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+    let dueAt = Date(timeIntervalSince1970: 1_786_420_740)
+    let frame = CapturedFrame(
+      jpegData: Data(), appName: "Notes", frameNumber: 1,
+      captureTime: dueAt.addingTimeInterval(-600))
+    let prompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
+      tasks: [ContextDirectorTaskContext(description: "File the report", dueAt: dueAt)],
+      frame: frame,
+      timeZone: timeZone)
+    XCTAssertTrue(prompt.contains("Due at: 2026-08-10 23:59 EDT"), prompt)
+    XCTAssertFalse(prompt.contains("2026-08-11"))
   }
 
   func testDirectorPromptCapsRecentDeliveriesAndOmitsTheSectionWhenEmpty() {

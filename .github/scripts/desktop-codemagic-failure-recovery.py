@@ -26,6 +26,7 @@ LOG_RE = re.compile(
     r"^https://api\.codemagic\.io/builds/(?P<build_id>[0-9a-f]{24})/"
     r"(?:step/[0-9a-f]{24}|logs/[0-9]+)$"
 )
+LOG_TAIL_LINES = 200
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 DIAGNOSTIC_RE = re.compile(r"^(?:FAIL|ERROR|WARN):\s+.{1,600}$")
@@ -42,8 +43,13 @@ CREDENTIAL_RE = re.compile(
 )
 BEARER_RE = re.compile(r"(?i)(\bbearer\s+)\S+")
 URL_CREDENTIAL_RE = re.compile(
-    r"(?i)([?&](?:access_token|refresh_token|id_token|api_key|key|signature|x-goog-signature)=)[^&\s]+"
+    r"(?i)([?&#](?:access_token|refresh_token|id_token|api_key|key|signature|x-goog-signature)=)[^&#\s]+"
 )
+QUERY_ASSIGNMENT_RE = re.compile(
+    r"(?i)([?&#](?:[A-Za-z0-9_.%-]*(?:token|key|secret|sign|auth|credential|password|pass|code)[A-Za-z0-9_.%-]*)=)[^&#\s]+"
+)
+GITHUB_TOKEN_RE = re.compile(r"\b(?:github_pat_|gh[pousr]_)[A-Za-z0-9_]+\b")
+JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
 
 
 class RecoveryError(RuntimeError):
@@ -148,6 +154,19 @@ def failed_action(build: dict[str, Any]) -> dict[str, Any]:
     return failed[0]
 
 
+def sanitize_line(line: str) -> str:
+    line = CREDENTIAL_HEADER_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
+    line = AUTHORIZATION_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
+    line = ENV_ASSIGNMENT_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
+    line = CREDENTIAL_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
+    line = BEARER_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
+    line = URL_CREDENTIAL_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
+    line = QUERY_ASSIGNMENT_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
+    line = GITHUB_TOKEN_RE.sub("<redacted>", line)
+    line = JWT_RE.sub("<redacted>", line)
+    return line
+
+
 def sanitize_diagnostics(log: bytes) -> list[str]:
     text = log.decode("utf-8", errors="replace")
     diagnostics: list[str] = []
@@ -155,16 +174,20 @@ def sanitize_diagnostics(log: bytes) -> list[str]:
         line = ANSI_RE.sub("", raw_line).strip()
         if not DIAGNOSTIC_RE.fullmatch(line):
             continue
-        line = CREDENTIAL_HEADER_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
-        line = AUTHORIZATION_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
-        line = ENV_ASSIGNMENT_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
-        line = CREDENTIAL_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
-        line = BEARER_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
-        line = URL_CREDENTIAL_RE.sub(lambda match: f"{match.group(1)}<redacted>", line)
-        diagnostics.append(line[:600])
+        diagnostics.append(sanitize_line(line)[:600])
         if len(diagnostics) == 20:
             break
     return diagnostics
+
+
+def sanitize_log_tail(log: bytes, *, max_lines: int = LOG_TAIL_LINES) -> list[str]:
+    text = log.decode("utf-8", errors="replace")
+    tail = text.splitlines()[-max_lines:]
+    sanitized: list[str] = []
+    for raw_line in tail:
+        line = sanitize_line(ANSI_RE.sub("", raw_line))
+        sanitized.append(line[:2000])
+    return sanitized
 
 
 def load_profiles(path: Path) -> dict[str, dict[str, Any]]:
@@ -238,10 +261,16 @@ def build_capsule(
     match = LOG_RE.fullmatch(log_url)
     if match is None or match.group("build_id") != build_id:
         raise RecoveryError("failed-step log URL is missing or unsafe")
-    diagnostics = sanitize_diagnostics(request_bytes(log_url, token=token, opener=opener))
+    log_bytes = request_bytes(log_url, token=token, opener=opener)
+    diagnostics = sanitize_diagnostics(log_bytes)
+    log_tail = sanitize_log_tail(log_bytes)
 
     profile = profiles.get(step_name, {})
     failure_profile = profile.get("failure_profile", "unclassified")
+    if not isinstance(failure_profile, str) or not failure_profile:
+        failure_profile = "unclassified"
+    if failure_profile == "unclassified":
+        print("::warning::failure_profile unclassified", flush=True)
     locally_reproducible = profile.get("locally_reproducible") is True
     arguments = profile.get("rehearsal_arguments") if locally_reproducible else []
     if not isinstance(arguments, list) or not all(isinstance(value, str) for value in arguments):
@@ -261,6 +290,7 @@ def build_capsule(
         "locally_reproducible": locally_reproducible,
         "rehearsal_command": command,
         "diagnostics": diagnostics,
+        "log_tail": log_tail,
         "codemagic_url": f"https://codemagic.io/app/{APP_ID}/build/{build_id}",
     }
 
@@ -279,6 +309,11 @@ def markdown_summary(capsule: dict[str, Any]) -> str:
     if diagnostics:
         lines.extend(["", "### Credential-safe diagnostics", ""])
         lines.extend(f"- `{line}`" for line in diagnostics)
+    log_tail = capsule.get("log_tail") or []
+    if log_tail:
+        lines.extend(["", "### Failed-step log tail (last 200 lines)", "", "```"])
+        lines.extend(str(line).replace("```", "'''") for line in log_tail)
+        lines.append("```")
     command = capsule.get("rehearsal_command")
     if isinstance(command, str):
         lines.extend(
