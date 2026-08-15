@@ -72,7 +72,7 @@ async def send_daily_summary_notification() -> None:
 
 async def _get_users_for_daily_summary(
     timezones: List[str], target_hour: int, unifiedpush: bool
-) -> List[Tuple[str, List[str], Any]]:
+) -> List[Tuple[str, List[Any], Any]]:  # recipients: FCM tokens (str) OR UnifiedPushEndpoint
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
     chunk_results = await asyncio.gather(
         *[

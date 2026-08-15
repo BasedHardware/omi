@@ -170,7 +170,11 @@ def _send_messages(messages: List[messaging.Message]) -> Any:
             # index->token alignment in _collect_send_results holds; a non-permanent error is logged,
             # not treated as an invalid token.
             logger.error(f'FCM send_each batch failed ({len(batch)} messages): {e}')
-            responses.extend(SimpleNamespace(success=False, exception=e) for _ in batch)
+            # Mark these as a WHOLE-BATCH failure, not per-token verdicts. Reusing the batch exception ``e``
+            # (which may carry a permanent-looking code) made _collect_send_results invalidate EVERY token
+            # in the batch — a transient send_each outage would then delete every recipient's token (cubic
+            # PR 10887 notifications.py:173). Only individual BatchResponse errors may invalidate a token.
+            responses.extend(SimpleNamespace(success=False, exception=None, batch_failed=True) for _ in batch)
     return SimpleNamespace(responses=responses)
 
 
@@ -182,6 +186,10 @@ def _collect_send_results(response: Any, tokens: List[str]) -> Tuple[int, List[s
     for idx, result in enumerate(response.responses):
         if result.success:
             success_count += 1
+        elif getattr(result, 'batch_failed', False):
+            # Whole-batch send_each failure (already logged in _send_messages). Not a per-token verdict,
+            # so never invalidate the token — a transient outage must not delete every recipient.
+            continue
         elif result.exception:
             error_code = getattr(result.exception, 'code', None)
             if error_code in PERMANENT_FAILURE_CODES:

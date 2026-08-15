@@ -384,7 +384,7 @@ def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str
 
 def get_users_for_daily_summary(
     timezones: list[str], target_local_hour: int, unifiedpush: bool
-) -> List[Tuple[str, List[str], Any]]:
+) -> List[Tuple[str, List[Any], Any]]:  # recipients: FCM tokens (str) OR UnifiedPushEndpoint
     """
     Get users who should receive daily summary notifications.
 
@@ -408,13 +408,13 @@ def get_users_for_daily_summary(
     if not timezones:
         return []
 
-    users: List[Tuple[str, List[str], Any]] = []
+    users: List[Tuple[str, List[Any], Any]] = []
 
     # 'Where in' query only supports 30 or fewer items in list so we split in chunks
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
 
     for chunk in timezone_chunks:
-        chunk_users: List[Tuple[str, List[str], Any]] = []
+        chunk_users: List[Tuple[str, List[Any], Any]] = []
         try:
             # Query users in these timezones
             query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
