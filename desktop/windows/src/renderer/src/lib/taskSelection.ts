@@ -6,10 +6,10 @@
 // Semantics (standard list multi-select, matching the mac page):
 // - plain click        → select only that row (anchor moves there)
 // - ctrl/cmd click     → toggle that row, anchor moves there
-// - shift click        → contiguous range from the anchor to the row, REPLACING
-//                        the selection (anchor stays put, so shift-clicking
+// - shift click        → contiguous range from the anchor to the row, UNIONED
+//                        into the selection (rows outside the range stay
+//                        selected; the anchor stays put so shift-clicking
 //                        around keeps pivoting on the same anchor)
-// - ctrl+shift click   → range from the anchor UNIONED into the selection
 
 export type TaskSelection = {
   /** Selected local row ids. */
@@ -38,7 +38,7 @@ export function applySelectionClick(
 ): TaskSelection {
   if (mods.shift && current.anchor != null) {
     const range = rangeBetween(order, current.anchor, id)
-    const base = mods.ctrl ? new Set(current.selected) : new Set<number>()
+    const base = new Set(current.selected)
     for (const r of range) base.add(r)
     return { selected: base, anchor: current.anchor }
   }
@@ -57,7 +57,9 @@ export function toggleInSelection(current: TaskSelection, id: number): TaskSelec
 }
 
 export function selectAll(order: readonly number[]): TaskSelection {
-  return { selected: new Set(order), anchor: order.length > 0 ? order[0] : null }
+  // Anchor on the LAST rendered row, matching mac's selectAll (a follow-up
+  // shift-click then ranges from the bottom of the list).
+  return { selected: new Set(order), anchor: order.length > 0 ? order[order.length - 1] : null }
 }
 
 export function clearSelection(): TaskSelection {

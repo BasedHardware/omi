@@ -30,23 +30,22 @@ describe('applySelectionClick', () => {
     expect(s3.anchor).toBe(20)
   })
 
-  it('shift click selects the contiguous range from the anchor, replacing', () => {
+  it('shift click unions the contiguous range from the anchor into the selection', () => {
     const s1 = applySelectionClick(order, EMPTY_SELECTION, 20, { ctrl: false, shift: false })
     const s2 = applySelectionClick(order, s1, 40, { ctrl: false, shift: true })
     expect([...s2.selected].sort((a, b) => a - b)).toEqual([20, 30, 40])
     expect(s2.anchor).toBe(20)
-    // Pivot the other way off the same anchor: the old range is replaced.
+    // Pivot the other way off the same anchor: rows outside the new range stay selected.
     const s3 = applySelectionClick(order, s2, 10, { ctrl: false, shift: true })
-    expect([...s3.selected].sort((a, b) => a - b)).toEqual([10, 20])
+    expect([...s3.selected].sort((a, b) => a - b)).toEqual([10, 20, 30, 40])
     expect(s3.anchor).toBe(20)
   })
 
-  it('ctrl+shift click unions the range into the selection', () => {
-    const s1 = applySelectionClick(order, EMPTY_SELECTION, 10, { ctrl: false, shift: false })
-    const s2 = applySelectionClick(order, s1, 20, { ctrl: false, shift: true }) // 10-20
-    const withExtra = applySelectionClick(order, s2, 50, { ctrl: true, shift: false }) // +50, anchor 50
-    const s3 = applySelectionClick(order, withExtra, 40, { ctrl: true, shift: true }) // union 40-50
-    expect([...s3.selected].sort((a, b) => a - b)).toEqual([10, 20, 40, 50])
+  it('shift range never clears rows selected outside the range', () => {
+    const s1 = applySelectionClick(order, EMPTY_SELECTION, 50, { ctrl: true, shift: false }) // +50
+    const s2 = applySelectionClick(order, s1, 10, { ctrl: true, shift: false }) // +10, anchor 10
+    const s3 = applySelectionClick(order, s2, 30, { ctrl: false, shift: true }) // range 10-30
+    expect([...s3.selected].sort((a, b) => a - b)).toEqual([10, 20, 30, 50])
   })
 
   it('shift click with no anchor behaves like a plain click', () => {
@@ -55,10 +54,11 @@ describe('applySelectionClick', () => {
     expect(s.anchor).toBe(30)
   })
 
-  it('a range to a row missing from the order still selects the clicked row', () => {
+  it('a shift range to a row missing from the order resolves to no new rows', () => {
     const s1 = applySelectionClick(order, EMPTY_SELECTION, 20, { ctrl: false, shift: false })
     const s2 = applySelectionClick(order, s1, 999, { ctrl: false, shift: true })
-    expect([...s2.selected]).toEqual([])
+    // The union base keeps the anchor's own selection; the empty range adds nothing.
+    expect([...s2.selected]).toEqual([20])
   })
 })
 
@@ -69,10 +69,10 @@ describe('helpers', () => {
     expect([...toggleInSelection(s, 30).selected]).toEqual([])
   })
 
-  it('selectAll selects the whole order with the first row as anchor', () => {
+  it('selectAll selects the whole order and anchors on the LAST row (mac)', () => {
     const s = selectAll(order)
     expect(new Set(s.selected)).toEqual(new Set(order))
-    expect(s.anchor).toBe(10)
+    expect(s.anchor).toBe(50)
     expect(selectAll([]).anchor).toBeNull()
   })
 
@@ -83,10 +83,13 @@ describe('helpers', () => {
   })
 
   it('pruneSelection drops rows that left the rendered order', () => {
-    const s1 = selectAll(order)
+    const s1 = selectAll(order) // anchor 50 (last row)
     const pruned = pruneSelection([10, 30], s1)
     expect(new Set(pruned.selected)).toEqual(new Set([10, 30]))
-    expect(pruned.anchor).toBe(10)
+    // The anchor (50) left the order too, so it clears.
+    expect(pruned.anchor).toBeNull()
+    const anchorKept = pruneSelection([10, 30], { selected: new Set([10, 30]), anchor: 10 })
+    expect(anchorKept.anchor).toBe(10)
     const anchorGone = pruneSelection([30], { selected: new Set([30]), anchor: 10 })
     expect(anchorGone.anchor).toBeNull()
   })

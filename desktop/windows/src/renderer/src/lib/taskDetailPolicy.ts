@@ -103,10 +103,29 @@ export function isPriorityEditable(task: ActionItemRecord): boolean {
   return !task.completed
 }
 
-/** Context blocks (mac's Context section): captured summary and activity. */
+/** Context blocks (mac's Context section): captured summary and activity, with
+ *  the metadata JSON as a fallback source — mac reads context_summary,
+ *  current_activity, and reasoning out of task metadata when the columns are
+ *  empty, and screen-extracted tasks often carry context only there. */
 export function contextBlocks(task: ActionItemRecord): { label: string; text: string }[] {
+  let meta: Record<string, unknown> = {}
+  if (task.metadataJson) {
+    try {
+      const parsed: unknown = JSON.parse(task.metadataJson)
+      if (parsed && typeof parsed === 'object') meta = parsed as Record<string, unknown>
+    } catch {
+      // Malformed metadata renders no fallback blocks rather than crashing.
+    }
+  }
+  const metaText = (key: string): string | null =>
+    typeof meta[key] === 'string' && (meta[key] as string).trim() ? (meta[key] as string) : null
+
   const blocks: { label: string; text: string }[] = []
-  if (task.contextSummary) blocks.push({ label: 'Summary', text: task.contextSummary })
-  if (task.currentActivity) blocks.push({ label: 'Activity', text: task.currentActivity })
+  const summary = task.contextSummary || metaText('context_summary')
+  if (summary) blocks.push({ label: 'Summary', text: summary })
+  const activity = task.currentActivity || metaText('current_activity')
+  if (activity) blocks.push({ label: 'Activity', text: activity })
+  const reasoning = metaText('reasoning')
+  if (reasoning) blocks.push({ label: 'Reasoning', text: reasoning })
   return blocks
 }

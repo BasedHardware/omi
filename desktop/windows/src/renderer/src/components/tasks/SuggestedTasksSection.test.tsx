@@ -34,7 +34,7 @@ afterEach(() => {
 })
 
 describe('SuggestedTasksSection', () => {
-  it('renders nothing while empty and shows the collapsed rail once loaded', async () => {
+  it('shows the collapsed rail once a candidate loads (count visible, cards hidden)', async () => {
     loadMock.mockResolvedValue({ candidates: [card()], accountGeneration: 1 })
     render(<SuggestedTasksSection onAccepted={() => {}} />)
     await waitFor(() => expect(screen.queryByTestId('suggested-section')).not.toBeNull())
@@ -60,8 +60,14 @@ describe('SuggestedTasksSection', () => {
     expect(screen.queryByTestId('suggested-section')).toBeNull()
   })
 
-  it('accept removes the card optimistically and notifies the page', async () => {
-    loadMock.mockResolvedValue({ candidates: [card()], accountGeneration: 1 })
+  it('accept removes the card, notifies the page, and reloads the rail', async () => {
+    loadMock
+      .mockResolvedValueOnce({ candidates: [card()], accountGeneration: 1 })
+      // Post-resolve reload: the server has a newly eligible candidate.
+      .mockResolvedValueOnce({
+        candidates: [card({ id: 'c-2', title: 'Next suggestion' })],
+        accountGeneration: 1
+      })
     acceptMock.mockResolvedValue({ taskId: 't-1' })
     const onAccepted = vi.fn()
     render(<SuggestedTasksSection onAccepted={onAccepted} />)
@@ -72,9 +78,12 @@ describe('SuggestedTasksSection', () => {
     expect(screen.queryByText('Reply to the vendor thread')).toBeNull()
     await waitFor(() => expect(onAccepted).toHaveBeenCalled())
     expect(acceptMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'c-1' }))
+    // The rail reloaded and surfaced the next candidate.
+    await waitFor(() => expect(screen.queryByText('Next suggestion')).not.toBeNull())
+    expect(loadMock).toHaveBeenCalledTimes(2)
   })
 
-  it('restores the card with the sync-error copy when accept fails', async () => {
+  it('restores the card via reload with the sync-error copy when accept fails', async () => {
     loadMock.mockResolvedValue({ candidates: [card()], accountGeneration: 1 })
     acceptMock.mockRejectedValue(new Error('down'))
     render(<SuggestedTasksSection onAccepted={() => {}} />)
@@ -82,14 +91,18 @@ describe('SuggestedTasksSection', () => {
     fireEvent.click(screen.getByTestId('suggested-toggle'))
 
     fireEvent.click(screen.getByTestId('suggested-accept-c-1'))
+    // The post-failure reload restores the still-pending card in server order.
     await waitFor(() => expect(screen.queryByText('Reply to the vendor thread')).not.toBeNull())
     expect(screen.getByTestId('suggested-error').textContent).toBe(
       'That Suggested action did not sync. Try again.'
     )
+    expect(loadMock).toHaveBeenCalledTimes(2)
   })
 
   it('reject removes the card without notifying the page', async () => {
-    loadMock.mockResolvedValue({ candidates: [card()], accountGeneration: 1 })
+    loadMock
+      .mockResolvedValueOnce({ candidates: [card()], accountGeneration: 1 })
+      .mockResolvedValueOnce({ candidates: [], accountGeneration: 1 })
     rejectMock.mockResolvedValue(undefined)
     const onAccepted = vi.fn()
     render(<SuggestedTasksSection onAccepted={onAccepted} />)

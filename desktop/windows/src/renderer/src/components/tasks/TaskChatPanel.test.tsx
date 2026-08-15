@@ -112,4 +112,11 @@ describe('TaskChatPanel', () => {
     fireEvent.click(screen.getByTestId('task-chat-close'))
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('Escape in the input closes the panel (the page hierarchy skips typing targets)', () => {
+    const onClose = vi.fn()
+    render(<TaskChatPanel task={task()} onClose={onClose} />)
+    fireEvent.keyDown(screen.getByTestId('task-chat-input'), { key: 'Escape' })
+    expect(onClose).toHaveBeenCalled()
+  })
 })

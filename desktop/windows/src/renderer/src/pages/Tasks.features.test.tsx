@@ -332,19 +332,33 @@ describe('Tasks — multi-select and bulk operations', () => {
     await enterSelectMode()
 
     fireEvent.click(rowFor('first'))
+    fireEvent.click(rowFor('third'), { ctrlKey: true })
     fireEvent.click(screen.getByTestId('tasks-bulk-reschedule'))
     fireEvent.change(screen.getByTestId('tasks-bulk-reschedule-date'), {
       target: { value: '2026-09-01' }
     })
 
-    await waitFor(() => expect(tasks.tasksUpdate).toHaveBeenCalledTimes(1))
-    const arg = tasks.tasksUpdate.mock.calls[0][0] as {
-      backendId: string
-      fields: { dueAt: number }
+    await waitFor(() => expect(tasks.tasksUpdate).toHaveBeenCalledTimes(2))
+    const args = tasks.tasksUpdate.mock.calls.map(
+      (c) => c[0] as { backendId: string; fields: { dueAt: number } }
+    )
+    expect(new Set(args.map((a) => a.backendId))).toEqual(new Set(['b1', 'b3']))
+    for (const arg of args) {
+      const due = new Date(arg.fields.dueAt)
+      expect([due.getFullYear(), due.getMonth(), due.getDate()]).toEqual([2026, 8, 1])
     }
-    expect(arg.backendId).toBe('b1')
-    const due = new Date(arg.fields.dueAt)
-    expect([due.getFullYear(), due.getMonth(), due.getDate()]).toEqual([2026, 8, 1])
+  })
+
+  it('clicking the task description selects the row in select mode', async () => {
+    incomplete = threeRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+    await enterSelectMode()
+
+    fireEvent.click(screen.getByText('second'))
+    expect(screen.getByTestId('tasks-selected-count').textContent).toBe('1 selected')
+    // And the description click did not open the inline editor.
+    expect(screen.queryByDisplayValue('second')).toBeNull()
   })
 
   it('Ctrl+A selects every rendered row in select mode', async () => {

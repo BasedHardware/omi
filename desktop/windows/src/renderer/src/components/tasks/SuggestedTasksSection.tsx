@@ -9,8 +9,11 @@ import {
 
 // The Suggested rail (mac parity: SuggestedTasksSection). Renders above the task
 // buckets, collapsed by default, only when there are pending candidates. Accept
-// and Reject are optimistic: the card leaves immediately and is restored at its
-// original index if the backend call fails, with mac's exact sync-error copy.
+// and Reject are optimistic: the card leaves immediately, and afterwards the
+// rail reloads from the server either way — on failure that restores the card in
+// the server's own order (with mac's exact sync-error copy) and on success it
+// surfaces any newly eligible candidates beyond the earlier page, mirroring
+// mac's data-change-driven reload.
 
 const EXPANDED_KEY = 'omi.suggestedExpanded.v1'
 
@@ -37,23 +40,30 @@ export function SuggestedTasksSection({
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set())
   const alive = useRef(true)
 
+  const reload = useCallback(
+    (): Promise<void> =>
+      loadSuggestedCandidates()
+        .then((result) => {
+          if (!alive.current) return
+          setCandidates(result.candidates)
+        })
+        .catch(() => {
+          if (!alive.current) return
+          setError('Suggested items could not be refreshed.')
+        })
+        .finally(() => {
+          if (alive.current) setLoaded(true)
+        }),
+    []
+  )
+
   useEffect(() => {
     alive.current = true
-    void loadSuggestedCandidates()
-      .then((result) => {
-        if (!alive.current) return
-        setCandidates(result.candidates)
-        setLoaded(true)
-      })
-      .catch(() => {
-        if (!alive.current) return
-        setError('Suggested items could not be refreshed.')
-        setLoaded(true)
-      })
+    void reload()
     return () => {
       alive.current = false
     }
-  }, [])
+  }, [reload])
 
   const setExpandedPersisted = (value: boolean): void => {
     setExpanded(value)
@@ -72,15 +82,16 @@ export function SuggestedTasksSection({
       return next
     })
 
-  // Optimistic remove with restore-at-index on failure (mac's doNow/dismiss shape).
+  // Optimistic remove, then reload from the server either way: a failure
+  // restores the card in the server's own order, and a success pulls in any
+  // newly eligible candidates (mac's data-change-driven reload).
   const resolve = useCallback(
     async (
       candidate: SuggestedCandidate,
       op: (c: SuggestedCandidate) => Promise<unknown>,
       onSuccess?: () => void
     ): Promise<void> => {
-      const index = candidates.findIndex((c) => c.id === candidate.id)
-      if (index === -1) return
+      if (!candidates.some((c) => c.id === candidate.id)) return
       markBusy(candidate.id, true)
       setError(null)
       setCandidates((list) => list.filter((c) => c.id !== candidate.id))
@@ -88,17 +99,13 @@ export function SuggestedTasksSection({
         await op(candidate)
         onSuccess?.()
       } catch {
-        setCandidates((list) => {
-          const restored = [...list]
-          restored.splice(Math.min(index, restored.length), 0, candidate)
-          return restored
-        })
         setError('That Suggested action did not sync. Try again.')
       } finally {
         markBusy(candidate.id, false)
+        await reload()
       }
     },
-    [candidates]
+    [candidates, reload]
   )
 
   if (!loaded || (candidates.length === 0 && !error)) return null

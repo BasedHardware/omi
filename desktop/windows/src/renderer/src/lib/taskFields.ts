@@ -13,15 +13,6 @@ export function normalizePriority(raw: string | null | undefined): TaskPriority 
   return v === 'high' || v === 'medium' || v === 'low' ? v : null
 }
 
-/** Sort rank: high first, unset last. */
-export function priorityRank(raw: string | null | undefined): number {
-  const p = normalizePriority(raw)
-  if (p === 'high') return 0
-  if (p === 'medium') return 1
-  if (p === 'low') return 2
-  return 3
-}
-
 export const PRIORITY_LABEL: Record<TaskPriority, string> = {
   high: 'High',
   medium: 'Medium',

@@ -151,12 +151,17 @@ export async function sendTaskChatMessage(
   saveTaskChat(task.backendId, withUser)
 
   const localContext = await gatherContext(text).catch(() => '')
-  const reply = await callLLM(buildTaskChatPrompt(task, history, text, localContext))
+  const reply = (await callLLM(buildTaskChatPrompt(task, history, text, localContext))).trim()
+  if (!reply) {
+    // A blank completion renders as an empty bubble with no retry path — treat
+    // it as a failed send so the panel keeps the user's turn and offers retry.
+    throw new Error('empty model reply')
+  }
 
-  const withReply: TaskChatMessage[] = [
-    ...withUser,
-    { role: 'assistant', content: reply.trim(), at: Date.now() }
-  ]
+  const assistantTurn: TaskChatMessage = { role: 'assistant', content: reply, at: Date.now() }
+  // Return the same bounded transcript that gets persisted, so a long session
+  // does not grow the panel's state past the storage cap.
+  const withReply: TaskChatMessage[] = [...withUser, assistantTurn].slice(-TASK_CHAT_MAX_MESSAGES)
   saveTaskChat(task.backendId, withReply)
   return withReply
 }

@@ -27,6 +27,7 @@ import {
   applySelectionClick,
   clearSelection,
   selectAll,
+  toggleInSelection,
   type TaskSelection
 } from '../lib/taskSelection'
 import {
@@ -35,7 +36,7 @@ import {
   bulkSetCompleted,
   describeBulkResult
 } from '../lib/taskBulkOps'
-import { PRIORITY_TINT, normalizePriority, todayDueAtMs } from '../lib/taskFields'
+import { PRIORITY_TINT, normalizePriority, quickDueChips, todayDueAtMs } from '../lib/taskFields'
 import { toast } from '../lib/toast'
 import type { ActionItemRecord } from '../../../shared/types'
 import type { Conversation as CloudConversation } from '../lib/omiApi.generated'
@@ -453,7 +454,14 @@ export function Tasks(): React.JSX.Element {
       toast(describeBulkResult(verb, result), {
         tone: result.failures.length > 0 ? 'error' : 'success'
       })
-      if (result.failures.length === 0) exitSelectMode()
+      if (result.failures.length === 0) {
+        exitSelectMode()
+      } else {
+        // Keep exactly the failed rows selected so the user can retry them
+        // (mac: remaining selected tasks stay selected after a partial failure).
+        const failedIds = new Set(result.failures.map((f) => f.task.id))
+        setSelection({ selected: failedIds, anchor: null })
+      }
     } finally {
       setBulkBusy(false)
     }
@@ -614,7 +622,7 @@ export function Tasks(): React.JSX.Element {
         e.preventDefault()
         if (s.selectMode) {
           // In select mode Space toggles selection membership (mac: toggleFocused).
-          setSelection((sel) => applySelectionClick([], sel, task.id, { ctrl: true, shift: false }))
+          setSelection((sel) => toggleInSelection(sel, task.id))
           return
         }
         void s.toggleItem(task)
@@ -734,14 +742,13 @@ export function Tasks(): React.JSX.Element {
               onChange={(e) => setEditDraft(e.target.value)}
               onBlur={() => commitEdit(t)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') commitEdit(t)
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) commitEdit(t)
                 else if (e.key === 'Escape') setEditingId(null)
               }}
               className="w-full border-0 border-b border-white/25 bg-transparent pb-0.5 text-sm text-white focus:border-white/60 focus:outline-none focus:ring-0"
             />
           ) : (
             <button
-              data-row-control
               onClick={() => {
                 if (selectMode) return
                 if (isBusy) return
@@ -764,7 +771,23 @@ export function Tasks(): React.JSX.Element {
 
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-white/45">
             {dueEditingId === t.id ? (
-              <span className="inline-flex items-center gap-1">
+              <span className="inline-flex flex-wrap items-center gap-1">
+                {quickDueChips().map((chip) => (
+                  <button
+                    key={chip.key}
+                    data-row-control
+                    data-testid={`task-due-chip-${chip.key}-${t.id}`}
+                    onMouseDown={(e) => {
+                      // mousedown so the chip wins over the date input's blur.
+                      e.preventDefault()
+                      void updateItem(t, { dueAt: chip.ms })
+                      setDueEditingId(null)
+                    }}
+                    className="rounded-md border border-white/15 px-1.5 py-0.5 text-[11px] text-white/60 hover:bg-white/5 hover:text-white/85"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
                 <input
                   type="date"
                   autoFocus
@@ -865,7 +888,7 @@ export function Tasks(): React.JSX.Element {
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
             e.preventDefault()
             void saveNew()
           } else if (e.key === 'Escape') {

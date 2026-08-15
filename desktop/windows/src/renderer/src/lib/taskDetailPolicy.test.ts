@@ -151,4 +151,32 @@ describe('contextBlocks', () => {
       { label: 'Activity', text: 'in Slack' }
     ])
   })
+
+  it('falls back to metadata context fields when the columns are empty (mac policy)', () => {
+    const blocks = contextBlocks(
+      rec({
+        metadataJson: JSON.stringify({
+          context_summary: 'from metadata',
+          current_activity: 'metadata activity',
+          reasoning: 'because the screenshot showed a request'
+        })
+      })
+    )
+    expect(blocks).toEqual([
+      { label: 'Summary', text: 'from metadata' },
+      { label: 'Activity', text: 'metadata activity' },
+      { label: 'Reasoning', text: 'because the screenshot showed a request' }
+    ])
+  })
+
+  it('prefers the columns over metadata and survives malformed metadata', () => {
+    const blocks = contextBlocks(
+      rec({
+        contextSummary: 'column summary',
+        metadataJson: JSON.stringify({ context_summary: 'metadata summary' })
+      })
+    )
+    expect(blocks[0]).toEqual({ label: 'Summary', text: 'column summary' })
+    expect(contextBlocks(rec({ metadataJson: '{not json' }))).toEqual([])
+  })
 })

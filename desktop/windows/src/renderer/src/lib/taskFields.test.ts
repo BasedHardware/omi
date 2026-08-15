@@ -5,7 +5,6 @@ import {
   dueTodayMs,
   dueTomorrowMs,
   normalizePriority,
-  priorityRank,
   quickDueChips,
   todayDueAtMs
 } from './taskFields'
@@ -20,12 +19,6 @@ describe('priority model', () => {
     expect(normalizePriority('')).toBeNull()
     expect(normalizePriority(null)).toBeNull()
     expect(normalizePriority(undefined)).toBeNull()
-  })
-
-  it('ranks high before medium before low before unset', () => {
-    const ranks = ['high', 'medium', 'low', null].map(priorityRank)
-    expect(ranks).toEqual([0, 1, 2, 3])
-    expect([...ranks].sort((a, b) => a - b)).toEqual(ranks)
   })
 
   it('declares the detail-panel chip order low to high, matching the mac panel', () => {

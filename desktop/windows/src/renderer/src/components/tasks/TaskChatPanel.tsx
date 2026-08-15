@@ -155,9 +155,17 @@ export function TaskChatPanel({ task, onClose }: TaskChatPanelProps): React.JSX.
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              // A composing (IME) Enter confirms the composition, not the send.
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault()
                 void send(input, messages)
+                return
+              }
+              // The page's escape hierarchy skips typing targets, so the panel
+              // handles its own close from the focused input.
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                onClose()
               }
             }}
             rows={2}

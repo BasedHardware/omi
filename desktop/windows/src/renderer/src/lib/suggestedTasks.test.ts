@@ -44,8 +44,7 @@ describe('projectCandidate', () => {
     expect(projectCandidate(wire() as never)).toEqual({
       id: 'c-1',
       title: 'Follow up with the vendor',
-      detail: null,
-      accountGeneration: 0
+      detail: null
     })
   })
 
@@ -142,11 +141,17 @@ describe('accept / reject', () => {
       { headers: { 'X-Account-Generation': 3 } }
     )
     expect(result.taskId).toBe('t-7')
-    // Attribution rides behind with the mac idempotency key shape.
+    // Attribution rides behind with the generated FeedbackCreate wire shape and
+    // both required headers.
     expect(post).toHaveBeenCalledWith(
       '/v1/task-intelligence/feedback',
-      { candidate_id: 'c-1', action: 'accept_candidate' },
-      { headers: { 'Idempotency-Key': 'suggested:c-1:accept_candidate' } }
+      { action: 'accept_candidate', subject_id: 'c-1', subject_kind: 'candidate' },
+      {
+        headers: {
+          'Idempotency-Key': 'suggested:c-1:accept_candidate',
+          'X-Account-Generation': 3
+        }
+      }
     )
   })
 

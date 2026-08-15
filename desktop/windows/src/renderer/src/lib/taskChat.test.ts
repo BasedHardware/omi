@@ -167,6 +167,26 @@ describe('sendTaskChatMessage', () => {
     expect(stored[0]).toMatchObject({ role: 'user', content: 'help me' })
   })
 
+  it('treats an empty model reply as a failed send (retry stays available)', async () => {
+    const callLLM = vi.fn().mockResolvedValue('   ')
+    const gatherContext = vi.fn().mockResolvedValue('')
+    await expect(
+      sendTaskChatMessage(task(), [], 'help me', { callLLM, gatherContext })
+    ).rejects.toThrow('empty model reply')
+    // The user's turn stays persisted, exactly like a transport failure.
+    expect(loadTaskChat('b-1')).toHaveLength(1)
+  })
+
+  it('returns the bounded transcript once the cap is reached', async () => {
+    const callLLM = vi.fn().mockResolvedValue('ok')
+    const gatherContext = vi.fn().mockResolvedValue('')
+    const long = Array.from({ length: TASK_CHAT_MAX_MESSAGES }, (_, i) => msg('user', `m${i}`))
+    const out = await sendTaskChatMessage(task(), long, 'newest', { callLLM, gatherContext })
+    expect(out).toHaveLength(TASK_CHAT_MAX_MESSAGES)
+    expect(out[out.length - 1]).toMatchObject({ role: 'assistant', content: 'ok' })
+    expect(out[out.length - 2]).toMatchObject({ role: 'user', content: 'newest' })
+  })
+
   it('survives a context-gather failure (degrades to no context)', async () => {
     const callLLM = vi.fn().mockResolvedValue('ok')
     const gatherContext = vi.fn().mockRejectedValue(new Error('kg down'))

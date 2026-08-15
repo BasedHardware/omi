@@ -18,10 +18,15 @@ type CandidateWire = CandidateRecord & {
   created_at?: string
 }
 
-export type SuggestedCandidate = {
+export type ProjectedCandidate = {
   id: string
   title: string
   detail: string | null
+}
+
+export type SuggestedCandidate = ProjectedCandidate & {
+  /** The control's account generation, stamped at load time and echoed on
+   *  accept/reject and feedback headers. */
   accountGeneration: number
 }
 
@@ -83,7 +88,7 @@ export function isSuppressed(id: string, now: number = Date.now()): boolean {
 /** Mac's project(_:) rule: only pending, create-task candidates with a non-empty
  *  description become cards. Updates/completions/workstream proposals stay out of
  *  the Suggested rail. */
-export function projectCandidate(record: CandidateWire): SuggestedCandidate | null {
+export function projectCandidate(record: CandidateWire): ProjectedCandidate | null {
   const id = record.candidate_id
   if (!id) return null
   if (record.status != null && record.status !== 'pending') return null
@@ -96,8 +101,7 @@ export function projectCandidate(record: CandidateWire): SuggestedCandidate | nu
   return {
     id,
     title,
-    detail: typeof detailRaw === 'string' && detailRaw.trim() ? detailRaw.trim() : null,
-    accountGeneration: 0
+    detail: typeof detailRaw === 'string' && detailRaw.trim() ? detailRaw.trim() : null
   }
 }
 
@@ -147,12 +151,24 @@ export async function loadSuggestedCandidates(
   return { candidates: projected, accountGeneration }
 }
 
-/** Fire-and-forget attribution (mac sends the same idempotency key shape). */
-function sendFeedback(post: typeof omiApi.post, candidateId: string, action: string): void {
+/** Fire-and-forget attribution. The wire shape is the generated FeedbackCreate
+ *  (action + subject_id + subject_kind), and the endpoint requires both the
+ *  idempotency key (mac's exact shape) and the account generation header. */
+function sendFeedback(
+  post: typeof omiApi.post,
+  candidateId: string,
+  action: 'accept_candidate' | 'dismiss',
+  accountGeneration: number
+): void {
   void post(
     '/v1/task-intelligence/feedback',
-    { candidate_id: candidateId, action },
-    { headers: { 'Idempotency-Key': `suggested:${candidateId}:${action}` } }
+    { action, subject_id: candidateId, subject_kind: 'candidate' },
+    {
+      headers: {
+        'Idempotency-Key': `suggested:${candidateId}:${action}`,
+        'X-Account-Generation': accountGeneration
+      }
+    }
   ).catch(() => {
     // Attribution is best-effort in this first Windows cut; mac queues failures
     // in a durable outbox — tracked as a follow-up.
@@ -169,7 +185,7 @@ export async function acceptSuggestedCandidate(
     {},
     { headers: { 'X-Account-Generation': candidate.accountGeneration } }
   )
-  sendFeedback(post, candidate.id, 'accept_candidate')
+  sendFeedback(post, candidate.id, 'accept_candidate', candidate.accountGeneration)
   const receipt = res.data as { task_id?: string | null } | null
   return { taskId: receipt?.task_id ?? null }
 }
@@ -187,5 +203,5 @@ export async function rejectSuggestedCandidate(
   )
   // Mac persists the 30-day suppression once the reject sticks.
   suppressCandidate(candidate.id, DISMISS_SUPPRESSION_MS, now())
-  sendFeedback(post, candidate.id, 'dismiss')
+  sendFeedback(post, candidate.id, 'dismiss', candidate.accountGeneration)
 }
