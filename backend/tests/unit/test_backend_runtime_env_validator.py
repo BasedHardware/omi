@@ -115,6 +115,15 @@ def with_listen_finalization_orphan_env(payload: str) -> str:
     )
 
 
+def with_finalization_effect_plan_mode(payload: str) -> str:
+    """Keep offline finalization runtime fixtures on the safe rollout default."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE", "value": "standby"},',
+    )
+
+
 def with_parity_pack_env(payload: str) -> str:
     """Keep offline dev Cloud Run states aligned with replay-capture bindings."""
     return payload.replace(
@@ -138,9 +147,11 @@ GOOGLE_OAUTH_SECRETS = '''\
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
         with_backend_pusher_env(
-            with_parity_pack_env(
-                with_listen_finalization_orphan_env(
-                    with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+            with_finalization_effect_plan_mode(
+                with_parity_pack_env(
+                    with_listen_finalization_orphan_env(
+                        with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+                    )
                 )
             )
         )

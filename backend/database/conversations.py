@@ -457,7 +457,15 @@ def persist_processing_result_with_lifecycle(
             and tuple(existing.get(field) for field in _FINALIZATION_IDENTITY_FIELDS) != expected_finalization_identity
         ):
             return False
-        _stamp_finalization_incarnation(write_data, existing)
+        if expected_finalization_identity is None or expected_finalization_identity[0] is not None:
+            # A persist fenced against an explicit identity must not mutate the
+            # identity it was fenced against. Rows that predate
+            # finalization_incarnation_id pass a None incarnation here; minting
+            # one mid-finalization would make the caller's later identity
+            # fences (derived-effect checkpoint, effect boundaries) fence a
+            # healthy run. Such legacy rows gain their incarnation on the next
+            # unfenced write instead.
+            _stamp_finalization_incarnation(write_data, existing)
 
         # Generated processing content never owns user-managed fields.
         # A null existing value means "never user-set" (stub docs dump None

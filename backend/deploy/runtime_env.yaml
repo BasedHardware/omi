@@ -67,6 +67,9 @@ environments:
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
             category: rollout
@@ -235,6 +238,9 @@ environments:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
             category: service_discovery
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -424,6 +430,9 @@ environments:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
               category: rollout
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
@@ -563,6 +572,9 @@ environments:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
               category: rollout
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
@@ -699,6 +711,9 @@ environments:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
               category: rollout
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'on'
@@ -768,6 +783,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -1026,6 +1044,9 @@ environments:
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
             category: rollout
@@ -1151,6 +1172,12 @@ environments:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
+      pusher:
+        values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
+        env:
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
       parakeet:
         env:
           PARAKEET_STREAM_CAPACITY:
@@ -1312,6 +1339,9 @@ environments:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
               category: rollout
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'off'
@@ -1468,6 +1498,9 @@ environments:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
               category: rollout
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'off'
@@ -1605,6 +1638,9 @@ environments:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
               category: rollout
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
               value: 'off'
@@ -1675,6 +1711,9 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout

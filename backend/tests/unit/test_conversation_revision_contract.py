@@ -470,6 +470,39 @@ def test_processing_result_preserves_matching_finalization_identity(monkeypatch)
     assert ref.set_calls[0][0]['finalization_incarnation_id'] == identity[0]
 
 
+def test_processing_result_under_legacy_identity_fence_does_not_mint_an_incarnation(monkeypatch):
+    """A persist fenced against a legacy (None) incarnation must not mint one.
+
+    Rows created before finalization_incarnation_id existed are finalized
+    against the identity (None, job, revision). Minting an incarnation inside
+    that fenced write would make the caller's later identity fences (the
+    derived-effect checkpoint and the v2 effect boundaries) fence a healthy
+    finalization, permanently retrying it.
+    """
+    identity = (None, 'job-1', 1)
+    ref = _ConversationRef(
+        _Snapshot(
+            {
+                'id': 'conversation-1',
+                'finalization_job_id': 'job-1',
+                'finalization_revision': 1,
+                'data_protection_level': 'standard',
+            }
+        )
+    )
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+
+    persisted = conversations_db.persist_processing_result_with_lifecycle(
+        'user-1',
+        {'id': 'conversation-1', 'status': 'completed', 'data_protection_level': 'standard'},
+        expected_finalization_identity=identity,
+    )
+
+    assert persisted is True
+    assert 'finalization_incarnation_id' not in ref.set_calls[0][0]
+
+
 def test_create_if_absent_never_persists_firestore_revision_metadata(monkeypatch):
     ref = _ConversationRef(_Snapshot(None, exists=False))
     monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))

@@ -1419,6 +1419,19 @@ def process_conversation(
         return conversation
 
     def _emit_derived_effects() -> None:
+        def run_or_submit(function: Callable[..., None], *args: Any) -> None:
+            # The durable finalizer invokes this bundle on the postprocess
+            # executor only after transactionally claiming ownership, so each
+            # derived effect must run to completion here and surface its
+            # failure to the finalizer for retry instead of hiding it in an
+            # unobserved future. Legacy inline callers keep the background
+            # dispatch so no effect blocks or performs network calls on the
+            # calling thread.
+            if defer_derived_effects:
+                function(*args)
+            else:
+                submit_with_context(postprocess_executor, function, *args)
+
         if (
             _calendar_auto_link_enabled()
             and not discarded
@@ -1508,16 +1521,18 @@ def process_conversation(
                 }
                 conversations_db.update_conversation(uid, conversation.id, app_updates)
             if not is_reprocess and not defer_required_enrichment:
-                submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
+                run_or_submit(save_structured_vector, uid, conversation)
                 if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
-                    submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
+                    run_or_submit(save_transcript_chunk_vectors, uid, conversation)
             if not defer_memory_extraction:
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
-            submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
-            submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
+            # The durable bundle waits on the action-item task sync so a
+            # provider failure stays retryable instead of vanishing.
+            run_or_submit(_save_action_items, uid, conversation, defer_derived_effects)
+            run_or_submit(_update_goal_progress, uid, conversation)
 
         if not is_reprocess and conversation.private_cloud_sync_enabled:
             try:
@@ -1557,7 +1572,7 @@ def process_conversation(
             def _run_webhook():
                 asyncio.run(conversation_created_webhook(uid, conversation))
 
-            submit_with_context(postprocess_executor, _run_webhook)
+            run_or_submit(_run_webhook)
 
     if defer_derived_effects:
         if derived_effects_observer is not None:
