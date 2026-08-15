@@ -134,6 +134,24 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'TYPESENSE_API_KEY=TYPESENSE_API_KEY:latest' in memory_secrets
 
 
+def test_render_dev_emits_x_connector_sync_job_outputs(capsys, monkeypatch):
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-dev-subnet-1')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
+    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'x-connector-sync-job'])
+
+    assert _MODULE['main']() == 0
+    output = capsys.readouterr().out
+    assert 'X_OAUTH_CLIENT_ID=x-client-id' in output
+    assert 'X_OAUTH_REDIRECT_URI=https://api.example/v1/x/callback' in output
+    assert 'RAPID_API_HOST=twitter-api.example' in output
+    assert 'X_OAUTH_CLIENT_SECRET=X_OAUTH_CLIENT_SECRET:latest' in output
+    assert 'RAPID_API_KEY=RAPID_API_KEY:latest' in output
+    assert 'notifications_job_env_vars<<' not in output
+
+
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
     serialized = json.dumps(_MANIFEST['environments']['dev'], sort_keys=True)
     assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
