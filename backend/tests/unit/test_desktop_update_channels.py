@@ -622,8 +622,18 @@ class TestPointerRepointRules:
 
 
 class TestBetaBreakglass:
-    def _stored(self, build: int, *, qualified: bool = True):
+    def _stored(self, build: int, *, qualified: bool = True, qualification_tier: str | None = None):
         tag = f"v0.12.{build - 12000}+{build}-macos"
+        tier = qualification_tier if qualification_tier is not None else ("T2" if qualified else "emergency")
+        passed = qualified if qualification_tier is None else (tier == "T2")
+        if tier == "signed-smoke":
+            evidence = "desktop-smoke-result-beta.json"
+            passed = False
+        elif tier == "emergency":
+            evidence = "desktop-smoke-result.json"
+            passed = False
+        else:
+            evidence = "qualification-evidence-" + tag + ".json"
         return normalize_release_manifest(
             _manifest(
                 release_id=tag,
@@ -631,11 +641,9 @@ class TestBetaBreakglass:
                 build_number=build,
                 zip_url=f"https://github.com/BasedHardware/omi/releases/download/{tag}/Omi.zip",
                 dmg_url=f"https://github.com/BasedHardware/omi/releases/download/{tag}/omi.dmg",
-                qualification_tier="T2" if qualified else "emergency",
-                qualification_passed=qualified,
-                qualification_evidence_asset=(
-                    "qualification-evidence-" + tag + ".json" if qualified else "desktop-smoke-result.json"
-                ),
+                qualification_tier=tier,
+                qualification_passed=passed,
+                qualification_evidence_asset=evidence,
                 compatibility_contract={
                     "schema_version": 1,
                     "app_release_id": tag,
@@ -686,6 +694,49 @@ class TestBetaBreakglass:
         audit = client.rows[(BETA_BREAKGLASS_AUDITS_COLLECTION, audit_id)]
         assert audit["operation"] == "rollback"
         assert audit["resulting_generation"] == 5
+
+    def test_rollback_accepts_signed_smoke_known_good(self):
+        broken = self._stored(12084)
+        known_good = self._stored(12073, qualification_tier="signed-smoke")
+        client = StrictFirestore(
+            {
+                (BETA_ADMISSION_COLLECTION, BETA_ADMISSION_DOCUMENT): _control(enabled=True, generation=7),
+                ("desktop_release_manifests", broken["release_id"]): broken,
+                ("desktop_release_manifests", known_good["release_id"]): known_good,
+                ("desktop_update_channels", "macos-beta"): {
+                    "release_id": broken["release_id"],
+                    "build_number": broken["build_number"],
+                    "generation": 4,
+                },
+            }
+        )
+        receipt = rollback_beta(
+            self._request(broken["release_id"], known_good["release_id"], 4, operation="rollback"),
+            firestore_client=client,
+            now=datetime(2026, 7, 22, 12, 5, tzinfo=timezone.utc),
+        )
+        assert receipt["pointer"]["release_id"] == known_good["release_id"]
+
+    def test_rollback_rejects_emergency_target(self):
+        broken, emergency = self._stored(12084), self._stored(12073, qualified=False)
+        client = StrictFirestore(
+            {
+                (BETA_ADMISSION_COLLECTION, BETA_ADMISSION_DOCUMENT): _control(enabled=True, generation=7),
+                ("desktop_release_manifests", broken["release_id"]): broken,
+                ("desktop_release_manifests", emergency["release_id"]): emergency,
+                ("desktop_update_channels", "macos-beta"): {
+                    "release_id": broken["release_id"],
+                    "build_number": broken["build_number"],
+                    "generation": 4,
+                },
+            }
+        )
+        with pytest.raises(ValueError, match="emergency"):
+            rollback_beta(
+                self._request(broken["release_id"], emergency["release_id"], 4, operation="rollback"),
+                firestore_client=client,
+                now=datetime(2026, 7, 22, 12, 5, tzinfo=timezone.utc),
+            )
 
     def test_breakglass_rejects_invalid_incident_identity_and_stale_cas_without_writes(self):
         broken, target = self._stored(12084), self._stored(12073)

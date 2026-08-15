@@ -17,7 +17,7 @@ Consequences that must hold:
 - Every macOS candidate release packages the beta variant (`Omi.Beta.zip`,
   `omi-beta.dmg`) from the same build, signed/notarized, with its own smoke
   result (`desktop-smoke-result-beta.json`) held to the same structural
-  qualification contract as stable plus launch, Keychain, and notification
+  signed-smoke contract as stable plus launch, Keychain, and notification
   callback probes, and its own appcast EdDSA signature (`betaEdSignature`).
 - The update feed is identity-aware: `identity=beta` serves beta-channel items
   with beta-identity enclosures only, and must never offer a stable-identity
@@ -37,9 +37,9 @@ Consequences that must hold:
   gating, storage, log-path, manual-download identity contracts
 - `desktop/macos/Desktop/Tests/DesktopStorageIdentityTests.swift` — isolated
   "Omi Beta" storage root
-- `.github/scripts/test_check_desktop_auto_beta_candidate.py` — both identities
-  satisfy the structural contract; Codemagic Beta additionally produces every
-  piece of gate-required behavioral evidence
+- `.github/scripts/check-release-process-guards.py` — Codemagic still smokes
+  both identities via `scripts/smoke-signed-desktop-artifact.sh`; the retired
+  qualification lane cannot be reintroduced
 - `backend/tests/unit/test_desktop_updates.py::TestBetaIdentityServing` —
   identity-aware appcast/download serving, stable feed unchanged
 
