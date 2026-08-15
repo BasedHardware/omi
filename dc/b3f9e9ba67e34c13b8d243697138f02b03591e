@@ -1,0 +1,57 @@
+desktop/context-for-claude/Tests/ContextAppTests/RelaunchFlushTests.swift
+  s_d58145f2e376ea::t_c7df5b5d221e91 1-134
+desktop/context-for-claude/Sources/ContextApp/Permissions.swift
+  s_d58145f2e376ea::t_3b9c777a19e7b6 1920-1961
+  s_d58145f2e376ea::t_a4022c7aa888cd 821-849,852-859,882-890
+  s_d58145f2e376ea::t_bf5cbbf6b0927c 737-739,742-745
+  s_d58145f2e376ea::t_eca747c7ecd388 629-722
+  s_d58145f2e376ea::t_919976e3e96459 576,579-583
+  s_d58145f2e376ea::t_9c2d8d102f63fb 522-525,536-542,550-554,561-562
+  s_d58145f2e376ea::t_08e54df988c442 851,860-875,879,881
+  s_d58145f2e376ea::t_e4f4593af5d516 195-258
+  s_d58145f2e376ea::t_c06970881241b1 543
+  s_d58145f2e376ea::t_28ce304a6a3f8e 502-510
+  s_d58145f2e376ea::t_843dd9d65718f3 1382-1388
+  s_d58145f2e376ea::t_872f830855c0e6 131-137,139-144
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_d58145f2e376ea::t_613e444ee0c66e 268-274
+  s_d58145f2e376ea::t_fea08a0d083f0d 563-589
+  s_d58145f2e376ea::t_781e2c6807f26a 697-700
+  s_d58145f2e376ea::t_c1e81f789c0eb6 550-553
+  s_d58145f2e376ea::t_c08a69b886ae32 619,623
+  s_d58145f2e376ea::t_15652797f4b6cb 111-123
+  s_d58145f2e376ea::t_3404830f1715a7 664-668,674
+desktop/context-for-claude/Tests/ContextAppTests/ScreenStaleGrantTests.swift
+  s_d58145f2e376ea::t_4f672e05a6ba4a 211-277
+  s_d58145f2e376ea::t_fd718ca5bf34b4 112-141,143,149-150
+  s_3ccc0619ee6841::t_75a7899ebcba61 80-84,194-195,201-202,205-206,280-281
+desktop/context-for-claude/Tests/ContextAppTests/TerminationRevivalTests.swift
+  s_d58145f2e376ea::t_c13f901c4db2f4 580-582
+  s_d58145f2e376ea::t_096e01233a3249 263,306-435
+  s_d58145f2e376ea::t_b4d8df2dc886f2 161-162,164-169,171,176,180-262
+  s_d58145f2e376ea::t_ffbc8308a67da7 65,99,117,139,156,264,289
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "dcb3f9e9ba67e34c13b8d243697138f02b03591e",
+  "prompts": {},
+  "sessions": {
+    "s_3ccc0619ee6841": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a651b70-49a8-4b37-aff0-ae9fbe9619cb",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
