@@ -151,7 +151,9 @@ enum ContextDirectorRetrievalHop {
         [
           "ref": String(item.ref.prefix(200)),
           "title": String(item.title.prefix(maximumTitleLength)),
-          "preview": String(item.preview.prefix(200)),
+          // Must match what the prompt actually quoted, or a citation grounded
+          // beyond this cut is not verifiable from the delivery row alone.
+          "preview": String(item.preview.prefix(maximumPreviewLength)),
         ]
       },
       "cited_refs": citedRefs.prefix(20).map { String($0.prefix(200)) },

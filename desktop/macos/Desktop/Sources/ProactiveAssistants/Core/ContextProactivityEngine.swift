@@ -283,6 +283,24 @@ actor ContextProactivityEngine {
         retrievedRefAllowlist = hop.allowedRefs
         retrievalProvenance = hop.provenance
         if let secondResult = hop.result { result = secondResult }
+        // The owner/fence guard above ran before the hop, and the hop spans a
+        // retrieval round trip plus a second model call. Ownership can be revoked
+        // or the visit can end inside that window, so the same guard must run
+        // again before anything is persisted — otherwise falling back to the
+        // first decision would deliver against context the pre-hop code would
+        // have refused. Re-checked here rather than trusting the hop to report
+        // staleness, so a future failure path cannot quietly bypass it.
+        guard
+          RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+          await store.activeFenceIsValid(fence)
+        else {
+          await terminalize(
+            deliveryID: deliveryID,
+            decisionType: "silence",
+            provenanceJSON: "{\"failure\":\"stale_visit\"}",
+            state: "failed")
+          return
+        }
       }
       // Bucket refs keep today's validation path untouched; retrieved-namespace
       // refs validate only against the allowlist of items quoted to this very
