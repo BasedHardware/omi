@@ -26,13 +26,19 @@ final class InlineTaskTodayButtonTests: XCTestCase {
     XCTAssertEqual(components.minute, 59)
   }
 
-  func testTodaySectionRendersWhileEmptySoTheComposerStaysReachable() {
+  func testTodaySectionRendersWhileEmptyOnlyWhileTheComposerIsOpen() {
     let vm = TasksViewModel()
 
+    XCTAssertFalse(vm.showsTodayComposer, "the composer opens on demand, not on load")
+    XCTAssertFalse(
+      vm.rendersSection(.today, hasTasks: false),
+      "an empty Today with no composer has nothing to show")
+
+    vm.beginTopInlineCreation()
     XCTAssertTrue(vm.showsTodayComposer)
     XCTAssertTrue(
       vm.rendersSection(.today, hasTasks: false),
-      "an empty Today still renders — it hosts the standing composer")
+      "an empty Today renders while it hosts the open composer")
     XCTAssertFalse(
       vm.rendersSection(.tomorrow, hasTasks: false),
       "other empty categories stay hidden")
@@ -71,8 +77,9 @@ final class InlineTaskTodayButtonTests: XCTestCase {
     XCTAssertTrue(vm.rendersSection(.today, hasTasks: false))
   }
 
-  func testAnchoredCreateSuppressesStandingTodayComposer() {
+  func testAnchoredCreateSuppressesTodayComposer() {
     let vm = TasksViewModel()
+    vm.beginTopInlineCreation()
 
     XCTAssertTrue(vm.showsTodaySectionComposer(inlineCreateAfterTaskId: nil))
     XCTAssertFalse(vm.showsTodaySectionComposer(inlineCreateAfterTaskId: "existing-task"))

@@ -3321,13 +3321,14 @@ class TasksViewModel: ObservableObject {
     calendar.date(bySettingHour: 23, minute: 59, second: 0, of: now)
   }
 
-  /// The standing composer lives in the Today section. Bulk edit and the
-  /// completed view have nothing to add a task to.
+  /// The composer opens on demand — the + button or Cmd+N — and lives in the
+  /// Today section. Bulk edit and the completed view have nothing to add to.
   var showsTodayComposer: Bool {
-    !isMultiSelectMode && !showCompleted
+    isInlineCreating && !isMultiSelectMode && !showCompleted
   }
 
-  /// Keep the list mounted when it carries the standing composer.
+  /// With no tasks the page falls through to its empty state, which has nowhere
+  /// to type. While the composer is open the list wins so it has a home.
   var showsTasksListWhenEmpty: Bool {
     showsTodayComposer
   }
@@ -3339,13 +3340,14 @@ class TasksViewModel: ObservableObject {
     isInlineCreating = true
   }
 
-  /// Empty categories are hidden, except Today while it hosts the composer —
-  /// an empty day must still offer somewhere to type.
+  /// Empty categories are hidden, except Today while the composer is open in it
+  /// — an empty day must still offer somewhere to type.
   func rendersSection(_ category: TaskCategory, hasTasks: Bool) -> Bool {
     hasTasks || (category == .today && showsTodayComposer)
   }
 
-  /// An anchored insertion temporarily replaces the standing composer.
+  /// The Today composer and a row-anchored insert bind the same text and focus
+  /// state, so an anchored insert takes over while it runs.
   func showsTodaySectionComposer(inlineCreateAfterTaskId: String?) -> Bool {
     showsTodayComposer && inlineCreateAfterTaskId == nil
   }
@@ -3373,7 +3375,9 @@ class TasksViewModel: ObservableObject {
           moveTask(created, toIndex: 0, inCategory: .today)
         }
         keyboardSelectedTaskId = created.id
-        isInlineCreating = false
+        // A composer opened from + stays open for back-to-back entry; an
+        // anchored insert is one-shot and closes.
+        isInlineCreating = afterTaskId == nil
         inlineCreateAfterTaskId = nil
         return
       }
@@ -3400,7 +3404,7 @@ class TasksViewModel: ObservableObject {
       keyboardSelectedTaskId = created.id
     }
 
-    isInlineCreating = false
+    isInlineCreating = afterTaskId == nil
     inlineCreateAfterTaskId = nil
   }
 }
