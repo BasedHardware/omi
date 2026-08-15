@@ -141,6 +141,7 @@ let surfaceLoad: (server: LoopbackServer?, url: URL) = {
 
 final class NativeHandlers: BridgeHandling, @unchecked Sendable {
   weak var emitter: WebViewController?
+  let screen: ScreenCaptureEngine
   private var sessionId: String?
   private var startedAt: Date?
   private var settings = [
@@ -148,6 +149,10 @@ final class NativeHandlers: BridgeHandling, @unchecked Sendable {
     "capture.sampleRateHz": "16000",
     "ui.theme": "system",
   ]
+
+  init(screen: ScreenCaptureEngine) {
+    self.screen = screen
+  }
 
   func startCapture(_ params: StartCaptureParams) async throws -> StartCaptureResult {
     let id = "sess-\(Int(Date().timeIntervalSince1970))"
@@ -167,6 +172,58 @@ final class NativeHandlers: BridgeHandling, @unchecked Sendable {
     }
     let ok = NSWorkspace.shared.open(url)
     return OpenExternalResult(opened: ok)
+  }
+
+  func screenStart(_ params: ScreenEmptyParams) async throws -> ScreenStartResult {
+    _ = params
+    return await screen.start()
+  }
+
+  func screenStop(_ params: ScreenEmptyParams) async throws -> ScreenStopResult {
+    _ = params
+    return await screen.stop()
+  }
+
+  func screenStatus(_ params: ScreenEmptyParams) async throws -> ScreenStatusResult {
+    _ = params
+    return await screen.currentStatus()
+  }
+
+  func screenFrameImage(_ params: ScreenFrameImageParams) async throws -> ScreenFrameImageResult {
+    try await screen.frameImage(frameRef: params.frameRef, maxLongEdge: params.maxLongEdge)
+  }
+
+  func screenExclusionsList(_ params: ScreenEmptyParams) async throws -> ScreenExclusionsListResult {
+    _ = params
+    return await screen.exclusionsList()
+  }
+
+  func screenExclusionsSet(_ params: ScreenExclusionsSetParams) async throws
+    -> ScreenExclusionsSetResult
+  {
+    let omi = Bundle.main.bundleIdentifier ?? "me.omi.shell.core-tasks.prototype"
+    return await screen.exclusionsSet(params.bundleIds, omiBundleId: omi)
+  }
+
+  func screenRetentionSet(_ params: ScreenRetentionSetParams) async throws
+    -> ScreenRetentionSetResult
+  {
+    await screen.retentionSet(params.days)
+  }
+
+  func screenRebuildIndex(_ params: ScreenEmptyParams) async throws -> ScreenRebuildIndexResult {
+    _ = params
+    return await screen.rebuildIndex()
+  }
+
+  func screenRequestPermission(_ params: ScreenEmptyParams) async throws -> ScreenPermissionResult {
+    _ = params
+    return await screen.requestPermission()
+  }
+
+  func screenOpenSettings(_ params: ScreenEmptyParams) async throws -> ScreenOpenSettingsResult {
+    _ = params
+    return await screen.openSettings()
   }
 
   /// Fake capture telemetry so the native -> surface direction is exercised.
@@ -429,6 +486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   var chatStreamHandler: ChatStreamHandler?
   var chatAttachmentStagingHandler: ChatAttachmentStagingHandler?
   var consumerEvidenceDriver: ConsumerEvidenceDriver?
+  var screenEngine: ScreenCaptureEngine?
   private let env = ProcessInfo.processInfo.environment
   private var acceptanceEmitted = false
   private var acceptancePassed = true
@@ -535,7 +593,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       x: 0, y: 0,
       width: fixtureSized ? captureDimension("OMI_NATIVE_VIEWPORT_WIDTH", fallback: semanticWindow ? 420 : 934, minimum: minimumWidth, maximum: 2400) : 934,
       height: fixtureSized ? captureDimension("OMI_NATIVE_VIEWPORT_HEIGHT", fallback: semanticWindow ? 420 : 671, minimum: minimumHeight, maximum: 1800) : 671)
-    let handlers = NativeHandlers()
+    let omiBundle = Bundle.main.bundleIdentifier ?? "me.omi.shell.core-tasks.prototype"
+    let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+      .first!
+      .appendingPathComponent(omiBundle, isDirectory: true)
+      .appendingPathComponent("screen", isDirectory: true)
+    let screenStore = ScreenLocalStore(root: support, omiBundleId: omiBundle)
+    let screenEngine = ScreenCaptureEngine(
+      store: screenStore,
+      source: ScreenCaptureKitSource(),
+      environment: ScreenSystemEnvironment(),
+      ingest: nil,
+      deviceName: Host.current().localizedName ?? Host.current().name ?? "Mac")
+    let handlers = NativeHandlers(screen: screenEngine)
     // Privileged-HTTP custody: SessionBootstrap resolves base URL + token via
     // Keychain → optional scratch issuer → OMI_API_TOKEN env. Neither value is
     // ever handed to JS. The SEAM is unchanged: surface sends a relative path,
@@ -570,6 +640,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         baseURL: base, custody: authority.custody, runId: runClientId)
       chatAttachmentStagingHandler = ChatAttachmentStagingHandler(
         baseURL: base, custody: authority.custody, runId: runClientId)
+      Task {
+        await screenEngine.setIngestClient(
+          ScreenIngestClient(
+            baseURL: base, custody: authority.custody, clientId: runClientId))
+      }
       FileHandle.standardError.write(
         Data(
           "bridge-http: enabled for \(base.scheme!)://\(base.host!) (token \(session.tokenPresent ? "present" : "absent"))\n"
@@ -582,11 +657,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     self.listenSocketHandler = listenSocketHandler
     self.chatStreamHandler = chatStreamHandler
     self.chatAttachmentStagingHandler = chatAttachmentStagingHandler
+    self.screenEngine = screenEngine
     controller = WebViewController(
       handlers: handlers, frame: contentRect, loadURL: surfaceLoad.url,
       http: httpHandler, listen: listenSocketHandler,
       chatStream: chatStreamHandler, chatAttachmentStaging: chatAttachmentStagingHandler,
       ephemeral: fixtureCapture || semanticWindow)
+    Task {
+      await screenEngine.setStatusSink { [weak controller] event in
+        guard let controller else { return }
+        DispatchQueue.main.async {
+          controller.webView.evaluateJavaScript(
+            BridgeDispatcher.emitScreenStatus(event), completionHandler: nil)
+        }
+      }
+    }
     window = NSWindow(
       contentRect: contentRect,
       styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -786,6 +871,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    if let screenEngine {
+      let lock = DispatchSemaphore(value: 0)
+      Task {
+        _ = await screenEngine.stop()
+        lock.signal()
+      }
+      _ = lock.wait(timeout: .now() + 2)
+    }
     consumerEvidenceDriver?.teardown()
     controller?.teardown()
     loopback?.stop()

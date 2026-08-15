@@ -136,7 +136,7 @@ enum BridgeHttpPolicy {
     token: String?,
     clientId: String? = nil
   ) -> BridgeHttpPolicyDecision {
-    guard ["GET", "POST", "PATCH", "DELETE"].contains(method) else {
+    guard ["GET", "POST", "PUT", "PATCH", "DELETE"].contains(method) else {
       return .failure(.shellError, "missing or unsupported method/path")
     }
     guard path.hasPrefix("/"), !path.hasPrefix("//"), !path.contains("://"),

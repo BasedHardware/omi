@@ -59,8 +59,9 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/surface"
 node "$here/codegen/generate.mjs" >/dev/null
 
 swiftc -O \
-  -target arm64-apple-macosx13.0 \
+  -target arm64-apple-macosx14.0 \
   -framework AppKit -framework WebKit -framework Network -framework Security -framework LocalAuthentication -framework AVFoundation \
+  -framework ScreenCaptureKit -framework Vision -framework CoreMedia -framework CoreVideo -framework CoreImage -framework IOKit -framework ImageIO -framework UniformTypeIdentifiers \
   -o "$app/Contents/MacOS/$app_name" \
   "$here"/shell/Sources/OmiShell/*.swift
 
@@ -120,7 +121,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>${app_name}</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1</string>
-  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSMicrophoneUsageDescription</key>
   <string>Omi uses the microphone only while you explicitly capture.</string>
