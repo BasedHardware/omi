@@ -1700,6 +1700,28 @@
             "default": false,
             "title": "Disabled"
           },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At"
+          },
+          "disabled_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Error"
+          },
           "disabled_reason": {
             "anyOf": [
               {
@@ -2194,6 +2216,28 @@
             ],
             "default": false,
             "title": "Disabled"
+          },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At"
+          },
+          "disabled_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Error"
           },
           "disabled_reason": {
             "anyOf": [

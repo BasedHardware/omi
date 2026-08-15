@@ -2131,6 +2131,24 @@ def _setup_completed_from_response(res: httpx.Response) -> bool:
     return isinstance(payload, dict) and bool(payload.get('is_setup_completed', False))
 
 
+def _disabled_app_install_detail(app: App, uid: str) -> str:
+    """Explain a blocked install truthfully.
+
+    The previous copy claimed a live connectivity problem and that the developer
+    had been notified. Neither is checked here: `disabled` is a stored flag set
+    up to months earlier, and the notification went out then. Owners chased
+    their own healthy servers looking for a request that is never sent.
+    """
+    when = f' on {app.disabled_at[:10]}' if app.disabled_at else ''
+    if app.uid == uid:
+        cause = f' Last error: {app.disabled_error}.' if app.disabled_error else ''
+        return (
+            f'This app was automatically disabled{when} after its webhook endpoint failed for 72 hours.'
+            f'{cause} Fix the endpoint, then press Re-enable on the app page.'
+        )
+    return f'This app was disabled{when} because its endpoint stopped responding. Its developer has to re-enable it.'
+
+
 @router.post('/v1/apps/enable', response_model=AppMutationResponse)
 async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
@@ -2138,10 +2156,7 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app.disabled:
-        raise HTTPException(
-            status_code=400,
-            detail='This app is currently unavailable due to connectivity issues. The developer has been notified.',
-        )
+        raise HTTPException(status_code=400, detail=_disabled_app_install_detail(app, uid))
     if app.private is not None:
         if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
