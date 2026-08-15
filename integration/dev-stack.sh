@@ -144,8 +144,9 @@ if (( DOCTOR_ONLY )); then
 fi
 
 RUN_ID="${REQUESTED_RUN_ID:-run-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
-if ! node "$HERE/lib/evidence-cli.mjs" validate-run-id --run-id "$RUN_ID" >/dev/null; then
-  rc=$?
+rc=0
+node "$HERE/lib/evidence-cli.mjs" validate-run-id --run-id "$RUN_ID" >/dev/null || rc=$?
+if (( rc != 0 )); then
   runtime_log warn dev-stack.refused --reason invalid_run_id
   exit "$rc"
 fi
