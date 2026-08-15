@@ -180,6 +180,10 @@ _canonical_activation_stub = ModuleType('utils.memory.canonical_activation')
 setattr(_canonical_activation_stub, 'canonical_write_enabled', MagicMock(return_value=False))
 _register_module('utils.memory.canonical_activation', _canonical_activation_stub)
 
+_retraction_scope_stub = ModuleType('utils.memory.retraction_scope')
+setattr(_retraction_scope_stub, 'retraction_can_be_skipped', MagicMock(return_value=False))
+_register_module('utils.memory.retraction_scope', _retraction_scope_stub)
+
 _apps_stub = ModuleType('utils.apps')
 setattr(_apps_stub, 'get_available_app_by_id_with_reviews', MagicMock())
 setattr(_apps_stub, 'get_is_user_paid_app', MagicMock(return_value=False))
