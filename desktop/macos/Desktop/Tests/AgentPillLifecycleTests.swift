@@ -1164,10 +1164,20 @@ import XCTest
     )
     XCTAssertFalse(source.contains("viewportResizeDetector"))
     XCTAssertFalse(source.contains("handleViewportSizeChange"))
-    // omi-test-quality: source-inspection -- static contract: geometry inside
-    // the LazyVStack must not feed transcript layout values back into state;
-    // the behavioral scroll coverage lives in ChatScrollLiveEdgeTests.
-    XCTAssertFalse(source.contains(".onGeometryChange(for: "))
+    // omi-test-quality: source-inspection -- static contract: measured transcript geometry must
+    // not re-enter this view's observed state; the behavioral scroll coverage lives in
+    // ChatScrollLiveEdgeTests and the rail's in ChatPromptTimelineTests.
+    //
+    // The claim is that geometry never re-enters *this view's* state, not that the transcript
+    // never measures itself. A blanket ban on `.onGeometryChange` stood in for that while the
+    // prompt rail was deleted; the rail is back and measures rows again, but it writes into
+    // `ChatTranscriptGeometry`, which this view holds as a plain `@State` reference and therefore
+    // does not observe — only the rail overlay does. Assert the facts that actually close the
+    // layout loop rather than the mechanism that happened to be absent.
+    XCTAssertFalse(source.contains(".onGeometryChange(for: ChatTranscriptContentFrame.self)"))
+    XCTAssertTrue(source.contains("@State private var transcriptGeometry = ChatTranscriptGeometry()"))
+    XCTAssertFalse(source.contains("@StateObject private var transcriptGeometry"))
+    XCTAssertFalse(source.contains("@ObservedObject private var transcriptGeometry"))
     // omi-test-quality: source-inspection -- static contract: a local send may
     // enter follow mode, but must never clear the reader's in-flight gesture
     // latch to do it; the behavioral coverage is in
