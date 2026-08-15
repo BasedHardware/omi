@@ -45,6 +45,13 @@ class SpeechProfileMutationResponse(BaseModel):
     status: str
 
 
+class SpeechProfileStatusResponse(BaseModel):
+    has_profile: bool
+    duration_seconds: float
+    sample_count: int
+    url: Optional[str] = None
+
+
 @router.get('/v3/speech-profile', tags=['v3'], response_model=HasSpeechProfileResponse)
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'has_profile': get_user_has_speech_profile(uid)}
@@ -55,22 +62,22 @@ def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'url': get_profile_audio_if_exists(uid, download=False)}
 
 
-@router.get('/v3/speech-profile/status', tags=['v3'])
+@router.get('/v3/speech-profile/status', tags=['v3'], response_model=SpeechProfileStatusResponse)
 def get_speech_profile_status(uid: str = Depends(auth.get_current_user_uid)):
     """Consolidated speech-profile status for the settings UI.
 
-    Surfaces users:{uid}:speech_profile_duration (written on upload but currently read by
-    nothing) and folds together data split across GET /v3/speech-profile (existence) and
-    GET /v4/speech-profile (url).
+    Folds together data split across GET /v3/speech-profile (existence), GET
+    /v4/speech-profile (url), and GET /v3/speech-profile/expand (extra sample
+    recordings), plus the cached duration written on upload.
     """
     has_profile = get_user_has_speech_profile(uid)
-    # Gate the cached duration on the actual profile existing. The duration is written
-    # write-ahead (before upload_profile_audio completes) and can outlive a deleted profile,
-    # so surfacing it when has_profile is False would report an inconsistent state (no profile
-    # but a positive duration) to the settings UI.
+    # Gate the cached duration on the actual profile existing. The cached value can
+    # outlive a deleted profile, so surfacing it when has_profile is False would report
+    # an inconsistent state (no profile but a positive duration) to the settings UI.
     return {
         'has_profile': has_profile,
         'duration_seconds': (get_speech_profile_duration(uid) or 0.0) if has_profile else 0.0,
+        'sample_count': len(get_additional_profile_recordings(uid) or []),
         'url': get_profile_audio_if_exists(uid, download=False),
     }
 
@@ -109,9 +116,11 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     # Write-ahead: Cache exact duration after VAD processing (use av for fast header-only read)
     with av.open(file_path) as container:
         duration = (float(container.duration) / av.time_base) + 5 if container.duration else 0
-    set_speech_profile_duration(uid, duration)
 
     url = upload_profile_audio(file_path, uid)
+    # Cache the duration only once the profile blob is actually stored: a failed
+    # overwrite must not leave the cache describing an upload that never landed.
+    set_speech_profile_duration(uid, duration)
 
     # Extract and store speaker embedding for user identification in listen sessions
     try:

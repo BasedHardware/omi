@@ -121,12 +121,14 @@ class AutomationBridge {
   }
 
   private recycle(): void {
-    if (this.child) {
-      try {
-        this.child.kill()
-      } catch {
-        /* already dead */
-      }
+    // Nothing to tear down: without a live child there are no in-flight requests
+    // to fail and no crash to back off from. Arming the cooldown here would make
+    // the next run() reject instead of spawning (dispose-before-first-use).
+    if (!this.child) return
+    try {
+      this.child.kill()
+    } catch {
+      /* already dead */
     }
     this.handleExit()
   }
@@ -186,6 +188,9 @@ class AutomationBridge {
 
   dispose(): void {
     this.recycle()
+    // Explicit disposal is not a crash: the next run() should spawn a fresh
+    // helper immediately instead of sitting out the crash-backoff window.
+    this.cooldownUntil = 0
   }
 }
 

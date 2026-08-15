@@ -23,7 +23,10 @@ export function computeLayout(graph: KnowledgeGraph, opts: LayoutOptions = {}): 
   const height = opts.height ?? 600
   const iterations = opts.iterations ?? 300
 
-  const degree: Record<string, number> = {}
+  // Null-prototype map: with a plain object literal, `degree['__proto__'] = 0`
+  // hits the inherited setter instead of creating an own property, so a node
+  // actually NAMED __proto__ would count as absent and lose all of its edges.
+  const degree: Record<string, number> = Object.create(null)
   for (const n of graph.nodes) degree[n.id] = 0
   for (const e of graph.edges) {
     if (Object.hasOwn(degree, e.sourceId)) degree[e.sourceId]++

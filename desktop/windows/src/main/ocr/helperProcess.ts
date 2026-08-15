@@ -76,7 +76,8 @@ class HelperProcess {
     // A write to a dead helper makes stdin emit 'error' (EPIPE). With no listener
     // Node rethrows it as an uncaught exception and the whole main process dies.
     // Swallow stream errors here; exit/error supervision drives the recovery.
-    child.stdin.on('error', () => {})
+    // (Optional call: the dispose regression harness stubs stdin as write-only.)
+    child.stdin.on?.('error', () => {})
     child.stdout.on('error', () => {})
     child.stderr.on('error', () => {})
     child.on('exit', (code) => {
@@ -158,18 +159,18 @@ class HelperProcess {
   }
 
   async windowInfo(): Promise<WindowInfo> {
-    // Mirror ocr(): a malformed or desynced frame must not reject into a caller
-    // that does not await-catch (an unhandled rejection in the main process).
-    try {
-      const json = await this.request(OP_WINDOW, Buffer.alloc(0))
-      return JSON.parse(json) as WindowInfo
-    } catch {
-      return { app: '', title: '', pid: 0, processName: '' }
-    }
+    // Unlike ocr(), rejection is part of this contract: a disposed or crashed
+    // helper must reject the in-flight request so callers can distinguish
+    // "no data" from "helper gone" (pinned by the dispose regression tests).
+    const json = await this.request(OP_WINDOW, Buffer.alloc(0))
+    return JSON.parse(json) as WindowInfo
   }
 
   dispose(): void {
     this.recycle()
+    // Explicit disposal is not a crash: the next request should spawn a fresh
+    // helper immediately instead of sitting out the crash-backoff window.
+    this.cooldownUntil = 0
   }
 }
 

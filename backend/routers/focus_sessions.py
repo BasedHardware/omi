@@ -1,6 +1,7 @@
 """Focus sessions — focus/distraction tracking and statistics."""
 
 from datetime import datetime
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -77,7 +78,31 @@ def get_focus_stats(
     return focus_sessions_db.get_focus_stats(uid, date=date)
 
 
-@router.get('/v1/screen-activity', tags=['screen-activity'])
+class ScreenActivityRow(BaseModel):
+    """One captured screen-activity row. The desktop app owns the write shape and
+    adds fields over time, so unknown keys pass through rather than being dropped."""
+
+    model_config = {"extra": "allow"}
+
+    id: str
+    timestamp: Optional[str] = None
+    appName: Optional[str] = None
+    windowTitle: Optional[str] = None
+
+
+class ScreenActivityAppSummary(BaseModel):
+    count: int
+    first_seen: Optional[str] = None
+    last_seen: Optional[str] = None
+    window_titles: List[str] = Field(default_factory=list)
+
+
+class ScreenActivitySummaryResponse(BaseModel):
+    apps: Dict[str, ScreenActivityAppSummary]
+    total_screenshots: int
+
+
+@router.get('/v1/screen-activity', tags=['screen-activity'], response_model=List[ScreenActivityRow])
 def list_screen_activity(
     date: str | None = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
     app_filter: str | None = Query(None, max_length=500),
@@ -102,7 +127,7 @@ def list_screen_activity(
     )
 
 
-@router.get('/v1/screen-activity/summary', tags=['screen-activity'])
+@router.get('/v1/screen-activity/summary', tags=['screen-activity'], response_model=ScreenActivitySummaryResponse)
 def screen_activity_summary(
     date: str | None = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
     uid: str = Depends(auth.get_current_user_uid),
