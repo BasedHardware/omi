@@ -135,8 +135,9 @@ environment_shared:
           config_map:
             name: '{env}-omi-backend-config'
             key: TWILIO_ACCOUNT_SID
-        MEMORY_MODE:
+        MEMORY_ENABLED:
           category: memory_rollout
+          value: 'off'
         MEMORY_TYPESENSE_COLLECTION:
           value: canonical_memory_atoms
           category: memory_rollout
@@ -144,8 +145,6 @@ environment_shared:
           config_map:
             name: '{env}-omi-backend-config'
             key: MCP_RESOURCE_URL
-        MEMORY_V3_GET_ENABLED:
-          category: memory_rollout
       values_file: backend/charts/backend-listen/{env}_omi_backend_listen_values.yaml
   region: us-central1
   cloud_run:
@@ -200,8 +199,9 @@ environment_shared:
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
-          MEMORY_MODE:
+          MEMORY_ENABLED:
             category: memory_rollout
+            value: 'off'
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
             category: rollout
@@ -214,8 +214,6 @@ environment_shared:
           POSTHOG_HOST:
             value: https://app.posthog.com
             category: telemetry
-          MEMORY_V3_GET_ENABLED:
-            category: memory_rollout
           GCP_LOCATION:
             value: us-central1
       backend:
@@ -294,12 +292,11 @@ environment_shared:
             env_var: SYNC_LEDGER_FENCE_MODE
             default: legacy
             category: rollout
-          MEMORY_MODE:
+          MEMORY_ENABLED:
             category: memory_rollout
+            value: 'off'
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
-            category: memory_rollout
-          MEMORY_V3_GET_ENABLED:
             category: memory_rollout
       backend-sync-backfill:
         secrets:
@@ -383,16 +380,15 @@ environment_shared:
             env_var: SYNC_LEDGER_FENCE_MODE
             default: legacy
             category: rollout
-          MEMORY_MODE:
+          MEMORY_ENABLED:
             category: memory_rollout
+            value: 'off'
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
             value: '555'
             category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
-            category: memory_rollout
-          MEMORY_V3_GET_ENABLED:
             category: memory_rollout
         provisional: true
       backend-sync:
@@ -408,6 +404,9 @@ environment_shared:
             version: latest
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+            version: latest
+          GOOGLE_MAPS_API_KEY:
+            secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
           OMI_LLM_GATEWAY_URL:
@@ -477,16 +476,15 @@ environment_shared:
             env_var: SYNC_LEDGER_FENCE_MODE
             default: legacy
             category: rollout
-          MEMORY_MODE:
+          MEMORY_ENABLED:
             category: memory_rollout
+            value: 'off'
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             provisional: true
             value: '555'
             category: rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
-            category: memory_rollout
-          MEMORY_V3_GET_ENABLED:
             category: memory_rollout
     jobs:
       notifications-job:
@@ -560,13 +558,12 @@ environment_shared:
             category: memory_rollout
           PINECONE_INDEX_NAME:
             category: memory_rollout
-          MEMORY_MODE:
+          MEMORY_ENABLED:
             category: memory_rollout
+            value: 'off'
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
           MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
             value: 'true'
-            category: memory_rollout
-          MEMORY_V3_GET_ENABLED:
             category: memory_rollout

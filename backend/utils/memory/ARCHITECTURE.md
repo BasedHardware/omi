@@ -139,14 +139,18 @@ fences prevent an old lease or retry from resurrecting a recreated account.
 The supported controls and rollback floor are documented in
 `docs/runbooks/universal-memory-operations.md`.
 
-- `MEMORY_MODE` is a global readiness/incident declaration.
-- `MEMORY_V3_GET_ENABLED` is a deprecated, non-authoritative deployment
-  declaration retained only until manifest cleanup; it cannot affect routing.
-- `MEMORY_CANONICAL_MAINTENANCE_ENABLED` is job-only.
+- `MEMORY_ENABLED=on|off` is the one user-facing product flag. Unset fail-closes
+  to off. `on` enables intake and list; it does not enable Gate 3 ST→LT
+  maintenance. `MEMORY_MODE` and `MEMORY_V3_GET_ENABLED` are one-deploy aliases
+  only (`write|read` → on, `off|shadow` → off) and are not written in overlays.
+- `MEMORY_CANONICAL_MAINTENANCE_ENABLED` is job-only and stays a separate ops
+  switch. Do not derive it from `MEMORY_ENABLED=on`.
 - `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` and its batch/candidate settings are
   global cost/incident controls.
-- Cursor secret/version/TTL settings are unused by the live memory route and
-  may be removed after confirming no other consumer owns them.
+- `GET /v3/memories` first page uses `read_page`, which 503s
+  `Memory cursor unavailable` when `MEMORY_V3_CURSOR_SECRET` is missing. That is
+  the list fence, not `MEMORY_V3_GET_ENABLED` (unused on the route). First page
+  falls back to offset `read()` for that 503.
 
 The universal dual-format reader is the rollback floor. A rollback may stop new
 canonical intake or L2 maintenance globally, but must keep the universal reader

@@ -32,7 +32,9 @@ from utils.subscription import (
     adapt_plans_for_legacy_client,
     clear_trial_paywall_cache,
     find_active_paid_subscription_for_user,
+    price_ids_match_plan_and_interval,
 )
+from utils.observability.fallback import record_fallback
 from database.users import (
     get_stripe_connect_account_id,
     set_stripe_connect_account_id,
@@ -289,12 +291,32 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
     """
     Attempts to reactivate a canceled subscription if possible.
 
+    When the local Firestore row is missing or stale (no ``stripe_subscription_id``),
+    fall back to Stripe as the source of truth so a pending-cancellation
+    subscription Stripe still holds for this user can be reactivated instead of
+    dropping into a fresh-checkout flow.
+
     Returns:
         dict with reactivation details if successful, None otherwise
     """
     current_subscription = users_db.get_user_subscription(uid)
+    recovered_from_stripe = False
     if not current_subscription or not current_subscription.stripe_subscription_id:
-        return None
+        # The local row may be missing/stale (e.g. read-after-write lag or a
+        # sync issue). Stripe is the recovery source of truth: find the active
+        # paid subscription there and use its id to attempt reactivation.
+        current_subscription = find_active_paid_subscription_for_user(uid)
+        recovered_from_stripe = True
+        if not current_subscription or not current_subscription.stripe_subscription_id:
+            record_fallback(
+                component='other',
+                from_mode='firestore_subscription',
+                to_mode='stripe_subscription',
+                reason='local_heal',
+                outcome='exhausted',
+                log=logger,
+            )
+            return None
 
     try:
         # Retrieve current subscription from Stripe to check status
@@ -306,12 +328,24 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
             current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
 
             # If resubscribing to the same plan, just remove cancellation
-            if current_price_id == target_price_id:
+            current_interval = stripe_sub_dict['items']['data'][0]['price'].get('recurring', {}).get('interval')
+            if price_ids_match_plan_and_interval(current_price_id, target_price_id, current_interval):
                 stripe.Subscription.modify(current_subscription.stripe_subscription_id, cancel_at_period_end=False)
 
                 # Update our database
                 current_subscription.cancel_at_period_end = False
                 users_db.update_user_subscription(uid, current_subscription.model_dump())
+                set_credits_invalidation_signal(uid)
+                clear_trial_paywall_cache(uid)
+                if recovered_from_stripe:
+                    record_fallback(
+                        component='other',
+                        from_mode='firestore_subscription',
+                        to_mode='stripe_subscription',
+                        reason='local_heal',
+                        outcome='recovered',
+                        log=logger,
+                    )
 
                 # Calculate next billing date
                 next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end'], tz=timezone.utc).strftime(
@@ -325,6 +359,16 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                 }
     except Exception as e:
         logger.error(f"Error checking for reactivation: {e}")
+
+    if recovered_from_stripe:
+        record_fallback(
+            component='other',
+            from_mode='firestore_subscription',
+            to_mode='stripe_subscription',
+            reason='local_heal',
+            outcome='exhausted',
+            log=logger,
+        )
 
     return None
 
@@ -422,7 +466,7 @@ def get_available_plans_endpoint(
                             plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Monthly',
                             price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
-                            description=None,
+                            description=definition.get("description"),
                             subtitle=definition.get("subtitle"),
                             eyebrow=definition.get("eyebrow"),
                             interval=monthly_price.recurring.interval,
@@ -444,7 +488,7 @@ def get_available_plans_endpoint(
                             plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Annual',
                             price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
-                            description=definition["annual_description"],
+                            description=f'{definition.get("description", "")} {definition["annual_description"]}'.strip(),
                             subtitle=definition.get("subtitle"),
                             eyebrow=definition.get("eyebrow"),
                             interval=annual_price.recurring.interval,
@@ -627,6 +671,13 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     try:
         # Retrieve current subscription to get current price ID
         stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
+        if stripe_sub.get('cancel_at_period_end') and (
+            not stripe_sub.get('current_period_end') or stripe_sub['current_period_end'] > int(time.time())
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Plan changes are available after the current subscription ends. Reactivate your current plan to keep it.",
+            )
         current_price_id = stripe_sub['items']['data'][0]['price']['id']
         current_item_id = stripe_sub['items']['data'][0]['id']
 

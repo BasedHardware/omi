@@ -3,7 +3,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, Iterable, Iterator, List, NoReturn, Optional, Tuple, cast
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -593,7 +593,7 @@ class HistoricalMemoryAdapter:
         limit: int = 100,
         scan_offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
-    ) -> Tuple[List[Optional[HistoricalMemoryRecord]], int, bool]:
+    ) -> NoReturn:
         """Retired offset scan — cursor paging must use dual keyset streams.
 
         Kept only so accidental callers fail loudly instead of silently
@@ -1115,6 +1115,14 @@ class _CanonicalCursorStream:
         except HTTPException:
             raise
         except Exception as exc:
+            # Surface the underlying failure class/message so a Firestore
+            # FAILED_PRECONDITION (missing composite) is distinguishable from a
+            # uid/cursor ValueError in logs. No uid or memory content here.
+            logger.exception(
+                "canonical list scan page failed: %s: %s",
+                type(exc).__name__,
+                exc,
+            )
             raise HTTPException(status_code=503, detail="Canonical memory unavailable") from exc
         self._slots = [
             (

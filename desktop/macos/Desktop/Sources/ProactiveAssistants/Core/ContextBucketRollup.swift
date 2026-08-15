@@ -20,6 +20,13 @@ struct BucketExtraction: Codable, Equatable, Sendable {
 
   let narrative: String
   let facts: [Fact]
+  /// Proposed browser destination key, `unknown/…` when the model abstains.
+  ///
+  /// Optional so a response predating this field still decodes: synthesized
+  /// `Decodable` uses `decodeIfPresent` for optionals, where a non-optional would
+  /// throw on the missing key. `var` with a default also keeps the memberwise
+  /// initializer source-compatible for existing callers.
+  var destination: String? = nil
 }
 
 enum BucketFactValidity: String {
@@ -152,26 +159,73 @@ enum ContextProactivityPromptBuilder {
   }
 
   static func extractionPrompt(appName: String, windowTitle: String?, evidenceRef: String) -> String {
-    """
-    \(ScreenDerivedContent.untrustedPreamble)
-    Produce a 150-400 token ambient narrative and discrete factual records. Facts are
-    proposals; include an identifier, surviving evidence text, and evidence ref for each.
-    App: \(appName)
-    Window: \(windowTitle ?? "")
-    Evidence ref: \(evidenceRef)
-    """
+    let base = """
+      \(ScreenDerivedContent.untrustedPreamble)
+      Produce a 150-400 token ambient narrative and discrete factual records. Facts are
+      proposals; include an identifier, surviving evidence text, and evidence ref for each.
+      App: \(appName)
+      Window: \(ContextDestinationKey.singleLine(windowTitle ?? "", limit: 160))
+      Evidence ref: \(evidenceRef)
+      """
+    // Browser-scoped by design. Unscoped destination labelling was measured at 6%
+    // precision: the model answers `telegram` for every thread and collapses
+    // unrelated private conversations into one bucket. Native-app title identity is
+    // already correct, so it is left alone.
+    guard ContextDestinationKey.isBrowser(appName: appName), let windowTitle,
+      !windowTitle.isEmpty
+    else {
+      return base + "\n\nSet \"destination\" to \"\(ContextDestinationKey.abstention)\"."
+    }
+    // The fragment sits below `untrustedPreamble`, so the window title it quotes
+    // stays framed as untrusted data rather than instruction.
+    return base + "\n\n" + ContextDestinationKey.promptFragment(title: windowTitle)
   }
 
   static func directorPrompt(
     snapshot: ContextBucketSnapshot,
     tasks: [ContextDirectorTaskContext],
-    frame: CapturedFrame
+    frame: CapturedFrame,
+    recentDeliveries: [ContextBucketRecentDelivery] = []
   ) -> String {
-    "\(directorStablePrompt(snapshot: snapshot))\n\n\(directorVolatilePrompt(tasks: tasks, frame: frame))"
+    """
+    \(directorStablePrompt(snapshot: snapshot))
+
+    \(directorVolatilePrompt(tasks: tasks, frame: frame, recentDeliveries: recentDeliveries))
+    """
   }
 
-  static func directorStablePrompt(snapshot: ContextBucketSnapshot) -> String {
+  /// The lookup instruction is static text: it must be identical for the first
+  /// and second director calls of a visit so both share one cached prefix, and
+  /// it therefore describes both states ("when that section is present…"). It is
+  /// gated on `allowLookup` so the flag-off prompt stays byte-identical to today.
+  /// Wording is load-bearing and was tuned against live data, not guessed.
+  ///
+  /// The first draft asked only about "a question that is actually part of this
+  /// context". Measured against the reasoning model on the case this feature
+  /// exists for — the user drafting a message whose answer sits elsewhere in
+  /// their history — that fired **3 times out of 8**, so the hop missed its own
+  /// motivating case most of the time. Naming the writing-a-question case
+  /// explicitly took it to **8/8**.
+  ///
+  /// Broadening did not cost anything. Across 60 real bucket snapshots of
+  /// ordinary work context it still requests a lookup **0 times**, so no second
+  /// director call is bought in normal use, and two controls — a question the
+  /// supplied facts already answer, and a context asking nothing — stayed at 0/3
+  /// under both wordings. A worked example was also tried and changed nothing,
+  /// so it is deliberately omitted rather than carried on the cached prefix.
+  static let directorLookupInstruction = """
+    If this context contains a question, request, or reference whose answer is not present in
+    the supplied facts — including a question the user is currently writing — set lookup_query to
+    one short search phrase naming the missing thing. Otherwise set lookup_query to "". Still return
+    your best decision alongside it: the lookup buys at most one re-evaluation with a RETRIEVED
+    CONTEXT section appended, and when that section is already present below, any further
+    lookup_query is ignored. Refs from that section (conversation:…, memory:…) may be cited in
+    bucket_entry_refs only when the section supplies them.
+    """
+
+  static func directorStablePrompt(snapshot: ContextBucketSnapshot, allowLookup: Bool = false) -> String {
     let stableBucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
+    let lookup = allowLookup ? "\n" + directorLookupInstruction : ""
     return """
       \(ScreenDerivedContent.untrustedPreamble)
       Decide whether interrupting now adds concrete value. Return silence unless the validated
@@ -189,6 +243,8 @@ enum ContextProactivityPromptBuilder {
       update, recommendation, or useful follow-up without an explicit commitment, promise, or
       request is insight or suggest; never infer an owner or due date and never create a task
       candidate from actionability alone.
+      Do not re-deliver a point already delivered for this bucket unless the validated facts
+      add something materially new. Prefer silence over restating.\(lookup)
 
       \(stableBucket)
       """
@@ -196,7 +252,8 @@ enum ContextProactivityPromptBuilder {
 
   static func directorVolatilePrompt(
     tasks: [ContextDirectorTaskContext],
-    frame: CapturedFrame
+    frame: CapturedFrame,
+    recentDeliveries: [ContextBucketRecentDelivery] = []
   ) -> String {
     let actionableCutoff = frame.captureTime.addingTimeInterval(
       ContextDirectorTaskSelection.futureHorizon)
@@ -209,7 +266,7 @@ enum ContextProactivityPromptBuilder {
       return "- \(task.description)\n  Due at (UTC): \(utcTimestamp(dueAt))"
     }
     let taskContext = taskLines.joined(separator: "\n")
-    return """
+    var prompt = """
       == OPEN OR OVERDUE TASKS ==
       \(taskContext)
 
@@ -218,6 +275,49 @@ enum ContextProactivityPromptBuilder {
       Window: \(frame.windowTitle ?? "")
       Captured at (UTC): \(utcTimestamp(frame.captureTime))
       """
+    if let recent = recentDeliveriesSection(recentDeliveries, now: frame.captureTime) {
+      prompt += "\n\n\(recent)"
+    }
+    return prompt
+  }
+
+  static func recentDeliveriesSection(
+    _ deliveries: [ContextBucketRecentDelivery],
+    now: Date
+  ) -> String? {
+    let entries = Array(deliveries.prefix(ContextBucketRecentDelivery.promptCap))
+    guard !entries.isEmpty else { return nil }
+    let lines = entries.map { delivery -> String in
+      let decision = String(delivery.decisionType.prefix(32))
+      let age = relativeAge(from: delivery.deliveredAt, now: now)
+      let summary = boundedSummary(delivery.message)
+      if summary.isEmpty {
+        return "- \(decision) (\(age))"
+      }
+      return "- \(decision) (\(age)): \(summary)"
+    }
+    return """
+      == RECENTLY DELIVERED FOR THIS BUCKET ==
+      \(lines.joined(separator: "\n"))
+      """
+  }
+
+  static func relativeAge(from deliveredAt: Date, now: Date) -> String {
+    let seconds = max(0, Int(now.timeIntervalSince(deliveredAt).rounded(.down)))
+    if seconds < 60 { return "\(seconds)s ago" }
+    let minutes = seconds / 60
+    if minutes < 60 { return "\(minutes)m ago" }
+    let hours = minutes / 60
+    if hours < 48 { return "\(hours)h ago" }
+    return "\(hours / 24)d ago"
+  }
+
+  static func boundedSummary(_ message: String?) -> String {
+    let collapsed =
+      (message ?? "")
+      .replacingOccurrences(of: "\n", with: " ")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return String(collapsed.prefix(ContextBucketRecentDelivery.summaryCharacterLimit))
   }
 
   private static func utcTimestamp(_ date: Date) -> String {
@@ -644,6 +744,7 @@ actor ContextBucketRollupWriter {
         rawContextKey: "\(frame.appName)\n\(frame.windowTitle ?? "")",
         normalizedContextKey: ContextTitleNormalizer.identityKey(
           appName: frame.appName, windowTitle: frame.windowTitle) ?? "")
+      await applyDestinationIfEligible(extraction: extraction, frame: frame, fence: fence)
     } catch {
       switch error as? ProactiveLaneClientError {
       case .http(let status, _) where status == 429:
@@ -653,6 +754,26 @@ actor ContextBucketRollupWriter {
       default:
         log("Context bucket extraction failed silently: \(error.localizedDescription)")
       }
+    }
+  }
+
+  /// Applies a model-proposed browser destination, if it survives every gate.
+  ///
+  /// Deliberately non-throwing: a rejected or failed destination must never lose
+  /// the extraction that already succeeded. Falling through leaves the context on
+  /// its existing per-title identity, which is the safe direction.
+  private func applyDestinationIfEligible(
+    extraction: BucketExtraction, frame: CapturedFrame, fence: ContextVisitFence
+  ) async {
+    guard await ContextBucketsFeature.isDestinationRoutingEnabled,
+      ContextDestinationKey.isBrowser(appName: frame.appName),
+      let windowTitle = frame.windowTitle,
+      let subjectID = ContextDestinationKey.sanitize(extraction.destination, title: windowTitle)
+    else { return }
+    do {
+      _ = try await store.applyDestination(subjectID, for: fence)
+    } catch {
+      log("Context bucket destination binding failed silently: \(error.localizedDescription)")
     }
   }
 
@@ -680,8 +801,11 @@ actor ContextBucketRollupWriter {
             "additionalProperties": false,
           ],
         ],
+        "destination": ["type": "string"],
       ],
-      "required": ["narrative", "facts"],
+      // Strict structured output requires every declared property to be listed as
+      // required, so non-browser contexts are instructed to abstain instead.
+      "required": ["narrative", "facts", "destination"],
       "additionalProperties": false,
     ]
   }

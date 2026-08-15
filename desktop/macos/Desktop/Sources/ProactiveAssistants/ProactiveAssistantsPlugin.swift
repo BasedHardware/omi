@@ -186,6 +186,8 @@ public class ProactiveAssistantsPlugin: NSObject {
   )
   /// Fast poll interval for checking idle/app/window state without capturing.
   private let capturePollInterval: TimeInterval = 1.0
+  /// Exempts HID idleness while another process plays media (movie night ≠ away).
+  private let mediaPlaybackDetector = MediaPlaybackDetector()
   /// Apps whose content changes slowly. The value is the heartbeat interval in seconds.
   /// Uses bundle ID when available, falling back to localized app name.
   private let appSpecificHeartbeatIntervals: [String: TimeInterval] = [
@@ -776,9 +778,19 @@ public class ProactiveAssistantsPlugin: NSObject {
       return
     }
 
-    // Cheap early exits before resolving the active window.
-    let idleSeconds = systemIdleSeconds()
-    if idleSeconds >= captureTrigger.idleThreshold {
+    // Cheap early exits before resolving the active window. Two exemptions compose:
+    // media playback exempts HID idleness at every level (a movie viewer types nothing
+    // for an hour but is still watching — MediaPlaybackIdlePolicy), and Maximum
+    // notification level additionally extends the window to 300s for HID-idle WITHOUT
+    // media (reading a static feed). Calmer levels keep the 60s threshold.
+    let idleThreshold = SuggestionPacing.captureIdleThreshold(
+      frequencyLevel: NotificationService.currentFrequencyLevel(),
+      base: captureTrigger.idleThreshold
+    )
+    let idleSeconds = mediaPlaybackDetector.effectiveIdleSeconds(
+      hidIdleSeconds: systemIdleSeconds(),
+      threshold: idleThreshold)
+    if idleSeconds >= idleThreshold {
       logCaptureGate("idle")
       return
     }
@@ -879,7 +891,12 @@ public class ProactiveAssistantsPlugin: NSObject {
       app: appName ?? "",
       windowTitle: currentWindowTitle,
       idleSeconds: idleSeconds,
-      now: now
+      now: now,
+      forceHeartbeatCapture: SuggestionPacing.forcesHeartbeatCapture(
+        frequencyLevel: NotificationService.currentFrequencyLevel()),
+      idleThresholdOverride: SuggestionPacing.captureIdleThreshold(
+        frequencyLevel: NotificationService.currentFrequencyLevel(),
+        base: captureTrigger.idleThreshold)
     ) {
     case .skip:
       return

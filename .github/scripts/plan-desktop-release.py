@@ -20,10 +20,16 @@ REQUIRED_SOURCE_CHECK_NAMES = (
     "Desktop Swift Release Compile",
 )
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
-# Desktop Swift CI can consume the full 90-minute job budget. Keep the planner's
-# exact-SHA wait aligned so healthy builds are not timed out while still running. Override
-# via CI_GATE_TIMEOUT_SECONDS or --source-check-wait-seconds.
-SOURCE_CHECK_WAIT_SECONDS = 90 * 60
+# The planner's GH_TOKEN is a GitHub App installation token minted once at job
+# start, and those expire after 60 minutes. Every poll after expiry — including
+# the blocked-path fallback scan — fails with "gh: Bad credentials (401)", which
+# both kills the newest-green fallback and reports a misleading credentials
+# error instead of the real gate state (Aug 14 2026: every hourly run red;
+# issue #11574). So the wait must stay safely inside the token's life; a Swift
+# CI run that needs longer simply defers to the next hourly train tick, which
+# re-evaluates the finished checks instantly.
+TOKEN_SAFE_WAIT_CEILING_SECONDS = 45 * 60
+SOURCE_CHECK_WAIT_SECONDS = TOKEN_SAFE_WAIT_CEILING_SECONDS
 SOURCE_CHECK_POLL_SECONDS = 30
 MAX_SOURCE_STATUS_POLLS = 20
 CI_GATE_TIMEOUT_ENV = "CI_GATE_TIMEOUT_SECONDS"
@@ -279,6 +285,23 @@ def required_source_checks_gate(repository: str, sha: str) -> SourceCheckGate:
     return SourceCheckGate("ready")
 
 
+def clamp_source_check_wait_seconds(value: int) -> int:
+    """Cap any requested wait to the installation-token-safe ceiling.
+
+    Applied to every source of the value (default, env override, CLI flag): the
+    token constraint is a fact about the credential, not about the caller's
+    intent, so no configuration may exceed it.
+    """
+    if value > TOKEN_SAFE_WAIT_CEILING_SECONDS:
+        print(
+            f"Clamping source-check wait from {value}s to {TOKEN_SAFE_WAIT_CEILING_SECONDS}s: "
+            "the GitHub App installation token expires after 60 minutes and every later "
+            "poll (and the newest-green fallback scan) would fail with 401."
+        )
+        return TOKEN_SAFE_WAIT_CEILING_SECONDS
+    return value
+
+
 def default_source_check_wait_seconds() -> int:
     """Resolve the CI gate wait budget from CI_GATE_TIMEOUT_SECONDS or the default."""
     raw = os.environ.get(CI_GATE_TIMEOUT_ENV)
@@ -515,6 +538,7 @@ def main() -> int:
     )
     if source_check_wait_seconds < 0:
         parser.error("--source-check-wait-seconds must be non-negative")
+    source_check_wait_seconds = clamp_source_check_wait_seconds(source_check_wait_seconds)
     if args.source_check_poll_seconds <= 0:
         parser.error("--source-check-poll-seconds must be positive")
     if args.watch_source_sha:

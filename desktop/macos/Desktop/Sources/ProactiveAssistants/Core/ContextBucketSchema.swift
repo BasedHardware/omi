@@ -84,6 +84,18 @@ enum ContextBucketSchema {
           """,
         arguments: [migrationName, effectiveOwnerID, sourceOwnerID, legacyBindings.count, Date()])
     }
+    migrator.registerMigration("addContextVisitHandles") { db in
+      try db.alter(table: "context_visits") { table in
+        table.add(column: "primaryHandleType", .text)
+        table.add(column: "primaryHandleValue", .text)
+        table.add(column: "handlesJson", .text)
+        table.add(column: "bundleID", .text)
+      }
+      try db.create(
+        index: "idx_context_visits_handle",
+        on: "context_visits",
+        columns: ["primaryHandleType", "primaryHandleValue"])
+    }
   }
 
   static func removeMigratedLegacyDefaults(

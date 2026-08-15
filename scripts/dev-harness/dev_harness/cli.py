@@ -283,6 +283,27 @@ def _python_importable(module: str) -> bool:
     )
 
 
+def _java_runtime_present() -> bool:
+    """Report whether a usable JVM exists, not merely whether `java` is on PATH.
+
+    macOS ships a stub at /usr/bin/java that is always present and exits 1 with
+    "Unable to locate a Java Runtime" when no JDK is installed, so a PATH lookup
+    passes on every Mac. Running the binary is the only check that distinguishes
+    the stub from a real runtime.
+    """
+    if not _which("java"):
+        return False
+    try:
+        return (
+            subprocess.run(
+                ["java", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30
+            ).returncode
+            == 0
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]]:
     missing: list[str] = []
     warnings: list[str] = []
@@ -292,8 +313,11 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
         missing.append(
             "firebase-tools CLI or npx (install with npm install, npm install -g firebase-tools, or use npx)"
         )
-    if not _which("java"):
-        missing.append("java runtime (required by Firestore emulator)")
+    if not _java_runtime_present():
+        missing.append(
+            "java runtime (required by the Firestore and Auth emulators; "
+            "install one with `brew install --cask temurin` or from https://adoptium.net)"
+        )
     if not _which("redis-server"):
         missing.append("redis-server (required for local Redis on loopback)")
     runtime = typesense_runtime()
@@ -586,7 +610,11 @@ def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
     firestore["rules"] = str(cfg.repo_root / "firestore.rules")
     firestore["indexes"] = str(cfg.repo_root / "firestore.indexes.json")
     _write_json(config_path, payload)
-    base = ["firebase"] if _which("firebase") else ["npx", "firebase-tools"]
+    # `--yes` is required: the emulator runs detached with its output redirected to a
+    # log file, so npx's "Need to install the following packages / Ok to proceed? (y)"
+    # prompt has no terminal to answer it and the process blocks there forever. The
+    # health check then fails on a timeout that says nothing about the real cause.
+    base = ["firebase"] if _which("firebase") else ["npx", "--yes", "firebase-tools"]
     return [
         *base,
         "emulators:start",

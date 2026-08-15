@@ -18,14 +18,18 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       visitID: 99, contextGeneration: 3, poolEpoch: 4, bucketID: "bucket", startedAt: Date(timeIntervalSince1970: 1))
 
     let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
-    let expected = [
-      ScreenDerivedContent.untrustedPreamble,
-      "Produce a 150-400 token ambient narrative and discrete factual records. Facts are",
-      "proposals; include an identifier, surviving evidence text, and evidence ref for each.",
-      "App: Xcode",
-      "Window: PR-123",
-      "Evidence ref: screenshot:42",
-    ].joined(separator: "\n")
+    let expected =
+      [
+        ScreenDerivedContent.untrustedPreamble,
+        "Produce a 150-400 token ambient narrative and discrete factual records. Facts are",
+        "proposals; include an identifier, surviving evidence text, and evidence ref for each.",
+        "App: Xcode",
+        "Window: PR-123",
+        "Evidence ref: screenshot:42",
+      ].joined(separator: "\n")
+      // Xcode is not a browser, so destination routing must not be offered here —
+      // only the abstention that satisfies the strict-schema required field.
+      + "\n\nSet \"destination\" to \"\(ContextDestinationKey.abstention)\"."
 
     XCTAssertEqual(prompt, expected)
   }
@@ -37,7 +41,11 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
 
     let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
 
-    XCTAssertTrue(prompt.hasSuffix("App: Safari\nWindow: \nEvidence ref: visit:123"))
+    // Safari is a browser, but a blank window title carries no destination signal,
+    // so this must still fall through to abstention rather than inviting a guess.
+    XCTAssertTrue(prompt.contains("App: Safari\nWindow: \nEvidence ref: visit:123"))
+    XCTAssertTrue(prompt.hasSuffix("Set \"destination\" to \"\(ContextDestinationKey.abstention)\"."))
+    XCTAssertFalse(prompt.contains("page-group"))
   }
 
   func testDirectorPromptContainsSafetyPreambleBucketTasksAndFrameMetadata() {
@@ -77,6 +85,8 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       "update, recommendation, or useful follow-up without an explicit commitment, promise, or",
       "request is insight or suggest; never infer an owner or due date and never create a task",
       "candidate from actionability alone.",
+      "Do not re-deliver a point already delivered for this bucket unless the validated facts",
+      "add something materially new. Prefer silence over restating.",
       "",
       bucket,
       "",
@@ -94,6 +104,100 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     XCTAssertTrue(prompt.contains("== FROZEN RANKED CONTEXT ==\nfrozen:entry-1"))
     XCTAssertTrue(prompt.contains("== RECENT TAIL ==\ntail:entry-2"))
     XCTAssertTrue(prompt.contains("== VALIDATED FACTS ==\nfact:PR-123"))
+    XCTAssertFalse(prompt.contains("== RECENTLY DELIVERED FOR THIS BUCKET =="))
+  }
+
+  func testDirectorPromptIncludesBoundedRecentDeliveriesForThisBucket() {
+    let capturedAt = Date(timeIntervalSince1970: 1_700_000_000)
+    let snapshot = ContextBucketSnapshot(
+      bucketID: "bucket", versionID: 1, version: 1, header: "header",
+      frozenRankedSegment: Data(), tail: [], validatedFacts: ["fact"], notifyWorthiness: 1)
+    let frame = CapturedFrame(
+      jpegData: Data(), appName: "Notes", frameNumber: 10, captureTime: capturedAt)
+    let prompt = ContextProactivityPromptBuilder.directorPrompt(
+      snapshot: snapshot,
+      tasks: [],
+      frame: frame,
+      recentDeliveries: [
+        ContextBucketRecentDelivery(
+          decisionType: "resurface",
+          message: "Keep the investigation open",
+          deliveredAt: capturedAt.addingTimeInterval(-65)),
+        ContextBucketRecentDelivery(
+          decisionType: "insight",
+          message: "Status changed",
+          deliveredAt: capturedAt.addingTimeInterval(-26 * 60)),
+      ])
+    let bucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
+    let expected = [
+      ScreenDerivedContent.untrustedPreamble,
+      "Decide whether interrupting now adds concrete value. Return silence unless the validated",
+      "facts support a specific, timely action. Use only supplied bucket-entry refs.",
+      "Never announce that meeting notes, a transcript, or a call summary are ready. The",
+      "conversation-finalization lane owns that claim and attaches the exact conversation link.",
+      "Use resurface or suggest for an actionable open task supplied below. Entries marked",
+      "reference-only are identity context: do not notify about or recreate them yet. Use",
+      "task_candidate only when a validated fact explicitly records a new commitment, promise,",
+      "or request with an accountable action that the user personally made or accepted (first",
+      "person), and that commitment is absent from the supplied task list. A commitment made by",
+      "another person is never a task candidate, however explicit or well-dated it is; if it",
+      "genuinely bears on the user's tracked work it may at most be insight, and a commitment",
+      "between other parties that does not involve the user is silence. A material change, status",
+      "update, recommendation, or useful follow-up without an explicit commitment, promise, or",
+      "request is insight or suggest; never infer an owner or due date and never create a task",
+      "candidate from actionability alone.",
+      "Do not re-deliver a point already delivered for this bucket unless the validated facts",
+      "add something materially new. Prefer silence over restating.",
+      "",
+      bucket,
+      "",
+      "== OPEN OR OVERDUE TASKS ==",
+      "",
+      "",
+      "== CURRENT FRAME METADATA ==",
+      "App: Notes",
+      "Window: ",
+      "Captured at (UTC): 2023-11-14T22:13:20.000Z",
+      "",
+      "== RECENTLY DELIVERED FOR THIS BUCKET ==",
+      "- resurface (1m ago): Keep the investigation open",
+      "- insight (26m ago): Status changed",
+    ].joined(separator: "\n")
+
+    XCTAssertEqual(prompt, expected)
+  }
+
+  func testDirectorPromptCapsRecentDeliveriesAndOmitsTheSectionWhenEmpty() {
+    let capturedAt = Date(timeIntervalSince1970: 1_700_000_000)
+    let snapshot = ContextBucketSnapshot(
+      bucketID: "bucket", versionID: 1, version: 1, header: "header",
+      frozenRankedSegment: Data(), tail: [], validatedFacts: ["fact"], notifyWorthiness: 1)
+    let frame = CapturedFrame(
+      jpegData: Data(), appName: "Notes", frameNumber: 10, captureTime: capturedAt)
+    let empty = ContextProactivityPromptBuilder.directorPrompt(
+      snapshot: snapshot, tasks: [], frame: frame, recentDeliveries: [])
+    XCTAssertFalse(empty.contains("== RECENTLY DELIVERED FOR THIS BUCKET =="))
+
+    let overflow = (0..<5).map { index in
+      ContextBucketRecentDelivery(
+        decisionType: "resurface",
+        message: "nudge-\(index)",
+        deliveredAt: capturedAt.addingTimeInterval(TimeInterval(-60 * (index + 1))))
+    }
+    let capped = ContextProactivityPromptBuilder.directorPrompt(
+      snapshot: snapshot, tasks: [], frame: frame, recentDeliveries: overflow)
+    XCTAssertEqual(
+      ContextProactivityPromptBuilder.recentDeliveriesSection(overflow, now: capturedAt),
+      """
+      == RECENTLY DELIVERED FOR THIS BUCKET ==
+      - resurface (1m ago): nudge-0
+      - resurface (2m ago): nudge-1
+      - resurface (3m ago): nudge-2
+      """)
+    XCTAssertTrue(capped.contains("- resurface (1m ago): nudge-0"))
+    XCTAssertTrue(capped.contains("- resurface (3m ago): nudge-2"))
+    XCTAssertFalse(capped.contains("nudge-3"))
+    XCTAssertFalse(capped.contains("nudge-4"))
   }
 
   func testDirectorTaskContextBoundsDescription() {

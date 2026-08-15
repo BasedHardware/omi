@@ -83,17 +83,20 @@ enum ContextBucketVisitResolver {
     in db: Database,
     referenceHash: String,
     normalizedTitle: String?,
-    startedAt: Date
+    startedAt: Date,
+    primaryHandle: WorkHistoryHandle? = nil
   ) throws -> String? {
+    let handleIdentity = primaryHandle?.isDurable == true ? primaryHandle : nil
+    let lookupHash = handleIdentity?.identityKey ?? referenceHash
     let binding = try Row.fetchOne(
       db,
       sql: "SELECT * FROM subject_bindings WHERE referenceHash = ?",
-      arguments: [referenceHash])
-    let subjectKind: String = binding?["subjectKind"] ?? "context"
-    let subjectID: String = binding?["subjectID"] ?? referenceHash
+      arguments: [lookupHash])
+    let subjectKind: String = binding?["subjectKind"] ?? handleIdentity?.kind.rawValue ?? "context"
+    let subjectID: String = binding?["subjectID"] ?? handleIdentity?.value ?? referenceHash
     let workstreamID: String? = binding?["workstreamID"]
-    let confidence: Double = binding?["confidence"] ?? 0.5
-    let source: String = binding?["source"] ?? "repeat_cooccurrence"
+    let confidence: Double = binding?["confidence"] ?? (handleIdentity == nil ? 0.5 : 0.8)
+    let source: String = binding?["source"] ?? (handleIdentity == nil ? "repeat_cooccurrence" : "source_handle")
 
     if let existing: String = binding?["bucketID"] {
       let consistent =
@@ -111,17 +114,30 @@ enum ContextBucketVisitResolver {
       // subject. Fall through and re-resolve for the binding's current subject.
     }
 
-    guard normalizedTitle != nil else { return nil }
+    guard normalizedTitle != nil || handleIdentity != nil else { return nil }
     // A subject binding (including explicit_open) already owns this identity, so
     // do not require a prior completed visit before attaching the subject bucket.
     if binding == nil {
       let recentCutoff = startedAt.addingTimeInterval(-7 * 24 * 60 * 60)
-      let previousVisits =
-        try Int.fetchOne(
-          db,
-          sql:
-            "SELECT COUNT(*) FROM context_visits WHERE referenceHash = ? AND outcome = 'completed' AND startedAt >= ?",
-          arguments: [referenceHash, recentCutoff]) ?? 0
+      let previousVisits: Int
+      if let handleIdentity, try db.columns(in: "context_visits").map(\.name).contains("primaryHandleValue") {
+        previousVisits =
+          try Int.fetchOne(
+            db,
+            sql: """
+              SELECT COUNT(*) FROM context_visits
+              WHERE primaryHandleType = ? AND primaryHandleValue = ?
+                AND outcome = 'completed' AND startedAt >= ?
+              """,
+            arguments: [handleIdentity.kind.rawValue, handleIdentity.value, recentCutoff]) ?? 0
+      } else {
+        previousVisits =
+          try Int.fetchOne(
+            db,
+            sql:
+              "SELECT COUNT(*) FROM context_visits WHERE referenceHash = ? AND outcome = 'completed' AND startedAt >= ?",
+            arguments: [referenceHash, recentCutoff]) ?? 0
+      }
       guard previousVisits >= 1 else { return nil }
     }
 
@@ -141,9 +157,12 @@ enum ContextBucketVisitResolver {
           INSERT INTO context_buckets
             (id, subjectKind, subjectID, workstreamID, displayLabel, visitCount,
              lastVisitedAt, createdAt, updatedAt)
-          VALUES (?, ?, ?, ?, NULL, 0, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
           """,
-        arguments: [resolvedBucketID, subjectKind, subjectID, workstreamID, startedAt, startedAt, startedAt])
+        arguments: [
+          resolvedBucketID, subjectKind, subjectID, workstreamID,
+          handleIdentity?.value ?? normalizedTitle, startedAt, startedAt, startedAt,
+        ])
     }
     try db.execute(
       sql: """
@@ -157,7 +176,7 @@ enum ContextBucketVisitResolver {
           updatedAt = excluded.updatedAt
         """,
       arguments: [
-        referenceHash, resolvedBucketID, subjectKind, subjectID, confidence, source, startedAt, startedAt,
+        lookupHash, resolvedBucketID, subjectKind, subjectID, confidence, source, startedAt, startedAt,
       ])
     return resolvedBucketID
   }
@@ -168,11 +187,46 @@ actor ContextBucketStore {
 
   private init() {}
 
+  /// Binds this visit's reference hash to a shared browser destination.
+  ///
+  /// Called once per novel browser title; afterwards `resolveBucketID` reads the
+  /// stored binding and every later visit resolves deterministically with no model
+  /// call. Caching the decision on the reference-hash primary key is what keeps
+  /// identity stable — the model is a one-time router, never a per-visit classifier.
+  ///
+  /// Returns the bucket the destination resolved to, or nil when nothing changed.
+  @discardableResult
+  func applyDestination(_ subjectID: String, for fence: ContextVisitFence) async throws -> String? {
+    guard let currentBucketID = fence.bucketID else { return nil }
+    let pool = try await poolForDestination(fence)
+    return try await pool.write { db -> String? in
+      let referenceHash = try String.fetchOne(
+        db, sql: "SELECT referenceHash FROM context_visits WHERE id = ?",
+        arguments: [fence.visitID])
+      guard let referenceHash else { return nil }
+      return try ContextDestinationBinder.apply(
+        in: db,
+        referenceHash: referenceHash,
+        currentBucketID: currentBucketID,
+        subjectID: subjectID)
+    }
+  }
+
+  private func poolForDestination(_ fence: ContextVisitFence) async throws -> DatabasePool {
+    let (pool, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool, generation == fence.poolEpoch else {
+      throw ContextBucketStoreError.databaseUnavailable
+    }
+    return pool
+  }
+
   func startVisit(
     appName: String,
     windowTitle: String?,
     contextGeneration: Int64,
-    startedAt: Date = Date()
+    startedAt: Date = Date(),
+    handles: [WorkHistoryHandle] = [],
+    bundleID: String? = nil
   ) async throws -> ContextVisitFence {
     let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
@@ -183,25 +237,35 @@ actor ContextBucketStore {
     // hashes keep visit rows unique and skip durable binding/bucket lookup.
     let referenceHash =
       normalizedKey.map(Self.referenceHash) ?? "ephemeral:\(UUID().uuidString.lowercased())"
+    let resolvedHandles =
+      handles.isEmpty
+      ? WorkHistoryHandleExtractor.handles(
+        from: WorkHistoryFrontmostSnapshot(appName: appName, windowTitle: windowTitle, bundleID: bundleID))
+      : handles
+    let primaryHandle = WorkHistoryHandle.primary(in: resolvedHandles)
     let bucketID = try await pool.write { db -> String? in
-      guard normalizedKey != nil else { return nil }
+      guard normalizedKey != nil || primaryHandle?.isDurable == true else { return nil }
       return try ContextBucketVisitResolver.resolveBucketID(
         in: db,
         referenceHash: referenceHash,
         normalizedTitle: normalizedTitle,
-        startedAt: startedAt)
+        startedAt: startedAt,
+        primaryHandle: primaryHandle)
     }
     let visitID = try await pool.write { db -> Int64 in
       try db.execute(
         sql: """
           INSERT INTO context_visits
             (contextGeneration, poolEpoch, bucketID, appName, rawContextKey,
-             normalizedContextKey, referenceHash, startedAt, outcome, createdAt, updatedAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+             normalizedContextKey, referenceHash, startedAt, outcome, createdAt, updatedAt,
+             primaryHandleType, primaryHandleValue, handlesJson, bundleID)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)
           """,
         arguments: [
           contextGeneration, poolEpoch, bucketID, appName, rawKey, normalizedKey ?? "",
           referenceHash, startedAt, startedAt, startedAt,
+          primaryHandle?.kind.rawValue, primaryHandle?.value, WorkHistoryHandle.encodeList(resolvedHandles),
+          bundleID,
         ])
       return db.lastInsertedRowID
     }

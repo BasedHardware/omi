@@ -37,7 +37,7 @@ actor SuggestionAssistant: ProactiveAssistant {
   /// The shared delay (`AssistantSettings.analysisDelay`, 60s) exists so assistants do
   /// not analyze while the user is still moving around. A minute is far too long for a
   /// suggestion about the screen in front of you, so this assistant takes the frames and
-  /// enforces its own, much shorter settle window instead (`settleInterval`).
+  /// enforces its own, much shorter settle window instead (`SuggestionPacing.settleInterval`).
   var needsFrameDuringDelay: Bool {
     get async { true }
   }
@@ -47,18 +47,10 @@ actor SuggestionAssistant: ProactiveAssistant {
   private let geminiClient: GeminiClient
   private let telemetryModel: SuggestionAssistantTelemetry.Model
 
-  /// Dwell before a context is worth spending on — level-aware, see
-  /// `SuggestionGatePolicy.requiredDwell(frequencyLevel:)` (10 s at Maximum, 30 s otherwise).
-  private static func requiredDwell(frequencyLevel: Int) -> TimeInterval {
-    SuggestionGatePolicy.requiredDwell(frequencyLevel: frequencyLevel)
-  }
-
-  /// Hard ceiling on paid evaluations per day, so cost is a number we choose rather than a
-  /// function of how much the user alt-tabs.
-  private static let dailyEvaluationBudget = 40
-
-  /// Frames are still accepted this early so dwell can be measured from the switch.
-  private let settleInterval: TimeInterval = 6.0
+  /// Last observed notification frequency level, refreshed on every context switch and
+  /// evaluation so synchronous gates can pace by level without an actor hop per frame.
+  /// Defaults to Balanced so a not-yet-read level never triggers Maximum pacing.
+  private var cachedFrequencyLevel: Int = 3
 
   private var dailyBudget = SuggestionDailyBudget()
 
@@ -69,7 +61,6 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   private var lastEvaluationAt: Date?
   private var recentSuggestions: [String] = []
-  private let maxRecentSuggestions = 10
 
   /// The commitments handed to the evaluation currently in flight, kept so delivery can
   /// hold a `commitment` nudge to what the model was actually shown.
@@ -123,13 +114,17 @@ actor SuggestionAssistant: ProactiveAssistant {
     )
     pendingApp = newApp
     pendingWindowTitle = newWindowTitle
+    // Refreshed per switch so the synchronous `shouldAnalyze` gate can pace by level
+    // without hopping actors on every frame.
+    cachedFrequencyLevel = await MainActor.run { NotificationService.currentFrequencyLevel() }
   }
 
   /// Every branch here is mechanical. No model call happens until all of them pass, which
   /// is what makes the cost contract testable.
   func shouldAnalyze(frameNumber: Int, timeSinceLastAnalysis: TimeInterval) -> Bool {
     guard let switchedAt = pendingContextSwitchAt else { return false }
-    guard Date().timeIntervalSince(switchedAt) >= settleInterval else { return false }
+    let settle = SuggestionPacing.settleInterval(frequencyLevel: cachedFrequencyLevel)
+    guard Date().timeIntervalSince(switchedAt) >= settle else { return false }
     return true
   }
 
@@ -138,8 +133,9 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     let enabled = await isEnabled
     let excluded = await MainActor.run { SuggestionAssistantSettings.shared.isAppExcluded(frame.appName) }
-    let frequencyLevel = await MainActor.run { NotificationService.currentFrequencyLevel() }
-    let cooldown = await cooldownInterval
+    let level = await MainActor.run { NotificationService.currentFrequencyLevel() }
+    cachedFrequencyLevel = level
+    let cooldown = SuggestionPacing.cooldown(base: await cooldownInterval, frequencyLevel: level)
 
     let now = Date()
     let dwell = pendingContextSwitchAt.map { now.timeIntervalSince($0) } ?? 0
@@ -148,12 +144,15 @@ actor SuggestionAssistant: ProactiveAssistant {
       isEnabled: enabled,
       isAppExcluded: excluded,
       now: now,
-      lastEvaluationAt: lastEvaluationAt,
-      cooldown: SuggestionGatePolicy.cooldown(base: cooldown, frequencyLevel: frequencyLevel),
+      lastEvaluationAt: SuggestionPacing.effectiveLastEvaluation(
+        lastEvaluationAt: lastEvaluationAt,
+        anchor: pendingContextSwitchAt,
+        frequencyLevel: level),
+      cooldown: cooldown,
       dwell: dwell,
-      requiredDwell: Self.requiredDwell(frequencyLevel: frequencyLevel),
+      requiredDwell: SuggestionPacing.requiredDwell(frequencyLevel: level),
       evaluationsToday: dailyBudget.countToday(now: now),
-      dailyBudget: Self.dailyEvaluationBudget
+      dailyBudget: SuggestionPacing.dailyEvaluationBudget(frequencyLevel: level)
     )
 
     guard decision.allowsEvaluation else {
@@ -187,7 +186,13 @@ actor SuggestionAssistant: ProactiveAssistant {
     await MainActor.run {
       AnalyticsManager.shared.suggestionAssistantGateOutcome(.eligible)
     }
-    clearPendingContext()
+    // Calm levels consume the context: one evaluation per arrival, then quiet until the
+    // user moves somewhere new. Maximum re-arms so staying on the same feed keeps
+    // producing nudges every cooldown interval — that sustained cadence is the level's
+    // entire point, and cooldown + the daily budget still bound the spend.
+    if !SuggestionPacing.rearmsAfterEvaluation(frequencyLevel: level) {
+      clearPendingContext()
+    }
     lastEvaluationAt = now
     dailyBudget.recordEvaluation(now: now)
     commitmentsInFlight = grounding.openCommitments
@@ -512,7 +517,8 @@ actor SuggestionAssistant: ProactiveAssistant {
     }
     let telemetryIdentity = SuggestionAssistantTelemetry.NotificationIdentity(result.telemetryIdentity)
     let ownerID = RuntimeOwnerIdentity.currentOwnerId()
-    let threshold = await minConfidence
+    let threshold = SuggestionPacing.minConfidence(
+      base: await minConfidence, frequencyLevel: cachedFrequencyLevel)
 
     let outcome = SuggestionDeliveryPolicy.decide(
       hasOwner: ownerID != nil,
@@ -558,8 +564,9 @@ actor SuggestionAssistant: ProactiveAssistant {
     }
 
     recentSuggestions.append(suggestion.suggestion)
-    if recentSuggestions.count > maxRecentSuggestions {
-      recentSuggestions.removeFirst(recentSuggestions.count - maxRecentSuggestions)
+    let dedupMemory = SuggestionPacing.dedupMemory(frequencyLevel: cachedFrequencyLevel)
+    if recentSuggestions.count > dedupMemory {
+      recentSuggestions.removeFirst(recentSuggestions.count - dedupMemory)
     }
 
     await deliver(
@@ -644,10 +651,10 @@ actor SuggestionAssistant: ProactiveAssistant {
       now: now,
       lastEvaluationAt: nil,
       cooldown: 0,
-      dwell: Self.requiredDwell(frequencyLevel: gateState.2),
-      requiredDwell: Self.requiredDwell(frequencyLevel: gateState.2),
+      dwell: SuggestionPacing.requiredDwell(frequencyLevel: gateState.2),
+      requiredDwell: SuggestionPacing.requiredDwell(frequencyLevel: gateState.2),
       evaluationsToday: dailyBudget.countToday(now: now),
-      dailyBudget: Self.dailyEvaluationBudget)
+      dailyBudget: SuggestionPacing.dailyEvaluationBudget(frequencyLevel: gateState.2))
     guard gateState.1, gateState.2 > 0, decision.allowsEvaluation else {
       if !gateState.1 { return ["outcome": "skipped_notifications_disabled"] }
       if gateState.2 == 0 { return ["outcome": "skipped_frequency_off"] }
