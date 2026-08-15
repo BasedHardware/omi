@@ -747,6 +747,88 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn(f"source_sha={fallback_sha}", outputs)
         self.assertIn("should_release=true", outputs)
 
+    def test_blocked_newest_sha_prefers_a_green_sha_ahead_over_an_older_one(self) -> None:
+        """A green tip unblocks the train, and ships newer code than the backward fallback.
+
+        Aug 14 2026: main's tip had every required check green while the newest
+        desktop-touching commit below it was red on a flaky Swift suite. The
+        train shipped an older tree (or wedged) and nothing surfaced it. A
+        first-parent commit above the blocked SHA contains everything the
+        blocked SHA contains, so its own green exact-SHA checks prove that tree.
+        """
+        ahead_sha = "c" * 40
+        older_green_sha = "b" * 40
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner, "releasable_desktop_changes_since", return_value=["desktop/macos/a.swift"]),
+                patch.object(planner, "latest_releasable_desktop_sha", return_value=SOURCE_SHA),
+                patch.object(planner, "latest_change_age_seconds", return_value=601),
+                patch.object(planner, "existing_source_candidate_reason", return_value=None),
+                patch.object(
+                    planner,
+                    "evaluate_source_checks",
+                    return_value=planner.SourceCheckGate("blocked", "required check failed"),
+                ),
+                patch.object(planner, "first_parent_shas_after", return_value=[ahead_sha]),
+                patch.object(planner, "releasable_desktop_shas_since", return_value=[SOURCE_SHA, older_green_sha]),
+                patch.object(
+                    planner,
+                    "required_source_checks_gate",
+                    return_value=planner.SourceCheckGate("ready"),
+                ),
+                patch.object(planner, "active_release_reason", return_value=None),
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        self.assertIn(f"source_sha={ahead_sha}", outputs)
+        self.assertNotIn(f"source_sha={older_green_sha}", outputs)
+        self.assertIn("should_release=true", outputs)
+
+    def test_sha_ahead_with_a_skipped_or_absent_check_is_not_treated_as_green(self) -> None:
+        """The forward hop needs a genuine `ready`, never a skipped or missing check.
+
+        A commit that does not touch desktop paths skips the Swift jobs. Those
+        skipped (or absent) checks prove nothing, so such a commit must not
+        carry the train forward.
+        """
+        ahead_sha = "c" * 40
+        gates = {
+            ahead_sha: planner.SourceCheckGate("blocked", "completed with skipped"),
+        }
+
+        def gate_for(_repository: str, sha: str) -> planner.SourceCheckGate:
+            return gates.get(sha, planner.SourceCheckGate("blocked", "required check is missing"))
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner, "releasable_desktop_changes_since", return_value=["desktop/macos/a.swift"]),
+                patch.object(planner, "latest_releasable_desktop_sha", return_value=SOURCE_SHA),
+                patch.object(planner, "latest_change_age_seconds", return_value=601),
+                patch.object(planner, "existing_source_candidate_reason", return_value=None),
+                patch.object(
+                    planner,
+                    "evaluate_source_checks",
+                    return_value=planner.SourceCheckGate("blocked", "required check failed"),
+                ),
+                patch.object(planner, "first_parent_shas_after", return_value=[ahead_sha]),
+                patch.object(planner, "releasable_desktop_shas_since", return_value=[SOURCE_SHA]),
+                patch.object(planner, "required_source_checks_gate", side_effect=gate_for),
+                patch.object(sys, "argv", [str(SCRIPT), "--repository", REPOSITORY]),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+            ):
+                self.assertEqual(planner.main(), 1)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        self.assertIn("should_release=false", outputs)
+        self.assertIn("source gate blocked", outputs)
+
     def test_blocked_newest_sha_without_a_green_fallback_exits_one(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "github-output"

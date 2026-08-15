@@ -143,30 +143,34 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             with self.subTest(job=job_id, timeout_minutes=timeout_minutes):
                 self.assertIn(f"timeout-minutes: {timeout_minutes}", self.jobs[job_id])
 
-    def test_closed_prs_release_the_same_pr_concurrency_group_without_allocating_a_runner(self):
-        """Closures allocate no Mac; only abandoned PRs cancel obsolete work."""
+    def test_no_closed_pull_request_runs_exist(self):
+        """No closure run can publish a skipped check onto the merge SHA."""
         workflow = _workflow_text()
-        changes = self.jobs["changes"]
 
-        self.assertRegex(workflow, r"types:\s*\[[^]]*closed[^]]*\]")
-        self.assertIn("github.event.pull_request.number || github.sha", workflow)
-        self.assertIn(
-            "cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action != 'closed' || !github.event.pull_request.merged) }}",
-            workflow,
-        )
-        self.assertIn("github.event.action != 'closed'", changes)
+        self.assertNotIn("closed", workflow)
+        self.assertNotIn("pull_request.merged", workflow)
 
-    def test_closed_pr_bookkeeping_cannot_publish_the_required_release_check(self):
-        """A merged close run must not supersede exact-SHA release evidence."""
-        gate = self.jobs["desktop-swift"]
-        release_compile = self.jobs["desktop-swift-release-compile"]
+    def test_required_release_check_names_are_literals(self):
+        """GitHub does not evaluate `name:` for a skipped job.
 
-        self.assertIn("github.event.action == 'closed'", gate)
-        self.assertIn("Desktop Swift PR Closure", gate)
-        self.assertIn("Desktop Swift Build & Tests", gate)
-        self.assertIn("github.event.action == 'closed'", release_compile)
-        self.assertIn("Desktop Swift PR Closure Release Compile", release_compile)
-        self.assertIn("Desktop Swift Release Compile", release_compile)
+        An expression there publishes the raw expression text as the check
+        name, so the check the desktop release planner requires by exact name
+        becomes *absent* instead of skipped on every commit that does not touch
+        desktop paths. Observed Aug 14 2026 on f666ddd4a3/7a79f08329/7d7ed62e5:
+        the published name was the literal
+        "github.event.action == 'closed' && ... || 'Desktop Swift Build & Tests'".
+        Every job name in this workflow must therefore be expression-free.
+        """
+        for job_id, body in self.jobs.items():
+            name_lines = [
+                line for line in body.splitlines() if line.strip().startswith("name:") and "    - name:" not in line
+            ]
+            self.assertTrue(name_lines, f"job {job_id} declares no name")
+            with self.subTest(job=job_id):
+                self.assertNotIn("${{", name_lines[0])
+
+        self.assertIn("name: Desktop Swift Build & Tests", self.jobs["desktop-swift"])
+        self.assertIn("name: Desktop Swift Release Compile", self.jobs["desktop-swift-release-compile"])
 
     def test_notification_boundary_runs_targeted_release_regression(self):
         job = self.jobs["desktop-swift-verify"]
@@ -188,7 +192,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """The required check name must fail closed on its selected lanes."""
         gate = self.jobs["desktop-swift"]
 
-        self.assertIn("'Desktop Swift Build & Tests'", gate)
+        self.assertIn("name: Desktop Swift Build & Tests", gate)
         self.assertIn("desktop-swift-verify", gate)
         self.assertIn("always()", gate)
         self.assertIn("STATIC_REQUIRED", gate)
@@ -259,7 +263,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             concurrency,
         )
         self.assertIn(
-            "cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.action != 'closed' || !github.event.pull_request.merged) }}",
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
             concurrency,
         )
         self.assertNotIn("github.ref", concurrency)

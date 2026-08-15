@@ -157,6 +157,46 @@ def releasable_desktop_shas_since(ref: str | None) -> list[str]:
     return [line for line in output.splitlines() if line]
 
 
+def first_parent_shas_after(blocked_sha: str) -> list[str]:
+    """First-parent commits newer than `blocked_sha` on main, newest first."""
+    try:
+        output = git(
+            [
+                "log",
+                "--first-parent",
+                f"--max-count={FALLBACK_SOURCE_CANDIDATES}",
+                "--format=%H",
+                f"{blocked_sha}..HEAD",
+            ]
+        )
+    except subprocess.CalledProcessError:
+        return []
+    return [line for line in output.splitlines() if line]
+
+
+def newest_green_source_ahead(repository: str, blocked_sha: str) -> tuple[str, str] | None:
+    """Newest commit ABOVE the blocked SHA whose own required checks are green.
+
+    A commit newer than `blocked_sha` on first-parent main contains everything
+    `blocked_sha` contains, so its own exact-SHA checks tested a superset of
+    that tree. When those checks are green, the desktop code in the blocked
+    commit has been proven green by a later run, and the train may ship from
+    that newer SHA. This is what makes a green tip unblock the train, and what
+    stops a single flaky red commit from wedging shipping: the next commit that
+    actually runs desktop CI carries the train forward.
+
+    Only a genuine `ready` gate qualifies — skipped and absent checks are not
+    success, so a non-desktop commit (whose desktop jobs skip) never qualifies.
+    Preferred over `newest_green_fallback_source` because it ships newer, not
+    older, code.
+    """
+    for sha in first_parent_shas_after(blocked_sha):
+        gate = required_source_checks_gate(repository, sha)
+        if gate.state == "ready":
+            return sha, f"newest green SHA ahead of blocked {blocked_sha[:12]}"
+    return None
+
+
 def newest_green_fallback_source(repository: str, latest_tag: str | None, blocked_sha: str) -> tuple[str, str] | None:
     """Newest older releasable SHA whose required checks all succeeded, if any."""
     for sha in releasable_desktop_shas_since(latest_tag):
@@ -729,7 +769,11 @@ def main() -> int:
         set_output("reason", f"Waiting for required exact-SHA checks: {source_check_gate.reason}.")
         return 0
     if source_check_gate.state == "blocked":
-        fallback = newest_green_fallback_source(args.repository, latest_tag, source_sha)
+        # Prefer a green SHA ABOVE the blocked one — it proves the same desktop
+        # tree and ships newer code — before falling back to an older green SHA.
+        fallback = newest_green_source_ahead(args.repository, source_sha) or newest_green_fallback_source(
+            args.repository, latest_tag, source_sha
+        )
         if fallback is None:
             print(f"::error::{source_check_gate.reason}")
             set_output("should_release", "false")
