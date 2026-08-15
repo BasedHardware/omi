@@ -1,0 +1,22 @@
+web/admin/lib/__tests__/activation-route.test.ts
+  s_34650e4ce9f8ec::t_39656472d8d933 34-37,40-45,47-48,54-67,73
+  s_34650e4ce9f8ec::t_c7efe7c925dc28 140-156
+web/admin/app/(protected)/dashboard/classic/page.tsx
+  s_34650e4ce9f8ec::t_3f51e231cb90f3 1716
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d5e502fb9a8c096d5062ddb1eba1f259a6a544f1",
+  "prompts": {},
+  "sessions": {
+    "s_34650e4ce9f8ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "caa15e01-aaae-4c85-8ad2-05945ef2f011",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
