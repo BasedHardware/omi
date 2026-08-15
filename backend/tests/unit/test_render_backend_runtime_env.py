@@ -218,6 +218,9 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     monkeypatch.setenv('LISTEN_FINALIZATION_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backend-sync.example.com/v2/sync-jobs/run')
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'fake-x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
     rc = _MODULE['main']()
     assert rc == 0
@@ -257,6 +260,9 @@ def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatc
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backend-sync.example.com/v2/sync-jobs/run')
     monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
     monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://172.16.160.108')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'fake-x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
 
     assert _MODULE['main']() == 0
