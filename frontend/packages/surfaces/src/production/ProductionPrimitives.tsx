@@ -181,7 +181,7 @@ export function ProductionLifecycleRegion({
         </p>
       )}
       {nextAction && <p className="lifecycle-next-action">{t(locale, "lifecycle.nextAction", { action: nextAction })}</p>}
-      {retry && <button type="button" className="lifecycle-retry" aria-label={retry.label ?? t(locale, "common.retry")} onClick={() => void retry.onRetry()}>{retry.label ?? t(locale, "common.retry")}</button>}
+      {retry && <button type="button" className="lifecycle-retry control-primary" aria-label={retry.label ?? t(locale, "common.retry")} onClick={() => void retry.onRetry()}>{retry.label ?? t(locale, "common.retry")}</button>}
       <ProductionOperationError error={operationError} />
       {children}
     </section>
@@ -437,14 +437,14 @@ export function ProductionEmptyState({
 }: {
   icon?: ProductionIconName;
   title: string;
-  detail: string;
+  detail?: string;
   action?: ReactNode;
 }): React.JSX.Element {
   return (
     <section className="production-empty-state">
       <span className="production-empty-state-icon"><ProductionIcon name={icon} size={24} /></span>
       <h2>{title}</h2>
-      <p>{detail}</p>
+      {detail ? <p>{detail}</p> : null}
       {action && <div className="production-empty-state-action">{action}</div>}
     </section>
   );

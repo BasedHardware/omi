@@ -2,7 +2,7 @@ import * as React from "react";
 import { t } from "@omi-core/i18n";
 import type { ProductionRoute } from "./command-registry.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
-import { ProductionLifecycleRegion, ProductionPageHeader } from "./ProductionPrimitives.js";
+import { ProductionEmptyState, ProductionLifecycleRegion, ProductionPageHeader } from "./ProductionPrimitives.js";
 
 export type DeferredProductionDestination = Extract<ProductionRoute, "apps" | "brain-map">;
 
@@ -45,7 +45,11 @@ export function DeferredDestinationProduction({
           className="production-header"
           eyebrow={title}
           title={title}
-          description={t(locale, "destination.unavailable", undefined as never)}
+        />
+        <ProductionEmptyState
+          icon={destination === "apps" ? "apps" : "library"}
+          title={t(locale, "destination.unavailable", undefined as never)}
+          detail={t(locale, "destination.waitForSource", undefined as never)}
         />
         <ProductionLifecycleRegion
           className="surface-notices"

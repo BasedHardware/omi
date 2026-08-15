@@ -30,7 +30,10 @@
 .settings-state-title {
   margin: 0;
   color: var(--content-primary);
-  font-weight: 600;
+  font-family: var(--type-heading-family);
+  font-size: var(--type-heading-size);
+  font-weight: var(--type-heading-weight);
+  line-height: var(--type-heading-line);
 }
 
 .settings-eyebrow {
@@ -61,17 +64,20 @@
   display: grid;
   gap: var(--space-md);
   margin: var(--space-xxl) 0;
-  padding: var(--space-lg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-panel, var(--radius-control));
-  background: var(--surface-raised);
+  padding: var(--space-lg) 0;
+  border: 0;
+  border-block-start: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
 }
 
 .settings-section h2 {
   margin: 0;
-  font-family: var(--type-title-family, var(--type-display-family));
-  font-size: var(--type-body-size);
-  font-weight: var(--type-title-weight, 600);
+  font-family: var(--type-heading-family);
+  font-size: var(--type-heading-size);
+  font-weight: var(--type-heading-weight);
+  line-height: var(--type-heading-line);
+  letter-spacing: var(--type-heading-tracking);
 }
 
 .settings-account-panel,
@@ -84,15 +90,18 @@
 .settings-account-panel.is-signed-out,
 .settings-account-panel.is-loading,
 .settings-plan-absent {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-sm);
+  padding: var(--space-lg) 0;
   color: var(--content-secondary);
 }
 
 .settings-account-panel.is-unavailable {
   gap: var(--space-md);
-  padding: var(--space-md);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--surface-elevated);
+  padding: var(--space-lg) 0;
+  border: 0;
+  background: transparent;
 }
 
 .settings-signed-in {
@@ -117,7 +126,9 @@
 
 .settings-row-title {
   color: var(--content-primary);
-  font-weight: 600;
+  font-size: var(--type-row-size);
+  font-weight: var(--type-row-weight);
+  line-height: var(--type-row-line);
 }
 
 .settings-row-description,
@@ -139,7 +150,9 @@
 .settings-identity-details dd,
 .settings-plan-details dd {
   margin: 0;
-  color: var(--content-secondary);
+  color: var(--content-primary);
+  font-size: var(--type-row-size);
+  line-height: var(--type-row-line);
 }
 
 .settings-sign-out,
@@ -149,11 +162,14 @@
 .settings-select-wrap select {
   min-height: var(--min-tap-target);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
   border-radius: var(--radius-control);
+  font: inherit;
+}
+
+.settings-select-wrap select {
+  border: 1px solid var(--border);
   color: var(--content-primary);
   background: var(--surface-elevated);
-  font: inherit;
 }
 
 .settings-sign-out,

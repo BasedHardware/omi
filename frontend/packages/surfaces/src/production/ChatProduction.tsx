@@ -23,7 +23,7 @@ import {
   reconcileMessages,
 } from "./chat-reconcile.js";
 import { ProductionChrome } from "./ProductionChrome.js";
-import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, type ProductionAnnouncementScheduler } from "./ProductionPrimitives.js";
+import { ProductionDataSourceBadge, ProductionEmptyState, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, type ProductionAnnouncementScheduler } from "./ProductionPrimitives.js";
 import "./chat.css";
 
 type Locale = string;
@@ -613,13 +613,16 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
           {...(announcementScheduler ? { scheduler: announcementScheduler } : {})}
         />
         {status.refresh.phase === "initial-loading" ? (
-          <p className="chat-empty-state">{t(locale, "common.loading")}</p>
-        ) : status.refresh.phase === "unavailable" && messages.length === 0 ? (
-          <p className="chat-empty-state">{t(locale, "lifecycle.unavailable")}</p>
-        ) : status.refresh.phase === "ready" && messages.length === 0 ? (
           <div className="chat-empty-state">
-            <strong>{t(locale, "chat.emptyTitle")}</strong>
-            <p>{t(locale, "chat.emptyBody")}</p>
+            <ProductionEmptyState icon="loading" title={t(locale, "common.loading")} />
+          </div>
+        ) : status.refresh.phase === "unavailable" && messages.length === 0 ? (
+          <div className="chat-empty-state">
+            <ProductionEmptyState icon="alert" title={t(locale, "lifecycle.unavailable")} />
+          </div>
+        ) : status.refresh.phase === "ready" && messages.length === 0 ? (
+          <div className="chat-empty-state" data-empty-kind="empty-projection">
+            <ProductionEmptyState icon="conversations" title={t(locale, "chat.emptyTitle")} detail={t(locale, "chat.emptyBody")} />
           </div>
         ) : (
           <section className="chat-thread" aria-label={t(locale, "chat.messagesLabel")}>
@@ -849,7 +852,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
           <div className="chat-composer-row">
             <button
               type="button"
-              className="chat-attach"
+              className="chat-attach control-tertiary"
               disabled={!stagingAvailable || !capState.enabled || sending || staging}
               aria-label={t(locale, "chat.attach")}
               aria-describedby={attachmentHint ? "chat-attachment-hint" : undefined}
@@ -866,7 +869,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
               aria-label={t(locale, "chat.composerLabel")}
               onChange={(event) => setDraft(event.target.value)}
             />
-            <button type="submit" className="chat-send" disabled={!canSend} aria-label={t(locale, "chat.send")}>
+            <button type="submit" className="chat-send control-primary" disabled={!canSend} aria-label={t(locale, "chat.send")}>
               {t(locale, "chat.send")}
             </button>
           </div>

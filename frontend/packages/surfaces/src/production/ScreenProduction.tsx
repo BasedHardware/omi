@@ -294,7 +294,7 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
             <div className="screen-capture-controls" data-capture-tone={tone}>
               <button
                 type="button"
-                className={`screen-capture-toggle is-${tone}`}
+                className={`screen-capture-toggle is-${tone} ${engine === "recording" || engine === "paused" || engine === "starting" ? "control-danger" : "control-primary"}`}
                 aria-pressed={engine === "recording" || engine === "paused" || engine === "starting"}
                 aria-label={t(locale, "screen.captureToggle")}
                 onClick={() => void run(() => (engine === "recording" || engine === "paused" || engine === "starting" ? store.stopCapture() : store.startCapture()))}
@@ -340,9 +340,9 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
               title={empty.title}
               detail={empty.detail}
               action={permissionNeedsAction && (emptyKind === "permission-denied" || emptyKind === "never-enabled") ? (
-                <button type="button" onClick={() => void run(() => store.requestPermission())}>{t(locale, "screen.requestPermission")}</button>
+                <button type="button" className="control-primary" onClick={() => void run(() => store.requestPermission())}>{t(locale, "screen.requestPermission")}</button>
               ) : emptyKind === "never-enabled" && bridgeAvailable ? (
-                <button type="button" onClick={() => void run(() => store.startCapture())}>{t(locale, "screen.start")}</button>
+                <button type="button" className="control-primary" onClick={() => void run(() => store.startCapture())}>{t(locale, "screen.start")}</button>
               ) : undefined}
             />
           </div>
@@ -393,21 +393,25 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
                     />
                     {ocr && <FrameHighlights blocks={ocr.blocks} matchedIds={matched} />}
                   </div>
-                ) : !bridgeAvailable ? (
-                  <p className="screen-frame-host-unavailable">{t(locale, "screen.frameImageHostUnavailable")}</p>
-                ) : image.kind === "unavailable" ? (
-                  <p className="screen-frame-unavailable">{t(locale, "screen.frameImageUnavailable")}</p>
                 ) : image.kind === "loading" ? (
-                  <p className="screen-frame-loading">{t(locale, "common.loading")}</p>
-                ) : selected ? (
-                  <p className="screen-frame-unavailable">{t(locale, "screen.frameImageUnavailable")}</p>
+                  <div className="screen-frame-loading">
+                    <ProductionEmptyState icon="loading" title={t(locale, "common.loading")} />
+                  </div>
+                ) : !bridgeAvailable ? (
+                  <div className="screen-frame-host-unavailable">
+                    <ProductionEmptyState icon="screen" title={t(locale, "screen.frameImageHostUnavailable")} />
+                  </div>
+                ) : image.kind === "unavailable" ? (
+                  <div className="screen-frame-unavailable">
+                    <ProductionEmptyState icon="screen" title={t(locale, "screen.frameImageUnavailable")} />
+                  </div>
                 ) : null}
               </div>
               {extracted !== "" && (
                 <section className="screen-extracted" aria-label={t(locale, "screen.extractedText")}>
                   <header>
                     <h2>{t(locale, "screen.extractedText")}</h2>
-                    <button type="button" onClick={() => void copyExtracted()}>{t(locale, "screen.copy")}</button>
+                    <button type="button" className="control-tertiary" onClick={() => void copyExtracted()}>{t(locale, "screen.copy")}</button>
                   </header>
                   <pre className="screen-extracted-text">{extracted}</pre>
                 </section>
@@ -428,19 +432,22 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
                 }}
               />
               <div className="screen-playback">
-                <button type="button" onClick={() => playing ? store.pause() : store.play()}>
+                <button type="button" className="control-primary screen-play-control" onClick={() => playing ? store.pause() : store.play()}>
                   {playing ? t(locale, "screen.pause") : t(locale, "screen.play")}
                 </button>
-                {SCREEN_PLAYBACK_RATES.map((value: ScreenPlaybackRate) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={rate === value}
-                    onClick={() => store.setPlaybackRate(value)}
-                  >
-                    {t(locale, "screen.playbackRate", { rate: value })}
-                  </button>
-                ))}
+                <div className="control-segment-group" role="group">
+                  {SCREEN_PLAYBACK_RATES.map((value: ScreenPlaybackRate) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className="control-segment"
+                      aria-pressed={rate === value}
+                      onClick={() => store.setPlaybackRate(value)}
+                    >
+                      {t(locale, "screen.playbackRate", { rate: value })}
+                    </button>
+                  ))}
+                </div>
                 <span className="screen-frame-counter" data-frame-counter="true">
                   {t(locale, "screen.frameCounter", { current: counterCurrent, total: counterTotal })}
                 </span>

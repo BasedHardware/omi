@@ -58,6 +58,16 @@ test("ships a complete visual-state token contract without an unbundled font", (
 
 test("defines one executable content role, measure, truncation, and date-granularity matrix", () => {
   assert.deepEqual(Object.keys(TYPOGRAPHY_CONTENT_POLICY), ["display", "title", "heading", "body", "row", "label", "meta", "button", "code"]);
+  for (const theme of Object.values(SEMANTIC_TOKENS)) {
+    const type = theme.typography;
+    assert.ok(type.display.size >= type.title.size, `${theme.name} display is at least as large as title`);
+    assert.ok(type.title.size > type.heading.size, `${theme.name} title recedes into heading`);
+    assert.ok(type.heading.size > type.meta.size, `${theme.name} heading stays above metadata`);
+    assert.ok(type.body.size > type.meta.size, `${theme.name} body stays above metadata`);
+    assert.equal(type.row.size, type.body.size, `${theme.name} row matches body size and uses weight to rank`);
+    assert.ok(type.row.weight > type.body.weight, `${theme.name} row is heavier than body`);
+    assert.ok(type.meta.size <= type.label.size, `${theme.name} metadata never outranks a label`);
+  }
   assert.deepEqual(TYPOGRAPHY_CONTENT_POLICY.body, { measureCh: 68, overflow: "wrap", maxLines: null });
   assert.deepEqual(TYPOGRAPHY_CONTENT_POLICY.meta, { measureCh: 44, overflow: "single-line-ellipsis", maxLines: 1 });
   assert.deepEqual(TYPOGRAPHY_CONTENT_POLICY.code, { measureCh: 96, overflow: "scroll", maxLines: null });

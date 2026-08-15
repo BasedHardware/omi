@@ -176,16 +176,21 @@
 html[data-platform="desktop"] .proposition-list { gap: 8px; }
 
 html[data-platform="desktop"] .proposition-card {
-  padding: 14px 15px;
-  border: 1px solid var(--control-border);
-  border-radius: 13px;
-  background: var(--glass-surface-soft);
+  padding: var(--space-md) var(--space-sm);
+  border: 0;
+  border-radius: var(--radius-element);
+  background: transparent;
+}
+
+html[data-platform="desktop"] .proposition-card:hover,
+html[data-platform="desktop"] .proposition-card:focus-within {
+  background: var(--surface-hover);
 }
 
 html[data-platform="desktop"] .proposition-read-only-note,
 html[data-platform="desktop"] .completeness-notice {
-  margin: 0 0 10px;
-  font-size: 12px;
+  margin: 0 0 var(--space-md);
+  font-size: var(--type-meta-size);
 }
 
 html[data-platform="desktop"] .completeness-notice {
