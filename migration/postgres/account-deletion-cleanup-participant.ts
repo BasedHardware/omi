@@ -12,7 +12,7 @@ import type { DeletionCleanupDispositionReceipt } from
 import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,
-} from "./connection";
+} from "../../drivers/postgres/connection";
 import { POSTGRES_DELETION_SURFACE_TABLES } from "./deletion-surface-registry";
 
 export type PostgresDeletionCleanupSurface = keyof typeof POSTGRES_DELETION_SURFACE_TABLES;

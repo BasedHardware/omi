@@ -4,13 +4,13 @@ import { describe, expect, test } from "bun:test";
 import type {
   GcsDeletionReceiptKey,
   GcsStoredDeletionReceipt,
-} from "../../migration/workers/gcs-deletion-cleanup-participant";
+} from "../workers/gcs-deletion-cleanup-participant";
 import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,
   SerializableTransactionOptions,
   SqlStatement,
-} from "./connection";
+} from "../../drivers/postgres/connection";
 import {
   createPostgresGcsDeletionReceiptRepository,
   PostgresGcsDeletionReceiptError,

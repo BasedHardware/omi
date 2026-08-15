@@ -689,7 +689,22 @@ test("migration fence rejects apps/service importing migration/", () => {
     );
     const result = runLint();
     expect(result.status).not.toBe(0);
-    expect(`${result.stdout}${result.stderr}`).toContain("apps/service may not import migration/");
+    expect(`${result.stdout}${result.stderr}`).toContain("apps/service and drivers/ may not import migration/");
+  } finally {
+    rmSync(fixture, { force: true });
+  }
+});
+
+test("migration fence rejects drivers/ importing migration/", () => {
+  const fixture = join(platformRoot, "drivers", "postgres", "migration-import-tripwire.ts");
+  try {
+    writeFileSync(
+      fixture,
+      'import { createPostgresGcsDeletionReceiptRepository } from "../../migration/postgres/gcs-deletion-receipt-repository";\nexport const planted = createPostgresGcsDeletionReceiptRepository;\n',
+    );
+    const result = runLint();
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain("apps/service and drivers/ may not import migration/");
   } finally {
     rmSync(fixture, { force: true });
   }

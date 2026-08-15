@@ -5,7 +5,7 @@ import type {
   PostgresTransactionPool,
   SerializableTransactionOptions,
   SqlStatement,
-} from "./connection";
+} from "../../drivers/postgres/connection";
 import { POSTGRES_DELETION_SURFACE_TABLES } from "./deletion-surface-registry";
 import {
   createPostgresDeletionCleanupParticipant,

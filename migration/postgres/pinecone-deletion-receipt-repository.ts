@@ -3,20 +3,21 @@ import { isProxy } from "node:util/types";
 
 import { isWellFormedAccountId } from "../../core/control/account-control";
 import {
-  TYPESENSE_DELETION_MAX_DOCUMENTS_PER_COLLECTION,
-  type TypesenseDeletionCollectionRole,
-  type TypesenseDeletionReceiptKey,
-  type TypesenseDeletionReceiptLoad,
-  type TypesenseDeletionReceiptRepository,
-  type TypesenseStoredDeletionReceipt,
-} from "../../migration/workers/typesense-deletion-cleanup-participant";
+  PINECONE_DELETION_INDEX_NAME,
+  PINECONE_DELETION_MAX_RECORDS_PER_NAMESPACE,
+  type PineconeDeletionNamespace,
+  type PineconeDeletionReceiptKey,
+  type PineconeDeletionReceiptLoad,
+  type PineconeDeletionReceiptRepository,
+  type PineconeStoredDeletionReceipt,
+} from "../workers/pinecone-deletion-cleanup-participant";
 import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,
   SqlValue,
-} from "./connection";
+} from "../../drivers/postgres/connection";
 
-export class PostgresTypesenseDeletionReceiptError extends Error {
+export class PostgresPineconeDeletionReceiptError extends Error {
   constructor(readonly code:
     | "invalid_input"
     | "terminal_coordinate_denied"
@@ -24,16 +25,15 @@ export class PostgresTypesenseDeletionReceiptError extends Error {
     | "retryable_serialization"
     | "persistence_failed") {
     super(code);
-    this.name = "PostgresTypesenseDeletionReceiptError";
+    this.name = "PostgresPineconeDeletionReceiptError";
   }
 }
 
 const DIGEST = /^[0-9a-f]{64}$/;
 const OPERATION_REF = /^opref1_[0-9a-f]{64}$/;
-const COLLECTION = /^[A-Za-z0-9_-]{1,128}$/;
 
-const fail = (code: PostgresTypesenseDeletionReceiptError["code"]): never => {
-  throw new PostgresTypesenseDeletionReceiptError(code);
+const fail = (code: PostgresPineconeDeletionReceiptError["code"]): never => {
+  throw new PostgresPineconeDeletionReceiptError(code);
 };
 
 const sha256 = (value: unknown): string => createHash("sha256")
@@ -66,15 +66,26 @@ const safeInteger = (value: unknown, maximum = Number.MAX_SAFE_INTEGER): number 
   return value as number;
 };
 
-const role = (value: unknown): value is TypesenseDeletionCollectionRole =>
-  value === "legacy_conversations" || value === "canonical_memory_atoms";
+const namespaceForRole = (value: unknown): PineconeDeletionNamespace | null => {
+  switch (value) {
+    case "conversation_vectors": return "ns1";
+    case "memory_vectors": return "ns2";
+    case "screen_activity_vectors": return "ns3";
+    case "action_item_vectors": return "ns4";
+    case "transcript_chunk_vectors": return "ns_tchunks";
+    case "x_post_vectors": return "ns_x";
+    case "workstream_association_vectors": return "workstream-association-v1";
+    default: return null;
+  }
+};
 
-const parseKey = (value: unknown): TypesenseDeletionReceiptKey => {
+const parseKey = (value: unknown): PineconeDeletionReceiptKey => {
   const row = exactRecord(value, [
     "version", "account_id", "control_revision", "deletion_epoch", "operation_ref",
-    "eligibility_digest", "registry_digest", "role", "collection_name",
+    "eligibility_digest", "registry_digest", "role", "index_name", "namespace_name",
   ]);
-  if (row.version !== "typesense-deletion-receipt-key-v1"
+  const expectedNamespace = namespaceForRole(row.role);
+  if (row.version !== "pinecone-deletion-receipt-key-v1"
     || !isWellFormedAccountId(row.account_id)
     || typeof row.control_revision !== "number" || !Number.isSafeInteger(row.control_revision)
     || row.control_revision < 0
@@ -82,18 +93,18 @@ const parseKey = (value: unknown): TypesenseDeletionReceiptKey => {
     || row.deletion_epoch < 0 || typeof row.operation_ref !== "string"
     || !OPERATION_REF.test(row.operation_ref) || typeof row.eligibility_digest !== "string"
     || !DIGEST.test(row.eligibility_digest) || typeof row.registry_digest !== "string"
-    || !DIGEST.test(row.registry_digest) || !role(row.role)
-    || typeof row.collection_name !== "string" || !COLLECTION.test(row.collection_name)) {
-    fail("invalid_input");
-  }
-  return Object.freeze({ ...row }) as unknown as TypesenseDeletionReceiptKey;
+    || !DIGEST.test(row.registry_digest) || expectedNamespace === null
+    || row.index_name !== PINECONE_DELETION_INDEX_NAME
+    || row.namespace_name !== expectedNamespace) fail("invalid_input");
+  return Object.freeze({ ...row }) as unknown as PineconeDeletionReceiptKey;
 };
 
-const parseReceipt = (value: unknown): TypesenseStoredDeletionReceipt => {
+const parseReceipt = (value: unknown): PineconeStoredDeletionReceipt => {
   const row = exactRecord(value, [
     "version", "account_id", "control_revision", "deletion_epoch", "operation_ref",
-    "eligibility_digest", "registry_digest", "role", "collection_name", "result",
-    "affected_count", "provider_receipt_digest", "receipt_digest",
+    "eligibility_digest", "registry_digest", "role", "index_name", "namespace_name",
+    "result", "pre_delete_count", "pre_delete_content_hash", "provider_receipt_digest",
+    "receipt_digest",
   ]);
   const key = parseKey(Object.freeze({
     version: row.version,
@@ -104,14 +115,16 @@ const parseReceipt = (value: unknown): TypesenseStoredDeletionReceipt => {
     eligibility_digest: row.eligibility_digest,
     registry_digest: row.registry_digest,
     role: row.role,
-    collection_name: row.collection_name,
+    index_name: row.index_name,
+    namespace_name: row.namespace_name,
   }));
   if ((row.result !== "disposed" && row.result !== "already_absent")
-    || typeof row.affected_count !== "number" || !Number.isSafeInteger(row.affected_count)
-    || row.affected_count < 0
-    || row.affected_count > TYPESENSE_DELETION_MAX_DOCUMENTS_PER_COLLECTION
-    || (row.result === "disposed" && row.affected_count === 0)
-    || (row.result === "already_absent" && row.affected_count !== 0)
+    || typeof row.pre_delete_count !== "number" || !Number.isSafeInteger(row.pre_delete_count)
+    || row.pre_delete_count < 0
+    || row.pre_delete_count > PINECONE_DELETION_MAX_RECORDS_PER_NAMESPACE
+    || (row.result === "disposed" && row.pre_delete_count === 0)
+    || (row.result === "already_absent" && row.pre_delete_count !== 0)
+    || typeof row.pre_delete_content_hash !== "string" || !DIGEST.test(row.pre_delete_content_hash)
     || typeof row.provider_receipt_digest !== "string" || !DIGEST.test(row.provider_receipt_digest)
     || typeof row.receipt_digest !== "string" || !DIGEST.test(row.receipt_digest)) {
     fail("invalid_input");
@@ -119,12 +132,13 @@ const parseReceipt = (value: unknown): TypesenseStoredDeletionReceipt => {
   const core = Object.freeze({
     ...key,
     result: row.result,
-    affected_count: row.affected_count,
+    pre_delete_count: row.pre_delete_count,
+    pre_delete_content_hash: row.pre_delete_content_hash,
     provider_receipt_digest: row.provider_receipt_digest,
   });
-  if (sha256({ contract_version: "typesense-deletion-stored-receipt-v1", receipt: core })
+  if (sha256({ contract_version: "pinecone-deletion-stored-receipt-v1", receipt: core })
     !== row.receipt_digest) fail("invalid_input");
-  return Object.freeze({ ...core, receipt_digest: row.receipt_digest }) as TypesenseStoredDeletionReceipt;
+  return Object.freeze({ ...core, receipt_digest: row.receipt_digest }) as PineconeStoredDeletionReceipt;
 };
 
 interface ReceiptRow extends Record<string, unknown> {
@@ -135,21 +149,23 @@ interface ReceiptRow extends Record<string, unknown> {
   eligibility_digest: unknown;
   registry_digest: unknown;
   resource_role: unknown;
-  collection_name: unknown;
+  index_name: unknown;
+  namespace_name: unknown;
   result: unknown;
-  affected_count: unknown;
+  pre_delete_count: unknown;
+  pre_delete_content_hash: unknown;
   provider_receipt_digest: unknown;
   receipt_digest: unknown;
 }
 
 const receiptFromRow = (
   row: ReceiptRow,
-  expected: TypesenseDeletionReceiptKey,
-): TypesenseStoredDeletionReceipt => {
-  let receipt: TypesenseStoredDeletionReceipt;
+  expected: PineconeDeletionReceiptKey,
+): PineconeStoredDeletionReceipt => {
+  let receipt: PineconeStoredDeletionReceipt;
   try {
     receipt = parseReceipt(Object.freeze({
-      version: "typesense-deletion-receipt-key-v1" as const,
+      version: "pinecone-deletion-receipt-key-v1" as const,
       account_id: row.account_id,
       control_revision: safeInteger(row.control_revision),
       deletion_epoch: safeInteger(row.deletion_epoch),
@@ -157,11 +173,13 @@ const receiptFromRow = (
       eligibility_digest: row.eligibility_digest,
       registry_digest: row.registry_digest,
       role: row.resource_role,
-      collection_name: row.collection_name,
+      index_name: row.index_name,
+      namespace_name: row.namespace_name,
       result: row.result,
-      affected_count: safeInteger(
-        row.affected_count, TYPESENSE_DELETION_MAX_DOCUMENTS_PER_COLLECTION,
+      pre_delete_count: safeInteger(
+        row.pre_delete_count, PINECONE_DELETION_MAX_RECORDS_PER_NAMESPACE,
       ),
+      pre_delete_content_hash: row.pre_delete_content_hash,
       provider_receipt_digest: row.provider_receipt_digest,
       receipt_digest: row.receipt_digest,
     }));
@@ -174,12 +192,12 @@ const receiptFromRow = (
     || receipt.operation_ref !== expected.operation_ref
     || receipt.eligibility_digest !== expected.eligibility_digest
     || receipt.registry_digest !== expected.registry_digest
-    || receipt.role !== expected.role
-    || receipt.collection_name !== expected.collection_name) fail("persistence_failed");
+    || receipt.role !== expected.role || receipt.index_name !== expected.index_name
+    || receipt.namespace_name !== expected.namespace_name) fail("persistence_failed");
   return receipt;
 };
 
-const keyFromReceipt = (receipt: TypesenseStoredDeletionReceipt): TypesenseDeletionReceiptKey =>
+const keyFromReceipt = (receipt: PineconeStoredDeletionReceipt): PineconeDeletionReceiptKey =>
   Object.freeze({
     version: receipt.version,
     account_id: receipt.account_id,
@@ -189,58 +207,56 @@ const keyFromReceipt = (receipt: TypesenseStoredDeletionReceipt): TypesenseDelet
     eligibility_digest: receipt.eligibility_digest,
     registry_digest: receipt.registry_digest,
     role: receipt.role,
-    collection_name: receipt.collection_name,
+    index_name: receipt.index_name,
+    namespace_name: receipt.namespace_name,
   });
 
-const valuesFor = (key: TypesenseDeletionReceiptKey): readonly SqlValue[] => [
+const valuesFor = (key: PineconeDeletionReceiptKey): readonly SqlValue[] => [
   key.account_id, key.control_revision, key.deletion_epoch, key.operation_ref,
-  key.eligibility_digest, key.registry_digest, key.role, key.collection_name,
+  key.eligibility_digest, key.registry_digest, key.role, key.index_name, key.namespace_name,
 ];
 
 const providerCode = (error: unknown): string | null => {
   if (error === null || typeof error !== "object") return null;
-  const descriptors = Object.getOwnPropertyDescriptors(error);
-  const code = descriptors.code;
-  return code && "value" in code && typeof code.value === "string" ? code.value : null;
+  const descriptor = Object.getOwnPropertyDescriptor(error, "code");
+  return descriptor && "value" in descriptor && typeof descriptor.value === "string"
+    ? descriptor.value : null;
 };
 
-const mapFailure = (error: unknown): PostgresTypesenseDeletionReceiptError => {
-  if (error instanceof PostgresTypesenseDeletionReceiptError) return error;
+const mapFailure = (error: unknown): PostgresPineconeDeletionReceiptError => {
+  if (error instanceof PostgresPineconeDeletionReceiptError) return error;
   const code = providerCode(error);
-  if (code === "40001") return new PostgresTypesenseDeletionReceiptError("retryable_serialization");
-  if (code === "23505") return new PostgresTypesenseDeletionReceiptError("receipt_conflict");
-  if (code === "P0001") return new PostgresTypesenseDeletionReceiptError("terminal_coordinate_denied");
-  return new PostgresTypesenseDeletionReceiptError("persistence_failed");
+  if (code === "40001") return new PostgresPineconeDeletionReceiptError("retryable_serialization");
+  if (code === "23505") return new PostgresPineconeDeletionReceiptError("receipt_conflict");
+  if (code === "P0001") return new PostgresPineconeDeletionReceiptError("terminal_coordinate_denied");
+  return new PostgresPineconeDeletionReceiptError("persistence_failed");
 };
 
 const setCleanupRole = (connection: CheckedOutPostgresConnection) => connection.query({
-  name: "typesense_cleanup_receipt.set_role",
+  name: "pinecone_cleanup_receipt.set_role",
   text: "SET LOCAL ROLE omi_platform_cleanup",
   values: [],
 });
 
-export const createPostgresTypesenseDeletionReceiptRepository = (
+export const createPostgresPineconeDeletionReceiptRepository = (
   pool: PostgresTransactionPool,
-): TypesenseDeletionReceiptRepository => Object.freeze({
-  async load(keyValue: TypesenseDeletionReceiptKey): Promise<TypesenseDeletionReceiptLoad> {
+): PineconeDeletionReceiptRepository => Object.freeze({
+  async load(keyValue: PineconeDeletionReceiptKey): Promise<PineconeDeletionReceiptLoad> {
     const key = parseKey(keyValue);
     try {
       return await pool.withTransaction(
-        // The fixed loader takes a SHARE lock on the terminal export coordinate so
-        // the observation cannot race deletion-safety state. PostgreSQL rejects
-        // row-locking SELECTs inside a READ ONLY transaction.
+        // The fixed loader takes a SHARE lock on terminal deletion evidence.
         { isolationLevel: "serializable", accessMode: "read write" },
         async (connection) => {
           await setCleanupRole(connection);
           const rows = await connection.query<ReceiptRow>({
-            name: "typesense_cleanup_receipt.load",
-            text: "SELECT * FROM omi_memory.load_typesense_deletion_receipt($1,$2,$3,$4,$5,$6,$7,$8)",
+            name: "pinecone_cleanup_receipt.load",
+            text: "SELECT * FROM omi_memory.load_pinecone_deletion_receipt($1,$2,$3,$4,$5,$6,$7,$8,$9)",
             values: valuesFor(key),
           });
           if (rows.length === 0) return Object.freeze({ kind: "missing" as const });
           if (rows.length !== 1) fail("persistence_failed");
-          const receipt = receiptFromRow(rows[0]!, key);
-          return Object.freeze({ kind: "found" as const, receipt });
+          return Object.freeze({ kind: "found" as const, receipt: receiptFromRow(rows[0]!, key) });
         },
       );
     } catch (error) {
@@ -248,9 +264,7 @@ export const createPostgresTypesenseDeletionReceiptRepository = (
     }
   },
 
-  async record(
-    receiptValue: TypesenseStoredDeletionReceipt,
-  ): Promise<TypesenseStoredDeletionReceipt> {
+  async record(receiptValue: PineconeStoredDeletionReceipt): Promise<PineconeStoredDeletionReceipt> {
     const receipt = parseReceipt(receiptValue);
     const key = keyFromReceipt(receipt);
     try {
@@ -259,11 +273,12 @@ export const createPostgresTypesenseDeletionReceiptRepository = (
         async (connection) => {
           await setCleanupRole(connection);
           const rows = await connection.query<ReceiptRow>({
-            name: "typesense_cleanup_receipt.record",
-            text: "SELECT * FROM omi_memory.record_typesense_deletion_receipt($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+            name: "pinecone_cleanup_receipt.record",
+            text: "SELECT * FROM omi_memory.record_pinecone_deletion_receipt($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",
             values: [
-              ...valuesFor(key), receipt.result, receipt.affected_count,
-              receipt.provider_receipt_digest, receipt.receipt_digest,
+              ...valuesFor(key), receipt.result, receipt.pre_delete_count,
+              receipt.pre_delete_content_hash, receipt.provider_receipt_digest,
+              receipt.receipt_digest,
             ],
           });
           if (rows.length !== 1) fail("persistence_failed");

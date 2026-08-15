@@ -4,13 +4,13 @@ import { describe, expect, test } from "bun:test";
 import type {
   PineconeDeletionReceiptKey,
   PineconeStoredDeletionReceipt,
-} from "../../migration/workers/pinecone-deletion-cleanup-participant";
+} from "../workers/pinecone-deletion-cleanup-participant";
 import type {
   CheckedOutPostgresConnection,
   PostgresTransactionPool,
   SerializableTransactionOptions,
   SqlStatement,
-} from "./connection";
+} from "../../drivers/postgres/connection";
 import {
   createPostgresPineconeDeletionReceiptRepository,
   PostgresPineconeDeletionReceiptError,
