@@ -17,6 +17,16 @@ GATEWAY_URL="http://127.0.0.1:8788"
 SURFACE_URL="http://127.0.0.1:5290"
 RUNDIR="${OMI_DEV_STACK_RUNDIR:-/tmp/omi-dev-stack}"
 OWNERFILE="$RUNDIR/service-owner.json"
+case "${OMI_CHAT_MODEL:-}" in
+  ""|test) ;;
+  real)
+    GATEWAY_URL="http://127.0.0.1:8791"
+    ;;
+  *)
+    echo "ERROR: OMI_CHAT_MODEL must be unset, test, or real." >&2
+    exit 2
+    ;;
+esac
 
 MODE_ACCEPT=0
 while (( $# )); do
@@ -26,6 +36,7 @@ while (( $# )); do
       sed -n '2,8p' "$0"
       printf '%s\n' "usage: integration/dev-app.sh [--accept]"
       printf '%s\n' "  boots or reuses the local stack with OMI_SEED_PERSONA=demo, then launches the macOS shell."
+      printf '%s\n' "  OMI_CHAT_MODEL=real opts into the local real-model proxy (see integration/README.md)."
       printf '%s\n' "  stop the stack with: integration/dev-stack.sh --stop"
       exit 0
       ;;
@@ -46,13 +57,21 @@ serving "$SERVICE_URL" && service_up=1
 serving "$GATEWAY_URL" && gateway_up=1
 
 if (( service_up == 1 && gateway_up == 0 )); then
-  echo "ERROR: service is already on 4851 but the local test gateway is not on 8788." >&2
+  if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+    echo "ERROR: service is already on 4851 but the local model gateway is not on 8791." >&2
+  else
+    echo "ERROR: service is already on 4851 but the local test gateway is not on 8788." >&2
+  fi
   echo "  Stop the partial stack: integration/dev-stack.sh --stop" >&2
   echo "  If 4851 is a stranger, find it: lsof -nP -iTCP:4851 -sTCP:LISTEN" >&2
   exit 1
 fi
 if (( service_up == 0 && gateway_up == 1 )); then
-  echo "ERROR: local test gateway is already on 8788 but the service is not on 4851." >&2
+  if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+    echo "ERROR: local model gateway is already on 8791 but the service is not on 4851." >&2
+  else
+    echo "ERROR: local test gateway is already on 8788 but the service is not on 4851." >&2
+  fi
   echo "  Stop the partial stack: integration/dev-stack.sh --stop" >&2
   exit 1
 fi
@@ -106,11 +125,17 @@ IDENTITY="$(SETTINGS_JSON="$SETTINGS_JSON" STATUS_JSON="$STATUS_JSON" node -e '
 
 printf 'omi local demo app\n\n'
 printf '  base URL   %s\n' "$SERVICE_URL"
-printf '  gateway    %s  (local test gateway — chat generation is not a real model)\n' "$GATEWAY_URL"
+if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+  printf '  gateway    %s  (local real-model proxy — Chat UI still says Local test gateway; attachments still fail closed)\n' "$GATEWAY_URL"
+else
+  printf '  gateway    %s  (local test gateway — chat generation is not a real model)\n' "$GATEWAY_URL"
+fi
 printf '  identity   %s\n' "$IDENTITY"
 printf '  surface    %s\n' "$SURFACE_URL"
 if (( booted )); then
   printf '  stack      booted with the demo persona for this process\n'
+elif [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+  printf '  stack      reused the listeners already serving 4851 and 8791\n'
 else
   printf '  stack      reused the listeners already serving 4851 and 8788\n'
 fi

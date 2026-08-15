@@ -20,6 +20,29 @@ integration/dev-stack.sh --device <simulator-udid> --assert
 integration/dev-stack.sh --up
 integration/dev-stack.sh --stop
 
+## Local real-model proxy (opt-in)
+
+Default Chat generation still uses `integration/local-test-gateway.mjs` on
+8788 — a canned SSE fixture, never a production model. To answer with a real
+GLM / Z.ai model locally, set `OMI_CHAT_MODEL=real` and one of
+`GLM_API_KEY`, `ZAI_API_KEY`, or `OMI_BENCH_OPENAI_API_KEY` (first non-empty
+wins). Optional: `OMI_BENCH_OPENAI_BASE_URL` (default `https://api.z.ai/api/paas/v4`),
+`OMI_BENCH_OPENAI_MODEL` (default `glm-4.7`), `OMI_LOCAL_MODEL_GATEWAY_TOKEN`.
+
+```bash
+GLM_API_KEY=... OMI_CHAT_MODEL=real integration/dev-stack.sh --up
+# or: GLM_API_KEY=... OMI_CHAT_MODEL=real bun run app
+integration/dev-stack.sh --stop
+```
+
+That launches `integration/local-model-gateway.mjs` on 8791, rewrites the
+service's semantic lane (`omi:auto:…`) to the configured model id, and pipes
+the provider SSE through. `--stop` stops whichever gateway this harness
+started. The Chat UI label stays **Local test gateway** — capability reporting
+does not mint a real-provider claim from reachability. Attachments still fail
+closed in the generation source. Do not treat this opt-in as production, and
+do not point it at `api.omi.me`.
+
 # Applied negative controls; each full run must finish red at its named assertion
 integration/red-proof-assert.sh
 ```

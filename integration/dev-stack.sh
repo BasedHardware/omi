@@ -16,6 +16,9 @@ GATEWAY_LAUNCHER="$HERE/local-test-gateway.mjs"
 GATEWAY_PORT=8788
 GATEWAY_TOKEN="local-test-gateway-token"
 GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
+MODEL_GATEWAY_LAUNCHER="$HERE/local-model-gateway.mjs"
+MODEL_GATEWAY_PORT=8791
+GATEWAY_SCRIPT_NEEDLE="local-test-gateway.mjs"
 MACOS_ORIGIN="http://127.0.0.1:5290"
 SURFACES="$CORE_REPO/frontend/packages/surfaces"
 MACOS_LAUNCHER="$CORE_REPO/frontend/shells/macos/scripts/dev-run-macos.sh"
@@ -65,15 +68,14 @@ GATEWAY_PID=""
 GATEWAY_START_IDENTITY=""
 mkdir -p "$RUNDIR"
 
-stop_local_test_gateway() {
-  local gateway_pid identity now cmd
-  gateway_pid="${GATEWAY_PID:-}"
-  identity="${GATEWAY_START_IDENTITY:-}"
-  if [[ ! "$gateway_pid" =~ ^[0-9]+$ || -z "$identity" ]]; then
-    gateway_pid="$(cat "$GATEWAY_PID_PATH" 2>/dev/null || true)"
-    identity="$(cat "$GATEWAY_IDENTITY_FILE" 2>/dev/null || true)"
-  fi
-  [[ "$gateway_pid" =~ ^[0-9]+$ && -n "$identity" ]] || return 0
+stop_gateway_process() {
+  local gateway_pid="$1"
+  local identity="$2"
+  local needle="$3"
+  local pid_path="$4"
+  local identity_file="$5"
+  local now cmd
+  [[ "$gateway_pid" =~ ^[0-9]+$ && -n "$identity" && -n "$needle" ]] || return 0
   now="$(ps -p "$gateway_pid" -o lstart= 2>/dev/null || true)"
   # process-owner snapshots trim; `ps -o lstart=` pads. Untrimmed compare
   # refused to kill the exact process this harness started.
@@ -81,9 +83,9 @@ stop_local_test_gateway() {
   identity="${identity%"${identity##*[![:space:]]}"}"
   now="${now#"${now%%[![:space:]]*}"}"
   now="${now%"${now##*[![:space:]]}"}"
-  [[ "$now" == "$identity" ]] || { rm -f -- "$GATEWAY_PID_PATH" "$GATEWAY_IDENTITY_FILE"; return 0; }
+  [[ "$now" == "$identity" ]] || { rm -f -- "$pid_path" "$identity_file"; return 0; }
   cmd="$(ps -www -p "$gateway_pid" -o command= 2>/dev/null || true)"
-  [[ "$cmd" == *local-test-gateway.mjs* ]] || { rm -f -- "$GATEWAY_PID_PATH" "$GATEWAY_IDENTITY_FILE"; return 0; }
+  [[ "$cmd" == *"$needle"* ]] || { rm -f -- "$pid_path" "$identity_file"; return 0; }
   kill -TERM "$gateway_pid" 2>/dev/null || true
   for _ in $(seq 1 20); do
     node "$OWNER_TOOL" snapshot --pid "$gateway_pid" >/dev/null 2>&1 || break
@@ -95,13 +97,37 @@ stop_local_test_gateway() {
   if [[ "$now" == "$identity" ]]; then
     kill -KILL "$gateway_pid" 2>/dev/null || true
   fi
-  rm -f -- "$GATEWAY_PID_PATH" "$GATEWAY_IDENTITY_FILE"
-  GATEWAY_PID=""
-  GATEWAY_START_IDENTITY=""
+  rm -f -- "$pid_path" "$identity_file"
+  if [[ "$gateway_pid" == "${GATEWAY_PID:-}" ]]; then
+    GATEWAY_PID=""
+    GATEWAY_START_IDENTITY=""
+  fi
+}
+
+stop_gateway_record() {
+  local pid_path="$1"
+  local identity_file="$2"
+  local needle="$3"
+  local gateway_pid identity
+  gateway_pid="$(cat "$pid_path" 2>/dev/null || true)"
+  identity="$(cat "$identity_file" 2>/dev/null || true)"
+  stop_gateway_process "$gateway_pid" "$identity" "$needle" "$pid_path" "$identity_file"
+}
+
+stop_owned_gateways() {
+  if [[ "${GATEWAY_PID:-}" =~ ^[0-9]+$ && -n "${GATEWAY_START_IDENTITY:-}" ]]; then
+    stop_gateway_process "$GATEWAY_PID" "$GATEWAY_START_IDENTITY" \
+      "${GATEWAY_SCRIPT_NEEDLE:-local-test-gateway.mjs}" \
+      "${GATEWAY_PID_PATH:-}" "${GATEWAY_IDENTITY_FILE:-}"
+  fi
+  stop_gateway_record "$RUNDIR/local-test-gateway.pid" \
+    "$RUNDIR/local-test-gateway-start-identity" "local-test-gateway.mjs"
+  stop_gateway_record "$RUNDIR/local-model-gateway.pid" \
+    "$RUNDIR/local-model-gateway-start-identity" "local-model-gateway.mjs"
 }
 
 if (( STOP_ONLY )); then
-  stop_local_test_gateway
+  stop_owned_gateways
   node "$OWNER_TOOL" stop --record "$OWNERFILE"
   exit $?
 fi
@@ -145,7 +171,7 @@ cleanup() {
   local exit_status=$1
   local stop_rc=0
   if (( LEAVE_RUNNING )); then return; fi
-  stop_local_test_gateway
+  stop_owned_gateways
   if (( OWNER_WRITTEN )); then
     node "$OWNER_TOOL" stop --record "$OWNERFILE" >/dev/null 2>&1 || stop_rc=$?
   elif [[ "$SERVICE_PID" =~ ^[0-9]+$ ]]; then
@@ -180,8 +206,33 @@ trap 'exit 143' TERM
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing required tool $1" >&2; exit 1; }; }
 for tool in bun node lsof curl mkfifo; do need "$tool"; done
+case "${OMI_CHAT_MODEL:-}" in
+  ""|test) ;;
+  real)
+    GATEWAY_LAUNCHER="$MODEL_GATEWAY_LAUNCHER"
+    GATEWAY_PORT="$MODEL_GATEWAY_PORT"
+    GATEWAY_TOKEN="${OMI_LOCAL_MODEL_GATEWAY_TOKEN:-local-model-gateway-token}"
+    GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
+    GATEWAY_PID_PATH="$RUNDIR/local-model-gateway.pid"
+    GATEWAY_IDENTITY_FILE="$RUNDIR/local-model-gateway-start-identity"
+    GATEWAY_SCRIPT_NEEDLE="local-model-gateway.mjs"
+    ;;
+  *)
+    echo "ERROR: OMI_CHAT_MODEL must be unset, test, or real." >&2
+    exit 2
+    ;;
+esac
 [[ -f "$SERVICE_LAUNCHER" ]] || { echo "ERROR: required sibling launcher is absent: $SERVICE_LAUNCHER" >&2; exit 1; }
-[[ -f "$GATEWAY_LAUNCHER" ]] || { echo "ERROR: required local test gateway is absent: $GATEWAY_LAUNCHER" >&2; exit 1; }
+[[ -f "$HERE/local-test-gateway.mjs" ]] || { echo "ERROR: required local test gateway is absent: $HERE/local-test-gateway.mjs" >&2; exit 1; }
+if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+  [[ -f "$MODEL_GATEWAY_LAUNCHER" ]] || { echo "ERROR: required local model gateway is absent: $MODEL_GATEWAY_LAUNCHER" >&2; exit 1; }
+fi
+if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+  if [[ -z "${GLM_API_KEY:-}" && -z "${ZAI_API_KEY:-}" && -z "${OMI_BENCH_OPENAI_API_KEY:-}" ]]; then
+    echo "ERROR: local model gateway requires GLM_API_KEY, ZAI_API_KEY, or OMI_BENCH_OPENAI_API_KEY" >&2
+    exit 1
+  fi
+fi
 node "$OWNER_TOOL" prepare --record "$OWNERFILE" >/dev/null || exit $?
 
 listener() { lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null || true; }
@@ -194,7 +245,11 @@ if [[ -n "$held" ]]; then
 fi
 held="$(listener "$GATEWAY_PORT")"
 if [[ -n "$held" ]]; then
-  echo "ERROR: required local test gateway port ${GATEWAY_PORT} is occupied; this harness will not kill it or start a second listener." >&2
+  if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+    echo "ERROR: required local model gateway port ${GATEWAY_PORT} is occupied; this harness will not kill it or start a second listener." >&2
+  else
+    echo "ERROR: required local test gateway port ${GATEWAY_PORT} is occupied; this harness will not kill it or start a second listener." >&2
+  fi
   printf '%s\n' "$held" >&2
   occupied=1
 fi
@@ -210,13 +265,23 @@ fi
 
 printf 'run %s\n' "$RUN_ID"
 printf 'service %s with one run-scoped SQLite database\n' "$SERVICE_REL"
-printf 'local test gateway %s (never a production model, never the production API host)\n' "$GATEWAY_URL"
-GATEWAY_READY="$RUN_DIR/local-test-gateway-ready.json"
-rm -f -- "$GATEWAY_PID_PATH" "$GATEWAY_IDENTITY_FILE" "$GATEWAY_READY"
-( OMI_LOCAL_TEST_GATEWAY_PORT="$GATEWAY_PORT" \
-  OMI_LOCAL_TEST_GATEWAY_TOKEN="$GATEWAY_TOKEN" \
-  OMI_LOCAL_TEST_GATEWAY_READY="$GATEWAY_READY" \
-  exec bun "$GATEWAY_LAUNCHER" ) >/dev/null 2>&1 &
+if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+  printf 'local model gateway %s (real model proxy; Chat UI still says Local test gateway)\n' "$GATEWAY_URL"
+  GATEWAY_READY="$RUN_DIR/local-model-gateway-ready.json"
+  rm -f -- "$GATEWAY_PID_PATH" "$GATEWAY_IDENTITY_FILE" "$GATEWAY_READY"
+  ( OMI_LOCAL_MODEL_GATEWAY_PORT="$GATEWAY_PORT" \
+    OMI_LOCAL_MODEL_GATEWAY_TOKEN="$GATEWAY_TOKEN" \
+    OMI_LOCAL_MODEL_GATEWAY_READY="$GATEWAY_READY" \
+    exec bun "$GATEWAY_LAUNCHER" ) >/dev/null 2>&1 &
+else
+  printf 'local test gateway %s (never a production model, never the production API host)\n' "$GATEWAY_URL"
+  GATEWAY_READY="$RUN_DIR/local-test-gateway-ready.json"
+  rm -f -- "$GATEWAY_PID_PATH" "$GATEWAY_IDENTITY_FILE" "$GATEWAY_READY"
+  ( OMI_LOCAL_TEST_GATEWAY_PORT="$GATEWAY_PORT" \
+    OMI_LOCAL_TEST_GATEWAY_TOKEN="$GATEWAY_TOKEN" \
+    OMI_LOCAL_TEST_GATEWAY_READY="$GATEWAY_READY" \
+    exec bun "$GATEWAY_LAUNCHER" ) >/dev/null 2>&1 &
+fi
 GATEWAY_PID=$!
 GATEWAY_SNAPSHOT="$(node "$OWNER_TOOL" snapshot --pid "$GATEWAY_PID")" || exit $?
 GATEWAY_START_IDENTITY="$(printf '%s' "$GATEWAY_SNAPSHOT" | node -e '
@@ -230,7 +295,11 @@ for _ in $(seq 1 80); do
   sleep 0.05
 done
 if (( gateway_ready == 0 )); then
-  echo "ERROR: local test gateway emitted no readiness candidate on ${GATEWAY_URL}." >&2
+  if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+    echo "ERROR: local model gateway emitted no readiness candidate on ${GATEWAY_URL}." >&2
+  else
+    echo "ERROR: local test gateway emitted no readiness candidate on ${GATEWAY_URL}." >&2
+  fi
   exit 1
 fi
 mkfifo "$SERVICE_LOG_PIPE" || { echo "ERROR: could not create the service log sanitizer pipe." >&2; exit 1; }
@@ -304,7 +373,11 @@ OWNER_WRITTEN=1
 
 if (( MODE_UP )); then
   LEAVE_RUNNING=1
-  printf 'service-ready run=%s pid=%s owner=%s local-test-gateway=%s\n' "$RUN_ID" "$SERVICE_PID" "$OWNERFILE" "$GATEWAY_URL"
+  if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+    printf 'service-ready run=%s pid=%s owner=%s local-model-gateway=%s\n' "$RUN_ID" "$SERVICE_PID" "$OWNERFILE" "$GATEWAY_URL"
+  else
+    printf 'service-ready run=%s pid=%s owner=%s local-test-gateway=%s\n' "$RUN_ID" "$SERVICE_PID" "$OWNERFILE" "$GATEWAY_URL"
+  fi
   exit 0
 fi
 
