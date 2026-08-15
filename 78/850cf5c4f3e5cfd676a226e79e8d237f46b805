@@ -1,0 +1,19 @@
+desktop/macos/changelog/unreleased/20260815-mic-listening-mode-cycle.json
+  s_3ccc0619ee6841::t_69296c4d1ac31b 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "78850cf5c4f3e5cfd676a226e79e8d237f46b805",
+  "prompts": {},
+  "sessions": {
+    "s_3ccc0619ee6841": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a651b70-49a8-4b37-aff0-ae9fbe9619cb",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
