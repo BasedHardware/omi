@@ -219,7 +219,7 @@ describe("AcpRuntimeAdapter process spawning", () => {
     const saved: Record<string, string | undefined> = {};
     const secretKeys = [
       "OMI_AUTH_TOKEN", "OMI_BYOK_OPENAI", "OMI_BYOK_ANTHROPIC", "OMI_BYOK_GEMINI", "OMI_BYOK_DEEPGRAM",
-      "ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "CI_JOB_TOKEN",
+      "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "NO_BROWSER", "INITIAL_AGENT_MODE", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "CI_JOB_TOKEN",
     ];
     for (const key of secretKeys) {
       saved[key] = process.env[key];
@@ -242,6 +242,71 @@ describe("AcpRuntimeAdapter process spawning", () => {
       expect(callEnv.env).toHaveProperty("PATH", process.env.PATH);
       // Adapter-specific home is forwarded so the external adapter can locate config/state.
       expect(callEnv.env).toHaveProperty("HERMES_HOME", "/custom/hermes/home");
+      await adapter.stop();
+    } finally {
+      for (const [key, val] of Object.entries(saved)) {
+        if (val === undefined) delete process.env[key];
+        else process.env[key] = val;
+      }
+    }
+  });
+
+  it("maps Settings BYOK OpenAI key to OPENAI_API_KEY for Codex subprocesses", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "codex",
+      command: "codex-acp",
+      envCommandName: "OMI_CODEX_ADAPTER_COMMAND",
+    });
+
+    const saved: Record<string, string | undefined> = {
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      OMI_BYOK_OPENAI: process.env.OMI_BYOK_OPENAI,
+      OMI_AUTH_TOKEN: process.env.OMI_AUTH_TOKEN,
+    };
+    delete process.env.OPENAI_API_KEY;
+    process.env.OMI_BYOK_OPENAI = "sk-settings-byok";
+    process.env.OMI_AUTH_TOKEN = "should-not-leak";
+    try {
+      proc.stdin.on("data", () => {});
+      await adapter.start();
+
+      const callEnv = (vi.mocked(spawn).mock.calls[0] as readonly unknown[])[1] as { env: Record<string, string> };
+      expect(callEnv.env).toHaveProperty("OPENAI_API_KEY", "sk-settings-byok");
+      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_OPENAI");
+      expect(callEnv.env).not.toHaveProperty("OMI_AUTH_TOKEN");
+      await adapter.stop();
+    } finally {
+      for (const [key, val] of Object.entries(saved)) {
+        if (val === undefined) delete process.env[key];
+        else process.env[key] = val;
+      }
+    }
+  });
+
+  it("prefers an explicit OPENAI_API_KEY over Settings BYOK for Codex", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "codex",
+      command: "codex-acp",
+      envCommandName: "OMI_CODEX_ADAPTER_COMMAND",
+    });
+
+    const saved: Record<string, string | undefined> = {
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      OMI_BYOK_OPENAI: process.env.OMI_BYOK_OPENAI,
+    };
+    process.env.OPENAI_API_KEY = "sk-explicit";
+    process.env.OMI_BYOK_OPENAI = "sk-settings-byok";
+    try {
+      proc.stdin.on("data", () => {});
+      await adapter.start();
+
+      const callEnv = (vi.mocked(spawn).mock.calls[0] as readonly unknown[])[1] as { env: Record<string, string> };
+      expect(callEnv.env).toHaveProperty("OPENAI_API_KEY", "sk-explicit");
+      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_OPENAI");
       await adapter.stop();
     } finally {
       for (const [key, val] of Object.entries(saved)) {
@@ -558,7 +623,7 @@ describe("adapter capability matrix", () => {
     expect(Object.keys(ADAPTER_CAPABILITY_MATRIX).sort()).toEqual(
       [...PRODUCTION_ADAPTER_IDS, ...PLACEHOLDER_ADAPTER_IDS].sort()
     );
-    expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono", "hermes", "openclaw"]);
+    expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono", "hermes", "openclaw", "codex"]);
     expect(PLACEHOLDER_ADAPTER_IDS).toEqual(["a2a"]);
     expect(Object.fromEntries(PRODUCTION_ADAPTER_IDS.map((adapterId) => [
       adapterId,
@@ -568,6 +633,7 @@ describe("adapter capability matrix", () => {
       "pi-mono": "managed_cloud",
       hermes: "local_user",
       openclaw: "local_user",
+      codex: "local_user",
     });
 
     expect(ADAPTER_CAPABILITY_MATRIX.acp.expectations).toMatchObject({
@@ -608,6 +674,27 @@ describe("adapter capability matrix", () => {
       modelSwitching: { status: "unsupported" },
       artifactEmission: { status: "unsupported" },
       toolSupport: { status: "unsupported" },
+      restartOrphanSemantics: { status: "required" },
+    });
+    expect(ADAPTER_CAPABILITY_MATRIX.codex.expectations).toMatchObject({
+      nativeResume: { status: "unsupported" },
+      cancellationDispatch: { status: "required" },
+      cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },
+      pinnedWorker: { status: "required" },
+      modelSwitching: { status: "unsupported" },
+      artifactEmission: { status: "unsupported" },
+      toolSupport: { status: "required" },
+      restartOrphanSemantics: { status: "required" },
+    });
+
+    expect(ADAPTER_CAPABILITY_MATRIX.codex.expectations).toMatchObject({
+      nativeResume: { status: "unsupported" },
+      cancellationDispatch: { status: "required" },
+      cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },
+      pinnedWorker: { status: "required" },
+      modelSwitching: { status: "unsupported" },
+      artifactEmission: { status: "unsupported" },
+      toolSupport: { status: "required" },
       restartOrphanSemantics: { status: "required" },
     });
 
@@ -703,6 +790,17 @@ describe("adapter capability matrix", () => {
       supportsArtifactEmission: false,
       supportsTools: false,
       restartBehavior: "native_bindings_survive",
+    });
+    expect(adapterCapabilitiesFor("codex")).toEqual({
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      supportsCancellation: true,
+      acknowledgesCancellation: false,
+      requiresPinnedWorker: true,
+      supportsModelSwitching: false,
+      supportsArtifactEmission: false,
+      supportsTools: true,
+      restartBehavior: "process_local_bindings_stale",
     });
   });
 });

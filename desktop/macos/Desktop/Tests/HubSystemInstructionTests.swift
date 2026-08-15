@@ -142,7 +142,7 @@ final class HubSystemInstructionTests: XCTestCase {
     XCTAssertEqual(toolNames, Set(DesktopCapabilityRegistry.realtimeToolNames))
   }
 
-  func testRealtimeSpawnAgentProviderEnumOnlyAdvertisesAvailableProviders() {
+  func testRealtimeSpawnAgentProviderEnumMatchesAvailableLocalProviders() {
     let tools = RealtimeHubTools.openAITools(availableDirectedProviders: ["openclaw"])
     let spawnAgent = tools.first { ($0["name"] as? String) == HubTool.spawnAgent.rawValue }
     let parameters = spawnAgent?["parameters"] as? [String: Any]
@@ -150,16 +150,20 @@ final class HubSystemInstructionTests: XCTestCase {
     let provider = properties?["provider"] as? [String: Any]
 
     XCTAssertEqual(provider?["enum"] as? [String], ["openclaw"])
-    XCTAssertTrue((provider?["description"] as? String ?? "").contains("current user explicitly names it"))
+    let description = provider?["description"] as? String ?? ""
+    XCTAssertTrue(description.contains("current user explicitly names it"))
+    XCTAssertTrue(description.contains("regular Omi agent"))
   }
 
-  func testRealtimeSpawnAgentOmitsProviderWhenNoLocalProvidersAreAvailable() {
+  func testRealtimeSpawnAgentOmitsProviderOverrideWhenNoLocalProvidersAreAvailable() {
     let tools = RealtimeHubTools.openAITools(availableDirectedProviders: [])
     let spawnAgent = tools.first { ($0["name"] as? String) == HubTool.spawnAgent.rawValue }
     let parameters = spawnAgent?["parameters"] as? [String: Any]
     let properties = parameters?["properties"] as? [String: Any]
 
-    XCTAssertNil(properties?["provider"])
+    let provider = properties?["provider"] as? [String: Any]
+
+    XCTAssertNil(provider)
     XCTAssertNotNil(properties?["brief"])
   }
 

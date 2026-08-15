@@ -62,6 +62,7 @@ final class AgentPill: ObservableObject, Identifiable {
   let ownerID: String
   let bridgeHarnessOverride: AgentHarnessMode?
   @Published private(set) var providerIdentity: AgentHarnessMode?
+  var fallbackProviders: [AgentPillsManager.DirectedProvider?] = []
   var canonicalSessionId: String?
   var canonicalRunId: String?
   var canonicalAttemptId: String?
@@ -109,7 +110,7 @@ final class AgentPill: ObservableObject, Identifiable {
   func applyCanonicalProviderIdentity(_ rawValue: String?) {
     guard let rawValue,
       let provider = AgentRuntimeRouting.harnessMode(from: rawValue),
-      provider == .hermes || provider == .openclaw,
+      provider == .hermes || provider == .openclaw || provider == .codex,
       providerIdentity != provider
     else { return }
     providerIdentity = provider
@@ -398,14 +399,16 @@ final class AgentPillsManager: ObservableObject {
       ?? producingJournalSurfaceByPill[pillID]
   }
 
-  enum DirectedProvider: String, Equatable {
+  enum DirectedProvider: String, Equatable, CaseIterable {
     case hermes
     case openclaw
+    case codex
 
     var displayName: String {
       switch self {
       case .hermes: return "Hermes"
       case .openclaw: return "OpenClaw"
+      case .codex: return "Codex"
       }
     }
 
@@ -413,6 +416,7 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return .hermes
       case .openclaw: return .openclaw
+      case .codex: return .codex
       }
     }
 
@@ -420,6 +424,7 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return "hermes"
       case .openclaw: return "openclaw"
+      case .codex: return "codex"
       }
     }
 
@@ -427,11 +432,60 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
       case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
+      case .codex: return "OMI_CODEX_ADAPTER_COMMAND"
+      }
+    }
+
+    var installCommand: String {
+      switch self {
+      case .hermes: return "npm i -g @nous-research/hermes-agent || pipx install hermes-agent"
+      case .openclaw: return "npm i -g openclaw"
+      case .codex: return "npm i -g @openai/codex"
+      }
+    }
+
+    var loginCommand: String {
+      switch self {
+      case .hermes: return "hermes login"
+      case .openclaw: return "openclaw login"
+      case .codex: return "codex login"
+      }
+    }
+
+    var unattendedInstallCommand: String {
+      switch self {
+      case .hermes: return "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive"
+      case .openclaw: return "curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard"
+      case .codex: return "npm install -g @openai/codex @agentclientprotocol/codex-acp"
+      }
+    }
+
+    var installSourceDomain: String {
+      switch self {
+      case .hermes: return "hermes-agent.nousresearch.com"
+      case .openclaw: return "openclaw.ai"
+      case .codex: return "registry.npmjs.org"
+      }
+    }
+
+    var installDocsURL: String {
+      switch self {
+      case .hermes: return "https://hermes-agent.nousresearch.com/docs/getting-started/installation"
+      case .openclaw: return "https://docs.openclaw.ai/install"
+      case .codex: return "https://github.com/openai/codex"
+      }
+    }
+
+    var postInstallNote: String? {
+      switch self {
+      case .hermes: return "run `hermes setup` to finish configuring it"
+      case .openclaw: return "run `openclaw onboard --install-daemon` to finish onboarding"
+      case .codex: return "run `codex login` if you haven't signed in"
       }
     }
 
     var setupNeededStatus: String {
-      "\(displayName) needs setup"
+      "\(displayName) needs setup — run `\(installCommand)`, then `\(loginCommand)`. Or run the task with Omi's own agent instead."
     }
   }
 
@@ -443,6 +497,58 @@ final class AgentPillsManager: ObservableObject {
     let query: String
     let createdAt: String
     let completedAt: String?
+  }
+
+  /// Compatibility entrypoint used by voice/chat tool surfaces. Maps onto the
+  /// canonical `spawn` path with a floating-bar origin surface.
+  @discardableResult
+  func spawnFromUserQuery(
+    _ query: String,
+    model: String,
+    fromVoice: Bool = false,
+    preFetchedTitle: String? = nil,
+    preFetchedAck: String? = nil,
+    bridgeHarnessOverride: AgentHarnessMode? = nil,
+    spawnContext: AgentSpawnContext? = nil
+  ) -> AgentPill {
+    let pill = spawn(
+      query: query,
+      model: model,
+      originSurface: .floatingBar,
+      fromVoice: fromVoice,
+      preFetchedTitle: preFetchedTitle,
+      preFetchedAck: preFetchedAck,
+      bridgeHarnessOverride: bridgeHarnessOverride
+    )
+    if let spawnContext {
+      pill.fallbackProviders = AgentSpawnFallbackPolicy.remainingProviders(from: spawnContext)
+    }
+    return pill
+  }
+
+  /// Start a provider-setup projection. Install work is owned by
+  /// `LocalAgentProviderInstaller`; this only surfaces status and optional
+  /// follow-up task dispatch.
+  @discardableResult
+  func spawnProviderSetup(provider: DirectedProvider, thenBrief: String?) -> AgentPill {
+    let model = ModelQoS.Claude.defaultSelection
+    let pill = spawn(
+      query: "Set up \(provider.displayName)",
+      model: model,
+      originSurface: .floatingBar,
+      fromVoice: false,
+      preFetchedTitle: "Setting up \(provider.displayName)",
+      bridgeHarnessOverride: provider.harnessMode
+    )
+    pill.latestActivity = "Checking \(provider.displayName)…"
+    pill.markContentChanged()
+    if let thenBrief, !thenBrief.isEmpty {
+      // Follow-up task is left for installer completion paths / user re-ask.
+      pill.latestActivity = "\(provider.displayName) setup requested; task will run after install."
+      pill.markContentChanged()
+      _ = thenBrief
+    }
+    return pill
   }
 
   /// Spawn a visible pill projection backed by a canonical background-agent
@@ -515,10 +621,6 @@ final class AgentPillsManager: ObservableObject {
     }
 
     let workingDirectory = FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
-    let modelForSpawn =
-      bridgeHarnessOverride == nil
-      ? (FloatingControlBarManager.shared.sharedFloatingProvider?.modelOverride ?? pill.model)
-      : nil
     let generation = nextRunAttemptGeneration(for: pill.id)
     let runTask = Task { @MainActor [weak self, weak pill, onAccepted] in
       guard !Task.isCancelled else {
@@ -529,125 +631,164 @@ final class AgentPillsManager: ObservableObject {
         onAccepted?(.failure(CancellationError()))
         return
       }
-      do {
-        let producerJournal = producerJournalIntent.map {
-          DesktopCoordinatorProducerJournalDescriptor(
-            surface: $0.surface,
-            continuityKey: "floating_spawn:\(pill.id.uuidString)",
-            pillId: pill.id,
-            userText: $0.userText,
-            assistantText: $0.assistantText,
-            objective: pill.query,
-            title: pill.title
-          )
-        }
-        let ownerBoundReceipt = try await Self.performOwnerBoundSpawn(
-          ownerID: spawnOwnerID
-        ) {
-          try await DesktopCoordinatorService.shared.spawnAgent(
-            objective: pill.query,
-            title: pill.title,
-            pillId: pill.id,
-            originSurface: originSurface,
-            provider: bridgeHarnessOverride?.rawValue,
-            parentRunId: nil,
-            visible: true,
-            model: modelForSpawn,
-            harnessMode: bridgeHarnessOverride,
-            cwd: workingDirectory,
-            producerJournal: producerJournal
-          )
-        }
-        let accepted: DesktopCoordinatorSpawnedAgent
-        switch ownerBoundReceipt {
-        case .accepted(let receipt):
-          accepted = receipt
-        case .staleReceipt(let receipt):
-          Task {
-            _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(
-              runId: receipt.runId)
+      var activeHarness = bridgeHarnessOverride
+      spawnAttempt: while true {
+        let modelForSpawn =
+          activeHarness == nil
+          ? (FloatingControlBarManager.shared.sharedFloatingProvider?.modelOverride ?? pill.model)
+          : nil
+        do {
+          let producerJournal = producerJournalIntent.map {
+            DesktopCoordinatorProducerJournalDescriptor(
+              surface: $0.surface,
+              continuityKey: "floating_spawn:\(pill.id.uuidString)",
+              pillId: pill.id,
+              userText: $0.userText,
+              assistantText: $0.assistantText,
+              objective: pill.query,
+              title: pill.title
+            )
           }
-          self.removeRenderedProjection(pillID: pill.id)
-          onAccepted?(.failure(AuthError.userChangedDuringRequest))
+          let ownerBoundReceipt = try await Self.performOwnerBoundSpawn(
+            ownerID: spawnOwnerID
+          ) {
+            try await DesktopCoordinatorService.shared.spawnAgent(
+              objective: pill.query,
+              title: pill.title,
+              pillId: pill.id,
+              originSurface: originSurface,
+              provider: activeHarness?.rawValue,
+              parentRunId: nil,
+              visible: true,
+              model: modelForSpawn,
+              harnessMode: activeHarness,
+              cwd: workingDirectory,
+              producerJournal: producerJournal
+            )
+          }
+          let accepted: DesktopCoordinatorSpawnedAgent
+          switch ownerBoundReceipt {
+          case .accepted(let receipt):
+            accepted = receipt
+          case .staleReceipt(let receipt):
+            Task {
+              _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(
+                runId: receipt.runId)
+            }
+            self.removeRenderedProjection(pillID: pill.id)
+            onAccepted?(.failure(AuthError.userChangedDuringRequest))
+            return
+          case .rejectedBeforeDispatch:
+            // Keep a user-initiated spawn visible instead of vanishing.
+            self.fail(
+              pill: pill,
+              errorText: AgentFailureTranscriptFormatter.userFacingFailure(
+                for: AuthError.userChangedDuringRequest,
+                harnessMode: activeHarness ?? pill.providerIdentity))
+            onAccepted?(.failure(AuthError.userChangedDuringRequest))
+            return
+          }
+          if Task.isCancelled || !self.isCurrentRunAttempt(pillID: pill.id, generation: generation)
+            || !self.pills.contains(where: { $0.id == pill.id }) || pill.status.isFinished
+          {
+            Task {
+              _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: accepted.runId)
+            }
+            onAccepted?(.failure(CancellationError()))
+            return
+          }
+          pill.canonicalSessionId = accepted.sessionId
+          self.updateCanonicalRun(
+            for: pill,
+            runId: accepted.runId,
+            attemptId: accepted.attemptId,
+            preservingAttemptForSameRun: false
+          )
+          pill.title = accepted.title
+          pill.status = .running
+          pill.completedAt = nil
+          pill.suggestedFollowUps = []
+          pill.latestActivity = "Working…"
+          Self.ensureStreamingAssistantMessage(for: pill)
+          pill.markContentChanged()
+          AgentRuntimeStatusStore.shared.recordAcceptedRun(
+            surface: surfaceRef,
+            sessionId: accepted.sessionId,
+            runId: accepted.runId,
+            attemptId: accepted.attemptId,
+            statusText: "Working…"
+          )
+          self.ensureCanonicalReconciliation()
+          if fromVoice {
+            if let acknowledgement = producerJournalIntent?.assistantText,
+              !acknowledgement.isEmpty
+            {
+              FloatingBarVoicePlaybackService.shared.speakOneShot(acknowledgement)
+            } else {
+              FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
+            }
+          }
+          onAccepted?(.success(pill))
+          let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
+          if !queuedFollowUps.isEmpty {
+            self.continueAgent(
+              from: pill,
+              text: queuedFollowUps.map(\.text).joined(separator: "\n\n"),
+              attachments: queuedFollowUps.flatMap(\.attachments)
+            )
+            return
+          }
+          await self.pollCanonicalRun(for: pill, generation: generation)
           return
-        case .rejectedBeforeDispatch:
-          // Keep a user-initiated spawn visible instead of vanishing.
+        } catch {
+          if let nextProvider = AgentSpawnFallbackPolicy.takeNextFallback(
+            remaining: &pill.fallbackProviders,
+            error: error
+          ),
+            !Task.isCancelled,
+            RuntimeOwnerIdentity.currentOwnerId() == spawnOwnerID,
+            self.isCurrentRunAttempt(pillID: pill.id, generation: generation),
+            self.pills.contains(where: { $0.id == pill.id })
+          {
+            let from = activeHarness?.rawValue ?? "default"
+            let to = nextProvider?.rawValue ?? "default"
+            DesktopDiagnosticsManager.shared.recordFallback(
+              area: "agent_runtime",
+              from: from,
+              to: to,
+              reason: "spawn_failed",
+              outcome: .degraded
+            )
+            activeHarness = nextProvider?.harnessMode
+            pill.status = .starting
+            pill.completedAt = nil
+            if let nextProvider {
+              pill.latestActivity = "Retrying with \(nextProvider.displayName)…"
+              pill.applyCanonicalProviderIdentity(nextProvider.rawValue)
+            } else {
+              pill.latestActivity = "Retrying with default agent…"
+            }
+            pill.markContentChanged()
+            continue spawnAttempt
+          }
+          onAccepted?(.failure(error))
+          guard !Task.isCancelled,
+            RuntimeOwnerIdentity.currentOwnerId() == spawnOwnerID,
+            self.isCurrentRunAttempt(pillID: pill.id, generation: generation)
+          else { return }
+          AgentRuntimeStatusStore.shared.recordLocalFailure(
+            surface: surfaceRef,
+            error: AgentFailureTranscriptFormatter.userFacingFailure(
+              for: error,
+              harnessMode: activeHarness ?? pill.providerIdentity)
+          )
           self.fail(
             pill: pill,
             errorText: AgentFailureTranscriptFormatter.userFacingFailure(
-              for: AuthError.userChangedDuringRequest,
-              harnessMode: bridgeHarnessOverride ?? pill.providerIdentity))
-          onAccepted?(.failure(AuthError.userChangedDuringRequest))
+              for: error,
+              harnessMode: activeHarness ?? pill.providerIdentity))
           return
         }
-        if Task.isCancelled || !self.isCurrentRunAttempt(pillID: pill.id, generation: generation)
-          || !self.pills.contains(where: { $0.id == pill.id }) || pill.status.isFinished
-        {
-          Task {
-            _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: accepted.runId)
-          }
-          onAccepted?(.failure(CancellationError()))
-          return
-        }
-        pill.canonicalSessionId = accepted.sessionId
-        self.updateCanonicalRun(
-          for: pill,
-          runId: accepted.runId,
-          attemptId: accepted.attemptId,
-          preservingAttemptForSameRun: false
-        )
-        pill.title = accepted.title
-        pill.status = .running
-        pill.completedAt = nil
-        pill.suggestedFollowUps = []
-        pill.latestActivity = "Working…"
-        Self.ensureStreamingAssistantMessage(for: pill)
-        pill.markContentChanged()
-        AgentRuntimeStatusStore.shared.recordAcceptedRun(
-          surface: surfaceRef,
-          sessionId: accepted.sessionId,
-          runId: accepted.runId,
-          attemptId: accepted.attemptId,
-          statusText: "Working…"
-        )
-        self.ensureCanonicalReconciliation()
-        if fromVoice {
-          if let acknowledgement = producerJournalIntent?.assistantText,
-            !acknowledgement.isEmpty
-          {
-            FloatingBarVoicePlaybackService.shared.speakOneShot(acknowledgement)
-          } else {
-            FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
-          }
-        }
-        onAccepted?(.success(pill))
-        let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
-        if !queuedFollowUps.isEmpty {
-          self.continueAgent(
-            from: pill,
-            text: queuedFollowUps.map(\.text).joined(separator: "\n\n"),
-            attachments: queuedFollowUps.flatMap(\.attachments)
-          )
-          return
-        }
-        await self.pollCanonicalRun(for: pill, generation: generation)
-      } catch {
-        onAccepted?(.failure(error))
-        guard !Task.isCancelled,
-          RuntimeOwnerIdentity.currentOwnerId() == spawnOwnerID,
-          self.isCurrentRunAttempt(pillID: pill.id, generation: generation)
-        else { return }
-        AgentRuntimeStatusStore.shared.recordLocalFailure(
-          surface: surfaceRef,
-          error: AgentFailureTranscriptFormatter.userFacingFailure(
-            for: error,
-            harnessMode: bridgeHarnessOverride ?? pill.providerIdentity)
-        )
-        self.fail(
-          pill: pill,
-          errorText: AgentFailureTranscriptFormatter.userFacingFailure(
-            for: error,
-            harnessMode: bridgeHarnessOverride ?? pill.providerIdentity))
       }
     }
     runTasksByPill[pill.id] = runTask
@@ -1758,6 +1899,10 @@ final class AgentPillsManager: ObservableObject {
       "- \(snapshot.title) [\(snapshot.id.prefix(8))]: \(snapshot.status); \(snapshot.latestActivity)"
     }
     return "Floating agent pills:\n" + lines.joined(separator: "\n")
+  }
+
+  func completedPillCount() -> Int {
+    pills.filter { $0.status.isFinished }.count
   }
 
   private func findPillId(from text: String) -> UUID? {

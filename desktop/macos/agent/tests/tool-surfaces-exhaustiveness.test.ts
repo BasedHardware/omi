@@ -89,7 +89,7 @@ describe("tool surface exhaustiveness", () => {
 
   it("matches the checked-in manifest fixture", () => {
     const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
-    expect(fixture).toEqual(omiToolManifest);
+    expect(fixture).toEqual(JSON.parse(JSON.stringify(omiToolManifest)));
   });
 
   it("binds every swiftTool to a swift executor", () => {

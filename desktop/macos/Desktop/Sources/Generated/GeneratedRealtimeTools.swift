@@ -257,9 +257,10 @@ enum GeneratedRealtimeTools {
           "type": "string",
           "enum": [
             "openclaw",
-            "hermes"
+            "hermes",
+            "codex"
           ],
-          "description": "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent."
+          "description": "Optional local provider override when the current user explicitly names it; omit for a regular Omi agent."
         },
         "parent_run_id": {
           "type": "string",

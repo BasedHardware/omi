@@ -604,7 +604,7 @@ actor AgentRuntimeProcess {
   /// The Node registry is the authority for adapter activation. Swift must not
   /// re-run local executable detection before advertising a realtime provider.
   func registeredDirectedProviderIDs() -> [String] {
-    runtimeAdapterIDs.intersection(["hermes", "openclaw"]).sorted()
+    runtimeAdapterIDs.intersection(["codex", "hermes", "openclaw"]).sorted()
   }
 
   static func adapterId(forHarnessMode harnessMode: String) -> String? {
@@ -2750,8 +2750,8 @@ actor AgentRuntimeProcess {
 
   private func applyLocalAgentEnvironment(to env: inout [String: String]) {
     // Seed auto-discovered commands for every local adapter so the shared Node
-    // process can route to Hermes or OpenClaw even when it was launched for a
-    // different adapter. registerClient returns early once the reducer is
+    // process can route to Hermes, OpenClaw, or Codex even when it was launched
+    // for a different adapter. registerClient returns early once the reducer is
     // startup adapter's env would otherwise be the only one the process sees.
     let home = NSHomeDirectory()
     if env["HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
@@ -2773,8 +2773,11 @@ actor AgentRuntimeProcess {
 
     // The same injected PATH/home contract used by the testable detector feeds
     // the Node registry. PTT receives only the registry projection later; it
-    // never performs a competing executable lookup of its own.
+    // never performs a competing executable lookup of its own. Each adapter is
+    // seeded only when it is health-ready (installed AND wired AND authed), so
+    // a Codex binary with no bridge or no sign-in never gets registered.
     if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      AgentProviderHealth.isReady(for: .hermes, environment: env, homeDirectory: home),
       case .available(command: let hermes) = LocalAgentProviderDetector.availability(
         for: .hermes,
         environment: env,
@@ -2785,6 +2788,7 @@ actor AgentRuntimeProcess {
     }
 
     if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      AgentProviderHealth.isReady(for: .openclaw, environment: env, homeDirectory: home),
       case .available(command: let openClaw) = LocalAgentProviderDetector.availability(
         for: .openclaw,
         environment: env,
@@ -2792,6 +2796,17 @@ actor AgentRuntimeProcess {
       ).status
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
+    }
+
+    if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      AgentProviderHealth.isReady(for: .codex, environment: env, homeDirectory: home),
+      case .available(command: let codex) = LocalAgentProviderDetector.availability(
+        for: .codex,
+        environment: env,
+        homeDirectory: home
+      ).status
+    {
+      env["OMI_CODEX_ADAPTER_COMMAND"] = Self.codexAdapterCommand(codexPath: codex)
     }
   }
 
@@ -2837,6 +2852,10 @@ actor AgentRuntimeProcess {
     return "\(shellQuote(openClawPath)) acp"
   }
 
+  static func codexAdapterCommand(codexPath: String) -> String {
+    "CODEX_PATH=\(shellQuote(codexPath)) npx -y @agentclientprotocol/codex-acp"
+  }
+
   /// Directly launched app bundles do not inherit the shell's FNM multishell
   /// PATH entry. Search the stable Node-install roots as well, so a globally
   /// installed OpenClaw CLI remains available to the shared agent bridge.
@@ -2850,35 +2869,15 @@ actor AgentRuntimeProcess {
       "\(home)/.hermes/hermes-agent",
       "\(home)/.local/bin",
     ]
-    let managedNodeRoots = [
-      "\(home)/.nvm/versions/node",
-      "\(home)/.fnm/node-versions",
-      "\(home)/.local/share/fnm/node-versions",
-      "\(home)/.nodenv/versions",
-      "\(home)/.asdf/installs/nodejs",
-    ]
     // User-managed Node installations take precedence over machine-wide fallbacks.
     return Self.uniquePaths(
       adapterPathDirs
-        + managedNodeRoots.flatMap {
-          Self.nodeInstallBinDirectories(root: $0, fileManager: fileManager)
-        }
+        + LocalAgentProviderDetector.managedNodeBinDirectories(
+          homeDirectory: home, fileManager: fileManager)
         + [
           "/opt/homebrew/bin",
           "/usr/local/bin",
         ])
-  }
-
-  private static func nodeInstallBinDirectories(root: String, fileManager: FileManager) -> [String] {
-    guard let versions = try? fileManager.contentsOfDirectory(atPath: root) else { return [] }
-    return versions.compactMap { version in
-      let versionDirectory = (root as NSString).appendingPathComponent(version)
-      let directBin = (versionDirectory as NSString).appendingPathComponent("bin")
-      if fileManager.fileExists(atPath: directBin) { return directBin }
-      let installationBin = (versionDirectory as NSString).appendingPathComponent("installation/bin")
-      if fileManager.fileExists(atPath: installationBin) { return installationBin }
-      return nil
-    }
   }
 
   private static func uniquePaths(_ paths: [String]) -> [String] {

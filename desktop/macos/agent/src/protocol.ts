@@ -812,6 +812,7 @@ export interface RuntimeFailurePayload {
   adapterId?: string;
   provider?: string;
   retryable?: boolean;
+  phase?: "startup";
   recoveryAction?: "worker_recycled";
   recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
   retryDisposition?: "next_send";

@@ -392,10 +392,10 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     for (const provider of ["openclaw", "hermes"] as const) {
       const artifactRoot = mkdtempTracked(`omi-${provider}-artifacts-`);
       const externalDirectory = mkdtempTracked(`omi-${provider}-reported-`);
+      const desktopDirectory = mkdtempTrackedIn(homedir(), `omi-${provider}-desktop-`);
       // Keep Desktop-like fixtures outside temporary roots: a linked worktree
       // can itself be under /private/tmp, which would otherwise bypass the
       // Desktop-specific delivery grammar.
-      const desktopDirectory = mkdtempTrackedIn(homedir(), `omi-${provider}-desktop-`);
       // This must remain outside the temporary roots even when the test
       // checkout itself lives under /private/tmp (as it does in isolated
       // worktrees), otherwise it accidentally becomes a valid deliverable.

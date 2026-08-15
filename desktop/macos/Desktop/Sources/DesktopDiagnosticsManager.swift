@@ -1461,6 +1461,7 @@ final class DesktopDiagnosticsManager {
     "ble_decode_failed",
     "bind_failed",
     "db_backoff",
+    "spawn_failed",
     "state_divergence",
     "status_inferred",
   ]

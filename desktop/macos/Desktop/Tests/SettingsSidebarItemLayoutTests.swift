@@ -7,6 +7,13 @@ import XCTest
 
 @MainActor
 final class SettingsSidebarItemLayoutTests: XCTestCase {
+  func testVisibleNavSectionsKeepNotificationsRewindAndAIAgents() {
+    let sections = SettingsSidebar.visibleNavSections
+    XCTAssertTrue(sections.contains(.aiAgents))
+    XCTAssertTrue(sections.contains(.notifications))
+    XCTAssertTrue(sections.contains(.rewind))
+  }
+
   func testMergedNotificationsAndPrivacyLabelStaysOnOneLineWhenSelected() {
     let labelWidth = NSHostingView(
       rootView: Text(SettingsContentView.SettingsSection.notifications.displayTitle)

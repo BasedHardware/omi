@@ -37,11 +37,12 @@ export interface RuntimeFailure {
   source?: RuntimeFailureSource;
   adapterId?: string;
   provider?: string;
-  retryable?: boolean;
-  recoveryAction?: "worker_recycled";
-  recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
-  retryDisposition?: "next_send";
-}
+   retryable?: boolean;
+   phase?: "startup";
+   recoveryAction?: "worker_recycled";
+   recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
+   retryDisposition?: "next_send";
+ }
 
 export class AdapterRuntimeError extends Error {
   readonly failure: RuntimeFailure;
@@ -286,6 +287,8 @@ function adapterFailureLabel(adapterId: ProductionAdapterId, provider?: string):
         return "OpenAI";
       }
       return "ACP";
+    case "codex":
+      return "Codex";
   }
 }
 

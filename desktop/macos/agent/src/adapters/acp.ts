@@ -71,6 +71,14 @@ const EXTERNAL_ADAPTER_ENV_ALLOWLIST = [
   "HERMES_HOME",
 ] as const;
 
+const CODEX_ADAPTER_ENV_ALLOWLIST = [
+  // Codex-acp: needs OPENAI_API_KEY for auth, NO_BROWSER to suppress
+  // interactive browser login, and INITIAL_AGENT_MODE for headless operation.
+  "OPENAI_API_KEY",
+  "NO_BROWSER",
+  "INITIAL_AGENT_MODE",
+] as const;
+
 /**
  * Proxy environment variable names that may carry embedded credentials
  * (e.g. `http://user:pass@proxy:3128`). Their values are sanitized before
@@ -313,7 +321,10 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       const externalEnv: NodeJS.ProcessEnv = {
         OMI_ADAPTER_ID: this.adapterId,
       };
-      for (const key of EXTERNAL_ADAPTER_ENV_ALLOWLIST) {
+      const allowlist = this.adapterId === "codex"
+        ? [...EXTERNAL_ADAPTER_ENV_ALLOWLIST, ...CODEX_ADAPTER_ENV_ALLOWLIST]
+        : EXTERNAL_ADAPTER_ENV_ALLOWLIST;
+      for (const key of allowlist) {
         if (process.env[key] !== undefined) {
           // Proxy URLs may carry embedded credentials (user:pass@host).
           // Strip them before forwarding to untrusted subprocesses.
@@ -321,6 +332,16 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
             ? sanitizeProxyUrl(process.env[key]!)
             : process.env[key];
         }
+      }
+      // Settings BYOK arrives on the bridge as OMI_BYOK_OPENAI. Codex-acp
+      // authenticates via OPENAI_API_KEY, so map the Settings key when no
+      // explicit OPENAI_API_KEY is already present. Do not forward OMI_BYOK_*.
+      if (
+        this.adapterId === "codex"
+        && !externalEnv.OPENAI_API_KEY?.trim()
+        && process.env.OMI_BYOK_OPENAI?.trim()
+      ) {
+        externalEnv.OPENAI_API_KEY = process.env.OMI_BYOK_OPENAI;
       }
       this.log(`Starting ${this.adapterId} ACP subprocess: ${command}`);
       this.process = spawn(command, {

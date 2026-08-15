@@ -155,7 +155,9 @@ let package = Package(
       ],
       path: "Tests/VoiceTurnDomainTests"
     ),
-    .testTarget(
+    // Compile-only sentinels (not XCTest). Must be a regular target so
+    // `swift build --target SemanticFeatureSentinels` works on Swift 6.4+.
+    .target(
       name: "SemanticFeatureSentinels",
       dependencies: [],
       path: "Tests/SemanticFeatureSentinels",
