@@ -347,7 +347,11 @@ class ListenReceiver:
         # Defer both lookups so Omi-STT sessions never pay for them. Offload the
         # Firestore enrollment read onto db_executor (async blocker gate).
         if self.host.use_custom_stt:
-            byok_active = await run_blocking(db_executor, users_db.is_byok_active, self.host.request.uid)
+            try:
+                byok_active = await run_blocking(db_executor, users_db.is_byok_active, self.host.request.uid)
+            except Exception as error:
+                logger.warning('Custom-STT photo BYOK enrollment lookup failed type=%s', type(error).__name__)
+                byok_active = False
             has_llm_byok_key = bool(byok_active and (get_byok_key('openai') or get_byok_key('anthropic')))
             skip_photo_description = should_skip_custom_stt_postprocessing(
                 uses_custom_stt=True,

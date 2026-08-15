@@ -123,6 +123,30 @@ def test_custom_stt_photo_skips_omi_description_without_llm_byok_key(monkeypatch
     assert 'Custom STT' in photo.description
 
 
+def test_custom_stt_photo_uses_placeholder_when_byok_enrollment_lookup_fails(monkeypatch):
+    """A failed enrollment read must fail closed without dropping the photo."""
+    recv = _make_photo_receiver(use_custom_stt=True)
+    described = []
+
+    async def _describe(_uid, _img):
+        described.append(1)
+        return 'a description'
+
+    monkeypatch.setattr(receiver, 'describe_image', _describe)
+    monkeypatch.setattr(receiver, 'get_byok_key', lambda _provider: 'sk-test')
+
+    def _enrollment_failure(_uid):
+        raise RuntimeError('firestore unavailable')
+
+    monkeypatch.setattr(receiver.users_db, 'is_byok_active', _enrollment_failure)
+
+    asyncio.run(_process_photo(recv))
+
+    assert described == []
+    assert len(recv.host.transcripts.photo_buffer) == 1
+    assert 'Custom STT' in recv.host.transcripts.photo_buffer[0].description
+
+
 def test_custom_stt_photo_runs_description_with_llm_byok_key(monkeypatch):
     """A custom-STT user with active BYOK enrollment and an OpenAI/Anthropic
     request key pays their own bill, so photo descriptions must still run."""
