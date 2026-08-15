@@ -4,6 +4,7 @@ surface — document/collection reads & writes, FieldFilter/order_by/limit query
 sentinel -> neutral sentinel translation, and batches — against the neutral FakeDocumentStore. The
 transactional path (open Mongo session) is exercised by the live contract check, not here."""
 
+import pytest
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -152,16 +153,36 @@ def test_start_after_advances_pagination():
     assert [s.id for s in after.stream()] == ["g2", "g3"]  # advances, does not repeat
 
 
-def test_group_query_supports_order_by_and_start_after():
+def test_group_query_order_by_streams_ordered_and_rejects_field_order_plus_keyset():
     c = _client()
     c.document("users/u1/events/e1").set({"ts": 1})
     c.document("users/u2/events/e2").set({"ts": 2})
     q = c.collection_group("events").order_by("ts")
     # Assert the ORDERED list (a set compare would pass even if order_by did nothing).
     assert [s.id for s in q.stream()] == ["e1", "e2"]
-    # start_after must actually advance past the cursor — assert the exact post-cursor page, not truthiness
-    # (cubic PR 10887 A10: the old set/truthiness asserts passed even if start_after were ignored).
-    assert [s.id for s in q.start_after("users/u1/events/e1").stream()] == ["e2"]
+    # An explicit field order_by combined with a document-name start_after keyset is UNSUPPORTED on both
+    # real adapters (a single doc-name cursor cannot position a field-ordered set — Mongo & Firestore both
+    # raise NotImplementedError; the store contract asserts this). The fake used to silently return a
+    # field-ordered-but-id-keyset window, so this combo passed hermetically then broke on both backends
+    # (cubic PR 10887 #5). The fake must reject it too.
+    with pytest.raises(NotImplementedError):
+        list(q.start_after("users/u1/events/e1").stream())
+
+
+def test_group_query_name_filter_with_docref_bound_matches_full_path():
+    # cubic PR 10887 #338: a collection-group __name__ filter matches _id, which IS the full document
+    # path (query_group spans parents, no collection to prefix). The facade must forward a _DocRef bound
+    # as its full .path, NOT the bare .id used for scoped queries (a regression from the #8 scoped fix:
+    # reducing to .id made the group filter match nothing on Mongo). Verified live on Mongo.
+    c = _client()
+    c.document("users/u1/state/s1").set({"k": 1})
+    c.document("users/u2/state/s2").set({"k": 2})
+    ref = c.document("users/u1/state/s1")
+    grp = c.collection_group("state").where(filter=FieldFilter("__name__", "==", ref))
+    assert [s.id for s in grp.stream()] == ["s1"]  # was [] when the DocRef was reduced to bare "s1"
+    # A range bound (>=) with a DocRef must also compare on the full path.
+    rng = c.collection_group("state").where(filter=FieldFilter("__name__", ">=", c.document("users/u2/state/s2")))
+    assert [s.id for s in rng.stream()] == ["s2"]
 
 
 def test_write_option_precondition_enforced_on_batch_delete():

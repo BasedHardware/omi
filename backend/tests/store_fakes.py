@@ -312,22 +312,37 @@ class FakeDocumentStore:
         # regardless of parent (e.g. ``users/{uid}/fair_use_state/current`` matches ``fair_use_state``).
         rows = [(p, d) for p, d in self._docs.items() if p.rsplit("/", 1)[0].rsplit("/", 1)[-1] == group]
         for field, op, value in filters or ():
-            if "." in field:
+            if field == "__name__":
+                # Collection-group document-name filter: _id IS the full path here (no _parent scope),
+                # so compare against p directly, mirroring the adapters (mongo.py query_group; cubic #6).
+                rows = [(p, d) for p, d in rows if _OPS[op](p, value)]
+            elif "." in field:
                 # Resolve dotted paths (e.g. ``subject.kind``) like the real adapters and ``query()``,
                 # so collection-group filters on embedded fields are emulated faithfully (not top-level only).
                 rows = [(p, d) for p, d in rows if (nested := _get_path(d, field)) is not None and _OPS[op](nested, value)]
             else:
                 rows = [(p, d) for p, d in rows if field in d and _OPS[op](d[field], value)]
-        reverse = direction == "desc"
-        if isinstance(order_by, str):
-            rows.sort(key=lambda pd: (pd[1].get(order_by), pd[0]), reverse=reverse)
-        elif order_by is not None:
+        # A __name__ order on a collection group is the implicit document-name (path) keyset — strip it so
+        # it doesn't count as an explicit order that conflicts with start_after (cubic PR 10887 #2).
+        specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
+        specs = [(f, d) for f, d in specs if f != "__name__"]
+        if start_after is not None and specs:
+            # A single document-name cursor cannot position a field-ordered result set; both real adapters
+            # reject this (mongo.py / firestore.py query_group). The fake must too, or a test passes here
+            # and breaks against both backends (cubic PR 10887 #5).
+            raise NotImplementedError(
+                "query_group: a document-name start_after keyset cannot combine with an explicit order_by"
+            )
+        if specs and isinstance(order_by, str):
+            f, fdir = specs[0]
+            rows.sort(key=lambda pd, ff=f: (pd[1].get(ff), pd[0]), reverse=(fdir == "desc"))
+        elif specs:
             rows.sort(key=lambda pd: pd[0])
-            for field, fdir in reversed(list(order_by)):
+            for field, fdir in reversed(specs):
                 rows.sort(key=lambda pd, f=field: pd[1].get(f), reverse=(fdir == "desc"))
         else:
-            # No explicit order_by: document-name (full path) ascending, matching Firestore's
-            # implicit __name__ order so a keyset ``start_after`` pages consistently from page one.
+            # No explicit order (or a __name__-only order): document-name (full path) ascending, matching
+            # Firestore's implicit __name__ order so a keyset ``start_after`` pages consistently from page one.
             rows.sort(key=lambda pd: pd[0])
         if start_after is not None:
             # Document-name keyset (mirrors the adapters): resume strictly after the cursor path.

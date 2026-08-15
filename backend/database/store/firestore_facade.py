@@ -100,8 +100,21 @@ def _name_filter_value(value: Any) -> Any:
     stringified to its object ``repr`` and matched nothing — e.g. ``user_usage``'s monthly ``__name__``
     range (`llm_usage_ref.document(...)` bounds) returned zero rows on Mongo, undercounting chat usage
     (cubic PR 10887 #8; the contract test only exercised a bare-string bound, so the seam hid it). A
-    plain string id passes through unchanged."""
+    plain string id passes through unchanged. Collection-GROUP queries need the FULL path instead —
+    see ``_group_name_filter_value``."""
     return value.id if isinstance(value, _DocRef) else value
+
+
+def _group_name_filter_value(value: Any) -> Any:
+    """Normalize a ``__name__`` filter bound for a collection-GROUP query to the full document path.
+
+    Unlike a scoped collection query (which the store rebuilds as ``f"{collection}/{value}"`` from a
+    bare id — see ``_name_filter_value``), a collection-group query matches the document name against
+    ``_id`` directly, which IS the full logical path (query_group spans parents, so there is no single
+    collection to prefix). Reducing a ``_DocRef`` to its bare ``.id`` here made the group ``__name__``
+    filter match nothing on Mongo (cubic PR 10887 #338, a regression from the #8 scoped-query fix). Keep
+    the ``_DocRef``'s full ``.path``; a plain string path passes through unchanged."""
+    return value.path if isinstance(value, _DocRef) else value
 
 
 def _to_neutral(value: Any) -> Any:
@@ -643,7 +656,7 @@ class _GroupQuery:
         if op is None:
             raise NotImplementedError(f"unsupported query operator: {op_string!r}")
         if field_path == "__name__":
-            value = _name_filter_value(value)
+            value = _group_name_filter_value(value)  # group: full path (not the scoped bare id)
         return self._clone(filters=self._filters + [(field_path, op, value)])
 
     def order_by(self, field_path: str, direction: Any = "ASCENDING") -> "_GroupQuery":
