@@ -658,3 +658,47 @@ describe('owner switching', () => {
     expect(store.getState().accountGeneration).toBe(3)
   })
 })
+
+describe('control failure during refresh', () => {
+  it('clears the generation and rows so stale recommendations are never actionable', async () => {
+    let controlFails = false
+    const store = new DashboardIntelligenceStore({
+      get: vi.fn(async (path: string) => {
+        if (path === '/v1/candidates/control') {
+          if (controlFails) throw new Error('down')
+          return { data: READ_CONTROL }
+        }
+        if (path === '/v1/what-matters-now') {
+          return {
+            data: {
+              schema_version: 1,
+              evaluation_id: 'ev-1',
+              output_version: 'out-1',
+              material_version: 'mat-1',
+              generated_at: PAST,
+              expires_at: FUTURE,
+              recommendations: [wireRow()]
+            }
+          }
+        }
+        if (path === '/v1/goals/canonical/list') return { data: [] }
+        const err = new Error('nf') as Error & { response?: { status: number } }
+        err.response = { status: 404 }
+        throw err
+      }) as never,
+      post: vi.fn() as never,
+      del: vi.fn() as never,
+      now: () => NOW,
+      uuid: () => 'u',
+      ownerId: () => 'uid-1'
+    })
+    await store.load()
+    expect(store.getState().recommendations).toHaveLength(1)
+
+    controlFails = true
+    await store.load()
+    expect(store.getState().accountGeneration).toBeNull()
+    expect(store.getState().recommendations).toEqual([])
+    expect(store.getState().error).toBe('Recommendations are unavailable right now.')
+  })
+})

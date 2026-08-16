@@ -54,16 +54,22 @@ class ResizeObserverStub {
   onRewindSettings: vi.fn(() => () => {})
 }
 
-let lastKnowsProps: HubKnowsProps | null = null
+// The stub renders its props into the DOM instead of writing to an outer
+// variable (reassigning during render trips the react-hooks purity lint); the
+// prefill test drives the seam through a real click.
 
 function StubKnows(props: HubKnowsProps): React.JSX.Element {
-  lastKnowsProps = props
-  return <div data-testid={`stub-knows-${props.variant ?? 'stage'}`} />
+  return (
+    <button
+      type="button"
+      data-testid={`stub-knows-${props.variant ?? 'stage'}`}
+      onClick={() => props.onAskPrefill?.('What changed this week?')}
+    />
+  )
 }
 
 beforeEach(() => {
   window.localStorage.clear()
-  lastKnowsProps = null
   chat.sending = false
   chat.history = []
   registerHubKnows(StubKnows)
@@ -110,8 +116,7 @@ describe('question prefill', () => {
         <HomeHub />
       </MemoryRouter>
     )
-    expect(lastKnowsProps?.onAskPrefill).toBeTypeOf('function')
-    lastKnowsProps?.onAskPrefill?.('What changed this week?')
+    fireEvent.click(screen.getByTestId('stub-knows-stage'))
     // The focus signal focuses the stage input, whose focus opens the panel and
     // re-docks (remounts) the bar — so assert against the CURRENT input node.
     await waitFor(() => {

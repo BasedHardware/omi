@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Circle, Lightbulb, MessageSquare, ArrowUpRight, X, Clock } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import type { KnowsRow } from '../../../lib/intelligence/knowsComposer'
@@ -30,31 +31,53 @@ export function HomeKnowsRow({
   /** Insight rows only: push the recommendation back 24h. */
   onLater?: () => void
 }): React.JSX.Element {
-  const [reasonOpen, setReasonOpen] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
+  // Overlay anchors in viewport coordinates: both the context menu and the
+  // reason popover render through a portal with edge clamping (the pattern
+  // ConversationRowContextMenu established), so a row near the bottom of the
+  // hub's no-scroll stage can never have its actions clipped by an ancestor's
+  // overflow.
+  const [reasonAt, setReasonAt] = useState<{ x: number; y: number } | null>(null)
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
+  const reasonOpen = reasonAt !== null
+  const menuOpen = menuAt !== null
 
   const Icon = row.kind === 'task' ? Circle : row.kind === 'insight' ? Lightbulb : MessageSquare
 
-  const dismissClicked = (): void => {
+  const dismissClicked = (e: React.MouseEvent): void => {
     if (!onDismiss) return
     if (row.kind === 'insight') {
-      setReasonOpen(true)
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      setReasonAt({ x: rect.right, y: rect.bottom + 4 })
       return
     }
     onDismiss(null)
   }
 
   const chooseReason = (reason: FeedbackReason | null): void => {
-    setReasonOpen(false)
+    setReasonAt(null)
     onDismiss?.(reason)
   }
+
+  // Escape dismisses whichever overlay is open; the reason popover keeps its
+  // documented close-without-choosing behavior (a reasonless dismiss).
+  useEffect(() => {
+    if (!menuOpen && !reasonOpen) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      if (reasonOpen) chooseReason(null)
+      else setMenuAt(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [menuOpen, reasonOpen, onDismiss])
 
   const openContextMenu = (e: React.MouseEvent): void => {
     // Mac parity: the row's context menu carries Later and Dismiss. Question
     // rows have neither, so the default menu is fine there.
     if (!onDismiss && !onLater) return
     e.preventDefault()
-    setMenuOpen(true)
+    setMenuAt({ x: e.clientX, y: e.clientY })
   }
 
   return (
@@ -81,7 +104,7 @@ export function HomeKnowsRow({
           </span>
         </button>
         {onDismiss ? (
-          <span className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          <span className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100">
             {onLater && (
               <button
                 type="button"
@@ -108,73 +131,87 @@ export function HomeKnowsRow({
         )}
       </div>
 
-      {menuOpen && (
-        <>
-          <button
-            type="button"
-            aria-label="Close menu"
-            className="fixed inset-0 z-40 cursor-default"
-            onClick={() => setMenuOpen(false)}
-          />
-          <div
-            className="absolute right-0 top-[48px] z-50 w-[130px] rounded-[10px] border border-home-hairline bg-home-tile p-1 shadow-lg"
-            data-testid="knows-context-menu"
-          >
-            {onLater && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false)
-                  onLater()
-                }}
-                className="focus-ring block w-full rounded px-2 py-1.5 text-left text-[12px] text-home-secondary hover:bg-home-tileHover hover:text-home-ink"
-              >
-                Later
-              </button>
-            )}
-            {onDismiss && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false)
-                  dismissClicked()
-                }}
-                className="focus-ring block w-full rounded px-2 py-1.5 text-left text-[12px] text-home-secondary hover:bg-home-tileHover hover:text-home-ink"
-              >
-                Dismiss
-              </button>
-            )}
-          </div>
-        </>
-      )}
+      {menuOpen &&
+        menuAt !== null &&
+        createPortal(
+          <>
+            <button
+              type="button"
+              aria-label="Close menu"
+              className="fixed inset-0 z-[190] cursor-default"
+              onClick={() => setMenuAt(null)}
+            />
+            <div
+              className="fixed z-[200] w-[130px] rounded-[10px] border border-home-hairline bg-home-tile p-1 shadow-lg"
+              style={{
+                left: Math.min(menuAt.x, window.innerWidth - 140),
+                top: Math.min(menuAt.y, window.innerHeight - 90)
+              }}
+              data-testid="knows-context-menu"
+            >
+              {onLater && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuAt(null)
+                    onLater()
+                  }}
+                  className="focus-ring block w-full rounded px-2 py-1.5 text-left text-[12px] text-home-secondary hover:bg-home-tileHover hover:text-home-ink"
+                >
+                  Later
+                </button>
+              )}
+              {onDismiss && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    setMenuAt(null)
+                    dismissClicked(e)
+                  }}
+                  className="focus-ring block w-full rounded px-2 py-1.5 text-left text-[12px] text-home-secondary hover:bg-home-tileHover hover:text-home-ink"
+                >
+                  Dismiss
+                </button>
+              )}
+            </div>
+          </>,
+          document.body
+        )}
 
-      {reasonOpen && (
-        <>
-          {/* Click-away closes without a reason — which still dismisses. */}
-          <button
-            type="button"
-            aria-label="Dismiss without a reason"
-            className="fixed inset-0 z-40 cursor-default"
-            onClick={() => chooseReason(null)}
-          />
-          <div
-            className="absolute right-0 top-[48px] z-50 w-[210px] rounded-[10px] border border-home-hairline bg-home-tile p-2 shadow-lg"
-            data-testid="knows-dismiss-reasons"
-          >
-            <p className="px-1 pb-1 text-[11px] font-semibold text-home-muted">Optional reason</p>
-            {DISMISS_REASONS.map(({ label, reason }) => (
-              <button
-                key={reason}
-                type="button"
-                onClick={() => chooseReason(reason)}
-                className="focus-ring block w-full rounded px-2 py-1.5 text-left text-[12px] text-home-secondary hover:bg-home-tileHover hover:text-home-ink"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      {reasonOpen &&
+        reasonAt !== null &&
+        createPortal(
+          <>
+            {/* Click-away closes without a reason — which still dismisses. */}
+            <button
+              type="button"
+              aria-label="Dismiss without a reason"
+              className="fixed inset-0 z-[190] cursor-default"
+              onClick={() => chooseReason(null)}
+            />
+            <div
+              className="fixed z-[200] w-[210px] rounded-[10px] border border-home-hairline bg-home-tile p-2 shadow-lg"
+              style={{
+                left: Math.max(8, Math.min(reasonAt.x - 210, window.innerWidth - 218)),
+                top: Math.min(reasonAt.y, window.innerHeight - 150)
+              }}
+              data-testid="knows-dismiss-reasons"
+            >
+              <p className="px-1 pb-1 text-[11px] font-semibold text-home-muted">Optional reason</p>
+              {DISMISS_REASONS.map(({ label, reason }) => (
+                <button
+                  key={reason}
+                  type="button"
+                  onClick={() => chooseReason(reason)}
+                  className="focus-ring block w-full rounded px-2 py-1.5 text-left text-[12px] text-home-secondary hover:bg-home-tileHover hover:text-home-ink"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body
+        )}
     </div>
   )
 }

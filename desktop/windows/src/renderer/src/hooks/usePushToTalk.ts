@@ -215,8 +215,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
    *  from the machine state (or a delegated hub hold), never a second source of
    *  truth. `hubActiveRef` is always false unless a hold delegated (flag on), so
    *  flag-off this reads exactly as before. */
-  const isHolding = (): boolean =>
-    jobRef.current?.state.phase === 'holding' || hubActiveRef.current
+  const isHolding = (): boolean => jobRef.current?.state.phase === 'holding' || hubActiveRef.current
 
   // Acquire the mic NOW (macOS parity: capture starts at key-down, not at the
   // hold threshold), prefetch the auth token alongside the mic spin-up, and

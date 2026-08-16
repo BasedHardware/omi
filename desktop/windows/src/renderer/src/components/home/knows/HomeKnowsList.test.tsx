@@ -25,9 +25,11 @@ function stubIntelligence(over: Partial<ReturnType<typeof dashboardIntelligence.
     recommendations: [],
     goals: [],
     selectedGoalDetail: null,
+    goalDetailError: null,
     focusReplacementGoalId: null,
     error: null,
     isLoading: false,
+    hasLoadedOnce: true,
     pendingFeedbackCount: 0
   }
   vi.spyOn(dashboardIntelligence, 'getState').mockReturnValue({ ...base, ...over })
@@ -91,7 +93,10 @@ beforeEach(() => {
     { id: 8, description: 'Done thing', completed: true, dueAt: null, createdAt: NOW - 1000 }
   ])
   insightRecent.mockResolvedValue([])
-  ;(window as unknown as { omi: { insightRecent: typeof insightRecent } }).omi = { insightRecent }
+  ;(window as unknown as { omi: Record<string, unknown> }).omi = {
+    insightRecent,
+    onTasksChanged: vi.fn(() => () => {})
+  }
 })
 
 afterEach(() => {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import { useDashboardIntelligence } from '../../../hooks/useDashboardIntelligence'
@@ -9,6 +9,7 @@ import {
   focusedGoals
 } from '../../../lib/intelligence/dashboardStore'
 import type { CanonicalGoal, GoalLifecycleTarget } from '../../../lib/intelligence/wireTypes'
+import { ModalShell } from '../../conversations/ModalShell'
 
 // The All-goals sheet (mac parity: AllGoalsSheet, WhatMattersNowSection.swift).
 // Current/History segmented views, per-row Open / Focus-Unfocus / lifecycle
@@ -45,10 +46,35 @@ export function AllGoalsSheet({
 
   const confirmReplacement = async (): Promise<void> => {
     if (replacementFor === null || replacementChoice === null) return
-    await dashboardIntelligence.focus(replacementFor, replacementChoice)
+    const ok = await dashboardIntelligence.focus(replacementFor, replacementChoice)
+    // A failed replacement keeps the dialog open for a retry; the store's
+    // error line explains what happened.
+    if (!ok) return
     setReplacementFor(null)
     setReplacementChoice(null)
   }
+
+  const cancelReplacement = (): void => {
+    // Local dismissal must also clear the store's replacement request, or the
+    // Goals page's dialog (driven by the same store field) reopens the flow.
+    dashboardIntelligence.clearFocusReplacement()
+    setReplacementFor(null)
+    setReplacementChoice(null)
+  }
+
+  // While the nested replacement dialog is open, Escape must close IT and not
+  // the whole sheet: a capture-phase listener with stopImmediatePropagation
+  // pre-empts the outer ModalShell's window keydown.
+  useEffect(() => {
+    if (replacementFor === null) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      e.stopImmediatePropagation()
+      cancelReplacement()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  })
 
   const transition = async (goal: CanonicalGoal, status: GoalLifecycleTarget): Promise<void> => {
     setMenuGoalId(null)
@@ -56,10 +82,12 @@ export function AllGoalsSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="dialog">
-      <div className="flex max-h-[540px] w-[620px] flex-col rounded-xl border border-home-hairline bg-home-tile p-5 shadow-2xl">
+    <ModalShell onClose={onClose} maxWidth="max-w-[620px]" labelledBy="all-goals-title">
+      <div className="flex max-h-[500px] flex-col">
         <div className="mb-4 flex items-center gap-3">
-          <h2 className="text-[20px] font-semibold text-home-ink">All goals</h2>
+          <h2 id="all-goals-title" className="text-[20px] font-semibold text-home-ink">
+            All goals
+          </h2>
           <div className="ml-2 flex rounded-md border border-home-hairline p-0.5" role="tablist">
             {[
               { label: 'Current', value: false },
@@ -183,14 +211,19 @@ export function AllGoalsSheet({
       </div>
 
       {replacementFor !== null && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Replace a focused goal"
+        >
           <div className="w-[380px] rounded-xl border border-home-hairline bg-home-tile p-5 shadow-2xl">
             <div className="mb-2 flex items-start justify-between">
               <h3 className="text-[15px] font-semibold text-home-ink">Replace a focused goal</h3>
               <button
                 type="button"
                 aria-label="Close"
-                onClick={() => setReplacementFor(null)}
+                onClick={cancelReplacement}
                 className="focus-ring rounded p-1 text-home-faint hover:text-home-secondary"
               >
                 <X className="h-3.5 w-3.5" />
@@ -216,7 +249,7 @@ export function AllGoalsSheet({
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setReplacementFor(null)}
+                onClick={cancelReplacement}
                 className="focus-ring rounded-md border border-home-hairline px-3 py-1.5 text-[12px] font-medium text-home-secondary"
               >
                 Cancel
@@ -232,7 +265,7 @@ export function AllGoalsSheet({
           </div>
         </div>
       )}
-    </div>
+    </ModalShell>
   )
 }
 

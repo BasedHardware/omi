@@ -36,9 +36,11 @@ function stub(selected: GoalDetail | null, error: string | null = null): void {
     recommendations: [],
     goals: [],
     selectedGoalDetail: selected,
+    goalDetailError: error,
     focusReplacementGoalId: null,
     error,
     isLoading: false,
+    hasLoadedOnce: true,
     pendingFeedbackCount: 0
   })
   vi.spyOn(dashboardIntelligence, 'subscribe').mockReturnValue(() => {})
@@ -71,10 +73,17 @@ describe('GoalDetailSheet', () => {
     expect(onWork).toHaveBeenCalledTimes(2)
   })
 
-  it('shows the loading placeholder while the projection is for another goal', () => {
+  it('shows the loading placeholder while no detail has landed', () => {
     stub(null)
     render(<GoalDetailSheet goalId="g-1" onClose={() => {}} onWorkOnGoal={() => {}} />)
     expect(screen.getByText('Loading goal…')).toBeTruthy()
+  })
+
+  it('a projection for a DIFFERENT goal keeps the loading state, never stale content', () => {
+    stub({ ...detail, goal: { ...detail.goal, goalId: 'g-OTHER' } })
+    render(<GoalDetailSheet goalId="g-1" onClose={() => {}} onWorkOnGoal={() => {}} />)
+    expect(screen.getByText('Loading goal…')).toBeTruthy()
+    expect(screen.queryByText('Ship the launch')).toBeNull()
   })
 
   it('a load failure shows the goal-unavailable error instead of stale content', () => {

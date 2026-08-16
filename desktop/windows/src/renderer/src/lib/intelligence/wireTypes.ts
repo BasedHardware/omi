@@ -154,6 +154,10 @@ export function readWmnProjection(data: unknown): WmnProjection | null {
     ) {
       continue
     }
+    // A row whose feedback subject kind we cannot name would render but 422 on
+    // every feedback POST; drop it at decode, like unknown recommendation
+    // subject kinds drop at projection.
+    if (readFeedbackSubjectKind(r.feedback_subject_kind) === '_unknown') continue
     recommendations.push({
       interventionId,
       outputVersion: rowOutputVersion,

@@ -69,9 +69,14 @@ export function HubAskBar(props: {
 
   // A focusSignal bump pulls the caret in after a programmatic prefill; rAF for
   // the same reason as the mousedown handler below (focus inside the triggering
-  // event's dispatch is swallowed).
+  // event's dispatch is swallowed). The ref seeds from the CURRENT prop so a
+  // remount (the bar re-docks between stage and panel) never re-fires an old
+  // signal — focusing here dispatches askFocused, so a stale replay would
+  // reopen the chat the user just dismissed.
+  const lastFocusSignal = useRef(focusSignal)
   useEffect(() => {
-    if (focusSignal === undefined || focusSignal === 0) return
+    if (focusSignal === undefined || focusSignal === lastFocusSignal.current) return
+    lastFocusSignal.current = focusSignal
     const raf = requestAnimationFrame(() => inputRef.current?.focus())
     return () => cancelAnimationFrame(raf)
   }, [focusSignal])

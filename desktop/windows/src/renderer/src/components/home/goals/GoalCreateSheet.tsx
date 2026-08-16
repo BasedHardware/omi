@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { dashboardIntelligence } from '../../../lib/intelligence/dashboardStore'
+import { ModalShell } from '../../conversations/ModalShell'
 
 // The Add-goal sheet (mac parity: CanonicalGoalCreateSheet). One occurrence id
 // is minted per sheet instance and used as the Idempotency-Key, so a retried
@@ -38,9 +39,11 @@ export function GoalCreateSheet({ onClose }: { onClose: () => void }): React.JSX
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="dialog">
-      <div className="w-[460px] rounded-xl border border-home-hairline bg-home-tile p-5 shadow-2xl">
-        <h2 className="mb-4 text-[16px] font-semibold text-home-ink">Add goal</h2>
+    <ModalShell onClose={onClose} maxWidth="max-w-[460px]" labelledBy="goal-create-title-heading">
+      <div>
+        <h2 id="goal-create-title-heading" className="mb-4 text-[16px] font-semibold text-home-ink">
+          Add goal
+        </h2>
         <Field label="Short name">
           <input
             value={title}
@@ -93,7 +96,7 @@ export function GoalCreateSheet({ onClose }: { onClose: () => void }): React.JSX
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   )
 }
 

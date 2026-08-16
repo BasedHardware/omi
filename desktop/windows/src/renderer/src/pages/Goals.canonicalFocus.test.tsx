@@ -59,9 +59,11 @@ function stubIntelligence(
     recommendations: [],
     goals: [],
     selectedGoalDetail: null,
+    goalDetailError: null,
     focusReplacementGoalId: null,
     error: null,
     isLoading: false,
+    hasLoadedOnce: true,
     pendingFeedbackCount: 0,
     ...over
   })

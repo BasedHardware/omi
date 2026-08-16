@@ -234,11 +234,14 @@ function defaultDeps(): Deps {
   }
 }
 
-let generatingOwnerId: string | null = null
+// Per-owner in-flight refreshes: concurrent callers for the SAME owner share
+// one promise (so the second Home surface receives the generated result rather
+// than an empty fallback), and one owner's generation never starves another's.
+const inflightByOwner = new Map<string, Promise<string[]>>()
 
-/** Test seam: the single-flight latch is module state. */
+/** Test seam: the single-flight table is module state. */
 export function __resetSuggestionsGenerationForTest(): void {
-  generatingOwnerId = null
+  inflightByOwner.clear()
 }
 
 /** Return today's personalized questions for the owner, generating at most once
@@ -251,27 +254,36 @@ export async function refreshHomeSuggestions(depsOverride: Partial<Deps> = {}): 
   const today = suggestionsDayStamp(deps.now())
   const cached = readSuggestionsCache(owner)
   if (cached && cached.dayStamp === today) return cached.questions
-  if (generatingOwnerId !== null) return cached?.questions ?? []
-  generatingOwnerId = owner
-  try {
-    const sample = await readContext(deps)
-    const classification = classifyContext(sample)
-    if (classification === 'unavailable') return cached?.questions ?? []
-    let questions: string[] = []
-    if (classification === 'available') {
-      const reply = await deps.generate(generationPrompt(sample))
-      questions = sanitizeSuggestions(parseGeneratedSuggestions(reply)).slice(0, 2)
+  const existing = inflightByOwner.get(owner)
+  if (existing) return existing
+  const run = (async (): Promise<string[]> => {
+    try {
+      const sample = await readContext(deps)
+      if (deps.ownerId() !== owner) {
+        // Account switched while reading context: the sample belongs to the
+        // previous owner and must never reach the generator.
+        return []
+      }
+      const classification = classifyContext(sample)
+      if (classification === 'unavailable') return cached?.questions ?? []
+      let questions: string[] = []
+      if (classification === 'available') {
+        const reply = await deps.generate(generationPrompt(sample))
+        questions = sanitizeSuggestions(parseGeneratedSuggestions(reply)).slice(0, 2)
+      }
+      if (deps.ownerId() !== owner) {
+        // Account switched mid-generation: drop the result (mac parity).
+        return []
+      }
+      writeSuggestionsCache(owner, { questions, dayStamp: today })
+      return questions
+    } catch {
+      // Transport failure: cache untouched, retried on the next visit.
+      return cached?.questions ?? []
+    } finally {
+      inflightByOwner.delete(owner)
     }
-    if (deps.ownerId() !== owner) {
-      // Account switched mid-generation: drop the result (mac parity).
-      return []
-    }
-    writeSuggestionsCache(owner, { questions, dayStamp: today })
-    return questions
-  } catch {
-    // Transport failure: cache untouched, retried on the next visit.
-    return cached?.questions ?? []
-  } finally {
-    generatingOwnerId = null
-  }
+  })()
+  inflightByOwner.set(owner, run)
+  return run
 }

@@ -48,7 +48,7 @@ export function HomeKnowsList({
     const read = (): void => {
       fetchAllActionItems()
         .then((items) => {
-          const open = items.filter((t) => !t.completed)
+          const open = items.filter((t) => !t.completed && !t.deleted)
           setOpenTaskCount(open.length)
           // Due-dated work first (soonest due leads), then the freshest
           // captures — the same emphasis as mac's overdue + today + recent
@@ -75,7 +75,13 @@ export function HomeKnowsList({
     }
     read()
     window.addEventListener('focus', read)
-    return () => window.removeEventListener('focus', read)
+    // Local task mutations broadcast tasks:changed; re-read so a create,
+    // complete, or delete updates the rows without waiting for refocus.
+    const offTasksChanged = window.omi.onTasksChanged(read)
+    return () => {
+      window.removeEventListener('focus', read)
+      offTasksChanged()
+    }
   }, [])
 
   // Recommendations lead the insight slot; learned insights follow (mac

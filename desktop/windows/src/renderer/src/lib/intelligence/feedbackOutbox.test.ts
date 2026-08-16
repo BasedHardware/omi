@@ -125,4 +125,34 @@ describe('replay', () => {
     })
     expect(loadOutbox().map((e) => e.idempotencyKey)).toEqual(['late'])
   })
+
+  it('stops sending when the owner scope goes stale mid-pass and keeps the rest', async () => {
+    enqueueFeedback(entry({ idempotencyKey: 'a' }))
+    enqueueFeedback(entry({ idempotencyKey: 'b' }))
+    let current = true
+    const sent: string[] = []
+    await replayOutbox(
+      async (e) => {
+        sent.push(e.idempotencyKey)
+        current = false // the account switches after the first send
+      },
+      'uid-1',
+      () => current
+    )
+    expect(sent).toEqual(['a'])
+    // The removal write is also skipped under a stale scope, so nothing of the
+    // old owner's queue is mutated from the new session.
+    expect(loadOutbox('uid-1').map((e) => e.idempotencyKey)).toEqual(['a', 'b'])
+  })
+
+  it('drops malformed persisted entries instead of replaying them forever', () => {
+    window.localStorage.setItem(
+      'whatMattersNowFeedbackOutbox.v1.uid-1',
+      JSON.stringify([
+        { idempotencyKey: 'bad', accountGeneration: 3, request: { nope: true } },
+        entry({ idempotencyKey: 'good' })
+      ])
+    )
+    expect(loadOutbox('uid-1').map((e) => e.idempotencyKey)).toEqual(['good'])
+  })
 })

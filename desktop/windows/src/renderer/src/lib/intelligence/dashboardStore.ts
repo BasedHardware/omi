@@ -46,6 +46,8 @@ export const RETRY_BANNER = 'Saved feedback will retry automatically.'
 export const FEEDBACK_SAVED_ERROR = 'Saved. Feedback will retry automatically.'
 export const TARGET_UNAVAILABLE = 'This review target is no longer available.'
 export const CHOOSE_REPLACEMENT = 'Choose a focused goal to replace.'
+export const GOALS_UNAVAILABLE = 'Goals are unavailable right now. Try again.'
+export const GOAL_UNAVAILABLE = 'This goal is no longer available.'
 
 export type RecommendationDestination =
   | { kind: 'suggested'; candidateId: string }
@@ -138,9 +140,16 @@ export type DashboardIntelligenceState = {
   recommendations: ProjectedRecommendation[]
   goals: CanonicalGoal[]
   selectedGoalDetail: GoalDetail | null
+  /** Error scoped to the goal-detail request, so an unrelated dashboard error
+   *  can never masquerade as this goal's failure (and vice versa). */
+  goalDetailError: string | null
   focusReplacementGoalId: string | null
   error: string | null
   isLoading: boolean
+  /** True once any load has completed for the current owner; surfaces gate
+   *  their canonical-vs-fallback choice on it instead of flashing the fallback
+   *  during the cold start. */
+  hasLoadedOnce: boolean
   pendingFeedbackCount: number
 }
 
@@ -195,9 +204,11 @@ export class DashboardIntelligenceStore {
     recommendations: [],
     goals: [],
     selectedGoalDetail: null,
+    goalDetailError: null,
     focusReplacementGoalId: null,
     error: null,
     isLoading: false,
+    hasLoadedOnce: false,
     pendingFeedbackCount: 0
   }
 
@@ -205,6 +216,7 @@ export class DashboardIntelligenceStore {
   private deps: Deps
   private activeLoad: Promise<void> | null = null
   private loadedOwnerId: string | null = null
+  private ownerRevision = 0
   // intervention_presented fires once per intervention id per store lifetime
   // (mac parity: presentedInterventionIDs).
   private presentedInterventionIds = new Set<string>()
@@ -232,30 +244,42 @@ export class DashboardIntelligenceStore {
   async load(): Promise<void> {
     const owner = this.deps.ownerId()
     if (this.loadedOwnerId !== null && this.loadedOwnerId !== owner) {
-      // Owner switched (sign-out/in): clear every owner-scoped piece before
-      // loading the new owner's world.
+      // Owner switched (sign-out/in): bump the revision so every in-flight
+      // continuation from the old owner refuses to commit, then clear every
+      // owner-scoped piece before loading the new owner's world.
+      this.ownerRevision += 1
       this.activeLoad = null
       this.state = {
         accountGeneration: null,
         recommendations: [],
         goals: [],
         selectedGoalDetail: null,
+        goalDetailError: null,
         focusReplacementGoalId: null,
         error: null,
         isLoading: false,
+        hasLoadedOnce: false,
         pendingFeedbackCount: 0
       }
     }
     if (this.activeLoad) return this.activeLoad
     this.loadedOwnerId = owner
-    const run = this.performLoad(owner).finally(() => {
-      this.activeLoad = null
+    const run = this.performLoad(owner, this.ownerRevision).finally(() => {
+      // Only the load that owns the handle clears it; a superseded load must
+      // not null out its successor's.
+      if (this.activeLoad === run) this.activeLoad = null
     })
     this.activeLoad = run
     return run
   }
 
-  private async performLoad(owner: string): Promise<void> {
+  /** True while `owner` at `revision` is still the world we may commit into
+   *  (mac's ownerScopeIsCurrent). Checked after every await before setState. */
+  private scopeCurrent(owner: string, revision: number): boolean {
+    return this.ownerRevision === revision && this.deps.ownerId() === owner
+  }
+
+  private async performLoad(owner: string, revision: number): Promise<void> {
     this.setState({ isLoading: true })
     try {
       let control
@@ -263,9 +287,21 @@ export class DashboardIntelligenceStore {
         const controlRes = await this.deps.get('/v1/candidates/control')
         control = readWorkflowControl(controlRes.data)
       } catch {
-        this.setState({ isLoading: false, error: 'Recommendations are unavailable right now.' })
+        if (!this.scopeCurrent(owner, revision)) return
+        // A failed control leaves no trustworthy generation: stale rows must
+        // not stay actionable under an old generation, so clear them along
+        // with the gate (goals stay visible; their mutations are generation-
+        // gated off anyway).
+        this.setState({
+          accountGeneration: null,
+          recommendations: [],
+          isLoading: false,
+          hasLoadedOnce: true,
+          error: 'Recommendations are unavailable right now.'
+        })
         return
       }
+      if (!this.scopeCurrent(owner, revision)) return
       if (control.workflowMode !== 'read') {
         // Any non-read mode clears the surface without error text (mac parity:
         // accounts outside the rollout keep a calm dashboard).
@@ -275,6 +311,7 @@ export class DashboardIntelligenceStore {
           goals: [],
           error: null,
           isLoading: false,
+          hasLoadedOnce: true,
           pendingFeedbackCount: 0
         })
         return
@@ -282,11 +319,16 @@ export class DashboardIntelligenceStore {
 
       let pending = purgeMismatchedGeneration(control.accountGeneration, owner)
       if (pending.length > 0) {
-        await replayOutbox(async (entry) => {
-          await this.postFeedback(entry)
-        }, owner)
+        await replayOutbox(
+          async (entry) => {
+            await this.postFeedback(entry)
+          },
+          owner,
+          () => this.scopeCurrent(owner, revision)
+        )
         pending = loadOutbox(owner)
       }
+      if (!this.scopeCurrent(owner, revision)) return
 
       let recommendations: ProjectedRecommendation[] = []
       let wmnError: string | null = null
@@ -319,6 +361,7 @@ export class DashboardIntelligenceStore {
         goalsError = 'Goals are unavailable right now.'
       }
 
+      if (!this.scopeCurrent(owner, revision)) return
       this.emitPresented(recommendations)
       const error = wmnError ?? goalsError ?? (pending.length > 0 ? RETRY_BANNER : null)
       this.setState({
@@ -327,10 +370,13 @@ export class DashboardIntelligenceStore {
         goals,
         error,
         isLoading: false,
+        hasLoadedOnce: true,
         pendingFeedbackCount: pending.length
       })
     } finally {
-      if (this.state.isLoading) this.setState({ isLoading: false })
+      if (this.scopeCurrent(owner, revision) && this.state.isLoading) {
+        this.setState({ isLoading: false })
+      }
     }
   }
 
@@ -450,6 +496,7 @@ export class DashboardIntelligenceStore {
       await this.reload()
       return true
     } catch {
+      this.setState({ error: GOALS_UNAVAILABLE })
       return false
     }
   }
@@ -512,6 +559,8 @@ export class DashboardIntelligenceStore {
     } catch (e) {
       if (httpStatus(e) === 409 && replacementGoalId === null) {
         this.setState({ focusReplacementGoalId: goalId, error: CHOOSE_REPLACEMENT })
+      } else {
+        this.setState({ error: GOALS_UNAVAILABLE })
       }
       return false
     }
@@ -557,19 +606,20 @@ export class DashboardIntelligenceStore {
   }
 
   async loadGoalDetail(goalId: string): Promise<GoalDetail | null> {
+    this.setState({ goalDetailError: null })
     try {
       const res = await this.deps.get(`/v1/goals/${goalId}/detail`)
       const detail = readGoalDetail(res.data)
       this.setState({ selectedGoalDetail: detail })
       return detail
     } catch {
-      this.setState({ selectedGoalDetail: null, error: 'This goal is no longer available.' })
+      this.setState({ selectedGoalDetail: null, goalDetailError: GOAL_UNAVAILABLE })
       return null
     }
   }
 
   clearGoalDetail(): void {
-    this.setState({ selectedGoalDetail: null })
+    this.setState({ selectedGoalDetail: null, goalDetailError: null })
   }
 
   /** Open a recommendation by row id (mac parity: openRecommendation). When

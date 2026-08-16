@@ -42,15 +42,22 @@ export function loadOutbox(ownerId: string = outboxOwnerId()): PendingFeedback[]
     const entries: PendingFeedback[] = []
     for (const item of parsed) {
       const e = item as Partial<PendingFeedback> | null
+      const r = e?.request as Partial<FeedbackCreateBody> | null | undefined
       if (
         e &&
         typeof e.idempotencyKey === 'string' &&
         typeof e.accountGeneration === 'number' &&
-        e.request &&
-        typeof e.request === 'object'
+        r &&
+        typeof r === 'object' &&
+        typeof r.action === 'string' &&
+        typeof r.subject_kind === 'string' &&
+        typeof r.subject_id === 'string' &&
+        typeof r.intervention_id === 'string'
       ) {
         entries.push(e as PendingFeedback)
       }
+      // Malformed persisted entries are dropped here rather than replayed
+      // forever; the save below rewrites the pruned list.
     }
     return entries
   } catch {
@@ -117,11 +124,15 @@ export type FeedbackSender = (entry: PendingFeedback) => Promise<void>
  *  number of entries delivered. */
 export async function replayOutbox(
   send: FeedbackSender,
-  ownerId: string = outboxOwnerId()
+  ownerId: string = outboxOwnerId(),
+  scopeCurrent: () => boolean = () => true
 ): Promise<number> {
   const entries = loadOutbox(ownerId)
   const succeeded = new Set<string>()
   for (const entry of entries) {
+    // An account switch mid-pass must not submit the previous owner's
+    // feedback under the new session's credentials.
+    if (!scopeCurrent()) break
     try {
       await send(entry)
       succeeded.add(entry.idempotencyKey)
@@ -129,7 +140,7 @@ export async function replayOutbox(
       // Sequential, no backoff: the entry stays for the next load.
     }
   }
-  if (succeeded.size > 0) {
+  if (succeeded.size > 0 && scopeCurrent()) {
     saveOutbox(
       loadOutbox(ownerId).filter((e) => !succeeded.has(e.idempotencyKey)),
       ownerId

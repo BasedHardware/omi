@@ -1,4 +1,6 @@
 import { useDashboardIntelligence } from '../../../hooks/useDashboardIntelligence'
+import { dashboardIntelligence } from '../../../lib/intelligence/dashboardStore'
+import { ModalShell } from '../../conversations/ModalShell'
 
 // The goal detail sheet (mac parity: CanonicalGoalDetailSheet): why it matters,
 // success criteria, metric progress, active work threads, and meaningful
@@ -15,20 +17,24 @@ export function GoalDetailSheet({
   onClose: () => void
   onWorkOnGoal: () => void
 }): React.JSX.Element {
-  const intelligence = useDashboardIntelligence()
+  // Subscribe WITHOUT auto-loading: a full load triggered by this sheet's
+  // mount must not race the detail request or clear its scoped error.
+  const intelligence = useDashboardIntelligence(dashboardIntelligence, { autoLoad: false })
   const detail = intelligence.selectedGoalDetail
   const matches = detail !== null && detail.goal.goalId === goalId
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="dialog">
-      <div className="flex max-h-[600px] w-[620px] flex-col rounded-xl border border-home-hairline bg-home-tile p-5 shadow-2xl">
+    <ModalShell onClose={onClose} maxWidth="max-w-[620px]" labelledBy="goal-detail-title">
+      <div className="flex max-h-[540px] flex-col">
         {!matches ? (
           <p className="py-10 text-center text-[12px] text-home-muted">
-            {intelligence.error ?? 'Loading goal…'}
+            {intelligence.goalDetailError ?? 'Loading goal…'}
           </p>
         ) : (
           <>
-            <h2 className="mb-1 text-[18px] font-semibold text-home-ink">{detail.goal.title}</h2>
+            <h2 id="goal-detail-title" className="mb-1 text-[18px] font-semibold text-home-ink">
+              {detail.goal.title}
+            </h2>
             {detail.goal.desiredOutcome && (
               <p className="mb-3 text-[12px] text-home-secondary">{detail.goal.desiredOutcome}</p>
             )}
@@ -105,7 +111,7 @@ export function GoalDetailSheet({
           </>
         )}
       </div>
-    </div>
+    </ModalShell>
   )
 }
 

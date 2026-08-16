@@ -41,10 +41,13 @@ function rotated<T>(items: T[], rotation: number): T[] {
 
 export function composeKnowsRows(sources: KnowsSources): KnowsRow[] {
   const freshTasks = rotated(
-    sources.tasks.filter((t) => !sources.dismissedTaskIds.has(t.id)),
+    sources.tasks.filter((t) => t.text.trim() && !sources.dismissedTaskIds.has(t.id)),
     sources.rotation
   )
-  const insights = rotated(sources.insights, sources.rotation)
+  const insights = rotated(
+    sources.insights.filter((i) => i.text.trim()),
+    sources.rotation
+  )
 
   const seenQuestions = new Set<string>()
   const questions: string[] = []

@@ -24,6 +24,12 @@ export function CanonicalGoalsChips(props: HubHomeWidgetsProps): React.JSX.Eleme
   const [showCreate, setShowCreate] = useState(false)
   const [detailGoalId, setDetailGoalId] = useState<string | null>(null)
 
+  if (!intelligence.hasLoadedOnce) {
+    // Cold start: the gate is unknown. Render nothing (mac renders nothing for
+    // an unbound generation) instead of flashing the legacy row at canonical
+    // accounts or firing the legacy fetch before the control answers.
+    return <></>
+  }
   if (intelligence.accountGeneration === null) {
     return <HomeGoalsChips {...props} />
   }
@@ -74,9 +80,11 @@ export function CanonicalGoalsChips(props: HubHomeWidgetsProps): React.JSX.Eleme
             </span>
             <button
               type="button"
-              onClick={() =>
-                intelligence.goals.length === 0 ? setShowCreate(true) : setShowAllGoals(true)
-              }
+              onClick={() => {
+                if (intelligence.goals.length === 0) setShowCreate(true)
+                else if (props.onShowAll) props.onShowAll()
+                else setShowAllGoals(true)
+              }}
               className="focus-ring shrink-0 text-[11px] font-medium text-home-secondary hover:text-home-ink"
             >
               {intelligence.goals.length === 0 ? 'Add goal' : 'Choose focus'}

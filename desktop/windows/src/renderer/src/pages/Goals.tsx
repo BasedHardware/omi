@@ -21,6 +21,7 @@ import { GenerateGoalsButton } from '../components/ui/GenerateGoalsButton'
 import { toast } from '../lib/toast'
 import { useDashboardIntelligence } from '../hooks/useDashboardIntelligence'
 import { dashboardIntelligence, focusedGoals } from '../lib/intelligence/dashboardStore'
+import { ModalShell } from '../components/conversations/ModalShell'
 import { goalEmoji } from '../lib/goalEmoji'
 import { isCompleted, progressColor, progressLabel, progressPct } from '../lib/goalVisuals'
 import { GoalCelebration } from '../components/goals/GoalCelebration'
@@ -93,8 +94,14 @@ export function Goals(): React.JSX.Element {
     async (goalId: string): Promise<void> => {
       setFocusBusyId(goalId)
       try {
-        if (focusedIds.has(goalId)) await dashboardIntelligence.unfocus(goalId)
-        else await dashboardIntelligence.focus(goalId, null)
+        const ok = focusedIds.has(goalId)
+          ? await dashboardIntelligence.unfocus(goalId)
+          : await dashboardIntelligence.focus(goalId, null)
+        // The full-set conflict opens the replacement dialog; every other
+        // failure gets a toast so the star's state never silently lies.
+        if (!ok && dashboardIntelligence.getState().focusReplacementGoalId === null) {
+          toast('Could not update the goal focus. Try again.')
+        }
       } finally {
         setFocusBusyId(null)
       }
@@ -387,7 +394,7 @@ export function Goals(): React.JSX.Element {
     return (
       <li key={g.id} className="surface-card group p-4">
         <div className="flex items-start gap-3">
-          {canonicalActive && !done && (
+          {canonicalActive && (focusedIds.has(g.id) || !done) && (
             <button
               onClick={() => void toggleFocus(g.id)}
               disabled={focusBusyId === g.id}
@@ -396,7 +403,7 @@ export function Goals(): React.JSX.Element {
               className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-all duration-200 ${
                 focusedIds.has(g.id)
                   ? 'text-white'
-                  : 'text-white/25 opacity-0 hover:text-white/70 group-hover:opacity-100'
+                  : 'text-white/25 opacity-0 hover:text-white/70 focus-visible:opacity-100 group-hover:opacity-100'
               } ${focusBusyId === g.id ? 'opacity-50' : ''}`}
             >
               <Star className="h-3.5 w-3.5" fill={focusedIds.has(g.id) ? 'currentColor' : 'none'} />
@@ -525,12 +532,21 @@ export function Goals(): React.JSX.Element {
   return (
     <div className="flex h-full flex-col">
       {intelligence.focusReplacementGoalId !== null && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          role="dialog"
+        <ModalShell
+          onClose={() => {
+            dashboardIntelligence.clearFocusReplacement()
+            setReplacementChoice(null)
+          }}
+          maxWidth="max-w-[380px]"
+          labelledBy="goals-page-replacement-title"
         >
-          <div className="w-[380px] rounded-2xl border border-white/10 bg-[#141414] p-5">
-            <h3 className="mb-2 text-[15px] font-semibold text-white">Replace a focused goal</h3>
+          <div>
+            <h3
+              id="goals-page-replacement-title"
+              className="mb-2 text-[15px] font-semibold text-white"
+            >
+              Replace a focused goal
+            </h3>
             <p className="mb-3 text-[12px] text-white/60">
               Your focus set is full. Nothing is archived; the replaced goal moves back to the list.
             </p>
@@ -573,7 +589,7 @@ export function Goals(): React.JSX.Element {
               </button>
             </div>
           </div>
-        </div>
+        </ModalShell>
       )}
       <PageHeader
         title="Goals"

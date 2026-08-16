@@ -44,9 +44,11 @@ function stubState(over: Partial<ReturnType<typeof dashboardIntelligence.getStat
     recommendations: [],
     goals: [],
     selectedGoalDetail: null,
+    goalDetailError: null,
     focusReplacementGoalId: null,
     error: null,
     isLoading: false,
+    hasLoadedOnce: true,
     pendingFeedbackCount: 0,
     ...over
   })
@@ -212,5 +214,65 @@ describe('GoalCreateSheet', () => {
       whyItMatters: null,
       successCriteria: []
     })
+  })
+})
+
+describe('review-driven regressions', () => {
+  it('cold start renders nothing until the first load lands (no legacy flash)', () => {
+    stubState({ accountGeneration: null, hasLoadedOnce: false })
+    render(
+      <MemoryRouter>
+        <CanonicalGoalsChips />
+      </MemoryRouter>
+    )
+    expect(screen.queryByTestId('legacy-goals-chips')).toBeNull()
+    expect(screen.queryByTestId('focused-goals')).toBeNull()
+  })
+
+  it('canceling the replacement dialog clears the store request too', async () => {
+    stubState({ goals: [goal('a', 'focused', { focusRank: 0 }), goal('b', 'background')] })
+    const clear = vi
+      .spyOn(dashboardIntelligence, 'clearFocusReplacement')
+      .mockImplementation(() => {})
+    vi.spyOn(dashboardIntelligence, 'focus').mockImplementationOnce(async () => {
+      stubState({
+        goals: [goal('a', 'focused', { focusRank: 0 }), goal('b', 'background')],
+        focusReplacementGoalId: 'b'
+      })
+      return false
+    })
+    render(
+      <MemoryRouter>
+        <AllGoalsSheet onClose={() => {}} onAddGoal={() => {}} onOpenGoal={() => {}} />
+      </MemoryRouter>
+    )
+    fireEvent.click(screen.getByText('Focus'))
+    await waitFor(() => expect(screen.getByText('Replace a focused goal')).toBeTruthy())
+    fireEvent.click(screen.getByText('Cancel'))
+    expect(clear).toHaveBeenCalled()
+  })
+
+  it('a failed replacement keeps the dialog open for a retry', async () => {
+    stubState({ goals: [goal('a', 'focused', { focusRank: 0 }), goal('b', 'background')] })
+    const focus = vi
+      .spyOn(dashboardIntelligence, 'focus')
+      .mockImplementationOnce(async () => {
+        stubState({
+          goals: [goal('a', 'focused', { focusRank: 0 }), goal('b', 'background')],
+          focusReplacementGoalId: 'b'
+        })
+        return false
+      })
+      .mockResolvedValue(false)
+    render(
+      <MemoryRouter>
+        <AllGoalsSheet onClose={() => {}} onAddGoal={() => {}} onOpenGoal={() => {}} />
+      </MemoryRouter>
+    )
+    fireEvent.click(screen.getByText('Focus'))
+    await waitFor(() => expect(screen.getByText('Replace a focused goal')).toBeTruthy())
+    fireEvent.click(screen.getByText('Replace focus'))
+    await waitFor(() => expect(focus).toHaveBeenCalledTimes(2))
+    expect(screen.getByText('Replace a focused goal')).toBeTruthy()
   })
 })
