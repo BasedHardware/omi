@@ -720,6 +720,8 @@ exempt:
     reason: "release-policy full-tree check, not diff-scoped"
   - path: ".github/scripts/check-deployment-concurrency.py"
     reason: "deployment concurrency policy full-tree check, not diff-scoped"
+  - path: ".github/scripts/check_admin_deploy_scope.py"
+    reason: "runtime classifier invoked by gcp_admin.yml; contract and fixtures are admin-deploy-scope*"
   - path: ".github/scripts/check_isinstance_return_ratchet.py"
     reason: "typed error flow-control ratchet uses a committed baseline, not diff-scoped triggers"
   - path: "backend/scripts/check_app_client_openapi_compatibility.py"
