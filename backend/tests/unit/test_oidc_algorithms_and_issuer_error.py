@@ -71,6 +71,8 @@ def test_es256_token_rejected_under_default_rs256_only(monkeypatch):
         OIDCAuthProvider().verify_token(token)
 
 
+@pytest.mark.slow  # first RSA-2048 keygen (~100-300ms) is charged to this test's measured phase, over the
+# fast-unit 0.12s CPU budget even with the @lru_cache (which only helps AFTER the first call) — cubic 10887.
 def test_missing_issuer_is_permanent_autherror_not_transient_jwks(monkeypatch):
     # A config error (OIDC_ISSUER unset) surfaces from _issuer() INSIDE the decode try; it must propagate
     # as a permanent AuthError, not be reclassified as JWKSUnavailable (transient/retryable).

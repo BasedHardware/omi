@@ -8,8 +8,10 @@ import pytest
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from google.api_core.exceptions import Aborted
+from google.api_core.exceptions import Aborted, FailedPrecondition
+from google.cloud.firestore_v1 import LastUpdateOption
 
+from database.store import firestore_facade as ff
 from database.store.firestore_facade import (
     NeutralFirestoreClient,
     _group_name_filter_value,
@@ -218,7 +220,6 @@ def test_write_option_precondition_enforced_on_batch_delete():
     # clear (which build a precondition via write_option and pass it to batch.delete) raised
     # AttributeError on the Mongo-backed facade. It must exist AND enforce the precondition, surfacing
     # a stale revision as google FailedPrecondition (what those callers catch to re-read and retry).
-    from google.api_core.exceptions import FailedPrecondition
 
     c = _client()
     ref = c.document("users/u1/staged/s1")
@@ -242,8 +243,6 @@ def test_write_option_precondition_enforced_on_batch_delete():
 def test_last_update_option_precondition_enforced_on_reference_update():
     # review-queue self-heal passes a native LastUpdateOption to reference.update; the facade must map
     # it to the store precondition, not silently ignore it, and raise on a stale revision.
-    from google.api_core.exceptions import FailedPrecondition
-    from google.cloud.firestore_v1 import LastUpdateOption
 
     c = _client()
     ref = c.document("users/u1/review/r1")
@@ -446,8 +445,6 @@ def test_commit_retries_commit_only_on_unknown_result_but_replays_body_on_transi
     # cubic PR 10887 firestore_facade.py:508: UnknownTransactionCommitResult means the commit MAY have
     # succeeded, so _commit must retry the COMMIT (idempotent) and NEVER signal a body replay; only a
     # TransientTransactionError (body never applied) is replayed via Aborted.
-    from database.store import firestore_facade as ff
-    from google.api_core.exceptions import Aborted
 
     class _LabelExc(Exception):
         def __init__(self, label):

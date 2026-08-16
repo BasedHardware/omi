@@ -613,8 +613,9 @@ def test_datetime_field_round_trips_timezone_aware(store, uid):
     got = store.get(f"users/{uid}").to_dict()["lease_expires_at"]
     assert got.tzinfo is not None
     assert got == when
-    # The comparison the callers actually do must not raise.
-    assert (got > datetime.now(timezone.utc)) in (True, False)
+    # The comparison the callers actually do must not raise (tz-aware vs tz-aware; a naive `got` would
+    # raise TypeError here). Evaluating it is the check — no vacuous membership assert needed.
+    _ = got > datetime.now(timezone.utc)
 
 
 def test_update_nested_field_with_non_identifier_segment(store, uid):
@@ -701,8 +702,6 @@ def test_update_missing_doc_with_precondition_raises_precondition_failed(store, 
     # emulator), so both backends and both paths (non-batch _update AND batch) must agree. The Mongo
     # existence-probe from ADR-0045 wrongly returned NotFound here; this supersedes it. (No precondition
     # still -> NotFound: test_update_missing_raises_not_found / test_batch_update_missing_doc_raises_not_found.)
-    from datetime import datetime, timezone
-
     precond = datetime(2020, 1, 1, tzinfo=timezone.utc)
     with pytest.raises(PreconditionFailed):
         store.update(f"users/{uid}/people/ghost", {"a": 1}, if_updated_at=precond)

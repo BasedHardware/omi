@@ -325,6 +325,9 @@ class TestBatchUpload:
 
         assert len(paths) == 1
         assert paths[0].endswith('.batch.bin')
+        # Streaming guard (cubic 10887): the 50 chunks go through ONE open_write (streamed per-chunk), not a
+        # monolithic put — the byte count alone can't tell the two apart on the fake store.
+        assert len(store.open_write_calls) == 1
         assert len(_written(store, paths[0])) == 50 * 80_000
 
     @patch.object(storage_mod, 'users_db')
