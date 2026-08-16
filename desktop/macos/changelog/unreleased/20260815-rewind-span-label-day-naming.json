@@ -1,3 +1,0 @@
-{
-  "change": "Rewind's capture-span label and chat message timestamps now always show the date of the day they point at, even around midnight and across time zones"
-}
