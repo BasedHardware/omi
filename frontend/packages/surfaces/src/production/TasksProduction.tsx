@@ -206,6 +206,8 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
   const shellRef = useRef<HTMLElement>(null);
   const onReadyRef = useRef(onReady);
   const readyRef = useRef(false);
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
   const dayFormatter = calendarDay ?? (fixture ? utcCalendarDay : localCalendarDay);
   const dateFormatter = formatDate ?? (fixture ? utcDate : localDate);
@@ -216,7 +218,10 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
       setRows([...nextRows] as Task[]);
       setDead(nextDead);
     } catch {
-      setOperationError(translate("lifecycle.error"));
+      // A list that is already on screen is a loaded view. Announcing
+      // "Unable to load this view" over it is the lying-state class: the
+      // load succeeded, and this catch is a later failure.
+      setOperationError(translate(rowsRef.current.length > 0 ? "lifecycle.savedFailed" : "lifecycle.error"));
     }
     setStatus(store.status());
   }, [store, translate]);
@@ -228,7 +233,9 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
       await reload();
       return true;
     } catch {
-      setOperationError(translate("lifecycle.error"));
+      // A write refusal is not a failed load. The list underneath is the
+      // view; say the change could not be applied.
+      setOperationError(translate("dead.body"));
       setStatus(store.status());
       return false;
     }
@@ -242,7 +249,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
       try {
         await store.refresh();
       } catch {
-        setOperationError(translate("lifecycle.error"));
+        setOperationError(translate(rowsRef.current.length > 0 ? "lifecycle.savedFailed" : "lifecycle.error"));
         await reload();
       }
       await reload();

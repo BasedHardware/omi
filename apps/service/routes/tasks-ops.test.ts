@@ -19,6 +19,7 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 
+import { parseTaskPageJson } from "@omi-core/ratified-contracts/projections/tasks";
 import {
   WRITE_AVAILABILITY,
   WRITE_ERRORS,
@@ -32,8 +33,10 @@ import {
   type LocalService,
 } from "../app-facing";
 import { WRITE_RUN_ID_HEADER } from "../observability/write-ops-counter";
+import { DEMO_TASK_SEED } from "../qa/demo-persona";
 import { RETENTION_CAP_SECONDS } from "../stores/straggler-table";
 import { TASKS_OPS_PATH } from "./tasks-ops";
+import { TASKS_READ_PATH } from "./tasks-read";
 
 const DEV_KEY_MATERIAL_LABEL = "omi-local-dev-token-not-a-secret-v1";
 const OWNER_ACCOUNT_ID = "local-dev-user";
@@ -952,5 +955,62 @@ describe("the vendored write-ops corpus, executed", () => {
     // corpus adds another, this fails and somebody reads the paragraph above
     // rather than discovering the rewrite by accident.
     expect(rebasedCases).toBe(1);
+  });
+});
+
+describe("a public task handle patches the live row, not a second one", () => {
+  test("a demo-seeded row toggles through the opaque read handle", async () => {
+    // The headed Tasks surface lists HMAC handles. Sending one as record_id
+    // used to upsert a ghost. red-proof: drop resolveWriteRecordId and this
+    // still returns 200 while listRecords grows to 2. APPLIED AND OBSERVED RED.
+    const booted = boot();
+    await cutOver(booted);
+    const seeded = DEMO_TASK_SEED.find((row) => row.record_id === "demo-task-cedar-shells");
+    expect(seeded).toBeDefined();
+    const applied = booted.service.writePath.tasks.apply(OWNER_ACCOUNT_ID, {
+      op: "create",
+      record_id: seeded!.record_id,
+      content: seeded!.content,
+    });
+    expect(applied.applied).toBe(true);
+
+    const listed = await booted.service.app.request(TASKS_READ_PATH, {
+      headers: { authorization: booted.auth },
+    });
+    expect(listed.status).toBe(200);
+    const page = parseTaskPageJson(await listed.text());
+    expect(page).not.toBeNull();
+    const item = page!.items.find((row) => row.description === seeded!.content["description"]);
+    expect(item).toBeDefined();
+    expect(item!.id).toMatch(/^task1_[a-f0-9]{64}$/);
+    expect(item!.completed).toBe(false);
+
+    const patched = await post(booted, envelope({
+      writeId: writeId("seeded-toggle"),
+      op: { op: "patch", record_id: item!.id, patch: { completed: true } },
+    }));
+    expect(patched.status).toBe(200);
+    expect(JSON.parse(patched.text).applied.record_id).toBe("demo-task-cedar-shells");
+
+    const records = booted.service.writePath.tasks.listRecords(OWNER_ACCOUNT_ID);
+    expect(records).toHaveLength(1);
+    expect(records[0]!.record_id).toBe("demo-task-cedar-shells");
+    expect(records[0]!.content["completed"]).toBe(true);
+  });
+
+  test("an opaque handle that matches no live row is conflict, not an upsert", async () => {
+    const booted = boot();
+    await cutOver(booted);
+    const missing = await post(booted, envelope({
+      writeId: writeId("ghost-handle"),
+      op: {
+        op: "patch",
+        record_id: `task1_${"a".repeat(64)}`,
+        patch: { completed: true },
+      },
+    }));
+    expect(missing.status).toBe(WRITE_ERRORS.conflict.status);
+    expect(missing.text).toBe(WRITE_ERRORS.conflict.body);
+    expect(booted.service.writePath.tasks.listRecords(OWNER_ACCOUNT_ID)).toHaveLength(0);
   });
 });

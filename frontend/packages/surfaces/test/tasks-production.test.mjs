@@ -81,7 +81,8 @@ test("mutation failures stay localized and dead letters remain discardable", asy
   // RETAINED-SOURCE-ASSERTION: backend-detail absence and discard-only wiring are cross-branch structural constraints.
   const source = await read("src/production/TasksProduction.tsx");
   const fixtures = await read("src/production/task-fixtures.ts");
-  assert.match(source, /setOperationError\(translate\("lifecycle\.error"\)\)/);
+  assert.match(source, /rowsRef\.current\.length > 0 \? "lifecycle\.savedFailed" : "lifecycle\.error"/);
+  assert.match(source, /setOperationError\(translate\("dead\.body"\)\)/);
   assert.match(source, /store\.discardDeadLetter\(view\.opId\)/);
   // The dead-letter row binding was renamed `letter` -> `view` when the panel
   // started routing through `deadLetterView`. Both spellings are banned here

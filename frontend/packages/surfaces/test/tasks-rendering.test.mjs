@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import test, { after } from "node:test";
+import { fileURLToPath } from "node:url";
 
+import { PlatformTasksStore } from "@omi-core/domain";
 import { EN_MESSAGES, t } from "@omi-core/i18n";
 import {
   closeRenderHarness,
@@ -402,3 +406,217 @@ test("openTaskRouteSource opens the platform store", async () => {
   // red-proof: routing Tasks through a retired openTasks() port would keep
   // the last surface on a wire nothing serves.
 });
+
+test("a refused task write keeps the list and does not claim the view failed to load", async () => {
+  const TasksProduction = await loadProductionExport("TasksProduction.tsx", "TasksProduction");
+  const fixtureStore = await loadProductionExport("task-fixtures.ts", "fixtureStore");
+  const baseStore = fixtureStore("normal");
+  const store = {
+    ...baseStore,
+    async patch() {
+      throw new Error("platform task write refused: opaque read handle has no write id");
+    },
+  };
+  const rendered = await renderComponent(TasksProduction, {
+    store,
+    fixture: "normal",
+    translate,
+    now: Date.UTC(2026, 7, 7, 12, 0, 0),
+  });
+  try {
+    const cardsBefore = rendered.container.querySelectorAll("article.task-card").length;
+    assert.ok(cardsBefore > 0);
+    const check = rendered.container.querySelector("button.task-check");
+    assert.ok(check);
+    await rendered.act(async () => { check.click(); });
+    assert.equal(rendered.container.querySelectorAll("article.task-card").length, cardsBefore);
+    const banner = rendered.container.querySelector(".production-operation-error");
+    assert.equal(banner?.textContent, EN_MESSAGES["dead.body"]);
+    assert.notEqual(banner?.textContent, EN_MESSAGES["lifecycle.error"]);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("checking a seeded task marks it complete and keeps it complete after refresh", async () => {
+  // Rendered-layer proof through PlatformTasksStore, not a fixture that
+  // always succeeds on patch. red-proof: drop the listed-handle branch in
+  // assertWritableId. Click then paints dead.body / lifecycle.error and the
+  // card stays open. APPLIED AND OBSERVED RED.
+  const TasksProduction = await loadProductionExport("TasksProduction.tsx", "TasksProduction");
+  const seededDescription = "Pack rain shells for the Cedar Loop hike";
+  const env = new ManualEnv();
+  const { http, store } = await openSeededPlatformStore(env, seededDescription);
+  const rendered = await renderComponent(TasksProduction, {
+    store,
+    translate,
+    now: Date.UTC(2026, 7, 7, 12, 0, 0),
+    calendarDay: (timestamp) => new Date(timestamp).toISOString().slice(0, 10),
+    formatDate: (timestamp) => new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(timestamp)),
+  });
+  try {
+    const card = [...rendered.container.querySelectorAll("article.task-card")]
+      .find((node) => node.textContent?.includes(seededDescription));
+    assert.ok(card, "seeded task renders");
+    assert.equal(card.classList.contains("is-completed"), false);
+    const check = card.querySelector("button.task-check");
+    assert.ok(check);
+    await rendered.act(async () => { check.click(); });
+    await rendered.act(async () => { await env.advance(10); });
+    const completed = [...rendered.container.querySelectorAll("article.task-card")]
+      .find((node) => node.textContent?.includes(seededDescription));
+    assert.ok(completed);
+    assert.equal(completed.classList.contains("is-completed"), true);
+    assert.equal(completed.querySelector("button.task-check")?.getAttribute("aria-pressed"), "true");
+    const posted = http.calls.find((call) => call.method === "POST");
+    assert.equal(posted?.path, "/v1/tasks/ops");
+    assert.match(String(posted?.body?.op?.record_id ?? ""), /^task1_[a-f0-9]{64}$/);
+    await rendered.act(async () => { await store.refresh(); });
+    const afterRefresh = [...rendered.container.querySelectorAll("article.task-card")]
+      .find((node) => node.textContent?.includes(seededDescription));
+    assert.ok(afterRefresh);
+    assert.equal(afterRefresh.classList.contains("is-completed"), true);
+    assert.equal(rendered.container.querySelector(".production-operation-error"), null);
+    assert.equal(rendered.container.textContent?.includes(EN_MESSAGES["lifecycle.error"]), false);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+function corpusPage(wireCase) {
+  const rows = JSON.parse(readFileSync(resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../contracts/ratified/fixtures/tasks-read-conformance.json",
+  ), "utf8"));
+  const row = rows.find((entry) => entry.wireCase === wireCase);
+  assert.ok(row, `corpus row ${wireCase} is missing`);
+  return structuredClone(row.page);
+}
+
+function okPage(page) {
+  return { status: 200, json: page, text: JSON.stringify(page) };
+}
+
+async function openSeededPlatformStore(env, description) {
+  const open = corpusPage("window:complete_terminal");
+  open.accountEpoch = 7;
+  open.items[0] = {
+    ...open.items[0],
+    description,
+    completed: false,
+    completedAt: null,
+  };
+  const after = structuredClone(open);
+  after.items[0] = {
+    ...after.items[0],
+    completed: true,
+    completedAt: Date.UTC(2026, 7, 7, 12, 0, 0),
+    revision: "b".repeat(64),
+  };
+  const revision = "c".repeat(64);
+  const http = new ScriptedHttp([
+    okPage(open),
+    {
+      status: 200,
+      json: { applied: { record_id: "demo-task-cedar-shells", revision }, idempotent: false },
+      text: JSON.stringify({ applied: { record_id: "demo-task-cedar-shells", revision }, idempotent: false }),
+    },
+    okPage(after),
+  ]);
+  const store = await PlatformTasksStore.open(new MemoryStore().openBridge("u1"), env, http);
+  return { http, store };
+}
+
+class ScriptedHttp {
+  constructor(queue) {
+    this.queue = queue;
+    this.calls = [];
+  }
+  async request(method, path, body) {
+    this.calls.push(body === undefined ? { method, path } : { method, path, body });
+    const next = this.queue.shift();
+    if (!next) throw new Error("unscripted request");
+    return next;
+  }
+}
+
+class MemoryStore {
+  constructor() {
+    this.logs = new Map();
+    this.kvs = new Map();
+    this.generations = new Map();
+  }
+  openBridge(uid) {
+    const generation = (this.generations.get(uid) ?? 0) + 1;
+    this.generations.set(uid, generation);
+    const ns = (name) => `${uid}::${name}`;
+    return {
+      uid,
+      generation,
+      openLog: async (name) => {
+        const key = ns(name);
+        if (!this.logs.has(key)) this.logs.set(key, { lsn: 0, entries: [] });
+        const log = this.logs.get(key);
+        return {
+          append: async (payload) => {
+            log.lsn += 1;
+            log.entries.push({ lsn: log.lsn, payload });
+            return log.lsn;
+          },
+          scan: async (after) => log.entries.filter((entry) => entry.lsn > after),
+          truncate: async (upTo) => {
+            log.entries = log.entries.filter((entry) => entry.lsn > upTo);
+          },
+        };
+      },
+      openKv: async (name) => {
+        const key = ns(name);
+        if (!this.kvs.has(key)) this.kvs.set(key, new Map());
+        const kv = this.kvs.get(key);
+        return {
+          get: async (k) => kv.get(k) ?? null,
+          set: async (k, v) => void kv.set(k, v),
+          delete: async (k) => void kv.delete(k),
+        };
+      },
+      destroyAll: async () => {
+        for (const key of [...this.logs.keys()]) if (key.startsWith(`${uid}::`)) this.logs.delete(key);
+        for (const key of [...this.kvs.keys()]) if (key.startsWith(`${uid}::`)) this.kvs.delete(key);
+      },
+    };
+  }
+}
+
+class ManualEnv {
+  constructor() {
+    this.t = 1_000_000;
+    this.seed = 42;
+    this.timers = [];
+    this.fallbackSink = { records: [], record(event) { this.records.push(event); } };
+  }
+  now() { return this.t; }
+  random() {
+    this.seed ^= this.seed << 13;
+    this.seed ^= this.seed >>> 17;
+    this.seed ^= this.seed << 5;
+    return (this.seed >>> 0) / 0xffffffff;
+  }
+  delay(ms, fn) {
+    const timer = { at: this.t + ms, fn, cancelled: false };
+    this.timers.push(timer);
+    return () => { timer.cancelled = true; };
+  }
+  async advance(ms) {
+    const target = this.t + ms;
+    for (;;) {
+      const due = this.timers.filter((timer) => !timer.cancelled && timer.at <= target).sort((a, b) => a.at - b.at)[0];
+      if (!due) break;
+      this.t = due.at;
+      this.timers = this.timers.filter((timer) => timer !== due);
+      due.fn();
+      for (let i = 0; i < 50; i++) await Promise.resolve();
+    }
+    this.t = target;
+    for (let i = 0; i < 50; i++) await Promise.resolve();
+  }
+}

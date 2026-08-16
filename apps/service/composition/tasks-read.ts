@@ -524,6 +524,37 @@ const buildFrontiers = (prepared: PreparedTasksRead, declaredFrontier: string): 
 };
 
 /**
+ * Same grammar as `codecs/opaque-refs.ts` `TASK_ITEM_REF`. Duplicated here so
+ * the write door can recognise a public handle without forking the codec or
+ * importing the codec module's internals.
+ */
+const TASK_ITEM_REF = /^task1_[0-9a-f]{64}$/;
+
+/**
+ * Map a write `record_id` onto the storage id the tasks store actually holds.
+ *
+ * The read wire serves reader-scoped HMAC handles (`task1_` + hex). The write
+ * envelope's `record_id` is a storage id. A client that only ever saw the
+ * public handle — seeded rows, assistant-created rows, another device — will
+ * send that handle. Applying it as a storage id UPSERTS a second row. This
+ * function is the alias the read codec already minted: encode every live
+ * storage id for this reader and return the match. Not-opaque ids pass
+ * through. An opaque handle that matches nothing returns `null` so the write
+ * door can refuse rather than create a ghost keyed by the HMAC.
+ */
+export const resolveTasksWriteRecordId = (
+  ports: Pick<TasksReadPorts, "loadRecords" | "encodeItemRef">,
+  accountId: string,
+  recordId: string,
+): string | null => {
+  if (!TASK_ITEM_REF.test(recordId)) return recordId;
+  for (const record of ports.loadRecords(accountId)) {
+    if (ports.encodeItemRef(record.record_id) === recordId) return record.record_id;
+  }
+  return null;
+};
+
+/**
  * The record's ordering key — the store-owned total order, never a task field.
  * `first_seen_seq` alone would be ambiguous if two records ever shared one, so
  * the record id is folded in as the tiebreak the store itself pins.

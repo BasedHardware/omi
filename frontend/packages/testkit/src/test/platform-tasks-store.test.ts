@@ -7,8 +7,9 @@
  *     dropped on a failed read, a narrower cache discarded wholesale.
  *  2. Writes use the ratified ops envelope (`POST /v1/tasks/ops`) with
  *     `write_id` idempotency and the account epoch observed from the read.
- *     Completeness stays the server's envelope. Opaque read handles without a
- *     write id are refused rather than upserted.
+ *     Completeness stays the server's envelope. Listed opaque read handles are
+ *     sent so the write door can resolve them onto storage ids; a fabricated
+ *     handle that was never listed is still refused.
  *
  * Live Tasks open this store by name (`openPlatformTasks()`). The retired
  * `openTasks()` factory port and R7 (`check-openTasks-parked.mjs`) are gone
@@ -286,19 +287,49 @@ test("the same description may create again after the open row is completed", as
   assert.equal(http.calls.filter((call) => call.method === "POST").length, 3);
 });
 
-test("a patch against a bare opaque read handle is refused rather than upserted", async () => {
-  // red-proof: send the HMAC handle as record_id. The write door upserts a
-  // second row. APPLIED AND OBSERVED RED.
-  const page = pageFor("window:complete_terminal") as { items: { id: string }[] };
+test("a listed opaque read handle is sent as record_id so the write door can resolve it", async () => {
+  // red-proof: restore the bare-handle throw in assertWritableId. The surface
+  // never POSTs, seeded rows stay frozen, and the catch paints
+  // "Unable to load this view" over a loaded list.
+  const page = pageFor("window:complete_terminal") as {
+    items: Array<Record<string, unknown>>;
+  };
+  (page as Record<string, unknown>)["accountEpoch"] = 7;
+  const opaqueId = String(page.items[0]!["id"]);
+  const revision = "b".repeat(64);
+  const http = new Scripted([
+    ok(page),
+    {
+      status: 200,
+      json: { applied: { record_id: "demo-task-cedar-shells", revision }, idempotent: false },
+      text: JSON.stringify({ applied: { record_id: "demo-task-cedar-shells", revision }, idempotent: false }),
+    },
+  ]);
+  const store = await PlatformTasksStore.open(disk().openBridge("u1"), env, http);
+  await store.refresh();
+  await store.patch(opaqueId, { completed: true });
+  await env.advance(10);
+  const posted = http.calls.find((call) => call.method === "POST");
+  assert.equal(posted?.path, "/v1/tasks/ops");
+  assert.equal(
+    (posted?.body as { op?: { record_id?: string } }).op?.record_id,
+    opaqueId,
+    "the listed public handle is what the write door resolves",
+  );
+  assert.equal((await store.list())[0]!.completed, true);
+});
+
+test("a fabricated opaque read handle that was never listed is still refused", async () => {
+  const empty = pageFor("absence:query_gap") as Record<string, unknown>;
+  empty["accountEpoch"] = 7;
   const store = await PlatformTasksStore.open(
     disk().openBridge("u1"),
     env,
-    new Scripted([ok(page)]),
+    new Scripted([ok(empty)]),
   );
   await store.refresh();
-  const opaqueId = (await store.list())[0]!.id;
   await assert.rejects(
-    () => store.patch(opaqueId, { completed: true }),
+    () => store.patch(`task1_${"a".repeat(64)}`, { completed: true }),
     /opaque read handle has no write id/,
   );
 });

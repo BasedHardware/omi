@@ -142,7 +142,7 @@ import { composeLocalMemoryFormation, type LocalMemoryFormation, type LocalMemor
 
 export type { LocalMemoryFormation, LocalMemoryFormationMode } from "./composition/memory-formation";
 import { registerTasksReadRoutes, TASKS_READ_PATH } from "./routes/tasks-read";
-import { prepareTasksRead } from "./composition/tasks-read";
+import { prepareTasksRead, resolveTasksWriteRecordId } from "./composition/tasks-read";
 import { prepareConversationsRead } from "./composition/conversations-read";
 import { prepareFoldersRead } from "./composition/folders-read";
 import {
@@ -990,6 +990,10 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     counter: opsCounter,
     // The same fixed instant the read path uses. No wall clock anywhere.
     now: () => anchorEpochSeconds,
+    resolveWriteRecordId: (principal, recordId) => {
+      const prepared = prepareTasksReadFor(principal);
+      return resolveTasksWriteRecordId(prepared.ports, principal.uid, recordId);
+    },
   });
   registerTasksReadRoutes(app, {
     resolvePrincipal,
