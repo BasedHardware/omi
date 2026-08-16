@@ -7,12 +7,24 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, cast, Deque, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 from websockets.exceptions import ConnectionClosed
 
+if TYPE_CHECKING:
+    from websockets.legacy.client import WebSocketClientProtocol
+else:
+    WebSocketClientProtocol = Any
+
 from utils.metrics import PUSHER_CIRCUIT_BREAKER_REJECTIONS, PUSHER_SESSION_DEGRADED
 from utils.pusher import PusherCircuitBreakerOpen, connect_to_trigger_pusher
+
+# Typed wrapper because utils.pusher.connect_to_trigger_pusher uses the untyped
+# `callable` builtin as a parameter annotation; cast to the proper signature.
+_connect_to_trigger_pusher: Callable[..., Awaitable[Optional[WebSocketClientProtocol]]] = cast(
+    "Callable[..., Awaitable[Optional[WebSocketClientProtocol]]]", connect_to_trigger_pusher
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +44,7 @@ PUSHER_RECONNECT_BASE_DELAY = 1.0
 PUSHER_RECONNECT_MAX_DELAY = 60.0
 PENDING_REQUEST_TIMEOUT = 120
 MAX_RETRIES_PER_REQUEST = 3
+PENDING_REQUEST_RECOVERY_COOLDOWN = 300
 
 
 @dataclass
@@ -53,10 +66,10 @@ class ListenPusherSessionDeps:
     get_current_conversation_id: Callable[[], Optional[str]]
     is_active: Callable[[], bool]
     shutdown_event: asyncio.Event
-    get_byok_keys: Callable[[], dict]
+    get_byok_keys: Callable[[], Dict[str, Any]]
     on_conversation_processed: Callable[[str], None]
     wait_for_event: Callable[[asyncio.Event, float], Awaitable[bool]]
-    connect_to_pusher: Callable[..., Awaitable[object]] = connect_to_trigger_pusher
+    connect_to_pusher: Callable[..., Awaitable[Optional[WebSocketClientProtocol]]] = _connect_to_trigger_pusher
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
     random: Callable[[], float] = random.random
     now: Callable[[], float] = time.time
@@ -67,19 +80,23 @@ class ListenPusherSession:
     def __init__(self, config: ListenPusherSessionConfig, deps: ListenPusherSessionDeps):
         self.config = config
         self.deps = deps
-        self.pusher_ws = None
+        self.pusher_ws: Optional[WebSocketClientProtocol] = None
         self.pusher_connect_lock = asyncio.Lock()
+        self.transcript_flush_lock = asyncio.Lock()
+        self.audio_flush_lock = asyncio.Lock()
         self.pusher_connected = False
         self.reconnect_state = PusherReconnectState.CONNECTED
         self.reconnect_attempts = 0
-        self.reconnect_task = None
+        self.reconnect_task: Optional[asyncio.Task[None]] = None
         self.degraded_since: float = 0.0
-        self.segment_buffers: deque = deque(maxlen=config.max_segment_buffer_size)
-        self.last_synced_conversation_id = None
-        self.pending_conversation_requests: Dict[str, dict] = {}
+        self.segment_buffers: Deque[Dict[str, Any]] = deque(maxlen=config.max_segment_buffer_size)
+        self.last_synced_conversation_id: Optional[str] = None
+        self.pending_conversation_requests: Dict[str, Dict[str, Any]] = {}
         self.pending_request_event = asyncio.Event()
-        self.pending_speaker_sample_requests: deque = deque(maxlen=config.max_pending_speaker_sample_requests)
-        self.audio_chunks: deque = deque()
+        self.pending_speaker_sample_requests: Deque[Tuple[str, str, List[str]]] = deque(
+            maxlen=config.max_pending_speaker_sample_requests
+        )
+        self.audio_chunks: Deque[bytes] = deque()
         self.audio_total_size = 0
         self.audio_buffer_last_received: Optional[float] = None
 
@@ -91,10 +108,16 @@ class ListenPusherSession:
     def session_id(self):
         return self.config.session_id
 
-    def transcript_send(self, segments):
+    def transcript_send(self, segments: List[Dict[str, Any]]) -> None:
         self.segment_buffers.extend(segments)
 
-    def _buffer_pending_conversation_request(self, conversation_id: str):
+    def _buffer_pending_conversation_request(
+        self,
+        conversation_id: str,
+        *,
+        finalization_job_id: Optional[str] = None,
+        dispatch_generation: Optional[int] = None,
+    ):
         existing = self.pending_conversation_requests.get(conversation_id)
         if existing is None and len(self.pending_conversation_requests) >= self.config.max_pending_requests:
             oldest_id = min(
@@ -109,63 +132,90 @@ class ListenPusherSession:
         self.pending_conversation_requests[conversation_id] = {
             'sent_at': self.deps.now(),
             'retries': (existing or {}).get('retries', 0),
+            'finalization_job_id': finalization_job_id or (existing or {}).get('finalization_job_id'),
+            'dispatch_generation': dispatch_generation or (existing or {}).get('dispatch_generation'),
         }
         self.pending_request_event.set()
 
-    async def request_conversation_processing(self, conversation_id: str):
-        """Request pusher to process a conversation."""
+    async def request_conversation_processing(
+        self,
+        conversation_id: str,
+        finalization_job_id: Optional[str] = None,
+        dispatch_generation: Optional[int] = None,
+    ):
+        """Request pusher to process a conversation through its durable lease."""
         if not self.pusher_connected or not self.pusher_ws:
             logger.info(
                 f"Pusher not connected for {conversation_id}, will retry on reconnect {self.uid} {self.session_id}"
             )
-            self._buffer_pending_conversation_request(conversation_id)
+            self._buffer_pending_conversation_request(
+                conversation_id,
+                finalization_job_id=finalization_job_id,
+                dispatch_generation=dispatch_generation,
+            )
             return False
         try:
-            self._buffer_pending_conversation_request(conversation_id)
+            self._buffer_pending_conversation_request(
+                conversation_id,
+                finalization_job_id=finalization_job_id,
+                dispatch_generation=dispatch_generation,
+            )
+            pending = self.pending_conversation_requests[conversation_id]
             data = bytearray()
             data.extend(struct.pack("I", 104))
-            payload = {
+            payload: Dict[str, Any] = {
                 "conversation_id": conversation_id,
                 "language": self.config.language,
                 "byok_keys": self.deps.get_byok_keys(),
             }
+            if pending.get('finalization_job_id'):
+                payload['finalization_job_id'] = pending['finalization_job_id']
+                payload['dispatch_generation'] = pending.get('dispatch_generation') or 1
             data.extend(bytes(json.dumps(payload), "utf-8"))
-            await self.pusher_ws.send(data)
+            await self.pusher_ws.send(cast(bytes, data))
             logger.info(f"Sent process_conversation request to pusher: {conversation_id} {self.uid} {self.session_id}")
             return True
         except Exception as e:
             logger.error(f"Failed to send process_conversation request: {e} {self.uid} {self.session_id}")
             return False
 
-    async def _transcript_flush(self, auto_reconnect: bool = True):
-        if self.pusher_connected and self.pusher_ws and len(self.segment_buffers) > 0:
-            try:
-                data = bytearray()
-                data.extend(struct.pack("I", 102))
-                data.extend(
-                    bytes(
-                        json.dumps(
-                            {
-                                "segments": list(self.segment_buffers),
-                                "memory_id": self.deps.get_current_conversation_id(),
-                            }
-                        ),
-                        "utf-8",
+    async def _transcript_flush(self):
+        async with self.transcript_flush_lock:
+            if self.pusher_connected and self.pusher_ws and len(self.segment_buffers) > 0:
+                pending_segments = self.segment_buffers
+                self.segment_buffers = deque(maxlen=self.config.max_segment_buffer_size)
+                try:
+                    data = bytearray()
+                    data.extend(struct.pack("I", 102))
+                    data.extend(
+                        bytes(
+                            json.dumps(
+                                {
+                                    "segments": list(pending_segments),
+                                    "memory_id": self.deps.get_current_conversation_id(),
+                                }
+                            ),
+                            "utf-8",
+                        )
                     )
-                )
-                self.segment_buffers.clear()
-                await self.pusher_ws.send(data)
-            except ConnectionClosed as e:
-                logger.error(f"Pusher transcripts Connection closed: {e} {self.uid} {self.session_id}")
-                self._mark_disconnected()
-            except Exception as e:
-                logger.error(f"Pusher transcripts failed: {e} {self.uid} {self.session_id}")
+                    await self.pusher_ws.send(cast(bytes, data))
+                except (asyncio.CancelledError, Exception) as e:
+                    self.segment_buffers = deque(
+                        (*pending_segments, *self.segment_buffers), maxlen=self.config.max_segment_buffer_size
+                    )
+                    if isinstance(e, asyncio.CancelledError):
+                        raise
+                    elif isinstance(e, ConnectionClosed):
+                        logger.error(f"Pusher transcripts Connection closed: {e} {self.uid} {self.session_id}")
+                        self._mark_disconnected()
+                    else:
+                        logger.error(f"Pusher transcripts failed: {e} {self.uid} {self.session_id}")
 
     async def transcript_consume(self):
         while self.deps.is_active():
             await self.deps.sleep(1)
             if len(self.segment_buffers) > 0:
-                await self._transcript_flush(auto_reconnect=True)
+                await self._transcript_flush()
 
     def audio_bytes_send(self, audio_bytes: bytes, received_at: float):
         chunk = audio_bytes
@@ -178,52 +228,63 @@ class ListenPusherSession:
         self.audio_total_size += len(chunk)
         self.audio_buffer_last_received = received_at
 
-    async def _audio_bytes_flush(self, auto_reconnect: bool = True):
-        current_conversation_id = self.deps.get_current_conversation_id()
-        if (
-            self.pusher_ws
-            and current_conversation_id
-            and (
-                self.last_synced_conversation_id is None or current_conversation_id != self.last_synced_conversation_id
-            )
-        ):
-            try:
-                data = bytearray()
-                data.extend(struct.pack("I", 103))
-                data.extend(bytes(current_conversation_id, "utf-8"))
-                await self.pusher_ws.send(data)
-                self.last_synced_conversation_id = current_conversation_id
-            except ConnectionClosed as e:
-                logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
-                self._mark_disconnected()
-            except Exception as e:
-                logger.error(f"Failed to send conversation_id to pusher: {e} {self.uid} {self.session_id}")
+    async def _audio_bytes_flush(self):
+        async with self.audio_flush_lock:
+            current_conversation_id = self.deps.get_current_conversation_id()
+            if (
+                self.pusher_ws
+                and current_conversation_id
+                and (
+                    self.last_synced_conversation_id is None
+                    or current_conversation_id != self.last_synced_conversation_id
+                )
+            ):
+                try:
+                    data = bytearray()
+                    data.extend(struct.pack("I", 103))
+                    data.extend(bytes(current_conversation_id, "utf-8"))
+                    await self.pusher_ws.send(cast(bytes, data))
+                    self.last_synced_conversation_id = current_conversation_id
+                except ConnectionClosed as e:
+                    logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
+                    self._mark_disconnected()
+                except Exception as e:
+                    logger.error(f"Failed to send conversation_id to pusher: {e} {self.uid} {self.session_id}")
 
-        if self.pusher_connected and self.pusher_ws and self.audio_total_size > 0:
-            try:
-                effective_rate = TARGET_SAMPLE_RATE if self.config.is_multi_channel else self.config.sample_rate
-                buffer_duration_seconds = self.audio_total_size / (effective_rate * 2)
-                buffer_start_time = (self.audio_buffer_last_received or self.deps.now()) - buffer_duration_seconds
-                audio_data = b''.join(self.audio_chunks)
-                data = bytearray()
-                data.extend(struct.pack("I", 101))
-                data.extend(struct.pack("d", buffer_start_time))
-                data.extend(audio_data)
-                self.audio_chunks.clear()
+            if self.pusher_connected and self.pusher_ws and self.audio_total_size > 0:
+                pending_chunks = self.audio_chunks
+                pending_total_size = self.audio_total_size
+                self.audio_chunks = deque()
                 self.audio_total_size = 0
-                del audio_data
-                await self.pusher_ws.send(data)
-            except ConnectionClosed as e:
-                logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
-                self._mark_disconnected()
-            except Exception as e:
-                logger.error(f"Pusher audio_bytes failed: {e} {self.uid} {self.session_id}")
+                try:
+                    effective_rate = TARGET_SAMPLE_RATE if self.config.is_multi_channel else self.config.sample_rate
+                    buffer_duration_seconds = pending_total_size / (effective_rate * 2)
+                    buffer_start_time = (self.audio_buffer_last_received or self.deps.now()) - buffer_duration_seconds
+                    audio_data = b''.join(pending_chunks)
+                    data = bytearray()
+                    data.extend(struct.pack("I", 101))
+                    data.extend(struct.pack("d", buffer_start_time))
+                    data.extend(audio_data)
+                    del audio_data
+                    await self.pusher_ws.send(cast(bytes, data))
+                except (asyncio.CancelledError, Exception) as e:
+                    self.audio_chunks.extendleft(reversed(pending_chunks))
+                    self.audio_total_size += pending_total_size
+                    while self.audio_total_size > self.config.max_audio_buffer_size:
+                        self.audio_total_size -= len(self.audio_chunks.popleft())
+                    if isinstance(e, asyncio.CancelledError):
+                        raise
+                    elif isinstance(e, ConnectionClosed):
+                        logger.error(f"Pusher audio_bytes Connection closed: {e} {self.uid} {self.session_id}")
+                        self._mark_disconnected()
+                    else:
+                        logger.error(f"Pusher audio_bytes failed: {e} {self.uid} {self.session_id}")
 
     async def audio_bytes_consume(self):
         while self.deps.is_active():
             await self.deps.sleep(1)
             if self.audio_total_size > 0:
-                await self._audio_bytes_flush(auto_reconnect=True)
+                await self._audio_bytes_flush()
 
     async def pusher_receive(self):
         """Receive and handle messages from pusher, with timeout-based retry for pending requests."""
@@ -240,7 +301,7 @@ class ListenPusherSession:
                 continue
 
             try:
-                msg = await asyncio.wait_for(self.pusher_ws.recv(), timeout=5.0)
+                msg = cast(bytes, await asyncio.wait_for(self.pusher_ws.recv(), timeout=5.0))
                 if not msg or len(msg) < 4:
                     continue
                 header_type = struct.unpack('<I', msg[:4])[0]
@@ -248,15 +309,42 @@ class ListenPusherSession:
                 if header_type == 201:
                     result = json.loads(msg[4:].decode("utf-8"))
                     conversation_id = result.get("conversation_id")
-                    self.pending_conversation_requests.pop(conversation_id, None)
 
                     if "error" in result:
-                        logger.error(f"Conversation processing failed: {result['error']} {self.uid} {self.session_id}")
-                        continue
-
-                    if result.get("success"):
+                        if result.get("terminal"):
+                            # The job reached its attempt budget and is now
+                            # dead-lettered. Retrying it would never converge.
+                            self.pending_conversation_requests.pop(conversation_id, None)
+                            logger.error(
+                                f"Conversation processing failed terminally: {conversation_id} {self.uid} {self.session_id}"
+                            )
+                        else:
+                            pending = self.pending_conversation_requests.get(conversation_id)
+                            if pending is not None:
+                                # The pusher has released its durable lease back to
+                                # queued. Keep the request so this live session can
+                                # reclaim it instead of stranding `processing`.
+                                pending['sent_at'] = self.deps.now() - PENDING_REQUEST_TIMEOUT - 1
+                            logger.error(f"Conversation processing failed: {self.uid} {self.session_id}")
+                    elif result.get('fenced'):
+                        self.pending_conversation_requests.pop(conversation_id, None)
+                        logger.info(
+                            'Conversation finalization fenced by durable lifecycle conversation=%s uid=%s session=%s',
+                            conversation_id,
+                            self.uid,
+                            self.session_id,
+                        )
+                    elif result.get("success"):
+                        self.pending_conversation_requests.pop(conversation_id, None)
                         logger.info(f"Conversation processed by pusher: {conversation_id} {self.uid} {self.session_id}")
                         self.deps.on_conversation_processed(conversation_id)
+                    else:
+                        pending = self.pending_conversation_requests.get(conversation_id)
+                        if pending is not None:
+                            pending['sent_at'] = self.deps.now() - PENDING_REQUEST_TIMEOUT - 1
+                        logger.warning(
+                            f"Conversation processing returned no terminal result: {conversation_id} {self.uid} {self.session_id}"
+                        )
 
             except asyncio.TimeoutError:
                 pass
@@ -281,19 +369,27 @@ class ListenPusherSession:
                     continue
                 if info['retries'] >= MAX_RETRIES_PER_REQUEST:
                     logger.warning(
-                        f"Conversation {cid} retry limit reached, keeping buffered for pusher recovery {self.uid} {self.session_id}"
+                        f"Conversation {cid} retry burst exhausted; scheduling recovery cooldown {self.uid} {self.session_id}"
                     )
-                    info['sent_at'] = now
+                    # Continue in bounded bursts rather than permanently
+                    # dropping a queued durable finalization after one live
+                    # session's transient provider failures.
+                    info['retries'] = 0
+                    info['sent_at'] = now + PENDING_REQUEST_RECOVERY_COOLDOWN - PENDING_REQUEST_TIMEOUT
                     continue
                 info['retries'] += 1
                 logger.warning(
                     f"Retrying process_conversation for {cid} (attempt {info['retries']}/{MAX_RETRIES_PER_REQUEST}) {self.uid} {self.session_id}"
                 )
-                await self.request_conversation_processing(cid)
+                await self.request_conversation_processing(
+                    cid,
+                    info.get('finalization_job_id'),
+                    info.get('dispatch_generation'),
+                )
 
     async def _flush(self):
-        await self._audio_bytes_flush(auto_reconnect=False)
-        await self._transcript_flush(auto_reconnect=False)
+        await self._audio_bytes_flush()
+        await self._transcript_flush()
 
     def _mark_disconnected(self):
         """Signal pusher disconnection and ensure one reconnect loop is running."""
@@ -420,8 +516,13 @@ class ListenPusherSession:
                     f"Reconnected to pusher, re-sending {len(self.pending_conversation_requests)} pending requests {self.uid} {self.session_id}"
                 )
                 for cid in list(self.pending_conversation_requests.keys()):
-                    self.pending_conversation_requests[cid]['sent_at'] = self.deps.now()
-                    await self.request_conversation_processing(cid)
+                    pending = self.pending_conversation_requests[cid]
+                    pending['sent_at'] = self.deps.now()
+                    await self.request_conversation_processing(
+                        cid,
+                        pending.get('finalization_job_id'),
+                        pending.get('dispatch_generation'),
+                    )
             if self.pending_speaker_sample_requests:
                 buffered = list(self.pending_speaker_sample_requests)
                 self.pending_speaker_sample_requests.clear()
@@ -457,13 +558,14 @@ class ListenPusherSession:
         segment_ids: List[str],
     ):
         """Send speaker sample extraction request to pusher with segment IDs."""
+        request = (person_id, conv_id, segment_ids)
         if not self.pusher_connected or not self.pusher_ws:
-            self.pending_speaker_sample_requests.append((person_id, conv_id, segment_ids))
+            self.pending_speaker_sample_requests.append(request)
             logger.warning(
                 f"Pusher not connected, buffered speaker sample request: person={person_id}, "
                 f"{len(segment_ids)} segments ({len(self.pending_speaker_sample_requests)} pending) {self.uid} {self.session_id}"
             )
-            return
+            return False
         try:
             data = bytearray()
             data.extend(struct.pack("I", 105))
@@ -479,12 +581,17 @@ class ListenPusherSession:
                     "utf-8",
                 )
             )
-            await self.pusher_ws.send(data)
+            await self.pusher_ws.send(cast(bytes, data))
             logger.info(
                 f"Sent speaker sample request to pusher: person={person_id}, {len(segment_ids)} segments {self.uid} {self.session_id}"
             )
+            return True
         except Exception as e:
+            self.pending_speaker_sample_requests.append(request)
+            if isinstance(e, ConnectionClosed):
+                self._mark_disconnected()
             logger.error(f"Failed to send speaker sample request: {e} {self.uid} {self.session_id}")
+            return False
 
     def is_connected(self):
         return self.pusher_connected

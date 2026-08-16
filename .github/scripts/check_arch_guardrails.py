@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Advisory architecture guardrails for changed files.
+"""Architecture guardrails for changed files and oversized packages.
 
-Warns on large changed files and long functions, then exits 0. This script is
-intentionally stdlib-only so it can run early in CI without setup steps.
+Large changed files and long functions remain advisory. Oversized package maps
+use a baseline ratchet. This script is stdlib-only so it can run early in CI.
 """
 
 import argparse
@@ -11,6 +11,7 @@ import os
 import re
 from pathlib import Path
 
+from check_package_architecture_maps import load_baseline_at_ref, run as check_package_architecture_maps
 
 SOURCE_EXTENSIONS = {
     ".c",
@@ -173,16 +174,14 @@ def write_summary(warnings, file_threshold, function_threshold):
 def main():
     parser = argparse.ArgumentParser(description="Warn on large changed files and long functions")
     parser.add_argument("--changed-files", default="/tmp/changed-files.txt", type=Path)
+    parser.add_argument("--base", help="Git revision whose package-map baseline is trusted")
     parser.add_argument("--file-lines", default=800, type=int)
     parser.add_argument("--function-lines", default=150, type=int)
     args = parser.parse_args()
 
     warnings = []
-    if not args.changed_files.exists():
-        write_summary(warnings, args.file_lines, args.function_lines)
-        return 0
-
-    for path in read_changed_files(args.changed_files):
+    changed_files = read_changed_files(args.changed_files) if args.changed_files.exists() else []
+    for path in changed_files:
         if not path.exists() or not path.is_file() or not source_file(path):
             continue
         try:
@@ -204,7 +203,17 @@ def main():
             warnings.append({"type": "Function length", "location": f"{path}:{start}", "detail": message})
 
     write_summary(warnings, args.file_lines, args.function_lines)
-    return 0
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        previous_baseline = load_baseline_at_ref(repo_root, args.base) if args.base else None
+    except ValueError as exc:
+        print(f"::error title=Invalid package architecture baseline::{annotation_escape(exc)}")
+        return 1
+    return check_package_architecture_maps(
+        repo_root=repo_root,
+        baseline_path=repo_root / ".github" / "scripts" / "package_architecture_baseline.json",
+        previous_baseline=previous_baseline,
+    )
 
 
 if __name__ == "__main__":

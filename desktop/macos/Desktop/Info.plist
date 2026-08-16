@@ -54,6 +54,12 @@
             </array>
         </dict>
     </array>
+    <!-- Codemagic sets both keys for published preview artifacts. The preview identity
+         (`com.omi.preview.*`) remains the runtime safety boundary if this marker is absent. -->
+    <key>OMIExternalPreview</key>
+    <false/>
+    <key>OMIExternalPreviewBackend</key>
+    <string>production</string>
     <!-- Sparkle Auto-Update Configuration -->
     <key>SUFeedURL</key>
     <string>https://api.omi.me/v2/desktop/appcast.xml</string>

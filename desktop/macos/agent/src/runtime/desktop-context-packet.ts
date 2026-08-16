@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type {
   DesktopContextPolicyDecision,
   DesktopContextRetentionClass,
@@ -98,13 +98,11 @@ function policyDecisionForSnippet(snippet: DesktopContextSnippetInput): DesktopC
   );
 }
 
-function packetIdFor(input: DesktopContextPacketBuildInput, createdAtMs: number): string {
+function packetIdFor(input: DesktopContextPacketBuildInput): string {
   if (input.packetId) return input.packetId;
-  const hash = createHash("sha256")
-    .update(`${input.ownerId}:${input.surfaceKind}:${input.objective}:${createdAtMs}`)
-    .digest("hex")
-    .slice(0, 16);
-  return `ctx_${hash}`;
+  // Context packets are occurrences, not content-addressed records. Two runs
+  // can legitimately persist identical objectives in the same millisecond.
+  return `ctx_${randomUUID().replaceAll("-", "")}`;
 }
 
 export function buildDesktopContextPacket(input: DesktopContextPacketBuildInput): BuiltDesktopContextPacket {
@@ -153,7 +151,7 @@ export function buildDesktopContextPacket(input: DesktopContextPacketBuildInput)
   };
   const contextHash = `sha256:${createHash("sha256").update(stableJson(packetJson)).digest("hex")}`;
   const tokenEstimate = snippets.reduce((sum, snippet) => sum + snippet.tokenEstimate, estimateTokens(input.objective));
-  const packetId = packetIdFor(input, nowMs);
+  const packetId = packetIdFor(input);
   const accessLogs: NewDesktopContextAccessLog[] = selected.map((snippet) => ({
     ownerId: input.ownerId,
     packetId,

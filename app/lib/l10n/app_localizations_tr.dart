@@ -9,6 +9,9 @@ class AppLocalizationsTr extends AppLocalizations {
   AppLocalizationsTr([String locale = 'tr']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Oturumun süresi doldu — tekrar giriş yapın.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -745,11 +748,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Planınız $date tarihinde yenilenecek.';
-  }
-
-  @override
   String get basicPlan => 'Ücretsiz Plan';
 
   @override
@@ -1469,7 +1467,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get payYourSttProvider => 'Omi\'yi özgürce kullanın. Sadece STT sağlayıcınıza doğrudan ödeme yaparsınız.';
 
   @override
-  String get freeMinutesMonth => 'Ayda 1.200 ücretsiz dakika dahildir. ';
+  String get freeMinutesMonth => 'Ayda 300 ücretsiz dakika dahildir. ';
 
   @override
   String get omiUnlimited => 'Omi Sınırsız';
@@ -1791,20 +1789,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Omi\'yi Beğeniyor musunuz?';
-
-  @override
-  String get leaveReviewIos =>
-      'App Store\'da bir yorum bırakarak daha fazla insana ulaşmamıza yardımcı olun. Geri bildiriminiz bizim için çok değerli!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play Store\'da bir yorum bırakarak daha fazla insana ulaşmamıza yardımcı olun. Geri bildiriminiz bizim için çok değerli!';
-
-  @override
-  String get rateOnAppStore => 'App Store\'da Değerlendir';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play\'de Değerlendir';
 
   @override
   String get maybeLater => 'Belki sonra';
@@ -2142,6 +2126,18 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Hafızayı düzenle';
+
+  @override
+  String get pinAsBaseline => 'Temel olarak sabitle';
+
+  @override
+  String get unpinAsBaseline => 'Temelden ayır';
+
+  @override
+  String get baselineMemory => 'Temel bellek';
+
+  @override
+  String get alwaysInContext => 'Her zaman bağlamda';
 
   @override
   String get memoryContentHint => 'Dondurma yemeyi severim...';
@@ -4715,7 +4711,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Belirli veri erişimi yapılandırılmamış.';
 
   @override
-  String get basicPlanDescription => '1.200 premium dakika + cihazda sınırsız';
+  String get basicPlanDescription => '300 premium dakika + cihazda sınırsız';
 
   @override
   String get minutes => 'dakika';
@@ -6008,7 +6004,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'Ayda 1.200 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar.';
+      'Ayda 300 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar.';
 
   @override
   String get viewUsage => 'Kullanımı görüntüle';
@@ -6089,7 +6085,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'Ayda 1.200 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar. ';
+      'Ayda 300 premium dakika. Cihaz Üzerinde sekmesi sınırsız ücretsiz transkripsiyon sunar. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8998,7 +8994,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get billingYearly => 'Yıllık';
 
   @override
-  String get savePercent => '~%17 tasarruf';
+  String savePercent(int percent) {
+    return '~%$percent tasarruf';
+  }
 
   @override
   String get popular => 'Popüler';
@@ -9350,7 +9348,8 @@ class AppLocalizationsTr extends AppLocalizations {
       'Sesi anında değil, dilediğin zaman transkribe etmek üzere şimdi kaydet. Kayıtlar telefonunda saklanır; konuşma oluşturmak için onları sen yüklersin.';
 
   @override
-  String get transcribeLaterNote => 'Şimdilik Omi cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.';
+  String get transcribeLaterNote =>
+      'Telefonun mikrofonu ile Omi ve Limitless cihazlarında çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9500,4 +9499,356 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Donanım Yazılımını Yükle';
+
+  @override
+  String get pendantRecordingTitle => 'Pendant\'ta kayıt yapılıyor';
+
+  @override
+  String get pendantRecordingNote =>
+      'Pendant\'ın kendi kendine kayıt yapıyor. Uygulama açıkken kayıtlar telefonuna eşitlenir.';
+
+  @override
+  String get pendantSyncingRecordings => 'Pendant\'ından kayıtlar eşitleniyor…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes dk kayıtlı';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Pendant\'ın depolama alanı neredeyse dolu — eşitleme için uygulamayı açık tut.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta\'yı Bağla';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Ray-Ban Meta gözlüğünüzü konuşmalar ve görsel bağlam için Omi kayıt cihazınız olarak kullanın. Omi, gözlüğünüzü bağlamak için Meta AI uygulamasını açacaktır.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI ile bağlan';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Bağlantıyı Meta AI uygulamasında tamamlayın, ardından buraya geri dönün.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Tekrar Kontrol Et';
+
+  @override
+  String get raybanMetaAllowCamera => 'Gözlükte Kameraya İzin Ver';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi, konuşmalarınıza fotoğraf eklemek için gözlüğünüzün kamerasını kullanır. Bunu atlayıp yalnızca sesi kullanabilirsiniz.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Şimdilik Atla';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta yalnızca ses modu';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Omi\'nin bu sürümü gözlüğünüzün mikrofonunu Bluetooth üzerinden kullanabilir. Fotoğraf çekimi için Omi\'nin Meta geliştirici sürümü gerekir.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Gözlüğün mikrofonu kullanılırken telefonunuzdaki müzik duraklatılır.';
+
+  @override
+  String get raybanMetaContinue => 'Devam Et';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Fotoğraf Çek';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Fotoğraf istendi — konuşmanızda görünecektir.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon hazır';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Görüntü yakalama hazır';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Yalnızca ses modunda kullanılamaz';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta\'ya bağlanırken hata: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'Cihaz depolama';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '%$percent dolu';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total alanın $used kısmı kullanıldı';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free boş';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Cihaz neredeyse dolu — yer açmak için eşitleyin.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Bağlantı yok — yerel olarak kaydediliyor. Tekrar çevrimiçi olduğunuzda yazıya dökülecek.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Verileriniz varsayılan olarak güçlü şifreleme ile korunur ve nasıl saklanıp kullanılacağını siz kontrol edersiniz.';
+
+  @override
+  String get sttModelAccuracy => 'Doğruluk';
+
+  @override
+  String get whisperModelSizeBase => 'Temel';
+
+  @override
+  String get cloudTranscription => 'Bulut transkripsiyonu';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Modeli Sil';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Bu modeli silmek istediğinizden emin misiniz?';
+
+  @override
+  String get onDeviceModelDownloaded => 'İndirildi';
+
+  @override
+  String get sttModelFaster => 'Daha hızlı';
+
+  @override
+  String get sttFilterAuto => 'Otomatik';
+
+  @override
+  String get sttModelHigher => 'Daha yüksek';
+
+  @override
+  String get whisperModelSizeLarge => 'Büyük';
+
+  @override
+  String get sttModelLower => 'Daha düşük';
+
+  @override
+  String get whisperModelSizeMedium => 'Orta';
+
+  @override
+  String get onDeviceModelDeleted => 'Model silindi';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Model indirilemedi';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Whisper modeli indirilemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Model indirildi';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper modeli başarıyla indirildi';
+
+  @override
+  String get onDeviceModelSize => 'Model Boyutu';
+
+  @override
+  String get sttNone => 'Yok';
+
+  @override
+  String get onDeviceTranscription => 'Cihaz üzerinde transkripsiyon';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripsiyon cihazınızda yerel olarak işlenir';
+
+  @override
+  String get sttModelSlower => 'Daha yavaş';
+
+  @override
+  String get whisperModelSizeSmall => 'Küçük';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Konuşmadan metne sağlayıcı';
+
+  @override
+  String get speechToTextProviderDesc => 'Transkripsiyon için kullanılan hizmeti seçin';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Hız';
+
+  @override
+  String get whisperModelSizeTiny => 'Çok küçük';
+
+  @override
+  String get transcriptionLanguage => 'Transkripsiyon dili';
+
+  @override
+  String get transcriptionLanguageDesc => 'Konuşma transkripsiyonu için dil seçin';
+
+  @override
+  String get whisperModel => 'Whisper modeli';
+
+  @override
+  String get whisperModelDesc => 'Cihaz üzerinde transkripsiyon için model seçin';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Ücretsiz plana düşürülsün mü?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Şu kısıtlamalarla karşılaşacaksınız:';
+
+  @override
+  String get downgradeLimitBattery => '7 kat pil tüketimi';
+
+  @override
+  String get downgradeLimitQuality => '%30 daha düşük transkripsiyon kalitesi';
+
+  @override
+  String get downgradeLimitDelay => '5-7 saniye gecikme';
+
+  @override
+  String get downgradeLimitSpeakers => 'Konuşmacılar tanımlanamaz';
+
+  @override
+  String get downgradeAnyway => 'Yine de Düşür';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Takvim Bağlı Değil';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Konuşmaları takvim etkinliklerine bağlamak için Google Takvim hesabınızı bağlayın.';
+
+  @override
+  String linkedToEvent(String title) {
+    return '\"$title\" etkinliğine bağlandı';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Takvim etkinliği bağlanamadı';
+
+  @override
+  String get thanksForYourFeedback => 'Geri bildiriminiz için teşekkürler!';
+
+  @override
+  String get copyMessage => 'Mesajı kopyala';
+
+  @override
+  String get searchSettings => 'Ayarlarda ara…';
+
+  @override
+  String get errorLoadingAudio => 'Ses yüklenirken hata oluştu';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Ray-Ban Meta mikrofonunuzu seçin';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Gözlüğünüzün Bluetooth mikrofonunu seçin. Omi mikrofonu kullanırken müzik duraklatılır.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth mikrofonu bulunamadı. Gözlüğünüzü iPhone Ayarları\'ndan bağlayıp tekrar deneyin.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth mikrofonları yüklenemedi. Bluetooth\'un açık olduğunu kontrol edip tekrar deneyin.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Bu mikrofona bağlanılamadı. iPhone Ayarları\'nda bağlı olduğundan emin olun.';
+
+  @override
+  String get syncStatusTooOld => 'Eşitlemek için çok eski — Omi bunu kabul edemez';
+
+  @override
+  String get planSheetChooseYourPlan => 'Sınırsız Omi\'nin kilidini açmak için planını seç.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, mobil ve web\'de kullanılabilir';
+
+  @override
+  String get popularBadge => 'POPÜLER';
+
+  @override
+  String get worksOnDesktop => 'Masaüstünde çalışır';
+
+  @override
+  String get noDesktopAccess => 'Masaüstünde çalışmaz';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months ay / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ay ücretsiz',
+      one: '1 ay ücretsiz',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi ücretsizdir, ancak ücretsiz sürümün deneyimini etkileyen sınırları vardır:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 saniye gecikme (gerçek zamanlı değil)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Ücretsiz sürüme geç';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Ücretsiz sınırsız erişim kazan';
+
+  @override
+  String get shareDataForTraining => 'Eğitim için veri paylaş';
+
+  @override
+  String get yourRequestUnderReview => 'Talebin inceleniyor';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Güncelleme gerekli';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Hesap taşımasından sonra devam etmek için en son Omi uygulamasını yükleyin.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Taşıma devam ediyor';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Hesabınız taşınıyor. Taşıma bitene kadar ürün özellikleri duraklatılır.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Taşıma geri alınmasından sonra hesabınız bakımda. Daha yeni bazı veriler izole kalabilir.';
+
+  @override
+  String get accountCutoverOpenStore => 'Mağazayı aç';
 }

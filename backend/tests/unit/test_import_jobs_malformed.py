@@ -132,3 +132,16 @@ def test_all_valid_jobs_returned():
     page = [{'id': 'a', 'status': _PENDING}, {'id': 'b', 'status': _PENDING}]
     result = _get(page)
     assert [r.job_id for r in result] == ['a', 'b']
+
+
+def test_limit_is_clamped_before_firestore():
+    # get_import_jobs passed the request limit straight to get_import_jobs -> Firestore .limit(), so
+    # ?limit=-1 raised (HTTP 500) and an oversized limit could stream the whole collection. Mirrors the
+    # clamp the sibling dev-API list endpoints already apply.
+    with patch.object(imports_mod.import_jobs_db, 'get_import_jobs', return_value=[]) as m:
+        imports_mod.get_import_jobs(uid='uid1', limit=-1)
+        imports_mod.get_import_jobs(uid='uid1', limit=99999)
+        imports_mod.get_import_jobs(uid='uid1', limit=0)
+    assert m.call_args_list[0].kwargs['limit'] == 1  # -1 -> 1
+    assert m.call_args_list[1].kwargs['limit'] == 1000  # 99999 -> 1000
+    assert m.call_args_list[2].kwargs['limit'] == 1  # 0 -> 1

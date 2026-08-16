@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
-from models.memory_contracts import L1MemoryArchiveItem, LifecycleState, WorkingMemoryObservation
+from models.memory_contracts import L1MemoryArchiveItem, WorkingMemoryObservation
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.memory_read_api import (
     query_archive_product_memory_items,
@@ -177,10 +177,18 @@ def test_query_default_product_memory_items_applies_product_filter_before_matchi
         "automatic", [stale_short, archive, fresh_short, long_term], policy=MemoryAccessPolicy.for_omi_chat(), now=NOW
     )
 
-    assert [result["memory_id"] for result in results] == ["fresh-short", "long-term"]
-    assert {result["tier"] for result in results} == {"short_term", "long_term"}
+    assert [result["memory_id"] for result in results] == ["long-term"]
+    assert {result["tier"] for result in results} == {"long_term"}
     assert results[0]["memory_layer"] == "product_memory"
     assert results[0]["agent_use"] == "default_access_memory"
+
+
+def test_query_default_product_memory_items_excludes_pending_raw_text():
+    pending = _product_item("pending-short", "Unprocessed plugin text must not reach chat.")
+
+    results = query_default_product_memory_items("plugin", [pending], policy=MemoryAccessPolicy.for_omi_chat(), now=NOW)
+
+    assert results == []
 
 
 def test_query_default_product_memory_items_keeps_processed_short_term_visible():
@@ -202,6 +210,104 @@ def test_query_default_product_memory_items_keeps_processed_short_term_visible()
     assert [result["memory_id"] for result in results] == ["processed-short"]
     assert results[0]["access_reason"] == "default_memory_allowed"
     assert results[0]["processing_state"] == "processed"
+
+
+def test_query_default_product_memory_items_collapses_alias_to_canonical_survivor():
+    survivor = _product_item(
+        "canonical-survivor",
+        "Project Beacon uses weekly planning.",
+        canonical_memory_id="canonical-survivor",
+        tier=MemoryTier.long_term,
+        processing_state=ProcessingState.processed,
+        expires_at=None,
+        ledger_commit_id="commit-survivor",
+        ledger_sequence=1,
+        captured_at=NOW - timedelta(days=3),
+        updated_at=NOW - timedelta(days=2),
+    )
+    alias = _product_item(
+        "duplicate-short-term",
+        "Fresh duplicate: Project Beacon uses weekly planning.",
+        canonical_memory_id=survivor.memory_id,
+        processing_state=ProcessingState.processed,
+        updated_at=NOW - timedelta(hours=1),
+    )
+
+    results = query_default_product_memory_items(
+        "Project Beacon",
+        [alias, survivor],
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        now=NOW,
+    )
+
+    assert [result["memory_id"] for result in results] == [survivor.memory_id]
+    assert results[0]["tier"] == MemoryTier.long_term.value
+
+
+def test_query_default_product_memory_items_collapses_tail_entering_alias_cycle():
+    tail = _product_item(
+        "mem-a",
+        "Project Beacon tail",
+        canonical_memory_id="mem-b",
+        processing_state=ProcessingState.processed,
+    )
+    cycle_b = _product_item(
+        "mem-b",
+        "Project Beacon cycle B",
+        canonical_memory_id="mem-c",
+        processing_state=ProcessingState.processed,
+    )
+    cycle_c = _product_item(
+        "mem-c",
+        "Project Beacon cycle C",
+        canonical_memory_id="mem-b",
+        processing_state=ProcessingState.processed,
+    )
+
+    results = query_default_product_memory_items(
+        "Project Beacon",
+        [tail, cycle_b, cycle_c],
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        now=NOW,
+    )
+
+    assert [result["memory_id"] for result in results] == ["mem-b"]
+
+
+def test_query_default_product_memory_items_traverses_ineligible_alias_intermediate():
+    alias = _product_item(
+        "mem-a",
+        "Project Beacon recent alias",
+        canonical_memory_id="mem-b",
+        processing_state=ProcessingState.processed,
+    )
+    restricted_intermediate = _product_item(
+        "mem-b",
+        "Restricted intermediate must not be returned",
+        canonical_memory_id="mem-c",
+        processing_state=ProcessingState.processed,
+        sensitivity_labels=["financial"],
+    )
+    survivor = _product_item(
+        "mem-c",
+        "Project Beacon canonical survivor",
+        canonical_memory_id="mem-c",
+        tier=MemoryTier.long_term,
+        processing_state=ProcessingState.processed,
+        expires_at=None,
+        ledger_commit_id="commit-survivor",
+        ledger_sequence=2,
+    )
+
+    results = query_default_product_memory_items(
+        "Project Beacon",
+        [alias, restricted_intermediate, survivor],
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        now=NOW,
+    )
+
+    assert [result["memory_id"] for result in results] == [survivor.memory_id]
+    assert all(result["memory_id"] != restricted_intermediate.memory_id for result in results)
 
 
 def test_query_default_product_memory_items_excludes_tombstoned_and_restricted_sensitivity():
@@ -240,7 +346,11 @@ def test_query_archive_product_memory_items_is_explicit_and_capability_gated():
         processing_state=ProcessingState.processed,
         expires_at=None,
     )
-    fresh_short = _product_item("fresh-short", "User prefers Rust settings.")
+    fresh_short = _product_item(
+        "fresh-short",
+        "User prefers Rust settings.",
+        processing_state=ProcessingState.processed,
+    )
 
     default_results = query_default_product_memory_items(
         "Rust", [archive, fresh_short], policy=MemoryAccessPolicy.for_omi_chat(), now=NOW

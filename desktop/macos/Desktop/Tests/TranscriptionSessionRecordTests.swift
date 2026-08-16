@@ -1,84 +1,97 @@
 import XCTest
+
 @testable import Omi_Computer
 
 final class TranscriptionSessionRecordTests: XCTestCase {
-    func testBackendIdentityExistsWhenBackendIdIsPresent() {
-        let record = TranscriptionSessionRecord(
-            source: "desktop",
-            backendId: "conversation-a",
-            backendSynced: false
-        )
+  func testConversationRoleDefaultsToAmbientForBackwardCompatibility() {
+    let record = TranscriptionSessionRecord(source: "desktop")
 
-        XCTAssertTrue(record.hasSyncedBackendIdentity)
-    }
+    XCTAssertEqual(record.conversationRole, .ambient)
+  }
 
-    func testBackendIdentityExistsWhenBackendSyncedIsTrue() {
-        let record = TranscriptionSessionRecord(
-            source: "desktop",
-            backendId: nil,
-            backendSynced: true
-        )
+  func testConversationRoleCanBePersistedAsMeeting() {
+    let record = TranscriptionSessionRecord(source: "desktop", conversationRole: .meeting)
 
-        XCTAssertTrue(record.hasSyncedBackendIdentity)
-    }
+    XCTAssertEqual(record.conversationRole, .meeting)
+  }
 
-    func testCompletionAcceptsEmptyBackendIdentity() {
-        let record = TranscriptionSessionRecord(
-            source: "desktop",
-            backendId: nil,
-            backendSynced: false
-        )
+  func testBackendIdentityExistsWhenBackendIdIsPresent() {
+    let record = TranscriptionSessionRecord(
+      source: "desktop",
+      backendId: "conversation-a",
+      backendSynced: false
+    )
 
-        XCTAssertTrue(record.canAcceptCompletion(backendId: "conversation-a"))
-    }
+    XCTAssertTrue(record.hasSyncedBackendIdentity)
+  }
 
-    func testCompletionAcceptsSameBackendId() {
-        let record = TranscriptionSessionRecord(
-            source: "desktop",
-            backendId: "conversation-a",
-            backendSynced: true
-        )
+  func testBackendIdentityExistsWhenBackendSyncedIsTrue() {
+    let record = TranscriptionSessionRecord(
+      source: "desktop",
+      backendId: nil,
+      backendSynced: true
+    )
 
-        XCTAssertTrue(record.canAcceptCompletion(backendId: "conversation-a"))
-    }
+    XCTAssertTrue(record.hasSyncedBackendIdentity)
+  }
 
-    func testCompletionRejectsConflictingBackendId() {
-        let record = TranscriptionSessionRecord(
-            source: "desktop",
-            backendId: "conversation-a",
-            backendSynced: true
-        )
+  func testCompletionAcceptsEmptyBackendIdentity() {
+    let record = TranscriptionSessionRecord(
+      source: "desktop",
+      backendId: nil,
+      backendSynced: false
+    )
 
-        XCTAssertFalse(record.canAcceptCompletion(backendId: "conversation-b"))
-    }
+    XCTAssertTrue(record.canAcceptCompletion(backendId: "conversation-a"))
+  }
 
-    func testLocalListConversationMarksEmptySegmentsAsOmitted() {
-        let record = TranscriptionSessionRecord(source: "desktop", backendId: "conversation-a")
+  func testCompletionAcceptsSameBackendId() {
+    let record = TranscriptionSessionRecord(
+      source: "desktop",
+      backendId: "conversation-a",
+      backendSynced: true
+    )
 
-        let conversation = record.toServerConversation(segments: [])
+    XCTAssertTrue(record.canAcceptCompletion(backendId: "conversation-a"))
+  }
 
-        XCTAssertNotNil(conversation)
-        XCTAssertFalse(conversation!.transcriptSegmentsIncluded)
-        XCTAssertEqual(conversation!.transcriptPresenceState, .omittedFromResponse)
-        XCTAssertTrue(conversation!.shouldFetchDetailForTranscript)
-    }
+  func testCompletionRejectsConflictingBackendId() {
+    let record = TranscriptionSessionRecord(
+      source: "desktop",
+      backendId: "conversation-a",
+      backendSynced: true
+    )
 
-    func testLocalConversationWithSegmentsMarksTranscriptIncluded() {
-        let record = TranscriptionSessionRecord(source: "desktop", backendId: "conversation-a")
-        let segment = TranscriptionSegmentRecord(
-            sessionId: 1,
-            speaker: 0,
-            text: "hello",
-            startTime: 0,
-            endTime: 1,
-            segmentOrder: 0
-        )
+    XCTAssertFalse(record.canAcceptCompletion(backendId: "conversation-b"))
+  }
 
-        let conversation = record.toServerConversation(segments: [segment])
+  func testLocalListConversationMarksEmptySegmentsAsOmitted() {
+    let record = TranscriptionSessionRecord(source: "desktop", backendId: "conversation-a")
 
-        XCTAssertNotNil(conversation)
-        XCTAssertTrue(conversation!.transcriptSegmentsIncluded)
-        XCTAssertEqual(conversation!.transcriptPresenceState, .includedNonEmpty)
-        XCTAssertFalse(conversation!.shouldFetchDetailForTranscript)
-    }
+    let conversation = record.toServerConversation(segments: [])
+
+    XCTAssertNotNil(conversation)
+    XCTAssertFalse(conversation!.transcriptSegmentsIncluded)
+    XCTAssertEqual(conversation!.transcriptPresenceState, .omittedFromResponse)
+    XCTAssertTrue(conversation!.shouldFetchDetailForTranscript)
+  }
+
+  func testLocalConversationWithSegmentsMarksTranscriptIncluded() {
+    let record = TranscriptionSessionRecord(source: "desktop", backendId: "conversation-a")
+    let segment = TranscriptionSegmentRecord(
+      sessionId: 1,
+      speaker: 0,
+      text: "hello",
+      startTime: 0,
+      endTime: 1,
+      segmentOrder: 0
+    )
+
+    let conversation = record.toServerConversation(segments: [segment])
+
+    XCTAssertNotNil(conversation)
+    XCTAssertTrue(conversation!.transcriptSegmentsIncluded)
+    XCTAssertEqual(conversation!.transcriptPresenceState, .includedNonEmpty)
+    XCTAssertFalse(conversation!.shouldFetchDetailForTranscript)
+  }
 }

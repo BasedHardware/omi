@@ -40,6 +40,22 @@ final class ClientDeviceServiceTests: XCTestCase {
     )
   }
 
+  func testDesktopDevBundleAlsoUsesUserDefaultsInstallId() {
+    // Omi Dev must not touch the shared login-keychain device-id item either.
+    let suiteName = "ClientDeviceServiceTests.dev.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer {
+      defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    let service = ClientDeviceService(
+      bundleIdentifier: AppBuild.desktopDevBundleIdentifier,
+      userDefaults: defaults
+    )
+    _ = service.deviceIdHash
+    XCTAssertNotNil(defaults.string(forKey: "dev-client-device-install-uuid"))
+  }
+
   func testNamedDevelopmentBundlesDoNotShareInstallIds() {
     let firstSuiteName = "ClientDeviceServiceTests.first.\(UUID().uuidString)"
     let secondSuiteName = "ClientDeviceServiceTests.second.\(UUID().uuidString)"
@@ -66,5 +82,33 @@ final class ClientDeviceServiceTests: XCTestCase {
       firstDefaults.string(forKey: "dev-client-device-install-uuid"),
       secondDefaults.string(forKey: "dev-client-device-install-uuid")
     )
+  }
+
+  func testProductionMigratesMirroredInstallIdWhenScopedKeychainIsMissing() {
+    let suiteName = "ClientDeviceServiceTests.production-mirror.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    let mirror = "stable-install-id-before-scoped-keychain"
+    defaults.set(mirror, forKey: "client-device-install-uuid-mirror")
+    defer {
+      defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    var persistedInstallIds: [String] = []
+    let service = ClientDeviceService(
+      bundleIdentifier: AppBuild.productionBundleIdentifier,
+      userDefaults: defaults,
+      keychainReader: { .missing },
+      keychainWriter: { persistedInstallIds.append($0) }
+    )
+
+    let expectedHash = SHA256.hash(data: Data(mirror.utf8))
+      .map { String(format: "%02x", $0) }
+      .joined()
+      .prefix(8)
+      .description
+
+    XCTAssertEqual(service.deviceIdHash, expectedHash)
+    XCTAssertEqual(persistedInstallIds, [mirror])
+    XCTAssertEqual(defaults.string(forKey: "client-device-install-uuid-mirror"), mirror)
   }
 }

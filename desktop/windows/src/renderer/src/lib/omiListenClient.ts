@@ -1,9 +1,10 @@
 import { auth } from './firebase'
-import type { BackendSegment, ListenEvent, ListenSource } from '../../../shared/types'
+import type { BackendSegment, ListenEvent, ListenMode, ListenSource } from '../../../shared/types'
 import { getPreferences } from './preferences'
+import { getWindowsDeviceIdHash } from './clientDevice'
 
 export type OmiListenCallbacks = {
-  /** Fires once when the v4/listen WS reaches OPEN. */
+  /** Fires once both the v4/listen WS and the requested audio source are ready. */
   onConnected: () => void
   /** Fires for each batch of finalized segments. */
   onSegments: (segments: BackendSegment[]) => void
@@ -24,64 +25,53 @@ export type OmiListenCallbacks = {
 
 export type OmiListenHandle = {
   stop: () => void
+  /** Ask a transcribe-stream session ('transcribe' mode) to flush its trailing
+   * segment now instead of waiting out silence. No-op for 'conversation'
+   * sessions and for lanes that never reached OPEN. */
+  finalize: () => void
 }
 
 let nextSessionId = 1
 
-async function getSystemAudioStream(): Promise<MediaStream> {
-  let display: MediaStream
-  try {
-    display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-  } catch (e) {
-    const err = e as Error
-    if (/not supported/i.test(err.message)) {
-      throw new Error(
-        'System-audio capture handler not active. Fully restart the app (stop and rerun `npm run dev`) so the main process reloads.'
-      )
-    }
-    throw e
-  }
-  const audioTracks = display.getAudioTracks()
-  display.getVideoTracks().forEach((t) => t.stop())
-  if (audioTracks.length === 0) {
-    throw new Error('Windows returned no system-audio (loopback) track.')
-  }
-  return new MediaStream(audioTracks)
-}
-
 /**
- * Open a v4/listen session for one audio source. The renderer captures PCM
- * with AudioContext, then forwards each
- * 4096-sample buffer to the main process as Int16. The main process owns the
- * WebSocket (needed to set the Authorization header).
+ * Open a v4/listen session for one audio source. The main process owns the
+ * WebSocket (needed to set the Authorization header) and, since Phase 2, the
+ * hidden capture window owns the actual audio capture: this client opens the
+ * session and OWNS the transcript flow in the CALLING window (byte-identical to
+ * before), but the mic/system stream is acquired + fed remotely — we send an
+ * `audio-start` command and the capture window's AudioSessionHost runs the
+ * pipeline → VAD gate → listenFeed(sessionId). A source (mic/loopback) failure
+ * comes back as a routed `audio-source-error` for this sessionId, surfaced here
+ * as a fatal error (same shape as the old in-window capture failure).
  */
 export async function startOmiListen(
   source: ListenSource,
-  cb: OmiListenCallbacks
+  cb: OmiListenCallbacks,
+  mode: Extract<ListenMode, 'conversation' | 'transcribe'> = 'conversation',
+  clientConversationId?: string
 ): Promise<OmiListenHandle> {
   const user = auth.currentUser
   if (!user) throw new Error('Omi v4/listen requires sign-in.')
   const token = await user.getIdToken()
+  const deviceIdHash = await getWindowsDeviceIdHash()
   const sessionId = `omi-listen-${Date.now()}-${nextSessionId++}`
 
-  const stream =
-    source === 'mic'
-      ? await navigator.mediaDevices.getUserMedia({ audio: true })
-      : await getSystemAudioStream()
-
-  const audioCtx = new AudioContext({ sampleRate: 16000 })
-  const node = audioCtx.createMediaStreamSource(stream)
-  const processor = audioCtx.createScriptProcessor(4096, 1, 1)
-  node.connect(processor)
-
   let stopped = false
-  let connected = false
+  let backendConnected = false
+  let audioSourceReady = false
+  let readyNotified = false
 
-  const unsub = window.omi.onListenMessage((msg) => {
+  const notifyReady = (): void => {
+    if (stopped || readyNotified || !backendConnected || !audioSourceReady) return
+    readyNotified = true
+    cb.onConnected()
+  }
+
+  const unsubMsg = window.omi.onListenMessage((msg) => {
     if (msg.sessionId !== sessionId) return
     if (msg.kind === 'connected') {
-      connected = true
-      cb.onConnected()
+      backendConnected = true
+      notifyReady()
     } else if (msg.kind === 'segments') {
       cb.onSegments(msg.segments)
     } else if (msg.kind === 'event') {
@@ -90,17 +80,42 @@ export async function startOmiListen(
       cb.onError(new Error(msg.message), msg.fatal)
     } else if (msg.kind === 'closed') {
       if (stopped) return
-      if (connected) {
+      if (readyNotified) {
         // Connected then dropped (clean, quota, or abnormal) → let the caller
         // end the session and surface an error. Pass the reason so a 1008
         // entitlement/quota close can be reported as such, not a bare code.
         cb.onClosed(msg.code, msg.reason)
       } else {
-        // Never connected → an initial failure; surface as fatal so the caller
-        // reports that transcription couldn't start.
+        // The full source + transport lane never became usable. Surface this as
+        // an initial failure even when the backend socket briefly reached OPEN.
         cb.onError(new Error(`v4/listen closed (${msg.code}) ${msg.reason}`.trim()), true)
       }
     }
+  })
+
+  // The audio stream now lives in the capture window. A failure to acquire it (a
+  // dead/blocked mic, no loopback track) arrives as a routed audio-source-error
+  // for our sessionId — surface it as a fatal source failure.
+  const unsubCapture = window.omi.onCaptureEvent((ev) => {
+    if (stopped) return
+    // The capture window crashed and respawned: its session map is empty, so the
+    // still-open WebSocket would silently starve (frozen transcript, no error).
+    // Re-issue audio-start — AudioSessionHost re-acquires the source and resumes
+    // feeding this session. One seam covers every startOmiListen consumer.
+    if (ev.type === 'capture-window-restarted') {
+      audioSourceReady = false
+      window.omi.captureCommand({ type: 'audio-start', sessionId, source })
+      return
+    }
+    if (ev.type === 'audio-source-ready' && ev.sessionId === sessionId) {
+      audioSourceReady = true
+      notifyReady()
+      return
+    }
+    if (ev.type !== 'audio-source-error' || ev.sessionId !== sessionId) return
+    const error = new Error(ev.message || 'audio source failed')
+    if (ev.name) error.name = ev.name
+    cb.onError(error, true)
   })
 
   try {
@@ -108,71 +123,31 @@ export async function startOmiListen(
       sessionId,
       source,
       token,
-      language: getPreferences().language
+      deviceIdHash,
+      language: getPreferences().language,
+      mode,
+      clientConversationId
     })
   } catch (e) {
-    unsub()
-    try {
-      processor.disconnect()
-    } catch {
-      /* ignore */
-    }
-    try {
-      node.disconnect()
-    } catch {
-      /* ignore */
-    }
-    try {
-      stream.getTracks().forEach((t) => t.stop())
-    } catch {
-      /* ignore */
-    }
-    try {
-      void audioCtx.close()
-    } catch {
-      /* ignore */
-    }
+    unsubMsg()
+    unsubCapture()
     throw e
   }
 
-  processor.onaudioprocess = (e): void => {
-    if (stopped) return
-    const f32 = e.inputBuffer.getChannelData(0)
-    const i16 = new Int16Array(f32.length)
-    for (let i = 0; i < f32.length; i++) {
-      const s = Math.max(-1, Math.min(1, f32[i]))
-      i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff
-    }
-    // Transfer the underlying buffer to keep IPC cheap.
-    window.omi.listenFeed(sessionId, i16.buffer)
-  }
-  processor.connect(audioCtx.destination)
+  // Ask the capture window to acquire this source and stream it (VAD-gated) into
+  // the session we just opened.
+  window.omi.captureCommand({ type: 'audio-start', sessionId, source })
 
   return {
     stop: (): void => {
       stopped = true
-      unsub()
-      try {
-        processor.disconnect()
-      } catch {
-        /* ignore */
-      }
-      try {
-        node.disconnect()
-      } catch {
-        /* ignore */
-      }
-      try {
-        stream.getTracks().forEach((t) => t.stop())
-      } catch {
-        /* ignore */
-      }
-      try {
-        void audioCtx.close()
-      } catch {
-        /* ignore */
-      }
+      unsubMsg()
+      unsubCapture()
+      window.omi.captureCommand({ type: 'audio-stop', sessionId })
       void window.omi.listenStop(sessionId)
+    },
+    finalize: (): void => {
+      window.omi.listenFinalize(sessionId)
     }
   }
 }

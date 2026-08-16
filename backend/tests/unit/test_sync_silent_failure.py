@@ -14,6 +14,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 
 def _read_text(path):
@@ -29,13 +30,13 @@ class TestProcessSegmentErrorHandling:
     """Verify process_segment has proper error handling after the fix."""
 
     @staticmethod
-    def _read_sync_source():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        return _read_text(sync_path)
+    def _read_pipeline_source():
+        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+        return _read_text(pipeline_path)
 
     def test_process_segment_has_try_except(self):
         """process_segment() must wrap its body in try/except to catch all errors."""
-        source = self._read_sync_source()
+        source = self._read_pipeline_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
@@ -43,39 +44,9 @@ class TestProcessSegmentErrorHandling:
         assert 'try:' in func_body, "process_segment must have try/except"
         assert 'except Exception' in func_body, "process_segment must catch exceptions"
 
-    def test_process_segment_treats_empty_words_as_success(self):
-        """When Deepgram returns no words, treat it as a successful empty segment."""
-        source = self._read_sync_source()
-        start = source.index('def process_segment(')
-        next_def = source.index('\ndef ', start + 1)
-        func_body = source[start:next_def]
-        empty_words_block = func_body[func_body.index('if not words:') : func_body.index('transcript_segments')]
-
-        assert 'No transcript words for segment' in empty_words_block, "Must log empty-word segments"
-        assert 'errors.append' not in empty_words_block, "Empty-word segments must not append to errors"
-        assert 'return' in empty_words_block, "Empty-word segments must short-circuit as success"
-
-    def test_process_segment_warns_on_empty_postprocessed(self):
-        """When words exist but postprocessing yields nothing, log warning (not error)."""
-        source = self._read_sync_source()
-        start = source.index('def process_segment(')
-        next_def = source.index('\ndef ', start + 1)
-        func_body = source[start:next_def]
-
-        assert 'Postprocessing returned empty' in func_body, "Must log warning for empty postprocessed segments"
-
-    def test_process_segment_collects_errors_on_exception(self):
-        """When an exception occurs, it must be caught and appended to errors."""
-        source = self._read_sync_source()
-        start = source.index('def process_segment(')
-        next_def = source.index('\ndef ', start + 1)
-        func_body = source[start:next_def]
-
-        assert 'Failed to process segment' in func_body, "Must include error context on exception"
-
     def test_process_segment_uses_lock_for_thread_safety(self):
         """Shared state mutations must be protected by a lock."""
-        source = self._read_sync_source()
+        source = self._read_pipeline_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
@@ -87,7 +58,7 @@ class TestProcessSegmentErrorHandling:
 
     def test_process_segment_accepts_lock_and_errors_params(self):
         """process_segment must accept lock and errors as parameters."""
-        source = self._read_sync_source()
+        source = self._read_pipeline_source()
         start = source.index('def process_segment(')
         sig_end = source.index('):', start) + 2
         signature = source[start:sig_end]
@@ -350,7 +321,7 @@ class TestDeepgramRetryBehavioral:
         mock_client = MagicMock()
         mock_client.listen.rest.v.return_value.transcribe_url.side_effect = ConnectionError('timeout')
 
-        with patch('utils.stt.pre_recorded._deepgram_client', mock_client):
+        with patch('utils.stt.pre_recorded._deepgram_client_for_request', return_value=mock_client):
             with pytest.raises(RuntimeError, match='Deepgram transcription failed after 2 attempts'):
                 self._deepgram_prerecorded('https://fake-audio.wav', attempts=0, return_language=True)
 
@@ -375,7 +346,7 @@ class TestDeepgramRetryBehavioral:
         mock_client = MagicMock()
         mock_client.listen.rest.v.return_value.transcribe_url.return_value = mock_response
 
-        with patch('utils.stt.pre_recorded._deepgram_client', mock_client):
+        with patch('utils.stt.pre_recorded._deepgram_client_for_request', return_value=mock_client):
             words, lang = self._deepgram_prerecorded('https://fake-audio.wav', return_language=True)
 
         assert words == []
@@ -510,33 +481,39 @@ class TestDataLossPreventionFlow:
 
 
 class TestSegmentDeduplication:
-    """Verifies that retried segments are deduplicated in the merge path."""
+    """Verifies that retried / cross-timebase segments are deduplicated on merge."""
 
     @staticmethod
-    def _read_sync_source():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        return _read_text(sync_path)
+    def _read_pipeline_source():
+        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+        return _read_text(pipeline_path)
 
-    def test_merge_path_has_dedup_logic(self):
-        """process_segment merge path must deduplicate before appending."""
-        source = self._read_sync_source()
+    def test_merge_path_calls_shared_dedupe_helper(self):
+        """process_segment merge path must route through dedupe_segments_for_merge."""
+        source = self._read_pipeline_source()
         start = source.index('def process_segment(')
         next_def = source.index('\ndef ', start + 1)
         func_body = source[start:next_def]
 
-        assert 'existing_timestamps' in func_body, "Must build set of existing segment timestamps"
-        assert 'deduped_segments' in func_body, "Must filter out duplicate segments"
+        assert 'dedupe_segments_for_merge(' in func_body, "Must call shared merge dedupe helper"
         assert (
             'not deduped_segments' in func_body or 'if not deduped_segments' in func_body
         ), "Must handle case where all segments are duplicates"
+        assert (
+            'store_partial_merge_survivor_audio(' in func_body
+        ), "Partial dedupe must store sliced private-cloud audio for survivors"
 
-    def test_dedup_uses_timestamp_rounding(self):
-        """Dedup must round timestamps to avoid float precision issues."""
-        source = self._read_sync_source()
+    def test_dedupe_helper_uses_rounding(self):
+        """Shared helper must round timestamps for reliable comparison."""
+        merge_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'merge_dedupe.py')
+        source = _read_text(merge_path)
+        assert 'def dedupe_segments_for_merge(' in source
         assert 'round(' in source, "Must round timestamps for reliable comparison"
 
-    def test_dedup_logic_correctness(self):
-        """Verify the dedup algorithm works correctly with sample data."""
+    def test_dedup_logic_correctness_exact_absolute(self):
+        """Exact absolute-range duplicates (207 retry) are dropped; new ranges kept."""
+        from utils.sync.merge_dedupe import dedupe_segments_for_merge
+
         existing_segments = [
             {'start': 0.0, 'end': 5.0, 'timestamp': 1700000000.0, 'text': 'hello'},
             {'start': 5.0, 'end': 10.0, 'timestamp': 1700000005.0, 'text': 'world'},
@@ -546,41 +523,165 @@ class TestSegmentDeduplication:
             {'start': 10.0, 'end': 15.0, 'timestamp': 1700000010.0, 'text': 'new stuff'},  # new
         ]
 
-        # Build existing set (same logic as in sync.py)
-        existing_timestamps = {
-            (round(s['timestamp'], 2), round(s['timestamp'] + (s['end'] - s['start']), 2)) for s in existing_segments
-        }
-
-        deduped = []
-        for seg in new_segments:
-            seg_key = (round(seg['timestamp'], 2), round(seg['timestamp'] + (seg['end'] - seg['start']), 2))
-            if seg_key not in existing_timestamps:
-                deduped.append(seg)
+        deduped = dedupe_segments_for_merge(1700000000.0, existing_segments, new_segments)
 
         assert len(deduped) == 1, "Should filter out 1 duplicate"
         assert deduped[0]['text'] == 'new stuff', "Should keep only the new segment"
 
     def test_all_duplicates_skips_merge(self):
-        """When all new segments are duplicates, merge is skipped entirely."""
+        """When all new segments are exact absolute duplicates, nothing remains."""
+        from utils.sync.merge_dedupe import dedupe_segments_for_merge
+
         existing_segments = [
-            {'start': 0.0, 'end': 5.0, 'timestamp': 1700000000.0},
+            {'start': 0.0, 'end': 5.0, 'timestamp': 1700000000.0, 'text': 'hello'},
         ]
         new_segments = [
-            {'start': 0.0, 'end': 5.0, 'timestamp': 1700000000.0},  # exact duplicate
+            {'start': 0.0, 'end': 5.0, 'timestamp': 1700000000.0, 'text': 'hello'},
         ]
 
-        existing_timestamps = {
-            (round(s['timestamp'], 2), round(s['timestamp'] + (s['end'] - s['start']), 2)) for s in existing_segments
-        }
-
-        deduped = [
-            seg
-            for seg in new_segments
-            if (round(seg['timestamp'], 2), round(seg['timestamp'] + (seg['end'] - seg['start']), 2))
-            not in existing_timestamps
-        ]
-
+        deduped = dedupe_segments_for_merge(1700000000.0, existing_segments, new_segments)
         assert len(deduped) == 0, "All duplicates should be filtered"
+
+    def test_dedup_skips_same_text_when_chunk_timestamp_offset(self):
+        """Regression #4769: live/offline merge with clock offset must not duplicate lines."""
+        from utils.sync.merge_dedupe import dedupe_segments_for_merge
+
+        conv_start = 1_700_000_000.0
+        existing = [
+            {
+                'start': 0.0,
+                'end': 5.0,
+                'timestamp': conv_start,
+                'text': 'Hello there, how is the project going',
+                'speaker': 'SPEAKER_00',
+            },
+            {
+                'start': 5.0,
+                'end': 12.0,
+                'timestamp': conv_start + 5.0,
+                'text': 'How are you doing with the offline sync',
+                'speaker': 'SPEAKER_00',
+            },
+        ]
+        # Same spoken content, WAL filename ~5 min ahead of conversation started_at
+        offset = 300.0
+        incoming = [
+            {
+                'start': 0.0,
+                'end': 5.0,
+                'timestamp': conv_start + offset,
+                'text': 'Hello there, how is the project going',
+                'speaker': 'SPEAKER_00',
+            },
+            {
+                'start': 5.0,
+                'end': 12.0,
+                'timestamp': conv_start + offset + 5.0,
+                'text': 'How are you doing with the offline sync',
+                'speaker': 'SPEAKER_00',
+            },
+        ]
+
+        deduped = dedupe_segments_for_merge(conv_start, existing, incoming)
+        assert deduped == [], "Offset duplicate transcript lines must be dropped (#4769)"
+
+    def test_dedup_keeps_same_text_outside_slop_window(self):
+        """Repeated phrase far later in the conversation is not a clock-offset duplicate."""
+        from utils.sync.merge_dedupe import dedupe_segments_for_merge
+
+        conv_start = 1_700_000_000.0
+        existing = [
+            {
+                'start': 0.0,
+                'end': 5.0,
+                'timestamp': conv_start,
+                'text': 'We should schedule the offline sync review',
+            },
+        ]
+        # Same long phrase 20 minutes later — keep it
+        later = 20 * 60
+        incoming = [
+            {
+                'start': 0.0,
+                'end': 5.0,
+                'timestamp': conv_start + later,
+                'text': 'We should schedule the offline sync review',
+            },
+        ]
+
+        deduped = dedupe_segments_for_merge(conv_start, existing, incoming)
+        assert len(deduped) == 1
+        assert deduped[0]['text'] == 'We should schedule the offline sync review'
+
+    def test_dedup_keeps_short_repeated_backchannel_inside_slop(self):
+        """Short backchannels inside the slop window must not be silently dropped."""
+        from utils.sync.merge_dedupe import dedupe_segments_for_merge
+
+        conv_start = 1_700_000_000.0
+        existing = [
+            {'start': 0.0, 'end': 1.0, 'timestamp': conv_start, 'text': 'yeah'},
+        ]
+        incoming = [
+            {'start': 0.0, 'end': 1.0, 'timestamp': conv_start + 30.0, 'text': 'yeah'},
+        ]
+
+        deduped = dedupe_segments_for_merge(conv_start, existing, incoming)
+        assert len(deduped) == 1
+        assert deduped[0]['text'] == 'yeah'
+
+
+class TestMergeSurvivorAudio:
+    """Private-cloud slices for partial merge survivors (#4769 David CR)."""
+
+    def test_pcm16_16k_slice_is_sample_aligned(self):
+        from utils.sync.merge_audio import pcm16_16k_slice
+
+        pcm = b'\x00\x01' * 16000  # 1 second
+        sliced = pcm16_16k_slice(pcm, 0.25, 0.75)
+        assert len(sliced) == 16000  # 0.5s * 32000 B/s
+        assert len(sliced) % 2 == 0
+
+    def test_store_partial_uploads_one_chunk_per_survivor(self):
+        from types import ModuleType
+        from unittest.mock import MagicMock, patch
+
+        from utils.sync import merge_audio
+
+        survivors = [
+            {'start': 1.0, 'end': 2.0, 'timestamp': 1700000001.0, 'text': 'kept line'},
+        ]
+        pcm = b'\x00\x01' * 16000 * 3  # 3 seconds
+        expected_slice = pcm[32000:64000]
+
+        # Avoid importing the real utils.other.storage (slow) in a timing-guarded
+        # unit test; stub it via sys.modules so store_partial_merge_survivor_audio's
+        # local import resolves instantly.
+        import sys
+
+        mock_upload = MagicMock()
+        mock_storage = ModuleType('utils.other.storage')
+        mock_storage.upload_audio_chunk = mock_upload
+
+        with (
+            patch.object(merge_audio, '_wav_bytes_to_pcm16_16k', return_value=pcm),
+            patch.dict(sys.modules, {'utils.other.storage': mock_storage}),
+        ):
+            merge_audio.store_partial_merge_survivor_audio(
+                uid='uid',
+                conversation_id='conv',
+                file_timestamp=1700000000.0,
+                audio_bytes=b'wav',
+                data_protection_level='standard',
+                survivors=survivors,
+            )
+
+        mock_upload.assert_called_once()
+        args = mock_upload.call_args.args
+        assert args[0] == expected_slice
+        assert args[1] == 'uid'
+        assert args[2] == 'conv'
+        assert args[3] == 1700000001.0
+        assert args[4] == 'standard'
 
 
 # ---------------------------------------------------------------------------
@@ -589,12 +690,13 @@ class TestSegmentDeduplication:
 
 import sys
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 _STUB_MODULES = [
     'models',
     'models.conversation',
     'models.conversation_enums',
+    'models.sync_audio',
     'models.transcript_segment',
     'database._client',
     'database.redis_db',
@@ -602,6 +704,7 @@ _STUB_MODULES = [
     'database.users',
     'database.user_usage',
     'database.conversations',
+    'database.sync_ledger',
     'firebase_admin',
     'firebase_admin.messaging',
     'opuslib',
@@ -618,6 +721,7 @@ _STUB_MODULES = [
     'utils.fair_use',
     'utils.subscription',
     'utils.cloud_tasks',
+    'utils.sync.content_id',
     'utils.conversations.process_conversation',
     'python_multipart',
     'python_multipart.multipart',
@@ -638,8 +742,9 @@ class TestProcessSegmentReal:
     def setup_class(cls):
         # Save originals
         cls._saved_modules = {name: sys.modules.get(name) for name in _STUB_MODULES}
-        # Also save routers.sync if already imported
-        cls._saved_modules['routers.sync'] = sys.modules.get('routers.sync')
+        # Also save pipeline if already imported
+        cls._saved_modules['utils.sync.pipeline'] = sys.modules.get('utils.sync.pipeline')
+        cls._saved_modules['utils.sync'] = sys.modules.get('utils.sync')
 
         # Install stubs
         for mod_name in _STUB_MODULES:
@@ -678,17 +783,40 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage']._PRECACHE_FILE_SEM = MagicMock()
         sys.modules['utils.other.storage'].upload_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_syncing_temporal_file = MagicMock(return_value=True)
+        sys.modules['utils.other.storage'].compute_audio_files_fingerprint = MagicMock(return_value='fp')
+        sys.modules['utils.other.storage'].enqueue_conversation_artifact_build = MagicMock()
+        sys.modules['utils.other.storage'].get_conversation_playback_signed_url = MagicMock(return_value=None)
+        sys.modules['utils.other.storage'].upload_conversation_playback_artifact = MagicMock()
+        sys.modules['utils.other.storage'].mark_conversation_playback_unavailable = MagicMock()
+        sys.modules['utils.other.storage'].get_conversation_playback_unavailable_fingerprint = MagicMock(
+            return_value=None
+        )
         sys.modules['utils.cloud_tasks'].enqueue_sync_job = MagicMock()
         sys.modules['utils.cloud_tasks'].get_sync_tasks_max_attempts = MagicMock(return_value=5)
         sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
+        sys.modules['database.sync_ledger'].add_processed_sync_segment_id = MagicMock(return_value=True)
+        sys.modules['database.sync_ledger'].bind_sync_content_run_token = MagicMock()
+        sys.modules['database.sync_ledger'].checkpoint_sync_content_partial_result = MagicMock()
+        sys.modules['database.sync_ledger'].get_processed_sync_segment_ids = MagicMock(return_value=set())
+        sys.modules['database.sync_ledger'].get_sync_content_partial_result = MagicMock(return_value=None)
+        sys.modules['database.sync_ledger'].is_valid_completed_sync_content_result = MagicMock(return_value=True)
+        sys.modules['database.sync_ledger'].mark_sync_content_completed = MagicMock()
+        sys.modules['database.sync_ledger'].release_sync_content_claim_after_job_retired = MagicMock()
+        sys.modules['database.sync_ledger'].release_sync_content_claim = MagicMock()
+        sys.modules['database.sync_ledger'].try_mark_sync_content_metered = MagicMock(return_value=True)
+        sys.modules['database.sync_ledger'].try_mark_sync_content_side_effect = MagicMock(return_value=True)
+        sys.modules['utils.sync.content_id'].compute_sync_segment_id = MagicMock(return_value='segment-id')
         sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
         sys.modules['utils.encryption'].encrypt = MagicMock()
         sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
         sys.modules['utils.stt.pre_recorded'].prerecorded = MagicMock()
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
+        sys.modules['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(
+            return_value=('deepgram', 'multi', 'nova-3')
+        )
         sys.modules['utils.stt.vad'].vad_is_empty = MagicMock()
         sys.modules['utils.speaker_assignment'].process_speaker_assigned_segments = MagicMock()
         sys.modules['utils.speaker_identification'].detect_speaker_from_text = MagicMock(return_value=None)
@@ -736,18 +864,28 @@ class TestProcessSegmentReal:
         sys.modules['models.conversation'].Conversation = _Conversation
         sys.modules['models.transcript_segment'].TranscriptSegment = _TranscriptSegment
 
-        # Import under stubs
-        from routers.sync import process_segment
-        import routers.sync as sync_mod
+        class _AudioPrecacheResponse(BaseModel):
+            pass
 
-        sync_mod.submit_with_context = MagicMock()
+        class _AudioUrlsResponse(BaseModel):
+            pass
+
+        sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
+        sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
+
+        sync_pkg = ModuleType('utils.sync')
+        sync_pkg.__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync')]
+        sys.modules['utils.sync'] = sync_pkg
+        sys.modules.pop('utils.sync.pipeline', None)
+
+        # Import under stubs
+        from utils.sync.pipeline import process_segment
 
         cls._process_segment = staticmethod(process_segment)
 
     @classmethod
     def teardown_class(cls):
-        # Remove routers.sync so it can be re-imported cleanly
-        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
         # Restore original modules
         for name, orig in cls._saved_modules.items():
             if orig is None:
@@ -759,51 +897,58 @@ class TestProcessSegmentReal:
     def _import_process_segment(self):
         return self._process_segment
 
-    def test_empty_words_are_successful_noop(self):
-        """Real process_segment: empty Deepgram words → success with no memory changes."""
+    def test_empty_words_after_vad_are_silence_not_failure(self):
+        """Speech-eligible input with no provider words is silence, not a failure.
+
+        VAD over-reports on noise, so a provider returning nothing is the
+        authority on whether there was speech. The segment produces nothing and
+        records no error, so its job does not fail and the client stops
+        re-uploading it as a failed recording."""
         process_segment = self._import_process_segment()
 
         response = {'updated_memories': set(), 'new_memories': set()}
         errors = []
         lock = threading.Lock()
 
-        with patch('routers.sync.prerecorded', return_value=([], 'en')), patch(
-            'routers.sync.delete_syncing_temporal_file'
-        ), patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
-            'routers.sync.time.sleep'
+        with patch('utils.sync.pipeline.prerecorded', return_value=([], 'en')), patch(
+            'utils.sync.pipeline.delete_syncing_temporal_file'
+        ), patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
-            process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
+            result = process_segment(
+                '/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False
+            )
 
-        assert len(errors) == 0, "Empty words must not be treated as an error"
+        assert result is False
+        assert errors == []
         assert len(response['new_memories']) == 0
         assert len(response['updated_memories']) == 0
 
-    def test_empty_postprocessed_skips_without_error(self):
-        """Real process_segment: words present but postprocessing empty → warning, no error.
-
-        When Deepgram returns words but postprocess_words yields no segments,
-        it's a legitimate edge case (e.g. all words filtered out). Not an error.
-        """
+    def test_empty_postprocessed_after_vad_is_silence_not_failure(self):
+        """Provider words filtered to no segments is silence, not a failure."""
         process_segment = self._import_process_segment()
 
         response = {'updated_memories': set(), 'new_memories': set()}
         errors = []
         lock = threading.Lock()
 
-        with patch('routers.sync.prerecorded', return_value=([{'text': 'um'}], 'en')), patch(
-            'routers.sync.postprocess_words', return_value=[]
-        ), patch('routers.sync.delete_syncing_temporal_file'), patch(
-            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'um'}], 'en')), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[]
+        ), patch('utils.sync.pipeline.delete_syncing_temporal_file'), patch(
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'routers.sync.time.sleep'
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
-            process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
+            result = process_segment(
+                '/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False
+            )
 
-        assert len(errors) == 0, "Empty postprocessed segments must NOT be treated as an error"
+        assert result is False
+        assert errors == []
         assert len(response['new_memories']) == 0
         assert len(response['updated_memories']) == 0
 
@@ -815,18 +960,16 @@ class TestProcessSegmentReal:
         errors = []
         lock = threading.Lock()
 
-        with patch('routers.sync.prerecorded', side_effect=ConnectionError('timeout')), patch(
-            'routers.sync.delete_syncing_temporal_file'
-        ), patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
-            'routers.sync.time.sleep'
+        with patch('utils.sync.pipeline.prerecorded', side_effect=ConnectionError('timeout')), patch(
+            'utils.sync.pipeline.delete_syncing_temporal_file'
+        ), patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
             process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
-        assert len(errors) == 1
-        assert 'Failed to process segment' in errors[0]
-        assert 'timeout' in errors[0]
+        assert errors == ['stt_upstream_error']
 
     def _make_real_segment(self):
         """Create a real TranscriptSegment for Pydantic validation."""
@@ -846,18 +989,18 @@ class TestProcessSegmentReal:
         mock_conv = MagicMock()
         mock_conv.id = 'conv-abc123'
 
-        with patch('routers.sync.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
-            'routers.sync.postprocess_words', return_value=[real_segment]
-        ), patch('routers.sync.get_timestamp_from_path', return_value=1700000000.0), patch(
-            'routers.sync.get_closest_conversation_to_timestamps', return_value=None
+        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[real_segment]
+        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0), patch(
+            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None
         ), patch(
-            'routers.sync.process_conversation', return_value=mock_conv
+            'utils.sync.pipeline.process_conversation', return_value=mock_conv
         ), patch(
-            'routers.sync.delete_syncing_temporal_file'
+            'utils.sync.pipeline.delete_syncing_temporal_file'
         ), patch(
-            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'routers.sync.time.sleep'
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -889,18 +1032,18 @@ class TestProcessSegmentReal:
         mock_conv = MagicMock()
         mock_conv.id = 'conv-success'
 
-        with patch('routers.sync.prerecorded', side_effect=mock_deepgram_mixed), patch(
-            'routers.sync.postprocess_words', return_value=[real_segment]
-        ), patch('routers.sync.get_timestamp_from_path', return_value=1700000000.0), patch(
-            'routers.sync.get_closest_conversation_to_timestamps', return_value=None
+        with patch('utils.sync.pipeline.prerecorded', side_effect=mock_deepgram_mixed), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[real_segment]
+        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0), patch(
+            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None
         ), patch(
-            'routers.sync.process_conversation', return_value=mock_conv
+            'utils.sync.pipeline.process_conversation', return_value=mock_conv
         ), patch(
-            'routers.sync.delete_syncing_temporal_file'
+            'utils.sync.pipeline.delete_syncing_temporal_file'
         ), patch(
-            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'routers.sync.time.sleep'
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -918,7 +1061,7 @@ class TestProcessSegmentReal:
 
         # 2 succeeded, 1 failed (exception)
         assert len(errors) == 1, f"Expected 1 error, got {len(errors)}: {errors}"
-        assert 'Failed to process segment' in errors[0]
+        assert errors[0] == 'stt_upstream_error'
         assert len(response['new_memories']) >= 1  # At least 1 success
 
     def test_dedup_skips_existing_segments_on_retry(self):
@@ -931,7 +1074,7 @@ class TestProcessSegmentReal:
 
         mock_segment = MagicMock()
         mock_segment.end = 5.0
-        mock_segment.dict.return_value = {'start': 0.0, 'end': 5.0, 'text': 'hello', 'speaker': 'SPEAKER_00'}
+        mock_segment.model_dump.return_value = {'start': 0.0, 'end': 5.0, 'text': 'hello', 'speaker': 'SPEAKER_00'}
 
         # Simulate existing conversation with the SAME segments (retry scenario)
         existing_conv = {
@@ -948,18 +1091,18 @@ class TestProcessSegmentReal:
 
         existing_conv['finished_at'] = datetime.fromtimestamp(1700000005.0, tz=timezone.utc)
 
-        with patch('routers.sync.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
-            'routers.sync.postprocess_words', return_value=[mock_segment]
-        ), patch('routers.sync.get_timestamp_from_path', return_value=1700000000.0), patch(
-            'routers.sync.get_closest_conversation_to_timestamps', return_value=existing_conv
+        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[mock_segment]
+        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000.0), patch(
+            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
         ), patch(
-            'routers.sync.update_conversation_segments'
+            'utils.sync.pipeline.update_conversation_segments'
         ) as mock_update, patch(
-            'routers.sync.delete_syncing_temporal_file'
+            'utils.sync.pipeline.delete_syncing_temporal_file'
         ), patch(
-            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'routers.sync.time.sleep'
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
@@ -970,45 +1113,177 @@ class TestProcessSegmentReal:
         assert len(errors) == 0
         assert 'conv-existing' in response['updated_memories']
 
-    def test_all_silent_segments_return_200_not_500(self):
-        """When ALL segments are silent (empty words), endpoint should return 200 — not 500.
-
-        This is the core bug in #6100: all-silent batches were treated as all-failed,
-        triggering the 500 branch. Now empty words = success, so all-silent = 200.
-        """
+    def test_dedup_skips_offset_duplicate_transcript_lines(self):
+        """Regression #4769: same text with clock-offset WAL timestamp must skip merge."""
         process_segment = self._import_process_segment()
 
         response = {'updated_memories': set(), 'new_memories': set()}
         errors = []
         lock = threading.Lock()
 
-        # Run 3 segments that all return empty words (silence)
-        with patch('routers.sync.prerecorded', return_value=([], 'en')), patch(
-            'routers.sync.delete_syncing_temporal_file'
-        ), patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
-            'routers.sync.time.sleep'
+        mock_segment = MagicMock()
+        mock_segment.end = 5.0
+        mock_segment.model_dump.return_value = {
+            'start': 0.0,
+            'end': 5.0,
+            'text': 'hello there from the offline wal chunk',
+            'speaker': 'SPEAKER_00',
+        }
+
+        from datetime import datetime, timezone
+
+        conv_start = 1700000000.0
+        existing_conv = {
+            'id': 'conv-live',
+            'started_at': MagicMock(timestamp=MagicMock(return_value=conv_start)),
+            'finished_at': datetime.fromtimestamp(conv_start + 5.0, tz=timezone.utc),
+            'transcript_segments': [
+                {'start': 0.0, 'end': 5.0, 'text': 'hello there from the offline wal chunk', 'speaker': 'SPEAKER_00'},
+            ],
+            'discarded': False,
+        }
+
+        # Offline WAL filename ~5 minutes ahead of live conversation start
+        wal_ts = conv_start + 300.0
+
+        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[mock_segment]
+        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=wal_ts), patch(
+            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
+        ), patch(
+            'utils.sync.pipeline.update_conversation_segments'
+        ) as mock_update, patch(
+            'utils.sync.pipeline.delete_syncing_temporal_file'
+        ), patch(
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'utils.sync.pipeline.time.sleep'
+        ):
+            from models.conversation_enums import ConversationSource
+
+            process_segment(f'/tmp/{int(wal_ts)}.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
+
+        mock_update.assert_not_called()
+        assert len(errors) == 0
+        assert 'conv-live' in response['updated_memories']
+
+    def test_partial_dedupe_private_cloud_stores_survivor_slices(self):
+        """#4769 David CR: mixed chunk keeps audio for new lines without full WAV."""
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        # Same absolute timebase as the conversation: first line is an exact
+        # absolute duplicate (207-style), second line is genuinely new.
+        dup_seg = MagicMock()
+        dup_seg.end = 5.0
+        dup_seg.model_dump.return_value = {
+            'start': 0.0,
+            'end': 5.0,
+            'text': 'already on the conversation from earlier upload',
+            'speaker': 'SPEAKER_00',
+        }
+        new_seg = MagicMock()
+        new_seg.end = 10.0
+        new_seg.model_dump.return_value = {
+            'start': 5.0,
+            'end': 10.0,
+            'text': 'and then this brand new sentence arrives here',
+            'speaker': 'SPEAKER_00',
+        }
+
+        from datetime import datetime, timezone
+
+        conv_start = 1700000000.0
+        existing_conv = {
+            'id': 'conv-live',
+            'started_at': MagicMock(timestamp=MagicMock(return_value=conv_start)),
+            'finished_at': datetime.fromtimestamp(conv_start + 5.0, tz=timezone.utc),
+            'transcript_segments': [
+                {
+                    'start': 0.0,
+                    'end': 5.0,
+                    'text': 'already on the conversation from earlier upload',
+                    'speaker': 'SPEAKER_00',
+                },
+            ],
+            'discarded': False,
+        }
+
+        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[dup_seg, new_seg]
+        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=conv_start), patch(
+            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
+        ), patch(
+            'utils.sync.pipeline.update_conversation_segments'
+        ) as mock_update, patch(
+            'utils.sync.pipeline.delete_syncing_temporal_file'
+        ), patch(
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'utils.sync.pipeline._download_audio_bytes', return_value=b'fake-wav'
+        ), patch(
+            'utils.sync.pipeline._store_sync_audio_chunk'
+        ) as mock_full_store, patch(
+            'utils.sync.pipeline.store_partial_merge_survivor_audio'
+        ) as mock_partial_store, patch(
+            'utils.sync.pipeline.time.sleep'
+        ):
+            from models.conversation_enums import ConversationSource
+
+            process_segment(
+                f'/tmp/{int(conv_start)}.wav',
+                'uid',
+                response,
+                lock,
+                errors,
+                ConversationSource.omi,
+                False,
+                private_cloud_sync_enabled=True,
+            )
+
+        mock_update.assert_called_once()
+        mock_full_store.assert_not_called()
+        mock_partial_store.assert_called_once()
+        survivors = mock_partial_store.call_args.kwargs['survivors']
+        assert len(survivors) == 1
+        assert survivors[0]['text'] == 'and then this brand new sentence arrives here'
+        assert survivors[0]['start'] == 5.0
+        assert survivors[0]['end'] == 10.0
+        assert len(errors) == 0
+        assert 'conv-live' in response['updated_memories']
+
+    def test_speech_eligible_empty_segments_complete_as_silence(self):
+        """VAD-positive segments that all transcribe empty complete, not fail.
+
+        A recording that is entirely noise records no segment errors, so its job
+        finalizes completed rather than failed and is not offered back to the
+        client for a retry that would repeat identically."""
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        # VAD selected these three as speech-eligible; every one transcribes empty.
+        with patch('utils.sync.pipeline.prerecorded', return_value=([], 'en')), patch(
+            'utils.sync.pipeline.delete_syncing_temporal_file'
+        ), patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'), patch(
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
             for i in range(3):
                 process_segment(f'/tmp/{i}.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
-        # All segments returned silently — zero errors
         total_segments = 3
         failed_segments = len(errors)
-        successful_segments = total_segments - failed_segments
 
-        assert failed_segments == 0, f"Silent segments must not produce errors: {errors}"
-        assert successful_segments == 3
-
-        # Endpoint logic: no failures → 200 (not 207, not 500)
-        if total_segments > 0 and successful_segments == 0:
-            status = 500
-        elif failed_segments > 0:
-            status = 207
-        else:
-            status = 200
-        assert status == 200, "All-silent batch must return 200, not 500"
+        # No errors → _sync_job_finalization_updates yields 'completed'.
+        assert errors == []
+        assert failed_segments == 0
 
     def test_runtime_error_from_dg_becomes_segment_error(self):
         """When deepgram_prerecorded raises RuntimeError (retry exhaustion),
@@ -1020,20 +1295,18 @@ class TestProcessSegmentReal:
         lock = threading.Lock()
 
         with patch(
-            'routers.sync.prerecorded',
+            'utils.sync.pipeline.prerecorded',
             side_effect=RuntimeError('Deepgram transcription failed after 2 attempts: timeout'),
-        ), patch('routers.sync.delete_syncing_temporal_file'), patch(
-            'routers.sync.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch('utils.sync.pipeline.delete_syncing_temporal_file'), patch(
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
         ), patch(
-            'routers.sync.time.sleep'
+            'utils.sync.pipeline.time.sleep'
         ):
             from models.conversation_enums import ConversationSource
 
             process_segment('/tmp/1700000000.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
-        assert len(errors) == 1
-        assert 'Failed to process segment' in errors[0]
-        assert 'Deepgram transcription failed after 2 attempts' in errors[0]
+        assert errors == ['stt_upstream_error']
 
 
 # ---------------------------------------------------------------------------
@@ -1069,13 +1342,14 @@ _CHAT_STUB_MODULES = [
     'utils.notifications',
     'utils.retrieval.graph',
     'utils.stt.pre_recorded',
+    'utils.stt.vad',
     'utils.llm.usage_tracker',
     'utils.log_sanitizer',
 ]
 
 
 class TestVoiceMessageRuntimeErrorHandling:
-    """Tests that voice message functions in utils/chat.py handle RuntimeError from prerecorded."""
+    """Voice message helpers preserve typed provider failures for their routers."""
 
     _saved_modules = {}
     _transcribe_fn = None
@@ -1111,6 +1385,7 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
         sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.notifications'].send_notification = MagicMock()
+        sys.modules['utils.notifications'].send_notification_async = AsyncMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat = MagicMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat_stream = MagicMock()
         sys.modules['utils.log_sanitizer'].sanitize = lambda v: v
@@ -1141,10 +1416,20 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
 
         # STT stubs
+        sys.modules['utils.stt.pre_recorded'].PrerecordedSTTConfigurationError = type(
+            'PrerecordedSTTConfigurationError', (RuntimeError,), {}
+        )
         sys.modules['utils.stt.pre_recorded'].prerecorded = MagicMock()
         sys.modules['utils.stt.pre_recorded'].prerecorded_from_bytes = MagicMock()
         sys.modules['utils.stt.pre_recorded'].postprocess_words = MagicMock()
         sys.modules['utils.stt.pre_recorded'].get_deepgram_model_for_language = MagicMock(return_value=('en', 'nova-3'))
+        sys.modules['utils.stt.pre_recorded'].get_prerecorded_service = MagicMock(
+            return_value=('deepgram', 'en', 'nova-3')
+        )
+        sys.modules['utils.stt.vad'].VADAudioDecodeError = type('VADAudioDecodeError', (RuntimeError,), {})
+        sys.modules['utils.stt.vad'].VADProcessingError = type('VADProcessingError', (RuntimeError,), {})
+        sys.modules['utils.stt.vad'].linear16_pcm_is_silent = MagicMock(return_value=False)
+        sys.modules['utils.stt.vad'].vad_is_empty_strict = MagicMock(return_value=False)
 
         # Usage tracker stub
         sys.modules['utils.llm.usage_tracker'].track_usage = MagicMock()
@@ -1159,7 +1444,6 @@ class TestVoiceMessageRuntimeErrorHandling:
             process_voice_message_segment,
             process_voice_message_segment_stream,
         )
-        import utils.chat as chat_mod
 
         cls._transcribe_fn = staticmethod(transcribe_voice_message_segment)
         cls._process_fn = staticmethod(process_voice_message_segment)
@@ -1175,42 +1459,48 @@ class TestVoiceMessageRuntimeErrorHandling:
                 sys.modules[name] = orig
         cls._saved_modules.clear()
 
-    def test_transcribe_voice_message_handles_runtime_error(self):
-        """transcribe_voice_message_segment returns (None, lang) on RuntimeError, not crash."""
+    def test_transcribe_voice_message_propagates_typed_failure(self):
+        """Provider errors cannot be reclassified as an empty successful result."""
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
+
         with patch(
             'utils.chat.prerecorded',
             side_effect=RuntimeError('Deepgram transcription failed after 2 attempts: timeout'),
         ):
-            result = self._transcribe_fn('/tmp/test.wav', 'uid', language='en')
+            with pytest.raises(TranscriptionFailure) as exc_info:
+                self._transcribe_fn('/tmp/test.wav', 'uid', language='en')
+        assert exc_info.value.outcome == TranscriptionOutcome.UPSTREAM_ERROR
 
-        assert result == (None, 'en'), f"Expected (None, 'en'), got {result}"
+    def test_process_voice_message_propagates_typed_failure(self):
+        """The chat-producing wrapper does not swallow provider failures."""
+        from utils.stt.outcomes import TranscriptionFailure
 
-    def test_process_voice_message_handles_runtime_error(self):
-        """process_voice_message_segment returns [] on RuntimeError, not crash."""
         with patch(
             'utils.chat.prerecorded',
             side_effect=RuntimeError('Deepgram transcription failed after 2 attempts: timeout'),
         ):
-            result = self._process_fn('/tmp/test.wav', 'uid', language='en')
+            with pytest.raises(TranscriptionFailure):
+                self._process_fn('/tmp/test.wav', 'uid', language='en')
 
-        assert result == [], f"Expected [], got {result}"
-
-    def test_process_voice_message_stream_handles_runtime_error(self):
-        """process_voice_message_segment_stream returns (no yield) on RuntimeError, not crash."""
+    def test_process_voice_message_stream_propagates_typed_failure(self):
+        """The SSE utility propagates; the router converts this to a typed error frame."""
         import asyncio
 
+        from utils.stt.outcomes import TranscriptionFailure
+
         async def run():
-            chunks = []
-            with patch(
+            async def _run_inline(_executor, fn, *args, **kwargs):
+                return fn(*args, **kwargs)
+
+            with patch('utils.chat.run_blocking', side_effect=_run_inline), patch(
                 'utils.chat.prerecorded',
                 side_effect=RuntimeError('Deepgram transcription failed after 2 attempts: timeout'),
             ):
-                async for chunk in self._process_stream_fn('/tmp/test.wav', 'uid', language='en'):
-                    chunks.append(chunk)
-            return chunks
+                async for _chunk in self._process_stream_fn('/tmp/test.wav', 'uid', language='en'):
+                    pass
 
-        result = asyncio.run(run())
-        assert result == [], f"Expected no chunks, got {result}"
+        with pytest.raises(TranscriptionFailure):
+            asyncio.run(run())
 
 
 class TestVoiceMessageRuntimeErrorTeardown:

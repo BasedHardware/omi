@@ -81,6 +81,8 @@ sys.modules["database.auth"].get_user_name = MagicMock(return_value="Test User")
 _stub_package("langchain_core")
 langchain_output_parsers = _stub_module("langchain_core.output_parsers")
 langchain_output_parsers.PydanticOutputParser = MagicMock()
+langchain_messages = _stub_module("langchain_core.messages")
+langchain_messages.SystemMessage = MagicMock()
 langchain_prompts = _stub_module("langchain_core.prompts")
 langchain_prompts.ChatPromptTemplate = MagicMock()
 
@@ -91,6 +93,15 @@ llm_clients_stub = _stub_module("utils.llm.clients")
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
 llm_clients_stub.get_llm_gateway_chat_structured = MagicMock(return_value=MagicMock())
 llm_clients_stub.parser = MagicMock()
+usage_tracker_stub = _stub_module("utils.llm.usage_tracker")
+
+
+class _Features:
+    CONVERSATION_STRUCTURE = "conversation_structure"
+
+
+usage_tracker_stub.Features = _Features
+usage_tracker_stub.track_usage = MagicMock()
 conversation_folder_stub = _stub_module("utils.llm.conversation_folder")
 conversation_folder_stub.FolderAssignment = MagicMock
 conversation_folder_stub.assign_conversation_to_folder = MagicMock(return_value=None)
@@ -112,6 +123,10 @@ conversation_folder_stub.FolderAssignment = MagicMock()
 conversation_folder_stub.assign_conversation_to_folder = MagicMock(return_value=(None, 0.0, "test stub"))
 conversation_folder_stub.build_folders_context = MagicMock(return_value="")
 
+# Stub utils.llm.gateway_error_contract (conversation_processing imports from it)
+gateway_error_contract_stub = _stub_module("utils.llm.gateway_error_contract")
+gateway_error_contract_stub.is_byok_rate_limit_gateway_error = MagicMock(return_value=False)
+
 # Real models (pure pydantic) resolve from the models package directory.
 _stub_package("models")
 sys.modules["models"].__path__ = [str(BACKEND_DIR / "models")]
@@ -119,6 +134,13 @@ sys.modules["models"].__path__ = [str(BACKEND_DIR / "models")]
 _conversation_processing_stub = sys.modules.get("utils.llm.conversation_processing")
 if _conversation_processing_stub is not None and not hasattr(_conversation_processing_stub, "_local_started_at_iso"):
     sys.modules.pop("utils.llm.conversation_processing", None)
+
+# discard_parser only needs pydantic and langchain_core, so load the real module.
+_load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm" / "discard_parser.py")
+
+# prompt_cache only needs tiktoken, so load the real module rather than stub the
+# cache floor the preflight assertions below depend on.
+_load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" / "prompt_cache.py")
 
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",
@@ -160,7 +182,6 @@ conv_proc.ZoneInfo = _test_zone_info
 
 
 class TestLocalStartedAtIso:
-
     def test_converts_utc_to_user_local(self):
         # 23:48 UTC -> 13:48 in Honolulu (UTC-10), the meal/time-of-day case from the issue.
         out = conv_proc._local_started_at_iso(datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc), "Pacific/Honolulu")
@@ -228,7 +249,6 @@ def _capture_structure(fn, **kwargs):
 
 
 class TestStructureFunctionsTimezone:
-
     def test_get_transcript_structure_passes_local_time(self):
         result = _capture_structure(
             conv_proc.get_transcript_structure,
@@ -275,10 +295,23 @@ class TestStructureFunctionsTimezone:
             started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc),
             language_code="en",
             tz="Pacific/Honolulu",
-            title="Lunch",
         )
         assert result["invoke"]["started_at"] == "2025-01-01T13:48:00"
         assert result["invoke"]["tz"] == "Pacific/Honolulu"
+
+    def test_reprocess_regenerates_title_and_emoji_from_current_content(self):
+        result = _capture_structure(
+            conv_proc.get_reprocess_transcript_structure,
+            transcript="The corrected transcript is about a product launch",
+            started_at=datetime(2025, 1, 1, 12, 0, tzinfo=timezone.utc),
+            language_code="en",
+            tz="UTC",
+        )
+
+        assert "generate a concise title from the current content" in result["system_text"]
+        assert "select a single emoji" in result["system_text"]
+        assert "For the title, use" not in result["system_text"]
+        assert "title" not in result["invoke"]
 
     def test_both_prompts_state_local_and_drop_convert_instruction(self):
         # The semantic core of the fix is the prompt wording; pin it so a revert can't pass silently.
@@ -289,7 +322,7 @@ class TestStructureFunctionsTimezone:
             ),
             (
                 conv_proc.get_reprocess_transcript_structure,
-                dict(transcript="x", language_code="en", tz="Pacific/Honolulu", title="t"),
+                dict(transcript="x", language_code="en", tz="Pacific/Honolulu"),
             ),
         ]:
             result = _capture_structure(fn, started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc), **kwargs)
@@ -298,3 +331,16 @@ class TestStructureFunctionsTimezone:
             assert "do not re-interpret this timestamp as UTC" in text
             # The old buggy instruction asking the model to convert must be gone.
             assert "respond in user local timezone" not in text
+
+
+def test_gpt56_cache_buckets_are_fixed_and_never_include_request_content():
+    keys = {conv_proc._cache_bucket_key('omi-transcript-structure', now=offset * 15) for offset in range(8)}
+
+    assert keys == {
+        'omi-transcript-structure-v1-b0',
+        'omi-transcript-structure-v1-b1',
+        'omi-transcript-structure-v1-b2',
+        'omi-transcript-structure-v1-b3',
+    }
+    assert conv_proc._has_gpt56_cacheable_static_prefix('static ' * 1_100)
+    assert not conv_proc._has_gpt56_cacheable_static_prefix('short prefix')

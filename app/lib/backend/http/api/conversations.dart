@@ -1,14 +1,28 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items_wire;
+import 'package:omi/backend/schema/gen/apps_wire.g.dart' as apps_wire;
+import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+
+/// Whether a non-200 response from POST /v1/conversations (process in-progress
+/// conversation) is a benign race rather than a failure worth crash-reporting.
+///
+/// The backend returns 404 when there is no in-progress conversation to
+/// process — which happens when the WS auto-finalize path already consumed the
+/// in-progress conversation and cleared its Redis pointer before this
+/// client-initiated create ran. Nothing to recover; the conversation is
+/// already finalized. Reporting it floods crash reporting with noise.
+bool isBenignInProgressConversationCreateStatus(int statusCode) => statusCode == 404;
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
   var response = await makeApiCall(
@@ -20,9 +34,10 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
   if (response == null) return null;
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
-    return CreateConversationResponse.fromJson(jsonDecode(response.body));
+    return CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
+  } else if (isBenignInProgressConversationCreateStatus(response.statusCode)) {
+    Logger.debug('processInProgressConversation: no in-progress conversation (already finalized), skipping');
   } else {
-    // TODO: Server returns 304 doesn't recover
     PlatformManager.instance.crashReporter.reportCrash(
       Exception('Failed to create conversation'),
       StackTrace.current,
@@ -91,8 +106,9 @@ Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
-    var memories =
-        (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
+    var memories = (jsonDecode(body) as List<dynamic>)
+        .map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>))
+        .toList();
     Logger.debug('getConversations length: ${memories.length}');
     return (items: memories, ok: true);
   }
@@ -110,7 +126,7 @@ Future<ServerConversation?> reProcessConversationServer(String conversationId, {
   if (response == null) return null;
   Logger.debug('reProcessConversationServer: ${response.body}');
   if (response.statusCode == 200) {
-    return ServerConversation.fromJson(jsonDecode(response.body));
+    return ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
   return null;
 }
@@ -149,7 +165,9 @@ Future<CalendarEventLink?> linkCalendarEvent(String conversationId, String event
   );
   if (response == null) return null;
   if (response.statusCode == 200) {
-    return CalendarEventLink.fromJson(jsonDecode(response.body));
+    return CalendarEventLink.fromGenerated(
+      wire.GeneratedCalendarEventLink.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
   }
   debugPrint('linkCalendarEvent error: ${response.statusCode} - ${response.body}');
   return null;
@@ -166,7 +184,9 @@ Future<CalendarEventLink?> autoLinkCalendarEvent(String conversationId) async {
   );
   if (response == null) return null;
   if (response.statusCode == 200) {
-    return CalendarEventLink.fromJson(jsonDecode(response.body));
+    return CalendarEventLink.fromGenerated(
+      wire.GeneratedCalendarEventLink.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
   }
   // 404 means no overlapping event found - not an error, just no match
   if (response.statusCode == 404) {
@@ -201,27 +221,42 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return (jsonDecode(body) as List<dynamic>).map((event) => CalendarEventLink.fromJson(event)).toList();
+    return (jsonDecode(body) as List<dynamic>)
+        .map(
+          (event) =>
+              CalendarEventLink.fromGenerated(wire.GeneratedCalendarEventLink.fromJson(event as Map<String, dynamic>)),
+        )
+        .toList();
   }
   debugPrint('listGoogleCalendarEvents error: ${response.statusCode} - ${response.body}');
   return [];
 }
 
-Future<ServerConversation?> getConversationById(String conversationId) async {
+Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return null;
+  if (response == null) return (item: null, ok: false);
   if (response.statusCode == 200) {
-    return ServerConversation.fromJson(jsonDecode(response.body));
+    return (item: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>), ok: true);
   } else if (response.statusCode == 402) {
-    Logger.debug('Unlimited Plan Required for conversation: $conversationId');
-    return null;
+    // Locked conversations are still returned by the list endpoint as a
+    // redacted completed row, but their detail endpoint intentionally returns
+    // 402. Treat that response as an authoritative terminal result for
+    // lifecycle reconciliation so a stale Processing card is cleared.
+    Logger.debug('Conversation is locked/redacted: $conversationId');
+    return (item: null, ok: true);
+  } else if (response.statusCode == 404) {
+    return (item: null, ok: true);
   }
-  return null;
+  return (item: null, ok: false);
+}
+
+Future<ServerConversation?> getConversationById(String conversationId) async {
+  return (await getConversationByIdResult(conversationId)).item;
 }
 
 Future<bool> updateConversationTitle(String conversationId, String title) async {
@@ -272,12 +307,27 @@ class TranscriptsResponse {
   });
 
   factory TranscriptsResponse.fromJson(Map<String, dynamic> json) {
+    return TranscriptsResponse.fromGeneratedWireJson(json);
+  }
+
+  factory TranscriptsResponse.fromGeneratedWireJson(Map<String, dynamic> json) {
+    List<TranscriptSegment> readSegments(String key) {
+      final segments = json[key];
+      if (segments is! List) return [];
+      return segments
+          .map(
+            (segment) => TranscriptSegment.fromGenerated(
+              wire.GeneratedTranscriptSegment.fromJson(segment as Map<String, dynamic>),
+            ),
+          )
+          .toList();
+    }
+
     return TranscriptsResponse(
-      deepgram: (json['deepgram'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      soniox: (json['soniox'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      whisperx: (json['whisperx'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      speechmatics:
-          (json['speechmatics'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
+      deepgram: readSegments('deepgram'),
+      soniox: readSegments('soniox'),
+      whisperx: readSegments('whisperx'),
+      speechmatics: readSegments('speechmatics'),
     );
   }
 }
@@ -292,8 +342,7 @@ Future<TranscriptsResponse> getConversationTranscripts(String conversationId) as
   if (response == null) return TranscriptsResponse();
   Logger.debug('getConversationTranscripts: ${response.body}');
   if (response.statusCode == 200) {
-    var transcripts = (jsonDecode(response.body) as Map<String, dynamic>);
-    return TranscriptsResponse.fromJson(transcripts);
+    return TranscriptsResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
   return TranscriptsResponse();
 }
@@ -350,7 +399,6 @@ Future<bool> setConversationStarred(String conversationId, bool starred) async {
 }
 
 Future<bool> setConversationActionItemState(String conversationId, List<int> actionItemsIdx, List<bool> values) async {
-  print(jsonEncode({'items_idx': actionItemsIdx, 'values': values, 'conversation_id': conversationId}));
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/action-items',
     headers: {},
@@ -407,14 +455,99 @@ class UploadFilesResult {
   bool get isQueued => jobId != null;
 }
 
-/// Thrown when an upload is rejected by fair-use throttling (HTTP 429).
+/// Server-provided classification for a sync upload HTTP 429.
+///
+/// Fair use is deliberately opt-in: an unknown, proxy-generated, or platform
+/// 429 is backend capacity unless the response carries Omi's explicit reason.
+enum SyncRateLimitKind { fairUse, backendCapacity }
+
+@visibleForTesting
+bool shouldRequestSyncCaptureManifest(String? conversationId, bool claimLiveCapture) =>
+    conversationId != null && claimLiveCapture;
+
+Future<String?> _createSyncCaptureManifest(List<File> files, String conversationId) async {
+  final claims = <Map<String, String>>[];
+  for (final file in files) {
+    final digest = await sha256.bind(file.openRead()).first;
+    claims.add({'name': file.uri.pathSegments.last, 'sha256': digest.toString()});
+  }
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/sync-capture-manifest',
+    headers: const {},
+    body: jsonEncode(
+      wire.GeneratedSyncCaptureManifestRequest(
+        conversationId: conversationId,
+        files: [
+          for (final claim in claims)
+            wire.GeneratedSyncCaptureManifestFile(name: claim['name']!, sha256: claim['sha256']!),
+        ],
+      ).toJson(),
+    ),
+    method: 'POST',
+  );
+  if (response?.statusCode != 200) return null;
+  final body = wire.GeneratedSyncCaptureManifestResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
+  return body.manifest;
+}
+
+/// Thrown when a sync upload is rate-limited (HTTP 429).
 /// [retryAfterSeconds] is the server's Retry-After when provided.
 class SyncRateLimitedException implements Exception {
+  final SyncRateLimitKind kind;
   final int? retryAfterSeconds;
-  SyncRateLimitedException([this.retryAfterSeconds]);
+  SyncRateLimitedException({required this.kind, this.retryAfterSeconds});
 
   @override
-  String toString() => 'SyncRateLimitedException(retryAfter=$retryAfterSeconds)';
+  String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds)';
+}
+
+/// Thrown when the server permanently refuses a recording because its capture
+/// time is older than the automatic-recovery window (HTTP 422
+/// `backfill_lookback_exceeded`). No amount of retrying can make this upload
+/// succeed, so callers must stop re-offering the file instead of spending the
+/// recording's retry budget on it.
+class SyncRecoveryWindowExceededException implements Exception {
+  const SyncRecoveryWindowExceededException();
+
+  @override
+  String toString() => 'SyncRecoveryWindowExceededException()';
+}
+
+/// Classifies a sync 422 as the backend's terminal lookback rejection.
+///
+/// Keyed on the bounded `code` the sync routes emit, never on human-readable
+/// detail text: any other 422 stays a generic retryable failure.
+@visibleForTesting
+bool isSyncRecoveryWindowExceededResponse(http.Response response) {
+  if (response.statusCode != 422) return false;
+  try {
+    final body = wire.GeneratedSyncRecoveryWindowExceededResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return body.code == 'backfill_lookback_exceeded';
+  } catch (_) {
+    return false;
+  }
+}
+
+/// A synchronous upload response that durably reached the server but did not
+/// transcribe every segment. Callers keep the local WAL and retry it; the
+/// backend deduplicates any segments that already succeeded.
+class SyncUploadIncompleteException implements Exception {
+  final int failedSegments;
+
+  const SyncUploadIncompleteException(this.failedSegments);
+
+  @override
+  String toString() => 'SyncUploadIncompleteException(failedSegments=$failedSegments)';
+}
+
+@visibleForTesting
+SyncLocalFilesResponse requireCompleteSyncUpload(SyncLocalFilesResponse response) {
+  if (response.hasPartialFailure) {
+    throw SyncUploadIncompleteException(response.failedSegments);
+  }
+  return response;
 }
 
 /// Parse a Retry-After header expressed in delta-seconds. Returns null for an
@@ -424,6 +557,15 @@ int? _parseRetryAfterSeconds(http.Response response) {
   if (raw == null) return null;
   return int.tryParse(raw.trim());
 }
+
+/// Classifies a sync 429 without relying on human-readable error text.
+///
+/// The application-generated restriction response carries this bounded header.
+/// Everything else remains a generic backend-capacity limit.
+SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) =>
+    response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'fair_use'
+        ? SyncRateLimitKind.fairUse
+        : SyncRateLimitKind.backendCapacity;
 
 /// Upload-only: POST files and return as soon as the server acknowledges
 /// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
@@ -435,19 +577,36 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
+  bool claimLiveCapture = false,
 }) async {
+  String? captureManifest;
+  if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
+    captureManifest = await _createSyncCaptureManifest(files, conversationId!);
+  }
   var url = '${Env.apiBaseUrl}v2/sync-local-files';
   if (conversationId != null) {
     url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
   }
-  var response = await makeMultipartApiCall(url: url, files: files, onUploadProgress: onUploadProgress);
+  var response = await makeMultipartApiCall(
+    url: url,
+    files: files,
+    headers: {if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest},
+    onUploadProgress: onUploadProgress,
+  );
 
   if (response.statusCode == 200) {
-    // Fast-path: server processed synchronously and returned the result.
-    return UploadFilesResult.done(SyncLocalFilesResponse.fromJson(jsonDecode(response.body)));
+    // Fast-path: server processed synchronously and returned the result. A
+    // legacy server can still encode partial work in a 200, which must follow
+    // the retry path rather than acknowledging/deleting the local WAL.
+    final completed = SyncLocalFilesResponse.fromGenerated(
+      wire.GeneratedSyncLocalFilesResultResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
+    return UploadFilesResult.done(requireCompleteSyncUpload(completed));
   }
   if (response.statusCode == 202) {
-    final start = SyncJobStartResponse.fromJson(jsonDecode(response.body));
+    final start = SyncJobStartResponse.fromGenerated(
+      wire.GeneratedSyncJobStartResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
     if (start.jobId.isEmpty) {
       throw Exception('Upload accepted but no job id returned');
     }
@@ -457,10 +616,15 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     throw Exception('Audio file could not be processed by server');
   } else if (response.statusCode == 413) {
     throw Exception('Audio file is too large to upload');
-  } else if (response.statusCode == 429) {
-    // Fair-use throttle, not a content failure. Surface it typed so callers
-    // can back off (honoring Retry-After) instead of burning the retry budget.
-    throw SyncRateLimitedException(_parseRetryAfterSeconds(response));
+  } else if (response.statusCode == 429 ||
+      (response.statusCode == 503 &&
+          response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'backfill_capacity')) {
+    throw SyncRateLimitedException(
+      kind: syncRateLimitKindForResponse(response),
+      retryAfterSeconds: _parseRetryAfterSeconds(response),
+    );
+  } else if (isSyncRecoveryWindowExceededResponse(response)) {
+    throw const SyncRecoveryWindowExceededException();
   } else if (response.statusCode >= 500) {
     throw Exception('Server is temporarily unavailable');
   }
@@ -509,7 +673,10 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
     return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
   try {
-    return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse.fromJson(jsonDecode(response.body)));
+    return SyncJobFetch(
+      SyncJobFetchOutcome.ok,
+      SyncJobStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
   } catch (e) {
     Logger.debug('fetchSyncJobStatus parse error: $e');
     return const SyncJobFetch(SyncJobFetchOutcome.transient);
@@ -538,11 +705,9 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   );
   if (response == null) return (<ServerConversation>[], 0, 0);
   if (response.statusCode == 200) {
-    List<dynamic> items = (jsonDecode(response.body))['items'];
-    int currentPage = (jsonDecode(response.body))['current_page'];
-    int totalPages = (jsonDecode(response.body))['total_pages'];
-    var convos = items.map<ServerConversation>((item) => ServerConversation.fromJson(item)).toList();
-    return (convos, currentPage, totalPages);
+    final data = wire.GeneratedSearchConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    final convos = data.items.map((conversation) => ServerConversation.fromGenerated(conversation)).toList();
+    return (convos, data.currentPage, data.totalPages);
   }
   return (<ServerConversation>[], 0, 0);
 }
@@ -556,7 +721,9 @@ Future<String> testConversationPrompt(String prompt, String conversationId) asyn
   );
   if (response == null) return '';
   if (response.statusCode == 200) {
-    return jsonDecode(response.body)['summary'];
+    return wire.GeneratedConversationTestPromptResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).summary;
   } else {
     return '';
   }
@@ -584,14 +751,14 @@ Future<ActionItemsResponse> getActionItems({
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
 
-  if (response == null) return ActionItemsResponse(actionItems: [], hasMore: false);
+  if (response == null) return const ActionItemsResponse(actionItems: [], hasMore: false);
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return ActionItemsResponse.fromJson(jsonDecode(body));
+    return action_items_wire.GeneratedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
   } else {
     Logger.debug('getActionItems error ${response.statusCode}');
-    return ActionItemsResponse(actionItems: [], hasMore: false);
+    return const ActionItemsResponse(actionItems: [], hasMore: false);
   }
 }
 
@@ -606,8 +773,10 @@ Future<List<App>> getConversationSuggestedApps(String conversationId) async {
   if (response == null) return [];
   Logger.debug('getConversationSuggestedApps: ${response.body}');
   if (response.statusCode == 200) {
-    var data = jsonDecode(response.body);
-    return (data['suggested_apps'] as List<dynamic>).map((appData) => App.fromJson(appData)).toList();
+    final data = apps_wire.GeneratedConversationSuggestedAppsResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    return data.suggestedApps.map(App.fromGeneratedDetail).toList();
   }
   return [];
 }
@@ -631,11 +800,15 @@ class MergeConversationsResponse {
   });
 
   factory MergeConversationsResponse.fromJson(Map<String, dynamic> json) {
+    return MergeConversationsResponse.fromGenerated(wire.GeneratedMergeConversationsResponse.fromJson(json));
+  }
+
+  factory MergeConversationsResponse.fromGenerated(wire.GeneratedMergeConversationsResponse generated) {
     return MergeConversationsResponse(
-      status: json['status'] ?? 'merging',
-      message: json['message'] ?? 'Merge started',
-      warning: json['warning'],
-      conversationIds: List<String>.from(json['conversation_ids'] ?? []),
+      status: generated.status,
+      message: generated.message,
+      warning: generated.warning,
+      conversationIds: generated.conversationIds,
     );
   }
 }
@@ -659,7 +832,9 @@ Future<MergeConversationsResponse?> mergeConversations(List<String> conversation
   Logger.debug('mergeConversations: ${response.body}');
 
   if (response.statusCode == 200) {
-    return MergeConversationsResponse.fromJson(jsonDecode(response.body));
+    return MergeConversationsResponse.fromGenerated(
+      wire.GeneratedMergeConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
   } else {
     Logger.debug('mergeConversations error: ${response.statusCode} - ${response.body}');
     return null;

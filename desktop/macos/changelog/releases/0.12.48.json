@@ -1,0 +1,7 @@
+{
+  "version": "0.12.48",
+  "date": "2026-07-08",
+  "changes": [
+    "Fixed the Screen Recording permission flow so Omi reliably appears in the Screen Recording list when you click Open Settings, instead of sometimes needing a second attempt"
+  ]
+}

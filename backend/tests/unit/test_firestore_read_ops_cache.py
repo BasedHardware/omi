@@ -112,6 +112,7 @@ class TestMentorFrequencyCache:
         cached = cache.get("mentor_frequency:user_disabled")
         assert cached == 0
 
+    @pytest.mark.integration
     def test_cache_ttl_expiry(self):
         """Cache should expire and re-fetch after TTL."""
         cache = self.cache
@@ -615,7 +616,7 @@ class TestWebhookInvalidationCoverage:
     """
 
     PAYMENT_SOURCE_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'payment.py')
-    TRANSCRIBE_SOURCE_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
+    LISTEN_RUNTIME_SOURCE_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'listen', 'runtime.py')
 
     def _read_source(self, path):
         with open(path, encoding='utf-8') as f:
@@ -685,20 +686,20 @@ class TestWebhookInvalidationCoverage:
         section = source[branch_idx:idx_canceled]
         assert self._find_invalidation_call(section)
 
-    def test_transcribe_imports_invalidation_check(self):
-        """transcribe.py must import check_credits_invalidation."""
-        source = self._read_source(self.TRANSCRIBE_SOURCE_FILE)
+    def test_listen_runtime_imports_invalidation_check(self):
+        """The listen runtime must import check_credits_invalidation."""
+        source = self._read_source(self.LISTEN_RUNTIME_SOURCE_FILE)
         assert 'check_credits_invalidation' in source
 
-    def test_transcribe_calls_invalidation_check(self):
-        """transcribe.py must check invalidation signal in the refresh logic."""
-        source = self._read_source(self.TRANSCRIBE_SOURCE_FILE)
-        assert 'credits_invalidated = check_credits_invalidation(uid)' in source
-        assert 'or credits_invalidated' in source
+    def test_listen_runtime_calls_invalidation_check(self):
+        """The listen runtime must check the invalidation signal in refresh logic."""
+        source = self._read_source(self.LISTEN_RUNTIME_SOURCE_FILE)
+        assert 'invalidated = await self.persistence.call(check_credits_invalidation, self.request.uid)' in source
+        assert 'or invalidated' in source
 
-    def test_transcribe_uses_get_not_getdel(self):
-        """transcribe.py must use check_credits_invalidation (GET), not GETDEL."""
-        source = self._read_source(self.TRANSCRIBE_SOURCE_FILE)
+    def test_listen_runtime_uses_get_not_getdel(self):
+        """The listen runtime must use check_credits_invalidation (GET), not GETDEL."""
+        source = self._read_source(self.LISTEN_RUNTIME_SOURCE_FILE)
         assert 'check_credits_invalidation' in source
         # Must NOT use the old consumed-on-read pattern
         assert 'check_and_clear_credits_invalidation' not in source
@@ -910,6 +911,7 @@ def _redis_available():
         return False
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(not _redis_available(), reason="Local Redis not available")
 class TestRedisPubSubIntegration:
     """Integration tests using real local Redis to prove cross-pod pub/sub delivery."""

@@ -2,7 +2,7 @@ import logging
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional, cast
 
 from database._client import db
 from database.redis_db import r
@@ -23,7 +23,7 @@ _cache_lock = threading.Lock()
 _disabled_cache: dict[str, tuple[bool, float, int]] = {}  # (value, timestamp, generation)
 
 
-def _evict_oldest(d: dict):
+def _evict_oldest(d: Dict[str, Any]) -> None:
     """Drop the oldest 20% of entries by timestamp. Caller must hold _cache_lock."""
     n = len(d) // 5
     if n < 1:
@@ -34,6 +34,18 @@ def _evict_oldest(d: dict):
         oldest = sorted(d, key=lambda k: d[k])[:n]
     for k in oldest:
         del d[k]
+
+
+def _set_disabled_state(app_id: str, value: bool) -> None:
+    """Record a disabled-state write and enforce the size cap. Caller must hold _cache_lock.
+
+    The is_app_webhook_disabled read path already caps the cache; the record/re-enable write paths
+    did not, so routing every write through here keeps the cache within _CACHE_MAX_SIZE on all paths.
+    """
+    gen = _disabled_cache.get(app_id, (False, 0, 0))[2] + 1
+    _disabled_cache[app_id] = (value, time.monotonic(), gen)
+    if len(_disabled_cache) > _CACHE_MAX_SIZE:
+        _evict_oldest(_disabled_cache)
 
 
 # Lua script: atomically record a failure and return graduated response action.
@@ -143,8 +155,7 @@ def record_app_webhook_failure(app_id: str, status_code: int, error: str, endpoi
         if action == 3:
             r.setex(f'app_webhook_disabled:{app_id}', _HEALTH_TTL, '1')
             with _cache_lock:
-                gen = _disabled_cache.get(app_id, (False, 0, 0))[2] + 1
-                _disabled_cache[app_id] = (True, time.monotonic(), gen)
+                _set_disabled_state(app_id, True)
         return action
     except Exception as e:
         logger.warning(f'record_app_webhook_failure redis error app_id={app_id}: {e}')
@@ -212,8 +223,7 @@ def record_app_webhook_success(app_id: str, endpoint: str = ENDPOINT_REALTIME):
 def clear_app_webhook_health(app_id: str):
     """Clear all webhook health state for an app. Used on re-enable."""
     with _cache_lock:
-        gen = _disabled_cache.get(app_id, (False, 0, 0))[2] + 1
-        _disabled_cache[app_id] = (False, time.monotonic(), gen)
+        _set_disabled_state(app_id, False)
     try:
         keys_to_delete = [f'app_webhook_disabled:{app_id}']
         for ep in _ALL_ENDPOINTS:
@@ -249,19 +259,19 @@ def is_app_webhook_disabled(app_id: str) -> bool:
         return False
 
 
-def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optional[dict]:
+def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get health state for an app's webhook endpoint(s). Returns None if no data."""
     try:
         if endpoint:
             key = f'app_webhook_health:{app_id}:{endpoint}'
-            data = r.hgetall(key)
+            data = cast(Dict[bytes, bytes], r.hgetall(key))
             if not data:
                 return None
             return {k.decode(): v.decode() for k, v in data.items()}
-        result = {}
+        result: Dict[str, Any] = {}
         for ep in _ALL_ENDPOINTS:
             key = f'app_webhook_health:{app_id}:{ep}'
-            data = r.hgetall(key)
+            data = cast(Dict[bytes, bytes], r.hgetall(key))
             if data:
                 result[ep] = {k.decode(): v.decode() for k, v in data.items()}
         return result if result else None
@@ -272,8 +282,7 @@ def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optio
 def disable_app_in_firestore(app_id: str, error: str, failure_hours: int):
     """Mark an app as disabled in Firestore due to webhook failures."""
     with _cache_lock:
-        gen = _disabled_cache.get(app_id, (False, 0, 0))[2] + 1
-        _disabled_cache[app_id] = (True, time.monotonic(), gen)
+        _set_disabled_state(app_id, True)
     try:
         apps_collection = 'plugins_data'
         app_ref = db.collection(apps_collection).document(app_id)
@@ -373,9 +382,9 @@ def _record_dev_webhook_failure_fallback(uid: str, wtype_str: str, status_code: 
     return count == _DEV_FAILURE_THRESHOLD
 
 
-def record_dev_webhook_failure(uid: str, wtype: str, status_code: int, error: str) -> bool:
+def record_dev_webhook_failure(uid: str, wtype: object, status_code: int, error: str) -> bool:
     """Record a developer webhook failure. Returns True if threshold exceeded (should disable)."""
-    wtype_str = wtype.value if hasattr(wtype, 'value') else str(wtype)
+    wtype_str = getattr(wtype, 'value') if hasattr(wtype, 'value') else str(wtype)
     try:
         key = f'dev_webhook_health:{uid}:{wtype_str}'
         now_ts = int(time.time())
@@ -399,10 +408,10 @@ def record_dev_webhook_failure(uid: str, wtype: str, status_code: int, error: st
             return False
 
 
-def record_dev_webhook_success(uid: str, wtype: str):
+def record_dev_webhook_success(uid: str, wtype: object):
     """Record a successful developer webhook delivery. Resets failure state."""
     try:
-        wtype_str = wtype.value if hasattr(wtype, 'value') else str(wtype)
+        wtype_str = getattr(wtype, 'value') if hasattr(wtype, 'value') else str(wtype)
         key = f'dev_webhook_health:{uid}:{wtype_str}'
         now_ts = int(time.time())
         r.hset(

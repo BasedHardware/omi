@@ -209,12 +209,40 @@ def test_promote_creates_when_no_duplicate(monkeypatch):
     result = staged_tasks_db.promote_staged_task('uid')
 
     assert result == {'id': 'fresh-id-1', 'description': 'New unique task'}
-    # The skip-marker fields must NOT be set on the happy path.
+    # The skip marker stays absent, while the canonical reconciliation target is durable.
     assert 'promotion_skipped' not in update_calls
-    assert 'promoted_to' not in update_calls
+    assert update_calls['promoted_to'] == 'fresh-id-1'
     # The normal completed/promoted_at update still fires.
     assert update_calls.get('completed') is True
     assert isinstance(update_calls.get('promoted_at'), datetime)
+
+
+def test_existing_reservation_never_recreates_task_closed_after_begin(monkeypatch):
+    update_calls = _stub_top_staged(
+        monkeypatch,
+        {'id': 'staged-existing', 'description': 'Deleted by user', 'relevance_score': 1},
+    )
+    monkeypatch.setattr(
+        action_items_db,
+        'get_active_action_item_by_description',
+        lambda uid, desc: None,
+    )
+    monkeypatch.setattr(
+        action_items_db,
+        'create_action_item',
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('deleted task must not be recreated')),
+    )
+
+    result = staged_tasks_db.promote_staged_task(
+        'uid',
+        action_item_id='task-deleted-after-begin',
+        reservation_kind='existing',
+    )
+
+    assert result == {'id': 'task-deleted-after-begin'}
+    assert update_calls['completed'] is True
+    assert update_calls['promoted_to'] == 'task-deleted-after-begin'
+    assert update_calls['promotion_skipped'] == 'duplicate_target_closed'
 
 
 def test_promote_merges_missing_fields_on_dedup(monkeypatch):

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -76,8 +78,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   final AppReviewService _appReviewService = AppReviewService();
   ConversationTab selectedTab = ConversationTab.summary;
 
-  // Callback to seek audio to transcript segment
-  Future<void> Function(double)? _seekToSegmentCallback;
+  // Callback to seek audio to transcript segment (start, end) in wall seconds
+  Future<void> Function(double start, double end)? _seekToSegmentCallback;
   bool _isSharing = false;
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
@@ -199,8 +201,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       provider.setCachedConversation(widget.conversation);
       _providerInitialized = true;
 
-      conversationProvider.groupConversationsByDate();
-
       // Find the proper date and index for this conversation in the grouped conversations
       final result = conversationProvider.getConversationDateAndIndex(widget.conversation);
       if (result != null) {
@@ -208,17 +208,27 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         provider.updateConversation(widget.conversation.id, date);
       } else {
         final effectiveDate = widget.conversation.startedAt ?? widget.conversation.createdAt;
-        provider.selectedDate = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+        provider.selectedDate = conversationLocalDayKey(effectiveDate);
       }
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        final date = provider.selectedDate;
-        final idx = conversationProvider.getConversationIndexById(provider.conversation.id, date);
-        if (idx != -1) {
-          await conversationProvider.updateSearchedConvoDetails(provider.conversation.id, date, idx);
+        final conversationId = provider.conversation.id;
+        if (conversationProvider.getConversationDateAndIndexById(conversationId) != null) {
+          // The initial list payload is enough to render the detail page. Fill
+          // in omitted app results after the first usable frame instead of
+          // holding the destination's startup sequence on this request. The
+          // provider re-locates the conversation by ID after the await because
+          // refreshes can reorder or replace the grouped list meanwhile.
+          unawaited(
+            conversationProvider.updateSearchedConvoDetails(conversationId).then((_) {
+              if (!mounted || provider.conversationOrNull?.id != conversationId) return;
+              provider.updateConversation(conversationId, provider.selectedDate);
+            }),
+          );
+        } else {
+          provider.updateConversation(provider.conversation.id, provider.selectedDate);
         }
-        provider.updateConversation(provider.conversation.id, provider.selectedDate);
       }
 
       // Check if this is the first conversation and show app review prompt
@@ -404,22 +414,19 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       builder: (c) => AlertDialog(
         backgroundColor: const Color(0xFF1C1C1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Google Calendar Not Connected', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Connect your Google Calendar to link conversations to calendar events.',
-          style: TextStyle(color: Color(0xFF8E8E93)),
-        ),
+        title: Text(context.l10n.googleCalendarNotConnected, style: const TextStyle(color: Colors.white)),
+        content: Text(context.l10n.googleCalendarConnectPrompt, style: const TextStyle(color: Color(0xFF8E8E93))),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c),
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+            child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(c);
               Navigator.push(context, MaterialPageRoute(builder: (context) => const IntegrationsPage()));
             },
-            child: const Text('Connect', style: TextStyle(color: Colors.white)),
+            child: Text(context.l10n.connect, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -466,6 +473,16 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     Clipboard.setData(ClipboardData(text: content));
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.contentCopied)));
     HapticFeedback.lightImpact();
+  }
+
+  // iOS requires a non-zero sharePositionOrigin (popover anchor); Share.shareXFiles
+  // throws a PlatformException without it.
+  Rect _shareSheetOrigin() {
+    final box = _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    return const Rect.fromLTWH(0, 0, 100, 100);
   }
 
   Future<void> _downloadAudio(BuildContext context, ConversationDetailProvider provider) async {
@@ -541,7 +558,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
 
         final mimeType = file.path.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav';
-        await Share.shareXFiles([XFile(file.path, mimeType: mimeType)]);
+        await Share.shareXFiles([XFile(file.path, mimeType: mimeType)], sharePositionOrigin: _shareSheetOrigin());
 
         // Track successful completion
         final durationSeconds = DateTime.now().difference(startTime).inSeconds;
@@ -816,9 +833,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       // Directly share the summary link
                                       bool shared = await setConversationVisibility(provider.conversation.id);
                                       if (!shared) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(SnackBar(content: Text(context.l10n.conversationUrlNotShared)));
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text(context.l10n.conversationUrlNotShared)),
+                                          );
+                                        }
                                         setState(() {
                                           _isSharing = false;
                                         });
@@ -830,17 +849,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         conversation: provider.conversation,
                                         shareMethod: 'url_share',
                                       );
-                                      final RenderBox? box =
-                                          _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
-                                      final shareOrigin = box != null
-                                          ? Rect.fromLTWH(
-                                              box.localToGlobal(Offset.zero).dx,
-                                              box.localToGlobal(Offset.zero).dy,
-                                              box.size.width,
-                                              box.size.height,
-                                            )
-                                          : null;
-                                      shareConversationLink(provider.conversation, sharePositionOrigin: shareOrigin);
+                                      shareConversationLink(
+                                        provider.conversation,
+                                        sharePositionOrigin: _shareSheetOrigin(),
+                                      );
                                       // Small delay to let share sheet appear, then clear loading
                                       await Future.delayed(const Duration(milliseconds: 150));
                                       setState(() {
@@ -906,17 +918,17 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             itemBuilder: (context) => [
                               PullDownMenuItem(
                                 title: context.l10n.copyTranscript,
-                                iconWidget: FaIcon(FontAwesomeIcons.copy, size: 16),
+                                iconWidget: const FaIcon(FontAwesomeIcons.copy, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_transcript', provider),
                               ),
                               PullDownMenuItem(
                                 title: context.l10n.copySummary,
-                                iconWidget: FaIcon(FontAwesomeIcons.clone, size: 16),
+                                iconWidget: const FaIcon(FontAwesomeIcons.clone, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_summary', provider),
                               ),
                               PullDownMenuItem(
                                 title: context.l10n.copyConversationId,
-                                iconWidget: FaIcon(FontAwesomeIcons.clipboard, size: 16),
+                                iconWidget: const FaIcon(FontAwesomeIcons.clipboard, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_conversation_id', provider),
                               ),
                               if (provider.conversation.hasAudio())
@@ -948,18 +960,18 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 ),
                               PullDownMenuItem(
                                 title: context.l10n.testPrompt,
-                                iconWidget: FaIcon(FontAwesomeIcons.commentDots, size: 16),
+                                iconWidget: const FaIcon(FontAwesomeIcons.commentDots, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'test_prompt', provider),
                               ),
                               if (!provider.conversation.discarded)
                                 PullDownMenuItem(
                                   title: context.l10n.reprocessConversation,
-                                  iconWidget: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
+                                  iconWidget: const FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
                                   onTap: () => _handleMenuSelection(context, 'reprocess', provider),
                                 ),
                               PullDownMenuItem(
                                 title: context.l10n.deleteConversation,
-                                iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
+                                iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
                                 onTap: () => _handleMenuSelection(context, 'delete', provider),
                               ),
                             ],
@@ -1056,9 +1068,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       _controller!.animateTo(0);
                                     }
 
-                                    // Seek to segment using callback
+                                    // Seek to segment using callback (start + end for bounded play)
                                     if (_seekToSegmentCallback != null) {
-                                      await _seekToSegmentCallback!(segment.start);
+                                      await _seekToSegmentCallback!(segment.start, segment.end);
                                       HapticFeedback.lightImpact();
                                     }
                                   },
@@ -1076,7 +1088,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                     }
                                   },
                                 ),
-                                ActionItemsTab(),
+                                const ActionItemsTab(),
                               ],
                             );
                           },
@@ -1433,13 +1445,12 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
         builder: (context, data, child) {
           return Stack(
             children: [
-              ListView(
-                shrinkWrap: true,
+              CustomScrollView(
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
-                children: [
-                  const GetSummaryWidgets(),
+                slivers: [
+                  const SliverToBoxAdapter(child: GetSummaryWidgets()),
                   data.item1
-                      ? const ReprocessDiscardedWidget()
+                      ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                       : GetAppsWidgets(
                           searchQuery: widget.searchQuery,
                           currentResultIndex: widget.currentResultIndex,
@@ -1458,8 +1469,8 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                             context.read<ConversationDetailProvider>().saveEditingSummary(appId, newContent);
                           },
                         ),
-                  const GetGeolocationWidgets(),
-                  const SizedBox(height: 150),
+                  const SliverToBoxAdapter(child: GetGeolocationWidgets()),
+                  const SliverToBoxAdapter(child: SizedBox(height: 150)),
                 ],
               ),
             ],
@@ -1571,13 +1582,13 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
 
     if (linked != null) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Linked to "${event.title}"')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.linkedToEvent(event.title))));
     } else {
       setState(() {
         _isLinking = false;
         _linkingEventId = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to link calendar event')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.failedToLinkCalendarEvent)));
     }
   }
 

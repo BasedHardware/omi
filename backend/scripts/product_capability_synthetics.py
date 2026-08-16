@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Dict, List, Sequence, cast
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_DIR.parent
@@ -73,11 +73,12 @@ class CheckResult:
 
 def sanitize(value: Any) -> Any:
     if isinstance(value, dict):
-        return {key: sanitize(item) for key, item in value.items()}
+        typed: Dict[str, Any] = cast(Dict[str, Any], value)
+        return {key: sanitize(item) for key, item in typed.items()}
     if isinstance(value, list):
-        return [sanitize(item) for item in value]
+        return [sanitize(item) for item in cast(List[Any], value)]
     if isinstance(value, tuple):
-        return [sanitize(item) for item in value]
+        return [sanitize(item) for item in cast(List[Any], value)]
     if isinstance(value, str):
         redacted = value
         for pattern in SENSITIVE_PATTERNS:

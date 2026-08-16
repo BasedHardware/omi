@@ -1,20 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { useRecorder, type UseRecorder } from '../hooks/useRecorder'
-import { useChat, type UseChat } from '../hooks/useChat'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRecorder } from '../hooks/useRecorder'
+import { useChat } from '../hooks/useChat'
 import type { CaptureChoice } from '../../../shared/types'
-
-export type { CaptureChoice }
-
-type AppState = {
-  recorder: UseRecorder
-  chat: UseChat
-  pickerOpen: boolean
-  setPickerOpen: (v: boolean) => void
-  /** Begin a recording for the chosen capture mode (from any tab). */
-  startRecording: (choice: CaptureChoice) => void
-}
-
-const Ctx = createContext<AppState | null>(null)
+import { Ctx } from './appState'
 
 /**
  * App-level state shared across every tab: the recorder and chat engines live
@@ -24,7 +12,7 @@ const Ctx = createContext<AppState | null>(null)
  */
 export function AppStateProvider(props: { children: React.ReactNode }): React.JSX.Element {
   const recorder = useRecorder()
-  const chat = useChat({ surface: 'main' })
+  const chat = useChat()
   const [pickerOpen, setPickerOpen] = useState(false)
 
   // Hold the live recorder in a ref (updated after each render) so the keydown
@@ -48,10 +36,4 @@ export function AppStateProvider(props: { children: React.ReactNode }): React.JS
       {props.children}
     </Ctx.Provider>
   )
-}
-
-export function useAppState(): AppState {
-  const v = useContext(Ctx)
-  if (!v) throw new Error('useAppState must be used within AppStateProvider')
-  return v
 }

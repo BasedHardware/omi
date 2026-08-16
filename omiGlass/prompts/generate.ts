@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as progress from 'cli-progress';
 import { imageDescription } from '../sources/agent/imageDescription';
-import { imageBlurry } from '../sources/agent/imageBlurry';
 
 (async () => {
 

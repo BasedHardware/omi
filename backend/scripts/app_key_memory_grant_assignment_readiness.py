@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 DEFAULT_ASSIGNMENT_FILE_ENV = "MEMORY_APP_KEY_MEMORY_GRANT_ASSIGNMENTS"
 APP_KEY_MEMORY_GRANT_SUBPATH = "memory_control/app_key_memory_grants"
@@ -31,9 +31,15 @@ ALLOWED_FIELDS = REQUIRED_FIELDS | OPTIONAL_FIELDS
 
 
 def normalize_scope_list(value: Any) -> Tuple[Optional[List[str]], bool]:
-    if not isinstance(value, list) or any(not isinstance(scope, str) or not scope for scope in value):
+    if not isinstance(value, list):
         return None, True
-    return list(dict.fromkeys(value)), False
+    items: List[Any] = cast(List[Any], value)
+    scopes: List[str] = []
+    for scope in items:
+        if not isinstance(scope, str) or not scope:
+            return None, True
+        scopes.append(scope)
+    return list(dict.fromkeys(scopes)), False
 
 
 def _validate_bool(assignment: Mapping[str, Any], field: str, errors: List[str], index: int) -> Optional[bool]:
@@ -52,7 +58,7 @@ def _validate_string(assignment: Mapping[str, Any], field: str, errors: List[str
     return value
 
 
-def normalize_assignments(assignments: Optional[Sequence[Mapping[str, Any]]]) -> Tuple[List[Dict[str, Any]], List[str]]:
+def normalize_assignments(assignments: Optional[Sequence[object]]) -> Tuple[List[Dict[str, Any]], List[str]]:
     normalized: List[Dict[str, Any]] = []
     errors: List[str] = []
     if assignments is None:
@@ -64,6 +70,7 @@ def normalize_assignments(assignments: Optional[Sequence[Mapping[str, Any]]]) ->
         if not isinstance(assignment, Mapping):
             errors.append(f"assignment[{index}]:must_be_object")
             continue
+        assignment = cast(Mapping[str, Any], assignment)
         unknown_fields = sorted(set(assignment) - ALLOWED_FIELDS)
         for field in unknown_fields:
             errors.append(f"assignment[{index}]:unknown_capability_or_field:{field}")
@@ -183,7 +190,7 @@ def run_assignment_readiness(
     *,
     execute: bool,
     allow_write: bool,
-    assignments: Optional[Sequence[Mapping[str, Any]]] = None,
+    assignments: Optional[Sequence[object]] = None,
 ) -> Dict[str, Any]:
     if not execute:
         return {
@@ -228,11 +235,14 @@ def load_assignments(path: Optional[str]) -> List[Dict[str, Any]]:
     if not path:
         return []
     with Path(path).open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    if isinstance(payload, list):
-        return payload
-    if isinstance(payload, dict) and isinstance(payload.get("assignments"), list):
-        return payload["assignments"]
+        loaded: object = json.load(handle)
+    if isinstance(loaded, list):
+        return cast(List[Dict[str, Any]], loaded)
+    if isinstance(loaded, dict):
+        loaded_dict: Dict[str, Any] = cast(Dict[str, Any], loaded)
+        assignments = loaded_dict.get("assignments")
+        if isinstance(assignments, list):
+            return cast(List[Dict[str, Any]], assignments)
     raise ValueError("assignment file must be a JSON list or an object with an assignments list")
 
 

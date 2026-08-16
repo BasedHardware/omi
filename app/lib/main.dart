@@ -15,6 +15,8 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
+import 'package:omi/widgets/bluetooth_guidance_listener.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:opus_dart/opus_dart.dart';
@@ -29,10 +31,12 @@ import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/environment_profile.dart';
 import 'package:omi/env/prod_env.dart';
-import 'package:omi/firebase_options_dev.dart' as dev;
+import 'package:omi/firebase_options_local.dart' as local;
 import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
+import 'package:omi/startup_routing.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -68,26 +72,30 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
+import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/environment_detector.dart';
-import 'package:omi/pages/settings/developer.dart';
+import 'package:omi/utils/analytics/rage_click_context_tracker.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/notification_channel_strings.dart';
 
 /// Background message handler for FCM data messages
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
+  await NotificationChannelStrings.loadAppLocale();
 
   await AwesomeNotifications().initialize(null, [
     NotificationChannel(
       channelKey: 'channel',
-      channelName: 'Omi Notifications',
-      channelDescription: 'Notification channel for Omi',
+      channelName: NotificationChannelStrings.omiChannelName,
+      channelDescription: NotificationChannelStrings.omiChannelDescription,
       defaultColor: const Color(0xFF9D50DD),
       ledColor: Colors.white,
     ),
@@ -122,24 +130,35 @@ Future _init() async {
   } else {
     Env.init(DevEnv());
   }
+  Env.validateProfilePairing();
+  validateApplicationStartupRouting();
 
   FlutterForegroundTask.initCommunicationPort();
 
   // Service manager
   await ServiceManager.init();
+  LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
   if (Firebase.apps.isEmpty) {
-    final options = F.env == Environment.prod
-        ? prod.DefaultFirebaseOptions.currentPlatform
-        : dev.DefaultFirebaseOptions.currentPlatform;
+    final profile = Env.profile;
+    final options = profile == AppEnvironmentProfile.localDev
+        ? local.DefaultFirebaseOptions.currentPlatform
+        : prod.DefaultFirebaseOptions.currentPlatform;
+    Env.validateFirebaseProject(projectId: options.projectId);
     await Firebase.initializeApp(options: options);
   } else {
     // Firebase may already be initialized by native SDK (macOS)
     debugPrint('Firebase already initialized.');
+    Env.validateFirebaseProject(projectId: Firebase.app().options.projectId);
+  }
+
+  if (Env.profile.usesFirebaseAuthEmulator) {
+    await FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort);
   }
 
   await PlatformManager.initializeServices();
+  await NotificationChannelStrings.loadAppLocale();
   await NotificationService.instance.initialize();
 
   // Register FCM background message handler
@@ -149,23 +168,10 @@ Future _init() async {
 
   await SharedPreferencesUtil.init();
 
-  // TestFlight environment detection — must be after SharedPreferencesUtil.init()
+  // TestFlight remains a distribution/telemetry signal; production-family
+  // builds always use the established production backend.
   if (F.env == Environment.prod) {
-    final isTestFlight = await EnvironmentDetector.isTestFlight();
-    if (isTestFlight) {
-      Env.isTestFlight = true;
-      if (SharedPreferencesUtil().testFlightUseStagingApi) {
-        final staging = Env.stagingApiUrl;
-        if (staging != null) {
-          Env.overrideApiBaseUrl(staging);
-          debugPrint('TestFlight detected: using staging backend ($staging)');
-        } else {
-          debugPrint('TestFlight detected: staging preferred but STAGING_API_URL not configured, using production');
-        }
-      } else {
-        debugPrint('TestFlight detected: user chose production backend');
-      }
-    }
+    Env.isTestFlight = await EnvironmentDetector.isTestFlight();
   }
 
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
@@ -175,6 +181,12 @@ Future _init() async {
     // This handles the case where cached credentials are used on startup
     if (!SharedPreferencesUtil().onboardingCompleted) {
       await AuthService.instance.restoreOnboardingState();
+    }
+    // Fail-closed cutover gate before product traffic / offline uploads.
+    // Anonymous Firebase sessions are not cutover product owners.
+    final bootstrapUser = FirebaseAuth.instance.currentUser;
+    if (bootstrapUser != null && !bootstrapUser.isAnonymous) {
+      await AccountCutoverRuntime.instance.bindAuthenticatedOwner(bootstrapUser.uid);
     }
   }
   initOpus(await opus_flutter.load());
@@ -208,16 +220,24 @@ Future _init() async {
 }
 
 void main() {
-  runZonedGuarded(() async {
-    // Ensure
-    if (kDebugMode) {
-      MarionetteBinding.ensureInitialized();
-    } else {
-      WidgetsFlutterBinding.ensureInitialized();
-    }
-    await _init();
-    runApp(const MyApp());
-  }, (error, stack) => FirebaseCrashlytics.instance.recordError(error, stack, fatal: true));
+  runZonedGuarded(
+    () async {
+      // Ensure
+      if (kDebugMode) {
+        MarionetteBinding.ensureInitialized();
+      } else {
+        WidgetsFlutterBinding.ensureInitialized();
+      }
+      await _init();
+      runApp(const MyApp());
+    },
+    (error, stack) {
+      debugPrint('Uncaught error: $error\n$stack');
+      if (Firebase.apps.isNotEmpty) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      }
+    },
+  );
 }
 
 class MyApp extends StatefulWidget {
@@ -252,13 +272,26 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     ApiClient.dispose();
   }
 
+  Future<void> _refreshAccountCutoverThenWakeUploads() async {
+    if (!AuthService.instance.isSignedIn()) {
+      await AccountCutoverRuntime.instance.bindAuthenticatedOwner(null);
+      return;
+    }
+    // Apply fresh cutover control before waking WAL recovery so a stale
+    // legacy/allow projection cannot admit one offline upload.
+    final resumeUser = FirebaseAuth.instance.currentUser;
+    final resumeOwner = (resumeUser != null && !resumeUser.isAnonymous) ? resumeUser.uid : null;
+    await AccountCutoverRuntime.instance.bindAuthenticatedOwner(resumeOwner);
+    SyncReconciler.instance.onForeground();
+    unawaited(SyncUploadGate.instance.reconcileFairUseStatus());
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
-      // Resume the upload reconciler at fast cadence and check immediately.
-      SyncReconciler.instance.onForeground();
+      unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {
       SyncReconciler.instance.onBackground();
       _onAppPaused();
@@ -402,39 +435,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ErrorWidget.builder = (errorDetails) {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };
-              if (Env.isUsingStagingApi) {
-                final topPadding = MediaQuery.of(context).padding.top;
-                return Column(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        MyApp.navigatorKey.currentState?.push(
-                          MaterialPageRoute(builder: (context) => const DeveloperSettingsPage()),
-                        );
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.only(top: topPadding + 4, bottom: 4),
-                        color: Colors.orange.shade800,
-                        child: Text(
-                          context.l10n.staging.toUpperCase(),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            decoration: TextDecoration.none,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: MediaQuery.removePadding(context: context, removeTop: true, child: child!),
-                    ),
-                  ],
-                );
-              }
-              return child!;
+              final content = child!;
+              final guidedContent = BluetoothGuidanceListener(child: content);
+              return PlatformService.isIOS && Env.posthogApiKey != null
+                  ? RageClickContextTracker(child: guidedContent)
+                  : guidedContent;
             },
             home: TalkerWrapper(
               talker: Logger.instance.talker,

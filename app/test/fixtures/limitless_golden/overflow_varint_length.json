@@ -1,0 +1,15 @@
+{
+  "name": "overflow_varint_length",
+  "packets": [
+    "081210001801221b121910072008286b321108c08f84a1f7321afaffffff1f00000000"
+  ],
+  "expectedPages": [
+    {
+      "index": 107,
+      "session": 7,
+      "timestampMs": 1750000011200,
+      "frames": []
+    }
+  ],
+  "expectedStorageState": null
+}

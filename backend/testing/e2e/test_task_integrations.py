@@ -30,10 +30,10 @@ def _get_todoist_integration(client, auth_headers):
 
 
 def _patch_todoist_transport(monkeypatch, handler):
-    import routers.task_integrations as task_integrations
+    import utils.task_integrations_ops as task_integrations_ops
 
     fake_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    monkeypatch.setattr(task_integrations, "http_client", fake_client)
+    monkeypatch.setattr(task_integrations_ops, "http_client", fake_client)
     return fake_client
 
 

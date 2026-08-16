@@ -3,14 +3,22 @@ Tool for creating inline chart visualizations in chat responses.
 """
 
 import contextvars
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 
 try:
     from utils.retrieval.agentic import agent_config_context
 except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
+
+
+def _agent_config() -> Optional[Dict[str, Any]]:
+    """Retrieve the agent config dict from the context var, or None if unset."""
+    try:
+        return agent_config_context.get()
+    except LookupError:
+        return None
 
 
 @tool
@@ -71,11 +79,7 @@ def create_chart_tool(
         ],
     }
 
-    try:
-        config = agent_config_context.get()
-    except LookupError:
-        config = None
-
+    config = _agent_config()
     if config:
         configurable = config.get('configurable', {})
         configurable['chart_data'] = chart_data

@@ -61,7 +61,7 @@ class HydratedSearchResult(BaseModel):
 class SearchGatewayResult(BaseModel):
     results: List[HydratedSearchResult] = Field(default_factory=list)
     decisions: Dict[str, SearchDecision] = Field(default_factory=dict)
-    repair_purge_candidates: List[Dict[str, Any]] = Field(default_factory=list)
+    repair_purge_candidates: List[Dict[str, Any]] = Field(default_factory=list[Dict[str, Any]])
 
 
 def hydrate_and_filter_vector_hits(
@@ -72,6 +72,7 @@ def hydrate_and_filter_vector_hits(
     mode: SearchMode,
     required_projection_commit_id: str,
     required_account_generation: int,
+    now: Optional[datetime] = None,
 ) -> SearchGatewayResult:
     """Fail-closed vector gateway.
 
@@ -98,7 +99,12 @@ def hydrate_and_filter_vector_hits(
                 )
             )
             continue
-        if hit.projection_commit_id != required_projection_commit_id:
+        authoritative_projection_commit_id = (
+            item.ledger_commit_id.strip()
+            if isinstance(item.ledger_commit_id, str) and item.ledger_commit_id.strip()
+            else required_projection_commit_id
+        )
+        if hit.projection_commit_id != authoritative_projection_commit_id:
             decisions[hit.memory_id] = SearchDecision.stale_projection
             repair_purge_candidates.append(
                 _repair_purge_candidate(
@@ -231,9 +237,9 @@ def hydrate_and_filter_vector_hits(
             )
             continue
         access = (
-            is_archive_access_eligible(item, policy)
+            is_archive_access_eligible(item, policy, now=now)
             if mode == SearchMode.archive_explicit
-            else is_default_access_eligible(item, policy)
+            else is_default_access_eligible(item, policy, now=now)
         )
         if not access.allowed:
             decisions[hit.memory_id] = SearchDecision.access_denied
@@ -262,12 +268,19 @@ def _repair_purge_candidate(
     )
     if reason == VectorRepairPurgeReason.stale_projection_commit:
         decision = SearchDecision.stale_projection
+    authoritative_projection_commit_id = (
+        authoritative_item.ledger_commit_id.strip()
+        if authoritative_item is not None
+        and isinstance(authoritative_item.ledger_commit_id, str)
+        and authoritative_item.ledger_commit_id.strip()
+        else required_projection_commit_id
+    )
     return {
         "vector_id": hit.vector_id or hit.memory_id,
         "memory_id": hit.memory_id,
         "reason": reason.value,
         "decision": decision.value,
-        "required_projection_commit_id": required_projection_commit_id,
+        "required_projection_commit_id": authoritative_projection_commit_id,
         "observed_projection_commit_id": hit.projection_commit_id,
         "required_account_generation": required_account_generation,
         "observed_account_generation": hit.account_generation,

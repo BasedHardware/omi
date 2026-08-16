@@ -338,7 +338,7 @@ describe("desktop action queue", () => {
     expect(queue[0]).toMatchObject({ subjectId: "orphaned-story-run" });
   });
 
-  it("projects pending candidates and legacy pills into derived items", () => {
+  it("projects pending candidates into derived items", () => {
     const queue = buildDesktopActionQueue({
       nowMs: 10_000,
       candidates: [
@@ -350,18 +350,8 @@ describe("desktop action queue", () => {
           createdAtMs: 5_000,
         },
       ],
-      legacyPills: [
-        {
-          pillId: "pill-1",
-          ownerId: "owner-1",
-          title: "Legacy Agent",
-          status: "running",
-          createdAtMs: 4_000,
-          updatedAtMs: 6_000,
-        },
-      ],
     });
 
-    expect(queue.map((item) => item.kind)).toEqual(["candidate_review", "legacy_pill"]);
+    expect(queue.map((item) => item.kind)).toEqual(["candidate_review"]);
   });
 });

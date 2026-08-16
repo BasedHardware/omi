@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-
 import 'package:path_provider/path_provider.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
@@ -18,7 +17,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   static const int pagesPerChunk = 25;
   static const Duration _persistBatchDuration = Duration(seconds: 90);
 
-  List<Wal> _wals = const [];
+  List<Wal> _wals = [];
   BtDevice? _device;
   LocalWalSync? _localSync;
 
@@ -30,7 +29,6 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   bool _isSyncing = false;
   bool _cancelRequested = false;
-  String? _currentDeviceId;
 
   @override
   bool get isSyncing => _isSyncing;
@@ -104,6 +102,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     if (device == null) return [];
 
     if (device.type != DeviceType.limitless) return [];
+
+    // Transcribe Later owns the pendant's flash: the native drain engine writes it
+    // to recordings, so the Sync-page WAL surface stands down while batch is on.
+    if (SharedPreferencesUtil().batchModeEnabled) return [];
 
     String deviceId = device.id;
     List<Wal> wals = [];
@@ -286,7 +288,6 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     if (_device == null) return false;
 
     String deviceId = _device!.id;
-    _currentDeviceId = deviceId;
 
     try {
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);

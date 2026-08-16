@@ -54,7 +54,8 @@ enum CalendarReaderError: LocalizedError, Equatable {
     case .noBrowserFound:
       return "No supported browser found. Open Google Calendar in Chrome, Arc, Brave, or Edge, then try again."
     case .notSignedIn:
-      return "Not signed into Google in any browser. Open calendar.google.com in Chrome, Arc, Brave, or Edge, sign in, then try again."
+      return
+        "Not signed into Google in any browser. Open calendar.google.com in Chrome, Arc, Brave, or Edge, sign in, then try again."
     case .sessionExpired:
       return "Your Google session expired. Reload calendar.google.com in your browser to refresh it, then try again."
     case .cookieDecryptionFailed(let msg):
@@ -84,9 +85,9 @@ enum CalendarFetchOutcome: Equatable {
 
   static func == (lhs: CalendarFetchOutcome, rhs: CalendarFetchOutcome) -> Bool {
     switch (lhs, rhs) {
-    case let (.success(_, lb), .success(_, rb)):
+    case (.success(_, let lb), .success(_, let rb)):
       return lb == rb
-    case let (.failure(lc, ls, la), .failure(rc, rs, ra)):
+    case (.failure(let lc, let ls, let la), .failure(let rc, let rs, let ra)):
       return lc == rc && ls == rs && la == ra
     default:
       return false
@@ -224,12 +225,25 @@ actor CalendarReaderService {
   /// Read calendar events using browser cookies + SAPISID auth.
   /// Tries Arc, Chrome, Brave, and Edge across all Chromium profiles.
   /// Fetches events from `daysBack` days ago to `daysForward` days from now.
-  func readEvents(daysBack: Int = 90, daysForward: Int = 14, maxResults: Int = 200) async throws
+  /// Browser Keychain consent is only eligible for an explicitly requested read.
+  func readEvents(
+    daysBack: Int = 90,
+    daysForward: Int = 14,
+    maxResults: Int = 200,
+    userInitiated: Bool = false
+  ) async throws
     -> [CalendarEvent]
   {
+    if userInitiated {
+      BrowserKeychainCache.shared.beginUserInitiatedOperation()
+    }
     await APIKeyService.shared.waitForKeys()
     let events = try fetchCalendarViaCookies(
-      daysBack: daysBack, daysForward: daysForward, maxResults: maxResults)
+      daysBack: daysBack,
+      daysForward: daysForward,
+      maxResults: maxResults,
+      userInitiated: userInitiated
+    )
     return events.sorted { $0.startTime > $1.startTime }
   }
 
@@ -240,10 +254,18 @@ actor CalendarReaderService {
   /// to render honest status and to drive self-healing, rather than trusting a
   /// one-time success. It runs the same real fetch path over a tiny window so a
   /// green result guarantees the whole chain (cookies → auth → API) works.
-  func verifyConnection() async -> CalendarConnectionStatus {
+  func verifyConnection(userInitiated: Bool = false) async -> CalendarConnectionStatus {
+    if userInitiated {
+      BrowserKeychainCache.shared.beginUserInitiatedOperation()
+    }
     do {
       await APIKeyService.shared.waitForKeys()
-      _ = try fetchCalendarViaCookies(daysBack: 1, daysForward: 1, maxResults: 1)
+      _ = try fetchCalendarViaCookies(
+        daysBack: 1,
+        daysForward: 1,
+        maxResults: 1,
+        userInitiated: userInitiated
+      )
       return .connected(verifiedAt: Date())
     } catch let error as CalendarReaderError {
       switch error {
@@ -260,13 +282,14 @@ actor CalendarReaderService {
   }
 
   /// Synthesize profile memories and tasks from calendar events.
-  /// Uses local LLM (AgentBridge) to extract ~10 memories and 2-3 tasks.
+  /// The prompt and the model live in the backend behind POST /v1/connectors/synthesize;
+  /// this only formats the event rows and persists what comes back.
   func synthesizeFromEvents(events: [CalendarEvent]) async -> (
     memories: Int, tasks: Int, profileSummary: String
   ) {
     guard !events.isEmpty else { return (0, 0, "") }
 
-    // Format events compactly for the LLM
+    // Format events compactly for the backend
     var eventLines: [String] = []
     for event in events {
       var parts = ["[\(event.startTime)] \(event.summary)"]
@@ -282,159 +305,84 @@ actor CalendarReaderService {
       }
       eventLines.append(parts.joined(separator: " | "))
     }
-    let eventsText = eventLines.joined(separator: "\n")
-
-    let today = ISO8601DateFormatter().string(from: Date()).prefix(10)
-    let synthesisPrompt = """
-      Analyze these \(events.count) Google Calendar events and extract profile information about the user.
-
-      CALENDAR EVENTS:
-      \(eventsText)
-
-      Today's date: \(today)
-
-      Respond ONLY with valid JSON (no markdown, no code fences):
-      {
-        "memories": [
-          "factual statement about the user based on calendar patterns"
-        ],
-        "tasks": [
-          {"description": "actionable item based on upcoming events", "priority": "high", "due_at": "2026-03-20T09:00:00Z"}
-        ],
-        "profile": "2-3 sentence summary of who this user is based on their calendar"
-      }
-
-      RULES:
-      - Extract 10-15 memories (facts about their role, recurring meetings, relationships, routines, interests, work schedule, hobbies, social life)
-      - Extract 3-5 tasks (upcoming preparation, follow-ups, deadlines from future events)
-      - Focus on PATTERNS (weekly standups, regular gym, recurring 1-on-1s) not one-off events
-      - Each memory should be a single clear factual statement in third person ("The user...")
-      - Tasks should only reference FUTURE events with ISO date in due_at
-      - Task priorities: "high", "medium", or "low"
-      - Profile should summarize professional identity and schedule patterns
-      - Do NOT include raw event details — synthesize and generalize
-      - Do NOT include sensitive medical or financial details
-      """
 
     // Retry the synthesis on transient failure instead of silently dropping the import.
     let maxAttempts = 2
     for attempt in 1...maxAttempts {
-    do {
-      if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
-        || UserDefaults.standard.bool(forKey: "forceSynthesisFail") {
-        throw NSError(domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
-      }
-      let bridge = AgentBridge(harnessMode: "piMono")
-      try await bridge.start()
-      defer { Task { await bridge.stop() } }
-
-      let result = try await bridge.query(
-        prompt: synthesisPrompt,
-        systemPrompt:
-          "You are a profile extraction assistant. Analyze calendar events and output structured JSON. Be concise and factual.",
-        model: ModelQoS.Claude.synthesis,
-        onTextDelta: { @Sendable _ in },
-        onToolCall: { @Sendable _, _, _ in return "" },
-        onToolActivity: { @Sendable _, _, _, _ in }
-      )
-
-      var responseText = result.text
-      log(
-        "CalendarReaderService: Synthesis raw response (\(responseText.count) chars): \(responseText.prefix(300))"
-      )
-
-      // Extract JSON from response — handle markdown code fences and leading text
-      if let jsonStart = responseText.range(of: "```json") {
-        responseText = String(responseText[jsonStart.upperBound...])
-        if let jsonEnd = responseText.range(of: "```") {
-          responseText = String(responseText[..<jsonEnd.lowerBound])
+      do {
+        if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
+          || UserDefaults.standard.bool(forKey: "forceSynthesisFail")
+        {
+          throw NSError(
+            domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
         }
-      } else if let jsonStart = responseText.range(of: "```") {
-        responseText = String(responseText[jsonStart.upperBound...])
-        if let jsonEnd = responseText.range(of: "```") {
-          responseText = String(responseText[..<jsonEnd.lowerBound])
-        }
-      }
-      // Also try finding raw JSON object if there's leading text
-      if let braceStart = responseText.firstIndex(of: "{") {
-        responseText = String(responseText[braceStart...])
-      }
-      responseText = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let synthesis = try await APIClient.shared.synthesizeConnectorItems(
+          source: "calendar",
+          items: eventLines
+        )
 
-      guard let jsonData = responseText.data(using: .utf8),
-        let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-      else {
-        log(
-          "CalendarReaderService: Failed to parse synthesis response: \(responseText.prefix(200))")
-        return (0, 0, "")
-      }
+        let memoryStrings = synthesis.memories
+        let taskDicts = synthesis.tasks
+        let profileSummary = synthesis.profile
 
-      let memoryStrings = parsed["memories"] as? [String] ?? []
-      let taskDicts = parsed["tasks"] as? [[String: Any]] ?? []
-      let profileSummary = parsed["profile"] as? String ?? ""
-
-      let artifacts = memoryStrings.map { memory in
-        ImportEvidenceBatchItem(
+        let artifacts = memoryStrings.map { memory in
+          ImportEvidenceBatchItem(
             title: "Calendar Profile Insight",
             snippet: memory,
             content: memory,
             metadata: ["import_kind": "profile"]
-        )
-      }
-      let legacyMemories = memoryStrings.map { memory in
-        MemoryBatchItem(
-          content: memory,
-          tags: ["calendar", "onboarding"],
-          headline: "Calendar Profile Insight",
-          source: "google_calendar"
-        )
-      }
-      let saveResult = await OnboardingImportEvidenceService.save(
-        artifacts,
-        sourceType: "google_calendar",
-        logPrefix: "CalendarReaderService",
-        legacyMemories: legacyMemories
-      )
-
-      // Save tasks
-      var tasksSaved = 0
-      for taskDict in taskDicts {
-        guard let description = taskDict["description"] as? String else { continue }
-        let priority = taskDict["priority"] as? String ?? "medium"
-        let dueAtStr = taskDict["due_at"] as? String
-        var dueAt: Date? = nil
-        if let dueAtStr = dueAtStr {
-          dueAt = ISO8601DateFormatter().date(from: dueAtStr)
+          )
         }
-        let task = await TasksStore.shared.createTask(
-          description: description,
-          dueAt: dueAt,
-          priority: priority,
-          tags: ["calendar", "onboarding"]
+        let legacyMemories = memoryStrings.map { memory in
+          MemoryBatchItem(
+            content: memory,
+            tags: ["calendar", "onboarding"],
+            headline: "Calendar Profile Insight",
+            source: "google_calendar"
+          )
+        }
+        let saveResult = await OnboardingImportEvidenceService.save(
+          artifacts,
+          sourceType: "google_calendar",
+          logPrefix: "CalendarReaderService",
+          legacyMemories: legacyMemories
         )
-        if task != nil { tasksSaved += 1 }
-      }
 
-      log(
-        "CalendarReaderService: Synthesis complete — \(saveResult.saved) memories, \(tasksSaved) tasks, profile: \(profileSummary.prefix(80))"
-      )
-      return (saveResult.saved, tasksSaved, profileSummary)
+        // Save tasks
+        var tasksSaved = 0
+        for taskDict in taskDicts {
+          let description = taskDict.description
+          guard !description.isEmpty else { continue }
+          let priority = taskDict.priority.isEmpty ? "medium" : taskDict.priority
+          let dueAt = taskDict.dueAt.isEmpty ? nil : ISO8601DateFormatter().date(from: taskDict.dueAt)
+          let task = await TasksStore.shared.createTask(
+            description: description,
+            dueAt: dueAt,
+            priority: priority,
+            tags: ["calendar", "onboarding"]
+          )
+          if task != nil { tasksSaved += 1 }
+        }
 
-    } catch {
-      if attempt < maxAttempts {
-        log("CalendarReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
-        try? await Task.sleep(nanoseconds: 800_000_000)
-        continue
+        log(
+          "CalendarReaderService: Synthesis complete — \(saveResult.saved) memories, \(tasksSaved) tasks, profile: \(profileSummary.prefix(80))"
+        )
+        return (saveResult.saved, tasksSaved, profileSummary)
+
+      } catch {
+        if attempt < maxAttempts {
+          log("CalendarReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
+          try? await Task.sleep(nanoseconds: 800_000_000)
+          continue
+        }
+        log("CalendarReaderService: Synthesis failed after \(attempt) attempts: \(error)")
+        return (0, 0, "")
       }
-      log("CalendarReaderService: Synthesis failed after \(attempt) attempts: \(error)")
-      return (0, 0, "")
-    }
     }
     return (0, 0, "")
   }
 
-  func saveAsMemories(events: [CalendarEvent], limit: Int? = nil) async -> (saved: Int, failed: Int)
-  {
+  func saveAsMemories(events: [CalendarEvent], limit: Int? = nil) async -> (saved: Int, failed: Int) {
     let eventsToSave = limit.map { Array(events.prefix($0)) } ?? events
     guard !eventsToSave.isEmpty else { return (0, 0) }
 
@@ -493,7 +441,12 @@ actor CalendarReaderService {
 
   // MARK: - Python: decrypt cookies + fetch Calendar events via SAPISID auth
 
-  private func fetchCalendarViaCookies(daysBack: Int, daysForward: Int, maxResults: Int) throws
+  private func fetchCalendarViaCookies(
+    daysBack: Int,
+    daysForward: Int,
+    maxResults: Int,
+    userInitiated: Bool = false
+  ) throws
     -> [CalendarEvent]
   {
     let parameters = CalendarFetchParameters.normalized(
@@ -501,7 +454,7 @@ actor CalendarReaderService {
       daysForward: daysForward,
       maxResults: maxResults
     )
-    guard let calendarKey = getenv("GOOGLE_CALENDAR_API_KEY").flatMap({ String(validatingUTF8: $0) }),
+    guard let calendarKey = getenv("GOOGLE_CALENDAR_API_KEY").flatMap({ String(validatingCString: $0) }),
       !calendarKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else {
       throw CalendarReaderError.configurationError("Calendar API key is unavailable; try again after startup finishes.")
@@ -509,7 +462,10 @@ actor CalendarReaderService {
 
     // Build browser configs as JSON for Python
     // Pass the ORIGINAL db path — Python opens it read-only to avoid WAL/journal corruption from file copy
-    let browserConfigs = BrowserGoogleSession.configsForPython(logPrefix: "CalendarReaderService")
+    let browserConfigs = BrowserGoogleSession.configsForPython(
+      logPrefix: "CalendarReaderService",
+      userInitiated: userInitiated
+    )
 
     guard !browserConfigs.isEmpty else {
       throw CalendarReaderError.noBrowserFound
@@ -557,27 +513,11 @@ actor CalendarReaderService {
           except Exception:
               return None
 
-      def fetch_calendar_events(jar, cookies_list, days_back, days_forward, max_results):
+      def fetch_calendar_events(jar, days_back, days_forward, max_results):
           # Returns (events, error, http_status). http_status lets the caller
           # distinguish an expired session (401/403) from a transient network
           # failure so the user gets the right recovery step (philosophy §3).
-          # Find SAPISID cookie
-          sapisid = None
-          for c in cookies_list:
-              if c['name'] == 'SAPISID':
-                  sapisid = c['value']
-                  break
-          if not sapisid:
-              # Try __Secure-3PAPISID
-              for c in cookies_list:
-                  if c['name'] == '__Secure-3PAPISID':
-                      sapisid = c['value']
-                      break
-          if not sapisid:
-              return None, "No SAPISID cookie found", None
-
           origin = "https://calendar.google.com"
-          auth_header = get_sapisidhash(sapisid, origin)
 
           now = datetime.now(timezone.utc)
           time_min = (now - timedelta(days=days_back)).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -599,6 +539,16 @@ actor CalendarReaderService {
                   url += f"&pageToken={urllib.parse.quote(page_token)}"
 
               req = urllib.request.Request(url)
+              # The SAPISIDHASH must use the same host-scoped cookie Chrome
+              # would send to clients6.google.com. Selecting the first
+              # same-named cookie from SQLite can hash a cookie from a
+              # different Google host and make a live browser session look
+              # expired.
+              sapisid = cookie_value_for_request(
+                  jar, url, ('SAPISID', '__Secure-3PAPISID'))
+              if not sapisid:
+                  return None, "No SAPISID cookie applicable to Calendar found", None
+              auth_header = get_sapisidhash(sapisid, origin)
               req.add_header('Authorization', auth_header)
               req.add_header('Origin', origin)
               req.add_header('Referer', 'https://calendar.google.com/')
@@ -679,7 +629,7 @@ actor CalendarReaderService {
               continue
 
           jar = make_cookie_jar(cookies)
-          events, fetch_err, http_status = fetch_calendar_events(jar, cookies, days_back, days_forward, max_results)
+          events, fetch_err, http_status = fetch_calendar_events(jar, days_back, days_forward, max_results)
           if fetch_err or events is None:
               attempts.append({'browser': browser['name'], 'stage': 'fetch',
                                'reason': (fetch_err or 'unknown fetch error'),
@@ -757,14 +707,14 @@ actor CalendarReaderService {
 
     let outcome = CalendarOutcomeParser.parse(json)
     switch outcome {
-    case let .failure(cls, summary, attempts):
+    case .failure(let cls, let summary, let attempts):
       // Structured, non-sensitive diagnostics for the eval corpus (philosophy §7).
       log(
         "CalendarReaderService: fetch failed [\(cls.rawValue)] — \(summary) | "
           + "attempts: \(CalendarOutcomeParser.diagnosticsLine(attempts))")
       throw cls.asError(summary: summary)
 
-    case let .success(eventDicts, browserName):
+    case .success(let eventDicts, let browserName):
       log("CalendarReaderService: Got \(eventDicts.count) events from \(browserName)")
       return eventDicts.compactMap { dict -> CalendarEvent? in
         guard let id = dict["id"] as? String,

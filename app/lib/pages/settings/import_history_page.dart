@@ -11,8 +11,35 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/imports.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+
+/// Renders an import job's creation timestamp for its history row.
+///
+/// [createdAt] is a server timestamp and parses as UTC, so both the day the row
+/// is labelled with and the clock time it shows must come from the *local*
+/// projection: reading the raw UTC components puts the row on the wrong day and
+/// at the wrong time for every viewer whose local day differs from the UTC day.
+/// [now] exists for tests; production passes the real clock.
+String formatImportJobTimestamp(AppLocalizations l10n, DateTime createdAt, {DateTime? now}) {
+  final local = createdAt.toLocal();
+  final reference = (now ?? DateTime.now()).toLocal();
+  final today = DateTime(reference.year, reference.month, reference.day);
+  final jobDay = DateTime(local.year, local.month, local.day);
+  final time = '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+
+  if (jobDay == today) {
+    return l10n.todayAtTime(time);
+  }
+  // Calendar arithmetic, not a 24h subtraction: on either DST transition
+  // `today - Duration(days: 1)` lands at 23:00 or 01:00 rather than midnight,
+  // so it never equals a day key and the yesterday row silently falls through.
+  if (jobDay == DateTime(reference.year, reference.month, reference.day - 1)) {
+    return l10n.yesterdayAtTime(time);
+  }
+  return '${local.day}/${local.month}/${local.year} at $time';
+}
 
 class ImportHistoryPage extends StatefulWidget {
   const ImportHistoryPage({super.key});
@@ -369,7 +396,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                         color: Colors.deepPurple.withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(FontAwesomeIcons.plus, color: Colors.white, size: 16),
+                      child: const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 16),
                     )
             else
               Icon(Icons.lock_outline, color: Colors.grey.shade700, size: 20),
@@ -418,53 +445,35 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   }
 
   Widget _buildJobCard(ImportJobResponse job) {
-    IconData statusIcon;
+    FaIconData statusIcon;
     Color statusColor;
     String statusText;
 
     switch (job.status) {
       case ImportJobStatus.pending:
-        statusIcon = Icons.hourglass_empty;
+        statusIcon = FontAwesomeIcons.hourglass;
         statusColor = Colors.orange;
         statusText = context.l10n.statusPending;
         break;
       case ImportJobStatus.processing:
-        statusIcon = Icons.sync;
+        statusIcon = FontAwesomeIcons.arrowsRotate;
         statusColor = Colors.blue;
         statusText = context.l10n.statusProcessing;
         break;
       case ImportJobStatus.completed:
-        statusIcon = Icons.done;
+        statusIcon = FontAwesomeIcons.check;
         statusColor = Colors.green;
         statusText = context.l10n.statusCompleted;
         break;
       case ImportJobStatus.failed:
-        statusIcon = Icons.error;
+        statusIcon = FontAwesomeIcons.circleExclamation;
         statusColor = Colors.red;
         statusText = context.l10n.statusFailed;
         break;
     }
 
-    // Format date/time
-    String dateTimeStr = '';
-    if (job.createdAt != null) {
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final jobDate = DateTime(job.createdAt!.year, job.createdAt!.month, job.createdAt!.day);
-
-      if (jobDate == today) {
-        dateTimeStr = context.l10n.todayAtTime(
-          '${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}',
-        );
-      } else if (jobDate == today.subtract(const Duration(days: 1))) {
-        dateTimeStr = context.l10n.yesterdayAtTime(
-          '${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}',
-        );
-      } else {
-        dateTimeStr =
-            '${job.createdAt!.day}/${job.createdAt!.month}/${job.createdAt!.year} at ${job.createdAt!.hour.toString().padLeft(2, '0')}:${job.createdAt!.minute.toString().padLeft(2, '0')}';
-      }
-    }
+    final createdAt = job.createdAt;
+    final String dateTimeStr = createdAt == null ? '' : formatImportJobTimestamp(context.l10n, createdAt);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -490,7 +499,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
               if (job.isProcessing)
                 _RotatingSyncIcon(color: statusColor, size: 18)
               else if (job.status != ImportJobStatus.completed)
-                Icon(statusIcon, color: statusColor, size: 18),
+                FaIcon(statusIcon, color: statusColor, size: 18),
               if (job.status != ImportJobStatus.completed) const SizedBox(width: 6),
               // Status text and date
               Expanded(

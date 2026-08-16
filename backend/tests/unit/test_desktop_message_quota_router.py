@@ -45,10 +45,13 @@ def _make_client():
     _install_package('utils.llm', BACKEND_DIR / 'utils' / 'llm')
 
     chat_db = _install_module('database.chat')
+    chat_db.ClientMessageIdPayloadConflict = type('ClientMessageIdPayloadConflict', (ValueError,), {})
+    chat_db.MessageReconcileCursorError = type('MessageReconcileCursorError', (ValueError,), {})
     chat_db.save_message = MagicMock(
         return_value={'id': 'client-msg-1', 'created_at': '2026-07-02T00:00:00+00:00', 'created': True}
     )
     chat_db.get_messages = MagicMock(return_value=[])
+    chat_db.get_messages_reconcile_page = MagicMock(return_value=([], None, False))
     chat_db.delete_messages = MagicMock(return_value=0)
     chat_db.create_chat_session = MagicMock()
     chat_db.get_chat_sessions = MagicMock()
@@ -109,6 +112,7 @@ def test_desktop_human_message_records_quota_once_after_persistence_acceptance()
             metadata=None,
             client_message_id='client-msg-1',
             message_source='desktop_chat',
+            journal_revision=None,
         )
         module.llm_usage_db.record_chat_quota_question.assert_called_once_with(
             'test-uid',
@@ -118,6 +122,65 @@ def test_desktop_human_message_records_quota_once_after_persistence_acceptance()
             chat_session_id=None,
             platform='macos',
         )
+    finally:
+        _cleanup(saved)
+
+
+def test_desktop_reconcile_response_preserves_canonical_identity_and_artifacts():
+    client, module, saved = _make_client()
+    try:
+        metadata = '{"content_blocks":[{"type":"agent_spawn"}],"resources":[{"id":"artifact-1"}]}'
+        module.chat_db.get_messages_reconcile_page.return_value = (
+            [
+                {
+                    'id': 'turn-canonical',
+                    'text': 'I started a background agent for that.',
+                    'created_at': '2026-07-02T00:00:00+00:00',
+                    'sender': 'ai',
+                    'type': 'text',
+                    'app_id': None,
+                    'plugin_id': None,
+                    'session_id': 'session-1',
+                    'chat_session_id': 'session-1',
+                    'reported': False,
+                    'metadata': metadata,
+                    'client_message_id': 'turn-canonical',
+                    'message_source': 'desktop_chat',
+                }
+            ],
+            'turn-canonical',
+            True,
+        )
+
+        response = client.get('/v2/desktop/messages/reconcile?limit=100')
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload['next_cursor'] == 'turn-canonical'
+        assert payload['has_more'] is True
+        assert payload['messages'][0]['client_message_id'] == 'turn-canonical'
+        assert payload['messages'][0]['session_id'] == 'session-1'
+        assert payload['messages'][0]['metadata'] == metadata
+        module.chat_db.get_messages_reconcile_page.assert_called_once_with(
+            'test-uid',
+            app_id=None,
+            chat_session_id=None,
+            limit=100,
+            cursor_message_id=None,
+        )
+    finally:
+        _cleanup(saved)
+
+
+def test_desktop_reconcile_rejects_invalid_owner_scoped_cursor():
+    client, module, saved = _make_client()
+    try:
+        module.chat_db.get_messages_reconcile_page.side_effect = module.chat_db.MessageReconcileCursorError()
+
+        response = client.get('/v2/desktop/messages/reconcile?cursor=other-owner-message')
+
+        assert response.status_code == 400
+        assert response.json() == {'detail': 'invalid message reconciliation cursor'}
     finally:
         _cleanup(saved)
 
@@ -144,6 +207,7 @@ def test_desktop_duplicate_human_message_retries_idempotent_quota_record():
             metadata=None,
             client_message_id='client-msg-1',
             message_source='desktop_chat',
+            journal_revision=None,
         )
         module.llm_usage_db.record_chat_quota_question.assert_called_once_with(
             'test-uid',
@@ -153,6 +217,79 @@ def test_desktop_duplicate_human_message_retries_idempotent_quota_record():
             chat_session_id=None,
             platform=None,
         )
+    finally:
+        _cleanup(saved)
+
+
+def test_desktop_message_rejects_idempotency_payload_collision():
+    client, module, saved = _make_client()
+    try:
+        module.chat_db.save_message.side_effect = module.chat_db.ClientMessageIdPayloadConflict()
+        response = client.post(
+            '/v2/desktop/messages',
+            json={'text': 'different', 'sender': 'human', 'client_message_id': 'client-msg-1'},
+        )
+
+        assert response.status_code == 409
+        assert response.json() == {'detail': 'client_message_id payload conflict'}
+        module.llm_usage_db.record_chat_quota_question.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
+def test_desktop_message_forwards_bounded_journal_revision():
+    client, module, saved = _make_client()
+    try:
+        module.chat_db.save_message.return_value = {
+            'id': 'turn-1',
+            'created_at': '2026-07-02T00:00:00+00:00',
+            'created': False,
+            'updated': True,
+            'journal_revision': 12,
+        }
+        response = client.post(
+            '/v2/desktop/messages',
+            json={
+                'text': 'enriched',
+                'sender': 'ai',
+                'session_id': 'session-1',
+                'client_message_id': 'turn-1',
+                'journal_revision': 12,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()['journal_revision'] == 12
+        assert response.json()['updated'] is True
+        module.chat_db.save_message.assert_called_once_with(
+            'test-uid',
+            text='enriched',
+            sender='ai',
+            app_id=None,
+            session_id='session-1',
+            metadata=None,
+            client_message_id='turn-1',
+            message_source='desktop_chat',
+            journal_revision=12,
+        )
+    finally:
+        _cleanup(saved)
+
+
+def test_desktop_message_rejects_nonpositive_journal_revision_at_boundary():
+    client, module, saved = _make_client()
+    try:
+        response = client.post(
+            '/v2/desktop/messages',
+            json={
+                'text': 'invalid',
+                'sender': 'ai',
+                'client_message_id': 'turn-1',
+                'journal_revision': 0,
+            },
+        )
+        assert response.status_code == 422
+        module.chat_db.save_message.assert_not_called()
     finally:
         _cleanup(saved)
 
@@ -202,6 +339,7 @@ def test_realtime_voice_human_message_does_not_record_desktop_message_quota():
             metadata=None,
             client_message_id='voice-msg-1',
             message_source='realtime_voice',
+            journal_revision=None,
         )
         module.llm_usage_db.record_chat_quota_question.assert_not_called()
     finally:

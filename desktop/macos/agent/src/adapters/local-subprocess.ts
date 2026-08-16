@@ -16,8 +16,8 @@ import type {
   RuntimeAdapter,
 } from "./interface.js";
 import type { ArtifactRole } from "../runtime/types.js";
-import { normalizeRuntimeFailure, type RuntimeFailure } from "../runtime/failures.js";
-import type { OutboundMessage } from "../protocol.js";
+import { isRuntimeFailureCode, normalizeRuntimeFailure, type RuntimeFailure } from "../runtime/failures.js";
+import type { OutboundMessageDraft } from "../protocol.js";
 
 type LocalSubprocessRequest = {
   type: "open" | "resume" | "execute" | "cancel" | "close";
@@ -477,7 +477,7 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
     pending.eventSink?.(canonicalEvent);
   }
 
-  private canonicalEventFrom(event: Record<string, unknown>): OutboundMessage | null {
+  private canonicalEventFrom(event: Record<string, unknown>): OutboundMessageDraft | null {
     switch (event.type) {
       case "text_delta":
         return { type: "text_delta", text: stringValue(event.text) };
@@ -491,7 +491,14 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
           input: recordValue(event.input),
         };
       case "tool_activity": {
-        const status = event.status === "completed" || event.status === "failed" ? event.status : "started";
+        const status =
+          event.status === "progress"
+          || event.status === "completed"
+          || event.status === "failed"
+          || event.status === "cancelled"
+          || event.status === "interrupted"
+            ? event.status
+            : "started";
         return {
           type: "tool_activity",
           name: stringValue(event.name),
@@ -555,6 +562,7 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
     if (!code || !userMessage) return undefined;
     return normalizeRuntimeFailure({
       code,
+      failureCode: isRuntimeFailureCode(value.failureCode) ? value.failureCode : undefined,
       userMessage,
       technicalMessage: optionalString(value.technicalMessage),
       source: value.source === "adapter_process" || value.source === "adapter_execution" || value.source === "runtime"

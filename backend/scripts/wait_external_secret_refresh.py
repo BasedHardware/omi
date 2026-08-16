@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-from typing import Any
+from typing import Any, cast
 
 EXIT_REFRESH_OBSERVED = 0
 EXIT_HARD_ERROR = 1
@@ -79,16 +79,17 @@ def load_json(path: Path | None) -> dict[str, Any]:
     if path is None:
         return {}
     with path.open('r', encoding='utf-8') as handle:
-        loaded = json.load(handle)
+        loaded: object = json.load(handle)
     if not isinstance(loaded, dict):
         raise ValueError(f'{path} must contain a JSON object')
-    return loaded
+    return cast(dict[str, Any], loaded)
 
 
 def external_secret_refresh_observed(state: dict[str, Any], min_refresh_time: datetime) -> tuple[bool, str]:
-    status = state.get('status') if isinstance(state, dict) else {}
-    if not isinstance(status, dict):
+    status_raw = state.get('status')
+    if not isinstance(status_raw, dict):
         return False, 'ExternalSecret status missing'
+    status: dict[str, Any] = cast(dict[str, Any], status_raw)
 
     refresh_time = parse_optional_timestamp(status.get('refreshTime'))
     if refresh_time is None:
@@ -106,12 +107,14 @@ def external_secret_refresh_observed(state: dict[str, Any], min_refresh_time: da
 def is_ready(conditions: Any) -> bool:
     if not isinstance(conditions, list):
         return False
-    return any(
-        isinstance(condition, dict)
-        and condition.get('type') == 'Ready'
-        and str(condition.get('status') or '').lower() == 'true'
-        for condition in conditions
-    )
+    items: list[Any] = cast(list[Any], conditions)
+    for condition in items:
+        if not isinstance(condition, dict):
+            continue
+        condition_dict: dict[str, Any] = cast(dict[str, Any], condition)
+        if condition_dict.get('type') == 'Ready' and str(condition_dict.get('status') or '').lower() == 'true':
+            return True
+    return False
 
 
 def parse_optional_timestamp(value: Any) -> datetime | None:

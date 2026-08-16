@@ -9,6 +9,9 @@ class AppLocalizationsTl extends AppLocalizations {
   AppLocalizationsTl([String locale = 'tl']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Nag-expire ang session — mag-sign in ulit.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -747,11 +750,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Ang iyong plan ay magre-renew sa $date.';
-  }
-
-  @override
   String get basicPlan => 'Free Plan';
 
   @override
@@ -1472,7 +1470,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get payYourSttProvider => 'Gamitin ang omi nang libre. Direkta lang sa iyong STT provider ang babayaran mo.';
 
   @override
-  String get freeMinutesMonth => '600 libreng minuto/buwan kasama. Unlimited sa ';
+  String get freeMinutesMonth => '300 libreng minuto/buwan kasama. Unlimited sa ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1794,20 +1792,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Gusto mo ba ang Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Tumulong sa amin na maabot ang mas maraming tao sa pamamagitan ng pag-iwan ng review sa App Store. Ang iyong feedback ay napakahalagang para sa amin!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Tumulong sa amin na maabot ang mas maraming tao sa pamamagitan ng pag-iwan ng review sa Google Play Store. Ang iyong feedback ay napakahalagang para sa amin!';
-
-  @override
-  String get rateOnAppStore => 'Mag-rate sa App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Mag-rate sa Google Play';
 
   @override
   String get maybeLater => 'Siguro mamaya';
@@ -2149,6 +2133,18 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ I-edit ang Alaala';
+
+  @override
+  String get pinAsBaseline => 'I-pin bilang baseline';
+
+  @override
+  String get unpinAsBaseline => 'Alisin sa baseline';
+
+  @override
+  String get baselineMemory => 'Baseline na memorya';
+
+  @override
+  String get alwaysInContext => 'Palaging nasa konteksto';
 
   @override
   String get memoryContentHint => 'Gusto ko na kumain ng ice cream...';
@@ -4746,7 +4742,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Walang specific data access na na-configure.';
 
   @override
-  String get basicPlanDescription => '600 premium mins + unlimited on-device';
+  String get basicPlanDescription => '300 premium mins + unlimited on-device';
 
   @override
   String get minutes => 'minutes';
@@ -6048,7 +6044,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.';
+      '300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.';
 
   @override
   String get viewUsage => 'Tingnan ang paggamit';
@@ -6131,7 +6127,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ';
+      '300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9069,7 +9065,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get billingYearly => 'Taunan';
 
   @override
-  String get savePercent => 'Makatipid ~17%';
+  String savePercent(int percent) {
+    return 'Makatipid ~$percent%';
+  }
 
   @override
   String get popular => 'Sikat';
@@ -9425,7 +9423,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Gumagana muna sa mga Omi device. Mananatili ang audio sa iyong telepono hangga\'t hindi mo ito ina-upload.';
+      'Gumagana sa mikropono ng telepono at sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga\'t hindi mo ito ina-upload.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9578,4 +9576,358 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get flashFirmware => 'I-flash ang Firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Nagre-record sa pendant';
+
+  @override
+  String get pendantRecordingNote =>
+      'Kusang nagre-record ang iyong pendant. Nasi-sync ang mga recording sa iyong telepono habang nakabukas ang app.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sini-sync ang mga recording mula sa iyong pendant…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min ang nakaimbak';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Halos puno na ang storage ng pendant — panatilihing bukas ang app para makapag-sync.';
+
+  @override
+  String get connectRayBanMeta => 'Ikonekta ang Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Gamitin ang iyong Ray-Ban Meta glasses bilang iyong Omi capture device para sa mga conversation at visual na konteksto. Bubuksan ng Omi ang Meta AI app upang i-link ang iyong glasses.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Kumonekta sa pamamagitan ng Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Tapusin ang pagkonekta sa Meta AI app, pagkatapos ay bumalik dito.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Tingnan Muli';
+
+  @override
+  String get raybanMetaAllowCamera => 'Payagan ang Camera sa Glasses';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Ginagamit ng Omi ang camera ng iyong glasses upang magdagdag ng mga larawan sa iyong mga conversation. Maaari mong laktawan ito at gumamit ng audio lamang.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Laktawan Muna';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta audio-only mode';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Magagamit ng bersyong ito ng Omi ang mikropono ng iyong glasses sa pamamagitan ng Bluetooth. Kailangan ng Meta developer build ng Omi para sa photo capture.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'Na-pause ang musika sa iyong telepono habang ginagamit ang mikropono ng glasses.';
+
+  @override
+  String get raybanMetaContinue => 'Magpatuloy';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Kumuha ng Photo';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Hiniling ang photo — lalabas ito sa iyong conversation.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Handa na ang mikropono';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Handa na ang image capture';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Hindi available sa audio-only mode';
+
+  @override
+  String get raybanMetaCamera => 'Camera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Error sa pagkonekta sa Ray-Ban Meta: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'Storage ng device';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% puno';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used sa $total ang nagamit';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ang libre';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Halos puno na ang device — mag-sync para magbakante ng espasyo.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Walang koneksyon — nagre-record nang lokal. Ita-transcribe ito kapag online ka na ulit.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Ang iyong data ay protektado bilang default gamit ang malakas na encryption, at ikaw ang kumokontrol kung paano ito iniimbak at ginagamit.';
+
+  @override
+  String get sttModelAccuracy => 'Katumpakan';
+
+  @override
+  String get whisperModelSizeBase => 'Batayan';
+
+  @override
+  String get cloudTranscription => 'Transkripsyon sa Cloud';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Tanggalin ang Modelo';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Sigurado ka bang gusto mong tanggalin ang modelong ito?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Na-download';
+
+  @override
+  String get sttModelFaster => 'Mas mabilis';
+
+  @override
+  String get sttFilterAuto => 'Awtomatiko';
+
+  @override
+  String get sttModelHigher => 'Mas mataas';
+
+  @override
+  String get whisperModelSizeLarge => 'Malaki';
+
+  @override
+  String get sttModelLower => 'Mas mababa';
+
+  @override
+  String get whisperModelSizeMedium => 'Katamtaman';
+
+  @override
+  String get onDeviceModelDeleted => 'Natanggal ang modelo';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Nabigo ang pag-download ng modelo';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Nabigong i-download ang modelong Whisper. Pakisubukan muli.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Na-download ang modelo';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Matagumpay na na-download ang modelong Whisper';
+
+  @override
+  String get onDeviceModelSize => 'Laki ng Modelo';
+
+  @override
+  String get sttNone => 'Wala';
+
+  @override
+  String get onDeviceTranscription => 'Transkripsyon sa Device';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Ang transkripsyon ay pinoproseso lokal sa iyong device';
+
+  @override
+  String get sttModelSlower => 'Mas mabagal';
+
+  @override
+  String get whisperModelSizeSmall => 'Maliit';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Serbisyo ng Boses-sa-Teksto';
+
+  @override
+  String get speechToTextProviderDesc => 'Piliin ang serbisyong gagamitin para sa transkripsyon';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Bilis';
+
+  @override
+  String get whisperModelSizeTiny => 'Napakaliit';
+
+  @override
+  String get transcriptionLanguage => 'Wika ng Transkripsyon';
+
+  @override
+  String get transcriptionLanguageDesc => 'Piliin ang wika para sa transkripsyon ng pagsasalita';
+
+  @override
+  String get whisperModel => 'Modelong Whisper';
+
+  @override
+  String get whisperModelDesc => 'Piliin ang modelo para sa transkripsyon sa device';
+
+  @override
+  String get downgradeToFreemiumTitle => 'I-downgrade sa libreng plano?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Mararanasan mo ang mga limitasyong ito:';
+
+  @override
+  String get downgradeLimitBattery => '7x na paggamit ng baterya';
+
+  @override
+  String get downgradeLimitQuality => '30% na mas mababang kalidad ng transkripsyon';
+
+  @override
+  String get downgradeLimitDelay => '5-7 segundong pagkaantala';
+
+  @override
+  String get downgradeLimitSpeakers => 'Hindi makikilala ang mga nagsasalita';
+
+  @override
+  String get downgradeAnyway => 'I-downgrade Pa Rin';
+
+  @override
+  String get googleCalendarNotConnected => 'Hindi Nakakonekta ang Google Calendar';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Ikonekta ang iyong Google Calendar upang mai-link ang mga pag-uusap sa mga kaganapan sa kalendaryo.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Naka-link sa \"$title\"';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Nabigong i-link ang kaganapan sa kalendaryo';
+
+  @override
+  String get thanksForYourFeedback => 'Salamat sa iyong puna!';
+
+  @override
+  String get copyMessage => 'Kopyahin ang mensahe';
+
+  @override
+  String get searchSettings => 'Maghanap ng setting…';
+
+  @override
+  String get errorLoadingAudio => 'Nagkaproblema sa pag-load ng audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Piliin ang mikropono ng Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Piliin ang Bluetooth na mikropono ng salamin. Hihinto muna ang musika habang ginagamit ito ng Omi.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Walang nahanap na Bluetooth na mikropono. Ikonekta ang salamin sa Mga Setting ng iPhone, pagkatapos ay subukan muli.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Hindi ma-load ang mga Bluetooth na mikropono. Tiyaking naka-on ang Bluetooth, pagkatapos ay subukan muli.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Hindi makakonekta sa mikroponong iyon. Tiyaking nakakonekta ito sa Mga Setting ng iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Masyadong luma para i-sync — hindi ito matatanggap ng Omi';
+
+  @override
+  String get planSheetChooseYourPlan => 'Piliin ang iyong plano para ma-unlock ang walang limitasyong Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Available sa Mac, mobile, at web';
+
+  @override
+  String get popularBadge => 'SIKAT';
+
+  @override
+  String get worksOnDesktop => 'Gumagana sa desktop';
+
+  @override
+  String get noDesktopAccess => 'Hindi gumagana sa desktop';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months buwan / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count buwang libre',
+      one: '1 buwang libre',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Libre ang Omi, pero may mga limitasyon ang libreng bersyon na nakakaapekto sa iyong karanasan:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 segundong delay (hindi real-time)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Lumipat sa libreng bersyon';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Kumuha ng libreng walang limitasyong access';
+
+  @override
+  String get shareDataForTraining => 'Magbahagi ng data para sa training';
+
+  @override
+  String get yourRequestUnderReview => 'Sinusuri ang iyong kahilingan';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Pembaruan diperlukan';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Instal aplikasi Omi terbaru untuk melanjutkan setelah migrasi akun.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migrasi sedang berlangsung';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.';
+
+  @override
+  String get accountCutoverOpenStore => 'Buka toko';
 }

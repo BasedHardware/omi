@@ -1,38 +1,34 @@
 #!/usr/bin/env python3
 """
-VAD Gate Live Test — Issue #4644
+VAD Gate Live Test
 
-Tests the VAD gate with real speech audio against DG prerecorded as ground truth.
-Generates speech+silence audio, runs through VAD gate at various thresholds,
-streams gated audio to DG WebSocket, and compares transcripts against
-DG prerecorded (full audio) as the quality judge.
+Tests the VADStreamingGate against real audio (gTTS + pydub) sent to the
+Deepgram prerecorded API, sweeping speech-probability thresholds to find the
+best trade-off between transcription quality and bandwidth savings.
 
 Usage:
-    DEEPGRAM_API_KEY=xxx python3 scripts/vad_live_test.py
-    DEEPGRAM_API_KEY=xxx python3 scripts/vad_live_test.py --thresholds 0.3,0.4,0.5,0.6,0.7
+    cd backend && python3 scripts/vad_live_test.py
 """
 
 import asyncio
 import io
 import json
 import os
-import struct
 import sys
 import time
 import wave
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import httpx
 import numpy as np
-import websockets
 
 # Add backend to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from utils.stt.vad_gate import VADStreamingGate, GatedDeepgramSocket, DgWallMapper
+from utils.stt.vad_gate import VADStreamingGate
 
 DG_API_KEY = os.environ.get('DEEPGRAM_API_KEY', '')
 SAMPLE_RATE = 16000
@@ -66,28 +62,31 @@ class ThresholdResult:
     duration_sec: float
 
 
-def generate_test_audio(volume_db: float = 0.0, noise_db: float = -999.0) -> Tuple[bytes, float]:
+def generate_test_audio(volume_db: float = 0.0, noise_db: float = -999.0) -> Tuple[bytes, float, bytes]:
     """Generate test audio with speech segments separated by silence.
 
     Args:
         volume_db: Adjust speech volume (negative = quieter, simulates soft speakers)
-        noise_db: Background noise level in dBFS (e.g. -30 for moderate noise)
+        noise_db: Background white-noise level in dBFS (<= -100 disables)
 
     Returns (pcm_bytes, total_duration_sec, wav_bytes)
     """
-    from gtts import gTTS
-    from pydub import AudioSegment
+    from gtts import gTTS as _gTTS  # type: ignore[reportMissingImports]
+    from pydub import AudioSegment as _AudioSegment
 
-    all_audio = AudioSegment.silent(duration=500, frame_rate=SAMPLE_RATE)  # 500ms lead-in
+    gTTS: Any = cast(Any, _gTTS)
+    AudioSegment: Any = cast(Any, _AudioSegment)
+
+    all_audio: Any = AudioSegment.silent(duration=500, frame_rate=SAMPLE_RATE)  # 500ms lead-in
 
     for text, silence_sec in TEST_SEGMENTS:
         # Generate speech via gTTS
-        tts = gTTS(text=text, lang='en')
+        tts: Any = gTTS(text=text, lang='en')
         mp3_buf = io.BytesIO()
         tts.write_to_fp(mp3_buf)
         mp3_buf.seek(0)
 
-        speech = AudioSegment.from_mp3(mp3_buf)
+        speech: Any = AudioSegment.from_mp3(mp3_buf)
         speech = speech.set_frame_rate(SAMPLE_RATE).set_channels(CHANNELS).set_sample_width(2)
 
         # Adjust volume to simulate quiet/loud speakers
@@ -114,7 +113,7 @@ def generate_test_audio(volume_db: float = 0.0, noise_db: float = -999.0) -> Tup
         all_audio = all_audio.overlay(noise_seg)
 
     # Export as raw PCM
-    pcm_data = all_audio.raw_data
+    pcm_data: bytes = cast(bytes, all_audio.raw_data)
     duration = len(all_audio) / 1000.0
     label = f"vol={volume_db:+.0f}dB"
     if noise_db > -100:
@@ -145,14 +144,14 @@ async def get_ground_truth(wav_data: bytes) -> str:
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(url, headers=headers, content=wav_data)
         resp.raise_for_status()
-        result = resp.json()
+        result: Any = resp.json()
 
-    transcript = result['results']['channels'][0]['alternatives'][0]['transcript']
+    transcript: str = cast(str, result['results']['channels'][0]['alternatives'][0]['transcript'])
     print(f"Ground truth ({len(transcript)} chars): {transcript[:120]}...")
     return transcript
 
 
-async def stream_gated_audio(pcm_data: bytes, threshold: float) -> Tuple[str, dict]:
+async def stream_gated_audio(pcm_data: bytes, threshold: float) -> Tuple[str, Dict[str, Any]]:
     """Run audio through VAD gate, send gated output to DG prerecorded, return transcript + metrics."""
 
     gate = VADStreamingGate(
@@ -162,7 +161,7 @@ async def stream_gated_audio(pcm_data: bytes, threshold: float) -> Tuple[str, di
         uid='live-test',
         session_id=f'threshold-{threshold}',
     )
-    gate._speech_threshold = threshold
+    gate._speech_threshold = threshold  # type: ignore[reportPrivateUsage]
 
     # Chunk audio into 30ms frames and run through gate
     chunk_size = int(SAMPLE_RATE * CHANNELS * 2 * 0.03)  # 30ms of PCM16
@@ -199,8 +198,8 @@ async def stream_gated_audio(pcm_data: bytes, threshold: float) -> Tuple[str, di
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(url, headers=headers, content=wav_data)
             resp.raise_for_status()
-            result = resp.json()
-        transcript = result['results']['channels'][0]['alternatives'][0]['transcript']
+            result: Any = resp.json()
+        transcript = cast(str, result['results']['channels'][0]['alternatives'][0]['transcript'])
 
     metrics = gate.get_metrics()
     return transcript, metrics
@@ -226,15 +225,15 @@ async def run_threshold_test(pcm_data: bytes, threshold: float, ground_truth: st
         gate_transcript=transcript,
         ground_truth=ground_truth,
         similarity=similarity,
-        bytes_sent=metrics['bytes_sent'],
-        bytes_received=metrics['bytes_received'],
-        savings_pct=metrics['bytes_saved_ratio'] * 100,
-        chunks_total=metrics['chunks_total'],
-        chunks_speech=metrics['chunks_speech'],
-        chunks_silence=metrics['chunks_silence'],
-        keepalive_count=metrics['keepalive_count'],
-        finalize_count=metrics['finalize_count'],
-        finalize_errors=metrics['finalize_errors'],
+        bytes_sent=cast(int, metrics['bytes_sent']),
+        bytes_received=cast(int, metrics['bytes_received']),
+        savings_pct=cast(float, metrics['bytes_saved_ratio']) * 100,
+        chunks_total=cast(int, metrics['chunks_total']),
+        chunks_speech=cast(int, metrics['chunks_speech']),
+        chunks_silence=cast(int, metrics['chunks_silence']),
+        keepalive_count=cast(int, metrics['keepalive_count']),
+        finalize_count=cast(int, metrics['finalize_count']),
+        finalize_errors=cast(int, metrics['finalize_errors']),
         duration_sec=duration,
     )
 
@@ -251,7 +250,9 @@ async def run_threshold_test(pcm_data: bytes, threshold: float, ground_truth: st
     return result
 
 
-async def run_scenario(label: str, thresholds: List[float], volume_db: float = 0.0, noise_db: float = -999.0):
+async def run_scenario(
+    label: str, thresholds: List[float], volume_db: float = 0.0, noise_db: float = -999.0
+) -> Tuple[List[ThresholdResult], Optional[ThresholdResult]]:
     """Run a full threshold sweep for one audio scenario."""
     print(f"\n{'#' * 100}")
     print(f"# SCENARIO: {label}")
@@ -277,7 +278,7 @@ async def run_scenario(label: str, thresholds: List[float], volume_db: float = 0
     )
     print("-" * 100)
 
-    best_result = None
+    best_result: Optional[ThresholdResult] = None
     best_score = -1.0
 
     for r in results:
@@ -304,7 +305,7 @@ async def run_scenario(label: str, thresholds: List[float], volume_db: float = 0
     return results, best_result
 
 
-async def main():
+async def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(description='VAD Gate Live Test')
@@ -315,7 +316,7 @@ async def main():
         print("ERROR: Set DEEPGRAM_API_KEY env var")
         sys.exit(1)
 
-    thresholds = [float(t) for t in args.thresholds.split(',')]
+    thresholds = [float(t) for t in str(args.thresholds).split(',')]
 
     # Test multiple audio conditions
     scenarios = [
@@ -326,8 +327,8 @@ async def main():
         ("Quiet + noise (-12dB, -35dBFS)", -12.0, -35.0),
     ]
 
-    all_results = {}
-    all_bests = {}
+    all_results: Dict[str, List[ThresholdResult]] = {}
+    all_bests: Dict[str, Optional[ThresholdResult]] = {}
     for label, vol, noise in scenarios:
         results, best = await run_scenario(label, thresholds, volume_db=vol, noise_db=noise)
         all_results[label] = results
@@ -340,7 +341,7 @@ async def main():
     print(f"{'Scenario':<45} | {'Best Threshold':>14} | {'Quality':>8} | {'Savings':>8}")
     print("-" * 100)
 
-    threshold_scores = {}
+    threshold_scores: Dict[float, List[float]] = {}
     for label, best in all_bests.items():
         if best:
             print(f"{label:<45} | {best.threshold:>14.2f} | {best.similarity:>7.1%} | {best.savings_pct:>7.1f}%")
@@ -355,7 +356,7 @@ async def main():
     # Find best overall threshold (highest average composite)
     print(f"\n{'Threshold':>10} | {'Avg Score':>10} | {'Min Quality':>11}")
     print("-" * 50)
-    best_overall_threshold = None
+    best_overall_threshold: Optional[float] = None
     best_overall_score = -1.0
     for t in sorted(threshold_scores.keys()):
         scores = threshold_scores[t]

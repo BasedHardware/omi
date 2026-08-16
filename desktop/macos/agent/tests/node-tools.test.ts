@@ -27,7 +27,9 @@ describe("node tool helpers", () => {
 
       const result = await loadSkillInstructions(skillName, root);
 
-      expect(result).toBe("Skill 'escape' not found. Check the name matches one listed in <available_skills>.");
+      expect(result).toBe(
+        "Skill 'escape' is not available. Search with search_skills before loading a skill outside the compact catalog."
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
       await rm(outside, { recursive: true, force: true });

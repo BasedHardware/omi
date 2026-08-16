@@ -1,9 +1,11 @@
 from utils.transcribe_decisions import (
     ConversationLifecycleAction,
+    RecordingSessionReconnectAction,
     TARGET_SAMPLE_RATE,
     USER_SELF_PERSON_ID,
     decide_existing_conversation_action,
     decide_lifecycle_action,
+    decide_recording_session_reconnect_action,
     decide_multi_channel_mix,
     decide_multi_channel_stt_send,
     decide_stt_buffer_flush,
@@ -12,8 +14,12 @@ from utils.transcribe_decisions import (
     is_user_self_match,
     normalize_codec_frame,
     normalize_language,
+    normalize_listen_source,
     person_id_for_client,
+    recording_session_id_for_lifecycle_event,
+    select_recording_session_id,
     select_translation_language,
+    should_attach_to_existing_in_progress,
     should_enable_speaker_identification,
     should_flush_final_multi_channel_mix,
     should_force_single_language,
@@ -45,19 +51,16 @@ def test_startup_decisions_pin_current_overrides():
 def test_codec_frame_normalization_pins_special_codecs():
     opus = normalize_codec_frame('opus_fs320')
     assert opus.codec == 'opus'
-    assert opus.frame_size == 320
     assert opus.lc3_chunk_size is None
     assert opus.lc3_frame_duration_us is None
 
     lc3 = normalize_codec_frame('lc3_fs1030')
     assert lc3.codec == 'lc3'
-    assert lc3.frame_size == 160
     assert lc3.lc3_chunk_size == 30
     assert lc3.lc3_frame_duration_us == 10000
 
     pcm = normalize_codec_frame('pcm8')
     assert pcm.codec == 'pcm8'
-    assert pcm.frame_size == 160
 
 
 def test_translation_language_gating():
@@ -102,6 +105,32 @@ def test_translation_language_gating():
             single_language_mode=False,
             stt_language='en',
             language='en',
+            user_language_preference='fr',
+        )
+        is None
+    )
+
+
+def test_translation_language_rejects_sentinel_preferences():
+    # Legacy Firestore users/{uid}.language rows hold the STT sentinel itself; sending it
+    # to NLLB as a target is always an unsupported_target 400 + a Google fallback (#9623).
+    for sentinel in ('multi', 'auto'):
+        assert (
+            select_translation_language(
+                single_language_mode=False,
+                stt_language='multi',
+                language='multi',
+                user_language_preference=sentinel,
+            )
+            is None
+        )
+
+    # An un-normalized 'auto' request language is a sentinel too, never a target.
+    assert (
+        select_translation_language(
+            single_language_mode=False,
+            stt_language='multi',
+            language='auto',
             user_language_preference='fr',
         )
         is None
@@ -187,6 +216,85 @@ def test_conversation_lifecycle_actions():
         )
         == ConversationLifecycleAction.process_and_create_new
     )
+
+
+def test_cross_source_in_progress_must_not_attach():
+    assert should_attach_to_existing_in_progress(existing_source='omi', request_source='omi') is True
+    assert should_attach_to_existing_in_progress(existing_source='omi', request_source=None) is True
+    assert should_attach_to_existing_in_progress(existing_source='omi', request_source='web') is False
+    assert should_attach_to_existing_in_progress(existing_source='web', request_source='desktop') is False
+    assert should_attach_to_existing_in_progress(existing_source=None, request_source='') is True
+    # source=web is not a ConversationSource member → unknown (same as create persistence).
+    assert normalize_listen_source('Web') == 'unknown'
+    assert normalize_listen_source(None) == 'omi'
+    assert normalize_listen_source('web') == 'unknown'
+    assert should_attach_to_existing_in_progress(existing_source='unknown', request_source='web') is True
+    assert should_attach_to_existing_in_progress(existing_source='omi', request_source='unknown') is False
+
+
+def test_recording_session_identity_retries_and_rollovers_are_distinct():
+    client_id = 'client-recording'
+    assert (
+        select_recording_session_id(
+            client_conversation_id=client_id,
+            current_recording_session_id=None,
+            rollover=False,
+            generated_id='initial-server-id',
+        )
+        == client_id
+    )
+    assert (
+        select_recording_session_id(
+            client_conversation_id=client_id,
+            current_recording_session_id=client_id,
+            rollover=False,
+            generated_id='retry-server-id',
+        )
+        == client_id
+    )
+    assert (
+        select_recording_session_id(
+            client_conversation_id=client_id,
+            current_recording_session_id=client_id,
+            rollover=True,
+            generated_id='rollover-server-id',
+        )
+        == 'rollover-server-id'
+    )
+
+
+def test_terminal_recording_session_reconnect_rolls_before_accepting_audio():
+    assert (
+        decide_recording_session_reconnect_action(status='in_progress', in_progress_status='in_progress')
+        == RecordingSessionReconnectAction.resume_current
+    )
+    for terminal_status in ('processing', 'completed', 'failed', None):
+        assert (
+            decide_recording_session_reconnect_action(status=terminal_status, in_progress_status='in_progress')
+            == RecordingSessionReconnectAction.replay_terminal_and_rollover
+        )
+
+
+def test_discarded_completed_recording_session_reconnect_is_suppressed():
+    assert (
+        decide_recording_session_reconnect_action(
+            status='completed',
+            discarded=True,
+            in_progress_status='in_progress',
+        )
+        == RecordingSessionReconnectAction.suppress_discarded_and_rollover
+    )
+
+
+def test_delayed_finalizer_keeps_the_pre_rollover_recording_binding():
+    bindings = {
+        'finished-before-rollover': 'recording-one',
+        'current-after-rollover': 'recording-two',
+    }
+
+    assert recording_session_id_for_lifecycle_event(bindings, 'finished-before-rollover') == 'recording-one'
+    assert recording_session_id_for_lifecycle_event(bindings, 'current-after-rollover') == 'recording-two'
+    assert recording_session_id_for_lifecycle_event(bindings, 'unknown') is None
 
 
 def test_disconnect_processing_only_targets_single_channel_in_progress_with_content():

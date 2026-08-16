@@ -1,0 +1,7 @@
+{
+  "version": "0.12.20",
+  "date": "2026-07-05",
+  "changes": [
+    "Fixed import connector status so sources no longer appear connected before setup and zero-item imports stay connected."
+  ]
+}

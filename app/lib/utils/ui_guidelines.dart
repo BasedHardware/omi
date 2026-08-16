@@ -17,9 +17,9 @@ class AppStyles {
   static const TextStyle label = TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white70);
 
   // Colors
-  static final Color backgroundPrimary = Colors.black;
-  static final Color backgroundSecondary = const Color(0xFF1F1F25);
-  static final Color backgroundTertiary = Color(0xFF35343B);
+  static const Color backgroundPrimary = Colors.black;
+  static const Color backgroundSecondary = Color(0xFF1F1F25);
+  static const Color backgroundTertiary = Color(0xFF35343B);
 
   static const Color textPrimary = Colors.white;
   static final Color textSecondary = Colors.white.withValues(alpha: 0.8);

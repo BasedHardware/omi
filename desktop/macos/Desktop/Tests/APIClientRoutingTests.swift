@@ -1,686 +1,1159 @@
+import OmiSupport
 import XCTest
+
 @testable import Omi_Computer
 
 // MARK: - Request-capturing protocol for routing verification
 
 /// Captured request info: URL + HTTP method.
 private struct CapturedRequest {
-    let url: URL
-    let method: String
-    let headers: [String: String]
-    let body: Data?
+  let url: URL
+  let method: String
+  let headers: [String: String]
+  let body: Data?
 }
 
 /// Intercepts HTTP requests, records their URL and method, then returns 403
 /// so APIClient throws .httpError (not 401, which triggers AuthService refresh).
 private final class URLCapture: URLProtocol, @unchecked Sendable {
-    private static let lock = NSLock()
-    private static var _requests: [CapturedRequest] = []
+  private static let lock = NSLock()
+  private nonisolated(unsafe) static var _requests: [CapturedRequest] = []
+  private nonisolated(unsafe) static var _statusCode = 403
+  private nonisolated(unsafe) static var _responseBody = Data("{\"detail\":\"test\"}".utf8)
 
-    static var capturedRequests: [CapturedRequest] {
-        lock.lock()
-        defer { lock.unlock() }
-        return _requests
+  static var capturedRequests: [CapturedRequest] {
+    lock.lock()
+    defer { lock.unlock() }
+    return _requests
+  }
+
+  static func reset() {
+    lock.lock()
+    _requests.removeAll()
+    _statusCode = 403
+    _responseBody = Data("{\"detail\":\"test\"}".utf8)
+    lock.unlock()
+  }
+
+  static func setResponse(statusCode: Int, body: Data) {
+    lock.lock()
+    _statusCode = statusCode
+    _responseBody = body
+    lock.unlock()
+  }
+
+  private static func record(_ req: CapturedRequest) {
+    lock.lock()
+    _requests.append(req)
+    lock.unlock()
+  }
+
+  private static func bodyData(from request: URLRequest) -> Data? {
+    if let body = request.httpBody {
+      return body
     }
 
-    static func reset() {
-        lock.lock()
-        _requests.removeAll()
-        lock.unlock()
+    guard let stream = request.httpBodyStream else {
+      return nil
     }
 
-    private static func record(_ req: CapturedRequest) {
-        lock.lock()
-        _requests.append(req)
-        lock.unlock()
+    stream.open()
+    defer { stream.close() }
+
+    var data = Data()
+    let bufferSize = 4096
+    let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+    defer { buffer.deallocate() }
+
+    while stream.hasBytesAvailable {
+      let readCount = stream.read(buffer, maxLength: bufferSize)
+      if readCount > 0 {
+        data.append(buffer, count: readCount)
+      } else if readCount < 0 {
+        return nil
+      } else {
+        break
+      }
     }
 
-    private static func bodyData(from request: URLRequest) -> Data? {
-        if let body = request.httpBody {
-            return body
-        }
+    return data.isEmpty ? nil : data
+  }
 
-        guard let stream = request.httpBodyStream else {
-            return nil
-        }
+  override class func canInit(with request: URLRequest) -> Bool { true }
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
-        stream.open()
-        defer { stream.close() }
-
-        var data = Data()
-        let bufferSize = 4096
-        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-        defer { buffer.deallocate() }
-
-        while stream.hasBytesAvailable {
-            let readCount = stream.read(buffer, maxLength: bufferSize)
-            if readCount > 0 {
-                data.append(buffer, count: readCount)
-            } else if readCount < 0 {
-                return nil
-            } else {
-                break
-            }
-        }
-
-        return data.isEmpty ? nil : data
+  override func startLoading() {
+    if let url = request.url {
+      URLCapture.record(
+        CapturedRequest(
+          url: url,
+          method: request.httpMethod ?? "GET",
+          headers: request.allHTTPHeaderFields ?? [:],
+          body: Self.bodyData(from: request)
+        ))
     }
+    let (statusCode, body) = Self.response()
+    let response = HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
+    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+    client?.urlProtocol(self, didLoad: body)
+    client?.urlProtocolDidFinishLoading(self)
+  }
 
-    override class func canInit(with request: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+  override func stopLoading() {}
 
-    override func startLoading() {
-        if let url = request.url {
-            URLCapture.record(CapturedRequest(
-                url: url,
-                method: request.httpMethod ?? "GET",
-                headers: request.allHTTPHeaderFields ?? [:],
-                body: Self.bodyData(from: request)
-            ))
-        }
-        let response = HTTPURLResponse(url: request.url!, statusCode: 403, httpVersion: nil, headerFields: nil)!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data("{\"detail\":\"test\"}".utf8))
-        client?.urlProtocolDidFinishLoading(self)
-    }
-
-    override func stopLoading() {}
+  private static func response() -> (Int, Data) {
+    lock.lock()
+    defer { lock.unlock() }
+    return (_statusCode, _responseBody)
+  }
 }
 
 // MARK: - Assertion helpers
 
 private func assertRoutes(
-    _ reqs: [CapturedRequest],
-    host: String,
-    port: Int,
-    pathContains: String,
-    method: String,
-    label: String,
-    file: StaticString = #filePath,
-    line: UInt = #line
+  _ reqs: [CapturedRequest],
+  host: String,
+  port: Int,
+  pathContains: String,
+  method: String,
+  label: String,
+  file: StaticString = #filePath,
+  line: UInt = #line
 ) {
-    XCTAssertEqual(reqs.count, 1, "\(label): expected 1 request, got \(reqs.count)", file: file, line: line)
-    guard let req = reqs.first else { return }
-    XCTAssertEqual(req.url.host, host, "\(label): wrong host", file: file, line: line)
-    XCTAssertEqual(req.url.port, port, "\(label): wrong port", file: file, line: line)
-    XCTAssertTrue(req.url.absoluteString.contains(pathContains), "\(label): path should contain '\(pathContains)', got \(req.url.absoluteString)", file: file, line: line)
-    XCTAssertEqual(req.method, method, "\(label): wrong HTTP method", file: file, line: line)
+  XCTAssertEqual(reqs.count, 1, "\(label): expected 1 request, got \(reqs.count)", file: file, line: line)
+  guard let req = reqs.first else { return }
+  XCTAssertEqual(req.url.host, host, "\(label): wrong host", file: file, line: line)
+  XCTAssertEqual(req.url.port, port, "\(label): wrong port", file: file, line: line)
+  XCTAssertTrue(
+    req.url.absoluteString.contains(pathContains),
+    "\(label): path should contain '\(pathContains)', got \(req.url.absoluteString)", file: file, line: line)
+  XCTAssertEqual(req.method, method, "\(label): wrong HTTP method", file: file, line: line)
 }
 
 // MARK: - Tests
 
 final class APIClientRoutingTests: XCTestCase {
 
-    // MARK: - URL property tests
+  // MARK: - URL property tests
 
-    func testBaseURLDefaultsToPythonBackend() async {
+  func testNonProductionAppDefaultsToDevelopmentPythonBackend() async {
+    unsetenv("OMI_PYTHON_API_URL")
+    let client = APIClient()
+    let url = await client.baseURL
+    XCTAssertEqual(url, DesktopBackendEnvironment.developmentPythonAPIURL)
+  }
+
+  func testExplicitPythonBackendOverrideWinsOverDevelopmentDefault() {
+    let url = DesktopBackendEnvironment.pythonBaseURL(
+      useDevelopmentBackends: true,
+      environmentValue: "https://api.omi.me"
+    )
+    XCTAssertEqual(url, "https://api.omi.me/")
+  }
+
+  func testDevelopmentDefaultUsesDevelopmentPythonBackendWithoutOverride() {
+    let url = DesktopBackendEnvironment.pythonBaseURL(
+      useDevelopmentBackends: true,
+      environmentValue: nil
+    )
+    XCTAssertEqual(url, DesktopBackendEnvironment.developmentPythonAPIURL)
+  }
+
+  func testBetaProductionBundleKeepsProductionAuthBackendByDefault() {
+    let url = DesktopBackendEnvironment.authBaseURL(
+      bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+      environmentValue: nil
+    )
+    XCTAssertEqual(url, "https://api.omi.me/")
+  }
+
+  func testDevelopmentAuthBackendCanBeExplicitlyOverridden() {
+    let url = DesktopBackendEnvironment.authBaseURL(
+      useDevelopmentBackends: true,
+      environmentValue: "http://localhost:8080"
+    )
+    XCTAssertEqual(url, "http://localhost:8080/")
+  }
+
+  func testStableProductionBundleKeepsProductionPythonBackend() {
+    let url = DesktopBackendEnvironment.pythonBaseURL(
+      useDevelopmentBackends: false,
+      environmentValue: "https://api.omi.me"
+    )
+    XCTAssertEqual(url, "https://api.omi.me/")
+  }
+
+  func testExplicitRustBackendOverrideWinsOverDevelopmentDefault() {
+    let url = DesktopBackendEnvironment.rustBackendURL(
+      useDevelopmentBackends: true,
+      environmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app",
+      launchEnvironmentValue: nil
+    )
+    XCTAssertEqual(url, "https://desktop-backend-hhibjajaja-uc.a.run.app/")
+  }
+
+  func testDevelopmentDefaultUsesDevelopmentRustBackendWithoutOverride() {
+    let url = DesktopBackendEnvironment.rustBackendURL(
+      useDevelopmentBackends: true,
+      environmentValue: nil,
+      launchEnvironmentValue: nil
+    )
+    XCTAssertEqual(url, DesktopBackendEnvironment.developmentRustBackendURL)
+  }
+
+  func testDevelopmentDefaultsDoNotOverwriteExplicitBackendURLs() {
+    let originalPython = ProcessInfo.processInfo.environment["OMI_PYTHON_API_URL"]
+    let originalRust = ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"]
+    defer {
+      if let originalPython {
+        setenv("OMI_PYTHON_API_URL", originalPython, 1)
+      } else {
         unsetenv("OMI_PYTHON_API_URL")
-        let client = APIClient()
-        let url = await client.baseURL
-        XCTAssertEqual(url, "https://api.omi.me/")
-    }
-
-    func testBetaProductionBundleUsesDevelopmentPythonBackend() {
-        let url = DesktopBackendEnvironment.pythonBaseURL(
-            useDevelopmentBackends: true,
-            environmentValue: "https://api.omi.me"
-        )
-        XCTAssertEqual(url, "https://api.omiapi.com/")
-    }
-
-    func testBetaProductionBundleKeepsProductionAuthBackendByDefault() {
-        let url = DesktopBackendEnvironment.authBaseURL(environmentValue: nil)
-        XCTAssertEqual(url, "https://api.omi.me/")
-    }
-
-    func testAuthBackendCanBeExplicitlyOverridden() {
-        let url = DesktopBackendEnvironment.authBaseURL(environmentValue: "http://localhost:8080")
-        XCTAssertEqual(url, "http://localhost:8080/")
-    }
-
-    func testStableProductionBundleKeepsProductionPythonBackend() {
-        let url = DesktopBackendEnvironment.pythonBaseURL(
-            useDevelopmentBackends: false,
-            environmentValue: "https://api.omi.me"
-        )
-        XCTAssertEqual(url, "https://api.omi.me/")
-    }
-
-    func testBetaProductionBundleUsesDevelopmentRustBackend() {
-        let url = DesktopBackendEnvironment.rustBackendURL(
-            useDevelopmentBackends: true,
-            environmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app",
-            launchEnvironmentValue: nil
-        )
-        XCTAssertEqual(url, "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/")
-    }
-
-    func testStableProductionBundleKeepsConfiguredRustBackend() {
-        let url = DesktopBackendEnvironment.rustBackendURL(
-            useDevelopmentBackends: false,
-            environmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app",
-            launchEnvironmentValue: nil
-        )
-        XCTAssertEqual(url, "https://desktop-backend-hhibjajaja-uc.a.run.app/")
-    }
-
-    func testBetaProductionBundleRoutesToDevelopmentBackends() {
-        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-            bundleIdentifier: "com.omi.computer-macos",
-            updateChannel: "beta"
-        ))
-        // "staging" is normalized to "beta" — same routing.
-        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-            bundleIdentifier: "com.omi.computer-macos",
-            updateChannel: "staging"
-        ))
-    }
-
-    func testStableProductionBundleKeepsProductionBackends() {
-        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-            bundleIdentifier: "com.omi.computer-macos",
-            updateChannel: "stable"
-        ))
-    }
-
-    func testNonProductionBundleSkipsAutomaticBetaRouting() {
-        // Dev bundle and named test bundles never trigger beta-to-dev routing
-        // automatically. They must opt in via OMI_FORCE_DEV_BACKENDS or env URLs.
-        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-            bundleIdentifier: "com.omi.desktop-dev",
-            updateChannel: "beta"
-        ))
-        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-            bundleIdentifier: "com.omi.omi-beta-dev-test",
-            updateChannel: "beta"
-        ))
-    }
-
-    func testForceOverrideEnablesDevelopmentBackendsForAnyBundle() {
-        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-            bundleIdentifier: "com.omi.desktop-dev",
-            updateChannel: "stable",
-            forceOverride: "1"
-        ))
-        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-            bundleIdentifier: "com.omi.omi-beta-dev-test",
-            updateChannel: "stable",
-            forceOverride: "true"
-        ))
-        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
-            bundleIdentifier: "com.omi.computer-macos",
-            updateChannel: "stable",
-            forceOverride: "0"
-        ))
-    }
-
-    func testBaseURLReadsFromPythonEnvVar() async {
-        setenv("OMI_PYTHON_API_URL", "http://localhost:8080", 1)
-        defer { unsetenv("OMI_PYTHON_API_URL") }
-        let client = APIClient()
-        let url = await client.baseURL
-        XCTAssertEqual(url, "http://localhost:8080/")
-    }
-
-    func testBaseURLAddsTrailingSlash() async {
-        setenv("OMI_PYTHON_API_URL", "http://localhost:8080", 1)
-        defer { unsetenv("OMI_PYTHON_API_URL") }
-        let client = APIClient()
-        let url = await client.baseURL
-        XCTAssertTrue(url.hasSuffix("/"))
-    }
-
-    func testBaseURLPreservesExistingTrailingSlash() async {
-        setenv("OMI_PYTHON_API_URL", "http://localhost:8080/", 1)
-        defer { unsetenv("OMI_PYTHON_API_URL") }
-        let client = APIClient()
-        let url = await client.baseURL
-        XCTAssertEqual(url, "http://localhost:8080/")
-    }
-
-    func testRustBackendURLReadsFromApiUrlEnvVar() async {
-        setenv("OMI_DESKTOP_API_URL", "http://localhost:8787", 1)
-        defer { unsetenv("OMI_DESKTOP_API_URL") }
-        let client = APIClient()
-        let url = await client.rustBackendURL
-        XCTAssertEqual(url, "http://localhost:8787/")
-    }
-
-    func testRustBackendURLReturnsEmptyWhenNotSet() async {
+      }
+      if let originalRust {
+        setenv("OMI_DESKTOP_API_URL", originalRust, 1)
+      } else {
         unsetenv("OMI_DESKTOP_API_URL")
-        let client = APIClient()
-        let url = await client.rustBackendURL
-        XCTAssertEqual(url, "")
+      }
     }
 
-    func testBaseURLAndRustBackendURLAreIndependent() async {
-        setenv("OMI_PYTHON_API_URL", "http://python:8080", 1)
-        setenv("OMI_DESKTOP_API_URL", "http://rust:8787", 1)
-        defer { unsetenv("OMI_PYTHON_API_URL"); unsetenv("OMI_DESKTOP_API_URL") }
+    setenv("OMI_PYTHON_API_URL", "http://python-override:8080", 1)
+    setenv("OMI_DESKTOP_API_URL", "http://rust-override:10201", 1)
+    DesktopBackendEnvironment.applyReleaseChannelDefaults()
 
-        let client = APIClient()
-        let base = await client.baseURL
-        let rust = await client.rustBackendURL
-        XCTAssertEqual(base, "http://python:8080/")
-        XCTAssertEqual(rust, "http://rust:8787/")
-        XCTAssertNotEqual(base, rust)
+    XCTAssertEqual(
+      ProcessInfo.processInfo.environment["OMI_PYTHON_API_URL"],
+      "http://python-override:8080"
+    )
+    XCTAssertEqual(
+      ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"],
+      "http://rust-override:10201"
+    )
+  }
+
+  func testBundleEnvironmentDoesNotOverwriteExplicitLaunchBackendURLs() {
+    let launchEnvironment = [
+      "OMI_DESKTOP_API_URL": "http://127.0.0.1:10343",
+      "OMI_PYTHON_API_URL": "http://127.0.0.1:8080",
+    ]
+
+    XCTAssertFalse(
+      BundleEnvironment.shouldApplyBundledValue(
+        for: "OMI_DESKTOP_API_URL",
+        launchEnvironment: launchEnvironment
+      ))
+    XCTAssertFalse(
+      BundleEnvironment.shouldApplyBundledValue(
+        for: "OMI_PYTHON_API_URL",
+        launchEnvironment: launchEnvironment
+      ))
+    XCTAssertTrue(
+      BundleEnvironment.shouldApplyBundledValue(
+        for: "FIREBASE_API_KEY",
+        launchEnvironment: launchEnvironment
+      ))
+  }
+
+  @MainActor
+  func testProductionFamilyRejectsHostFirebaseAndLocalProfileOverrides() {
+    let hostOverrides = [
+      "FIREBASE_API_KEY": "wrong-key",
+      "FIREBASE_AUTH_EMULATOR_HOST": "127.0.0.1:9099",
+      "FIREBASE_PROJECT_ID": "based-hardware-dev",
+      "OMI_DESKTOP_LOCAL_PROFILE": "1",
+    ]
+    for bundleIdentifier in AppBuild.productionFamilyBundleIdentifiers {
+      for key in hostOverrides.keys {
+        XCTAssertFalse(
+          BundleEnvironment.shouldApplyBundledValue(
+            for: key,
+            launchEnvironment: hostOverrides,
+            bundleIdentifier: bundleIdentifier
+          ))
+      }
+      XCTAssertFalse(DesktopLocalProfile.isEnabled(bundleIdentifier: bundleIdentifier, profileValue: "1"))
+      XCTAssertEqual(
+        AppBuild.firebaseAPIKey(
+          bundleIdentifier: bundleIdentifier,
+          environmentKey: "wrong-key",
+          bundledKey: "signed-production-key"
+        ),
+        "signed-production-key"
+      )
+    }
+    XCTAssertTrue(DesktopLocalProfile.isEnabled(bundleIdentifier: "com.omi.omi-local", profileValue: "1"))
+  }
+
+  func testStableProductionBundleKeepsConfiguredRustBackend() {
+    let url = DesktopBackendEnvironment.rustBackendURL(
+      useDevelopmentBackends: true,
+      bundleIdentifier: AppBuild.productionBundleIdentifier,
+      environmentValue: "https://evil.example.test",
+      launchEnvironmentValue: "https://evil.example.test"
+    )
+    XCTAssertEqual(url, "https://desktop-backend-hhibjajaja-uc.a.run.app/")
+  }
+
+  func testStableProductionChannelUsesProductionBackends() {
+    XCTAssertFalse(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: "com.omi.computer-macos",
+        updateChannel: "staging"
+      ))
+    XCTAssertEqual(
+      DesktopBackendEnvironment.pythonBaseURL(
+        useDevelopmentBackends: false,
+        environmentValue: nil
+      ),
+      "https://api.omi.me/"
+    )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.rustBackendURL(
+        useDevelopmentBackends: false,
+        environmentValue: nil,
+        launchEnvironmentValue: nil
+      ),
+      DesktopBackendEnvironment.productionRustBackendURL
+    )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.pythonBaseURL(
+        useDevelopmentBackends: true,
+        bundleIdentifier: AppBuild.productionBundleIdentifier,
+        environmentValue: "https://evil.example.test"
+      ),
+      DesktopBackendEnvironment.productionPythonAPIURL
+    )
+  }
+
+  func testBundleEnvironmentNormalizesExportAssignments() {
+    XCTAssertEqual(BundleEnvironment.normalizedKey(from: "export OMI_PYTHON_API_URL"), "OMI_PYTHON_API_URL")
+    XCTAssertEqual(BundleEnvironment.normalizedKey(from: " OMI_DESKTOP_API_URL "), "OMI_DESKTOP_API_URL")
+    XCTAssertNil(BundleEnvironment.normalizedKey(from: "export   "))
+  }
+
+  func testStableProductionBundleKeepsProductionBackends() {
+    XCTAssertFalse(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: "com.omi.computer-macos",
+        updateChannel: "stable"
+      ))
+  }
+
+  func testBetaIdentityUsesDevelopmentServingEndpointsAndProductionAuth() {
+    XCTAssertTrue(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        updateChannel: "beta"
+      ))
+    XCTAssertEqual(
+      DesktopBackendEnvironment.pythonBaseURL(
+        useDevelopmentBackends: true,
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://api.omi.me/"
+      ),
+      DesktopBackendEnvironment.developmentPythonAPIURL
+    )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.rustBackendURL(
+        useDevelopmentBackends: true,
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app/",
+        launchEnvironmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app/"
+      ),
+      DesktopBackendEnvironment.developmentRustBackendURL
+    )
+    XCTAssertTrue(
+      DesktopBackendEnvironment.shouldUseProductionAuth(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier
+      ))
+    XCTAssertEqual(
+      DesktopBackendEnvironment.authBaseURL(
+        useDevelopmentBackends: true,
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://api.omiapi.com/"
+      ),
+      DesktopBackendEnvironment.productionPythonAPIURL
+    )
+  }
+
+  func testGeminiAndEmbeddingProxyRespectBetaIdentityRouting() {
+    let contaminatedEndpoint = DesktopBackendEnvironment.productionRustBackendURL
+    XCTAssertEqual(
+      GeminiClient.proxyBaseURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: contaminatedEndpoint,
+        launchEnvironmentValue: contaminatedEndpoint
+      ),
+      DesktopBackendEnvironment.developmentRustBackendURL
+    )
+    XCTAssertEqual(
+      EmbeddingService.proxyBaseURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: contaminatedEndpoint,
+        launchEnvironmentValue: contaminatedEndpoint
+      ),
+      DesktopBackendEnvironment.developmentRustBackendURL
+    )
+  }
+
+  func testBetaKeepsMCPIdentityEndpointsOnProductionWhileServingMCPFromDevelopment() {
+    XCTAssertEqual(
+      MemoryExportDestination.mcpServerURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: DesktopBackendEnvironment.productionPythonAPIURL
+      ),
+      "https://api.omiapi.com/v1/mcp/sse"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.mcpAuthorizeURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://api.omiapi.com/"
+      ),
+      "https://api.omi.me/authorize"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.mcpTokenURL(
+        bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
+        environmentValue: "https://api.omiapi.com/"
+      ),
+      "https://api.omi.me/token"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.chatgptOAuthClientID(forOAuthBaseURL: "https://api.omi.me/"),
+      "omi-chatgpt-prod"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.chatgptOAuthClientID(forOAuthBaseURL: "https://api.omiapi.com/"),
+      "omi-chatgpt-dev"
+    )
+  }
+
+  func testNonProductionBundlesDefaultToDevelopmentBackends() {
+    XCTAssertTrue(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: "com.omi.desktop-dev",
+        updateChannel: "beta"
+      ))
+    XCTAssertTrue(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: "com.omi.omi-beta-dev-test",
+        updateChannel: "stable"
+      ))
+  }
+
+  func testProductionFamilyHasNoDevelopmentOverrideSeam() {
+    XCTAssertTrue(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: "com.omi.desktop-dev",
+        updateChannel: "stable"
+      ))
+    XCTAssertFalse(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: AppBuild.productionBundleIdentifier,
+        updateChannel: "stable"
+      ))
+    XCTAssertFalse(
+      DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: AppBuild.productionBundleIdentifier,
+        updateChannel: "beta"
+      ))
+  }
+
+  func testProductionFamilyIgnoresContaminatedProcessEndpoints() {
+    XCTAssertEqual(
+      DesktopBackendEnvironment.pythonBaseURL(
+        useDevelopmentBackends: false,
+        environmentValue: "https://staging.example.test"
+      ),
+      DesktopBackendEnvironment.productionPythonAPIURL
+    )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.authBaseURL(
+        useDevelopmentBackends: false,
+        environmentValue: "https://staging.example.test"
+      ),
+      DesktopBackendEnvironment.productionPythonAPIURL
+    )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.rustBackendURL(
+        useDevelopmentBackends: false,
+        environmentValue: "https://staging.example.test",
+        launchEnvironmentValue: "https://other.example.test"
+      ),
+      DesktopBackendEnvironment.productionRustBackendURL
+    )
+  }
+
+  func testBaseURLReadsFromPythonEnvVar() async {
+    setenv("OMI_PYTHON_API_URL", "http://localhost:8080", 1)
+    defer { unsetenv("OMI_PYTHON_API_URL") }
+    let client = APIClient()
+    let url = await client.baseURL
+    XCTAssertEqual(url, "http://localhost:8080/")
+  }
+
+  func testBaseURLAddsTrailingSlash() async {
+    setenv("OMI_PYTHON_API_URL", "http://localhost:8080", 1)
+    defer { unsetenv("OMI_PYTHON_API_URL") }
+    let client = APIClient()
+    let url = await client.baseURL
+    XCTAssertTrue(url.hasSuffix("/"))
+  }
+
+  func testBaseURLPreservesExistingTrailingSlash() async {
+    setenv("OMI_PYTHON_API_URL", "http://localhost:8080/", 1)
+    defer { unsetenv("OMI_PYTHON_API_URL") }
+    let client = APIClient()
+    let url = await client.baseURL
+    XCTAssertEqual(url, "http://localhost:8080/")
+  }
+
+  func testRustBackendURLReadsFromApiUrlEnvVar() async {
+    setenv("OMI_DESKTOP_API_URL", "http://localhost:8787", 1)
+    defer { unsetenv("OMI_DESKTOP_API_URL") }
+    let client = APIClient()
+    let url = await client.rustBackendURL
+    XCTAssertEqual(url, "http://localhost:8787/")
+  }
+
+  func testNonProductionAppDefaultsToDevelopmentRustBackendWhenNotSet() async {
+    unsetenv("OMI_DESKTOP_API_URL")
+    let client = APIClient()
+    let url = await client.rustBackendURL
+    XCTAssertEqual(url, DesktopBackendEnvironment.developmentRustBackendURL)
+  }
+
+  func testBaseURLAndRustBackendURLAreIndependent() async {
+    setenv("OMI_PYTHON_API_URL", "http://python:8080", 1)
+    setenv("OMI_DESKTOP_API_URL", "http://rust:8787", 1)
+    defer {
+      unsetenv("OMI_PYTHON_API_URL")
+      unsetenv("OMI_DESKTOP_API_URL")
     }
 
-    // MARK: - Routing behavior: Python-routed endpoints (default baseURL)
+    let client = APIClient()
+    let base = await client.baseURL
+    let rust = await client.rustBackendURL
+    XCTAssertEqual(base, "http://python:8080/")
+    XCTAssertEqual(rust, "http://rust:8787/")
+    XCTAssertNotEqual(base, rust)
+  }
 
-    private func makeTestClient() async -> APIClient {
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [URLCapture.self]
-        let session = URLSession(configuration: config)
-        let client = APIClient(session: session)
-        await client.setTestAuthHeader("Bearer test-token")
-        return client
+  func testRealtimeMintStructuredFailurePreservesDiagnostics() async throws {
+    let previousOwner = UserDefaults.standard.object(forKey: .authUserId)
+    let previousOverride = UserDefaults.standard.object(forKey: .automationOwnerOverride)
+    UserDefaults.standard.set("realtime-routing-owner", forKey: .authUserId)
+    UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+    defer {
+      if let previousOwner {
+        UserDefaults.standard.set(previousOwner, forKey: .authUserId)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .authUserId)
+      }
+      if let previousOverride {
+        UserDefaults.standard.set(previousOverride, forKey: .automationOwnerOverride)
+      } else {
+        UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+      }
     }
+    let body = Data(
+      """
+      {
+        "error": "quota exhausted",
+        "reason": "provider_quota_exceeded",
+        "provider": "openai",
+        "backend_route": "/v2/realtime/session",
+        "upstream_status_code": 429,
+        "retryable": true,
+        "code": "insufficient_quota"
+      }
+      """.utf8)
+    URLCapture.setResponse(statusCode: 429, body: body)
+    let client = await makeTestClient()
 
-    override func setUp() {
-        super.setUp()
-        URLCapture.reset()
-        setenv("OMI_PYTHON_API_URL", "http://python-test:9001", 1)
-        setenv("OMI_DESKTOP_API_URL", "http://rust-test:9002", 1)
+    do {
+      _ = try await client.mintRealtimeToken(
+        provider: "openai",
+        expectedOwnerID: "realtime-routing-owner")
+      XCTFail("Expected structured realtime mint failure")
+    } catch let error as RealtimeTokenMintError {
+      XCTAssertEqual(error.statusCode, 429)
+      XCTAssertEqual(error.payload?.reason, "provider_quota_exceeded")
+      XCTAssertEqual(error.payload?.backendRoute, "/v2/realtime/session")
+      XCTAssertEqual(error.payload?.upstreamStatusCode, 429)
+      XCTAssertEqual(error.payload?.retryable, true)
+      XCTAssertEqual(error.healthError.failureClass.logValue, "provider_quota_exceeded")
+      XCTAssertTrue(error.localizedDescription.contains("status: 429"))
+      XCTAssertTrue(error.localizedDescription.contains("reason: provider_quota_exceeded"))
+      XCTAssertTrue(error.localizedDescription.contains("code: insufficient_quota"))
     }
+  }
 
-    override func tearDown() {
-        unsetenv("OMI_PYTHON_API_URL")
-        unsetenv("OMI_DESKTOP_API_URL")
-        URLCapture.reset()
-        super.tearDown()
+  // MARK: - Routing behavior: Python-routed endpoints (default baseURL)
+
+  private func makeTestClient() async -> APIClient {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [URLCapture.self]
+    let session = URLSession(configuration: config)
+    let client = APIClient(session: session)
+    await client.setTestAuthHeader("Bearer test-token")
+    return client
+  }
+
+  override func setUp() {
+    super.setUp()
+    URLCapture.reset()
+    setenv("OMI_PYTHON_API_URL", "http://python-test:9001", 1)
+    setenv("OMI_DESKTOP_API_URL", "http://rust-test:9002", 1)
+  }
+
+  override func tearDown() {
+    unsetenv("OMI_PYTHON_API_URL")
+    unsetenv("OMI_DESKTOP_API_URL")
+    URLCapture.reset()
+    super.tearDown()
+  }
+
+  // -- Conversations (GET, DELETE → Python) --
+
+  func testGetConversationRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.getConversation(id: "test-123") as ServerConversation
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/conversations/test-123", method: "GET",
+      label: "getConversation")
+  }
+
+  func testGetOmiCaptureUsesStrictArchiveDetailContract() async {
+    let client = await makeTestClient()
+    _ = try? await client.getOmiCapture(id: "capture-123") as ServerConversation
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "python-test", port: 9001,
+      pathContains: "v1/conversations/capture-123", method: "GET",
+      label: "getOmiCapture")
+    guard let firstRequest = requests.first else {
+      return XCTFail("Expected getOmiCapture to issue a request")
     }
-
-    // -- Conversations (GET, DELETE → Python) --
-
-    func testGetConversationRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getConversation(id: "test-123") as ServerConversation
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/conversations/test-123", method: "GET",
-                     label: "getConversation")
-    }
-
-    func testDeleteConversationRoutesToPython() async {
-        let client = await makeTestClient()
-        try? await client.deleteConversation(id: "conv-456")
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/conversations/conv-456?cascade=true", method: "DELETE",
-                     label: "deleteConversation")
-    }
-
-    // -- Conversations: manual URL(string: baseURL + ...) paths (PATCH → Python) --
-
-    func testSetConversationStarredRoutesToPython() async {
-        let client = await makeTestClient()
-        try? await client.setConversationStarred(id: "c1", starred: true)
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/conversations/c1/starred", method: "PATCH",
-                     label: "setConversationStarred")
-    }
-
-    func testUpdateConversationTitleRoutesToPython() async {
-        let client = await makeTestClient()
-        try? await client.updateConversationTitle(id: "c2", title: "New")
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/conversations/c2", method: "PATCH",
-                     label: "updateConversationTitle")
-    }
-
-    // -- Folders (GET → Python) --
-
-    func testGetFoldersRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getFolders() as [Folder]
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/folders", method: "GET",
-                     label: "getFolders")
-    }
-
-    // -- Memories (POST → Python) --
-
-    func testCreateMemoryRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.createMemory(content: "test memory") as CreateMemoryResponse
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v3/memories", method: "POST",
-                     label: "createMemory")
-    }
-
-    // -- Goals: manual URL path (PATCH → Python) --
-
-    func testUpdateGoalProgressRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.updateGoalProgress(goalId: "g1", currentValue: 42.0) as Goal
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/goals/g1/progress", method: "PATCH",
-                     label: "updateGoalProgress")
-    }
-
-    // -- Apps (GET → Python) --
-
-    func testGetAppsRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getApps() as [OmiApp]
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/apps", method: "GET",
-                     label: "getApps")
-    }
-
-    func testSearchAppsUsesBackendFilterParameters() async {
-        let client = await makeTestClient()
-        _ = try? await client.searchApps(
-            query: "R&D calendar",
-            category: "productivity",
-            capability: "external_integration",
-            installedOnly: true
-        ) as [OmiApp]
-
-        let requests = URLCapture.capturedRequests
-        assertRoutes(requests, host: "python-test", port: 9001,
-                     pathContains: "v2/apps/search", method: "GET",
-                     label: "searchApps")
-
-        let queryItems = URLComponents(url: requests.first!.url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        XCTAssertEqual(queryItems.first(where: { $0.name == "q" })?.value, "R&D calendar")
-        XCTAssertNil(queryItems.first(where: { $0.name == "query" })?.value)
-        XCTAssertEqual(queryItems.first(where: { $0.name == "category" })?.value, "productivity")
-        XCTAssertEqual(queryItems.first(where: { $0.name == "capability" })?.value, "external_integration")
-        XCTAssertEqual(queryItems.first(where: { $0.name == "installed_apps" })?.value, "true")
-    }
-
-    // -- Personas (GET → Python) --
-
-    func testGetPersonaRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getPersona() as Persona?
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/personas", method: "GET",
-                     label: "getPersona")
-    }
-
-    // -- User settings (GET → Python) --
-
-    func testGetDailySummarySettingsRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getDailySummarySettings() as DailySummarySettings
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/users/daily-summary-settings", method: "GET",
-                     label: "getDailySummarySettings")
-    }
-
-    // -- Subscription/payments (GET → Python, was explicit pythonBackendURL, now default) --
-
-    func testGetUserSubscriptionRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getUserSubscription() as UserSubscriptionResponse
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/users/me/subscription", method: "GET",
-                     label: "getUserSubscription")
-    }
-
-    // MARK: - Routing behavior: Rust-routed endpoints (customBaseURL: rustBackendURL)
-
-    // -- Config/API keys (GET → Rust) --
-
-    func testFetchApiKeysRoutesToRust() async {
-        let client = await makeTestClient()
-        _ = try? await client.fetchApiKeys() as APIClient.ApiKeysResponse
-        assertRoutes(URLCapture.capturedRequests, host: "rust-test", port: 9002,
-                     pathContains: "v1/config/api-keys", method: "GET",
-                     label: "fetchApiKeys")
-    }
-
-    func testSynthesizeSpeechRoutesToRust() async {
-        let client = await makeTestClient()
-        _ = try? await client.synthesizeSpeech(
-            request: APIClient.TtsSynthesizeRequest(
-                text: "Hello",
-                voiceId: "onyx",
-                instructions: "Speak naturally"
-            )
-        )
-
-        let requests = URLCapture.capturedRequests
-        assertRoutes(requests, host: "rust-test", port: 9002,
-                     pathContains: "v1/tts/synthesize", method: "POST",
-                     label: "synthesizeSpeech")
-
-        let body = requests.first?.body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        XCTAssertEqual(body?["text"] as? String, "Hello")
-        XCTAssertEqual(body?["voice_id"] as? String, "onyx")
-        XCTAssertEqual(body?["instructions"] as? String, "Speak naturally")
-    }
-
-    // -- Assistant settings (GET → Python, migrated from Rust) --
-
-    func testGetAssistantSettingsRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getAssistantSettings() as AssistantSettingsResponse
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/users/assistant-settings", method: "GET",
-                     label: "getAssistantSettings")
-    }
-
-    // -- Notification settings (GET → Python, migrated from Rust) --
-
-    func testGetNotificationSettingsRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getNotificationSettings() as NotificationSettingsResponse
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/users/notification-settings", method: "GET",
-                     label: "getNotificationSettings")
-    }
-
-    // -- Staged tasks (GET, DELETE → Python, migrated from Rust) --
-
-    func testGetStagedTasksRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getStagedTasks() as ActionItemsListResponse
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/staged-tasks", method: "GET",
-                     label: "getStagedTasks")
-    }
-
-    func testDeleteStagedTaskRoutesToPython() async {
-        let client = await makeTestClient()
-        try? await client.deleteStagedTask(id: "st-1")
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/staged-tasks/st-1", method: "DELETE",
-                     label: "deleteStagedTask")
-    }
-
-    // -- Chat sessions (GET, POST, DELETE → Python, migrated from Rust) --
-
-    func testGetChatSessionsRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getChatSessions() as [ChatSession]
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v2/chat-sessions", method: "GET",
-                     label: "getChatSessions")
-    }
-
-    func testCreateChatSessionRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.createChatSession(title: "test") as ChatSession
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v2/chat-sessions", method: "POST",
-                     label: "createChatSession")
-    }
-
-    func testDeleteChatSessionRoutesToPython() async {
-        let client = await makeTestClient()
-        try? await client.deleteChatSession(sessionId: "sess-1")
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v2/chat-sessions/sess-1", method: "DELETE",
-                     label: "deleteChatSession")
-    }
-
-    // -- Desktop messages (DELETE → Python, path changed to v2/desktop/messages) --
-
-    func testDeleteMessagesRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.deleteMessages() as MessageDeleteResponse
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v2/desktop/messages", method: "DELETE",
-                     label: "deleteMessages")
-    }
-
-    // -- LLM usage (GET → Python, migrated from Rust) --
-
-    func testFetchTotalOmiAICostRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = await client.fetchTotalOmiAICost()
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/users/me/llm-usage/total", method: "GET",
-                     label: "fetchTotalOmiAICost")
-    }
-
-    // MARK: - Python-routed: remaining manual URL builders
-
-    // -- setConversationVisibility: manual URL(string: baseURL + ...) PATCH → Python --
-
-    func testSetConversationVisibilityRoutesToPython() async {
-        let client = await makeTestClient()
-        try? await client.setConversationVisibility(id: "c3")
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/conversations/c3/visibility", method: "PATCH",
-                     label: "setConversationVisibility")
-    }
-
-    // -- moveConversationToFolder: manual URL PATCH → Python --
-
-    func testMoveConversationToFolderRoutesToPython() async {
-        let client = await makeTestClient()
-        try? await client.moveConversationToFolder(conversationId: "c4", folderId: "f1")
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/conversations/c4/folder", method: "PATCH",
-                     label: "moveConversationToFolder")
-    }
-
-    // -- setRecordingPermission: manual URL POST → Python --
-
-    func testSetRecordingPermissionRoutesToPython() async {
-        let client = await makeTestClient()
-        try? await client.setRecordingPermission(enabled: true)
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/users/store-recording-permission", method: "POST",
-                     label: "setRecordingPermission")
-    }
-
-    // -- setPrivateCloudSync: manual URL POST → Python --
-
-    func testSetPrivateCloudSyncRoutesToPython() async {
-        let client = await makeTestClient()
-        try? await client.setPrivateCloudSync(enabled: false)
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/users/private-cloud-sync", method: "POST",
-                     label: "setPrivateCloudSync")
-    }
-
-    // -- completeGoal: manual URL PATCH → Python --
-
-    func testCompleteGoalRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.completeGoal(id: "g2") as Goal
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/goals/g2", method: "PATCH",
-                     label: "completeGoal")
-    }
-
-    // -- assignSegmentsBulk: manual URL PATCH → Python --
-
-    func testAssignSegmentsBulkRoutesToPython() async {
-        let client = await makeTestClient()
-        try? await client.assignSegmentsBulk(conversationId: "c5", segmentIds: ["s1"], isUser: true, personId: nil)
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/conversations/c5/segments/assign-bulk", method: "PATCH",
-                     label: "assignSegmentsBulk")
-    }
-
-    // -- Chat AI endpoints (migrated from Rust to Python) --
-
-    func testGetInitialMessageRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getInitialMessage(sessionId: "s1")
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v2/chat/initial-message", method: "POST",
-                     label: "getInitialMessage")
-    }
-
-    func testGenerateSessionTitleRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.generateSessionTitle(sessionId: "s1", messages: [("hi", "human")])
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v2/chat/generate-title", method: "POST",
-                     label: "generateSessionTitle")
-    }
-
-    func testGetChatMessageCountRoutesToPython() async {
-        let client = await makeTestClient()
-        _ = try? await client.getChatMessageCount()
-        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
-                     pathContains: "v1/users/stats/chat-messages", method: "GET",
-                     label: "getChatMessageCount")
-    }
-
-    // MARK: - Promotion code routing and body tests
-
-    func testCreateCheckoutSessionSendsPromotionCode() async {
-        let client = await makeTestClient()
-        _ = try? await client.createCheckoutSession(priceId: "price_abc", promotionCode: "WELCOME50")
-
-        let requests = URLCapture.capturedRequests
-        assertRoutes(requests, host: "python-test", port: 9001,
-                     pathContains: "v1/payments/checkout-session", method: "POST",
-                     label: "createCheckoutSession")
-
-        let body = requests.first?.body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        XCTAssertEqual(body?["price_id"] as? String, "price_abc")
-        XCTAssertEqual(body?["promotion_code"] as? String, "WELCOME50")
-    }
-
-    func testCreateCheckoutSessionOmitsNilPromoCode() async {
-        let client = await makeTestClient()
-        _ = try? await client.createCheckoutSession(priceId: "price_abc")
-
-        let body = URLCapture.capturedRequests.first?.body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        XCTAssertEqual(body?["price_id"] as? String, "price_abc")
-        XCTAssertNil(body?["promotion_code"])
-    }
-
-    func testUpgradeSubscriptionSendsPromotionCode() async {
-        let client = await makeTestClient()
-        _ = try? await client.upgradeSubscription(priceId: "price_xyz", promotionCode: "SAVE20")
-
-        let requests = URLCapture.capturedRequests
-        assertRoutes(requests, host: "python-test", port: 9001,
-                     pathContains: "v1/payments/upgrade-subscription", method: "POST",
-                     label: "upgradeSubscription")
-
-        let body = requests.first?.body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        XCTAssertEqual(body?["price_id"] as? String, "price_xyz")
-        XCTAssertEqual(body?["promotion_code"] as? String, "SAVE20")
-    }
-
-    func testHttpErrorPreservesDetailFromResponse() async {
-        let client = await makeTestClient()
-        do {
-            _ = try await client.createCheckoutSession(priceId: "price_abc", promotionCode: "INVALID")
-            XCTFail("Expected httpError to be thrown")
-        } catch let error as APIError {
-            // URLCapture returns 403 with {"detail":"test"} — verify detail is preserved
-            XCTAssertEqual(error.detail, "test")
-        } catch {
-            XCTFail("Unexpected error type: \(error)")
+    let queryItems = URLComponents(url: firstRequest.url, resolvingAgainstBaseURL: false)?.queryItems
+    XCTAssertEqual(queryItems?.first(where: { $0.name == "source" })?.value, "omi")
+    XCTAssertEqual(queryItems?.first(where: { $0.name == "include_discarded" })?.value, "false")
+  }
+
+  func testDeleteConversationRoutesToPython() async {
+    let client = await makeTestClient()
+    try? await client.deleteConversation(id: "conv-456")
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/conversations/conv-456?cascade=true", method: "DELETE",
+      label: "deleteConversation")
+  }
+
+  // -- Conversations: manual URL(string: baseURL + ...) paths (PATCH → Python) --
+
+  func testSetConversationStarredRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.setConversationStarred(id: "c1", starred: true)
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/conversations/c1/starred", method: "PATCH",
+      label: "setConversationStarred")
+  }
+
+  func testUpdateConversationTitleRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.updateConversationTitle(id: "c2", title: "New")
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/conversations/c2", method: "PATCH",
+      label: "updateConversationTitle")
+  }
+
+  func testConversationMutationDecodesCanonicalRevisionAndState() async throws {
+    URLCapture.setResponse(
+      statusCode: 200,
+      body: Data(
+        """
+        {
+          "status": "Ok",
+          "conversation": {
+            "id": "c2",
+            "created_at": "2026-07-09T12:00:00Z",
+            "updated_at": "2026-07-09T12:00:01.123456Z",
+            "started_at": "2026-07-09T12:00:00Z",
+            "finished_at": "2026-07-09T12:01:00Z",
+            "structured": {
+              "title": "Canonical title",
+              "overview": "Processing finished",
+              "emoji": "",
+              "category": "other",
+              "action_items": [],
+              "events": []
+            },
+            "status": "completed",
+            "starred": true,
+            "discarded": false,
+            "is_locked": false
+          }
         }
+        """.utf8
+      )
+    )
+    let client = await makeTestClient()
+
+    let conversation = try await client.updateConversationTitle(id: "c2", title: "Canonical title")
+
+    XCTAssertEqual(conversation.structured.title, "Canonical title")
+    XCTAssertEqual(conversation.structured.overview, "Processing finished")
+    XCTAssertEqual(conversation.status, .completed)
+    XCTAssertTrue(conversation.starred)
+    XCTAssertNotNil(conversation.updatedAt)
+  }
+
+  // -- Folders (GET → Python) --
+
+  func testGetFoldersRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.getFolders() as [Folder]
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/folders", method: "GET",
+      label: "getFolders")
+  }
+
+  // -- Memories (POST → Python) --
+
+  func testCreateMemoryRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.createMemory(content: "test memory") as CreateMemoryResponse
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v3/memories", method: "POST",
+      label: "createMemory")
+  }
+
+  // -- Goals: manual URL path (PATCH → Python) --
+
+  func testUpdateGoalProgressRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.updateGoalProgress(goalId: "g1", currentValue: 42.0) as Goal
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/goals/g1/progress", method: "PATCH",
+      label: "updateGoalProgress")
+  }
+
+  // -- Apps (GET → Python) --
+
+  func testGetAppsRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.getApps() as [OmiApp]
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/apps", method: "GET",
+      label: "getApps")
+  }
+
+  func testSearchAppsUsesBackendFilterParameters() async {
+    let client = await makeTestClient()
+    _ =
+      try? await client.searchApps(
+        query: "R&D calendar",
+        category: "productivity",
+        capability: "external_integration",
+        installedOnly: true
+      ) as [OmiApp]
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "python-test", port: 9001,
+      pathContains: "v2/apps/search", method: "GET",
+      label: "searchApps")
+
+    let queryItems = URLComponents(url: requests.first!.url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    XCTAssertEqual(queryItems.first(where: { $0.name == "q" })?.value, "R&D calendar")
+    XCTAssertNil(queryItems.first(where: { $0.name == "query" })?.value)
+    XCTAssertEqual(queryItems.first(where: { $0.name == "category" })?.value, "productivity")
+    XCTAssertEqual(queryItems.first(where: { $0.name == "capability" })?.value, "external_integration")
+    XCTAssertEqual(queryItems.first(where: { $0.name == "installed_apps" })?.value, "true")
+  }
+
+  // -- Personas (GET → Python) --
+
+  func testGetPersonaRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.getPersona() as Persona?
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/personas", method: "GET",
+      label: "getPersona")
+  }
+
+  // -- User settings (GET → Python) --
+
+  func testGetDailySummarySettingsRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.getDailySummarySettings() as DailySummarySettings
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/users/daily-summary-settings", method: "GET",
+      label: "getDailySummarySettings")
+  }
+
+  // -- Subscription/payments (GET → Python, was explicit pythonBackendURL, now default) --
+
+  func testGetUserSubscriptionRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.getUserSubscription() as UserSubscriptionResponse
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/users/me/subscription", method: "GET",
+      label: "getUserSubscription")
+  }
+
+  // MARK: - Routing behavior: Rust-routed endpoints (customBaseURL: rustBackendURL)
+
+  // -- Config/API keys (GET → Rust) --
+
+  func testFetchApiKeysRoutesToRust() async {
+    let client = await makeTestClient()
+    _ = try? await client.fetchApiKeys() as APIClient.ApiKeysResponse
+    assertRoutes(
+      URLCapture.capturedRequests, host: "rust-test", port: 9002,
+      pathContains: "v1/config/api-keys", method: "GET",
+      label: "fetchApiKeys")
+  }
+
+  func testSynthesizeSpeechRoutesToRust() async {
+    let client = await makeTestClient()
+    _ = try? await client.synthesizeSpeech(
+      request: APIClient.TtsSynthesizeRequest(
+        text: "Hello",
+        voiceId: "onyx",
+        instructions: "Speak naturally"
+      )
+    )
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "rust-test", port: 9002,
+      pathContains: "v1/tts/synthesize", method: "POST",
+      label: "synthesizeSpeech")
+
+    let body = requests.first?.body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+    XCTAssertEqual(body?["text"] as? String, "Hello")
+    XCTAssertEqual(body?["voice_id"] as? String, "onyx")
+    XCTAssertEqual(body?["instructions"] as? String, "Speak naturally")
+  }
+
+  // -- Assistant settings (GET → Python, migrated from Rust) --
+
+  func testGetAssistantSettingsRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.getAssistantSettings() as AssistantSettingsResponse
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/users/assistant-settings", method: "GET",
+      label: "getAssistantSettings")
+  }
+
+  // -- Notification settings (GET → Python, migrated from Rust) --
+
+  func testGetNotificationSettingsRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.getNotificationSettings() as NotificationSettingsResponse
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/users/notification-settings", method: "GET",
+      label: "getNotificationSettings")
+  }
+
+  // -- Staged tasks (GET, DELETE → Python, migrated from Rust) --
+
+  func testGetStagedTasksRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.getStagedTasks() as ActionItemsListResponse
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/staged-tasks", method: "GET",
+      label: "getStagedTasks")
+  }
+
+  func testDeleteStagedTaskRoutesToPython() async {
+    let client = await makeTestClient()
+    try? await client.deleteStagedTask(id: "st-1")
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/staged-tasks/st-1", method: "DELETE",
+      label: "deleteStagedTask")
+  }
+
+  func testBatchDeleteActionItemsRoutesToPythonWithEverySelectedID() async throws {
+    URLCapture.setResponse(
+      statusCode: 200,
+      body: Data("{\"status\":\"Ok\",\"deleted_count\":2,\"deleted_ids\":[\"task-1\",\"task-2\"]}".utf8)
+    )
+    let client = await makeTestClient()
+
+    try await client.batchDeleteActionItems(ids: ["task-1", "task-2"])
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "python-test", port: 9001,
+      pathContains: "v1/action-items/batch-delete", method: "POST",
+      label: "batchDeleteActionItems")
+    let body = requests.first?.body.flatMap {
+      try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
     }
+    XCTAssertEqual(body?["ids"] as? [String], ["task-1", "task-2"])
+  }
+
+  func testActionItemIdsScopesSelectionToCurrentCompletionBucket() async throws {
+    URLCapture.setResponse(
+      statusCode: 200,
+      body: Data("{\"ids\":[\"task-1\"],\"completed_scope\":true}".utf8)
+    )
+    let client = await makeTestClient()
+
+    let ids = try await client.getActionItemIds(completed: true)
+
+    XCTAssertEqual(ids, ["task-1"])
+    XCTAssertTrue(URLCapture.capturedRequests.first?.url.query?.contains("completed=true") == true)
+  }
+
+  func testScopedActionItemIdsRejectsLegacyUnscopedResponse() async {
+    URLCapture.setResponse(statusCode: 200, body: Data("{\"ids\":[\"todo-1\",\"done-1\"]}".utf8))
+    let client = await makeTestClient()
+
+    do {
+      _ = try await client.getActionItemIds(completed: false)
+      XCTFail("Expected a legacy unscoped response to fail closed")
+    } catch APIError.invalidResponse {
+      // Expected: the previous backend ignores `completed` and returns every ID.
+    } catch {
+      XCTFail("Expected invalidResponse, got \(error)")
+    }
+  }
+
+  func testUnscopedActionItemIdsAcceptsLegacyResponse() async throws {
+    URLCapture.setResponse(statusCode: 200, body: Data("{\"ids\":[\"task-1\"]}".utf8))
+    let client = await makeTestClient()
+
+    let ids = try await client.getActionItemIds()
+
+    XCTAssertEqual(ids, ["task-1"])
+  }
+
+  // -- Chat sessions (GET, POST, DELETE → Python, migrated from Rust) --
+
+  func testGetChatSessionsRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.getChatSessions() as [ChatSession]
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v2/chat-sessions", method: "GET",
+      label: "getChatSessions")
+  }
+
+  func testCreateChatSessionRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.createChatSession(title: "test") as ChatSession
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v2/chat-sessions", method: "POST",
+      label: "createChatSession")
+  }
+
+  func testDeleteChatSessionRoutesToPython() async {
+    let client = await makeTestClient()
+    try? await client.deleteChatSession(sessionId: "sess-1")
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v2/chat-sessions/sess-1", method: "DELETE",
+      label: "deleteChatSession")
+  }
+
+  // -- Desktop messages (DELETE → Python, path changed to v2/desktop/messages) --
+
+  func testDeleteMessagesRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.deleteMessages() as MessageDeleteResponse
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v2/desktop/messages", method: "DELETE",
+      label: "deleteMessages")
+  }
+
+  // -- LLM usage (GET → Python, migrated from Rust) --
+
+  func testFetchTotalOmiAICostRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = await client.fetchTotalOmiAICost()
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/users/me/llm-usage/total", method: "GET",
+      label: "fetchTotalOmiAICost")
+  }
+
+  // MARK: - Python-routed: remaining manual URL builders
+
+  // -- setConversationVisibility: manual URL(string: baseURL + ...) PATCH → Python --
+
+  func testSetConversationVisibilityRoutesToPython() async {
+    let client = await makeTestClient()
+    try? await client.setConversationVisibility(id: "c3")
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/conversations/c3/visibility", method: "PATCH",
+      label: "setConversationVisibility")
+  }
+
+  // -- moveConversationToFolder: manual URL PATCH → Python --
+
+  func testMoveConversationToFolderRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.moveConversationToFolder(conversationId: "c4", folderId: "f1")
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/conversations/c4/folder", method: "PATCH",
+      label: "moveConversationToFolder")
+  }
+
+  // -- setRecordingPermission: manual URL POST → Python --
+
+  func testSetRecordingPermissionRoutesToPython() async {
+    let client = await makeTestClient()
+    try? await client.setRecordingPermission(enabled: true)
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/users/store-recording-permission", method: "POST",
+      label: "setRecordingPermission")
+  }
+
+  // -- setPrivateCloudSync: manual URL POST → Python --
+
+  func testSetPrivateCloudSyncRoutesToPython() async {
+    let client = await makeTestClient()
+    try? await client.setPrivateCloudSync(enabled: false)
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/users/private-cloud-sync", method: "POST",
+      label: "setPrivateCloudSync")
+  }
+
+  // -- completeGoal: manual URL PATCH → Python --
+
+  func testCompleteGoalRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.completeGoal(id: "g2") as Goal
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/goals/g2", method: "PATCH",
+      label: "completeGoal")
+  }
+
+  // -- assignSegmentsBulk: manual URL PATCH → Python --
+
+  func testAssignSegmentsBulkRoutesToPython() async {
+    let client = await makeTestClient()
+    try? await client.assignSegmentsBulk(conversationId: "c5", segmentIds: ["s1"], isUser: true, personId: nil)
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/conversations/c5/segments/assign-bulk", method: "PATCH",
+      label: "assignSegmentsBulk")
+  }
+
+  // -- Chat AI endpoints (migrated from Rust to Python) --
+
+  func testGetInitialMessageRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.getInitialMessage(sessionId: "s1")
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v2/chat/initial-message", method: "POST",
+      label: "getInitialMessage")
+  }
+
+  func testGenerateSessionTitleRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.generateSessionTitle(sessionId: "s1", messages: [("hi", "human")])
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v2/chat/generate-title", method: "POST",
+      label: "generateSessionTitle")
+  }
+
+  func testGetChatMessageCountRoutesToPython() async {
+    let client = await makeTestClient()
+    _ = try? await client.getChatMessageCount()
+    assertRoutes(
+      URLCapture.capturedRequests, host: "python-test", port: 9001,
+      pathContains: "v1/users/stats/chat-messages", method: "GET",
+      label: "getChatMessageCount")
+  }
+
+  // MARK: - Promotion code routing and body tests
+
+  func testCreateCheckoutSessionSendsPromotionCode() async {
+    let client = await makeTestClient()
+    _ = try? await client.createCheckoutSession(priceId: "price_abc", promotionCode: "WELCOME50")
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "python-test", port: 9001,
+      pathContains: "v1/payments/checkout-session", method: "POST",
+      label: "createCheckoutSession")
+
+    let body = requests.first?.body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+    XCTAssertEqual(body?["price_id"] as? String, "price_abc")
+    XCTAssertEqual(body?["promotion_code"] as? String, "WELCOME50")
+  }
+
+  func testCreateCheckoutSessionOmitsNilPromoCode() async {
+    let client = await makeTestClient()
+    _ = try? await client.createCheckoutSession(priceId: "price_abc")
+
+    let body = URLCapture.capturedRequests.first?.body.flatMap {
+      try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+    }
+    XCTAssertEqual(body?["price_id"] as? String, "price_abc")
+    XCTAssertNil(body?["promotion_code"])
+  }
+
+  func testUpgradeSubscriptionSendsPromotionCode() async {
+    let client = await makeTestClient()
+    _ = try? await client.upgradeSubscription(priceId: "price_xyz", promotionCode: "SAVE20")
+
+    let requests = URLCapture.capturedRequests
+    assertRoutes(
+      requests, host: "python-test", port: 9001,
+      pathContains: "v1/payments/upgrade-subscription", method: "POST",
+      label: "upgradeSubscription")
+
+    let body = requests.first?.body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+    XCTAssertEqual(body?["price_id"] as? String, "price_xyz")
+    XCTAssertEqual(body?["promotion_code"] as? String, "SAVE20")
+  }
+
+  func testHttpErrorPreservesDetailFromResponse() async {
+    let client = await makeTestClient()
+    do {
+      _ = try await client.createCheckoutSession(priceId: "price_abc", promotionCode: "INVALID")
+      XCTFail("Expected httpError to be thrown")
+    } catch let error as APIError {
+      // URLCapture returns 403 with {"detail":"test"} — verify detail is preserved
+      XCTAssertEqual(error.detail, "test")
+    } catch {
+      XCTFail("Unexpected error type: \(error)")
+    }
+  }
 }
 
 // MARK: - Helper extension to set testAuthHeader from async context
 
 extension APIClient {
-    func setTestAuthHeader(_ header: String) async {
-        self.testAuthHeader = header
-    }
+  func setTestAuthHeader(_ header: String) async {
+    self.testAuthHeader = header
+  }
 }

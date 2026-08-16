@@ -19,9 +19,9 @@ Requires:
 import argparse
 import io
 import os
-import struct
 import sys
 import wave
+from typing import Any, Dict, List, cast
 
 # Add backend to path so we can import utils
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -49,7 +49,7 @@ def pcm_to_wav(pcm_path: str, sample_rate: int, channels: int = 1, sample_width:
 def transcribe(wav_bytes: bytes, sample_rate: int) -> str:
     """Transcribe WAV bytes via Deepgram and return plain text."""
     words = deepgram_prerecorded_from_bytes(wav_bytes, sample_rate=sample_rate, diarize=False)
-    return ' '.join(w['text'] for w in words)
+    return ' '.join(w['text'] for w in cast(List[Dict[str, Any]], words))
 
 
 def compute_duration_sec(pcm_path: str, sample_rate: int, channels: int = 1, sample_width: int = 2) -> float:

@@ -1,69 +1,99 @@
-# E2E Flow: Tasks — task management with filtering, creation, and completion
-# Tests: Tasks list, filter groups, create task, toggle completion, category views
-# Core feature: action items extracted from conversations and screen activity
-
 version: 2
 name: tasks
-description: Tasks flow — navigate to Tasks page, browse categorized tasks (today/tomorrow/later/no deadline), filter by status/category/source/priority, create manual task, toggle completion
+tier: manual
+description: Tasks tab — search, Today/No Deadline sections, keyboard toolbar (v0.12.119+ redesign)
 app: com.omi.computer-macos
 covers:
-  - desktop/Desktop/Sources/MainWindow/Pages/TasksPage.swift
-  - desktop/Desktop/Sources/Providers/TasksStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TasksEscapeHandling.swift
+  # The selection and bulk steps below are explicit UI assertions: the run
+  # must expose the selection affordance, selected-row count, and bulk result.
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskMultiSelection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TasksViewModel+MultiSelection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskBulkOperationCoordinator.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailPanel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailPanelPolicy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Tasks/TaskDetailSourceNavigator.swift
+  - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  - desktop/macos/Desktop/Sources/Stores/TasksStore+BulkSelection.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage+BulkDelete.swift
 preconditions:
-  - auth_ready  # User signed in and onboarding completed. App shows main window.
+  - auth_ready
 
 steps:
   - id: S1
-    name: Navigate to Tasks page
-    do: "Click Tasks in sidebar: agent-swift find key sidebar_tasks click. Verify the Tasks page opens showing task categories (Today, Tomorrow, Later, No Deadline) and a search/filter bar at top."
-    verify: true
+    name: Navigate to Tasks tab
+    do: "Click the Tasks button in the top nav bar (agent-swift find text 'Tasks' click). Verify Tasks page loads with search bar ('Search tasks...') and task list."
     expect:
-      - kind: interactive_count
-        min: 5
-    evidence:
-      - screenshot: step-S1.webp
-    note: "Tasks is index 4 in sidebar (SidebarNavItem.tasks). TasksPage has 6 filter groups: Status, Date Range, Category, Source, Priority, Origin. Tasks sorted into TaskCategory by due date."
+      text_visible:
+        - Tasks
 
   - id: S2
-    name: Apply a filter
-    do: "Click the filter/funnel icon to open filter options. Select 'Status' group and toggle 'Todo' filter to show only incomplete tasks. Verify the task list updates to hide completed items."
-    verify: true
+    name: Verify Today section
+    do: "Verify the 'Today' section header is visible with task items listed below. Each task should have a checkbox circle and task text."
     expect:
-      - kind: interactive_count
-        min: 3
-    evidence:
-      - screenshot: step-S2.webp
-    note: "TaskFilterTag enum has 25+ filter options across 6 groups. Filters are combinable. SavedFilterView supports saving custom filter combinations to UserDefaults (JSON encoded)."
+      text_visible:
+        - Today
+
+  - id: S2a
+    name: Open and inspect task details
+    do: "Click one visible task row (not its completion or selection checkbox) to open the panel identified as task-detail-panel. Verify it shows the task description, 'Why Omi added this' (task-detail-why), 'Linked sources', status/details, and the task actions including the accessible task-detail-toggle and task-detail-copy-link controls. Activate task-detail-close and verify the task list remains visible."
+    expect:
+      text_visible:
+        - Task details
+        - Why Omi added this
+        - Linked sources
+        - Details
+        - Actions
+
+  - id: S2b-enter-select
+    name: Enter task multi-select mode
+    do: "Activate the Tasks surface's visible multi-selection affordance (accessible label 'Select'). Verify selection mode exposes 'Select All', '0 selected', and 'Cancel'."
+    expect:
+      text_visible:
+        - Select All
+        - 0 selected
+        - Cancel
+
+  - id: S2b-select-rows
+    name: Select two task rows
+    do: "Select two distinct visible task rows using their selection checkboxes. Verify the toolbar reports '2 selected'."
+    expect:
+      text_visible:
+        - 2 selected
+
+  - id: S2c
+    name: Execute and verify a bulk task operation
+    do: "With two task rows selected, activate the visible bulk action (for example, 'Delete 2'). Confirm deletion when prompted. Verify multi-select mode exits and the Tasks list remains usable."
+    expect:
+      text_visible:
+        - Tasks
+        - Select
 
   - id: S3
-    name: Create a manual task
-    do: "Click the FAB (floating action button, '+' icon) to open the task creation form. Enter title 'Review desktop app flows', optionally set a due date and priority. Save the task."
-    verify: true
+    name: Verify No Deadline section
+    do: "Scroll down if needed to find the 'No Deadline' section. Verify it exists with a count badge and task items."
     expect:
-      - kind: interactive_count
-        min: 3
-    evidence:
-      - screenshot: step-S3.webp
-    note: "Manual task creation via FAB. New tasks get source='manual' and appear in the appropriate category based on due date. TasksStore handles local + API sync."
+      text_visible:
+        - No Deadline
 
   - id: S4
-    name: Toggle task completion
-    do: "Find the task 'Review desktop app flows' (or any task in the list). Click the checkbox to mark it complete. Verify the task shows as completed with a checkmark or strikethrough styling."
-    verify: true
+    name: Verify keyboard toolbar
+    do: "Verify the keyboard toolbar at the bottom shows navigation and editing controls: Navigate, New, Delete, Indent, Outdent."
     expect:
-      - kind: interactive_count
-        min: 3
-    evidence:
-      - screenshot: step-S4.webp
-    note: "toggleTask in TasksStore optimistically updates local state, then syncs to API. Completed tasks move to 'Done' filter category."
+      interactive_count: { min: 3 }
+
+  - id: S4a
+    name: Cancel inline task creation with Escape
+    do: "Click New to begin an inline task, then press Escape. Verify the inline editor closes and the Tasks page remains visible."
+    expect:
+      text_visible:
+        - Tasks
 
   - id: S5
-    name: Clear filter and verify all tasks
-    do: "Clear the active filter to show all tasks again. Verify tasks from all categories (Today, Tomorrow, Later, No Deadline) are visible, including both completed and incomplete items."
-    verify: true
+    name: Verify search and filter controls
+    do: "Verify the search bar is present at the top. Check for filter/settings icons next to the search bar and the add (+) button."
     expect:
-      - kind: interactive_count
-        min: 3
-    evidence:
-      - screenshot: step-S5.webp
-    note: "Clearing filters restores the default view showing all task categories. Verify the manually created task appears in the correct section."
+      interactive_count: { min: 2 }

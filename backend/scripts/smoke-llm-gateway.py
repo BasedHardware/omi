@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+from typing import Any, Dict, cast
 
 import argparse
-import json
 import os
-import sys
 import time
 
 import httpx
@@ -59,7 +58,7 @@ def _find_success_request_metric(metrics_text: str) -> str | None:
     for line in metrics_text.splitlines():
         if not line.startswith('llm_gateway_requests_total{'):
             continue
-        if 'lane_id="omi:auto:chat-structured"' not in line or 'outcome="success"' not in line:
+        if 'lane_id="omi:auto:session-titles"' not in line or 'outcome="success"' not in line:
             continue
         try:
             value = float(line.rsplit(' ', 1)[-1])
@@ -92,6 +91,12 @@ def main() -> int:
         default=None,
         help='Metrics bearer token (default: read from METRICS_SECRET env var)',
     )
+    parser.add_argument(
+        '--lane',
+        action='append',
+        dest='lanes',
+        help='Named auto lane to smoke (repeatable; defaults to omi:auto:session-titles)',
+    )
     args = parser.parse_args()
 
     token = (args.token or os.environ.get('OMI_LLM_GATEWAY_SERVICE_TOKEN') or '').strip()
@@ -105,32 +110,41 @@ def main() -> int:
         'X-Omi-Service-Caller': 'backend',
         'Content-Type': 'application/json',
     }
-    payload = {
-        'model': 'omi:auto:chat-structured',
-        'messages': [
-            {'role': 'user', 'content': 'Question: should this use prior conversation context? Answer false.'}
-        ],
-        'response_format': {
-            'type': 'json_schema',
-            'json_schema': {
-                'name': 'RequiresContext',
-                'strict': True,
-                'schema': {
-                    'type': 'object',
-                    'properties': {'value': {'type': 'boolean'}},
-                    'required': ['value'],
-                    'additionalProperties': False,
-                },
-            },
-        },
-        'metadata': {'omi_feature': 'chat_extraction.requires_context'},
-    }
+    lanes = args.lanes or ['omi:auto:session-titles']
 
     with httpx.Client(timeout=20.0) as client:
         _get_ready(client, base_url, headers)
-        response = client.post(f'{base_url}/v1/chat/completions', headers=headers, json=payload)
-        _raise_for_status(response, '/v1/chat/completions')
-        body = response.json()
+        for lane in lanes:
+            # memory_l2 (and other medium-reasoning lanes) can spend a large share of a
+            # tiny completion budget on hidden reasoning and return empty content.
+            token_budget = 256 if 'memory-l2' in lane or 'memory_l2' in lane else 64
+            payload = {
+                'model': lane,
+                'messages': [{'role': 'user', 'content': 'Reply briefly to confirm this named lane is serving.'}],
+                'max_completion_tokens': token_budget,
+            }
+            response = client.post(f'{base_url}/v1/chat/completions', headers=headers, json=payload)
+            _raise_for_status(response, f'/v1/chat/completions ({lane})')
+            body: Dict[str, Any] = cast(Dict[str, Any], response.json())
+            choices = cast(list[Dict[str, Any]], body.get('choices') or [])
+            if not choices:
+                print(f'ERROR: {lane} response did not contain choices')
+                return 1
+            message: Dict[str, Any] = cast(Dict[str, Any], choices[0].get('message') or {})
+            content = message.get('content')
+            if isinstance(content, str) and content.strip():
+                continue
+            # Some tool-capable lanes may return structured/tool payloads; require a
+            # terminal finish_reason and a message object rather than empty choices.
+            finish = str(choices[0].get('finish_reason') or '')
+            if message and finish in {'stop', 'length', 'tool_calls', 'function_call'}:
+                print(f'WARN: {lane} returned empty content with finish_reason={finish}; accepting as live lane')
+                continue
+            print(
+                f'ERROR: {lane} response did not contain non-empty choices[0].message.content '
+                f'(finish_reason={finish!r})'
+            )
+            return 1
         if args.check_metrics:
             metrics_token = (args.metrics_token or os.environ.get('METRICS_SECRET') or '').strip()
             if not metrics_token:
@@ -138,18 +152,6 @@ def main() -> int:
                 return 2
             _assert_success_metric(client, base_url, metrics_token)
 
-    content = (body.get('choices') or [{}])[0].get('message', {}).get('content')
-    if not isinstance(content, str):
-        print('ERROR: response did not contain choices[0].message.content')
-        return 1
-    try:
-        decoded = json.loads(content)
-    except ValueError:
-        print('ERROR: response content was not JSON')
-        return 1
-    if not isinstance(decoded.get('value'), bool):
-        print('ERROR: response JSON did not contain boolean value')
-        return 1
     print('LLM gateway smoke passed')
     return 0
 

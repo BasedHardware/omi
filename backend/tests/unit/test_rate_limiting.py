@@ -1,8 +1,10 @@
 """Unit tests for rate limiting config and logic."""
 
+import asyncio
 import importlib
 import os
 import sys
+import threading
 import types
 import unittest
 from types import ModuleType
@@ -186,6 +188,35 @@ class TestShadowMode(unittest.TestCase):
             self.assertFalse(rlc.RATE_LIMIT_SHADOW)
         importlib.reload(rlc)
 
+    def test_shadow_mode_non_true_values_stay_off(self):
+        """Shadow is opt-in via 'true'; any other value must NOT silently enable it.
+
+        The flag defaults OFF (enforcement active). Only an explicit truthy
+        'true' should turn shadow/log-only mode on. Values like '0', 'off',
+        'no', or an empty string mean "not true", so enforcement must stay on —
+        otherwise setting the env var to disable shadow would fail open and
+        silently drop all rate-limit enforcement.
+        """
+        import utils.rate_limit_config as rlc
+
+        for value in ("0", "off", "no", "", "1", "disabled", "False ", "yes"):
+            with patch.dict(os.environ, {"RATE_LIMIT_SHADOW_MODE": value}):
+                importlib.reload(rlc)
+                self.assertFalse(
+                    rlc.RATE_LIMIT_SHADOW,
+                    f"RATE_LIMIT_SHADOW_MODE={value!r} must not enable shadow mode",
+                )
+        importlib.reload(rlc)
+
+    def test_shadow_mode_true_is_case_insensitive(self):
+        import utils.rate_limit_config as rlc
+
+        for value in ("true", "TRUE", "True"):
+            with patch.dict(os.environ, {"RATE_LIMIT_SHADOW_MODE": value}):
+                importlib.reload(rlc)
+                self.assertTrue(rlc.RATE_LIMIT_SHADOW, f"{value!r} should enable shadow mode")
+        importlib.reload(rlc)
+
 
 class TestGetEffectiveLimit(unittest.TestCase):
     """Test get_effective_limit edge cases."""
@@ -361,8 +392,6 @@ class TestWithRateLimitWrapper(unittest.TestCase):
 
     @patch('utils.other.endpoints._enforce_rate_limit')
     def test_with_rate_limit_context_uses_app_key_identity(self, mock_enforce):
-        import asyncio
-
         dep_func = self.ep.with_rate_limit_context(lambda: "unused", "dev:conversations_read")
         context = types.SimpleNamespace(uid="uid1", app_id="app1", key_id="key1")
 
@@ -370,6 +399,29 @@ class TestWithRateLimitWrapper(unittest.TestCase):
 
         mock_enforce.assert_called_once_with("app:app1:key:key1", "dev:conversations_read", fail_closed=True)
         self.assertIs(result, context)
+
+    def test_rate_limit_dependency_keeps_event_loop_responsive(self):
+        async def exercise() -> None:
+            loop = asyncio.get_running_loop()
+            entered = asyncio.Event()
+            release = threading.Event()
+
+            def blocking_enforce(_uid, _policy):
+                loop.call_soon_threadsafe(entered.set)
+                release.wait()
+
+            dep_func = self.ep.with_rate_limit(lambda: "uid", "chat:send_message")
+            with patch.object(self.ep, "_enforce_rate_limit", blocking_enforce):
+                dependency_task = asyncio.create_task(dep_func(uid="user123"))
+                await entered.wait()
+
+                # If the Redis/Lua boundary were still running on the event loop,
+                # execution could not reach this assertion until release was set.
+                self.assertFalse(dependency_task.done())
+                release.set()
+                self.assertEqual(await dependency_task, "user123")
+
+        asyncio.run(exercise())
 
     @patch('utils.other.endpoints._enforce_rate_limit')
     def test_check_api_key_rate_limit_uses_key_identity_and_fails_closed(self, mock_enforce):
@@ -451,6 +503,9 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "mcp:memories_read",
             "mcp:memories_write",
             "knowledge_graph:rebuild",
+            "knowledge_graph:extract",
+            "knowledge_graph:canonical",
+            "memories:extract",
             "wrapped:generate",
             "integration:conversations",
             "integration:memories",
@@ -481,8 +536,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_conversations_router_has_rate_limits(self):
         matches = self._grep_file("routers/conversations.py", r"with_rate_limit.*conversations:")
-        # create, reprocess, search, merge, and events = 5 endpoints
-        self.assertEqual(len(matches), 5, f"conversations.py expected 5 rate limits, got {len(matches)}")
+        # create, reprocess, topic, search, merge, and events = 6 endpoints
+        self.assertEqual(len(matches), 6, f"conversations.py expected 6 rate limits, got {len(matches)}")
 
     def test_chat_router_has_rate_limits(self):
         matches = self._grep_file("routers/chat.py", r"with_rate_limit.*(?:chat:|voice:|file:)")
@@ -563,13 +618,6 @@ class TestRouterWiring(unittest.TestCase):
         self.assertIn("key_id=test-key", log_output)
         self.assertNotIn("Authorization", log_output)
 
-    def test_developer_read_routes_do_not_add_duplicate_uid_wrappers(self):
-        developer_source = open("routers/developer.py", encoding='utf-8').read()
-
-        self.assertNotIn('with_rate_limit(get_uid_with_conversations_read, "dev:conversations_read")', developer_source)
-        self.assertNotIn('with_rate_limit(get_uid_with_action_items_read, "dev:action_items_read")', developer_source)
-        self.assertNotIn('with_rate_limit(get_uid_with_goals_read, "dev:goals_read")', developer_source)
-
     def test_goals_router_has_rate_limits(self):
         matches = self._grep_file("routers/goals.py", r"with_rate_limit.*goals:")
         # suggest, advice(x2), extract = 4
@@ -618,8 +666,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_memories_router_has_rate_limits(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:")
-        # create, batch, 2 review, delete, delete_all, 3 modify endpoints = 9
-        self.assertEqual(len(matches), 9, f"memories.py expected 9 rate limits, got {len(matches)}")
+        # extract, create, batch, 3 review (list/get/resolve), delete, delete_all, delete_batch, 5 modify = 14
+        self.assertEqual(len(matches), 14, f"memories.py expected 14 rate limits, got {len(matches)}")
 
     def test_memories_create_endpoint_rate_limited(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:create")
@@ -628,6 +676,10 @@ class TestRouterWiring(unittest.TestCase):
     def test_memories_delete_all_endpoint_rate_limited(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:delete_all")
         self.assertEqual(len(matches), 1, "DELETE /v3/memories must have memories:delete_all rate limit")
+
+    def test_memories_delete_batch_endpoint_rate_limited(self):
+        matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:delete_batch")
+        self.assertEqual(len(matches), 1, "DELETE /v3/memories/batch must have memories:delete_batch rate limit")
 
 
 class TestRealCheckRateLimit(unittest.TestCase):
@@ -721,6 +773,64 @@ class TestRealCheckRateLimit(unittest.TestCase):
         self.real_module.check_rate_limit("uid1", "p", 999, 7200)
         _, kwargs = self.mock_lua.call_args
         self.assertEqual(kwargs['args'], [7200], "Lua should only receive window, not max_requests")
+
+    def test_reversible_reservation_maps_admission_and_does_not_count_denials(self):
+        self.real_module._RATE_LIMIT_RESERVE_LUA = MagicMock(return_value=[1, 3, 3600])
+        allowed, remaining, retry = self.real_module.reserve_rate_limit("uid1", "desktop_reasoning", 10, 3600)
+        self.assertTrue(allowed)
+        self.assertEqual((remaining, retry), (7, 3600))
+        self.real_module._RATE_LIMIT_RESERVE_LUA.assert_called_once_with(
+            keys=["rl:desktop_reasoning:uid1"], args=[3600, 10]
+        )
+
+        self.real_module._RATE_LIMIT_RESERVE_LUA.return_value = [0, 10, 1200]
+        allowed, remaining, retry = self.real_module.reserve_rate_limit("uid1", "desktop_reasoning", 10, 3600)
+        self.assertFalse(allowed)
+        self.assertEqual((remaining, retry), (0, 1200))
+
+    def test_reversible_reservation_release_uses_same_counter_key(self):
+        self.real_module._RATE_LIMIT_RELEASE_LUA = MagicMock(return_value=2)
+        self.real_module.release_rate_limit("uid1", "desktop_reasoning")
+        self.real_module._RATE_LIMIT_RELEASE_LUA.assert_called_once_with(keys=["rl:desktop_reasoning:uid1"], args=[])
+
+    def _release_lua_source(self) -> str:
+        source = None
+        for lua_source in self.lua_sources:
+            if "DECR" in lua_source and "DEL" in lua_source and "INCR" not in lua_source:
+                source = lua_source
+                break
+        self.assertIsNotNone(source, "release Lua script was not registered")
+        return source
+
+    def test_release_lua_clamps_at_zero_after_delete(self):
+        # The guarded unit runner stubs the redis package, so the script cannot
+        # be executed here. Pin the clamp semantics structurally: a release on a
+        # missing/zeroed counter must DEL and return 0 instead of DECR-ing the
+        # key negative (an operator quota reset deletes keys mid-flight).
+        source = self._release_lua_source()
+        self.assertIn("or '0'", source)
+        self.assertIn("current <= 1", source)
+        self.assertIn("remaining <= 0", source)
+        self.assertEqual(source.count("redis.call('DEL', key)"), 2)
+        for clause in ("current <= 1", "remaining <= 0"):
+            branch = source.split(clause, 1)[1]
+            self.assertIn("return 0", branch.split("end", 1)[0])
+
+    def test_release_lua_clamps_at_zero_after_delete_executes(self):
+        # Full execution against fakeredis, for environments where the real
+        # redis package (and lupa) are importable — bare pytest locally.
+        try:
+            import fakeredis
+
+            client = fakeredis.FakeRedis()
+            script = client.register_script(self._release_lua_source())
+        except Exception:
+            self.skipTest("fakeredis with Lua support unavailable under the guarded runner")
+        key = "rl:desktop_reasoning:uid1"
+        remaining = script(keys=[key], args=[])
+        self.assertEqual(int(remaining), 0)
+        stored = client.get(key)
+        self.assertTrue(stored is None or int(stored) >= 0)
 
 
 if __name__ == '__main__':

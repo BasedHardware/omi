@@ -1,5 +1,6 @@
 version: 1
 name: ask-omi-animation-benchmark
+tier: 3
 description: Capture short frame sequences for Ask Omi open and close transitions.
 app: non-prod
 preconditions:

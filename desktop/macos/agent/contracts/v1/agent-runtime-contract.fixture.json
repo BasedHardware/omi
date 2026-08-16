@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "contextSnapshot": {
+    "contextPlan": {
+      "version": 1,
+      "planId": "sha256:plan",
+      "semanticGuidanceVersion": "kernel-semantic-guidance@1",
+      "semanticGuidance": "Kernel guidance",
+      "retainedTurnStartSeq": 2,
+      "retainedTurnEndSeq": 65,
+      "olderHistoryStrategy": "truncated",
+      "retainedTurnCount": 64,
+      "totalTurnCount": 65,
+      "omittedTurnCount": 1,
+      "stableCacheIdentity": "sha256:stable",
+      "dynamicContextIdentity": "sha256:dynamic"
+    }
+  },
+  "toolResultEnvelope": {
+    "version": 1,
+    "status": "succeeded",
+    "truncated": true,
+    "originalBytes": 634880,
+    "projectedBytes": 8192,
+    "fullOutputRef": "artifact:tool-output:example",
+    "provenance": {"invocationId": "invocation-1", "runId": "run-1", "attemptId": "attempt-1", "toolName": "list_agent_sessions"}
+  },
+  "toolInvocation": {"invocationId": "invocation-1", "runId": "run-1", "attemptId": "attempt-1", "toolName": "list_agent_sessions", "status": "succeeded"},
+  "permissionDecision": {"decision": "approved", "invocationId": "invocation-1"},
+  "lifecycle": {
+    "session": ["open", "archived", "closed"],
+    "run": ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling", "succeeded", "failed", "cancelled", "timed_out", "orphaned"],
+    "attempt": ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling", "succeeded", "failed", "cancelled", "timed_out", "orphaned"],
+    "turn": ["pending", "streaming", "completed", "failed"]
+  },
+  "failureTaxonomy": ["authentication", "quota_exceeded", "invalid_request", "timeout", "transport_interruption", "adapter_unavailable", "adapter_incompatible", "bridge_start_failed", "provider_setup_needed", "malformed_or_oversized_tool_result", "cancelled", "stale_owner", "policy_denied", "unknown"],
+  "sessionListingBudget": {"maxBytes": 8192, "mustExclude": ["input", "surfaceContext", "metadata", "result"]},
+  "adapterConformance": [
+    {"adapterId": "pi-mono", "surface": "desktop_chat", "transport": "node_runtime", "expectsToolEnvelope": true, "scenarios": [{"name": "lifecycle_failure", "runState": "failed", "attemptState": "failed", "turnState": "failed", "failureCode": "bridge_start_failed", "consumesToolInvocation": true, "expectsTruncatedToolEnvelope": true}, {"name": "oversized_tool_result", "runState": "failed", "attemptState": "failed", "turnState": "failed", "failureCode": "malformed_or_oversized_tool_result", "consumesToolInvocation": true, "expectsTruncatedToolEnvelope": true}]},
+    {"adapterId": "acp", "surface": "desktop_chat", "transport": "node_runtime", "expectsToolEnvelope": true, "scenarios": [{"name": "lifecycle_failure", "runState": "failed", "attemptState": "failed", "turnState": "failed", "failureCode": "bridge_start_failed", "consumesToolInvocation": true, "expectsTruncatedToolEnvelope": true}, {"name": "oversized_tool_result", "runState": "failed", "attemptState": "failed", "turnState": "failed", "failureCode": "malformed_or_oversized_tool_result", "consumesToolInvocation": true, "expectsTruncatedToolEnvelope": true}]},
+    {"adapterId": "hermes", "surface": "desktop_chat", "transport": "node_runtime", "expectsToolEnvelope": true, "scenarios": [{"name": "lifecycle_failure", "runState": "failed", "attemptState": "failed", "turnState": "failed", "failureCode": "bridge_start_failed", "consumesToolInvocation": true, "expectsTruncatedToolEnvelope": true}, {"name": "oversized_tool_result", "runState": "failed", "attemptState": "failed", "turnState": "failed", "failureCode": "malformed_or_oversized_tool_result", "consumesToolInvocation": true, "expectsTruncatedToolEnvelope": true}]},
+    {"adapterId": "openclaw", "surface": "desktop_chat", "transport": "node_runtime", "expectsToolEnvelope": true, "scenarios": [{"name": "lifecycle_failure", "runState": "failed", "attemptState": "failed", "turnState": "failed", "failureCode": "bridge_start_failed", "consumesToolInvocation": true, "expectsTruncatedToolEnvelope": true}, {"name": "oversized_tool_result", "runState": "failed", "attemptState": "failed", "turnState": "failed", "failureCode": "malformed_or_oversized_tool_result", "consumesToolInvocation": true, "expectsTruncatedToolEnvelope": true}]},
+    {"adapterId": "gemini-realtime", "surface": "realtime_voice", "transport": "swift_realtime", "expectsToolEnvelope": true, "scenarios": [{"name": "lifecycle_failure", "runState": "failed", "attemptState": "failed", "turnState": "failed", "failureCode": "bridge_start_failed", "consumesToolInvocation": true, "expectsTruncatedToolEnvelope": true}, {"name": "oversized_tool_result", "runState": "failed", "attemptState": "failed", "turnState": "failed", "failureCode": "malformed_or_oversized_tool_result", "consumesToolInvocation": true, "expectsTruncatedToolEnvelope": true}]},
+    {"adapterId": "openai-realtime", "surface": "realtime_voice", "transport": "swift_realtime", "expectsToolEnvelope": true, "scenarios": [{"name": "lifecycle_failure", "runState": "failed", "attemptState": "failed", "turnState": "failed", "failureCode": "bridge_start_failed", "consumesToolInvocation": true, "expectsTruncatedToolEnvelope": true}, {"name": "oversized_tool_result", "runState": "failed", "attemptState": "failed", "turnState": "failed", "failureCode": "malformed_or_oversized_tool_result", "consumesToolInvocation": true, "expectsTruncatedToolEnvelope": true}]}
+  ]
+}

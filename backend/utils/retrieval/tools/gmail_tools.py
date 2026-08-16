@@ -2,13 +2,12 @@
 Tools for accessing Gmail messages.
 """
 
-import contextvars
 import base64
 import traceback
 from email.utils import parsedate_to_datetime
-from typing import Optional, List
+from typing import Any, Dict, List, Optional, cast
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
 from utils.executors import db_executor, run_blocking
@@ -19,17 +18,15 @@ from utils.retrieval.tools.integration_base import (
 )
 
 # Import shared Google utilities
-from utils.retrieval.tools.google_utils import refresh_google_token, google_api_request
+from utils.retrieval.tools.google_utils import (
+    GMAIL_READONLY_SCOPE,
+    google_api_request,
+    google_integration_has_scope,
+    refresh_google_token,
+)
 import logging
 
 logger = logging.getLogger(__name__)
-
-# Import the context variable from agentic module
-try:
-    from utils.retrieval.agentic import agent_config_context
-except ImportError:
-    # Fallback if import fails
-    agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
 async def get_gmail_messages(
@@ -37,7 +34,7 @@ async def get_gmail_messages(
     query: Optional[str] = None,
     max_results: int = 10,
     label_ids: Optional[List[str]] = None,
-) -> List[dict]:
+) -> List[Dict[str, Any]]:
     """
     Fetch messages from Gmail API.
 
@@ -50,7 +47,7 @@ async def get_gmail_messages(
     Returns:
         List of message metadata
     """
-    params = {
+    params: Dict[str, Any] = {
         'maxResults': min(max_results, 50),  # Gmail API limit is 50
     }
 
@@ -61,7 +58,7 @@ async def get_gmail_messages(
     if label_ids:
         params['labelIds'] = label_ids
 
-    message_ids = []
+    message_ids: List[Any] = []
     page_token = None
 
     while True:
@@ -87,7 +84,7 @@ async def get_gmail_messages(
         if not page_token:
             break
 
-    messages = []
+    messages: List[Dict[str, Any]] = []
     for msg_id in message_ids:
         msg_data = await google_api_request(
             "GET",
@@ -100,7 +97,7 @@ async def get_gmail_messages(
     return messages
 
 
-def parse_gmail_message(message: dict) -> dict:
+def parse_gmail_message(message: Dict[str, Any]) -> Dict[str, Any]:
     """
     Parse a Gmail message object into a readable format.
 
@@ -138,14 +135,13 @@ def parse_gmail_message(message: dict) -> dict:
             data = payload.get('body', {}).get('data', '')
             if data:
                 body_text = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
-
+    date_str: str = header_dict.get('Date', '')
     # Parse date
-    date_str = header_dict.get('Date', '')
     date_parsed = None
     if date_str:
         try:
             date_parsed = parsedate_to_datetime(date_str)
-        except:
+        except Exception:
             pass
 
     return {
@@ -165,7 +161,7 @@ async def get_gmail_messages_tool(
     query: Optional[str] = None,
     max_results: int = 10,
     label: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Retrieve emails from the user's Gmail inbox.
@@ -205,7 +201,7 @@ async def get_gmail_messages_tool(
     uid, integration, access_token, access_err = await run_blocking(
         db_executor,
         prepare_access,
-        config,
+        cast(Optional[Dict[str, Any]], config),
         'google_calendar',
         'Gmail',
         'Gmail is not connected. Please connect your Google account from settings to view your emails.',
@@ -217,6 +213,14 @@ async def get_gmail_messages_tool(
     assert uid is not None
     assert integration is not None
     assert access_token is not None
+
+    # A Google grant created before Gmail was requested carries no Gmail scope; calling
+    # the Gmail API with it fails with an opaque 403, so ask for a reconnect instead.
+    if not google_integration_has_scope(integration, GMAIL_READONLY_SCOPE):
+        return (
+            'Gmail access has not been granted for this Google account. '
+            'Please reconnect Gmail from settings and approve email access.'
+        )
 
     try:
         max_results = ensure_capped(max_results, 50, "⚠️ get_gmail_messages_tool - max_results capped from {} to {}")

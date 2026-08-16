@@ -19,8 +19,13 @@ import types
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from tests.unit.memory_import_isolation import restore_sys_modules, snapshot_sys_modules
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -46,6 +51,11 @@ def _stub_package(name):
     mod = types.ModuleType(name)
     mod.__path__ = []
     sys.modules[name] = mod
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, mod)
     return mod
 
 
@@ -61,7 +71,69 @@ def _load_module_from_file(module_name, file_path):
 
 # ---------------------------------------------------------------------------
 # Stub heavy dependencies before importing anything from backend
+#
+# Snapshot touched modules first so the stubs installed below do not leak into
+# other test files during bulk ``pytest tests/unit/`` collection (issue #8661).
+# They are restored right after the modules under test are imported.
 # ---------------------------------------------------------------------------
+_SYS_MODULE_NAMES = [
+    "firebase_admin",
+    "firebase_admin.firestore",
+    "firebase_admin.auth",
+    "firebase_admin.messaging",
+    "firebase_admin.credentials",
+    "google.cloud.firestore",
+    "google.cloud.firestore_v1",
+    "google.cloud.firestore_v1.base_query",
+    "google.auth",
+    "google.auth.transport",
+    "google.auth.transport.requests",
+    "google.cloud.storage",
+    "opuslib",
+    "sentry_sdk",
+    "database",
+    "database._client",
+    "database.redis_db",
+    "database.auth",
+    "database.conversations",
+    "database.users",
+    "database.memories",
+    "database.vector_db",
+    "database.action_items",
+    "database.notifications",
+    "utils",
+    "utils.notifications",
+    "utils.conversations",
+    "utils.conversations.render",
+    "utils.conversations.factory",
+    "utils.conversations.search",
+    "utils.conversations.transcript_chunks",
+    "utils.retrieval",
+    "utils.retrieval.tools",
+    "utils.retrieval.tools.calendar_tools",
+    "utils.retrieval.safety",
+    "utils.retrieval.tool_services",
+    "utils.retrieval.tool_services.conversations",
+    "utils.retrieval.tool_services.memories",
+    "utils.retrieval.tool_services.action_items",
+    "utils.retrieval.tool_result_boundaries",
+    "utils.other",
+    "utils.other.endpoints",
+    "utils.memory",
+    "utils.memory.chat_memory_adapter",
+    "utils.memory.default_read_rollout",
+    "utils.memory.memory_system",
+    "utils.memory.memory_service",
+    "utils.rate_limit_config",
+    "routers",
+    "routers.tools",
+    "models",
+    "models.conversation",
+    "models.other",
+    "models.memories",
+]
+_SYS_MODULES_SNAPSHOT = snapshot_sys_modules(_SYS_MODULE_NAMES)
+
 for mod_name in [
     "firebase_admin",
     "firebase_admin.firestore",
@@ -106,6 +178,7 @@ memories_db.get_memories_by_ids = MagicMock(return_value=[])
 vector_db = _stub_module("database.vector_db")
 vector_db.query_vectors = MagicMock(return_value=[])
 vector_db.find_similar_memories = MagicMock(return_value=[])
+vector_db.search_transcript_chunks = MagicMock(return_value=[])
 
 # Stub database.action_items
 action_items_db = _stub_module("database.action_items")
@@ -134,27 +207,36 @@ _stub_package("utils.retrieval.tool_services")
 _stub_package("utils.other")
 _stub_package("utils.memory")
 
-memory_adapter_stub = _stub_module("utils.memory.chat_memory_adapter")
-memory_adapter_stub.list_default_chat_memories_decision_text = MagicMock(
-    return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
-)
-memory_adapter_stub.search_memory_default_chat_memories_vector_decision_text = MagicMock(
-    return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
-)
-read_rollout_stub = _stub_module("utils.memory.default_read_rollout")
-read_rollout_stub.MemoryReadDecision = types.SimpleNamespace(
-    USE_MEMORY="use_memory",
-    USE_LEGACY_SAFE="use_legacy_safe",
-)
-
-memory_system_stub = _stub_module("utils.memory.memory_system")
-memory_system_stub.MemorySystem = types.SimpleNamespace(LEGACY="legacy", CANONICAL="canonical")
-
 memory_service_stub = _stub_module("utils.memory.memory_service")
-memory_service_stub.MemoryService = MagicMock
 
-surface_routing_stub = _stub_module("utils.memory.surface_routing")
-surface_routing_stub.pin_memory_system = MagicMock(return_value=memory_system_stub.MemorySystem.LEGACY)
+
+class FakeMemoryService:
+    """Exercise the universal service contract while keeping this router suite hermetic."""
+
+    def __init__(self, *, db_client=None):
+        self.db_client = db_client
+
+    def read(self, uid, *, limit=100, offset=0, now=None):
+        del now
+        return [FakeMemoryDB(**row) for row in memories_db.get_memories(uid, limit=limit, offset=offset)]
+
+    def search(self, uid, query, *, limit=5):
+        rows = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)
+        ids = [row["memory_id"] for row in rows]
+        scores = {row["memory_id"]: float(row.get("score", 0.0)) for row in rows}
+        hydrated = {
+            row["id"]: FakeMemoryDB(**row)
+            for row in memories_db.get_memories_by_ids(uid, ids)
+            if not row.get("is_locked", False)
+        }
+        return [
+            types.SimpleNamespace(memory=hydrated[memory_id], score=scores[memory_id])
+            for memory_id in ids
+            if memory_id in hydrated
+        ]
+
+
+memory_service_stub.MemoryService = FakeMemoryService
 boundary_stub = _stub_module("utils.retrieval.tool_result_boundaries")
 boundary_stub.preserve_chat_memory_tool_result_boundary = MagicMock(side_effect=lambda _tool_name, result: result)
 
@@ -178,6 +260,32 @@ calendar_tools_mod.create_calendar_event_tool = FakeCalendarEventTool()
 
 # Stub render and factory modules
 render_mod = _stub_module("utils.conversations.render")
+
+
+def _stub_resolve_display_tz(tz):
+    if tz:
+        try:
+            return ZoneInfo(tz), tz
+        except Exception:
+            pass
+    return timezone.utc, "UTC"
+
+
+def _stub_format_local_time(dt, display_tz, tz_label):
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return f"{dt.astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
+
+
+def _stub_format_local_date(dt, display_tz):
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(display_tz).strftime('%Y-%m-%d')
+
+
+render_mod.resolve_display_tz = _stub_resolve_display_tz
+render_mod.format_local_time = _stub_format_local_time
+render_mod.format_local_date = _stub_format_local_date
 render_mod.conversations_to_string = MagicMock(
     side_effect=lambda convs, **kw: f"[{len(convs)} conversations formatted]"
 )
@@ -187,6 +295,8 @@ factory_mod.deserialize_conversation = MagicMock(
 )
 search_mod = _stub_module("utils.conversations.search")
 search_mod.keyword_search_conversation_ids = MagicMock(return_value=[])
+search_mod.parse_exact_conversation_reference = MagicMock(return_value=None)
+search_mod.conversation_matches_date_range = MagicMock(return_value=True)
 
 
 def _merge_conversation_search_ids(keyword_ids, vector_ids):
@@ -208,10 +318,16 @@ transcript_chunks_mod.hydrate_chunk_texts = MagicMock(side_effect=_hydrate_chunk
 def reset_conversation_search_stubs():
     search_mod.keyword_search_conversation_ids.reset_mock()
     search_mod.keyword_search_conversation_ids.return_value = []
+    search_mod.parse_exact_conversation_reference.reset_mock()
+    search_mod.parse_exact_conversation_reference.return_value = None
+    search_mod.conversation_matches_date_range.reset_mock()
+    search_mod.conversation_matches_date_range.return_value = True
     search_mod.merge_conversation_search_ids.reset_mock()
     search_mod.merge_conversation_search_ids.side_effect = _merge_conversation_search_ids
     transcript_chunks_mod.hydrate_chunk_texts.reset_mock()
     transcript_chunks_mod.hydrate_chunk_texts.side_effect = _hydrate_chunk_texts
+    vector_db.search_transcript_chunks.reset_mock()
+    vector_db.search_transcript_chunks.return_value = []
 
 
 endpoints_mod = _stub_module("utils.other.endpoints")
@@ -268,9 +384,11 @@ memories_model_mod = _stub_module("models.memories")
 class FakeMemoryDB:
     def __init__(self, **kwargs):
         self.id = kwargs.get('id', 'test-mem-id')
+        self.memory_id = kwargs.get('memory_id', self.id)
         self.content = kwargs.get('content', 'test memory')
         self.category = FakeCategory.other
         self.created_at = kwargs.get('created_at', datetime.now(timezone.utc))
+        self.is_locked = kwargs.get('is_locked', False)
 
     @staticmethod
     def get_memories_as_str(memories):
@@ -285,6 +403,10 @@ memories_model_mod.MemoryDB = FakeMemoryDB
 sys.path.insert(0, str(BACKEND_DIR))
 
 # Now load the shared service modules
+retrieval_safety = _load_module_from_file(
+    "utils.retrieval.safety",
+    BACKEND_DIR / "utils" / "retrieval" / "safety.py",
+)
 conversations_svc = _load_module_from_file(
     "utils.retrieval.tool_services.conversations",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "conversations.py",
@@ -297,6 +419,19 @@ action_items_svc = _load_module_from_file(
     "utils.retrieval.tool_services.action_items",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "action_items.py",
 )
+router_mod = _load_module_from_file(
+    "routers.tools",
+    BACKEND_DIR / "routers" / "tools.py",
+)
+rate_limit_config_mod = _load_module_from_file(
+    "utils.rate_limit_config",
+    BACKEND_DIR / "utils" / "rate_limit_config.py",
+)
+
+# Restore sys.modules now that the modules under test are imported and bound to
+# their stubbed dependencies. Tests below patch those module objects directly.
+restore_sys_modules(_SYS_MODULES_SNAPSHOT)
+del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
 # ===========================================================================
@@ -372,17 +507,14 @@ class TestParseIsoDate:
         with pytest.raises(ValueError):
             conversations_svc.parse_iso_date("2026-02-01T00:00:00 07:00 ", "test")
 
-    def test_source_has_encodeQueryDate(self):
-        """Verify desktop APIClient.swift uses encodeQueryDate for date params.
-        Regression guard: if encodeQueryDate is removed, this test fails."""
-        swift_path = os.path.join(
-            os.path.dirname(__file__), '..', '..', '..', 'desktop', 'Desktop', 'Sources', 'APIClient.swift'
-        )
-        if not os.path.exists(swift_path):
-            pytest.skip("APIClient.swift not found (backend-only test environment)")
-        with open(swift_path, encoding="utf-8") as f:
-            source = f.read()
-        assert 'func encodeQueryDate' in source, "encodeQueryDate helper must exist in APIClient.swift"
+    def test_source_has_encode_query_date(self):
+        """Verify desktop tool routes preserve plus-sign timezone offsets."""
+        source_root = BACKEND_DIR.parent / "desktop" / "macos" / "Desktop" / "Sources"
+        paths = sorted(source_root.rglob("APIClient*.swift"))
+        if not paths:
+            pytest.skip("APIClient sources not found (backend-only test environment)")
+        source = "\n".join(path.read_text(encoding="utf-8") for path in paths)
+        assert 'func encodeQueryDate' in source, "encodeQueryDate helper must exist in the APIClient extension set"
         # 8 call sites + 1 definition = at least 9 occurrences
         count = source.count('encodeQueryDate(')
         assert count >= 9, f"Expected >= 9 encodeQueryDate( occurrences (1 def + 8 calls), got {count}"
@@ -425,6 +557,73 @@ class TestGetConversationsText:
         result = conversations_svc.get_conversations_text(uid="test-uid")
         assert "1 conversations formatted" in result
 
+    def test_source_mapping_matches_search_results(self):
+        conversation = {
+            'id': 'conv-1',
+            'transcript_segments': [],
+            'structured': types.SimpleNamespace(title='Shared title', overview='Shared overview'),
+            'created_at': datetime(2026, 8, 13, tzinfo=timezone.utc),
+        }
+        conversations_db.get_conversations.return_value = [conversation]
+        list_sources = []
+        conversations_svc.get_conversations_text(uid="test-uid", source_sink=list_sources)
+
+        vector_db.query_vectors.return_value = ['conv-1']
+        conversations_db.get_conversations_by_id.return_value = [conversation]
+        search_sources = []
+        conversations_svc.search_conversations_text(uid="test-uid", query="shared", source_sink=search_sources)
+
+        assert (
+            list_sources
+            == search_sources
+            == [
+                {
+                    'kind': 'conversation',
+                    'source_id': 'conv-1',
+                    'title': 'Shared title',
+                    'preview': 'Shared overview',
+                    'created_at': '2026-08-13T00:00:00+00:00',
+                }
+            ]
+        )
+
+
+class TestGetConversationsTextMalformedPerson:
+    def setup_method(self):
+        conversations_db.get_conversations.reset_mock()
+        conversations_db.get_conversations.return_value = []
+        users_db.get_people_by_ids.reset_mock()
+        users_db.get_people_by_ids.return_value = []
+        render_mod.conversations_to_string.reset_mock()
+
+    def test_malformed_person_is_skipped_not_500(self):
+        """A legacy person doc missing the required name must be skipped, not 500 the whole list.
+
+        Before the fix, Person(**p) raised out of the unguarded people list-comp and, via the
+        unguarded GET /v1/tools/conversations handler, surfaced as HTTP 500 for the entire response.
+        Now the bad person is skipped (and logged) and the conversations still return with the good
+        speaker resolved.
+        """
+        conversations_db.get_conversations.return_value = [
+            {'id': 'conv-1', 'transcript_segments': [{'person_id': 'p-good'}, {'person_id': 'p-bad'}], 'title': 'T'},
+        ]
+        users_db.get_people_by_ids.return_value = [
+            {'id': 'p-good', 'name': 'Alice'},
+            {'id': 'p-bad'},  # legacy doc missing the required 'name'
+        ]
+
+        def fake_person(**kwargs):
+            if 'name' not in kwargs:
+                raise ValueError("Person requires name")  # stand-in for pydantic ValidationError
+            return types.SimpleNamespace(**kwargs)
+
+        with patch.object(conversations_svc, 'Person', side_effect=fake_person):
+            result = conversations_svc.get_conversations_text(uid="test-uid")
+
+        assert "1 conversations formatted" in result  # completed without raising -> no 500
+        people_arg = render_mod.conversations_to_string.call_args.kwargs['people']
+        assert [pp.name for pp in people_arg] == ['Alice']  # malformed person skipped, good one kept
+
 
 # ===========================================================================
 # Tests: search_conversations_text
@@ -453,6 +652,39 @@ class TestSearchConversationsText:
         result = conversations_svc.search_conversations_text(uid="test-uid", query="test query")
         assert "Found" in result
         assert "1 conversations formatted" in result
+
+    def test_exact_reference_bypasses_keyword_and_vector_search(self):
+        conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
+        search_mod.parse_exact_conversation_reference.return_value = conversation_id
+        conversations_db.get_conversations_by_id.return_value = [
+            {'id': conversation_id, 'transcript_segments': [], 'is_locked': False},
+        ]
+
+        result = conversations_svc.search_conversations_text(
+            uid="test-uid", query=f"https://h.omi.me/conversations/{conversation_id}"
+        )
+
+        assert "matching exactly" in result
+        assert "1 conversations formatted" in result
+        search_mod.keyword_search_conversation_ids.assert_not_called()
+        vector_db.query_vectors.assert_not_called()
+        conversations_db.get_conversations_by_id.assert_called_once_with("test-uid", [conversation_id])
+
+    def test_exact_reference_respects_date_filter(self):
+        conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
+        search_mod.parse_exact_conversation_reference.return_value = conversation_id
+        search_mod.conversation_matches_date_range.return_value = False
+        conversations_db.get_conversations_by_id.return_value = [
+            {'id': conversation_id, 'transcript_segments': [], 'is_locked': False},
+        ]
+
+        result = conversations_svc.search_conversations_text(
+            uid="test-uid", query=conversation_id, start_date="2026-01-01T00:00:00Z"
+        )
+
+        assert "No conversations found" in result
+        search_mod.keyword_search_conversation_ids.assert_not_called()
+        vector_db.query_vectors.assert_not_called()
 
     def test_start_date_only_sets_ends_at(self):
         """One-sided date: start_date only should set ends_at to avoid $lte: None."""
@@ -653,20 +885,45 @@ class TestRouterEnvelope:
     """Test the _ok helper in the router module."""
 
     def test_ok_normal(self):
-        # Import the router module
-        router_mod = _load_module_from_file(
-            "routers.tools",
-            BACKEND_DIR / "routers" / "tools.py",
-        )
         result = router_mod._ok("test_tool", "All good")
         assert result["tool_name"] == "test_tool"
         assert result["result_text"] == "All good"
         assert result["is_error"] is False
 
+    def test_ok_preserves_typed_sources(self):
+        source = {
+            "kind": "memory",
+            "source_id": "memory-1",
+            "title": "Memory",
+            "preview": "A bounded preview",
+        }
+        response = router_mod.ToolResponse.model_validate(router_mod._ok("get_memories", "result", [source]))
+
+        assert response.sources == [router_mod.ToolSource(**source)]
+
     def test_ok_error(self):
-        router_mod = sys.modules["routers.tools"]
-        result = router_mod._ok("test_tool", "Error: something went wrong")
+        result = router_mod._ok(
+            "test_tool",
+            "Error: something went wrong",
+            [{'kind': 'memory', 'source_id': 'memory-1'}],
+        )
         assert result["is_error"] is True
+        assert router_mod.ToolResponse.model_validate(result).sources == []
+
+    @pytest.mark.parametrize('url', ['javascript:alert(1)', 'file:///tmp/source', 'example.com/source'])
+    def test_tool_source_rejects_non_http_urls(self, url):
+        with pytest.raises(ValueError, match=r'absolute HTTP\(S\) URL'):
+            router_mod.ToolSource(kind='web', source_id='source-1', url=url)
+
+    @pytest.mark.parametrize('url', ['http://example.com/source', 'https://example.com/source'])
+    def test_tool_source_accepts_http_urls(self, url):
+        assert router_mod.ToolSource(kind='web', source_id='source-1', url=url).url == url
+
+    def test_shared_safe_isoformat_preserves_iso_and_string_values(self):
+        assert (
+            retrieval_safety.safe_isoformat(datetime(2026, 8, 13, tzinfo=timezone.utc)) == '2026-08-13T00:00:00+00:00'
+        )
+        assert retrieval_safety.safe_isoformat('raw-value') == 'raw-value'
 
 
 # ===========================================================================
@@ -677,18 +934,12 @@ class TestRouterEndpoints:
 
     @pytest.fixture(autouse=True)
     def setup_app(self):
-        from fastapi import FastAPI
-        from fastapi.testclient import TestClient
-
         # Override auth dependency
-        router_mod = sys.modules["routers.tools"]
         app = FastAPI()
         app.include_router(router_mod.router)
 
         # Override auth deps to return a fixed uid
-        from utils.other.endpoints import get_current_user_uid
-
-        app.dependency_overrides[get_current_user_uid] = lambda: "test-uid"
+        app.dependency_overrides[endpoints_mod.get_current_user_uid] = lambda: "test-uid"
         # Override rate-limited deps too — with_rate_limit returns a new dependency
         # so we need to override whatever it returned
         for route in app.routes:
@@ -871,6 +1122,113 @@ class TestRouterEndpoints:
         assert body["is_error"] is True
         assert "Error" in body["result_text"]
 
+    def test_search_chunks_endpoint_returns_typed_sources(self):
+        """Route wiring: /search-chunks serializes typed sources through the envelope."""
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': 1722500000, 'score': 0.9},
+        ]
+        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows: [
+            {
+                **r,
+                'text': '[Conversation on 01 Aug 2024, 08:53]\nUser: the beta shipped',
+                'conversation_title': 'Release chat',
+                'conversation_started_at': datetime(2024, 8, 1, 8, 53, tzinfo=timezone.utc),
+            }
+            for r in rows
+        ]
+        resp = self.client.post("/v1/tools/conversations/search-chunks", json={"query": "beta"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "search_conversation_chunks"
+        assert "User: the beta shipped" in body["result_text"]
+        assert body["sources"] == [
+            {
+                "kind": "conversation",
+                "source_id": "conv-a",
+                "title": "Release chat",
+                "preview": "[Conversation on 01 Aug 2024, 08:53] User: the beta shipped",
+                "created_at": "2024-08-01T08:13:20+00:00",
+                "moment_timestamp_ms": None,
+                "app_name": None,
+                "url": None,
+            }
+        ]
+
+
+# ===========================================================================
+# Tests: search-chunks typed sources (verbatim retrieval layer)
+# ===========================================================================
+class TestSearchConversationChunksSources:
+    """The chunks endpoint must emit sources shaped exactly like its siblings:
+    kind 'conversation' + PARENT conversation id (shared ref namespace, no client
+    citation-validation changes), a single-line verbatim preview, and an ISO date."""
+
+    def _call(self, query="beta release"):
+        body = router_mod.SearchChunksRequest(query=query)
+        result = router_mod.search_conversation_chunks(body, uid="test-uid")
+        # Validate through the response model so field bounds (preview <= 600,
+        # created_at <= 80) are enforced exactly as FastAPI serialization would.
+        return router_mod.ToolResponse.model_validate(result)
+
+    def _hydrate_with(self, **fields):
+        transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, rows: [{**r, **fields} for r in rows]
+
+    def test_sources_carry_parent_conversation_id_and_dedupe_by_conversation(self):
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 2, 'created_at': 1722500000, 'score': 0.91},
+            {'conversation_id': 'conv-a', 'chunk_index': 3, 'created_at': 1722500000, 'score': 0.88},
+            {'conversation_id': 'conv-b', 'chunk_index': 0, 'created_at': 1722600000, 'score': 0.70},
+        ]
+        self._hydrate_with(text='User: verbatim evidence', conversation_title='Standup')
+        response = self._call()
+        assert not response.is_error
+        # All three excerpts render, but sources dedupe to one per conversation,
+        # best-scored chunk first.
+        assert response.result_text.count("Excerpt") == 3
+        assert [(s.kind, s.source_id) for s in response.sources] == [
+            ("conversation", "conv-a"),
+            ("conversation", "conv-b"),
+        ]
+        assert response.sources[0].title == "Standup"
+        assert response.sources[0].created_at == "2024-08-01T08:13:20+00:00"
+
+    def test_preview_is_single_line_and_capped_at_600(self):
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': 1722500000, 'score': 0.9},
+        ]
+        self._hydrate_with(text="line one\nSpeaker 2: line two\n" + ("x" * 700))
+        response = self._call()
+        preview = response.sources[0].preview
+        assert "\n" not in preview
+        assert "line one Speaker 2: line two" in preview
+        assert len(preview) == 600
+
+    def test_created_at_falls_back_to_conversation_start_when_chunk_ts_missing(self):
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': 0, 'score': 0.9},
+        ]
+        self._hydrate_with(
+            text='User: hello',
+            conversation_started_at=datetime(2026, 8, 14, 22, 0, tzinfo=timezone.utc),
+        )
+        response = self._call()
+        assert response.sources[0].created_at == "2026-08-14T22:00:00+00:00"
+
+    def test_missing_title_falls_back_without_error(self):
+        vector_db.search_transcript_chunks.return_value = [
+            {'conversation_id': 'conv-a', 'chunk_index': 0, 'created_at': None, 'score': 0.9},
+        ]
+        self._hydrate_with(text='User: hello')
+        response = self._call()
+        assert response.sources[0].title == "Conversation"
+        assert response.sources[0].created_at is None
+
+    def test_no_results_returns_empty_sources(self):
+        vector_db.search_transcript_chunks.return_value = []
+        response = self._call()
+        assert response.sources == []
+        assert "No transcript excerpts found" in response.result_text
+
 
 # ===========================================================================
 # Tests: Rate limiting policy verification
@@ -879,17 +1237,14 @@ class TestRateLimitPolicies:
     """Verify rate limit policies exist and are wired correctly."""
 
     def test_tools_search_policy_exists(self):
-        rl_mod = _load_module_from_file(
-            "utils.rate_limit_config",
-            BACKEND_DIR / "utils" / "rate_limit_config.py",
-        )
+        rl_mod = rate_limit_config_mod
         assert "tools:search" in rl_mod.RATE_POLICIES
         max_req, window = rl_mod.RATE_POLICIES["tools:search"]
         assert max_req == 60
         assert window == 3600
 
     def test_tools_mutate_policy_exists(self):
-        rl_mod = sys.modules["utils.rate_limit_config"]
+        rl_mod = rate_limit_config_mod
         assert "tools:mutate" in rl_mod.RATE_POLICIES
         max_req, window = rl_mod.RATE_POLICIES["tools:mutate"]
         assert max_req == 60

@@ -11,6 +11,8 @@ import socket
 import dotenv
 import pytest
 
+from conftest import _set_e2e_env
+
 
 def test_dotenv_loading_is_disabled(tmp_path):
     """Local .env files must not rehydrate real credentials during e2e runs."""
@@ -20,6 +22,14 @@ def test_dotenv_loading_is_disabled(tmp_path):
     assert dotenv.load_dotenv(env_file, override=True) is False
     assert os.environ.get("SERVICE_ACCOUNT_JSON") is None
     assert os.environ.get("PINECONE_API_KEY") is None
+
+
+def test_e2e_environment_clears_firebase_auth_credential_path(monkeypatch):
+    monkeypatch.setenv("FIREBASE_AUTH_CREDENTIALS_PATH", "/tmp/inherited-firebase-auth.json")
+
+    _set_e2e_env()
+
+    assert "FIREBASE_AUTH_CREDENTIALS_PATH" not in os.environ
 
 
 def test_network_guard_blocks_external_dns_lookup():
@@ -59,7 +69,7 @@ def test_backend_storage_client_is_fake_after_app_import(client):
     from fakes.storage import FakeStorageClient
     import utils.other.storage as storage_helpers
 
-    assert isinstance(storage_helpers.storage_client, FakeStorageClient)
+    assert isinstance(storage_helpers._get_storage_client(), FakeStorageClient)
 
 
 def test_backend_database_globals_are_fake_after_app_import(client, fake_firestore, fake_redis):

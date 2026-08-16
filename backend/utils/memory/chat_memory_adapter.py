@@ -11,7 +11,6 @@ from typing import Any, Callable, Optional
 from models.product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
-    legacy_safe_default_read_rollout_decision,
     read_default_read_rollout,
 )
 from utils.memory.default_read_surface import (
@@ -30,7 +29,7 @@ class ChatMemorySearchResult:
 
     @property
     def should_use_legacy_fallback(self) -> bool:
-        return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
+        return False
 
 
 CHAT_MEMORY_CONTENT_MAX_CHARS = 280
@@ -43,7 +42,7 @@ def search_memory_default_chat_memories_text(
     uid: str,
     query: str,
     limit: int,
-    db_client,
+    db_client: Any,
     now: Optional[datetime] = None,
 ) -> Optional[str]:
     """Return LLM-ready default-visible memory product memories for Omi chat.
@@ -101,31 +100,17 @@ def list_default_chat_memories_decision_text(
     uid: str,
     limit: int,
     offset: int = 0,
-    db_client,
+    db_client: Any,
     now: Optional[datetime] = None,
-    allow_legacy_safe_fallback: bool = False,
 ) -> ChatMemorySearchResult:
     """Return explicit memory read-decision semantics for Omi chat get/list reads.
 
-    This mirrors the search-memory tool's denied/no-grant behavior: denied memory
-    control states return a safe no-memory response and do not downgrade to legacy
-    unless a caller deliberately opts into the legacy-safe compatibility wrapper.
+    Denied consumer grants return a safe no-memory response and never select a
+    second storage authority.
     """
 
     decision = read_default_read_rollout(uid=uid, db_client=db_client, consumer='omi_chat')
     if decision.read_decision != MemoryReadDecision.USE_MEMORY:
-        if allow_legacy_safe_fallback:
-            legacy_safe = legacy_safe_default_read_rollout_decision(
-                uid=uid,
-                source_path=decision.source_path,
-                consumer='omi_chat',
-                reason='chat_get_legacy_safe_fallback_explicit',
-            )
-            return ChatMemorySearchResult(
-                text=None,
-                read_decision=legacy_safe.read_decision,
-                fallback_reason=legacy_safe.fallback_reason,
-            )
         return ChatMemorySearchResult(
             text="No memories available for this request.",
             read_decision=decision.read_decision,
@@ -176,9 +161,10 @@ def search_memory_default_chat_memories_vector_text(
     uid: str,
     query: str,
     limit: int,
-    db_client,
+    db_client: Any,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
+    now: Optional[datetime] = None,
 ) -> Optional[str]:
     """Compatibility wrapper for explicit chat vector read decisions.
 
@@ -194,7 +180,7 @@ def search_memory_default_chat_memories_vector_text(
         db_client=db_client,
         vector_query=vector_query,
         required_projection_commit_id=required_projection_commit_id,
-        allow_legacy_safe_fallback=True,
+        now=now,
     )
     if result.read_decision != MemoryReadDecision.USE_MEMORY:
         return None
@@ -206,34 +192,19 @@ def search_memory_default_chat_memories_vector_decision_text(
     uid: str,
     query: str,
     limit: int,
-    db_client,
+    db_client: Any,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
-    allow_legacy_safe_fallback: bool = False,
+    now: Optional[datetime] = None,
 ) -> ChatMemorySearchResult:
     """Return explicit memory read-decision semantics for Omi chat vector reads.
 
-    The mature chat tool must not treat missing/malformed/no-grant rollout state
-    as `None` and silently downgrade to legacy. Only callers that deliberately
-    set `allow_legacy_safe_fallback=True` receive `USE_LEGACY_SAFE`; denied states
-    otherwise produce a safe no-memory response before vector or `memory_items`
-    reads.
+    Missing, malformed, or explicitly denied consumer grants produce a safe
+    no-memory response before vector or `memory_items` reads.
     """
 
     decision = read_default_read_rollout(uid=uid, db_client=db_client, consumer='omi_chat')
     if decision.read_decision != MemoryReadDecision.USE_MEMORY:
-        if allow_legacy_safe_fallback:
-            legacy_safe = legacy_safe_default_read_rollout_decision(
-                uid=uid,
-                source_path=decision.source_path,
-                consumer='omi_chat',
-                reason='chat_legacy_safe_fallback_explicit',
-            )
-            return ChatMemorySearchResult(
-                text=None,
-                read_decision=legacy_safe.read_decision,
-                fallback_reason=legacy_safe.fallback_reason,
-            )
         return ChatMemorySearchResult(
             text="No memories available for this request.",
             read_decision=decision.read_decision,
@@ -246,7 +217,8 @@ def search_memory_default_chat_memories_vector_decision_text(
     def _attach_vector_line(memory: dict[str, Any], item: dict[str, Any], scores: dict[str, float]) -> str:
         updated_at = parse_optional_default_read_datetime(item.get('updated_at') or item.get('date'))
         date_str = updated_at.strftime('%Y-%m-%d') if updated_at else 'Unknown'
-        score = float(scores.get(item.get('memory_id'), 0))
+        memory_id = item.get('memory_id')
+        score = scores.get(memory_id, 0.0) if isinstance(memory_id, str) else 0.0
         return _format_chat_memory_evidence_line(
             item,
             source_marker='vector_memory',
@@ -262,6 +234,7 @@ def search_memory_default_chat_memories_vector_decision_text(
         consumer=MemoryConsumer.omi_chat,
         vector_query=vector_query,
         required_projection_commit_id=required_projection_commit_id,
+        now=now,
         item_formatter=_vector_line,
         score_attacher=_attach_vector_line,
     )
@@ -304,10 +277,3 @@ def _quote_chat_memory_content(content: str) -> str:
     if len(normalized) > CHAT_MEMORY_CONTENT_MAX_CHARS:
         normalized = normalized[: CHAT_MEMORY_CONTENT_MAX_CHARS - 1].rstrip() + '…'
     return json.dumps(normalized, ensure_ascii=False)
-
-
-# Neutral symbol aliases (memory names remain valid via shim)
-ChatMemorySearchResult = ChatMemorySearchResult
-CHAT_MEMORY_BOUNDARY_NOTICE = CHAT_MEMORY_BOUNDARY_NOTICE
-CHAT_MEMORY_CONTENT_MAX_CHARS = CHAT_MEMORY_CONTENT_MAX_CHARS
-CHAT_MEMORY_POLICY_MARKER = CHAT_MEMORY_POLICY_MARKER

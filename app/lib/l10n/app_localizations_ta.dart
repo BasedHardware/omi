@@ -9,6 +9,9 @@ class AppLocalizationsTa extends AppLocalizations {
   AppLocalizationsTa([String locale = 'ta']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'அமர்வு காலாவதியானது — மீண்டும் உள்நுழையவும்.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -747,11 +750,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'உங்கள் திட்டம் $date இல் புதுப்பிக்கப்படும்.';
-  }
-
-  @override
   String get basicPlan => 'இலவச திட்டம்';
 
   @override
@@ -1473,7 +1471,7 @@ class AppLocalizationsTa extends AppLocalizations {
       'Omi ஐ சுதந்திரமாகப் பயன்படுத்தவும். நீங்கள் உங்கள் STT வழங்குநரிடம் நேரடியாக பணம் செலுத்துங்கள்.';
 
   @override
-  String get freeMinutesMonth => 'மாதத்திற்கு 600 இலவச நிமிடங்கள் அடங்கியுள்ளது. ';
+  String get freeMinutesMonth => 'மாதத்திற்கு 300 இலவச நிமிடங்கள் அடங்கியுள்ளது. ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1795,20 +1793,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Omi ஐ விரும்புகிறீர்களா?';
-
-  @override
-  String get leaveReviewIos =>
-      'App Store இல் ஒரு மதிப்பாய்வு விட்டு மேலும் நபர்களை அடைய எங்களுக்கு உதவவும். உங்கள் பதிப்பு எங்களுக்கு உலகத்தைக் குறிக்கிறது!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Google Play Store இல் ஒரு மதிப்பாய்வு விட்டு மேலும் நபர்களை அடைய எங்களுக்கு உதவவும். உங்கள் பதிப்பு எங்களுக்கு உலகத்தைக் குறிக்கிறது!';
-
-  @override
-  String get rateOnAppStore => 'App Store இல் மதிப்பிடவும்';
-
-  @override
-  String get rateOnGooglePlay => 'Google Play இல் மதிப்பிடவும்';
 
   @override
   String get maybeLater => 'ஒருவேளை பிறகு';
@@ -2148,6 +2132,18 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ பதிவை திருத்தவும்';
+
+  @override
+  String get pinAsBaseline => 'அடிப்படையாகப் பின் செய்';
+
+  @override
+  String get unpinAsBaseline => 'அடிப்படையிலிருந்து அகற்று';
+
+  @override
+  String get baselineMemory => 'அடிப்படை நினைவு';
+
+  @override
+  String get alwaysInContext => 'எப்போதும் சூழலில்';
 
   @override
   String get memoryContentHint => 'நான் ஐஸ் கிரீம் சாப்பிட விரும்புவேன்...';
@@ -4738,7 +4734,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'குறிப்பிட்ட தரவு அணுக கட்டமைக்கப்படவில்லை.';
 
   @override
-  String get basicPlanDescription => '600 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை';
+  String get basicPlanDescription => '300 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை';
 
   @override
   String get minutes => 'நிமிషங்கள்';
@@ -6038,7 +6034,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
 
   @override
   String get viewUsage => 'பயன்பாட்டைக் கவனிக்கவும்';
@@ -6120,7 +6116,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
 
   @override
   String get audioProcessedLocally =>
@@ -9051,7 +9047,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get billingYearly => 'ஆண்டு';
 
   @override
-  String get savePercent => '~17% சேமிக்கவும்';
+  String savePercent(int percent) {
+    return '~$percent% சேமிக்கவும்';
+  }
 
   @override
   String get popular => 'பிரபலம்';
@@ -9406,7 +9404,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'தற்போது Omi சாதனங்களுடன் மட்டுமே இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.';
+      'தொலைபேசி மைக்ரோஃபோன், Omi மற்றும் Limitless சாதனங்களுடன் இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9558,4 +9556,357 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get flashFirmware => 'ஃபார்ம்வேரை ஃபிளாஷ் செய்யவும்';
+
+  @override
+  String get pendantRecordingTitle => 'பெண்டன்ட்டில் பதிவு நடக்கிறது';
+
+  @override
+  String get pendantRecordingNote =>
+      'உங்கள் பெண்டன்ட் தானாகவே பதிவு செய்கிறது. ஆப்ஸ் திறந்திருக்கும்போது பதிவுகள் உங்கள் தொலைபேசியுடன் ஒத்திசைக்கப்படும்.';
+
+  @override
+  String get pendantSyncingRecordings => 'உங்கள் பெண்டன்ட்டிலிருந்து பதிவுகள் ஒத்திசைக்கப்படுகின்றன…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes நிமிடங்கள் சேமிக்கப்பட்டுள்ளன';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'பெண்டன்ட்டின் சேமிப்பகம் கிட்டத்தட்ட நிரம்பிவிட்டது — ஒத்திசைக்க ஆப்ஸைத் திறந்து வைத்திருங்கள்.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta ஐ இணைக்கவும்';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'உரையாடல்கள் மற்றும் காட்சி சூழலுக்கான உங்கள் Omi பதிவு சாதனமாக உங்கள் Ray-Ban Meta கண்ணாடியைப் பயன்படுத்தவும். உங்கள் கண்ணாடியை இணைக்க Omi, Meta AI செயலியைத் திறக்கும்.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI மூலம் இணைக்கவும்';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI செயலியில் இணைப்பை முடித்து, பிறகு இங்கே திரும்பி வாருங்கள்.';
+
+  @override
+  String get raybanMetaCheckAgain => 'மீண்டும் சரிபார்க்கவும்';
+
+  @override
+  String get raybanMetaAllowCamera => 'கண்ணாடியில் கேமராவை அனுமதிக்கவும்';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'உங்கள் உரையாடல்களில் புகைப்படங்களைச் சேர்க்க Omi உங்கள் கண்ணாடியின் கேமராவைப் பயன்படுத்துகிறது. இதைத் தவிர்த்து, ஆடியோவை மட்டும் பயன்படுத்தலாம்.';
+
+  @override
+  String get raybanMetaSkipForNow => 'இப்போதைக்கு தவிர்க்கவும்';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta ஆடியோ-மட்டும் பயன்முறை';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Omi இன் இந்தப் பதிப்பு Bluetooth வழியாக உங்கள் கண்ணாடியின் மைக்ரோபோனைப் பயன்படுத்த முடியும். புகைப்படம் எடுக்க Omi இன் Meta டெவலப்பர் பதிப்பு தேவை.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'கண்ணாடியின் மைக்ரோபோன் பயன்பாட்டில் இருக்கும்போது உங்கள் தொலைபேசியில் இசை இடைநிறுத்தப்படும்.';
+
+  @override
+  String get raybanMetaContinue => 'தொடரவும்';
+
+  @override
+  String get raybanMetaCapturePhoto => 'புகைப்படம் எடுக்கவும்';
+
+  @override
+  String get raybanMetaPhotoRequested => 'புகைப்படம் கோரப்பட்டது — அது உங்கள் உரையாடலில் தோன்றும்.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'மைக்ரோபோன் தயார்';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'படம் எடுத்தல் தயார்';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'ஆடியோ-மட்டும் பயன்முறையில் கிடைக்காது';
+
+  @override
+  String get raybanMetaCamera => 'கேமரா';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta உடன் இணைப்பதில் பிழை: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'சாதன சேமிப்பு';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% நிரம்பியது';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total இல் $used பயன்படுத்தப்பட்டது';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free காலி';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'சாதனம் கிட்டத்தட்ட நிரம்பிவிட்டது — இடத்தைக் காலி செய்ய ஒத்திசைக்கவும்.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'இணைப்பு இல்லை — உள்ளூரில் பதிவு செய்யப்படுகிறது. நீங்கள் மீண்டும் ஆன்லைனுக்கு வரும்போது படியெடுக்கப்படும்.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'உங்கள் தரவு இயல்பாகவே வலுவான குறியாக்கத்துடன் பாதுகாக்கப்படுகிறது, மேலும் அது எவ்வாறு சேமிக்கப்படுகிறது மற்றும் பயன்படுத்தப்படுகிறது என்பதை நீங்கள் கட்டுப்படுத்துகிறீர்கள்.';
+
+  @override
+  String get sttModelAccuracy => 'துல்லியம்';
+
+  @override
+  String get whisperModelSizeBase => 'அடிப்படை';
+
+  @override
+  String get cloudTranscription => 'கிளவுட் உரையாக்கம்';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'மாதிரியை நீக்கு';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'இந்த மாதிரியை நீக்க விரும்புகிறீர்களா?';
+
+  @override
+  String get onDeviceModelDownloaded => 'பதிவிறக்கப்பட்டது';
+
+  @override
+  String get sttModelFaster => 'வேகமானது';
+
+  @override
+  String get sttFilterAuto => 'தானியங்கு';
+
+  @override
+  String get sttModelHigher => 'அதிகம்';
+
+  @override
+  String get whisperModelSizeLarge => 'பெரியது';
+
+  @override
+  String get sttModelLower => 'குறைவு';
+
+  @override
+  String get whisperModelSizeMedium => 'நடுத்தரம்';
+
+  @override
+  String get onDeviceModelDeleted => 'மாதிரி நீக்கப்பட்டது';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'மாதிரி பதிவிறக்கம் தோல்வியடைந்தது';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Whisper மாதிரியைப் பதிவிறக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'மாதிரி பதிவிறக்கப்பட்டது';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper மாதிரி வெற்றிகரமாகப் பதிவிறக்கப்பட்டது';
+
+  @override
+  String get onDeviceModelSize => 'மாதிரி அளவு';
+
+  @override
+  String get sttNone => 'எதுவும் இல்லை';
+
+  @override
+  String get onDeviceTranscription => 'சாதனத்தில் உரையாக்கம்';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'உரையாக்கம் உங்கள் சாதனத்திலேயே செயலாக்கப்படுகிறது';
+
+  @override
+  String get sttModelSlower => 'மெதுவானது';
+
+  @override
+  String get whisperModelSizeSmall => 'சிறியது';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'பேச்சு-உரை வழங்குநர்';
+
+  @override
+  String get speechToTextProviderDesc => 'உரையாக்கத்திற்குப் பயன்படுத்தப்படும் சேவையைத் தேர்ந்தெடுக்கவும்';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'வேகம்';
+
+  @override
+  String get whisperModelSizeTiny => 'மிகச் சிறியது';
+
+  @override
+  String get transcriptionLanguage => 'உரையாக்க மொழி';
+
+  @override
+  String get transcriptionLanguageDesc => 'பேச்சு உரையாக்கத்திற்கான மொழியைத் தேர்ந்தெடுக்கவும்';
+
+  @override
+  String get whisperModel => 'Whisper மாதிரி';
+
+  @override
+  String get whisperModelDesc => 'சாதனத்தில் உரையாக்கத்திற்கான மாதிரியைத் தேர்ந்தெடுக்கவும்';
+
+  @override
+  String get downgradeToFreemiumTitle => 'இலவசத் திட்டத்திற்கு மாறவா?';
+
+  @override
+  String get downgradeLimitationsHeading => 'இந்த வரம்புகளை நீங்கள் சந்திப்பீர்கள்:';
+
+  @override
+  String get downgradeLimitBattery => '7 மடங்கு அதிக பேட்டரி பயன்பாடு';
+
+  @override
+  String get downgradeLimitQuality => '30% குறைவான உரையாக்கத் தரம்';
+
+  @override
+  String get downgradeLimitDelay => '5-7 வினாடிகள் தாமதம்';
+
+  @override
+  String get downgradeLimitSpeakers => 'பேசுபவர்களை அடையாளம் காண முடியாது';
+
+  @override
+  String get downgradeAnyway => 'எப்படியும் தரமிறக்கு';
+
+  @override
+  String get googleCalendarNotConnected => 'Google நாட்காட்டி இணைக்கப்படவில்லை';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'உரையாடல்களை நாட்காட்டி நிகழ்வுகளுடன் இணைக்க உங்கள் Google நாட்காட்டியை இணைக்கவும்.';
+
+  @override
+  String linkedToEvent(String title) {
+    return '“$title” உடன் இணைக்கப்பட்டது';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'நாட்காட்டி நிகழ்வை இணைக்க முடியவில்லை';
+
+  @override
+  String get thanksForYourFeedback => 'உங்கள் கருத்துக்கு நன்றி!';
+
+  @override
+  String get copyMessage => 'செய்தியை நகலெடு';
+
+  @override
+  String get searchSettings => 'அமைப்புகளில் தேடு…';
+
+  @override
+  String get errorLoadingAudio => 'ஆடியோவை ஏற்றுவதில் பிழை';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'உங்கள் Ray-Ban Meta மைக்ரோஃபோனைத் தேர்வுசெய்யவும்';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'உங்கள் கண்ணாடியின் Bluetooth மைக்ரோஃபோனைத் தேர்வுசெய்யவும். Omi அதைப் பயன்படுத்தும்போது இசை இடைநிறுத்தப்படும்.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth மைக்ரோஃபோன்கள் எதுவும் கிடைக்கவில்லை. iPhone அமைப்புகளில் கண்ணாடியை இணைத்து மீண்டும் முயலவும்.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth மைக்ரோஃபோன்களை ஏற்ற முடியவில்லை. Bluetooth இயக்கத்தில் உள்ளதா எனச் சரிபார்த்து மீண்டும் முயலவும்.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'அந்த மைக்ரோஃபோனுடன் இணைக்க முடியவில்லை. அது iPhone அமைப்புகளில் இணைக்கப்பட்டுள்ளதா என உறுதிசெய்யவும்.';
+
+  @override
+  String get syncStatusTooOld => 'ஒத்திசைக்க மிகவும் பழையது — Omi இதை ஏற்க முடியாது';
+
+  @override
+  String get planSheetChooseYourPlan => 'வரம்பற்ற Omi-ஐ திறக்க உங்கள் திட்டத்தைத் தேர்ந்தெடுக்கவும்.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, மொபைல் மற்றும் வலையில் கிடைக்கிறது';
+
+  @override
+  String get popularBadge => 'பிரபலம்';
+
+  @override
+  String get worksOnDesktop => 'டெஸ்க்டாப்பில் இயங்கும்';
+
+  @override
+  String get noDesktopAccess => 'டெஸ்க்டாப்பில் இயங்காது';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months மாதங்கள் / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count மாதங்கள் இலவசம்',
+      one: '1 மாதம் இலவசம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi இலவசம், ஆனால் இலவச பதிப்பில் உங்கள் அனுபவத்தைப் பாதிக்கும் வரம்புகள் உள்ளன:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 வினாடி தாமதம் (நிகழ்நேரம் அல்ல)';
+
+  @override
+  String get downgradeToFreemiumAction => 'இலவச பதிப்புக்கு மாறவும்';
+
+  @override
+  String get getFreeUnlimitedAccess => 'இலவச வரம்பற்ற அணுகலைப் பெறுங்கள்';
+
+  @override
+  String get shareDataForTraining => 'பயிற்சிக்காக தரவைப் பகிரவும்';
+
+  @override
+  String get yourRequestUnderReview => 'உங்கள் கோரிக்கை பரிசீலனையில் உள்ளது';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'अपडेट आवश्यक';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'माइग्रेशन जारी है';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।';
+
+  @override
+  String get accountCutoverOpenStore => 'स्टोर खोलें';
 }

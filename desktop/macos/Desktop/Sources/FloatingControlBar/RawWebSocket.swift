@@ -1,6 +1,43 @@
 import Foundation
 import Network
 
+enum RealtimeRawWebSocketFailurePhase: String, Sendable {
+  case configuration
+  case connect
+  case handshake
+  case receive
+  case send
+  case protocolViolation = "protocol_violation"
+}
+
+struct RealtimeRawWebSocketFailure: @unchecked Sendable {
+  let phase: RealtimeRawWebSocketFailurePhase
+  let message: String
+  let underlyingError: Error?
+
+  init(
+    phase: RealtimeRawWebSocketFailurePhase,
+    message: String,
+    underlyingError: Error? = nil
+  ) {
+    self.phase = phase
+    self.message = message
+    self.underlyingError = underlyingError
+  }
+}
+
+protocol RealtimeRawWebSocketTransport: AnyObject {
+  var onOpen: (() -> Void)? { get set }
+  var onMessage: ((Data) -> Void)? { get set }
+  var onClose: ((Int, String) -> Void)? { get set }
+  var onError: ((RealtimeRawWebSocketFailure) -> Void)? { get set }
+
+  func connect()
+  func sendText(_ text: String, completion: (@Sendable (Error?) -> Void)?)
+  func close()
+  func closeAndWait() async
+}
+
 // MARK: - Hand-rolled WebSocket client (RFC 6455 over Network.framework TCP+TLS)
 //
 // Apple's WebSocket stacks cannot reach Google's Gemini Live endpoint:
@@ -16,11 +53,11 @@ import Network
 // JSON in binary frames). Continuation (0x0) frames are reassembled; pings are
 // answered with pongs.
 
-final class RawWebSocket {
+final class RawWebSocket: RealtimeRawWebSocketTransport, @unchecked Sendable {
   var onOpen: (() -> Void)?
   var onMessage: ((Data) -> Void)?
   var onClose: ((Int, String) -> Void)?
-  var onError: ((String) -> Void)?
+  var onError: ((RealtimeRawWebSocketFailure) -> Void)?
 
   private let url: URL
   private let queue: DispatchQueue
@@ -34,6 +71,8 @@ final class RawWebSocket {
   // Reassembly across fragmented frames.
   private var fragment = Data()
   private var closed = false
+  private var terminalAcknowledged = false
+  private var terminalWaiters: [CheckedContinuation<Void, Never>] = []
 
   init(url: URL, queue: DispatchQueue) {
     self.url = url
@@ -41,37 +80,72 @@ final class RawWebSocket {
   }
 
   func connect() {
-    let host = url.host ?? ""
-    let port = UInt16(url.port ?? 443)
+    guard let host = url.host, !host.isEmpty else {
+      fail(
+        RealtimeRawWebSocketFailure(
+          phase: .configuration,
+          message: "invalid WebSocket host"))
+      return
+    }
+
+    let rawPort = url.port ?? 443
+    guard (1...65535).contains(rawPort),
+      let port = NWEndpoint.Port(rawValue: UInt16(rawPort))
+    else {
+      fail(
+        RealtimeRawWebSocketFailure(
+          phase: .configuration,
+          message: "invalid WebSocket port \(rawPort)"))
+      return
+    }
+
     let tls = NWProtocolTLS.Options()
     sec_protocol_options_add_tls_application_protocol(tls.securityProtocolOptions, "http/1.1")
     let params = NWParameters(tls: tls)
-    let c = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: params)
+    let c = NWConnection(host: NWEndpoint.Host(host), port: port, using: params)
     conn = c
     c.stateUpdateHandler = { [weak self] state in
       guard let self else { return }
       switch state {
       case .ready: self.sendUpgrade()
-      case .failed(let e): self.fail("connection failed: \(e)")
+      case .failed(let error):
+        self.fail(
+          RealtimeRawWebSocketFailure(
+            phase: .connect,
+            message: "connection failed: \(error)",
+            underlyingError: error))
+        self.acknowledgeTerminal()
       case .waiting(let e): log("RawWebSocket: waiting \(e)")
+      case .cancelled: self.acknowledgeTerminal()
       default: break
       }
     }
     c.start(queue: queue)
   }
 
-  func sendText(_ text: String) {
-    send(frame(opcode: 0x1, payload: Data(text.utf8)))
+  func sendText(_ text: String, completion: (@Sendable (Error?) -> Void)? = nil) {
+    send(frame(opcode: 0x1, payload: Data(text.utf8)), completion: completion)
   }
 
   func close() {
-    guard !closed else { return }
-    closed = true
-    pingTimer?.cancel()
-    pingTimer = nil
-    send(frame(opcode: 0x8, payload: Data()))
-    conn?.cancel()
-    conn = nil
+    queue.async { [weak self] in self?.beginClose() }
+  }
+
+  func closeAndWait() async {
+    await withCheckedContinuation { continuation in
+      queue.async { [weak self] in
+        guard let self else {
+          continuation.resume()
+          return
+        }
+        if self.terminalAcknowledged {
+          continuation.resume()
+          return
+        }
+        self.terminalWaiters.append(continuation)
+        self.beginClose()
+      }
+    }
   }
 
   // MARK: - Handshake
@@ -90,16 +164,31 @@ final class RawWebSocket {
       + "Connection: Upgrade\r\n"
       + "Sec-WebSocket-Key: \(wsKey)\r\n"
       + "Sec-WebSocket-Version: 13\r\n\r\n"
-    conn?.send(content: Data(req.utf8), completion: .contentProcessed { [weak self] e in
-      if let e { self?.fail("upgrade send: \(e)") }
-    })
+    conn?.send(
+      content: Data(req.utf8),
+      completion: .contentProcessed { [weak self] error in
+        if let error {
+          self?.fail(
+            RealtimeRawWebSocketFailure(
+              phase: .handshake,
+              message: "upgrade send: \(error)",
+              underlyingError: error))
+        }
+      })
     readLoop()
   }
 
   private func readLoop() {
     conn?.receive(minimumIncompleteLength: 1, maximumLength: 1 << 16) { [weak self] data, _, isComplete, error in
       guard let self else { return }
-      if let error { self.fail("receive: \(error)"); return }
+      if let error {
+        self.fail(
+          RealtimeRawWebSocketFailure(
+            phase: .receive,
+            message: "receive: \(error)",
+            underlyingError: error))
+        return
+      }
       if let data, !data.isEmpty {
         if !self.handshakeDone {
           self.inbound.append(data)
@@ -109,7 +198,13 @@ final class RawWebSocket {
           self.parseFrames()
         }
       }
-      if isComplete { self.fail("stream closed"); return }
+      if isComplete {
+        self.fail(
+          RealtimeRawWebSocketFailure(
+            phase: .receive,
+            message: "stream closed"))
+        return
+      }
       if !self.closed { self.readLoop() }
     }
   }
@@ -119,7 +214,10 @@ final class RawWebSocket {
     let head = String(s[s.startIndex..<range.lowerBound])
     let statusLine = head.components(separatedBy: "\r\n").first ?? ""
     guard statusLine.contains("101") else {
-      fail("handshake failed: \(statusLine)")
+      fail(
+        RealtimeRawWebSocketFailure(
+          phase: .handshake,
+          message: "handshake failed: \(statusLine)"))
       return
     }
     handshakeDone = true
@@ -152,7 +250,8 @@ final class RawWebSocket {
       f.append(UInt8(0x80 | n))
     } else if n < 65536 {
       f.append(0x80 | 126)
-      f.append(UInt8(n >> 8)); f.append(UInt8(n & 0xff))
+      f.append(UInt8(n >> 8))
+      f.append(UInt8(n & 0xff))
     } else {
       f.append(0x80 | 127)
       for i in stride(from: 56, through: 0, by: -8) { f.append(UInt8((n >> i) & 0xff)) }
@@ -170,7 +269,8 @@ final class RawWebSocket {
   private func parseFrames() {
     while inbound.count >= 2 {
       let base = inbound.startIndex
-      let b0 = inbound[base], b1 = inbound[base + 1]
+      let b0 = inbound[base]
+      let b1 = inbound[base + 1]
       let fin = (b0 & 0x80) != 0
       let opcode = b0 & 0x0f
       let masked = (b1 & 0x80) != 0  // servers must not mask
@@ -178,7 +278,8 @@ final class RawWebSocket {
       var hdr = 2
       if len == 126 {
         guard inbound.count >= 4 else { return }
-        len = Int(inbound[base + 2]) << 8 | Int(inbound[base + 3]); hdr = 4
+        len = Int(inbound[base + 2]) << 8 | Int(inbound[base + 3])
+        hdr = 4
       } else if len == 127 {
         guard inbound.count >= 10 else { return }
         // Accumulate the 64-bit length in UInt64, not Int: shifting an 8-byte value into
@@ -187,7 +288,10 @@ final class RawWebSocket {
         var u: UInt64 = 0
         for i in 0..<8 { u = (u << 8) | UInt64(inbound[base + 2 + i]) }
         guard u <= 64 * 1024 * 1024 else {
-          onError?("RawWebSocket: frame length \(u) exceeds 64MB cap — closing")
+          onError?(
+            RealtimeRawWebSocketFailure(
+              phase: .protocolViolation,
+              message: "RawWebSocket frame length exceeds 64MB cap"))
           inbound.removeAll()
           close()
           return
@@ -209,11 +313,19 @@ final class RawWebSocket {
       switch opcode {
       case 0x0:  // continuation
         fragment.append(payload)
-        if fin { onMessage?(fragment); fragment.removeAll() }
+        if fin {
+          onMessage?(fragment)
+          fragment.removeAll()
+        }
       case 0x1, 0x2:  // text / binary
         if fin {
-          if fragment.isEmpty { onMessage?(payload) }
-          else { fragment.append(payload); onMessage?(fragment); fragment.removeAll() }
+          if fragment.isEmpty {
+            onMessage?(payload)
+          } else {
+            fragment.append(payload)
+            onMessage?(fragment)
+            fragment.removeAll()
+          }
         } else {
           fragment.append(payload)
         }
@@ -225,8 +337,15 @@ final class RawWebSocket {
           reason = String(data: payload.subdata(in: (payload.startIndex + 2)..<payload.endIndex), encoding: .utf8) ?? ""
         }
         closed = true
+        // Cancel the keepalive timer on a server-initiated close, exactly like close()
+        // and fail() do. Without this, a resumed DispatchSourceTimer outlives the
+        // deallocated socket and keeps firing its wakeup forever. Gemini idle-closes
+        // the warm hub socket with a 1008 close frame (opcode 0x8) every ~2.5 min, so
+        // this path leaked one zombie 20s timer per re-warm across the app's lifetime.
+        pingTimer?.cancel()
+        pingTimer = nil
+        conn?.cancel()
         onClose?(code, reason)
-        conn?.cancel(); conn = nil
       case 0x9:  // ping → pong
         send(frame(opcode: 0xA, payload: payload))
       case 0xA:  // pong
@@ -237,18 +356,69 @@ final class RawWebSocket {
     }
   }
 
-  private func send(_ data: Data) {
-    conn?.send(content: data, completion: .contentProcessed { [weak self] e in
-      if let e { self?.fail("send: \(e)") }
-    })
+  private func send(_ data: Data, completion: (@Sendable (Error?) -> Void)? = nil) {
+    guard let conn else {
+      completion?(RawWebSocketSendError.notConnected)
+      return
+    }
+    conn.send(
+      content: data,
+      completion: .contentProcessed { [weak self] error in
+        if let error {
+          self?.fail(
+            RealtimeRawWebSocketFailure(
+              phase: .send,
+              message: "send: \(error)",
+              underlyingError: error))
+        }
+        completion?(error)
+      })
   }
 
-  private func fail(_ message: String) {
+  private func beginClose() {
+    guard conn != nil else {
+      acknowledgeTerminal()
+      return
+    }
+    if !closed {
+      closed = true
+      pingTimer?.cancel()
+      pingTimer = nil
+      send(frame(opcode: 0x8, payload: Data()))
+    }
+    conn?.cancel()
+  }
+
+  private func fail(_ failure: RealtimeRawWebSocketFailure) {
     guard !closed else { return }
     closed = true
     pingTimer?.cancel()
     pingTimer = nil
-    onError?(message)
-    conn?.cancel(); conn = nil
+    conn?.cancel()
+    onError?(failure)
   }
+
+  private func acknowledgeTerminal() {
+    guard !terminalAcknowledged else { return }
+    terminalAcknowledged = true
+    conn = nil
+    let waiters = terminalWaiters
+    terminalWaiters.removeAll()
+    for waiter in waiters {
+      waiter.resume()
+    }
+  }
+
+  deinit {
+    // A resumed DispatchSourceTimer keeps firing (and is leaked) if it is released
+    // without being cancelled. Every teardown path cancels pingTimer, but guard the
+    // release regardless so no future path can reintroduce a zombie keepalive timer.
+    pingTimer?.cancel()
+  }
+}
+
+private enum RawWebSocketSendError: LocalizedError {
+  case notConnected
+
+  var errorDescription: String? { "WebSocket is not connected." }
 }

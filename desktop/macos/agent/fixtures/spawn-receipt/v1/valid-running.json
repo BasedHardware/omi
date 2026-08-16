@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "journalReceipt": {
+    "accepted": true,
+    "continuityKey": "voice:00000000-0000-0000-0000-00000000f001",
+    "userTurnId": "turn_2d054a27fab620782ed320c376c21ebe",
+    "assistantTurnId": "turn_c41326045ced0d9d88204f590d1947c8",
+    "assistantText": "Launch Risk Research started and is working in the background."
+  },
+  "child": {
+    "sessionId": "session-child",
+    "runId": "run-child",
+    "attemptId": "attempt-child",
+    "pillId": "10000000-0000-0000-0000-00000000f001",
+    "title": "Launch Risk Research",
+    "objective": "Research launch risks",
+    "provider": "hermes",
+    "lifecycle": {
+      "state": "running",
+      "attemptState": "running",
+      "revision": 1720000000000,
+      "adapterId": "hermes",
+      "updatedAtMs": 1720000000000
+    }
+  },
+  "semanticDigest": "c1913ab9b9f9d90452c06dad04a7ee5f",
+  "providerResult": {
+    "schemaVersion": 1,
+    "ok": true,
+    "code": "spawn_started",
+    "message": "The background agent has started.",
+    "child": {
+      "sessionId": "session-child",
+      "runId": "run-child",
+      "attemptId": "attempt-child",
+      "state": "running",
+      "attemptState": "running",
+      "revision": 1720000000000,
+      "adapterId": "hermes",
+      "updatedAtMs": 1720000000000
+    },
+    "semanticDigest": "c1913ab9b9f9d90452c06dad04a7ee5f"
+  }
+}

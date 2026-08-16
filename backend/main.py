@@ -3,7 +3,8 @@ import json
 import logging
 import os
 
-from utils.env_loader import load_backend_env
+from utils.env_loader import firebase_admin_options, load_backend_env
+from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
 
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
 
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 import firebase_admin
 from fastapi import FastAPI
+from starlette.middleware.cors import CORSMiddleware
 
 from database.google_credentials import prepare_google_credentials
 
@@ -34,11 +36,16 @@ from routers import (
     integration,
     conversations,
     memories,
+    api_key_management,
     mcp,
     mcp_sse,
     oauth,
     auth,
     action_items,
+    account_cutover,
+    candidates,
+    chat_first,
+    chat_first_e2e,
     task_integrations,
     integrations,
     x_connector,
@@ -53,6 +60,7 @@ from routers import (
     wrapped,
     folders,
     goals,
+    workstreams,
     announcements,
     phone_calls,
     agent_tools,
@@ -63,10 +71,21 @@ from routers import (
     focus_sessions,
     advice,
     chat_sessions,
+    chat_generation,
+    desktop_agent_vm,
+    desktop_chat,
+    desktop_core,
+    desktop_proxy,
+    desktop_realtime,
+    desktop_screen_crisp,
+    desktop_tts_updates,
     scores,
     tts,
     memory_admin,
     memory_product,
+    task_recommendations,
+    conversation_finalization,
+    public_shared_conversation_chat,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -78,8 +97,11 @@ from utils.executors import (
     log_executor_health,
     run_blocking,
     db_executor,
-    start_background_task,
 )
+from utils.executors import start_background_task
+from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from services.conversation_finalization import reconcile_listen_finalization_jobs
+from services.conversation_finalization import reconcile_stale_processing_conversations
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 
 # Log LangSmith tracing status at startup
@@ -89,34 +111,53 @@ log_langsmith_status()
 validate_stripe_price_ids()
 
 _auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
+_firebase_admin_options = firebase_admin_options()
 if _auth_emulator_host:
-    for _adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"):
+    for _adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON", "FIREBASE_AUTH_CREDENTIALS_PATH"):
         os.environ.pop(_adc_key, None)
     _firebase_project_id = (
         os.environ.get("FIREBASE_AUTH_PROJECT_ID") or os.environ.get("FIREBASE_PROJECT_ID") or "demo-omi-local"
     )
-    firebase_admin.initialize_app(options={"projectId": _firebase_project_id})
+    firebase_admin.initialize_app(options={"projectId": _firebase_project_id})  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 elif os.environ.get("SERVICE_ACCOUNT_JSON"):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
     credentials = firebase_admin.credentials.Certificate(service_account_info)
-    firebase_admin.initialize_app(credentials)
+    firebase_admin.initialize_app(credentials, options=_firebase_admin_options)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 else:
-    firebase_admin.initialize_app()
-
-# starlette 0.40 added a default 1 MB cap per multipart form part. Voice
-# messages, audio uploads, and persona/app images legitimately exceed that.
-# Match the existing per-request PCM ceiling.
-from starlette.formparsers import MultiPartParser
-
-MultiPartParser.max_part_size = 200 * 1024 * 1024  # 200 MB
+    firebase_admin.initialize_app(options=_firebase_admin_options)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
 app = FastAPI()
+
+# Explicit, default-deny CORS: this API is Bearer-token authenticated (mobile/
+# desktop apps, not ambient browser cookies), so no cross-origin browser
+# caller needs to be allowed by default. CORS_ALLOWED_ORIGINS lets an operator
+# opt a specific web frontend in (comma-separated exact origins — never "*",
+# and never combined with allow_credentials, which would let any site read
+# authenticated responses for a signed-in visitor).
+_cors_allowed_origins = [o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()]
+if '*' in _cors_allowed_origins:
+    raise RuntimeError('CORS_ALLOWED_ORIGINS must not contain "*" — list explicit origins instead')
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_allowed_origins,
+    allow_credentials=False,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
 
 app.include_router(transcribe.router)
 app.include_router(omni_relay.router)
 app.include_router(auto_model.router)
 app.include_router(conversations.router)
+app.include_router(public_shared_conversation_chat.router)
 app.include_router(action_items.router)
+app.include_router(account_cutover.router)
+app.include_router(candidates.router)
+app.include_router(chat_first.router)
+if is_chat_first_e2e_harness_runtime():
+    # The fixture router has its own runtime check as defense in depth.  It is
+    # intentionally absent from dev/prod route tables, not merely disabled.
+    app.include_router(chat_first_e2e.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)
@@ -128,6 +169,7 @@ app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
 app.include_router(users.router)
+app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
 
 app.include_router(other.router)
@@ -145,14 +187,17 @@ app.include_router(auth.router)  # Added auth router (for the main Omi App, this
 
 
 app.include_router(payment.router)
+app.include_router(api_key_management.mcp_router)
 app.include_router(mcp.router)
 app.include_router(mcp_sse.router)
+app.include_router(api_key_management.developer_router)
 app.include_router(developer.router)
 app.include_router(imports.router)
 app.include_router(wrapped.router)
 app.include_router(folders.router)
 app.include_router(knowledge_graph.router)
 app.include_router(goals.router)
+app.include_router(workstreams.router)
 app.include_router(announcements.router)
 app.include_router(phone_calls.router)
 app.include_router(agent_tools.router)
@@ -163,10 +208,19 @@ app.include_router(staged_tasks.router)
 app.include_router(focus_sessions.router)
 app.include_router(advice.router)
 app.include_router(chat_sessions.router)
+app.include_router(chat_generation.router)
 app.include_router(scores.router)
 app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
+app.include_router(task_recommendations.router)
+app.include_router(desktop_core.router)
+app.include_router(desktop_agent_vm.router)
+app.include_router(desktop_chat.router)
+app.include_router(desktop_proxy.router)
+app.include_router(desktop_realtime.router)
+app.include_router(desktop_screen_crisp.router)
+app.include_router(desktop_tts_updates.router)
 
 
 methods_timeout = {
@@ -183,6 +237,8 @@ methods_timeout = {
 paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
+    "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
+    "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
@@ -192,8 +248,9 @@ from utils.byok import BYOKMiddleware
 app.add_middleware(BYOKMiddleware)
 
 
-@app.on_event("startup")
+@app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
+    validate_account_deletion_dispatch_configuration()
     asyncio.create_task(log_executor_health())
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
@@ -204,6 +261,15 @@ async def startup_event():
     # Periodic reconciliation ensures stale retrying claims (worker crashed) and
     # new pending/failed wipes are retried without requiring a restart.
     start_background_task(_periodic_deletion_wipe_reconcile(), name='periodic_deletion_wipe_reconcile')
+    start_background_task(
+        run_blocking(db_executor, _drain_listen_finalization_jobs),
+        name='startup_listen_finalization_reconcile',
+    )
+    start_background_task(
+        run_blocking(db_executor, _drain_stale_processing_conversations),
+        name='startup_stale_processing_reconcile',
+    )
+    start_background_task(_periodic_listen_finalization_reconcile(), name='periodic_listen_finalization_reconcile')
 
 
 def _drain_pending_deletion_wipes():
@@ -232,7 +298,56 @@ async def _periodic_deletion_wipe_reconcile(interval_seconds: int = 300):
             logger.error(f"Periodic deletion-wipe reconciliation failed: {e}")
 
 
-@app.on_event("shutdown")
+def _drain_listen_finalization_jobs():
+    """Best-effort durable finalization recovery after a restart/deploy."""
+    try:
+        result = reconcile_listen_finalization_jobs()
+        if result.get('requeued'):
+            logger.info(f"Startup listen-finalization reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup listen-finalization reconciliation failed: {e}")
+
+
+def _drain_stale_processing_conversations():
+    """Best-effort recovery of bare-`processing` conversations orphaned by a sync-route crash."""
+    try:
+        result = reconcile_stale_processing_conversations()
+        if result.get('completed') or result.get('migrated'):
+            logger.info(f"Startup stale-processing reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup stale-processing reconciliation failed: {e}")
+
+
+def _listen_finalization_reconcile_interval_seconds() -> int:
+    """Periodic reconcile cadence; overridable for hermetic behavioral tests."""
+    try:
+        seconds = int(os.getenv('LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS', '300'))
+    except ValueError:
+        seconds = 300
+    return max(1, seconds)
+
+
+async def _periodic_listen_finalization_reconcile(interval_seconds: int | None = None):
+    """Replay stale finalization leases and publish durable backlog metrics."""
+    if interval_seconds is None:
+        interval_seconds = _listen_finalization_reconcile_interval_seconds()
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            result = await run_blocking(db_executor, reconcile_listen_finalization_jobs)
+            if result.get('requeued'):
+                logger.info(f"Periodic listen-finalization reconciliation: {result}")
+        except Exception as e:
+            logger.error(f"Periodic listen-finalization reconciliation failed: {e}")
+        try:
+            stale_result = await run_blocking(db_executor, reconcile_stale_processing_conversations)
+            if stale_result.get('completed') or stale_result.get('migrated'):
+                logger.info(f"Periodic stale-processing reconciliation: {stale_result}")
+        except Exception as e:
+            logger.error(f"Periodic stale-processing reconciliation failed: {e}")
+
+
+@app.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()

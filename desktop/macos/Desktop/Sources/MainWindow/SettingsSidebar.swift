@@ -1,3 +1,4 @@
+import OmiTheme
 import SwiftUI
 
 // MARK: - Search Data Model
@@ -20,21 +21,20 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Rewind", subtitle: "Screen capture and audio recording",
       keywords: ["monitor", "screenshot", "capture", "audio", "recording", "microphone", "speech"],
-      section: .general, icon: "gearshape", settingId: "general.rewind"),
+      section: .general, icon: "gearshape", settingId: "general.screencapture"),
     SettingsSearchItem(
-      name: "System Audio", subtitle: "When to record audio from other apps",
-      keywords: [
-        "system audio", "meeting", "zoom", "google meet", "teams", "call", "capture", "recording",
-        "speaker",
-      ], section: .general, icon: "speaker.wave.2", settingId: "general.systemaudio"),
-    SettingsSearchItem(
-      name: "Notifications", subtitle: "Proactive alerts and status",
-      keywords: ["alerts", "notify"], section: .general, icon: "gearshape",
+      name: "Notifications", subtitle: "macOS permission and banner status",
+      keywords: ["alerts", "notify", "banners", "system settings", "permission"], section: .general,
+      icon: "gearshape",
       settingId: "general.notifications"),
     SettingsSearchItem(
       name: "Ask omi", subtitle: "Show or hide the floating chat bar",
       keywords: ["floating bar", "chat bar"], section: .general, icon: "gearshape",
       settingId: "general.askomi"),
+    SettingsSearchItem(
+      name: "Interface Sounds", subtitle: "Sounds for important arrivals and completions",
+      keywords: ["sound", "sounds", "audio", "chime", "mute", "silence", "effects"],
+      section: .general, icon: "speaker.wave.2", settingId: "general.interfacesounds"),
     SettingsSearchItem(
       name: "Font Size", subtitle: "Adjust text size across the app",
       keywords: ["text size", "zoom", "scale", "reset"], section: .general, icon: "gearshape",
@@ -42,7 +42,7 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Reset Window Size", subtitle: "Restore the default window dimensions",
       keywords: ["resize", "window", "default size"], section: .general, icon: "gearshape",
-      settingId: "general.resetwindow"),
+      settingId: "general.fontsize"),
 
     // Rewind
     SettingsSearchItem(
@@ -52,11 +52,14 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Screen Capture", subtitle: "Toggle screen capture on or off",
       keywords: ["screen capture", "screenshot", "monitor", "recording", "rewind"],
-      section: .rewind, icon: "rectangle.dashed.badge.record", settingId: "rewind.screencapture"),
+      section: .general, icon: "rectangle.dashed.badge.record", settingId: "general.screencapture"),
     SettingsSearchItem(
-      name: "Audio Recording", subtitle: "Toggle audio recording and transcription",
-      keywords: ["audio", "microphone", "recording", "transcription", "mic"], section: .rewind,
-      icon: "mic.fill", settingId: "rewind.audiorecording"),
+      name: "Audio Recording", subtitle: "Off, Always On, or Only Meetings",
+      keywords: [
+        "audio", "microphone", "recording", "transcription", "mic", "meeting", "zoom", "google meet",
+        "teams", "call", "system audio",
+      ], section: .general,
+      icon: "mic.fill", settingId: "general.audiorecording"),
     SettingsSearchItem(
       name: "Storage", subtitle: "View frame count and disk usage",
       keywords: ["frames", "storage", "disk", "space", "gb"], section: .rewind,
@@ -78,7 +81,7 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Transcription Settings", subtitle: "Configure speech-to-text options",
       keywords: ["language", "vocabulary", "speech"], section: .transcription, icon: "waveform",
-      settingId: "transcription.settings"),
+      settingId: "transcription.languagemode"),
     SettingsSearchItem(
       name: "Language Mode", subtitle: "Choose single or multi-language transcription",
       keywords: ["language", "multilingual", "single language"], section: .transcription,
@@ -109,12 +112,10 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["frequency", "how often", "interval"], section: .notifications, icon: "bell",
       settingId: "notifications.frequency"),
     SettingsSearchItem(
-      name: "Focus Notifications", subtitle: "Show notification on focus changes",
-      keywords: ["focus", "distraction", "notify focus"], section: .notifications, icon: "bell",
-      settingId: "notifications.focus"),
-    SettingsSearchItem(
-      name: "Task Notifications", subtitle: "Show notification when a task is extracted",
-      keywords: ["task", "action item", "notify task"], section: .notifications, icon: "bell",
+      name: "Task Notifications",
+      subtitle: "Allow interruptions when a task needs attention",
+      keywords: ["task", "action item", "notify task", "interruption", "proactive"],
+      section: .notifications, icon: "bell",
       settingId: "notifications.task"),
     SettingsSearchItem(
       name: "Insight Notifications", subtitle: "Show notification when an insight is generated",
@@ -130,7 +131,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["daily", "summary", "digest", "end of day"], section: .notifications, icon: "bell",
       settingId: "notifications.dailysummary"),
     SettingsSearchItem(
-      name: "Summary Time", subtitle: "When to send your daily summary",
+      name: "Summary Time", subtitle: "When to send your daily summary (hour only)",
       keywords: ["time", "schedule", "when", "hour"], section: .notifications, icon: "bell",
       settingId: "notifications.summarytime"),
 
@@ -147,7 +148,7 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Private Cloud Sync", subtitle: "Sync your data securely to your private cloud storage",
       keywords: ["cloud", "sync", "private cloud"], section: .privacy, icon: "lock.shield",
-      settingId: "privacy.cloudsync"),
+      settingId: "privacy.storerecordings"),
     SettingsSearchItem(
       name: "Encryption", subtitle: "Server-side encryption for your data",
       keywords: ["encrypt", "security", "end to end"], section: .privacy, icon: "lock.shield",
@@ -195,8 +196,8 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["auto install", "automatic install", "download updates", "install updates"],
       section: .about, icon: "info.circle", settingId: "about.autoinstall"),
     SettingsSearchItem(
-      name: "Update Channel", subtitle: "Choose between stable and beta update channels",
-      keywords: ["channel", "beta", "stable", "release channel"], section: .about,
+      name: "Omi Beta", subtitle: "Install the separate Omi Beta app beside this one",
+      keywords: ["channel", "beta", "stable", "release channel", "omi beta"], section: .about,
       icon: "info.circle", settingId: "about.channel"),
     SettingsSearchItem(
       name: "Version Info", subtitle: "Current app version and build number",
@@ -253,6 +254,11 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["floating bar", "ask omi", "show bar"], section: .floatingBar, icon: "sparkles",
       settingId: "floatingbar.show"),
     SettingsSearchItem(
+      name: "Notification Previews",
+      subtitle: "Show assistant notifications under the Floating Bar",
+      keywords: ["notification preview", "floating bar notification", "mute preview", "focus", "dnd"],
+      section: .floatingBar, icon: "sparkles", settingId: "floatingbar.notificationpreviews"),
+    SettingsSearchItem(
       name: "Background Style", subtitle: "Toggle between solid and transparent background",
       keywords: ["background", "solid", "transparent", "blur"], section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.background"),
@@ -266,15 +272,20 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["typed", "text", "speech", "tts", "audio answers"], section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.typedvoiceanswers"),
     SettingsSearchItem(
+      name: "Screen Sharing in Chat",
+      subtitle: "Let Ask Omi capture your screen when you ask about it",
+      keywords: ["screenshot", "screen", "capture", "share screen", "vision", "see my screen"],
+      section: .floatingBar, icon: "camera.viewfinder", settingId: "floatingbar.screenshare"),
+    SettingsSearchItem(
       name: "Voice Speed", subtitle: "Adjust the playback speed for voice replies",
       keywords: ["voice speed", "speech speed", "playback speed", "tts speed"],
       section: .floatingBar, icon: "sparkles", settingId: "floatingbar.voicespeed"),
     SettingsSearchItem(
-      name: "Shortcuts", subtitle: "Configure Ask omi and push-to-talk keyboard shortcuts",
+      name: "Shortcuts", subtitle: "Configure Open Omi and push-to-talk keyboard shortcuts",
       keywords: ["shortcuts", "keyboard", "hotkeys", "push to talk"], section: .shortcuts,
       icon: "keyboard", settingId: "floatingbar.shortcut"),
     SettingsSearchItem(
-      name: "Ask omi Shortcut", subtitle: "Global shortcut to open Ask omi from anywhere",
+      name: "Open Omi Shortcut", subtitle: "Global shortcut to open the Omi app from anywhere",
       keywords: ["shortcut", "hotkey", "keyboard", "global shortcut"], section: .shortcuts,
       icon: "keyboard", settingId: "floatingbar.shortcut"),
     SettingsSearchItem(
@@ -311,31 +322,80 @@ struct SettingsSearchItem: Identifiable {
   ]
 }
 
+enum SettingsSidebarMetrics {
+  /// The settings sidebar is a **table of contents**, not a content column.
+  ///
+  /// It was 260 — the width of the app's *main* sidebar, which carries conversation titles and has
+  /// something to do with the room. Nine section names do not, and that width spent the difference
+  /// on whitespace to the right of "About" while the pane beside it is the thing anyone reads.
+  ///
+  /// The value is **derived from the longest label rather than chosen**, because this row truncates
+  /// (`lineLimit(1)`, `.tail`) and a truncated item in a table of contents is worse than a wide one.
+  /// "Notifications & Privacy" needs 196 pt including its fixtures — the icon column, the gap after
+  /// it and the row's two side paddings — measured through the real font by
+  /// `SettingsSidebarItemLayoutTests`, at the *selected* weight, which is the wider of the two.
+  ///
+  /// The two numbers below the floor were both tried on a build and both truncated:
+  ///
+  /// - **196**, the settings kit's nominal width, renders "Notifications & P…".
+  /// - **216**, which clears the 196 pt requirement by 4 pt on paper, still renders
+  ///   "Notifications & Priva…" — a bare fit is not a fit once the scroll container and subpixel
+  ///   rounding have taken their share.
+  ///
+  /// So the width carries **`labelSlack`** rather than trusting the arithmetic to the last point,
+  /// and the guard test asserts the slack rather than the fit. 232 is still 28 pt narrower than the
+  /// 260 this started at, which was the app's *main* sidebar width — that one carries conversation
+  /// titles and has something to do with the room; nine section names do not.
+  static let expandedWidth: CGFloat = 232
+
+  /// Headroom over the measured label requirement. See `expandedWidth`: a zero-slack fit truncated
+  /// on a real build, so the fit is held open by this rather than by luck.
+  static let labelSlack: CGFloat = 12
+  static let horizontalInset: CGFloat = OmiSpacing.sm
+  static let itemAvailableWidth = expandedWidth - 2 * horizontalInset
+}
+
+/// **The rows this list actually shows**, as a value rather than a literal inside a `body`.
+///
+/// `ShellDestination.unreachable()` reads it: `Permissions` is an established page whose only way in
+/// is a row here, so "the row exists" has to be something a test can hold. Delete it and the
+/// reachability check names the page that lost its door instead of leaving it to be discovered in
+/// the app (INV-NAV-1).
+enum SettingsSidebarRoutes {
+  /// Merged nav: `.account` hosts Account & Plan (renders `.planUsage` content
+  /// too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
+  /// content too). The absorbed cases stay routable for deep links/automation
+  /// and highlight their merged item via `sidebarItem`.
+  ///
+  /// Capture and account first, then the things you tune, with Permissions beside
+  /// Notifications because both are access. Shortcuts / Advanced / About stay at the foot.
+  static let visibleSections: [SettingsContentView.SettingsSection] = [
+    .general,
+    .account,
+    .transcription,
+    .rewind,
+    .floatingBar,
+    .notifications,
+    .permissions,
+    .shortcuts,
+    .advanced,
+    .about,
+  ]
+}
+
 /// Settings sidebar that replaces the main sidebar when in settings
 struct SettingsSidebar: View {
   @Binding var selectedSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
   let onBack: () -> Void
+  @ObservedObject var appState: AppState
 
   @State private var isBackHovered = false
   @State private var searchQuery = ""
   @FocusState private var isSearchFocused: Bool
 
-  private let expandedWidth: CGFloat = 260
   private let iconWidth: CGFloat = 20
-  private let visibleSections: [SettingsContentView.SettingsSection] = [
-    .general,
-    .rewind,
-    .transcription,
-    .notifications,
-    .privacy,
-    .account,
-    .planUsage,
-    .floatingBar,
-    .shortcuts,
-    .advanced,
-    .about,
-  ]
+  private let visibleSections = SettingsSidebarRoutes.visibleSections
 
   private var filteredSearchItems: [SettingsSearchItem] {
     guard !searchQuery.isEmpty else { return [] }
@@ -356,34 +416,35 @@ struct SettingsSidebar: View {
     VStack(alignment: .leading, spacing: 0) {
       // Back button header
       backButton
-        .padding(.top, 12)
-        .padding(.horizontal, 16)
+        .padding(.top, OmiSpacing.md)
+        .padding(.horizontal, OmiSpacing.lg)
 
-      Spacer().frame(height: 24)
+      Spacer().frame(height: OmiSpacing.xxl)
 
       // Settings title
       Text("Settings")
-        .scaledFont(size: 22, weight: .bold)
-        .foregroundColor(OmiColors.textPrimary)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 12)
+        .scaledFont(size: OmiType.heading, weight: .bold)
+        .foregroundColor(Ink.primary)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.bottom, OmiSpacing.md)
 
       // Search field
       searchField
-        .padding(.horizontal, 12)
-        .padding(.bottom, 12)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.bottom, OmiSpacing.md)
 
       if searchQuery.isEmpty {
         // Normal settings sections
         ScrollView(showsIndicators: false) {
-          VStack(alignment: .leading, spacing: 2) {
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             ForEach(visibleSections, id: \.self) { section in
               SettingsSidebarItem(
                 section: section,
-                isSelected: selectedSection == section,
+                isSelected: selectedSection.sidebarItem == section,
                 iconWidth: iconWidth,
+                showsMissingPermissionNotice: section == .permissions && appState.hasMissingPermissions,
                 onTap: {
-                  withAnimation(.easeInOut(duration: 0.15)) {
+                  OmiMotion.withGated(.easeInOut(duration: 0.15)) {
                     selectedSection = section
                   }
                 }
@@ -392,30 +453,33 @@ struct SettingsSidebar: View {
             }
           }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, OmiSpacing.sm)
       } else {
         // Search results
         searchResultsList
-          .padding(.horizontal, 8)
+          .padding(.horizontal, OmiSpacing.sm)
       }
 
       Spacer()
     }
-    .frame(width: expandedWidth)
-    .background(OmiColors.backgroundPrimary)
+    .frame(width: SettingsSidebarMetrics.expandedWidth)
+    // A half-step of shading, and deliberately not a second material: the window already wears the
+    // glass, and a `.regularMaterial` here would be a *within-window* blur stacked on it — two
+    // materials in one window, which on light glass reads as a grey slab down the side.
+    .background(Ink.rowFill)
   }
 
   private var searchField: some View {
-    HStack(spacing: 8) {
+    HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "magnifyingglass")
-        .scaledFont(size: 13)
-        .foregroundColor(isSearchFocused ? OmiColors.purplePrimary : OmiColors.textTertiary)
-        .animation(.easeInOut(duration: 0.15), value: isSearchFocused)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(isSearchFocused ? Ink.accent : Ink.secondary)
+        .omiAnimation(.easeInOut(duration: 0.15), value: isSearchFocused)
 
       TextField("Search settings...", text: $searchQuery)
         .textFieldStyle(.plain)
-        .scaledFont(size: 13)
-        .foregroundColor(OmiColors.textPrimary)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.primary)
         .focused($isSearchFocused)
 
       if !searchQuery.isEmpty {
@@ -423,38 +487,39 @@ struct SettingsSidebar: View {
           searchQuery = ""
         } label: {
           Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
     }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 8)
+    .padding(.horizontal, OmiSpacing.sm)
+    .padding(.vertical, OmiSpacing.sm)
     .background(
-      RoundedRectangle(cornerRadius: 8)
-        .fill(OmiColors.backgroundTertiary)
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+        .fill(Ink.wash)
         .overlay(
-          RoundedRectangle(cornerRadius: 8)
-            .stroke(
-              isSearchFocused ? OmiColors.purplePrimary.opacity(0.5) : Color.clear, lineWidth: 1)
+          RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+            // Focused takes the one accent at full strength; at rest it is a control outline, which
+            // is `Ink.hairline` and not `Ink.separator` — a field is something you type into.
+            .strokeBorder(isSearchFocused ? Ink.accent : Ink.hairline, lineWidth: 1)
         )
     )
   }
 
   private var searchResultsList: some View {
     ScrollView(showsIndicators: false) {
-      VStack(alignment: .leading, spacing: 2) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         if filteredSearchItems.isEmpty {
           Text("No results")
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textTertiary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 20)
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.xl)
         } else {
           ForEach(filteredSearchItems) { item in
             SettingsSearchResultRow(item: item) {
-              withAnimation(.easeInOut(duration: 0.15)) {
+              OmiMotion.withGated(.easeInOut(duration: 0.15)) {
                 selectedSection = item.section
               }
               searchQuery = ""
@@ -471,23 +536,23 @@ struct SettingsSidebar: View {
 
   private var backButton: some View {
     Button(action: onBack) {
-      HStack(spacing: 8) {
+      HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "chevron.left")
-          .scaledFont(size: 14, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
+          .scaledFont(size: OmiType.body, weight: .semibold)
+          .foregroundColor(Ink.secondary)
 
         Text("Back")
-          .scaledFont(size: 14, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .scaledFont(size: OmiType.body, weight: .medium)
+          .foregroundColor(Ink.secondary)
 
         Spacer()
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 10)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: 8)
-          .fill(isBackHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+          .fill(isBackHovered ? Ink.rowHover : Color.clear)
       )
     }
     .buttonStyle(.plain)
@@ -502,6 +567,7 @@ struct SettingsSidebarItem: View {
   let section: SettingsContentView.SettingsSection
   let isSelected: Bool
   let iconWidth: CGFloat
+  var showsMissingPermissionNotice: Bool = false
   let onTap: () -> Void
 
   @State private var isHovered = false
@@ -520,6 +586,7 @@ struct SettingsSidebarItem: View {
     case .shortcuts: return "keyboard"
     case .advanced: return "chart.bar"
     case .about: return "info.circle"
+    case .permissions: return PermissionNavSymbol.outline
     }
   }
 
@@ -529,33 +596,57 @@ struct SettingsSidebarItem: View {
         EmptyView()
       } else {
         Button(action: onTap) {
-          HStack(spacing: 12) {
+          // The settings kit's row metrics rather than generic spacing tokens, so a row in the
+          // table of contents and a row in the pane beside it are the same object at the same
+          // rhythm — and so the narrower sidebar keeps the longest label off its own edge.
+          HStack(spacing: SettingsGlassMetrics.rowContentSpacing) {
             Image(systemName: icon)
-              .scaledFont(size: 17)
-              .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(isSelected ? Ink.surface : Ink.secondary)
               .frame(width: iconWidth)
 
-            Text(section.rawValue)
-              .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
-              .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+            Text(section.displayTitle)
+              .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
+              .foregroundColor(isSelected ? Ink.surface : Ink.primary)
+              .lineLimit(1)
+              .truncationMode(.tail)
+              .layoutPriority(1)
 
-            Spacer()
+            if showsMissingPermissionNotice {
+              Image(systemName: PermissionNavSymbol.missingNotice)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+                .foregroundColor(SettingsInk.notice)
+                .accessibilityHidden(true)
+            }
+
+            Spacer(minLength: 0)
           }
-          .padding(.horizontal, 12)
-          .padding(.vertical, 11)
+          .padding(.horizontal, SettingsGlassMetrics.rowHorizontalPadding)
+          .padding(.vertical, SettingsGlassMetrics.rowVerticalPadding)
           .contentShape(Rectangle())
           .background(
-            RoundedRectangle(cornerRadius: 10)
+            // Selection is the one thing on this pane that is actionable and is not already a
+            // button, which is exactly what the single accent is for. A row *shaded* rather than
+            // filled cannot be told apart from a hover on a surface this light — the shading a dark
+            // palette could spend here does not exist on glass.
+            RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
               .fill(
                 isSelected
-                  ? OmiColors.backgroundTertiary.opacity(0.8)
-                  : (isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear))
+                  ? AnyShapeStyle(Ink.accent)
+                  : AnyShapeStyle(isHovered ? Ink.rowHover : Color.clear))
           )
         }
         .buttonStyle(.plain)
         .onHover { hovering in
           isHovered = hovering
         }
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+        .accessibilityLabel(
+          Text(
+            showsMissingPermissionNotice
+              ? "\(section.displayTitle), permissions required"
+              : section.displayTitle)
+        )
       }
     }
   }
@@ -572,37 +663,38 @@ struct SettingsSubsectionItem: View {
 
   var body: some View {
     Button(action: onTap) {
-      HStack(spacing: 10) {
+      HStack(spacing: OmiSpacing.sm) {
         // Indentation spacer
         Spacer()
           .frame(width: iconWidth + 12)
 
         Image(systemName: subsection.icon)
-          .scaledFont(size: 14)
-          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(isSelected ? Ink.surface : Ink.secondary)
           .frame(width: 16)
 
         Text(subsection.rawValue)
-          .scaledFont(size: 13, weight: isSelected ? .medium : .regular)
-          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+          .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
+          .foregroundColor(isSelected ? Ink.surface : Ink.primary)
 
         Spacer()
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 9)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: 8)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
           .fill(
             isSelected
-              ? OmiColors.backgroundTertiary.opacity(0.6)
-              : (isHovered ? OmiColors.backgroundTertiary.opacity(0.3) : Color.clear))
+              ? AnyShapeStyle(Ink.accent)
+              : AnyShapeStyle(isHovered ? Ink.rowHover : Color.clear))
       )
     }
     .buttonStyle(.plain)
     .onHover { hovering in
       isHovered = hovering
     }
+    .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
   }
 }
 
@@ -615,30 +707,30 @@ struct SettingsSearchResultRow: View {
 
   var body: some View {
     Button(action: onTap) {
-      HStack(spacing: 10) {
+      HStack(spacing: OmiSpacing.sm) {
         Image(systemName: item.icon)
-          .scaledFont(size: 14)
-          .foregroundColor(OmiColors.textTertiary)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
           .frame(width: 20)
 
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(item.name)
-            .scaledFont(size: 13, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(Ink.primary)
 
           Text(item.breadcrumb)
-            .scaledFont(size: 11)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
         }
 
         Spacer()
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: 8)
-          .fill(isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+          .fill(isHovered ? Ink.rowHover : Color.clear)
       )
     }
     .buttonStyle(.plain)
@@ -659,16 +751,22 @@ struct SettingHighlightModifier: ViewModifier {
     content
       .id(settingId)
       .overlay(
-        RoundedRectangle(cornerRadius: 8)
-          .fill(isHighlighted ? OmiColors.purplePrimary.opacity(0.12) : Color.clear)
-          .animation(.easeInOut(duration: 0.3), value: isHighlighted)
+        // The "here it is" flash after a search jump: a wash of the one accent plus its edge, cut to
+        // the card's own corner so the flash lands on the card rather than beside it.
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+          .fill(isHighlighted ? Ink.accent.opacity(0.12) : Color.clear)
+          .overlay(
+            RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+              .strokeBorder(isHighlighted ? Ink.accent : Color.clear, lineWidth: 1)
+          )
+          .omiAnimation(.easeInOut(duration: 0.3), value: isHighlighted)
           .allowsHitTesting(false)
       )
       .onChange(of: highlightedSettingId) { _, newId in
         if newId == settingId {
-          withAnimation { isHighlighted = true }
+          OmiMotion.withGated { isHighlighted = true }
           DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation(.easeInOut(duration: 0.5)) { isHighlighted = false }
+            OmiMotion.withGated(.easeInOut(duration: 0.5)) { isHighlighted = false }
             if highlightedSettingId == settingId { highlightedSettingId = nil }
           }
         }
@@ -677,12 +775,13 @@ struct SettingHighlightModifier: ViewModifier {
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  SettingsSidebar(
-    selectedSection: .constant(.advanced),
-    highlightedSettingId: .constant(nil),
-    onBack: {}
-  )
-  .preferredColorScheme(.dark)
-}
+  #Preview {
+    SettingsSidebar(
+      selectedSection: .constant(.advanced),
+      highlightedSettingId: .constant(nil),
+      onBack: {},
+      appState: AppState()
+    )
+    .preferredColorScheme(.light)
+  }
 #endif

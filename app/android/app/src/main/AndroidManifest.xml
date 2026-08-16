@@ -167,13 +167,16 @@
                 <data
                     android:host="h.omi.me"
                     android:scheme="https"
-                    android:pathPattern="/tasks/.*" />
+                    android:path="/wrapped" />
             </intent-filter>
-            <intent-filter>
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="omi" />
+                <data
+                    android:host="h.omi.me"
+                    android:scheme="https"
+                    android:pathPattern="/tasks/.*" />
             </intent-filter>
         </activity>
 
@@ -187,7 +190,7 @@
 
         <!-- Native BLE Companion Service — receives OS-level device presence events -->
         <service
-            android:name="com.friend.ios.BleCompanionService"
+            android:name="com.friend.ios.ble.BleCompanionService"
             android:exported="true"
             android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
             <intent-filter>
@@ -197,8 +200,15 @@
 
         <!-- Native BLE Foreground Service — persistent BLE connection -->
         <service
-            android:name="com.friend.ios.OmiBleForegroundService"
+            android:name="com.friend.ios.ble.OmiBleForegroundService"
             android:foregroundServiceType="connectedDevice"
+            android:stopWithTask="false"
+            android:exported="false" />
+
+        <!-- Native phone-mic foreground service — keeps mic capture alive in background -->
+        <service
+            android:name="com.friend.ios.phonemic.PhoneMicForegroundService"
+            android:foregroundServiceType="microphone"
             android:stopWithTask="false"
             android:exported="false" />
 

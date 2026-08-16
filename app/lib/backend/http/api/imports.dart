@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/imports_integrations_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -49,14 +50,43 @@ class ImportJobResponse {
   });
 
   factory ImportJobResponse.fromJson(Map<String, dynamic> json) {
+    return ImportJobResponse.fromGenerated(wire.GeneratedImportJobResponse.fromJson(json));
+  }
+
+  factory ImportJobResponse.fromGenerated(wire.GeneratedImportJobResponse generated) {
     return ImportJobResponse(
-      jobId: json['job_id'] as String,
-      status: ImportJobStatus.fromString(json['status'] as String),
-      totalFiles: json['total_files'] as int?,
-      processedFiles: json['processed_files'] as int?,
-      conversationsCreated: json['conversations_created'] as int?,
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) : null,
-      error: json['error'] as String?,
+      jobId: generated.jobId,
+      status: ImportJobStatus.fromString(generated.status),
+      totalFiles: generated.totalFiles,
+      processedFiles: generated.processedFiles,
+      conversationsCreated: generated.conversationsCreated,
+      createdAt: generated.createdAt == null ? null : DateTime.tryParse(generated.createdAt!),
+      error: generated.error,
+    );
+  }
+
+  /// Generated-backed list parser for top-level array responses (e.g. GET
+  /// /v1/import/jobs). Routes the raw JSON through the generated wire DTO so
+  /// the inventory gate classifies this decode site as generated-backed.
+  static List<ImportJobResponse> fromGeneratedWireJsonList(String body) {
+    final data = jsonDecode(body) as List;
+    return data
+        .map(
+          (json) =>
+              ImportJobResponse.fromGenerated(wire.GeneratedImportJobResponse.fromJson(json as Map<String, dynamic>)),
+        )
+        .toList();
+  }
+
+  wire.GeneratedImportJobResponse toGenerated() {
+    return wire.GeneratedImportJobResponse(
+      jobId: jobId,
+      status: status.name,
+      totalFiles: totalFiles,
+      processedFiles: processedFiles,
+      conversationsCreated: conversationsCreated,
+      createdAt: createdAt?.toUtc().toIso8601String(),
+      error: error,
     );
   }
 
@@ -81,9 +111,9 @@ Future<ImportJobResponse?> startLimitlessImport(File zipFile, {String language =
     );
 
     if (response.statusCode == 200) {
-      var data = jsonDecode(response.body);
+      var data = wire.GeneratedImportJobResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
       Logger.debug('startLimitlessImport Response: $data');
-      return ImportJobResponse.fromJson(data);
+      return ImportJobResponse.fromGenerated(data);
     } else {
       Logger.debug('Failed to start import. Status: ${response.statusCode}, Body: ${response.body}');
       return null;
@@ -105,8 +135,7 @@ Future<List<ImportJobResponse>> getImportJobs({int limit = 50}) async {
     );
 
     if (response != null && response.statusCode == 200) {
-      var data = jsonDecode(response.body) as List;
-      return data.map((json) => ImportJobResponse.fromJson(json)).toList();
+      return ImportJobResponse.fromGeneratedWireJsonList(response.body);
     } else {
       Logger.debug('Failed to get import jobs. Response: ${response?.body}');
       return [];
@@ -129,9 +158,11 @@ Future<int?> deleteLimitlessConversations() async {
     );
 
     if (response != null && response.statusCode == 200) {
-      var data = jsonDecode(response.body);
+      final data = wire.GeneratedDeleteLimitlessConversationsResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
       Logger.debug('deleteLimitlessConversations Response: $data');
-      return data['deleted_count'] as int?;
+      return data.deletedCount;
     } else {
       Logger.debug('Failed to delete Limitless conversations. Response: ${response?.body}');
       return null;

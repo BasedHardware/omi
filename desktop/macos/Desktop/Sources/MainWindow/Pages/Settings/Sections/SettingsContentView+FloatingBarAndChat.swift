@@ -1,3 +1,4 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
@@ -5,22 +6,17 @@ import WebKit
 
 extension SettingsContentView {
   var floatingBarSection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "floatingbar.show") {
-        HStack(spacing: 16) {
-          Circle()
-            .fill(showAskOmiBar ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
-            .frame(width: 12, height: 12)
-            .shadow(color: showAskOmiBar ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
+        HStack(spacing: OmiSpacing.lg) {
           Text("Show floating bar")
-            .scaledFont(size: 16, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
+            .foregroundColor(Ink.primary)
 
           Spacer()
 
           Toggle("", isOn: $showAskOmiBar)
-            .toggleStyle(.switch)
+            .toggleStyle(OmiToggleStyle())
             .labelsHidden()
             .onChange(of: showAskOmiBar) { _, newValue in
               if newValue {
@@ -32,27 +28,44 @@ extension SettingsContentView {
         }
       }
 
-      settingsCard(settingId: "floatingbar.background") {
-        VStack(alignment: .leading, spacing: 16) {
-          Text("Background Style")
-            .scaledFont(size: 16, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+      settingsCard(settingId: "floatingbar.notificationpreviews") {
+        HStack(spacing: OmiSpacing.lg) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Notification Previews")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
+            Text(
+              "Show assistant notifications under the Floating Bar. When off, notifications use macOS banners instead."
+            )
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+          }
+          Spacer()
+          Toggle("", isOn: $shortcutSettings.floatingBarNotificationPreviewsEnabled)
+            .toggleStyle(OmiToggleStyle())
+        }
+      }
 
-          HStack(spacing: 16) {
+      settingsCard(settingId: "floatingbar.background") {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          Text("Background Style")
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
+            .foregroundColor(Ink.primary)
+
+          HStack(spacing: OmiSpacing.lg) {
             Text("Transparent")
-              .scaledFont(size: 13, weight: shortcutSettings.solidBackground ? .regular : .semibold)
+              .scaledFont(size: OmiType.body, weight: shortcutSettings.solidBackground ? .regular : .semibold)
               .foregroundColor(
-                shortcutSettings.solidBackground ? OmiColors.textTertiary : OmiColors.textPrimary)
+                shortcutSettings.solidBackground ? Ink.secondary : Ink.primary)
 
             Toggle("", isOn: $shortcutSettings.solidBackground)
-              .toggleStyle(.switch)
-              .tint(OmiColors.purplePrimary)
+              .toggleStyle(OmiToggleStyle())
               .labelsHidden()
 
             Text("Solid Dark")
-              .scaledFont(size: 13, weight: shortcutSettings.solidBackground ? .semibold : .regular)
+              .scaledFont(size: OmiType.body, weight: shortcutSettings.solidBackground ? .semibold : .regular)
               .foregroundColor(
-                shortcutSettings.solidBackground ? OmiColors.textPrimary : OmiColors.textTertiary)
+                shortcutSettings.solidBackground ? Ink.primary : Ink.secondary)
 
             Spacer()
           }
@@ -60,72 +73,83 @@ extension SettingsContentView {
       }
 
       settingsCard(settingId: "floatingbar.draggable") {
-        HStack(spacing: 16) {
-          VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: OmiSpacing.lg) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Draggable Floating Bar")
-              .scaledFont(size: 16, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
             Text("Allow repositioning the floating bar by dragging it.")
-              .scaledFont(size: 13)
-              .foregroundColor(OmiColors.textSecondary)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
           }
           Spacer()
           Toggle("", isOn: $shortcutSettings.draggableBarEnabled)
-            .toggleStyle(.switch)
-            .tint(OmiColors.purplePrimary)
+            .toggleStyle(OmiToggleStyle())
         }
       }
 
       settingsCard(settingId: "floatingbar.typedvoiceanswers") {
-        HStack(spacing: 16) {
-          VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: OmiSpacing.lg) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Typed Questions")
-              .scaledFont(size: 16, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
             Text("Speak answers aloud when you submit a typed question from the floating bar.")
-              .scaledFont(size: 13)
-              .foregroundColor(OmiColors.textSecondary)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
           }
           Spacer()
           Toggle("", isOn: floatingBarTypedVoiceAnswersBinding)
-            .toggleStyle(.switch)
-            .tint(OmiColors.purplePrimary)
+            .toggleStyle(OmiToggleStyle())
         }
       }
 
+      settingsCard(settingId: "floatingbar.screenshare") {
+        HStack(spacing: OmiSpacing.lg) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Screen Sharing in Chat")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
+            Text("Let Ask Omi capture your screen when you ask about what's on it.")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+          }
+          Spacer()
+          Toggle("", isOn: $chatScreenshotSharingEnabled)
+            .toggleStyle(OmiToggleStyle())
+            .labelsHidden()
+        }
+      }
+
+      // Push-to-talk replies are always spoken, so `hasAnyFloatingBarVoiceAnswersEnabled` is a
+      // constant and these two never dimmed. A greyed, unresponsive control is how the rest of
+      // this pane says "the thing behind this is off" — spending that signal on a state no
+      // setting can reach makes a live control read as dead.
       voicePicker(settingId: "floatingbar.voice")
-        .opacity(shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled ? 1 : 0.55)
-        .disabled(!shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled)
 
       voiceSpeedSlider(settingId: "floatingbar.voicespeed")
-        .opacity(shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled ? 1 : 0.55)
-        .disabled(!shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled)
     }
   }
 
   func voicePicker(settingId: String) -> some View {
     settingsCard(settingId: settingId) {
-      HStack(spacing: 16) {
-        VStack(alignment: .leading, spacing: 4) {
+      HStack(spacing: OmiSpacing.lg) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text("Voice")
-            .scaledFont(size: 16, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
+            .foregroundColor(Ink.primary)
           Text(
             ShortcutSettings.voiceOption(for: shortcutSettings.selectedVoiceID).description
           )
-          .scaledFont(size: 13)
-          .foregroundColor(OmiColors.textSecondary)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
         }
         Spacer()
-        Picker("", selection: $shortcutSettings.selectedVoiceID) {
+        SettingsMenuPicker(selection: $shortcutSettings.selectedVoiceID) {
           ForEach(ShortcutSettings.availableVoices) { voice in
             Text(voice.name).tag(voice.id)
           }
         }
-        .pickerStyle(.menu)
-        .labelsHidden()
-        .frame(width: 180)
-        .tint(OmiColors.purplePrimary)
       }
     }
   }
@@ -135,28 +159,26 @@ extension SettingsContentView {
   }
 
   var aiChatSection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       // AI Provider card
       settingsCard(settingId: "aichat.provider") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "cpu")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("AI Provider")
-              .scaledFont(size: 15, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
 
             Spacer()
 
-            Picker("", selection: $chatBridgeMode) {
+            SettingsMenuPicker(selection: $chatBridgeMode) {
               ForEach(AIProvider.all) { provider in
                 Text(provider.displayName).tag(provider.bridgeModeRawValue)
               }
             }
-            .pickerStyle(.menu)
-            .frame(width: 200)
             .onChange(of: chatBridgeMode) { _, newMode in
               if let mode = ChatProvider.BridgeMode(rawValue: newMode) {
                 Task {
@@ -170,26 +192,26 @@ extension SettingsContentView {
             if let url = provider.attributionURL {
               Link(destination: url) {
                 Text("\(provider.tagline) · \(url.host ?? "")")
-                  .scaledFont(size: 12)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
               }
             } else {
               Text(provider.tagline)
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
             }
           }
 
           if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
-            Divider()
+            GlassSeparator()
 
             HStack {
               Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.green)
-                .scaledFont(size: 12)
+                .foregroundColor(Ink.listeningGreen)
+                .scaledFont(size: OmiType.caption)
               Text("Connected to Claude")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textSecondary)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
 
               Spacer()
 
@@ -199,8 +221,8 @@ extension SettingsContentView {
                 }
               }
               .buttonStyle(.plain)
-              .scaledFont(size: 12, weight: .medium)
-              .foregroundColor(.red)
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(Ink.errorRed)
             }
           }
         }
@@ -211,20 +233,20 @@ extension SettingsContentView {
 
       // Ask Mode card
       settingsCard(settingId: "aichat.askmode") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "bubble.left.and.bubble.right")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("Ask Mode")
-              .scaledFont(size: 15, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
 
             Spacer()
 
             Toggle("", isOn: $askModeEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .controlSize(.small)
               .labelsHidden()
           }
@@ -232,22 +254,22 @@ extension SettingsContentView {
           Text(
             "When enabled, shows an Ask/Act toggle in the chat. Ask mode restricts the AI to read-only actions. When disabled, the AI always runs in Act mode."
           )
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textTertiary)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
         }
       }
 
       // Workspace card
       settingsCard(settingId: "aichat.workspace") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "folder")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("Workspace")
-              .scaledFont(size: 15, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
 
             Spacer()
 
@@ -259,77 +281,80 @@ extension SettingsContentView {
               panel.message = "Select a project directory"
               if panel.runModal() == .OK, let url = panel.url {
                 aiChatWorkingDirectory = url.path
-                refreshAIChatConfig()
-                // Update ChatProvider
+                // `ChatProvider` holds its own `@AppStorage` wrapper over the same key, and a
+                // wrapper's `didSet` only fires for writes made through that wrapper — so the
+                // provider has to be written to directly for it to reconfigure the runtime.
                 chatProvider?.aiChatWorkingDirectory = url.path
-                Task { await chatProvider?.discoverClaudeConfig() }
-                if chatProvider?.workingDirectory == nil {
-                  chatProvider?.workingDirectory = url.path
-                }
+                // Unconditional. The old `== nil` guard meant choosing a *second* workspace left
+                // the agent's file-system root on the first one, so the next provider switch
+                // (`effectiveAgentWorkingDirectory()`) handed the runtime the abandoned project.
+                chatProvider?.workingDirectory = url.path
+                Task { await rediscoverAIChatConfig() }
               }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
             if !aiChatWorkingDirectory.isEmpty {
               Button("Clear") {
                 aiChatWorkingDirectory = ""
-                refreshAIChatConfig()
                 chatProvider?.aiChatWorkingDirectory = ""
-                Task { await chatProvider?.discoverClaudeConfig() }
                 chatProvider?.workingDirectory = nil
+                Task { await rediscoverAIChatConfig() }
               }
-              .buttonStyle(.bordered)
-              .controlSize(.small)
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             }
           }
 
           if !aiChatWorkingDirectory.isEmpty {
             Text(aiChatWorkingDirectory)
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
               .truncationMode(.middle)
 
             Text("Project-level CLAUDE.md and skills will be discovered from this directory")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
           } else {
             Text(
               "No workspace set. Set a project directory to discover project-level CLAUDE.md and skills."
             )
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
           }
         }
       }
 
       // CLAUDE.md card
       settingsCard(settingId: "aichat.claudemd") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "doc.text")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("CLAUDE.md")
-              .scaledFont(size: 15, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
 
             Spacer()
           }
 
+          Text("Reference only — CLAUDE.md content is never injected into chat instructions.")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+
           // Global CLAUDE.md
-          VStack(alignment: .leading, spacing: 8) {
+          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             HStack {
               Text("Global")
-                .scaledFont(size: 11, weight: .medium)
-                .foregroundColor(OmiColors.textTertiary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
+                .scaledFont(size: OmiType.caption, weight: .medium)
+                .foregroundColor(Ink.secondary)
+                .padding(.horizontal, OmiSpacing.xs)
+                .padding(.vertical, OmiSpacing.hairline)
                 .background(
-                  RoundedRectangle(cornerRadius: 4)
-                    .fill(OmiColors.backgroundPrimary.opacity(0.5))
+                  RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+                    .fill(Ink.wash)
                 )
 
               Spacer()
@@ -340,44 +365,38 @@ extension SettingsContentView {
                   fileViewerContent = aiChatClaudeMdContent ?? ""
                   showFileViewer = true
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
-                Toggle("", isOn: $claudeMdEnabled)
-                  .toggleStyle(.switch)
-                  .controlSize(.small)
-                  .labelsHidden()
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               }
             }
 
             if let path = aiChatClaudeMdPath, let content = aiChatClaudeMdContent {
               let sizeKB = Double(content.utf8.count) / 1024.0
               Text("\(path) (\(String(format: "%.1f", sizeKB)) KB)")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
             } else {
               Text("No CLAUDE.md found at ~/.claude/CLAUDE.md")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
             }
           }
 
           // Project CLAUDE.md (only show if workspace is set)
           if !aiChatWorkingDirectory.isEmpty {
-            Divider().opacity(0.3)
+            GlassSeparator()
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               HStack {
                 Text("Project")
-                  .scaledFont(size: 11, weight: .medium)
-                  .foregroundColor(OmiColors.purplePrimary)
-                  .padding(.horizontal, 6)
-                  .padding(.vertical, 2)
+                  .scaledFont(size: OmiType.caption, weight: .medium)
+                  .foregroundColor(Ink.secondary)
+                  .padding(.horizontal, OmiSpacing.xs)
+                  .padding(.vertical, OmiSpacing.hairline)
                   .background(
-                    RoundedRectangle(cornerRadius: 4)
-                      .fill(OmiColors.purplePrimary.opacity(0.1))
+                    RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+                      .fill(Ink.rowFill)
                   )
 
                 Spacer()
@@ -388,27 +407,21 @@ extension SettingsContentView {
                     fileViewerContent = aiChatProjectClaudeMdContent ?? ""
                     showFileViewer = true
                   }
-                  .buttonStyle(.bordered)
-                  .controlSize(.small)
-
-                  Toggle("", isOn: $projectClaudeMdEnabled)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .labelsHidden()
+                  .buttonStyle(OmiButtonStyle(.primary, size: .compact))
                 }
               }
 
               if let path = aiChatProjectClaudeMdPath, let content = aiChatProjectClaudeMdContent {
                 let sizeKB = Double(content.utf8.count) / 1024.0
                 Text("\(path) (\(String(format: "%.1f", sizeKB)) KB)")
-                  .scaledFont(size: 12)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
                   .lineLimit(1)
                   .truncationMode(.middle)
               } else {
                 Text("No CLAUDE.md found at \(aiChatWorkingDirectory)/CLAUDE.md")
-                  .scaledFont(size: 12)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
               }
             }
           }
@@ -417,88 +430,86 @@ extension SettingsContentView {
 
       // Skills card
       settingsCard(settingId: "aichat.skills") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "sparkles")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             if aiChatProjectDiscoveredSkills.isEmpty {
               Text("Skills (\(aiChatDiscoveredSkills.count) discovered)")
-                .scaledFont(size: 15, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
+                .foregroundColor(Ink.primary)
             } else {
               Text(
                 "Skills (\(aiChatDiscoveredSkills.count) global + \(aiChatProjectDiscoveredSkills.count) project)"
               )
-              .scaledFont(size: 15, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
             }
 
             Spacer()
 
-            Button(action: { refreshAIChatConfig() }) {
+            Button(action: { Task { await rediscoverAIChatConfig() } }) {
               Image(systemName: "arrow.clockwise")
-                .scaledFont(size: 13)
+                .scaledFont(size: OmiType.body)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           }
 
-          let allSkills:
-            [(skill: (name: String, description: String, path: String), origin: String)] =
-              aiChatDiscoveredSkills.map { ($0, "Global") }
-              + aiChatProjectDiscoveredSkills.map { ($0, "Project") }
+          let allSkills: [(skill: (name: String, description: String, path: String), origin: String)] =
+            aiChatDiscoveredSkills.map { ($0, "Global") }
+            + aiChatProjectDiscoveredSkills.map { ($0, "Project") }
 
           if allSkills.isEmpty {
             Text("No skills found in ~/.claude/skills/")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
           } else {
             Text("Skill descriptions are included in the AI chat system prompt")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
 
             // Search field
-            HStack(spacing: 8) {
+            HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "magnifyingglass")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
 
               TextField("Search skills...", text: $skillSearchQuery)
                 .textFieldStyle(.plain)
-                .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textPrimary)
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(Ink.primary)
 
               if !skillSearchQuery.isEmpty {
                 Button(action: { skillSearchQuery = "" }) {
                   Image(systemName: "xmark.circle.fill")
-                    .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(Ink.secondary)
                 }
                 .buttonStyle(.plain)
               }
             }
-            .padding(8)
+            .padding(OmiSpacing.sm)
             .background(
-              RoundedRectangle(cornerRadius: 8)
-                .fill(OmiColors.backgroundPrimary.opacity(0.5))
+              RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+                .fill(Ink.wash)
             )
 
             ScrollView {
               let filteredSkills = allSkills.enumerated().filter { _, item in
                 skillSearchQuery.isEmpty
-                  || item.skill.name.localizedCaseInsensitiveContains(skillSearchQuery)
-                  || item.skill.description.localizedCaseInsensitiveContains(skillSearchQuery)
+                  || item.skill.name.localizedStandardContains(skillSearchQuery)
+                  || item.skill.description.localizedStandardContains(skillSearchQuery)
               }
 
               VStack(spacing: 0) {
-                ForEach(Array(filteredSkills.enumerated()), id: \.offset) { filteredIndex, item in
+                ForEach(filteredSkills, id: \.element.skill.path) { item in
                   let skill = item.element.skill
                   let origin = item.element.origin
-                  HStack(spacing: 10) {
+                  HStack(spacing: OmiSpacing.sm) {
                     Toggle(
-                      "",
+                      "Enable \(skill.name)",
                       isOn: Binding(
                         get: { !aiChatDisabledSkills.contains(skill.name) },
                         set: { enabled in
@@ -514,32 +525,34 @@ extension SettingsContentView {
                     .toggleStyle(.checkbox)
                     .labelsHidden()
 
-                    VStack(alignment: .leading, spacing: 2) {
-                      HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+                      HStack(spacing: OmiSpacing.xs) {
                         Text(skill.name)
-                          .scaledFont(size: 13, weight: .medium)
-                          .foregroundColor(OmiColors.textPrimary)
+                          .scaledFont(size: OmiType.body, weight: .medium)
+                          .foregroundColor(Ink.primary)
 
+                        // Project beats Global when both define a skill, so the two origins have
+                        // to be told apart at a glance. Both branches had collapsed onto
+                        // `Ink.secondary` over two washes four thousandths of an alpha apart,
+                        // which is the same chip drawn twice. The chip composes its ground from
+                        // its own tint, the way `SettingsStatusChip` does, so the pair cannot
+                        // drift into a contrast the label does not clear.
+                        let originTint = origin == "Project" ? Ink.accent : Ink.secondary
                         Text(origin)
-                          .scaledFont(size: 9, weight: .medium)
-                          .foregroundColor(
-                            origin == "Project" ? OmiColors.purplePrimary : OmiColors.textTertiary
-                          )
-                          .padding(.horizontal, 4)
-                          .padding(.vertical, 1)
+                          .scaledFont(size: OmiType.micro, weight: .medium)
+                          .foregroundColor(originTint)
+                          .padding(.horizontal, OmiSpacing.xxs)
+                          .padding(.vertical, OmiSpacing.hairline)
                           .background(
-                            RoundedRectangle(cornerRadius: 3)
-                              .fill(
-                                origin == "Project"
-                                  ? OmiColors.purplePrimary.opacity(0.1)
-                                  : OmiColors.backgroundPrimary.opacity(0.5))
+                            RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+                              .fill(originTint.opacity(0.14))
                           )
                       }
 
                       if !skill.description.isEmpty {
                         Text(skill.description)
-                          .scaledFont(size: 11)
-                          .foregroundColor(OmiColors.textTertiary)
+                          .scaledFont(size: OmiType.caption)
+                          .foregroundColor(Ink.secondary)
                           .lineLimit(1)
                           .truncationMode(.tail)
                       }
@@ -554,15 +567,13 @@ extension SettingsContentView {
                         ?? "Unable to read file"
                       showFileViewer = true
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
+                    .buttonStyle(OmiButtonStyle(.primary, size: .compact))
                   }
-                  .padding(.vertical, 6)
-                  .padding(.horizontal, 4)
+                  .padding(.vertical, OmiSpacing.xs)
+                  .padding(.horizontal, OmiSpacing.xxs)
 
-                  if filteredIndex < filteredSkills.count - 1 {
-                    Divider()
-                      .opacity(0.3)
+                  if item.offset != filteredSkills.last?.offset {
+                    GlassSeparator()
                   }
                 }
               }
@@ -574,40 +585,41 @@ extension SettingsContentView {
 
       // Browser Extension card
       settingsCard(settingId: "aichat.browserextension") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "globe")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("Browser Extension")
-              .scaledFont(size: 15, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
 
             Spacer()
 
             if !playwrightExtensionToken.isEmpty {
-              HStack(spacing: 4) {
+              HStack(spacing: OmiSpacing.xxs) {
                 Circle()
-                  .fill(Color.green)
+                  .fill(Ink.listeningGreen)
                   .frame(width: 6, height: 6)
                 Text("Connected")
-                  .scaledFont(size: 11)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
               }
             }
 
+            // No `onChange` hook: `ChatProvider` and `AgentRuntimeProcess` both read this key
+            // from `UserDefaults` (the former through a KVO publisher), so the `@AppStorage`
+            // write *is* the propagation. An empty handler here only looked like wiring.
             Toggle("", isOn: $playwrightUseExtension)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .controlSize(.small)
               .labelsHidden()
-              .onChange(of: playwrightUseExtension) { _, _ in
-              }
           }
 
           Text("Lets the AI use your Chrome browser with all your logged-in sessions.")
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
 
           if playwrightUseExtension {
             if playwrightExtensionToken.isEmpty {
@@ -615,25 +627,24 @@ extension SettingsContentView {
               Button(action: {
                 showBrowserSetup = true
               }) {
-                HStack(spacing: 6) {
+                HStack(spacing: OmiSpacing.xs) {
                   Image(systemName: "wrench.and.screwdriver")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                   Text("Set Up")
-                    .scaledFont(size: 13, weight: .medium)
+                    .scaledFont(size: OmiType.body, weight: .medium)
                 }
               }
-              .buttonStyle(.borderedProminent)
-              .controlSize(.small)
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             } else {
               // Token is set — show compact view
-              HStack(spacing: 8) {
+              HStack(spacing: OmiSpacing.sm) {
                 Text("Token")
-                  .scaledFont(size: 12)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
 
                 Text(String(playwrightExtensionToken.prefix(8)) + "...")
-                  .scaledFont(size: 12, weight: .medium)
-                  .foregroundColor(OmiColors.textPrimary)
+                  .scaledFont(size: OmiType.caption, weight: .medium)
+                  .foregroundColor(Ink.primary)
                   .font(.system(.body, design: .monospaced))
 
                 Spacer()
@@ -641,29 +652,27 @@ extension SettingsContentView {
                 Button(action: {
                   showBrowserSetup = true
                 }) {
-                  HStack(spacing: 4) {
+                  HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "arrow.clockwise")
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                     Text("Reconfigure")
-                      .scaledFont(size: 12)
+                      .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Button(action: {
                   playwrightExtensionToken = ""
                   UserDefaults.standard.set("", forKey: "playwrightExtensionToken")
                 }) {
-                  HStack(spacing: 4) {
+                  HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "xmark")
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                     Text("Reset")
-                      .scaledFont(size: 12)
+                      .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               }
             }
           }
@@ -672,20 +681,20 @@ extension SettingsContentView {
 
       // Dev Mode card
       settingsCard(settingId: "aichat.devmode") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "hammer")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("Dev Mode")
-              .scaledFont(size: 15, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
 
             Spacer()
 
             Toggle("", isOn: $devModeEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .controlSize(.small)
               .labelsHidden()
               .onChange(of: devModeEnabled) { _, newValue in
@@ -694,26 +703,26 @@ extension SettingsContentView {
           }
 
           Text("Let the AI modify the app's source code, rebuild it, and add custom features.")
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
 
           if devModeEnabled {
-            VStack(alignment: .leading, spacing: 8) {
-              HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+              HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: "checkmark.circle.fill")
-                  .foregroundColor(.green)
-                  .scaledFont(size: 12)
+                  .foregroundColor(Ink.listeningGreen)
+                  .scaledFont(size: OmiType.caption)
                 Text("AI can modify UI, add features, create custom SQLite tables")
-                  .scaledFont(size: 12)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
               }
-              HStack(spacing: 6) {
+              HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: "lock.fill")
-                  .foregroundColor(.orange)
-                  .scaledFont(size: 12)
+                  .foregroundColor(SettingsInk.notice)
+                  .scaledFont(size: OmiType.caption)
                 Text("Backend API, auth, and sync logic are read-only")
-                  .scaledFont(size: 12)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
               }
             }
           }
@@ -725,24 +734,13 @@ extension SettingsContentView {
       playwrightExtensionToken =
         UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
     }
+    // The browser-setup sheet is presented once, by `SettingsContentView.body`, because the
+    // identical Browser Extension card in Advanced shares `showBrowserSetup`. A second `.sheet`
+    // on the same binding inside this subtree is a competing presenter for one piece of state:
+    // AppKit honours one of them and logs the other, which is a coin toss over whether "Set Up"
+    // opens anything.
     .sheet(isPresented: $showFileViewer) {
       fileViewerSheet
-    }
-    .sheet(isPresented: $showBrowserSetup) {
-      BrowserExtensionSetup(
-        onComplete: {
-          showBrowserSetup = false
-          playwrightExtensionToken =
-            UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
-        },
-        onDismiss: {
-          showBrowserSetup = false
-          playwrightExtensionToken =
-            UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
-        },
-        chatProvider: chatProvider
-      )
-      .fixedSize()
     }
   }
 
@@ -751,34 +749,47 @@ extension SettingsContentView {
       // Header
       HStack {
         Text(fileViewerTitle)
-          .scaledFont(size: 16, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
         Button(action: { showFileViewer = false }) {
           Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: 18)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.heading)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
-      .padding(16)
+      .padding(OmiSpacing.lg)
 
-      Divider().opacity(0.3)
+      GlassSeparator()
 
       // Content
       ScrollView {
         Text(fileViewerContent)
           .font(.system(size: 12, design: .monospaced))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .textSelection(.enabled)
           .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(16)
+          .padding(OmiSpacing.lg)
       }
     }
     .frame(width: 600, height: 500)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.wash)
+  }
+
+  /// Re-scan CLAUDE.md and skills from disk, then republish them into the cards.
+  ///
+  /// `refreshAIChatConfig()` copies `ChatProvider`'s already-discovered snapshot, so on its own it
+  /// cannot see a skill added to `~/.claude/skills` since launch, nor a workspace chosen a moment
+  /// ago. Refresh and the workspace picker both *looked* like a rescan and were a re-read of the
+  /// same stale answer.
+  func rediscoverAIChatConfig() async {
+    if let provider = chatProvider {
+      await provider.discoverClaudeConfig()
+    }
+    refreshAIChatConfig()
   }
 
   func refreshAIChatConfig() {

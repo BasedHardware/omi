@@ -1,3 +1,4 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
@@ -5,22 +6,33 @@ import WebKit
 
 extension SettingsContentView {
   func advancedCategoryHeader(title: String, icon: String) -> some View {
-    HStack(spacing: 10) {
+    HStack(spacing: OmiSpacing.sm) {
       Image(systemName: icon)
-        .scaledFont(size: 16)
-        .foregroundColor(OmiColors.purplePrimary)
+        .scaledFont(size: OmiType.subheading)
+        .foregroundColor(Ink.secondary)
       Text(title)
-        .scaledFont(size: 18, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .scaledFont(size: OmiType.heading, weight: .semibold)
+        .foregroundColor(Ink.primary)
       Spacer()
     }
-    .padding(.top, 16)
+    .padding(.top, OmiSpacing.lg)
   }
 
   var advancedSection: some View {
-    VStack(spacing: 24) {
+    VStack(spacing: OmiSpacing.xxl) {
       advancedCategoryHeader(title: "AI Setup", icon: "cpu")
       aiSetupSubsection
+      // The three assistants that read your screen, and the throttle they share. Each card carries
+      // the switch that stops its assistant — which, until this pane rendered them, no surface in the
+      // app did. `advanced.taskassistant` is also where the Tasks page's gear button deep-links.
+      advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
+      taskAssistantSubsection
+      advancedCategoryHeader(title: "Insight Assistant", icon: ProactiveNotificationBadge.insightSystemImage)
+      insightAssistantSubsection
+      advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
+      memoryAssistantSubsection
+      advancedCategoryHeader(title: "Analysis Throttle", icon: "clock.arrow.2.circlepath")
+      analysisThrottleSubsection
       advancedCategoryHeader(title: "Profile & Stats", icon: "brain")
       profileAndStatsSubsection
       advancedCategoryHeader(title: "Reset Onboarding", icon: "arrow.counterclockwise")
@@ -31,41 +43,79 @@ extension SettingsContentView {
       preferencesSubsection
       advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
       troubleshootingSubsection
+      if AppBuild.isBetaProductionBundle {
+        advancedCategoryHeader(title: "Beta Diagnostics", icon: "waveform.path.ecg")
+        betaDiagnosticsSubsection
+      }
       advancedCategoryHeader(title: "Developer API Keys", icon: "key")
       developerKeysSubsection
 
       advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
       devToolsSubsection
     }
+    // The assistant cards above are seeded from their singletons when the pane is constructed, but
+    // `loadBackendSettings()` then runs `SettingsSyncManager.syncFromServer()`, which is
+    // server-authoritative and rewrites those same singletons underneath us. Without this the
+    // switches, sliders and app lists kept painting the pre-sync values — a per-device answer to a
+    // per-account question — until the next relaunch. The sync manager already announces itself;
+    // this is the pane agreeing to listen. Same shape as the Notifications pane.
+    .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
+      syncAssistantControlsFromSettings()
+    }
+  }
+
+  // MARK: - Beta Diagnostics
+
+  var betaDiagnosticsSubsection: some View {
+    settingsCard(settingId: "advanced.beta.enhanced_diagnostics") {
+      HStack(spacing: OmiSpacing.lg) {
+        Image(systemName: "waveform.path.ecg")
+          .scaledFont(size: OmiType.subheading)
+          .foregroundColor(Ink.secondary)
+          .frame(width: 24, height: 24)
+
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          Text("Enhanced Diagnostics")
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
+            .foregroundColor(Ink.primary)
+          Text(
+            "Share additional technical failure context to improve this beta. No prompts, transcripts, or raw log files are included."
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+        }
+
+        Spacer()
+
+        Toggle("Enhanced Diagnostics", isOn: $betaEnhancedDiagnosticsEnabled)
+          .toggleStyle(OmiToggleStyle())
+          .labelsHidden()
+      }
+    }
   }
 
   // MARK: - Dev Tools Subsection
 
   var devToolsSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "advanced.devtools.chatlab") {
-        HStack(spacing: 12) {
+        HStack(spacing: OmiSpacing.md) {
           Image(systemName: "flask.fill")
-            .scaledFont(size: 16)
-            .foregroundColor(OmiColors.purplePrimary)
-          VStack(alignment: .leading, spacing: 4) {
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(Ink.secondary)
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Chat Prompt Lab")
-              .scaledFont(size: 15, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
             Text("Iterate on chat system prompts with real questions, AI grading, and production ratings")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
           }
           Spacer()
           Button("Open") {
             ChatLabWindowManager.shared.openWindow(chatProvider: chatProvider)
           }
-          .buttonStyle(.plain)
-          .padding(.horizontal, 14)
-          .padding(.vertical, 6)
-          .background(OmiColors.purplePrimary)
-          .foregroundColor(.white)
-          .clipShape(RoundedRectangle(cornerRadius: 8))
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         }
       }
     }
@@ -74,27 +124,25 @@ extension SettingsContentView {
   // MARK: - Advanced Subsections
 
   var aiSetupSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "aichat.realtimevoice") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "waveform")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("Voice Model")
-              .scaledFont(size: 15, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
 
             Spacer()
 
-            Picker("", selection: $realtimeOmniProvider) {
+            SettingsMenuPicker(selection: $realtimeOmniProvider) {
               ForEach(RealtimeOmniProvider.allCases, id: \.rawValue) { p in
                 Text(p.displayName).tag(p.rawValue)
               }
             }
-            .pickerStyle(.menu)
-            .frame(width: 200)
             .onChange(of: realtimeOmniProvider) { _, newValue in
               if newValue == RealtimeOmniProvider.auto.rawValue {
                 AutoModelSelector.shared.refreshIfStale()
@@ -108,36 +156,34 @@ extension SettingsContentView {
 
           if let p = RealtimeOmniProvider(rawValue: realtimeOmniProvider), p == .auto {
             Text("\(p.subtitle) · currently \(RealtimeOmniSettings.shared.effectiveProvider.displayName)")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
           } else if let p = RealtimeOmniProvider(rawValue: realtimeOmniProvider) {
             Text(p.subtitle)
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
           }
         }
       }
 
       settingsCard(settingId: "aichat.provider") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "cpu")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("AI Provider")
-              .scaledFont(size: 15, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
 
             Spacer()
 
-            Picker("", selection: $chatBridgeMode) {
+            SettingsMenuPicker(selection: $chatBridgeMode) {
               ForEach(AIProvider.all) { provider in
                 Text(provider.displayName).tag(provider.bridgeModeRawValue)
               }
             }
-            .pickerStyle(.menu)
-            .frame(width: 200)
             .onChange(of: chatBridgeMode) { _, newMode in
               if let mode = ChatProvider.BridgeMode(rawValue: newMode) {
                 Task {
@@ -151,26 +197,26 @@ extension SettingsContentView {
             if let url = provider.attributionURL {
               Link(destination: url) {
                 Text("\(provider.tagline) · \(url.host ?? "")")
-                  .scaledFont(size: 12)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
               }
             } else {
               Text(provider.tagline)
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
             }
           }
 
           if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
-            Divider()
+            GlassSeparator()
 
             HStack {
               Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.green)
-                .scaledFont(size: 12)
+                .foregroundColor(Ink.listeningGreen)
+                .scaledFont(size: OmiType.caption)
               Text("Connected to Claude")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textSecondary)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
 
               Spacer()
 
@@ -180,23 +226,23 @@ extension SettingsContentView {
                 }
               }
               .buttonStyle(.plain)
-              .scaledFont(size: 12, weight: .medium)
-              .foregroundColor(.red)
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(Ink.errorRed)
             }
           }
         }
       }
 
       settingsCard(settingId: "aichat.workspace") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "folder")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("Workspace")
-              .scaledFont(size: 15, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
 
             Spacer()
 
@@ -215,8 +261,7 @@ extension SettingsContentView {
                 }
               }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
             if !aiChatWorkingDirectory.isEmpty {
               Button("Clear") {
@@ -225,82 +270,80 @@ extension SettingsContentView {
                 Task { await chatProvider?.discoverClaudeConfig() }
                 chatProvider?.workingDirectory = nil
               }
-              .buttonStyle(.bordered)
-              .controlSize(.small)
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             }
           }
 
           if !aiChatWorkingDirectory.isEmpty {
             Text(aiChatWorkingDirectory)
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
               .truncationMode(.middle)
           } else {
             Text("No workspace set. Choose a project directory for desktop chat context.")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
           }
         }
       }
 
       settingsCard(settingId: "aichat.browserextension") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "globe")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("Browser Extension")
-              .scaledFont(size: 15, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
 
             Spacer()
 
             if !playwrightExtensionToken.isEmpty {
-              HStack(spacing: 4) {
+              HStack(spacing: OmiSpacing.xxs) {
                 Circle()
-                  .fill(Color.green)
+                  .fill(Ink.listeningGreen)
                   .frame(width: 6, height: 6)
                 Text("Connected")
-                  .scaledFont(size: 11)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
               }
             }
 
             Toggle("", isOn: $playwrightUseExtension)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .controlSize(.small)
               .labelsHidden()
           }
 
           Text("Lets the AI use your Chrome browser with all your logged-in sessions.")
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
 
           if playwrightUseExtension {
             if playwrightExtensionToken.isEmpty {
               Button(action: {
                 showBrowserSetup = true
               }) {
-                HStack(spacing: 6) {
+                HStack(spacing: OmiSpacing.xs) {
                   Image(systemName: "wrench.and.screwdriver")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                   Text("Set Up")
-                    .scaledFont(size: 13, weight: .medium)
+                    .scaledFont(size: OmiType.body, weight: .medium)
                 }
               }
-              .buttonStyle(.borderedProminent)
-              .controlSize(.small)
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             } else {
-              HStack(spacing: 8) {
+              HStack(spacing: OmiSpacing.sm) {
                 Text("Token")
-                  .scaledFont(size: 12)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
 
                 Text(String(playwrightExtensionToken.prefix(8)) + "...")
-                  .scaledFont(size: 12, weight: .medium)
-                  .foregroundColor(OmiColors.textPrimary)
+                  .scaledFont(size: OmiType.caption, weight: .medium)
+                  .foregroundColor(Ink.primary)
                   .font(.system(.body, design: .monospaced))
 
                 Spacer()
@@ -308,29 +351,27 @@ extension SettingsContentView {
                 Button(action: {
                   showBrowserSetup = true
                 }) {
-                  HStack(spacing: 4) {
+                  HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "arrow.clockwise")
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                     Text("Reconfigure")
-                      .scaledFont(size: 12)
+                      .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Button(action: {
                   playwrightExtensionToken = ""
                   UserDefaults.standard.set("", forKey: "playwrightExtensionToken")
                 }) {
-                  HStack(spacing: 4) {
+                  HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "xmark")
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                     Text("Reset")
-                      .scaledFont(size: 12)
+                      .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
               }
             }
           }
@@ -338,20 +379,20 @@ extension SettingsContentView {
       }
 
       settingsCard(settingId: "aichat.devmode") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "hammer")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("Dev Mode")
-              .scaledFont(size: 15, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
 
             Spacer()
 
             Toggle("", isOn: $devModeEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .controlSize(.small)
               .labelsHidden()
               .onChange(of: devModeEnabled) { _, newValue in
@@ -360,40 +401,39 @@ extension SettingsContentView {
           }
 
           Text("Let the AI modify the app's source code, rebuild it, and add custom features.")
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
         }
       }
     }
   }
 
   var profileAndStatsSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "advanced.profileandstats") {
-        VStack(alignment: .leading, spacing: 12) {
-          HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack(spacing: OmiSpacing.md) {
             Image(systemName: showProfileAndStats ? "eye.slash" : "eye")
-              .scaledFont(size: 15)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Profile and Stats")
-                .scaledFont(size: 15, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
+                .foregroundColor(Ink.primary)
               Text("Keep the generated profile and usage stats hidden until you need them.")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
             }
 
             Spacer()
 
             Button(showProfileAndStats ? "Hide" : "Show") {
-              withAnimation(.easeInOut(duration: 0.2)) {
+              OmiMotion.withGated(.easeInOut(duration: 0.2)) {
                 showProfileAndStats.toggle()
               }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           }
         }
       }
@@ -406,17 +446,17 @@ extension SettingsContentView {
   }
 
   var aiUserProfileSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "advanced.aiuserprofile") {
-        VStack(alignment: .leading, spacing: 16) {
-          HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "brain")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("AI User Profile")
-              .scaledFont(size: 15, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .foregroundColor(Ink.primary)
 
             Spacer()
 
@@ -428,30 +468,27 @@ extension SettingsContentView {
                 regenerateAIProfile()
               }) {
                 Text(aiProfileText == nil ? "Generate Now" : "Regenerate")
-                  .scaledFont(size: 12)
+                  .scaledFont(size: OmiType.caption)
               }
-              .buttonStyle(.bordered)
-              .controlSize(.small)
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             }
           }
 
-          Divider()
-            .background(OmiColors.backgroundQuaternary)
+          GlassSeparator()
 
           if let text = aiProfileText {
             if isEditingAIProfile {
               TextEditor(text: $aiProfileEditText)
-                .scaledFont(size: 13, design: .monospaced)
-                .foregroundColor(OmiColors.textSecondary)
+                .scaledFont(size: OmiType.body, design: .monospaced)
+                .foregroundColor(Ink.secondary)
                 .scrollContentBackground(.hidden)
-                .frame(maxHeight: 200)
+                .frame(minHeight: 120, maxHeight: 300)
 
               HStack {
                 Button("Cancel") {
                   isEditingAIProfile = false
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Button("Save") {
                   if let id = aiProfileId {
@@ -461,21 +498,24 @@ extension SettingsContentView {
                       )
                       if success {
                         aiProfileText = aiProfileEditText
+                        isEditingAIProfile = false
                       }
-                      isEditingAIProfile = false
+                      // A rejected save used to close the editor anyway, which
+                      // threw the edit away and looked exactly like a save that
+                      // worked. Leave the editor open with the text intact so
+                      // the edit survives and can be retried.
                     }
                   }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
+                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
 
                 Spacer()
               }
             } else {
               ScrollView {
                 Text(text)
-                  .scaledFont(size: 13, design: .monospaced)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .scaledFont(size: OmiType.body, design: .monospaced)
+                  .foregroundColor(Ink.secondary)
                   .textSelection(.enabled)
                   .if_available_writingToolsNone()
                   .frame(maxWidth: .infinity, alignment: .leading)
@@ -485,16 +525,16 @@ extension SettingsContentView {
               HStack {
                 if let date = aiProfileGeneratedAt {
                   Text("Last updated: \(date.formatted(.relative(presentation: .named)))")
-                    .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(Ink.secondary)
                 }
 
                 Spacer()
 
                 if aiProfileDataSourcesUsed > 0 {
                   Text("Data sources: \(aiProfileDataSourcesUsed) items")
-                    .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(Ink.secondary)
                 }
 
                 Button(action: {
@@ -502,7 +542,7 @@ extension SettingsContentView {
                   isEditingAIProfile = true
                 }) {
                   Image(systemName: "pencil")
-                    .scaledFont(size: 11)
+                    .scaledFont(size: OmiType.caption)
                 }
                 .buttonStyle(.borderless)
                 .help("Edit profile")
@@ -511,8 +551,8 @@ extension SettingsContentView {
                   deleteCurrentAIProfile()
                 }) {
                   Image(systemName: "trash")
-                    .scaledFont(size: 11)
-                    .foregroundColor(.red.opacity(0.7))
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(Ink.errorRed)
                 }
                 .buttonStyle(.borderless)
                 .help("Delete this profile")
@@ -522,20 +562,20 @@ extension SettingsContentView {
             Text(
               "Your AI user profile will be generated automatically on next launch, or click \"Generate Now\" to create it now."
             )
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
           } else {
             HStack {
               Spacer()
-              VStack(spacing: 8) {
+              VStack(spacing: OmiSpacing.sm) {
                 ProgressView()
                 Text("Generating profile...")
-                  .scaledFont(size: 13)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .scaledFont(size: OmiType.body)
+                  .foregroundColor(Ink.secondary)
               }
               Spacer()
             }
-            .padding(.vertical, 20)
+            .padding(.vertical, OmiSpacing.xl)
           }
         }
       }
@@ -564,23 +604,22 @@ extension SettingsContentView {
   }
 
   var statsSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "advanced.stats") {
-        VStack(alignment: .leading, spacing: 16) {
-          HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "chart.bar")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("Your Stats")
-              .scaledFont(size: 15, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .foregroundColor(Ink.primary)
 
             Spacer()
           }
 
-          Divider()
-            .background(OmiColors.backgroundQuaternary)
+          GlassSeparator()
 
           if let stats = advancedStats {
             statRow(label: "Conversations", value: stats.conversations)
@@ -588,8 +627,8 @@ extension SettingsContentView {
             if isLoadingChatMessages {
               HStack {
                 Text("AI Chat Messages")
-                  .scaledFont(size: 14)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .scaledFont(size: OmiType.body)
+                  .foregroundColor(Ink.secondary)
                 Spacer()
                 ProgressView()
                   .controlSize(.mini)
@@ -617,8 +656,8 @@ extension SettingsContentView {
             statRowLoading(label: "Memories")
           } else {
             Text("Unable to load stats")
-              .scaledFont(size: 13)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
           }
         }
       }
@@ -632,26 +671,25 @@ extension SettingsContentView {
   }
 
   var featureTiersSubsection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "advanced.featuretiers") {
-        VStack(alignment: .leading, spacing: 16) {
-          HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "lock.shield")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("Feature Tiers")
-              .scaledFont(size: 15, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .foregroundColor(Ink.primary)
 
             Spacer()
           }
 
-          Divider()
-            .background(OmiColors.backgroundQuaternary)
+          GlassSeparator()
 
           // Tier picker — radio-style selector
-          VStack(alignment: .leading, spacing: 6) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xs) {
             tierPickerRow(tier: 0, label: "Show All Features", subtitle: "Unlock everything")
             tierPickerRow(tier: 1, label: "Tier 1", subtitle: "Conversations + Rewind")
             tierPickerRow(tier: 2, label: "Tier 2", subtitle: "+ Memories (100 memories)")
@@ -663,12 +701,11 @@ extension SettingsContentView {
           }
 
           if currentTierLevel > 0 {
-            Divider()
-              .background(OmiColors.backgroundQuaternary)
+            GlassSeparator()
 
             Text("Progress")
-              .scaledFont(size: 13, weight: .semibold)
-              .foregroundColor(OmiColors.textSecondary)
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.secondary)
 
             // Tier 1 — always unlocked
             tierFeatureRow(

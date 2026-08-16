@@ -4,16 +4,42 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - 'desktop/macos/Backend-Rust/**'
+      - 'backend/Dockerfile.desktop_backend'
+      - 'backend/**/*.py'
+      - 'backend/pylock.runtime.toml'
+      - 'backend/agent_vm/**'
+      - 'backend/runtime_images.json'
+      - '.github/workflows/desktop_backend_auto_dev.yml'
+      - '.github/scripts/desktop_backend_candidate_probe.py'
+      - '.github/scripts/verify_desktop_backend_image_lineage.py'
+      - '.github/scripts/extract_single_cloud_run_traffic_revision.py'
+      - 'backend/scripts/resolve_cloud_run_tagged_url.py'
+      - 'backend/scripts/wait_cloud_run_candidate_readiness.py'
+      - 'backend/scripts/firebase_release_probe_token.py'
+      - 'scripts/voice-provider-probe.sh'
   workflow_dispatch:
+    inputs:
+      candidate_only:
+        description: 'Build a zero-traffic candidate without running acceptance or changing traffic'
+        required: false
+        default: false
+        type: boolean
 
 env:
   SERVICE: desktop-backend
   REGION: us-central1
+  FIREBASE_AUTH_PROJECT_ID: based-hardware
+  EXPECTED_GCP_PROJECT_ID: based-hardware-dev
+  DEVELOPMENT_DESKTOP_BACKEND_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app
+  CANDIDATE_TAG: desktop-dev-candidate
+  CHAT_CONTRACT_VERSION: '1'
+  AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}
+  AGENT_VM_RECONCILER_JOB: agent-vm-reconciler
 
 concurrency:
   group: desktop-backend-auto-dev
-  cancel-in-progress: true
+  # Do not interrupt the Cloud Run mutation or its traffic verification.
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -22,17 +48,41 @@ jobs:
       contents: 'read'
       id-token: 'write'
 
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
       - name: Delete huge unnecessary tools folder
         run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Resolve immutable candidate identity
+        id: candidate-identity
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "ERROR: development desktop-backend deploys only from main." >&2
+            exit 1
+          fi
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          source_sha="$(git rev-parse 'HEAD^{commit}')"
+          main_sha="$(git rev-parse 'origin/main^{commit}')"
+          if [[ "$source_sha" != "$main_sha" ]]; then
+            echo "ERROR: checked-out SHA $source_sha is stale; current origin/main is $main_sha." >&2
+            exit 1
+          fi
+          image_tag="${source_sha:0:12}"
+          revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          {
+            echo "source_sha=$source_sha"
+            echo "image_tag=$image_tag"
+            echo "revision=desktop-backend-$revision_suffix"
+            echo "revision_suffix=$revision_suffix"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Google Auth
         id: auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
@@ -40,18 +90,39 @@ jobs:
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
-      - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/macos/Backend-Rust/google-credentials.json
-
-      - name: Validate desktop OAuth base API URL
+      - name: Resolve desktop OAuth base API URL
+        id: desktop-base-api-url
         env:
           DESKTOP_BACKEND_BASE_API_URL: ${{ vars.DESKTOP_BACKEND_BASE_API_URL }}
         run: |
           set -euo pipefail
-          if [ -z "${DESKTOP_BACKEND_BASE_API_URL//[[:space:]]/}" ]; then
-            echo "DESKTOP_BACKEND_BASE_API_URL must be configured for desktop OAuth callbacks" >&2
+          BASE_API_URL="${DESKTOP_BACKEND_BASE_API_URL//[[:space:]]/}"
+          if [ -z "$BASE_API_URL" ]; then
+            BASE_API_URL="$DEVELOPMENT_DESKTOP_BACKEND_URL"
+          fi
+          if [ -z "$BASE_API_URL" ]; then
+            echo "Desktop OAuth BASE_API_URL could not be resolved" >&2
+            exit 1
+          fi
+          echo "base_api_url=$BASE_API_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Validate development desktop backend authority
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          if [[ "$PROJECT_ID" != "$EXPECTED_GCP_PROJECT_ID" ]]; then
+            echo "ERROR: development environment resolved project $PROJECT_ID, expected $EXPECTED_GCP_PROJECT_ID." >&2
+            exit 1
+          fi
+          current_url="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format='value(status.url)')"
+          if [[ "$current_url" != "$DEVELOPMENT_DESKTOP_BACKEND_URL" ]]; then
+            echo "ERROR: development service URL $current_url is not $DEVELOPMENT_DESKTOP_BACKEND_URL." >&2
             exit 1
           fi
 
@@ -73,28 +144,149 @@ jobs:
               raise SystemExit("DESKTOP_GOOGLE_CALENDAR_API_KEY does not look like a Google API key")
           PY
 
+      - name: Capture current serving revision
+        id: previous-traffic
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          service_json="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json)"
+          previous_revision="$(SERVICE_JSON="$service_json" python3 - <<'PY'
+          import json
+          import os
+
+          service = json.loads(os.environ["SERVICE_JSON"])
+          targets = [
+              target.get("revisionName", "")
+              for target in service.get("status", {}).get("traffic", [])
+              if target.get("percent") == 100 and target.get("revisionName")
+          ]
+          if len(targets) != 1:
+              raise SystemExit("desktop-backend must have exactly one 100% serving revision")
+          print(targets[0])
+          PY
+          )"
+          echo "revision=$previous_revision" >> "$GITHUB_OUTPUT"
+
       - name: Build and Push Docker image
-        uses: docker/build-push-action@v6
+        id: build-image
+        uses: docker/build-push-action@v7
         with:
-          context: ./desktop/macos/Backend-Rust
-          file: ./desktop/macos/Backend-Rust/Dockerfile
+          context: .
+          file: ./backend/Dockerfile.desktop_backend
           push: true
-          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.candidate-identity.outputs.image_tag }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
+      - name: Build and publish Agent VM image
+        id: agent-vm-release
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}
+          AGENT_VM_GEMINI_SECRET_NAME: GEMINI_API_KEY
+          AGENT_VM_BACKEND_URL: ${{ steps.desktop-base-api-url.outputs.base_api_url }}
+          AGENT_VM_STOP_AUDIENCE: ${{ steps.desktop-base-api-url.outputs.base_api_url }}
+        run: |
+          set -euo pipefail
+          boot_image_name="$(gcloud compute images describe-from-family omi-agent --project="$PROJECT_ID" --format='value(name)')"
+          test -n "$boot_image_name"
+          AGENT_VM_BOOT_IMAGE="projects/$PROJECT_ID/global/images/$boot_image_name"
+          echo "boot_image=$AGENT_VM_BOOT_IMAGE" >> "$GITHUB_OUTPUT"
+          if [[ -z "$AGENT_GCS_BUCKET" ]]; then
+            echo "::warning::AGENT_GCS_BUCKET is not set — skipping Agent VM image build"
+            exit 0
+          fi
+          agent_image="gcr.io/$PROJECT_ID/agent-vm:${{ steps.candidate-identity.outputs.image_tag }}"
+          docker build --tag "$agent_image" --file backend/agent_vm/Dockerfile .
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/agent_vm/Dockerfile --image "$agent_image"
+          docker push "$agent_image"
+          agent_digest="$(gcloud container images describe "$agent_image" --format='value(image_summary.digest)')"
+          [[ "$agent_digest" == sha256:* ]]
+          agent_image_digest="$agent_image@$agent_digest"
+          source_sha="${{ steps.candidate-identity.outputs.source_sha }}"
+          startup_uri_gs="gs://$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/startup.sh"
+          startup_uri_https="https://storage.googleapis.com/$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/startup.sh"
+          # Legacy VMs may still reference gs://$AGENT_GCS_BUCKET/startup.sh; do not update it before acceptance.
+          rendered_startup="$RUNNER_TEMP/agent-vm-startup.sh"
+          AGENT_VM_IMAGE="$agent_image_digest" AGENT_VM_GEMINI_SECRET_NAME="$AGENT_VM_GEMINI_SECRET_NAME" \
+            AGENT_VM_RELEASE_ID="$source_sha" AGENT_VM_IMAGE_DIGEST="$agent_image_digest" \
+            AGENT_VM_BACKEND_URL="$AGENT_VM_BACKEND_URL" AGENT_VM_STOP_AUDIENCE="$AGENT_VM_STOP_AUDIENCE" \
+            envsubst "\$AGENT_VM_IMAGE \$AGENT_VM_GEMINI_SECRET_NAME \$AGENT_VM_RELEASE_ID \$AGENT_VM_IMAGE_DIGEST \$AGENT_VM_BACKEND_URL \$AGENT_VM_STOP_AUDIENCE" \
+            < backend/agent_vm/startup.sh > "$rendered_startup"
+          startup_sha256="$(sha256sum "$rendered_startup" | cut -d' ' -f1)"
+          gcloud storage cp --no-clobber "$rendered_startup" "$startup_uri_gs"
+          startup_readback="$RUNNER_TEMP/agent-vm-startup-readback.sh"
+          gcloud storage cp "$startup_uri_gs" "$startup_readback"
+          cmp -s "$rendered_startup" "$startup_readback"
+          manifest="$RUNNER_TEMP/agent-vm-release.json"
+          python3 backend/scripts/agent_vm_release.py \
+            --output "$manifest" \
+            --environment development \
+            --source-sha "$source_sha" \
+            --image-digest "$agent_image_digest" \
+            --startup-uri "$startup_uri_gs" \
+            --startup-sha256 "$startup_sha256" \
+            --boot-image "$AGENT_VM_BOOT_IMAGE" \
+            --service-account "omi-agent-vm-bootstrap@$PROJECT_ID.iam.gserviceaccount.com"
+          manifest_uri="gs://$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/manifest.json"
+          active_manifest_uri="gs://$AGENT_GCS_BUCKET/agent-vm/releases/active.json"
+          previous_manifest_uri="gs://$AGENT_GCS_BUCKET/agent-vm/releases/previous.json"
+          gcloud storage cp --no-clobber "$manifest" "$manifest_uri"
+          manifest_readback="$RUNNER_TEMP/agent-vm-release-readback.json"
+          gcloud storage cp "$manifest_uri" "$manifest_readback"
+          cmp -s "$manifest" "$manifest_readback"
+          {
+            echo "startup_uri=$startup_uri_https"
+            echo "startup_sha256=$startup_sha256"
+            echo "image_digest=$agent_image_digest"
+            echo "manifest_uri=$manifest_uri"
+            echo "active_manifest_uri=$active_manifest_uri"
+            echo "previous_manifest_uri=$previous_manifest_uri"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Deploy desktop-backend to Cloud Run
-        uses: google-github-actions/deploy-cloudrun@v2
+        id: deploy-candidate
+        uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-          flags: '--allow-unauthenticated'
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}
+          no_traffic: true
+          flags: >-
+            --allow-unauthenticated
+            --revision-suffix=${{ steps.candidate-identity.outputs.revision_suffix }}
+            --tag=${{ env.CANDIDATE_TAG }}
+            --network=default
+            --subnet=default
+            --vpc-egress=private-ranges-only
+            --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,SERVICE_ACCOUNT_JSON,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL
           env_vars: |
-            FIREBASE_PROJECT_ID=based-hardware
-            GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
-            BASE_API_URL=${{ vars.DESKTOP_BACKEND_BASE_API_URL }}
+            FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
+            FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
+            GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
+            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json
+            BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
+            OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
+            OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=development
+            AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc
+            AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}
+            GCE_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware-dev.iam.gserviceaccount.com
+            GCE_RUNTIME_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware-dev.iam.gserviceaccount.com
+            GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}
+            AGENT_VM_BOOT_IMAGE=${{ steps.agent-vm-release.outputs.boot_image }}
+            AGENT_VM_STARTUP_URI=${{ steps.agent-vm-release.outputs.startup_uri }}
+            AGENT_VM_RELEASE_ID=${{ steps.candidate-identity.outputs.source_sha }}
+            AGENT_VM_IMAGE_DIGEST=${{ steps.agent-vm-release.outputs.image_digest }}
+            AGENT_VM_STARTUP_SHA256=${{ steps.agent-vm-release.outputs.startup_sha256 }}
+            AGENT_VM_STOP_AUDIENCE=${{ steps.desktop-base-api-url.outputs.base_api_url }}
           secrets: |
+            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
@@ -104,48 +296,367 @@ jobs:
             REDIS_DB_HOST=REDIS_DB_HOST:latest
             REDIS_DB_PORT=REDIS_DB_PORT:latest
             PINECONE_HOST=PINECONE_HOST:latest
-            DEEPGRAM_API_KEY=DESKTOP_DEEPGRAM_API_KEY:latest
             ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
 
-      - name: Route traffic to deployed desktop-backend revision
+      - name: Wait for no-traffic candidate readiness
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          python3 backend/scripts/wait_cloud_run_candidate_readiness.py \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --service="$SERVICE" \
+            --revision="${{ steps.candidate-identity.outputs.revision }}" \
+            --timeout-seconds=150 \
+            --poll-interval-seconds=5
+
+      - name: Verify candidate image lineage
+        id: verify-image-lineage
+        env:
+          BUILD_IMAGE_REF: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          runtime_image_ref="$(gcloud run revisions describe "${{ steps.candidate-identity.outputs.revision }}" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format='value(status.imageDigest)')"
+          runtime_digest="$(python3 .github/scripts/verify_desktop_backend_image_lineage.py \
+            --build-image-ref="$BUILD_IMAGE_REF" \
+            --runtime-image-ref="$runtime_image_ref" \
+            --source-sha="${{ steps.candidate-identity.outputs.source_sha }}" \
+            --revision="${{ steps.candidate-identity.outputs.revision }}" \
+            --evidence-path=artifacts/desktop-backend-dev-readback.json)"
+          echo "runtime_digest=$runtime_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve exact no-traffic candidate URL
+        id: candidate-url
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         run: |
           set -euo pipefail
-          REVISION="$(gcloud run services describe "$SERVICE" \
+          candidate_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
             --project="$PROJECT_ID" \
             --region="$REGION" \
-            --format='value(status.latestCreatedRevisionName)')"
-          if [ -z "$REVISION" ]; then
-            echo "Could not determine latest desktop-backend revision" >&2
+            --service="$SERVICE" \
+            --revision="${{ steps.candidate-identity.outputs.revision }}" \
+            --tag="$CANDIDATE_TAG")"
+          echo "url=$candidate_url" >> "$GITHUB_OUTPUT"
+
+      - name: Stage candidate probe signer
+        if: github.event.inputs.candidate_only != 'true'
+        env:
+          FIREBASE_PROBE_SIGNER_B64: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          signer_file="$(mktemp "$RUNNER_TEMP/omi-firebase-probe-signer.XXXXXX")"
+          trap 'rm -f "$signer_file"' ERR
+          chmod 600 "$signer_file"
+          printf '%s' "$FIREBASE_PROBE_SIGNER_B64" | base64 --decode > "$signer_file"
+          echo "DESKTOP_BACKEND_PROBE_SIGNER_FILE=$signer_file" >> "$GITHUB_ENV"
+          trap - ERR
+
+      - name: Mint candidate probe identity
+        if: github.event.inputs.candidate_only != 'true'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          token_file="$(mktemp "$RUNNER_TEMP/omi-desktop-backend-probe.XXXXXX")"
+          chmod 600 "$token_file"
+          python3 backend/scripts/firebase_release_probe_token.py \
+            --secret-project "$PROJECT_ID" \
+            --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
+            --signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE" \
+            --token-output "$token_file"
+          echo "DESKTOP_BACKEND_PROBE_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
+
+      - name: Prove candidate chat compatibility
+        if: github.event.inputs.candidate_only != 'true'
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/desktop_backend_candidate_probe.py \
+            --base-url="${{ steps.candidate-url.outputs.url }}" \
+            --bearer-token-file="$DESKTOP_BACKEND_PROBE_TOKEN_FILE" \
+            --expected-release-sha="${{ steps.candidate-identity.outputs.source_sha }}" \
+            --expected-release-channel=development \
+            --expected-contract-version="$CHAT_CONTRACT_VERSION" \
+            --expected-revision="${{ steps.candidate-identity.outputs.revision }}" \
+            --expected-image-digest="${{ steps.verify-image-lineage.outputs.runtime_digest }}" \
+            --candidate-tag="$CANDIDATE_TAG" \
+            --workflow-run-id="$GITHUB_RUN_ID" \
+            --evidence-path=artifacts/desktop-backend-dev-candidate.json
+
+      - name: Prove candidate managed realtime provider paths
+        if: github.event.inputs.candidate_only != 'true'
+        run: |
+          set -euo pipefail
+          for provider in openai gemini; do
+            for attempt in 1 2 3; do
+              probe_exit=0
+              scripts/voice-provider-probe.sh "$provider" "${{ steps.candidate-url.outputs.url }}" \
+                --bearer-token-file="$DESKTOP_BACKEND_PROBE_TOKEN_FILE" || probe_exit=$?
+              if [[ "$probe_exit" -eq 0 ]]; then
+                break
+              fi
+              if [[ "$probe_exit" -ne 75 || "$attempt" -eq 3 ]]; then
+                echo "Managed realtime provider proof failed for $provider." >&2
+                exit "$probe_exit"
+              fi
+              echo "Retrying $provider provider proof after a retryable upstream failure ($attempt/3)."
+              sleep 5
+            done
+          done
+
+      - name: Keep candidate-only revision at zero traffic
+        if: github.event.inputs.candidate_only == 'true'
+        run: |
+          echo "::warning title=Candidate not promoted::Candidate-only mode leaves this revision at 0% traffic."
+          echo "Candidate ${{ steps.candidate-identity.outputs.revision }} remains available for diagnosis." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Route traffic to accepted desktop-backend revision
+        id: route-traffic
+        if: github.event.inputs.candidate_only != 'true'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REVISION: ${{ steps.candidate-identity.outputs.revision }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          current_main="$(git rev-parse 'origin/main^{commit}')"
+          if [[ "$current_main" != "${{ steps.candidate-identity.outputs.source_sha }}" ]]; then
+            echo "ERROR: candidate is stale because origin/main advanced to $current_main; traffic remains unchanged." >&2
             exit 1
           fi
+          python3 backend/scripts/resolve_cloud_run_tagged_url.py \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --service="$SERVICE" \
+            --revision="$REVISION" \
+            --tag="$CANDIDATE_TAG" >/dev/null
+          echo "DESKTOP_BACKEND_TRAFFIC_MUTATION_ATTEMPTED=true" >> "$GITHUB_ENV"
           gcloud run services update-traffic "$SERVICE" \
             --project="$PROJECT_ID" \
             --region="$REGION" \
             --to-revisions="$REVISION=100" \
             --quiet
-          TRAFFIC_JSON="$(gcloud run services describe "$SERVICE" \
+          traffic_json="$(gcloud run services describe "$SERVICE" \
             --project="$PROJECT_ID" \
             --region="$REGION" \
             --format=json)"
-          SERVING_REVISION="$(TRAFFIC_JSON="$TRAFFIC_JSON" python3 - <<'PY'
+          serving_revision="$(TRAFFIC_JSON="$traffic_json" python3 - <<'PY'
           import json
           import os
 
           service = json.loads(os.environ["TRAFFIC_JSON"])
-          for target in service.get("status", {}).get("traffic", []):
-              if target.get("percent") == 100:
-                  print(target.get("revisionName", ""))
-                  break
+          targets = [
+              target.get("revisionName", "")
+              for target in service.get("status", {}).get("traffic", [])
+              if target.get("percent") == 100 and target.get("revisionName")
+          ]
+          if len(targets) != 1:
+              raise SystemExit("desktop-backend traffic is not bound to one revision")
+          print(targets[0])
           PY
           )"
-          if [ "$SERVING_REVISION" != "$REVISION" ]; then
-            echo "desktop-backend traffic is serving $SERVING_REVISION, expected $REVISION" >&2
+          if [ "$serving_revision" != "$REVISION" ]; then
+            echo "desktop-backend traffic is serving $serving_revision, expected $REVISION" >&2
             exit 1
           fi
 
+      - name: Verify development backend release identity
+        if: github.event.inputs.candidate_only != 'true'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          gcloud run services describe "$SERVICE" \
+            --region "$REGION" \
+            --project "$PROJECT_ID" \
+            --format=json > "$RUNNER_TEMP/desktop-backend-service.json"
+          service_url="$(jq -r '.status.url // empty' "$RUNNER_TEMP/desktop-backend-service.json")"
+          test -n "$service_url"
+          python3 .github/scripts/desktop_backend_candidate_probe.py \
+            --health-only \
+            --base-url="$service_url" \
+            --expected-release-sha="${{ steps.candidate-identity.outputs.source_sha }}" \
+            --expected-release-channel=development \
+            --expected-contract-version="$CHAT_CONTRACT_VERSION" \
+            --evidence-path=artifacts/desktop-backend-dev-serving.json
+          echo "Verified development desktop-backend identity at $service_url/health" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy Agent VM reconciler Cloud Run Job
+        if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != ''
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          job: ${{ env.AGENT_VM_RECONCILER_JOB }}
+          region: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}
+          flags: >-
+            --command=python
+            '--args=-m,jobs.agent_vm_reconciler'
+            --max-retries=0
+            --task-timeout=3600s
+            --service-account=agent-vm-reconciler@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+            --network=default
+            --subnet=default
+            --vpc-egress=private-ranges-only
+          env_vars: |
+            FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
+            FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
+            GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
+            GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}
+            AGENT_VM_ENVIRONMENT=development
+            AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc
+            AGENT_VM_ACTIVE_RELEASE_URI=${{ steps.agent-vm-release.outputs.active_manifest_uri }}
+            AGENT_VM_RECONCILER_MAX_CONCURRENCY=5
+            AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS=300
+
+      - name: Save previous Agent VM release pointer
+        if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != ''
+        run: |
+          set -euo pipefail
+          pointer_error="$RUNNER_TEMP/agent-vm-active-pointer-error.txt"
+          if active_generation="$(gcloud storage objects describe \
+            "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
+            --format='value(generation)' 2>"$pointer_error")"; then
+            gcloud storage cp \
+              "${{ steps.agent-vm-release.outputs.active_manifest_uri }}#${active_generation}" \
+              "$RUNNER_TEMP/agent-vm-active-previous.json"
+            if previous_generation="$(gcloud storage objects describe \
+              "${{ steps.agent-vm-release.outputs.previous_manifest_uri }}" \
+              --format='value(generation)' 2>"$pointer_error")"; then
+              gcloud storage cp "$RUNNER_TEMP/agent-vm-active-previous.json" \
+                "${{ steps.agent-vm-release.outputs.previous_manifest_uri }}" \
+                --if-generation-match="$previous_generation"
+            elif grep -Eq '(^|[^0-9])404([^0-9]|$)|NOT_FOUND' "$pointer_error"; then
+              gcloud storage cp "$RUNNER_TEMP/agent-vm-active-previous.json" \
+                "${{ steps.agent-vm-release.outputs.previous_manifest_uri }}" \
+                --if-generation-match=0
+            else
+              cat "$pointer_error" >&2
+              echo "ERROR: previous Agent VM release pointer could not be read." >&2
+              exit 1
+            fi
+            gcloud storage cp \
+              "${{ steps.agent-vm-release.outputs.active_manifest_uri }}#${active_generation}" \
+              "$RUNNER_TEMP/agent-vm-active-previous-readback.json"
+            cmp -s "$RUNNER_TEMP/agent-vm-active-previous.json" "$RUNNER_TEMP/agent-vm-active-previous-readback.json"
+            echo present > "$RUNNER_TEMP/agent-vm-active-previous.state"
+            echo "$active_generation" > "$RUNNER_TEMP/agent-vm-active-previous.generation"
+          elif grep -Eq '(^|[^0-9])404([^0-9]|$)|NOT_FOUND' "$pointer_error"; then
+            # Do not delete a possibly concurrent rollback target. This run
+            # records that it has no predecessor and can only remove its own
+            # newly-created active pointer during compensation.
+            echo absent > "$RUNNER_TEMP/agent-vm-active-previous.state"
+            echo 0 > "$RUNNER_TEMP/agent-vm-active-previous.generation"
+          else
+            cat "$pointer_error" >&2
+            echo "ERROR: active Agent VM release pointer could not be read; refusing to change rollback state." >&2
+            exit 1
+          fi
+          echo "AGENT_VM_ACTIVE_POINTER_PREVIOUS_SAVED=true" >> "$GITHUB_ENV"
+
+      - name: Activate accepted Agent VM release
+        if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != ''
+        run: |
+          set -euo pipefail
+          gcloud storage cp \
+            "${{ steps.agent-vm-release.outputs.manifest_uri }}" \
+            "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
+            --cache-control='no-store,max-age=0' \
+            --if-generation-match="$(cat "$RUNNER_TEMP/agent-vm-active-previous.generation")"
+          echo "AGENT_VM_ACTIVE_POINTER_MUTATED=true" >> "$GITHUB_ENV"
+          activated_generation="$(gcloud storage objects describe \
+            "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" --format='value(generation)')"
+          gcloud storage cp \
+            "${{ steps.agent-vm-release.outputs.active_manifest_uri }}#${activated_generation}" \
+            "$RUNNER_TEMP/agent-vm-active-activated.json"
+          cmp -s "$RUNNER_TEMP/agent-vm-active-activated.json" "$RUNNER_TEMP/agent-vm-release.json"
+          echo "$activated_generation" > "$RUNNER_TEMP/agent-vm-active-activated.generation"
+          echo "DESKTOP_BACKEND_PROMOTION_COMPLETED=true" >> "$GITHUB_ENV"
+          echo "Activated Agent VM release ${{ steps.candidate-identity.outputs.source_sha }} after the reconciler job was deployed." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore prior traffic after a failed promotion
+        if: failure() && env.DESKTOP_BACKEND_TRAFFIC_MUTATION_ATTEMPTED == 'true'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PREVIOUS_REVISION: ${{ steps.previous-traffic.outputs.revision }}
+        run: |
+          set -euo pipefail
+          test -n "$PREVIOUS_REVISION"
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="$PREVIOUS_REVISION=100" \
+            --quiet
+          restored_revision="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json | python3 .github/scripts/extract_single_cloud_run_traffic_revision.py)"
+          if [[ "$restored_revision" != "$PREVIOUS_REVISION" ]]; then
+            echo "ERROR: rollback verification found $restored_revision, expected $PREVIOUS_REVISION." >&2
+            exit 1
+          fi
+          echo "::warning title=Desktop backend traffic restored::Restored 100% traffic to $PREVIOUS_REVISION."
+
+      - name: Remove accepted candidate tag
+        if: success() && steps.route-traffic.outcome == 'success'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --remove-tags="$CANDIDATE_TAG" \
+            --quiet
+
+      - name: Restore prior Agent VM release pointer after failed promotion
+        if: failure() && env.AGENT_VM_ACTIVE_POINTER_MUTATED == 'true' && env.AGENT_VM_ACTIVE_POINTER_PREVIOUS_SAVED == 'true' && env.DESKTOP_BACKEND_PROMOTION_COMPLETED != 'true'
+        run: |
+          set -euo pipefail
+          expected_generation="$(cat "$RUNNER_TEMP/agent-vm-active-activated.generation")"
+          current_generation="$(gcloud storage objects describe \
+            "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" --format='value(generation)')"
+          if [[ "$current_generation" != "$expected_generation" ]]; then
+            echo "REFUSED: active Agent VM release pointer changed after this promotion; not overwriting generation $current_generation." >&2
+            exit 1
+          fi
+          if [[ "$(cat "$RUNNER_TEMP/agent-vm-active-previous.state")" == "present" ]]; then
+            gcloud storage cp "$RUNNER_TEMP/agent-vm-active-previous.json" \
+              "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
+              --cache-control='no-store,max-age=0' --if-generation-match="$expected_generation"
+          else
+            gcloud storage rm "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
+              --if-generation-match="$expected_generation" --quiet
+          fi
+
+      - name: Upload desktop backend acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-backend-dev-${{ steps.candidate-identity.outputs.image_tag }}-${{ github.run_attempt }}
+          path: artifacts/desktop-backend-dev-*.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Remove probe token
+        if: always()
+        run: |
+          if [[ -n "${DESKTOP_BACKEND_PROBE_TOKEN_FILE:-}" ]]; then
+            rm -f "$DESKTOP_BACKEND_PROBE_TOKEN_FILE"
+          fi
+          if [[ -n "${DESKTOP_BACKEND_PROBE_SIGNER_FILE:-}" ]]; then
+            rm -f "$DESKTOP_BACKEND_PROBE_SIGNER_FILE"
+          fi
+
       - name: Show Output
-        run: echo "Desktop backend deployed to development environment"
+        run: |
+          if [[ "${{ github.event.inputs.candidate_only }}" == "true" ]]; then
+            echo "Desktop backend candidate built for development; traffic unchanged."
+          else
+            echo "Desktop backend accepted and deployed to development."
+          fi

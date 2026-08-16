@@ -2,6 +2,15 @@ import AppKit
 import Foundation
 import Sentry
 
+/// Closed reason a presented notification left the screen. Auto-hide and explicit
+/// close must not share a single "dismissed" bucket — that made engagement
+/// unreadable (expiry counted as a user dismiss).
+enum NotificationDismissalKind: String, CaseIterable, Sendable {
+  case user
+  case timeout
+  case replaced
+}
+
 /// Unified analytics manager that sends events to PostHog.
 /// Use this instead of calling PostHogManager directly
 @MainActor
@@ -14,8 +23,86 @@ class AnalyticsManager {
   }
 
   private var lastTranscriptionStartedAt: Date?
+  /// Main-actor-isolated test observation at the actual AnalyticsManager
+  /// boundary. It is nil in production and is deliberately not a mutable global
+  /// outside the actor, so tests can observe the real event/payload safely under
+  /// Swift concurrency.
+  private var memoryAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  private var devicePairingTelemetryCaptureForTests: (@MainActor (String?, [String: Any], [String: Any]) -> Void)?
 
   private init() {}
+
+  /// Install a scoped test observer for MemoryAssistant telemetry. Tests must
+  /// clear it in teardown; production behavior remains the PostHog call below.
+  func setMemoryAssistantTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    memoryAssistantTelemetryCaptureForTests = capture
+  }
+
+  private func captureMemoryAssistantTelemetryForTests(_ event: String, properties: [String: Any]) {
+    memoryAssistantTelemetryCaptureForTests?(event, properties)
+  }
+
+  /// Scoped observation of the privacy-safe live-suggestion funnel. This lives
+  /// at the same production boundary as PostHog so tests can assert the real
+  /// event payload without initializing analytics or exposing a mutable global.
+  private var suggestionAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  private var insightAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  /// Delivery callbacks can race (for example a floating-bar enqueue and a system-banner
+  /// completion). Keep one terminal outcome per opaque advice delivery ID at this boundary.
+  private var recordedInsightDeliveryIDSet: Set<UUID> = []
+  private var recordedInsightDeliveryIDOrder: [UUID] = []
+  private static let maxRecordedInsightDeliveryIDs = 512
+
+  func setSuggestionAssistantTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    suggestionAssistantTelemetryCaptureForTests = capture
+  }
+
+  private func captureSuggestionAssistantTelemetryForTests(_ event: String, properties: [String: Any]) {
+    suggestionAssistantTelemetryCaptureForTests?(event, properties)
+  }
+
+  /// Scoped observation of Advice delivery telemetry. Tests install a capture at the same
+  /// production boundary as PostHog; production leaves it nil.
+  func setInsightAssistantTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    if capture != nil {
+      recordedInsightDeliveryIDSet.removeAll()
+      recordedInsightDeliveryIDOrder.removeAll()
+    }
+    insightAssistantTelemetryCaptureForTests = capture
+  }
+
+  private func captureInsightAssistantTelemetryForTests(_ event: String, properties: [String: Any]) {
+    insightAssistantTelemetryCaptureForTests?(event, properties)
+  }
+
+  /// Test observer for integration-connect telemetry. Mirrors the
+  /// MemoryAssistant seam: nil in production; tests install a scoped capture
+  /// to observe the real event/payload without a mutable unsafe global.
+  private var integrationConnectTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  /// Install a scoped test observer for integration-connect telemetry. Tests
+  /// must clear it in teardown; production behavior remains the PostHog call.
+  func setIntegrationConnectTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    integrationConnectTelemetryCaptureForTests = capture
+  }
+
+  private func captureIntegrationConnectTelemetryForTests(_ event: String, properties: [String: Any]) {
+    integrationConnectTelemetryCaptureForTests?(event, properties)
+  }
+
+  func setDevicePairingTelemetryCaptureForTests(
+    _ capture: (@MainActor (String?, [String: Any], [String: Any]) -> Void)?
+  ) {
+    devicePairingTelemetryCaptureForTests = capture
+  }
 
   // MARK: - Initialization
 
@@ -65,7 +152,7 @@ class AnalyticsManager {
 
   func onboardingChatToolUsed(tool: String, properties: [String: Any] = [:]) {
     var props = properties
-    props["tool"] = tool
+    props["tool"] = ChatTelemetryDimension.toolName(tool)
     PostHogManager.shared.track("Onboarding Chat Tool Used", properties: props)
   }
 
@@ -74,20 +161,34 @@ class AnalyticsManager {
     PostHogManager.shared.track("Onboarding Chat Message", properties: props)
   }
 
-  /// Track full onboarding chat message content for debugging user issues.
-  func onboardingChatMessageDetailed(role: String, text: String, step: String, toolCalls: [String]? = nil, model: String? = nil, error: String? = nil) {
+  /// Track onboarding chat shape without sending the user's message content.
+  func onboardingChatMessageDetailed(
+    role: String, text: String, step: String, toolCalls: [String]? = nil, model: String? = nil, error: String? = nil
+  ) {
     var props: [String: Any] = [
       "role": role,
       "step": step,
-      "text": String(text.prefix(2000)),
       "text_length": text.count,
     ]
     if let toolCalls = toolCalls, !toolCalls.isEmpty {
-      props["tool_calls"] = toolCalls.joined(separator: ", ")
+      let boundedTools = Array(Set(toolCalls.map(ChatTelemetryDimension.toolName))).sorted().prefix(8)
+      props["tool_calls"] = boundedTools.joined(separator: ",")
+      props["tool_call_count"] = toolCalls.count
     }
-    if let model = model { props["model"] = model }
-    if let error = error { props["error"] = error }
+    if let model = model { props["model"] = Self.boundedAnalyticsDimension(model) }
+    if let error = error {
+      let errorClass = PostHogManager.diagnosticErrorClass(error)
+      props["error"] = errorClass
+      props["error_class"] = errorClass
+    }
     PostHogManager.shared.track("onboarding_chat_message_detailed", properties: props)
+  }
+
+  private static func boundedAnalyticsDimension(_ value: String) -> String {
+    let normalized = value.lowercased().map { character in
+      character.isLetter || character.isNumber || "._:-".contains(character) ? character : "_"
+    }
+    return String(normalized.prefix(80))
   }
 
   // MARK: - Authentication Events
@@ -100,8 +201,8 @@ class AnalyticsManager {
     PostHogManager.shared.signInCompleted(provider: provider)
   }
 
-  func signInFailed(provider: String, error: String) {
-    PostHogManager.shared.signInFailed(provider: provider, error: error)
+  func signInFailed(provider: String, error: String, errorClass: String? = nil) {
+    PostHogManager.shared.signInFailed(provider: provider, error: error, errorClass: errorClass)
   }
 
   func authFlowEvent(_ eventName: String, properties: [String: Any]) {
@@ -112,6 +213,66 @@ class AnalyticsManager {
     PostHogManager.shared.signedOut()
   }
 
+  // MARK: - Integration Connect Events
+
+  /// Privacy-safe macOS integration-connect funnel. Mirrors the Flutter
+  /// `Integration Connect Attempted/Succeeded/Failed` event names for
+  /// cross-platform PostHog aggregation; dimensions are bounded by
+  /// ``IntegrationConnectTelemetry``. See that type for the full contract.
+  func integrationConnectAttempted(
+    integrationName: String,
+    connectorID: String,
+    surface: IntegrationConnectTelemetry.Surface,
+    stage: String
+  ) {
+    let payload = IntegrationConnectTelemetry.attemptedPayload(
+      integrationName: integrationName, connectorID: connectorID,
+      surface: surface, stage: stage)
+    captureIntegrationConnectTelemetryForTests(
+      IntegrationConnectTelemetry.attemptedEventName, properties: payload)
+    PostHogManager.shared.track(
+      IntegrationConnectTelemetry.attemptedEventName, properties: payload)
+  }
+
+  func integrationConnectSucceeded(
+    integrationName: String,
+    connectorID: String,
+    surface: IntegrationConnectTelemetry.Surface,
+    stage: String,
+    durationMs: Int? = nil,
+    sourceCount: Int? = nil,
+    memoryCount: Int? = nil,
+    wasFirstSync: Bool = false
+  ) {
+    let payload = IntegrationConnectTelemetry.succeededPayload(
+      integrationName: integrationName, connectorID: connectorID,
+      surface: surface, stage: stage, durationMs: durationMs,
+      sourceCount: sourceCount, memoryCount: memoryCount, wasFirstSync: wasFirstSync)
+    captureIntegrationConnectTelemetryForTests(
+      IntegrationConnectTelemetry.succeededEventName, properties: payload)
+    PostHogManager.shared.track(
+      IntegrationConnectTelemetry.succeededEventName, properties: payload)
+  }
+
+  func integrationConnectFailed(
+    integrationName: String,
+    connectorID: String,
+    surface: IntegrationConnectTelemetry.Surface,
+    stage: String,
+    errorClass: IntegrationConnectTelemetry.ErrorClass,
+    durationMs: Int? = nil,
+    wasFirstSync: Bool = false
+  ) {
+    let payload = IntegrationConnectTelemetry.failedPayload(
+      integrationName: integrationName, connectorID: connectorID,
+      surface: surface, stage: stage, errorClass: errorClass,
+      durationMs: durationMs, wasFirstSync: wasFirstSync)
+    captureIntegrationConnectTelemetryForTests(
+      IntegrationConnectTelemetry.failedEventName, properties: payload)
+    PostHogManager.shared.track(
+      IntegrationConnectTelemetry.failedEventName, properties: payload)
+  }
+
   // MARK: - Monitoring Events
 
   func monitoringStarted() {
@@ -120,14 +281,6 @@ class AnalyticsManager {
 
   func monitoringStopped() {
     PostHogManager.shared.monitoringStopped()
-  }
-
-  func distractionDetected(app: String, windowTitle: String?) {
-    PostHogManager.shared.distractionDetected(app: app, windowTitle: windowTitle)
-  }
-
-  func focusRestored(app: String) {
-    PostHogManager.shared.focusRestored(app: app)
   }
 
   // MARK: - Recording Events
@@ -169,7 +322,8 @@ class AnalyticsManager {
     retryCount: Int,
     hasBackendId: Bool,
     hasClientConversationId: Bool,
-    segmentCount: Int?
+    segmentCount: Int?,
+    diagnostics: ReconciliationFailureDiagnostics? = nil
   ) {
     PostHogManager.shared.conversationReconciliationFailed(
       error: error,
@@ -179,7 +333,8 @@ class AnalyticsManager {
       retryCount: retryCount,
       hasBackendId: hasBackendId,
       hasClientConversationId: hasClientConversationId,
-      segmentCount: segmentCount
+      segmentCount: segmentCount,
+      diagnostics: diagnostics
     )
   }
 
@@ -218,6 +373,39 @@ class AnalyticsManager {
       "authorization_raw": authorizationRaw,
     ]
     PostHogManager.shared.track("Bluetooth State Changed", properties: properties)
+  }
+
+  func devicePairingReady(
+    device: BtDevice,
+    isNewPair: Bool,
+    isFirstPair: Bool,
+    firstPairedAt: Date?
+  ) {
+    let vendor = device.type.analyticsVendorSlug
+    let eventProperties: [String: Any] = [
+      "device_vendor": vendor,
+      "device_type": device.type.rawValue,
+      "model": device.displayModelNumber,
+      "is_first_pair": isFirstPair,
+    ]
+    var userProperties: [String: Any] = [
+      "has_paired_device": true,
+      "paired_device_type": device.type.rawValue,
+      "device_vendor": vendor,
+    ]
+    if let firstPairedAt {
+      userProperties["first_paired_at"] = ISO8601DateFormatter().string(from: firstPairedAt)
+    }
+
+    devicePairingTelemetryCaptureForTests?(
+      isNewPair ? "Device Paired" : nil,
+      eventProperties,
+      userProperties
+    )
+    if isNewPair {
+      PostHogManager.shared.track("Device Paired", properties: eventProperties)
+    }
+    PostHogManager.shared.setUserProperties(userProperties)
   }
 
   /// Report when ScreenCaptureKit broken state is detected (TCC granted but capture failing).
@@ -287,13 +475,30 @@ class AnalyticsManager {
     if hadPreviousSession && !lastCleanExit {
       log("Analytics: Previous session did not exit cleanly — reporting crash")
       let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+      let attachmentURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+        area: "crash",
+        failureClass: "unknown",
+        phase: "startup")
+      defer {
+        if let attachmentURL {
+          try? FileManager.default.removeItem(at: attachmentURL)
+        }
+      }
       SentrySDK.capture(message: "App Crash Detected") { scope in
         scope.setLevel(.warning)
         scope.setTag(value: "app_crash_detected", key: "diagnostic")
-        scope.setContext(value: [
-          "app_version": version,
-          "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
-        ], key: "crash")
+        scope.setContext(
+          value: [
+            "app_version": version,
+            "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
+          ], key: "crash")
+        if let attachmentURL {
+          scope.addAttachment(
+            Attachment(
+              path: attachmentURL.path,
+              filename: "desktop-incident-diagnostics.json",
+              contentType: "application/json"))
+        }
       }
     }
   }
@@ -382,8 +587,6 @@ class AnalyticsManager {
 
     // App bundle location - helps diagnose installation issues
     if let bundlePath = Bundle.main.bundlePath as String? {
-      diagnostics["bundle_path"] = bundlePath
-
       // Categorize the installation location
       if bundlePath.hasPrefix("/Volumes/") {
         diagnostics["install_location"] = "dmg_mounted"
@@ -398,6 +601,7 @@ class AnalyticsManager {
       } else {
         diagnostics["install_location"] = "other"
       }
+      diagnostics["is_standard_install"] = bundlePath.hasPrefix("/Applications/")
     }
 
     // Device info
@@ -440,9 +644,9 @@ class AnalyticsManager {
 
   // MARK: - Chat Events
 
-  func chatMessageSent(messageLength: Int, hasContext: Bool = false, source: String) {
+  func chatMessageSent(messageLength: Int, hasSelectedAppContext: Bool = false, source: String) {
     PostHogManager.shared.chatMessageSent(
-      messageLength: messageLength, hasContext: hasContext, source: source)
+      messageLength: messageLength, hasSelectedAppContext: hasSelectedAppContext, source: source)
   }
 
   // MARK: - Search Events
@@ -532,46 +736,161 @@ class AnalyticsManager {
 
   // MARK: - Claude Agent Events
 
-  /// Track when a Claude agent query completes (one full send → response cycle)
-  func chatAgentQueryCompleted(
-    durationMs: Int,
-    toolCallCount: Int,
-    toolNames: [String],
-    costUsd: Double,
-    messageLength: Int
-  ) {
-    let props: [String: Any] = [
-      "duration_ms": durationMs,
-      "tool_call_count": toolCallCount,
-      "tool_names": toolNames.joined(separator: ","),
-      "cost_usd": costUsd,
-      "response_length": messageLength,
-    ]
-    PostHogManager.shared.track("chat_agent_query_completed", properties: props)
+  /// Sends a Chat-first event only after its closed, content-free mapper has
+  /// produced the payload. Views must use this typed entry point instead of a
+  /// generic PostHog event so rich controls cannot leak user text or IDs.
+  func chatFirst(_ event: ChatFirstAnalyticsEvent) {
+    let payload = event.analyticsPayload
+    PostHogManager.shared.track(
+      payload.eventName,
+      properties: payload.properties.mapValues { $0 as Any }
+    )
   }
 
-  /// Track individual tool calls made by the Claude agent
-  func chatToolCallCompleted(toolName: String, durationMs: Int) {
-    let cleanName: String
-    if toolName.hasPrefix("mcp__") {
-      cleanName = String(toolName.split(separator: "__").last ?? Substring(toolName))
-    } else {
-      cleanName = toolName
+  func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
+    let payload = event.analyticsPayload
+    PostHogManager.shared.track(payload.eventName, properties: payload.properties)
+    if case .failed(_, _, let errorClass, _, _, _) = event {
+      DesktopDiagnosticsManager.shared.recordChatFailure(errorClass: errorClass.rawValue)
     }
+    let diagnosticKeys = [
+      "duration_ms", "error_class", "cancel_reason", "partial_response",
+      "surface", "harness", "runtime_surface", "session_adapter_id", "watchdog_fired",
+    ]
+    let diagnostics = diagnosticKeys.compactMap { key -> String? in
+      guard let value = payload.properties[key] else { return nil }
+      return "\(key)=\(value)"
+    }.joined(separator: " ")
+    log(
+      "Chat telemetry event=\(payload.eventName) attempt_id=\(payload.properties["attempt_id"] ?? "missing") \(diagnostics)"
+    )
+  }
+
+  func providerAuthRequired(
+    sessionAdapterId: String?,
+    harness: String,
+    bridgeMode: String,
+    oauthUrlValid: Bool
+  ) {
+    guard !Self.isDevBuild else { return }
+    var props: [String: Any] = [
+      "harness": boundedAnalyticsIdentifier(harness),
+      "bridge_mode": boundedAnalyticsIdentifier(bridgeMode),
+      "oauth_url_valid": oauthUrlValid,
+    ]
+    if let sessionAdapterId {
+      props["session_adapter_id"] = boundedAnalyticsIdentifier(sessionAdapterId)
+    }
+    PostHogManager.shared.track("provider_auth_required", properties: props)
+  }
+
+  func claudeOAuthBrowserOpened(harness: String, bridgeMode: String) {
+    guard !Self.isDevBuild else { return }
+    PostHogManager.shared.track(
+      "claude_oauth_browser_opened",
+      properties: [
+        "harness": boundedAnalyticsIdentifier(harness),
+        "bridge_mode": boundedAnalyticsIdentifier(bridgeMode),
+      ]
+    )
+  }
+
+  func claudeOAuthCallbackTimeout(harness: String, bridgeMode: String) {
+    guard !Self.isDevBuild else { return }
+    PostHogManager.shared.track(
+      "claude_oauth_callback_timeout",
+      properties: [
+        "harness": boundedAnalyticsIdentifier(harness),
+        "bridge_mode": boundedAnalyticsIdentifier(bridgeMode),
+      ]
+    )
+  }
+
+  func claudeOAuthCallbackReceived(harness: String, bridgeMode: String) {
+    guard !Self.isDevBuild else { return }
+    PostHogManager.shared.track(
+      "claude_oauth_callback_received",
+      properties: [
+        "harness": boundedAnalyticsIdentifier(harness),
+        "bridge_mode": boundedAnalyticsIdentifier(bridgeMode),
+      ]
+    )
+  }
+
+  func screenContextToolResult(
+    toolName: String,
+    context: ScreenContextTelemetryContext,
+    ok: Bool,
+    failureCode: String?,
+    screenNowAvailable: Bool?,
+    timelineCount: Int?,
+    latestCaptureAgeSeconds: Int?,
+    hasOCRPreview: Bool?,
+    imageBytesBucket: String?,
+    permissionTCCGranted: Bool?,
+    sckAvailable: Bool?
+  ) {
+    guard !Self.isDevBuild else { return }
+    var props: [String: Any] = [
+      "tool_name": toolName,
+      "surface": boundedAnalyticsIdentifier(context.surface),
+      "ok": ok,
+    ]
+    addScreenContextProperties(context, to: &props)
+    if let failureCode { props["failure_code"] = failureCode }
+    if let screenNowAvailable { props["screen_now_available"] = screenNowAvailable }
+    if let timelineCount { props["timeline_count"] = timelineCount }
+    if let latestCaptureAgeSeconds { props["latest_capture_age_seconds"] = latestCaptureAgeSeconds }
+    if let hasOCRPreview { props["has_ocr_preview"] = hasOCRPreview }
+    if let imageBytesBucket { props["image_bytes_bucket"] = imageBytesBucket }
+    if let permissionTCCGranted { props["permission_tcc_granted"] = permissionTCCGranted }
+    if let sckAvailable { props["sck_available"] = sckAvailable }
+    PostHogManager.shared.track("desktop_screen_context_result", properties: props)
+  }
+
+  func screenContextInvariant(
+    name: String,
+    context: ScreenContextTelemetryContext,
+    toolName: String?,
+    properties: [String: Any] = [:]
+  ) {
+    guard !Self.isDevBuild else { return }
+    var props = properties
+    props["invariant"] = name
+    props["surface"] = boundedAnalyticsIdentifier(context.surface)
+    if let toolName { props["tool_name"] = toolName }
+    addScreenContextProperties(context, to: &props)
+    PostHogManager.shared.track("desktop_screen_context_invariant", properties: props)
+  }
+
+  private func addScreenContextProperties(_ context: ScreenContextTelemetryContext, to props: inout [String: Any]) {
+    if let surfaceKind = context.surfaceKind { props["surface_kind"] = boundedAnalyticsIdentifier(surfaceKind) }
+    if let externalRefKind = context.externalRefKind {
+      props["external_ref_kind"] = boundedAnalyticsIdentifier(externalRefKind)
+    }
+    if let externalRefId = context.externalRefId {
+      props["external_ref_id"] = boundedAnalyticsIdentifier(externalRefId)
+    }
+    if let runId = context.runId { props["run_id"] = boundedAnalyticsIdentifier(runId) }
+    if let pillId = context.pillId { props["pill_id"] = boundedAnalyticsIdentifier(pillId) }
+  }
+
+  private func boundedAnalyticsIdentifier(_ value: String) -> String {
+    String(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(128))
+  }
+
+  /// Track individual tool calls made by the Claude agent.
+  ///
+  /// Fires for every terminal status, not only success — a failed tool call
+  /// previously emitted nothing, so tool reliability was unmeasurable. Filter
+  /// on `outcome == "completed"` for the pre-existing success-only meaning.
+  func chatToolCallCompleted(toolName: String, durationMs: Int, outcome: String) {
     let props: [String: Any] = [
-      "tool_name": cleanName,
+      "tool_name": ChatTelemetryDimension.toolName(toolName),
       "duration_ms": durationMs,
+      "outcome": ChatTelemetryDimension.toolOutcome(outcome),
     ]
     PostHogManager.shared.track("chat_tool_call_completed", properties: props)
-  }
-
-  /// Track when the Claude agent bridge fails to start or errors
-  func chatAgentError(error: String, rawError: String? = nil) {
-    var props: [String: Any] = ["error": error]
-    if let raw = rawError, raw != error {
-      props["raw_error"] = String(raw.prefix(500))
-    }
-    PostHogManager.shared.track("chat_agent_error", properties: props)
   }
 
   // MARK: - Conversation Events (Additional)
@@ -633,16 +952,16 @@ class AnalyticsManager {
 
   // MARK: - Proactive Assistant Events (Desktop-specific)
 
-  func focusAlertShown(app: String) {
-    PostHogManager.shared.focusAlertShown(app: app)
-  }
-
-  func focusAlertDismissed(app: String, action: String) {
-    PostHogManager.shared.focusAlertDismissed(app: app, action: action)
-  }
-
   func taskExtracted(taskCount: Int) {
     PostHogManager.shared.taskExtracted(taskCount: taskCount)
+  }
+
+  func taskIntelligenceAttribution(_ event: TaskIntelligenceAttributionEvent) {
+    PostHogManager.shared.taskIntelligenceAttribution(event)
+  }
+
+  func proactiveTaskGateEvaluated(_ trace: TaskInterruptionGateTrace) {
+    PostHogManager.shared.proactiveTaskGateEvaluated(trace)
   }
 
   func taskPromoted(taskCount: Int) {
@@ -662,11 +981,174 @@ class AnalyticsManager {
   }
 
   func memoryExtracted(memoryCount: Int) {
+    captureMemoryAssistantTelemetryForTests("Memory Extracted", properties: ["memory_count": memoryCount])
     PostHogManager.shared.memoryExtracted(memoryCount: memoryCount)
   }
 
-  func insightGenerated(category: String?) {
-    PostHogManager.shared.insightGenerated(category: category)
+  // MARK: - Memory Assistant Telemetry
+
+  /// Proactive MemoryAssistant setting change (the activation denominator). See
+  /// `MemoryAssistantTelemetry.Setting`. Emitted only on a real persisted change.
+  func memoryAssistantSettingChanged(setting: MemoryAssistantTelemetry.Setting, value: Bool) {
+    captureMemoryAssistantTelemetryForTests(
+      MemoryAssistantTelemetry.settingChangedEventName,
+      properties: MemoryAssistantTelemetry.settingChangedPayload(setting: setting, value: value)
+    )
+    PostHogManager.shared.memoryAssistantSettingChanged(setting: setting, value: value)
+  }
+
+  /// Proactive MemoryAssistant analysis-outcome funnel. See
+  /// `MemoryAssistantTelemetry.AnalysisOutcome`. One event per actual analysis
+  /// attempt; supplements (does not alter) the `Memory Extracted` success terminal.
+  func memoryAssistantAnalysisRun(
+    outcome: MemoryAssistantTelemetry.AnalysisOutcome,
+    confidence: Double? = nil
+  ) {
+    captureMemoryAssistantTelemetryForTests(
+      MemoryAssistantTelemetry.analysisRunEventName,
+      properties: MemoryAssistantTelemetry.analysisRunPayload(outcome: outcome, confidence: confidence)
+    )
+    PostHogManager.shared.memoryAssistantAnalysisRun(outcome: outcome, confidence: confidence)
+  }
+
+  // MARK: - Suggestion Assistant Telemetry
+
+  func suggestionAssistantSettingChanged(setting: SuggestionAssistantTelemetry.Setting, value: Bool) {
+    let payload = SuggestionAssistantTelemetry.settingChangedPayload(setting: setting, value: value)
+    captureSuggestionAssistantTelemetryForTests(
+      SuggestionAssistantTelemetry.settingChangedEventName,
+      properties: payload
+    )
+    PostHogManager.shared.suggestionAssistantSettingChanged(setting: setting, value: value)
+  }
+
+  func suggestionAssistantGateOutcome(_ outcome: SuggestionAssistantTelemetry.GateOutcome) {
+    let payload = SuggestionAssistantTelemetry.gateOutcomePayload(outcome)
+    captureSuggestionAssistantTelemetryForTests(
+      SuggestionAssistantTelemetry.gateOutcomeEventName,
+      properties: payload
+    )
+    PostHogManager.shared.suggestionAssistantGateOutcome(outcome)
+  }
+
+  func suggestionAssistantEvaluationStarted(
+    identity: SuggestionAssistantTelemetry.Identity,
+    shape: SuggestionAssistantTelemetry.EvaluationShape
+  ) {
+    let payload = SuggestionAssistantTelemetry.evaluationStartedPayload(identity: identity, shape: shape)
+    captureSuggestionAssistantTelemetryForTests(
+      SuggestionAssistantTelemetry.evaluationStartedEventName,
+      properties: payload
+    )
+    PostHogManager.shared.suggestionAssistantEvaluationStarted(identity: identity, shape: shape)
+  }
+
+  func suggestionAssistantEvaluationCompleted(
+    identity: SuggestionAssistantTelemetry.Identity,
+    shape: SuggestionAssistantTelemetry.EvaluationShape,
+    latency: TimeInterval,
+    producedSuggestion: Bool
+  ) {
+    let payload = SuggestionAssistantTelemetry.evaluationCompletedPayload(
+      identity: identity,
+      shape: shape,
+      latency: latency,
+      producedSuggestion: producedSuggestion
+    )
+    captureSuggestionAssistantTelemetryForTests(
+      SuggestionAssistantTelemetry.evaluationCompletedEventName,
+      properties: payload
+    )
+    PostHogManager.shared.suggestionAssistantEvaluationCompleted(
+      identity: identity,
+      shape: shape,
+      latency: latency,
+      producedSuggestion: producedSuggestion
+    )
+  }
+
+  func suggestionAssistantEvaluationFailed(
+    identity: SuggestionAssistantTelemetry.Identity,
+    shape: SuggestionAssistantTelemetry.EvaluationShape,
+    latency: TimeInterval,
+    reason: SuggestionAssistantTelemetry.EvaluationFailureReason
+  ) {
+    let payload = SuggestionAssistantTelemetry.evaluationFailedPayload(
+      identity: identity,
+      shape: shape,
+      latency: latency,
+      reason: reason
+    )
+    captureSuggestionAssistantTelemetryForTests(
+      SuggestionAssistantTelemetry.evaluationFailedEventName,
+      properties: payload
+    )
+    PostHogManager.shared.suggestionAssistantEvaluationFailed(
+      identity: identity,
+      shape: shape,
+      latency: latency,
+      reason: reason
+    )
+  }
+
+  func suggestionAssistantDeliveryOutcome(
+    _ outcome: SuggestionAssistantTelemetry.DeliveryOutcome,
+    identity: SuggestionAssistantTelemetry.NotificationIdentity
+  ) {
+    let payload = SuggestionAssistantTelemetry.deliveryOutcomePayload(outcome, identity: identity)
+    captureSuggestionAssistantTelemetryForTests(
+      SuggestionAssistantTelemetry.deliveryOutcomeEventName,
+      properties: payload
+    )
+    PostHogManager.shared.suggestionAssistantDeliveryOutcome(outcome, identity: identity)
+  }
+
+  func insightGenerated(category: String?, deliveryID: UUID? = nil) {
+    let properties: [String: Any] = {
+      var value: [String: Any] = [:]
+      if let category = InsightAssistantTelemetry.boundedCategory(category) {
+        value["category"] = category
+      }
+      if let deliveryID {
+        value["delivery_id"] = deliveryID.uuidString
+      }
+      return value
+    }()
+    captureInsightAssistantTelemetryForTests("Advice Generated", properties: properties)
+    PostHogManager.shared.insightGenerated(category: category, deliveryID: deliveryID)
+  }
+
+  /// Record one terminal outcome for a generated Advice item. The bounded recent-ID window
+  /// absorbs racing presentation callbacks without allowing process-lifetime growth.
+  func insightAssistantDeliveryOutcome(
+    _ outcome: InsightAssistantTelemetry.Outcome,
+    reason: InsightAssistantTelemetry.Reason,
+    deliveryID: UUID,
+    surface: InsightAssistantTelemetry.Surface? = nil
+  ) {
+    guard recordedInsightDeliveryIDSet.insert(deliveryID).inserted else { return }
+    recordedInsightDeliveryIDOrder.append(deliveryID)
+    if recordedInsightDeliveryIDOrder.count > Self.maxRecordedInsightDeliveryIDs {
+      let evicted = recordedInsightDeliveryIDOrder.removeFirst()
+      recordedInsightDeliveryIDSet.remove(evicted)
+    }
+    let identity = InsightAssistantTelemetry.DeliveryIdentity(deliveryID: deliveryID)
+    let payload = InsightAssistantTelemetry.deliveryOutcomePayload(
+      outcome,
+      reason: reason,
+      identity: identity,
+      surface: surface
+    )
+    captureInsightAssistantTelemetryForTests(
+      InsightAssistantTelemetry.deliveryOutcomeEventName,
+      properties: payload
+    )
+    PostHogManager.shared.insightAssistantDeliveryOutcome(
+      outcome,
+      reason: reason,
+      deliveryID: deliveryID,
+      surface: surface
+    )
   }
 
   // MARK: - Apps Events
@@ -693,12 +1175,32 @@ class AnalyticsManager {
     PostHogManager.shared.updateAvailable(version: version, context: context, item: item)
   }
 
+  func updateInstallStarted(attempt: UpdateInstallAttempt) {
+    PostHogManager.shared.updateInstallStarted(attempt: attempt)
+  }
+
   func updateInstalled(
-    version: String,
-    context: UpdateAnalyticsContext,
-    item: UpdateItemAnalytics
+    attempt: UpdateInstallAttempt,
+    installedVersion: String,
+    installedBuild: String
   ) {
-    PostHogManager.shared.updateInstalled(version: version, context: context, item: item)
+    PostHogManager.shared.updateInstalled(
+      attempt: attempt,
+      installedVersion: installedVersion,
+      installedBuild: installedBuild
+    )
+  }
+
+  func updateInstallVerificationFailed(
+    attempt: UpdateInstallAttempt,
+    installedVersion: String,
+    installedBuild: String
+  ) {
+    PostHogManager.shared.updateInstallVerificationFailed(
+      attempt: attempt,
+      installedVersion: installedVersion,
+      installedBuild: installedBuild
+    )
   }
 
   func updateCheckFailed(diagnostics: UpdateFailureDiagnostics) {
@@ -707,19 +1209,74 @@ class AnalyticsManager {
 
   // MARK: - Notification Events
 
-  func notificationSent(notificationId: String, title: String, assistantId: String, surface: String) {
+  func notificationSent(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    if let suggestionIdentity {
+      captureSuggestionAssistantTelemetryForTests(
+        "Notification Sent",
+        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+      )
+    }
     PostHogManager.shared.notificationSent(
-      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
+      notificationId: notificationId,
+      title: title,
+      assistantId: assistantId,
+      surface: surface,
+      suggestionIdentity: suggestionIdentity
+    )
   }
 
-  func notificationClicked(notificationId: String, title: String, assistantId: String, surface: String) {
+  func notificationClicked(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    if let suggestionIdentity {
+      captureSuggestionAssistantTelemetryForTests(
+        "Notification Clicked",
+        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+      )
+    }
     PostHogManager.shared.notificationClicked(
-      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
+      notificationId: notificationId,
+      title: title,
+      assistantId: assistantId,
+      surface: surface,
+      suggestionIdentity: suggestionIdentity
+    )
   }
 
-  func notificationDismissed(notificationId: String, title: String, assistantId: String, surface: String) {
+  func notificationDismissed(
+    notificationId: String,
+    title: String,
+    assistantId: String,
+    surface: String,
+    dismissalKind: NotificationDismissalKind,
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+  ) {
+    if let suggestionIdentity {
+      var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+      properties["dismissal_kind"] = dismissalKind.rawValue
+      captureSuggestionAssistantTelemetryForTests(
+        "Notification Dismissed",
+        properties: properties
+      )
+    }
     PostHogManager.shared.notificationDismissed(
-      notificationId: notificationId, title: title, assistantId: assistantId, surface: surface)
+      notificationId: notificationId,
+      title: title,
+      assistantId: assistantId,
+      surface: surface,
+      dismissalKind: dismissalKind,
+      suggestionIdentity: suggestionIdentity
+    )
   }
 
   func notificationWillPresent(notificationId: String, title: String) {
@@ -750,108 +1307,6 @@ class AnalyticsManager {
 
   func chatBridgeModeChanged(from oldMode: String, to newMode: String) {
     PostHogManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
-  }
-
-  // MARK: - All Settings State (Comprehensive daily report)
-
-  /// No-op. Replaced by on-change person-property updates at the owning callsites.
-  func reportAllSettingsIfNeeded() {}
-
-  private func collectAllSettings() -> [String: Any] {
-    var props: [String: Any] = [:]
-
-    // -- General / Shared Assistant Settings --
-    let shared = AssistantSettings.shared
-    props["screen_analysis_enabled"] = shared.screenAnalysisEnabled
-    props["transcription_enabled"] = shared.transcriptionEnabled
-    props["transcription_language"] = shared.transcriptionLanguage
-    props["transcription_auto_detect"] = shared.transcriptionAutoDetect
-    props["transcription_vocabulary_count"] = shared.transcriptionVocabulary.count
-    props["analysis_delay"] = shared.analysisDelay
-    props["cooldown_interval"] = shared.cooldownInterval
-    props["glow_overlay_enabled"] = shared.glowOverlayEnabled
-
-    // -- Focus Assistant --
-    let focus = FocusAssistantSettings.shared
-    props["focus_enabled"] = focus.isEnabled
-    props["focus_notifications_enabled"] = focus.notificationsEnabled
-    props["focus_cooldown_interval"] = focus.cooldownInterval
-    props["focus_has_custom_prompt"] =
-      focus.analysisPrompt != FocusAssistantSettings.defaultAnalysisPrompt
-    props["focus_prompt_length"] = focus.analysisPrompt.count
-    props["focus_excluded_apps_count"] = focus.excludedApps.count
-
-    // -- Task Extraction Assistant --
-    let task = TaskAssistantSettings.shared
-    props["task_enabled"] = task.isEnabled
-    props["task_notifications_enabled"] = task.notificationsEnabled
-    props["task_extraction_interval"] = task.extractionInterval
-    props["task_min_confidence"] = task.minConfidence
-    props["task_has_custom_prompt"] =
-      task.analysisPrompt != TaskAssistantSettings.defaultAnalysisPrompt
-    props["task_prompt_length"] = task.analysisPrompt.count
-    props["task_allowed_apps_count"] = task.allowedApps.count
-    props["task_browser_keywords_count"] = task.browserKeywords.count
-
-    // -- Memory Assistant --
-    let memory = MemoryAssistantSettings.shared
-    props["memory_enabled"] = memory.isEnabled
-    props["memory_extraction_interval"] = memory.extractionInterval
-    props["memory_min_confidence"] = memory.minConfidence
-    props["memory_notifications_enabled"] = memory.notificationsEnabled
-    props["memory_has_custom_prompt"] =
-      memory.analysisPrompt != MemoryAssistantSettings.defaultAnalysisPrompt
-    props["memory_prompt_length"] = memory.analysisPrompt.count
-    props["memory_excluded_apps_count"] = memory.excludedApps.count
-
-    // -- Insight Assistant --
-    let insight = InsightAssistantSettings.shared
-    props["insight_enabled"] = insight.isEnabled
-    props["insight_notifications_enabled"] = insight.notificationsEnabled
-    props["insight_extraction_interval"] = insight.extractionInterval
-    props["insight_min_confidence"] = insight.minConfidence
-    props["insight_has_custom_prompt"] =
-      insight.analysisPrompt != InsightAssistantSettings.defaultAnalysisPrompt
-    props["insight_prompt_length"] = insight.analysisPrompt.count
-    props["insight_excluded_apps_count"] = insight.excludedApps.count
-
-    // -- Task Agent --
-    let agent = TaskAgentSettings.shared
-    props["task_agent_enabled"] = agent.isEnabled
-    props["task_agent_auto_launch"] = agent.autoLaunch
-    props["task_agent_skip_permissions"] = agent.skipPermissions
-    props["task_agent_has_custom_prompt"] = !agent.customPromptPrefix.isEmpty
-
-    // -- Rewind (read from UserDefaults since these are @AppStorage in views) --
-    let ud = UserDefaults.standard
-    props["rewind_retention_days"] = ud.object(forKey: "rewindRetentionDays") as? Double ?? 7.0
-    props["rewind_capture_interval"] = ud.object(forKey: "rewindCaptureInterval") as? Double ?? 1.0
-
-    // -- AI Chat Mode --
-    props["chat_bridge_mode"] = ud.string(forKey: "chatBridgeMode") ?? "agentSDK"
-
-    // -- UI Preferences --
-    props["multi_chat_enabled"] = ud.bool(forKey: "multiChatEnabled")
-    props["conversations_compact_view"] =
-      ud.object(forKey: "conversationsCompactView") as? Bool ?? true
-    props["tier_level"] = ud.integer(forKey: "currentTierLevel")
-
-    // -- Device --
-    let deviceId = ud.string(forKey: "pairedDeviceId") ?? ""
-    props["has_paired_device"] = !deviceId.isEmpty
-    props["paired_device_type"] = ud.string(forKey: "pairedDeviceType") ?? ""
-
-    // -- Launch at Login --
-    props["launch_at_login_enabled"] = LaunchAtLoginManager.shared.isEnabled
-
-    // -- Floating Bar (AskOmi) --
-    props["floating_bar_enabled"] = FloatingControlBarManager.shared.isEnabled
-    props["floating_bar_visible"] = FloatingControlBarManager.shared.isVisible
-
-    // -- Dev Mode --
-    props["dev_mode_enabled"] = ud.bool(forKey: "devModeEnabled")
-
-    return props
   }
 
   // MARK: - Floating Bar Events

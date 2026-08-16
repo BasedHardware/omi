@@ -1,0 +1,111 @@
+version: 2
+name: chat-hermetic
+tier: 2
+description: Hermetic chat in Home tab — send/receive with Rust OMI_LLM_STUB=1 (v0.12.119+ redesign — chat is embedded in Home, not a separate tab)
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Chat/ChatTurnFailureNotice.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiTextEditor.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimePayload.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatContinuityInvariants.swift
+  - desktop/macos/Desktop/Sources/AnalyticsManager.swift
+  - desktop/macos/Desktop/Sources/APIClient+AuthPolicy.swift
+  - desktop/macos/Desktop/Sources/Auth/AuthSessionAttemptFence.swift
+  - desktop/macos/Desktop/Sources/Chat/APIClient+KernelJournal.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentArtifactProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentErrorClassifier.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentFailureTranscriptFormatter.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentLifecycleDisplayProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentLifecycleTranscriptProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/AuthorizedToolExecution.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatOmiMark.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
+  - desktop/macos/Desktop/Sources/Chat/DesktopCapabilityRegistry.swift
+  - desktop/macos/Desktop/Sources/Chat/MessageMetadata.swift
+  - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubbleSupport.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ToolActivityTimelineLayout.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelJournalEventHub.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelTurnJournal.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatMessageRatingPersistence.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+MessageRating.swift
+  - desktop/macos/Desktop/Sources/Chat/WritingToolsFix.swift
+  - desktop/macos/Desktop/Sources/BrowserExtensionSetup.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdownChatTypography.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+MemoryCreation.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+OrphanRepair.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeCredentialPolicy.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatComposerDraft.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatDraftScope.swift
+  # The marker query enters AgentClient.Session through the serialized context
+  # admission path before the exact stub reply is asserted below.
+  - desktop/macos/Desktop/Sources/Chat/AgentContextAdmissionGate.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentClient.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentContextRevision.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelTurnProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeJournalContracts.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Reset main chat for flow isolation
+    bridge.action:
+      name: reset_main_chat
+    expect:
+      result.detail.reset: "true"
+
+  - id: S2
+    name: Navigate to Home (chat is embedded here)
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
+
+  - id: S3
+    name: Send marker chat query
+    bridge.action:
+      name: ask_main_chat
+      params:
+        query: "Reply with exactly [[MARKER:chat-hermetic]]"
+    expect:
+      result.detail.sent: "Reply with exactly [[MARKER:chat-hermetic]]"
+
+  - id: S4
+    name: Wait for chat idle
+    bridge.action:
+      name: wait_main_chat_idle
+      params:
+        timeoutMs: "120000"
+    expect:
+      result.detail.idle: "true"
+
+  - id: S5
+    name: Assert deterministic exact stub reply
+    bridge.action:
+      name: main_chat_snapshot
+      params:
+        limit: "12"
+    expect:
+      result.detail.last_assistant_text: "MARKER:chat-hermetic"
+
+  - id: S6
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

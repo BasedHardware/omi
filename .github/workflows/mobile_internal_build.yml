@@ -1,0 +1,63 @@
+name: Mobile internal builds
+
+# App changes land on main in bursts, so a Codemagic build per merge is mostly superseded minutes
+# later. Codemagic's own triggering has no rate limit, so the push trigger is replaced by this:
+# a three-hourly batch that builds only when app code changed, plus an immediate build for an
+# allowlisted author who needs their own change on a device now. Anyone else can still start a
+# build by hand, here or in Codemagic.
+
+on:
+  push:
+    branches: [main]
+    paths: ['app/**']
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-internal-build
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The schedule run compares main against the last commit Codemagic built.
+          fetch-depth: 0
+
+      - name: Collect commit authors
+        id: authors
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" != "push" ]; then
+            echo "authors=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          authors="$(jq -r '[.commits[]?.author.username // empty] | unique | join(",")' "$GITHUB_EVENT_PATH")"
+          echo "authors=${authors}" >> "$GITHUB_OUTPUT"
+
+      - name: Decide and dispatch
+        env:
+          CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+          CODEMAGIC_APP_ID: ${{ vars.CODEMAGIC_APP_ID || '66c95e6ec76853c447b8bcbb' }}
+          MOBILE_INSTANT_BUILD_ACTORS: ${{ vars.MOBILE_INSTANT_BUILD_ACTORS || 'mdmohsin7' }}
+        run: |
+          python3 .github/scripts/dispatch_mobile_internal_builds.py \
+            --event "${{ github.event_name }}" \
+            --actor "${{ github.actor }}" \
+            --commit-authors "${{ steps.authors.outputs.authors }}" \
+            --app-id "$CODEMAGIC_APP_ID" \
+            --branch main | tee "$RUNNER_TEMP/dispatch.txt"
+          {
+            echo "### Mobile internal builds"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/dispatch.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

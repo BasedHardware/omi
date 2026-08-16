@@ -24,7 +24,7 @@ import sys
 import time
 import wave as _wave
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, Optional, cast
 
 from dotenv import load_dotenv
 
@@ -50,14 +50,14 @@ def normalize_for_wer(text: str) -> str:
     return PUNCT_RE.sub('', text).lower().strip()
 
 
-def load_manifest() -> List[dict]:
+def load_manifest() -> List[Dict[str, Any]]:
     manifest_path = AUDIO_DIR / 'manifest.json'
     if not manifest_path.exists():
         print('ERROR: Samples not prepared. Run first:')
         print('  python scripts/stt/n_benchmark_02_prerecorded.py --prepare')
         sys.exit(1)
     with open(manifest_path) as f:
-        return json.load(f)
+        return cast(List[Dict[str, Any]], json.load(f))
 
 
 def read_pcm_from_wav(wav_path: Path) -> bytes:
@@ -65,17 +65,19 @@ def read_pcm_from_wav(wav_path: Path) -> bytes:
         return wf.readframes(wf.getnframes())
 
 
-async def stream_to_deepgram(audio_pcm: bytes, language: str) -> dict:
-    segments_received = []
-    first_segment_time = [None]
+async def stream_to_deepgram(audio_pcm: bytes, language: str) -> Dict[str, Any]:
+    segments_received: List[Dict[str, Any]] = []
+    first_segment_time: List[Optional[float]] = [None]
     connect_start = time.monotonic()
 
-    def stream_transcript(segments):
+    def stream_transcript(segments: List[Dict[str, Any]]) -> None:
         if first_segment_time[0] is None:
             first_segment_time[0] = time.monotonic()
         segments_received.extend(segments)
 
     sock = await process_audio_dg(stream_transcript, language, 16000, 1)
+    if sock is None:
+        raise RuntimeError('Failed to open Deepgram streaming socket')
     connect_time = time.monotonic() - connect_start
 
     stream_start = time.monotonic()
@@ -85,7 +87,9 @@ async def stream_to_deepgram(audio_pcm: bytes, language: str) -> dict:
         await asyncio.sleep(CHUNK_INTERVAL)
 
     sock.finish()
-    await sock.drain_and_close()
+    # SafeDeepgramSocket does not implement drain_and_close(); relay via the
+    # underlying connection for parity with the Parakeet streaming path.
+    await cast(Any, sock).drain_and_close()
     total_time = time.monotonic() - stream_start
 
     text = ' '.join(s.get('text', '') for s in segments_received).strip()
@@ -100,17 +104,19 @@ async def stream_to_deepgram(audio_pcm: bytes, language: str) -> dict:
     }
 
 
-async def stream_to_parakeet(audio_pcm: bytes, language: str) -> dict:
-    segments_received = []
-    first_segment_time = [None]
+async def stream_to_parakeet(audio_pcm: bytes, language: str) -> Dict[str, Any]:
+    segments_received: List[Dict[str, Any]] = []
+    first_segment_time: List[Optional[float]] = [None]
     connect_start = time.monotonic()
 
-    def stream_transcript(segments):
+    def stream_transcript(segments: List[Dict[str, Any]]) -> None:
         if first_segment_time[0] is None:
             first_segment_time[0] = time.monotonic()
         segments_received.extend(segments)
 
     sock = await process_audio_parakeet(stream_transcript, language, 16000, 1)
+    if sock is None:
+        raise RuntimeError('Failed to open Parakeet streaming socket')
     connect_time = time.monotonic() - connect_start
 
     stream_start = time.monotonic()
@@ -135,7 +141,7 @@ async def stream_to_parakeet(audio_pcm: bytes, language: str) -> dict:
     }
 
 
-async def main():
+async def main() -> None:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     dg_key = os.getenv('DEEPGRAM_API_KEY')
@@ -152,13 +158,13 @@ async def main():
     print(f'Parakeet endpoint: {parakeet_url}')
     print(f'Chunk: {CHUNK_SIZE} bytes / {CHUNK_INTERVAL}s (real-time pace)\n')
 
-    results = []
+    results: List[Dict[str, Any]] = []
     for case in manifest:
         wav_path = AUDIO_DIR / f"{case['id']}.wav"
         audio_pcm = read_pcm_from_wav(wav_path)
         ref_norm = normalize_for_wer(case['text'])
 
-        row = {
+        row: Dict[str, Any] = {
             'id': case['id'],
             'description': case['description'],
             'duration_s': case['duration_s'],
@@ -213,7 +219,7 @@ async def main():
     print('RESULTS SUMMARY')
     print('=' * 80)
 
-    table = []
+    table: List[List[Any]] = []
     for r in results:
         table.append(
             [

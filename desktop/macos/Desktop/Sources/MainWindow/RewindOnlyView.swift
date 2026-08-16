@@ -1,348 +1,357 @@
+import OmiSupport
+import OmiTheme
 import SwiftUI
 
 /// Rewind-only view for when the app is launched with --mode=rewind
 /// Shows just the Rewind page without the sidebar, with a settings button overlay
 struct RewindOnlyView: View {
-    @StateObject private var appState = AppState()
-    @ObservedObject private var authState = AuthState.shared
+  @StateObject private var appState = AppState()
+  @ObservedObject private var authState = AuthState.shared
 
-    var body: some View {
-        Group {
-            if authState.isRestoringAuth {
-                VStack(spacing: 16) {
-                    if let iconURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-                       let nsImage = NSImage(contentsOf: iconURL) {
-                        Image(nsImage: nsImage)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 64, height: 64)
-                    }
-                    ProgressView()
-                        .scaleEffect(0.8)
-                        .tint(.white.opacity(0.6))
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if !authState.isSignedIn {
-                // Not signed in - show sign in view
-                SignInView(authState: authState)
-                    .onAppear {
-                        log("RewindOnlyView: Showing SignInView (not signed in)")
-                    }
-            } else {
-                // Signed in - show Rewind page with settings overlay
-                rewindContent
-                    .onAppear {
-                        log("RewindOnlyView: Showing Rewind content (signed in)")
-                        // Start screen monitoring automatically in rewind mode
-                        startMonitoringIfNeeded()
-                    }
-            }
+  var body: some View {
+    Group {
+      if authState.isRestoringAuth {
+        VStack(spacing: OmiSpacing.lg) {
+          if let iconURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+            let nsImage = NSImage(contentsOf: iconURL)
+          {
+            Image(nsImage: nsImage)
+              .resizable()
+              .scaledToFit()
+              .frame(width: 64, height: 64)
+          }
+          ProgressView()
+            .scaleEffect(0.8)
+            .tint(Ink.secondary)
         }
-        .background(OmiColors.backgroundPrimary)
-        .frame(minWidth: 800, minHeight: 500)
-        .preferredColorScheme(.dark)
-        .tint(OmiColors.purplePrimary)
-        .onAppear {
-            log("RewindOnlyView: View appeared - isSignedIn=\(authState.isSignedIn)")
-            // Force dark appearance on the window
-            DispatchQueue.main.async {
-                for window in NSApp.windows {
-                    if window.title.contains("Rewind") || window.title.lowercased().hasPrefix("omi") {
-                        window.appearance = NSAppearance(named: .darkAqua)
-                    }
-                }
-            }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if authState.sessionPhase == .recoveryRequired {
+        SessionRecoveryView()
+          .onAppear {
+            log("RewindOnlyView: Showing recoverable auth state")
+          }
+      } else if !authState.isSignedIn {
+        // Not signed in - show sign in view
+        SignInView(authState: authState)
+          .onAppear {
+            log("RewindOnlyView: Showing SignInView (not signed in)")
+          }
+      } else {
+        // Signed in - show Rewind page with settings overlay
+        rewindContent
+          .onAppear {
+            log("RewindOnlyView: Showing Rewind content (signed in)")
+            // Start screen monitoring automatically in rewind mode
+            startMonitoringIfNeeded()
+          }
+      }
+    }
+    // No ground of its own: the glass window owns it. See `glassContent()` — it also pins the
+    // panel's light appearance, without which `Ink`'s ladder resolves *up* on a Dark Mac and the
+    // whole page renders white on white.
+    .glassContent()
+    .frame(minWidth: 800, minHeight: 500)
+    .tint(Ink.accent)
+    .onAppear {
+      log("RewindOnlyView: View appeared - isSignedIn=\(authState.isSignedIn)")
+      // The window has to be transparent and light-pinned or there is no glass — a window still
+      // painting its own `backgroundColor` slips an opaque sheet between the desktop and the blur.
+      DispatchQueue.main.async {
+        for window in NSApp.windows
+        where window.title.contains("Rewind") || window.title.lowercased().hasPrefix("omi") {
+          WindowGlass.wear(window, as: .titled)
         }
+      }
     }
+  }
 
-    // MARK: - Rewind Content
+  // MARK: - Rewind Content
 
-    private var rewindContent: some View {
-        ZStack(alignment: .topTrailing) {
-            // Main Rewind page (full width, no sidebar)
-            RewindPage()
+  private var rewindContent: some View {
+    ZStack(alignment: .topTrailing) {
+      // Main Rewind page (full width, no sidebar)
+      RewindPage()
 
-            // Settings button overlay in top-right corner
-            settingsButton
-                .padding(16)
+      // Settings button overlay in top-right corner
+      settingsButton
+        .padding(OmiSpacing.lg)
+    }
+  }
+
+  // MARK: - Settings Button
+
+  private var settingsButton: some View {
+    Menu {
+      Button {
+        openRewindSettings()
+      } label: {
+        Label("Rewind Settings", systemImage: "slider.horizontal.3")
+      }
+
+      Divider()
+
+      Button {
+        openFullApp()
+      } label: {
+        Label("Open Full omi App", systemImage: "square.grid.2x2")
+      }
+
+      Divider()
+
+      Button {
+        NSApplication.shared.terminate(nil)
+      } label: {
+        Label("Quit", systemImage: "xmark.circle")
+      }
+    } label: {
+      Image(systemName: "gearshape.fill")
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.primary)
+        .padding(OmiSpacing.sm)
+        // It floats over the timeline, so it is real glass rather than a wash: a wash over moving
+        // screenshots is not a control, it is a smudge.
+        .glassFloatingBar(cornerRadius: 999)
+    }
+    .menuStyle(.borderlessButton)
+    .menuIndicator(.hidden)
+    .fixedSize()
+    .help("Settings")
+  }
+
+  // MARK: - Actions
+
+  private func startMonitoringIfNeeded() {
+    let settings = AssistantSettings.shared
+    if settings.screenAnalysisEnabled {
+      ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
+        if success {
+          log("RewindOnlyView: Screen analysis started automatically")
+        } else {
+          log("RewindOnlyView: Screen analysis failed to start: \(error ?? "unknown")")
         }
+      }
     }
+  }
 
-    // MARK: - Settings Button
+  private func openRewindSettings() {
+    // Open settings window focused on Rewind section
+    RewindSettingsWindow.show()
+  }
 
-    private var settingsButton: some View {
-        Menu {
-            Button {
-                openRewindSettings()
-            } label: {
-                Label("Rewind Settings", systemImage: "slider.horizontal.3")
-            }
-
-            Divider()
-
-            Button {
-                openFullApp()
-            } label: {
-                Label("Open Full omi App", systemImage: "square.grid.2x2")
-            }
-
-            Divider()
-
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
-                Label("Quit", systemImage: "xmark.circle")
-            }
-        } label: {
-            Image(systemName: "gearshape.fill")
-                .scaledFont(size: 14)
-                .foregroundColor(.white.opacity(0.7))
-                .padding(10)
-                .background(Color.black.opacity(0.5))
-                .clipShape(Circle())
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Settings")
-    }
-
-    // MARK: - Actions
-
-    private func startMonitoringIfNeeded() {
-        let settings = AssistantSettings.shared
-        if settings.screenAnalysisEnabled {
-            ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
-                if success {
-                    log("RewindOnlyView: Screen analysis started automatically")
-                } else {
-                    log("RewindOnlyView: Screen analysis failed to start: \(error ?? "unknown")")
-                }
-            }
-        }
-    }
-
-    private func openRewindSettings() {
-        // Open settings window focused on Rewind section
-        RewindSettingsWindow.show()
-    }
-
-    private func openFullApp() {
-        // Launch the full app (without --mode=rewind)
-        let appPath = Bundle.main.bundlePath
-        let task = Process()
-        task.launchPath = "/usr/bin/open"
-        task.arguments = ["-n", appPath]  // -n opens a new instance
-        try? task.run()
-    }
+  private func openFullApp() {
+    // Launch the full app (without --mode=rewind)
+    let appPath = Bundle.main.bundlePath
+    let task = Process()
+    task.launchPath = "/usr/bin/open"
+    task.arguments = ["-n", appPath]  // -n opens a new instance
+    try? task.run()
+  }
 }
 
 // MARK: - Rewind Settings Window
 
 /// Standalone settings window for Rewind-only mode
-class RewindSettingsWindow {
-    static var window: NSWindow?
+@MainActor class RewindSettingsWindow {
+  static var window: NSWindow?
 
-    static func show() {
-        // If window exists, just bring it to front
-        if let existingWindow = window, existingWindow.isVisible {
-            existingWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate()
-            return
-        }
-
-        // Create settings content - using SettingsContentView with Rewind section
-        let settingsView = RewindSettingsView()
-            .withFontScaling()
-            .frame(minWidth: 500, minHeight: 400)
-            .background(OmiColors.backgroundPrimary)
-            .preferredColorScheme(.dark)
-
-        let hostingController = NSHostingController(rootView: settingsView)
-
-        let newWindow = NSWindow(contentViewController: hostingController)
-        newWindow.title = "Rewind Settings"
-        newWindow.setContentSize(NSSize(width: 600, height: 500))
-        newWindow.styleMask = [.titled, .closable, .resizable, .miniaturizable]
-        newWindow.minSize = NSSize(width: 500, height: 400)
-        newWindow.center()
-        newWindow.appearance = NSAppearance(named: .darkAqua)
-        newWindow.isReleasedWhenClosed = false
-        newWindow.makeKeyAndOrderFront(nil)
-
-        NSApp.activate()
-
-        self.window = newWindow
+  static func show() {
+    // If window exists, just bring it to front
+    if let existingWindow = window, existingWindow.isVisible {
+      existingWindow.makeKeyAndOrderFront(nil)
+      NSApp.activate()
+      return
     }
+
+    // Create settings content - using SettingsContentView with Rewind section
+    let settingsView = RewindSettingsView()
+      .withFontScaling()
+      .frame(minWidth: 500, minHeight: 400)
+      .glassContent()
+
+    let hostingController = NSHostingController(rootView: settingsView)
+
+    let newWindow = NSWindow(contentViewController: hostingController)
+    newWindow.title = "Rewind Settings"
+    newWindow.setContentSize(NSSize(width: 600, height: 500))
+    newWindow.styleMask = [.titled, .closable, .resizable, .miniaturizable]
+    newWindow.minSize = NSSize(width: 500, height: 400)
+    newWindow.center()
+    // Transparent + light-pinned, or there is no glass.
+    WindowGlass.wear(newWindow, as: .titled)
+    newWindow.isReleasedWhenClosed = false
+    newWindow.makeKeyAndOrderFront(nil)
+
+    NSApp.activate()
+
+    self.window = newWindow
+  }
 }
 
 // MARK: - Rewind Settings View
 
 /// Settings view specifically for Rewind configuration
 struct RewindSettingsView: View {
-    @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
-    @AppStorage("rewindRetentionDays") private var retentionDays = 7
-    @AppStorage("rewindCaptureInterval") private var captureInterval = 1.0
+  @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
+  @AppStorage("rewindRetentionDays") private var retentionDays = 7
+  @AppStorage("rewindCaptureInterval") private var captureInterval = 1.0
 
-    @State private var excludedApps: [String] = []
+  @State private var excludedApps: [String] = []
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                // Header
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Rewind Settings")
-                        .scaledFont(size: 24, weight: .bold)
-                        .foregroundColor(.white)
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
+        // Header
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          Text("Rewind Settings")
+            .scaledFont(size: 24, weight: .bold)
+            .foregroundColor(Ink.primary)
 
-                    Text("Configure screen capture and storage")
-                        .scaledFont(size: 14)
-                        .foregroundColor(.white.opacity(0.6))
-                }
-
-                Divider()
-                    .background(Color.white.opacity(0.2))
-
-                // Screen Capture Toggle
-                settingsRow(
-                    title: "Screen Capture",
-                    subtitle: "Capture screenshots for Rewind timeline"
-                ) {
-                    Toggle("", isOn: $screenAnalysisEnabled)
-                        .toggleStyle(.switch)
-                        .tint(OmiColors.purplePrimary)
-                }
-
-                // Retention Period
-                settingsRow(
-                    title: "Keep Screenshots For",
-                    subtitle: "Older screenshots will be automatically deleted"
-                ) {
-                    Picker("", selection: $retentionDays) {
-                        Text("1 day").tag(1)
-                        Text("3 days").tag(3)
-                        Text("7 days").tag(7)
-                        Text("14 days").tag(14)
-                        Text("30 days").tag(30)
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 120)
-                }
-
-                // Storage Info
-                storageInfoSection
-
-                Divider()
-                    .background(Color.white.opacity(0.2))
-
-                // Permissions Section
-                permissionsSection
-
-                Spacer()
-            }
-            .padding(24)
+          Text("Configure screen capture and storage")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
         }
-        .background(OmiColors.backgroundPrimary)
-    }
 
-    private func settingsRow<Content: View>(
-        title: String,
-        subtitle: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .scaledFont(size: 14, weight: .medium)
-                    .foregroundColor(.white)
+        GlassSeparator()
 
-                Text(subtitle)
-                    .scaledFont(size: 12)
-                    .foregroundColor(.white.opacity(0.5))
-            }
-
-            Spacer()
-
-            content()
+        // Screen Capture Toggle
+        settingsRow(
+          title: "Screen Capture",
+          subtitle: "Capture screenshots for Rewind timeline"
+        ) {
+          Toggle("", isOn: $screenAnalysisEnabled)
+            .toggleStyle(OmiToggleStyle())
         }
-        .padding(.vertical, 8)
-    }
 
-    private var storageInfoSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Storage")
-                .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(.white.opacity(0.8))
-
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Screenshots stored locally")
-                        .scaledFont(size: 13)
-                        .foregroundColor(.white.opacity(0.7))
-
-                    Text("~/Library/Application Support/Omi/users/\(UserDefaults.standard.string(forKey: "auth_userId") ?? "")/")
-                        .scaledFont(size: 11, design: .monospaced)
-                        .foregroundColor(.white.opacity(0.4))
-                }
-
-                Spacer()
-
-                Button("Show in Finder") {
-                    let url = DesktopLocalProfile.applicationSupportURL()
-                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: url.path)
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(OmiColors.purplePrimary)
-                .scaledFont(size: 12, weight: .medium)
-            }
+        // Retention Period
+        settingsRow(
+          title: "Keep Screenshots For",
+          subtitle: RewindSettings.isUnlimited(retentionDays: retentionDays)
+            ? "Every screenshot is kept, so Rewind reaches back to your first capture"
+            : "Older screenshots will be automatically deleted"
+        ) {
+          SettingsMenuPicker(selection: $retentionDays) {
+            Text("1 day").tag(1)
+            Text("3 days").tag(3)
+            Text("7 days").tag(7)
+            Text("14 days").tag(14)
+            Text("30 days").tag(30)
+            Text("Keep everything").tag(RewindSettings.unlimitedRetentionDays)
+          }
         }
-        .padding(16)
-        .background(Color.white.opacity(0.05))
-        .cornerRadius(12)
+
+        // Storage Info
+        storageInfoSection
+
+        GlassSeparator()
+
+        // Permissions Section
+        permissionsSection
+
+        Spacer()
+      }
+      .padding(OmiSpacing.xxl)
     }
+    .glassContent()
+  }
 
-    private var permissionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Permissions")
-                .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(.white.opacity(0.8))
+  private func settingsRow<Content: View>(
+    title: String,
+    subtitle: String,
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    HStack(alignment: .center, spacing: OmiSpacing.lg) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text(title)
+          .scaledFont(size: OmiType.body, weight: .medium)
+          .foregroundColor(Ink.primary)
 
-            Button {
-                ScreenCaptureService.openScreenRecordingPreferences()
-            } label: {
-                HStack {
-                    Image(systemName: "rectangle.on.rectangle")
-                        .scaledFont(size: 16)
-                        .foregroundColor(OmiColors.purplePrimary)
+        Text(subtitle)
+          .scaledFont(size: OmiType.caption)
+          // The bottom rung on glass is `secondary`; a fainter grey measures under WCAG AA there.
+          .foregroundColor(Ink.secondary)
+      }
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Screen Recording")
-                            .scaledFont(size: 13, weight: .medium)
-                            .foregroundColor(.white)
+      Spacer()
 
-                        Text("Required for Rewind to capture your screen")
-                            .scaledFont(size: 11)
-                            .foregroundColor(.white.opacity(0.5))
-                    }
+      content()
+    }
+    .padding(.vertical, OmiSpacing.sm)
+  }
 
-                    Spacer()
+  private var storageInfoSection: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      Text("Storage")
+        .scaledFont(size: OmiType.body, weight: .semibold)
+        .foregroundColor(Ink.primary)
 
-                    Text("Open Settings")
-                        .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary)
-                }
-                .padding(12)
-                .background(Color.white.opacity(0.05))
-                .cornerRadius(8)
-            }
-            .buttonStyle(.plain)
+      HStack {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          Text("Screenshots stored locally")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.primary)
+
+          Text("~/Library/Application Support/Omi/users/\(UserDefaults.standard.string(forKey: "auth_userId") ?? "")/")
+            .scaledFont(size: OmiType.caption, design: .monospaced)
+            .foregroundColor(Ink.secondary)
         }
+
+        Spacer()
+
+        Button("Show in Finder") {
+          let url = DesktopLocalProfile.applicationSupportURL()
+          NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: url.path)
+        }
+        .buttonStyle(.plain)
+        // The one accent, spent on the one thing here that is actionable and is not a button.
+        .foregroundColor(Ink.accent)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+      }
     }
+    .padding(OmiSpacing.lg)
+    .glassCard(cornerRadius: PageGlass.rowRadius)
+  }
+
+  private var permissionsSection: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      Text("Permissions")
+        .scaledFont(size: OmiType.body, weight: .semibold)
+        .foregroundColor(Ink.primary)
+
+      Button {
+        ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
+      } label: {
+        HStack {
+          Image(systemName: "rectangle.on.rectangle")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(Ink.primary)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+            Text("Screen Recording")
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(Ink.primary)
+
+            Text("Required for Rewind to capture your screen")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
+
+          Spacer()
+
+          Text("Open Settings")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(Ink.accent)
+        }
+        .padding(OmiSpacing.md)
+        .glassCard(cornerRadius: PageGlass.rowRadius)
+      }
+      .buttonStyle(.plain)
+    }
+  }
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
+  #Preview {
     RewindOnlyView()
-        .frame(width: 1000, height: 700)
-}
+      .frame(width: 1000, height: 700)
+  }
 #endif

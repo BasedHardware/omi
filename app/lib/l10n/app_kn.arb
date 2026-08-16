@@ -1,5 +1,6 @@
 {
     "@@locale": "kn",
+    "sessionExpiredSignInAgain": "ಸೆಷನ್ ಅವಧಿ ಮುಗಿದಿದೆ — ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಿ.",
     "@@last_modified": "2024-12-26",
     "appTitle": "ಓಮಿ",
     "@appTitle": {
@@ -965,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "ನಿಮ್ಮ ಯೋಜನೆ {date} ರಲ್ಲಿ ನವೀಕರಣ ಮಾಡುತ್ತದೆ.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "ಉಚ್ಛ ಯೋಜನೆ",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1482,7 +1473,7 @@
     "exportConfiguration": "ಕಾನ್ಫಿಗರೇಶನ್ ರಫ್ತು ಮಾಡಿ",
     "bringYourOwn": "ನಿಮ್ಮ ಸ್ವಂತ ತರಿಸಿ",
     "payYourSttProvider": "Omi ಅನ್ನು ಅವಿರತವಾಗಿ ಬಳಸಿ. ನೀವು ಕೇವಲ ನಿಮ್ಮ STT ಪ್ರದಾನಕಾರಕನಿಗೆ ನೇರವಾಗಿ ಪಾವತಿ ಮಾಡಿ.",
-    "freeMinutesMonth": "600 ಅಪ್ರೈಲ್ ಮುಕ್ತ ನಿಮಿಷ/ತಿಂಗಳು. ಅಸೀಮಿತ ",
+    "freeMinutesMonth": "300 ಅಪ್ರೈಲ್ ಮುಕ್ತ ನಿಮಿಷ/ತಿಂಗಳು. ಅಸೀಮಿತ ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "ಹೋಸ್ಟ್ ಅಗತ್ಯ",
     "validPortRequired": "ಮಾನ್ಯ ಪೋರ್ಟ್ ಅಗತ್ಯ",
@@ -1697,22 +1688,6 @@
     "lovingOmi": "Omi ಪಸಂದ ಮಾಡುತ್ತಿದ್ದೀರೆ?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "App Store ನಲ್ಲಿ ವಿಮರ್ಶೆ ಬಿಡುವುದರ ಮೂಲಕ ನಮಗೆ ಹೆಚ್ಚಿನ ಜನರ ಬಳಿ ತಲುಪಲು ಸಾಹಾಯ್ಯ ಮಾಡಿ. ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ ನಮಗೆ ಬೇಸರ ಬರುತ್ತದೆ!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Google Play Store ನಲ್ಲಿ ವಿಮರ್ಶೆ ಬಿಡುವುದರ ಮೂಲಕ ನಮಗೆ ಹೆಚ್ಚಿನ ಜನರ ಬಳಿ ತಲುಪಲು ಸಾಹಾಯ್ಯ ಮಾಡಿ. ನಿಮ್ಮ ಪ್ರತಿಕ್ರಿಯೆ ನಮಗೆ ಬೇಸರ ಬರುತ್ತದೆ!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "App Store ನಲ್ಲಿ ರೇಟ್ ಮಾಡಿ",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play ನಲ್ಲಿ ರೇಟ್ ಮಾಡಿ",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "ಬಹುಶಃ ನಂತರ",
     "@maybeLater": {
@@ -5505,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "600 ಪ್ರೀಮಿಯಮ್ ನಿಮಿಷಗಳು + ಅನಿಯಮಿತ ಆನ್-ಡಿವೈಸ್",
+    "basicPlanDescription": "300 ಪ್ರೀಮಿಯಮ್ ನಿಮಿಷಗಳು + ಅನಿಯಮಿತ ಆನ್-ಡಿವೈಸ್",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7280,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "ಪ್ರತಿ ತಿಂಗಳು 600 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.",
+    "premiumMinutesInfo": "ಪ್ರತಿ ತಿಂಗಳು 300 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7391,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "ಪ್ರತಿ ತಿಂಗಳು 600 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.",
+    "premiumMinutesMonth": "ಪ್ರತಿ ತಿಂಗಳು 300 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10520,7 +10495,7 @@
     "upgradePlan": "ಯೋಜನೆ ಅಪ್‌ಗ್ರೇಡ್",
     "billingMonthly": "ಮಾಸಿಕ",
     "billingYearly": "ವಾರ್ಷಿಕ",
-    "savePercent": "~17% ಉಳಿಸಿ",
+    "savePercent": "~{percent}% ಉಳಿಸಿ",
     "popular": "ಜನಪ್ರಿಯ",
     "currentPlan": "ಪ್ರಸ್ತುತ",
     "neoSubtitle": "ತಿಂಗಳಿಗೆ {count} ಪ್ರಶ್ನೆಗಳು",
@@ -10582,6 +10557,7 @@
     "syncStatusWaiting": "ಸಿಂಕ್ ಆಗಲು ಕಾಯುತ್ತಿದೆ",
     "syncStatusRetrying": "ಪ್ರಕ್ರಿಯೆ ವಿಫಲ — ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲಾಗುತ್ತಿದೆ",
     "syncStatusFailed": "ವಿಫಲ — Retry ಒತ್ತಿ",
+    "syncStatusTooOld": "ಸಿಂಕ್ ಮಾಡಲು ತುಂಬಾ ಹಳೆಯದು — Omi ಅದನ್ನು ಸ್ವೀಕರಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ",
     "syncStatusFileUnavailable": "ಫೈಲ್ ಲಭ್ಯವಿಲ್ಲ",
     "syncStatusUploaded": "ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ · Omi ನಲ್ಲಿ ಪ್ರಕ್ರಿಯೆ ನಡೆಯುತ್ತಿದೆ",
     "noRecordingsYet": "ಇನ್ನೂ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಇಲ್ಲ",
@@ -10632,7 +10608,7 @@
     "syncCustomSttWarningMessage": "ನೀವು ನಿಮ್ಮ ಸ್ವಂತ ಪ್ರತಿಲೇಖನ ಪೂರೈಕೆದಾರರನ್ನು ಬಳಸುತ್ತೀರಿ. ಈ ಧ್ವನಿಮುದ್ರಣಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಿದರೆ ಅವು Omi ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಪ್ರತಿಲೇಖನಗೊಳ್ಳುತ್ತವೆ ಮತ್ತು ನಿಮ್ಮ ಯೋಜನೆಯ ಪ್ರತಿಲೇಖನ ಮಿತಿಗೆ ಎಣಿಸಲಾಗುತ್ತದೆ.",
     "transcribeLaterTitle": "ನಂತರ ಲಿಪ್ಯಂತರಿಸಿ",
     "transcribeLaterDescription": "ನೇರ ಪ್ರಸಾರದ ಬದಲು ಈಗ ಧ್ವನಿಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ, ಬೇಕೆಂದಾಗ ಲಿಪ್ಯಂತರಿಸಿ. ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಯುತ್ತವೆ; ನಂತರ ಅವುಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ ಸಂಭಾಷಣೆಗಳನ್ನು ರಚಿಸಿ.",
-    "transcribeLaterNote": "ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.",
+    "transcribeLaterNote": "ಫೋನ್ ಮೈಕ್ರೊಫೋನ್, Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.",
     "transcribeLaterStorageFull": "ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಸಂಗ್ರಹ ಸ್ಥಳ ಕಡಿಮೆ ಇರುವುದರಿಂದ ರೆಕಾರ್ಡಿಂಗ್ ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಂತಿದೆ. ಸ್ಥಳ ಖಾಲಿ ಮಾಡಿ ಅಥವಾ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ; ನಂತರ ಅದು ತಾನಾಗಿಯೇ ಮುಂದುವರಿಯುತ್ತದೆ.",
     "unmute": "ಮ್ಯೂಟ್ ತೆಗೆ",
     "newRecording": "ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್",
@@ -10682,5 +10658,127 @@
     "deviceOnboardingIntroDuration": "ಸುಮಾರು 1 ನಿಮಿಷ",
     "jumpToLatestMessage": "ಇತ್ತೀಚಿನ ಸಂದೇಶಕ್ಕೆ ಹೋಗಿ",
     "latest": "ಇತ್ತೀಚಿನ",
-    "flashFirmware": "ಫರ್ಮ್‌ವೇರ್ ಫ್ಲ್ಯಾಶ್ ಮಾಡಿ"
+    "flashFirmware": "ಫರ್ಮ್‌ವೇರ್ ಫ್ಲ್ಯಾಶ್ ಮಾಡಿ",
+    "pendantRecordingTitle": "ಪೆಂಡೆಂಟ್‌ನಲ್ಲಿ ರೆಕಾರ್ಡಿಂಗ್",
+    "pendantRecordingNote": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ತಾನಾಗಿಯೇ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ. ಆ್ಯಪ್ ತೆರೆದಿರುವಾಗ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗುತ್ತವೆ.",
+    "pendantSyncingRecordings": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್‌ನಿಂದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಲಾಗುತ್ತಿದೆ…",
+    "pendantMinutesStored": "~{minutes} ನಿಮಿಷ ಸಂಗ್ರಹವಾಗಿದೆ",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "ಪೆಂಡೆಂಟ್‌ನ ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ಭರ್ತಿಯಾಗಿದೆ — ಸಿಂಕ್ ಮಾಡಲು ಆ್ಯಪ್ ಅನ್ನು ತೆರೆದಿಡಿ.",
+    "connectRayBanMeta": "Ray-Ban Meta ಸಂಪರ್ಕಿಸಿ",
+    "raybanMetaSetupDescription": "ಸಂವಾದಗಳು ಮತ್ತು ದೃಶ್ಯ ಸನ್ನಿವೇಶಕ್ಕಾಗಿ ನಿಮ್ಮ Ray-Ban Meta ಕನ್ನಡಕವನ್ನು ನಿಮ್ಮ Omi ಸೆರೆಹಿಡಿಯುವ ಸಾಧನವಾಗಿ ಬಳಸಿ. ನಿಮ್ಮ ಕನ್ನಡಕವನ್ನು ಲಿಂಕ್ ಮಾಡಲು Omi Meta AI ಅಪ್ಲಿಕೇಶನ್ ಅನ್ನು ತೆರೆಯುತ್ತದೆ.",
+    "raybanMetaOpenMetaAI": "Meta AI ಮೂಲಕ ಸಂಪರ್ಕಿಸಿ",
+    "raybanMetaWaitingForMetaAI": "Meta AI ಅಪ್ಲಿಕೇಶನ್‌ನಲ್ಲಿ ಸಂಪರ್ಕವನ್ನು ಪೂರ್ಣಗೊಳಿಸಿ, ನಂತರ ಇಲ್ಲಿಗೆ ಹಿಂತಿರುಗಿ.",
+    "raybanMetaCheckAgain": "ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ",
+    "raybanMetaAllowCamera": "ಕನ್ನಡಕದಲ್ಲಿ ಕ್ಯಾಮೆರಾವನ್ನು ಅನುಮತಿಸಿ",
+    "raybanMetaCameraExplanation": "ನಿಮ್ಮ ಸಂವಾದಗಳಿಗೆ ಫೋಟೋಗಳನ್ನು ಸೇರಿಸಲು Omi ನಿಮ್ಮ ಕನ್ನಡಕದ ಕ್ಯಾಮೆರಾವನ್ನು ಬಳಸುತ್ತದೆ. ನೀವು ಇದನ್ನು ಬಿಟ್ಟುಬಿಟ್ಟು ಕೇವಲ ಆಡಿಯೊವನ್ನು ಬಳಸಬಹುದು.",
+    "raybanMetaSkipForNow": "ಸದ್ಯಕ್ಕೆ ಬಿಟ್ಟುಬಿಡಿ",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta ಕೇವಲ-ಆಡಿಯೊ ಮೋಡ್",
+    "raybanMetaAudioOnlyExplanation": "Omi ನ ಈ ಆವೃತ್ತಿಯು ಬ್ಲೂಟೂತ್ ಮೂಲಕ ನಿಮ್ಮ ಕನ್ನಡಕದ ಮೈಕ್ರೋಫೋನ್ ಅನ್ನು ಬಳಸಬಹುದು. ಫೋಟೋ ಸೆರೆಹಿಡಿಯಲು Omi ನ Meta ಡೆವಲಪರ್ ಬಿಲ್ಡ್ ಅಗತ್ಯವಿದೆ.",
+    "raybanMetaMusicPauseNote": "ಕನ್ನಡಕದ ಮೈಕ್ರೋಫೋನ್ ಬಳಕೆಯಲ್ಲಿರುವಾಗ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿನ ಸಂಗೀತವು ವಿರಾಮಗೊಳ್ಳುತ್ತದೆ.",
+    "raybanMetaContinue": "ಮುಂದುವರಿಸಿ",
+    "raybanMetaCapturePhoto": "ಫೋಟೋ ಸೆರೆಹಿಡಿಯಿರಿ",
+    "raybanMetaPhotoRequested": "ಫೋಟೋ ವಿನಂತಿಸಲಾಗಿದೆ — ಇದು ನಿಮ್ಮ ಸಂವಾದದಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತದೆ.",
+    "raybanMetaMicrophoneReady": "ಮೈಕ್ರೋಫೋನ್ ಸಿದ್ಧವಾಗಿದೆ",
+    "raybanMetaImageCaptureReady": "ಚಿತ್ರ ಸೆರೆಹಿಡಿಯುವಿಕೆ ಸಿದ್ಧವಾಗಿದೆ",
+    "raybanMetaImageCaptureUnavailable": "ಕೇವಲ-ಆಡಿಯೊ ಮೋಡ್‌ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ",
+    "raybanMetaCamera": "ಕ್ಯಾಮೆರಾ",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta ಗೆ ಸಂಪರ್ಕಿಸುವಲ್ಲಿ ದೋಷ: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "ಸಾಧನ ಸಂಗ್ರಹಣೆ",
+    "deviceStoragePercentFull": "{percent}% ತುಂಬಿದೆ",
+    "deviceStorageUsedOfTotal": "{total} ರಲ್ಲಿ {used} ಬಳಸಲಾಗಿದೆ",
+    "deviceStorageFree": "{free} ಖಾಲಿ",
+    "deviceStorageNearlyFull": "ಸಾಧನ ಬಹುತೇಕ ತುಂಬಿದೆ — ಸ್ಥಳವನ್ನು ಮುಕ್ತಗೊಳಿಸಲು ಸಿಂಕ್ ಮಾಡಿ.",
+    "phoneMicOfflineFallbackMessage": "ಸಂಪರ್ಕವಿಲ್ಲ — ಸ್ಥಳೀಯವಾಗಿ ರೆಕಾರ್ಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ. ನೀವು ಮತ್ತೆ ಆನ್‌ಲೈನ್‌ಗೆ ಬಂದಾಗ ಇದನ್ನು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗುತ್ತದೆ.",
+    "dataEncryptedBanner": "ನಿಮ್ಮ ಡೇಟಾ ಪೂರ್ವನಿಯೋಜಿತವಾಗಿ ಬಲವಾದ ಎನ್‌ಕ್ರಿಪ್ಶನ್‌ನಿಂದ ಸುರಕ್ಷಿತವಾಗಿದೆ, ಮತ್ತು ಅದನ್ನು ಹೇಗೆ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಬಳಸಲಾಗುತ್ತದೆ ಎಂಬುದನ್ನು ನೀವು ನಿಯಂತ್ರಿಸುತ್ತೀರಿ.",
+    "rayBanMetaMicPickerTitle": "ನಿಮ್ಮ Ray-Ban Meta ಮೈಕ್ರೊಫೋನ್ ಆಯ್ಕೆಮಾಡಿ",
+    "rayBanMetaMicPickerDescription": "ನಿಮ್ಮ ಕನ್ನಡಕದ Bluetooth ಮೈಕ್ರೊಫೋನ್ ಆಯ್ಕೆಮಾಡಿ. Omi ಅದನ್ನು ಬಳಸುವಾಗ ಸಂಗೀತ ವಿರಾಮಗೊಳ್ಳುತ್ತದೆ.",
+    "rayBanMetaMicPickerEmpty": "ಯಾವುದೇ Bluetooth ಮೈಕ್ರೊಫೋನ್ ಕಂಡುಬಂದಿಲ್ಲ. iPhone ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಕನ್ನಡಕವನ್ನು ಸಂಪರ್ಕಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth ಮೈಕ್ರೊಫೋನ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. Bluetooth ಆನ್ ಆಗಿದೆಯೇ ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "rayBanMetaMicPickerConnectError": "ಆ ಮೈಕ್ರೊಫೋನ್‌ಗೆ ಸಂಪರ್ಕಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಅದು iPhone ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಸಂಪರ್ಕಗೊಂಡಿದೆಯೇ ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ.",
+    "cloudTranscription": "ಕ್ಲೌಡ್ ಪ್ರತಿಲೇಖನ",
+    "copyMessage": "ಸಂದೇಶವನ್ನು ನಕಲಿಸಿ",
+    "deleteOnDeviceModel": "ಮಾದರಿಯನ್ನು ಅಳಿಸಿ",
+    "deleteOnDeviceModelConfirm": "ಈ ಮಾದರಿಯನ್ನು ಅಳಿಸಲು ನೀವು ಖಚಿತವಾಗಿದ್ದೀರಾ?",
+    "downgradeAnyway": "ಆದರೂ ಡೌನ್‌ಗ್ರೇಡ್ ಮಾಡಿ",
+    "downgradeLimitBattery": "7 ಪಟ್ಟು ಹೆಚ್ಚು ಬ್ಯಾಟರಿ ಬಳಕೆ",
+    "downgradeLimitDelay": "5-7 ಸೆಕೆಂಡ್ ವಿಳಂಬ",
+    "downgradeLimitQuality": "30% ಕಡಿಮೆ ಪ್ರತಿಲೇಖನ ಗುಣಮಟ್ಟ",
+    "downgradeLimitSpeakers": "ಮಾತನಾಡುವವರನ್ನು ಗುರುತಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ",
+    "downgradeLimitationsHeading": "ನೀವು ಈ ಮಿತಿಗಳನ್ನು ಎದುರಿಸುತ್ತೀರಿ:",
+    "downgradeToFreemiumTitle": "ಉಚಿತ ಯೋಜನೆಗೆ ಡೌನ್‌ಗ್ರೇಡ್ ಮಾಡುವುದೇ?",
+    "errorLoadingAudio": "ಆಡಿಯೊ ಲೋಡ್ ಮಾಡುವಲ್ಲಿ ದೋಷ",
+    "failedToLinkCalendarEvent": "ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್ ಲಿಂಕ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ",
+    "googleCalendarConnectPrompt": "ಸಂವಾದಗಳನ್ನು ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್‌ಗಳಿಗೆ ಲಿಂಕ್ ಮಾಡಲು ನಿಮ್ಮ Google Calendar ಅನ್ನು ಸಂಪರ್ಕಿಸಿ.",
+    "googleCalendarNotConnected": "Google Calendar ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲ",
+    "linkedToEvent": "“{title}” ಗೆ ಲಿಂಕ್ ಮಾಡಲಾಗಿದೆ",
+    "onDeviceModelDeleted": "ಮಾದರಿಯನ್ನು ಅಳಿಸಲಾಗಿದೆ",
+    "onDeviceModelDownloadFailed": "ಮಾದರಿ ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ",
+    "onDeviceModelDownloadFailedDesc": "Whisper ಮಾದರಿಯನ್ನು ಡೌನ್‌ಲೋಡ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "onDeviceModelDownloadSuccess": "ಮಾದರಿ ಡೌನ್‌ಲೋಡ್ ಆಗಿದೆ",
+    "onDeviceModelDownloadSuccessDesc": "Whisper ಮಾದರಿಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಡೌನ್‌ಲೋಡ್ ಮಾಡಲಾಗಿದೆ",
+    "onDeviceModelDownloaded": "ಡೌನ್‌ಲೋಡ್ ಆಗಿದೆ",
+    "onDeviceModelSize": "ಮಾದರಿಯ ಗಾತ್ರ",
+    "onDeviceTranscription": "ಸಾಧನದಲ್ಲಿ ಪ್ರತಿಲೇಖನ",
+    "onDeviceTranscriptionDesc": "ಪ್ರತಿಲೇಖನವನ್ನು ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿಯೇ ಸ್ಥಳೀಯವಾಗಿ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ",
+    "searchSettings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಹುಡುಕಿ…",
+    "speechToTextProvider": "ಮಾತಿನಿಂದ ಪಠ್ಯ ಸೇವಾ ಪೂರೈಕೆದಾರ",
+    "speechToTextProviderDesc": "ಪ್ರತಿಲೇಖನಕ್ಕೆ ಬಳಸುವ ಸೇವೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "sttFilterAuto": "ಸ್ವಯಂ",
+    "sttModelAccuracy": "ನಿಖರತೆ",
+    "sttModelFaster": "ವೇಗವಾಗಿ",
+    "sttModelHigher": "ಹೆಚ್ಚು",
+    "sttModelLower": "ಕಡಿಮೆ",
+    "sttModelSlower": "ನಿಧಾನವಾಗಿ",
+    "sttModelSpeed": "ವೇಗ",
+    "sttNone": "ಯಾವುದೂ ಇಲ್ಲ",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "ನಿಮ್ಮ ಅಭಿಪ್ರಾಯಕ್ಕೆ ಧನ್ಯವಾದ!",
+    "transcriptionLanguage": "ಪ್ರತಿಲೇಖನ ಭಾಷೆ",
+    "transcriptionLanguageDesc": "ಮಾತಿನ ಪ್ರತಿಲೇಖನಕ್ಕೆ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "whisperModel": "Whisper ಮಾದರಿ",
+    "whisperModelDesc": "ಸಾಧನದಲ್ಲಿನ ಪ್ರತಿಲೇಖನಕ್ಕೆ ಮಾದರಿಯನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "whisperModelSizeBase": "ಮೂಲ",
+    "whisperModelSizeLarge": "ದೊಡ್ಡದು",
+    "whisperModelSizeMedium": "ಮಧ್ಯಮ",
+    "whisperModelSizeSmall": "ಚಿಕ್ಕದು",
+    "whisperModelSizeTiny": "ಅತಿ ಚಿಕ್ಕದು",
+    "planSheetChooseYourPlan": "ಅಮಿತ Omi ಅನ್‌ಲಾಕ್ ಮಾಡಲು ನಿಮ್ಮ ಯೋಜನೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ.",
+    "availableOnMacMobileWeb": "Mac, ಮೊಬೈಲ್ ಮತ್ತು ವೆಬ್‌ನಲ್ಲಿ ಲಭ್ಯ",
+    "popularBadge": "ಜನಪ್ರಿಯ",
+    "worksOnDesktop": "ಡೆಸ್ಕ್‌ಟಾಪ್‌ನಲ್ಲಿ ಕೆಲಸ ಮಾಡುತ್ತದೆ",
+    "noDesktopAccess": "ಡೆಸ್ಕ್‌ಟಾಪ್‌ನಲ್ಲಿ ಕೆಲಸ ಮಾಡುವುದಿಲ್ಲ",
+    "annualBillingSummary": "{months} ತಿಂಗಳು / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 ತಿಂಗಳು ಉಚಿತ} other{{count} ತಿಂಗಳು ಉಚಿತ}}",
+    "freemiumLimitsIntro": "Omi ಉಚಿತ, ಆದರೆ ಉಚಿತ ಆವೃತ್ತಿಯಲ್ಲಿ ನಿಮ್ಮ ಅನುಭವದ ಮೇಲೆ ಪರಿಣಾಮ ಬೀರುವ ಮಿತಿಗಳಿವೆ:",
+    "downgradeLimitDelayNotRealTime": "5-7 ಸೆಕೆಂಡ್ ವಿಳಂಬ (ನೈಜ ಸಮಯವಲ್ಲ)",
+    "downgradeToFreemiumAction": "ಉಚಿತ ಆವೃತ್ತಿಗೆ ಬದಲಿಸಿ",
+    "getFreeUnlimitedAccess": "ಉಚಿತ ಅಮಿತ ಪ್ರವೇಶ ಪಡೆಯಿರಿ",
+    "shareDataForTraining": "ತರಬೇತಿಗಾಗಿ ಡೇಟಾ ಹಂಚಿಕೊಳ್ಳಿ",
+    "yourRequestUnderReview": "ನಿಮ್ಮ ವಿನಂತಿ ಪರಿಶೀಲನೆಯಲ್ಲಿದೆ",
+    "pinAsBaseline": "ಆಧಾರವಾಗಿ ಪಿನ್ ಮಾಡಿ",
+    "unpinAsBaseline": "ಆಧಾರದಿಂದ ಅನ್‌ಪಿನ್ ಮಾಡಿ",
+    "baselineMemory": "ಆಧಾರ ಸ್ಮೃತಿ",
+    "alwaysInContext": "ಯಾವಾಗಲೂ ಸಂದರ್ಭದಲ್ಲಿ",
+    "accountCutoverUpdateRequiredTitle": "अपडेट आवश्यक",
+    "accountCutoverUpdateRequiredMessage": "खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।",
+    "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
+    "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
+    "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
+    "accountCutoverOpenStore": "स्टोर खोलें"
 }

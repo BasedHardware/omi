@@ -212,7 +212,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                                   height: 180,
                                                   margin: const EdgeInsets.only(right: 8),
                                                   decoration: BoxDecoration(
-                                                    color: Color(0xFF35343B),
+                                                    color: const Color(0xFF35343B),
                                                     borderRadius: BorderRadius.circular(8),
                                                   ),
                                                   child: provider.isUploadingThumbnail
@@ -293,11 +293,11 @@ class _AddAppPageState extends State<AddAppPage> {
                                                     onTap: () => provider.removeThumbnail(index),
                                                     child: Container(
                                                       padding: const EdgeInsets.all(4),
-                                                      decoration: BoxDecoration(
+                                                      decoration: const BoxDecoration(
                                                         color: Colors.white,
                                                         shape: BoxShape.circle,
                                                       ),
-                                                      child: const Icon(
+                                                      child: const FaIcon(
                                                         FontAwesomeIcons.xmark,
                                                         size: 10,
                                                         color: Colors.black,
@@ -741,7 +741,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                           Navigator.pop(context);
                                           String? appId = await provider.submitApp();
                                           App? app;
-                                          if (appId != null) {
+                                          if (appId != null && context.mounted) {
                                             app = await context.read<AppProvider>().getAppFromId(appId);
                                           }
                                           var paymentProvider = PaymentMethodProvider();
@@ -753,9 +753,9 @@ class _AddAppPageState extends State<AddAppPage> {
                                                 context: context,
                                                 builder: (ctx) => Container(
                                                   padding: const EdgeInsets.all(20),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFF1F1F25),
-                                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                                                  decoration: const BoxDecoration(
+                                                    color: Color(0xFF1F1F25),
+                                                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                                                   ),
                                                   child: Material(
                                                     color: Colors.transparent,

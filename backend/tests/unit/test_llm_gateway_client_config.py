@@ -6,24 +6,30 @@ from typing import Any
 
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
 import pytest
 
-from utils.llm import clients, gateway_shadow
+from utils.llm import clients, gateway_shadow, gateway_serving
 from utils.llm import providers
-from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, get_llm_gateway_base_url
+from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, GatewayContextChatOpenAI, get_llm_gateway_base_url
 from utils.llm.gateway_client import (
+    LLM_CHAT_AGENT_ROUTE_ENV_VAR,
     LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR,
     LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR,
     LLM_GATEWAY_FEATURE_MODE_ENV_VAR,
     LLM_GATEWAY_URL_ENV_VAR,
+    GatewayDirectModelSurfaceBlocked,
     feature_auto_lane_id,
+    get_chat_agent_route,
     raise_if_gateway_feature_mode_blocks_direct_model_surface,
+    should_route_chat_agent_through_gateway,
     should_route_features_through_gateway,
 )
 from utils.llm.clients import get_llm_gateway_chat_structured
+from utils.llm.usage_tracker import reset_usage_context, set_usage_context
+import httpx
 
 
 class FakeChatModel(BaseChatModel):
@@ -71,30 +77,41 @@ def test_llm_gateway_base_url_uses_repo_local_env_config(monkeypatch):
 
 
 def test_gateway_langchain_client_uses_internal_gateway_base_url_and_auth(monkeypatch):
-    captured = {}
-
-    class FakeChatOpenAI:
-        def __init__(self, **kwargs):
-            captured.update(kwargs)
-
     monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://gateway.internal:8080/')
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'service-token')
-    monkeypatch.setattr(providers, 'ChatOpenAI', FakeChatOpenAI)
     original_cache = dict(providers._llm_cache)
     providers._llm_cache.clear()
 
     try:
         result = get_llm_gateway_chat_structured()
 
-        assert isinstance(result, FakeChatOpenAI)
-        assert captured['model'] == 'omi:auto:chat-structured'
-        assert captured['base_url'] == 'http://gateway.internal:8080/v1'
-        assert captured['request_timeout'] == 35.0
-        assert captured['default_headers']['X-Omi-Service-Caller'] == 'backend'
-        assert captured['default_headers']['Authorization'] == 'Bearer service-token'
+        assert isinstance(result, GatewayContextChatOpenAI)
+        assert result.model_name == 'omi:auto:chat-structured'
+        assert str(result.openai_api_base) == 'http://gateway.internal:8080/v1'
+        assert result.request_timeout == 35.0
+        assert result.default_headers['X-Omi-Service-Caller'] == 'backend'
+        assert result.default_headers['Authorization'] == 'Bearer service-token'
     finally:
         providers._llm_cache.clear()
         providers._llm_cache.update(original_cache)
+
+
+def test_gateway_langchain_client_injects_request_scoped_usage_attribution() -> None:
+    model = GatewayContextChatOpenAI(
+        model='omi:auto:chat-structured',
+        api_key='gateway-test',
+        base_url='http://gateway.internal:8080/v1',
+        omi_gateway_feature='fallback_feature',
+    )
+    token = set_usage_context('user-123', 'conversation_processing')
+    try:
+        payload = model._get_request_payload([HumanMessage(content='hello')])
+    finally:
+        reset_usage_context(token)
+
+    assert payload['extra_headers']['X-Omi-User-Uid'] == 'user-123'
+    assert payload['extra_headers']['X-Omi-LLM-Feature'] == 'conversation_processing'
+    assert payload['metadata']['omi_feature'] == 'conversation_processing'
 
 
 def test_get_llm_dev_shadow_wraps_legacy_and_submits_gateway(monkeypatch):
@@ -167,33 +184,130 @@ def test_get_llm_dev_shadow_is_disabled_for_prod_like_runtime(monkeypatch):
 def test_get_llm_feature_gateway_mode_uses_generated_auto_lane(monkeypatch):
     captured = {}
     gateway = FakeChatModel(name='gateway', calls=[])
+    legacy = FakeChatModel(name='legacy', calls=[])
 
-    def fake_gateway(lane_id, streaming=False, options=None):
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
         captured['lane_id'] = lane_id
         captured['streaming'] = streaming
+        captured['feature'] = feature
         return gateway
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', fake_gateway)
+    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
 
     result = clients.get_llm('conv_discard', streaming=True).invoke('hello')
 
     assert result.content == 'gateway response'
-    assert captured == {'lane_id': feature_auto_lane_id('conv_discard'), 'streaming': True}
+    assert captured == {'lane_id': feature_auto_lane_id('conv_discard'), 'streaming': True, 'feature': 'conv_discard'}
+    assert len(gateway.calls) == 1
+    assert legacy.calls == []
 
 
-def test_get_llm_feature_gateway_mode_blocks_byok_direct_bypass(monkeypatch):
+def test_memory_l2_gateway_mode_uses_luna_auto_lane_without_direct_fallback(monkeypatch):
+    captured = {}
+    gateway = FakeChatModel(name='gateway', calls=[])
+    legacy = FakeChatModel(name='legacy', calls=[])
+
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
+        captured['lane_id'] = lane_id
+        captured['streaming'] = streaming
+        captured['feature'] = feature
+        return gateway
+
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
-    monkeypatch.delenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, raising=False)
-    monkeypatch.delenv('K_SERVICE', raising=False)
-    monkeypatch.setattr(clients, 'get_byok_key', lambda provider: 'sk-test-byok' if provider == 'openai' else None)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', fake_gateway)
+    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
 
-    try:
-        clients.get_llm('conv_discard')
-    except RuntimeError as exc:
-        assert 'get_llm.conv_discard.byok' in str(exc)
-    else:
-        raise AssertionError('expected gateway mode to block BYOK direct bypass')
+    result = clients.get_llm('memory_l2').invoke('promote this memory')
+
+    assert result.content == 'gateway response'
+    assert captured == {'lane_id': 'omi:auto:memory-l2', 'streaming': False, 'feature': 'memory_l2'}
+    assert len(gateway.calls) == 1
+    assert legacy.calls == []
+
+
+def test_get_llm_forwards_an_explicit_gateway_transport_timeout(monkeypatch):
+    captured = {}
+
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
+        captured.update(lane_id=lane_id, streaming=streaming, options=options, feature=feature)
+        return FakeChatModel(name="gateway", calls=[])
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, "gateway")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway)
+
+    clients.get_llm("memory_l2", request_timeout=20.0)
+
+    assert captured == {
+        "lane_id": "omi:auto:memory-l2",
+        "streaming": False,
+        "options": {"request_timeout": 20.0},
+        "feature": "memory_l2",
+    }
+
+
+def test_get_llm_feature_gateway_mode_fails_closed_on_transport_failure(monkeypatch):
+    legacy = FakeChatModel(name='legacy', calls=[])
+
+    class FailingGateway(FakeChatModel):
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            raise httpx.ConnectError('connection refused')
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(
+        clients, 'get_or_create_omi_gateway_llm', lambda *args, **kwargs: FailingGateway(name='gateway', calls=[])
+    )
+    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
+    with pytest.raises(httpx.ConnectError):
+        clients.get_llm('conv_discard').invoke('hello')
+
+    assert legacy.calls == []
+
+
+def test_gateway_serving_does_not_fallback_on_gateway_configuration_503():
+
+    request = httpx.Request('POST', 'http://gateway/v1/chat/completions')
+    response = httpx.Response(503, request=request)
+    error = httpx.HTTPStatusError('gateway route configuration failed', request=request, response=response)
+
+    assert gateway_serving.is_gateway_transport_failure(error) is False
+
+
+def test_get_llm_feature_gateway_mode_routes_byok_through_gateway_only(monkeypatch):
+    captured: dict[str, object] = {}
+    legacy = FakeChatModel(name='byok', calls=[])
+
+    def fake_gateway(lane_id, *, provider, api_key, **_kwargs):
+        captured['lane_id'] = lane_id
+        captured['provider'] = provider
+        captured['api_key'] = api_key
+        return FakeChatModel(name='gateway-byok', calls=[])
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, 'get_byok_key', lambda provider: 'sk-test-byok' if provider == 'openai' else None)
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm_for_byok', fake_gateway)
+    monkeypatch.setattr(clients, '_create_byok_client', lambda *args, **kwargs: legacy)
+
+    result = clients.get_llm('conv_discard').invoke('hello')
+
+    assert result.content == 'gateway-byok response'
+    assert captured == {
+        'lane_id': feature_auto_lane_id('conv_discard'),
+        'provider': 'openai',
+        'api_key': 'sk-test-byok',
+    }
+    assert legacy.calls == []
 
 
 def test_gateway_feature_mode_is_blocked_in_prod_without_explicit_allow(monkeypatch):
@@ -269,8 +383,10 @@ def test_gateway_feature_mode_blocks_direct_exception_surfaces(monkeypatch):
 
     try:
         raise_if_gateway_feature_mode_blocks_direct_model_surface('file_chat.openai_files')
-    except RuntimeError as exc:
+    except GatewayDirectModelSurfaceBlocked as exc:
         assert 'file_chat.openai_files' in str(exc)
+        assert exc.error_code == 'file_chat_gateway_blocked'
+        assert exc.surface == 'file_chat.openai_files'
     else:
         raise AssertionError('expected direct model surface to be blocked')
 
@@ -284,29 +400,28 @@ def test_gateway_feature_mode_allows_acknowledged_direct_exception(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_app_icon_generation_uses_legacy_provider_when_gateway_feature_mode_off(monkeypatch):
+async def test_app_icon_generation_always_uses_gateway(monkeypatch):
     from utils.llm import app_generator
 
-    monkeypatch.setattr(app_generator, 'should_route_features_through_gateway', lambda: False)
-    monkeypatch.setattr(app_generator, '_generate_app_icon_via_openai', lambda _prompt: b'legacy-image')
+    captured = {}
 
-    def fail_gateway(**_kwargs):
-        raise AssertionError('gateway image generation should not run with feature mode off')
+    def gateway(**kwargs):
+        captured.update(kwargs)
+        return {'data': [{'b64_json': 'aWNvbg=='}]}
 
-    monkeypatch.setattr(app_generator, 'generate_image_via_gateway', fail_gateway)
+    monkeypatch.setattr(app_generator, 'generate_image_via_gateway', gateway)
 
-    assert await app_generator.generate_app_icon('Name', 'Description', 'other') == b'legacy-image'
+    assert await app_generator.generate_app_icon('Name', 'Description', 'other') == b'icon'
+    assert captured['model'] == 'dall-e-3'
 
 
 @pytest.mark.asyncio
-async def test_perplexity_tool_uses_legacy_provider_when_gateway_feature_mode_off(monkeypatch):
+async def test_perplexity_tool_always_uses_gateway(monkeypatch):
     perplexity_tools = _load_perplexity_tools()
 
-    monkeypatch.setattr(perplexity_tools, 'should_route_features_through_gateway', lambda: False)
-    monkeypatch.setattr(perplexity_tools, '_perplexity_legacy_search', lambda _query: _async_return('legacy-search'))
-    monkeypatch.setattr(perplexity_tools, '_perplexity_gateway_search', lambda _query: _raise_gateway_called())
+    monkeypatch.setattr(perplexity_tools, '_perplexity_gateway_search', lambda _query: _async_return('gateway-search'))
 
-    assert await perplexity_tools.perplexity_web_search_tool.coroutine('query') == 'legacy-search'
+    assert await perplexity_tools.perplexity_web_search_tool.coroutine('query') == 'gateway-search'
 
 
 def test_perplexity_gateway_response_preserves_top_level_citations():
@@ -324,6 +439,48 @@ def test_perplexity_gateway_response_preserves_top_level_citations():
     assert 'https://example.com/source' in formatted
 
 
+def test_chat_agent_route_direct_while_feature_mode_gateway(monkeypatch):
+    """Chat can stay direct while other features use the gateway."""
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'direct')
+    monkeypatch.delenv('K_SERVICE', raising=False)
+    monkeypatch.delenv('KUBERNETES_SERVICE_HOST', raising=False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+
+    assert should_route_features_through_gateway() is True
+    assert get_chat_agent_route() == 'direct'
+    assert should_route_chat_agent_through_gateway() is False
+
+
+def test_chat_agent_route_gateway_requires_feature_mode(monkeypatch):
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'gateway')
+    monkeypatch.delenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, raising=False)
+    monkeypatch.delenv('K_SERVICE', raising=False)
+
+    assert get_chat_agent_route() == 'gateway'
+    assert should_route_chat_agent_through_gateway() is False
+
+
+def test_chat_agent_route_gateway_with_feature_mode(monkeypatch):
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'luna')  # alias
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv('K_SERVICE', raising=False)
+
+    assert get_chat_agent_route() == 'gateway'
+    assert should_route_chat_agent_through_gateway() is True
+
+
+def test_chat_agent_route_invalid_raises(monkeypatch):
+    monkeypatch.setenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, 'not-a-route')
+    try:
+        get_chat_agent_route()
+    except RuntimeError as exc:
+        assert LLM_CHAT_AGENT_ROUTE_ENV_VAR in str(exc)
+    else:
+        raise AssertionError('expected invalid chat agent route to raise')
+
+
 def _load_perplexity_tools():
     module_path = Path(__file__).parents[2] / 'utils' / 'retrieval' / 'tools' / 'perplexity_tools.py'
     spec = importlib.util.spec_from_file_location('perplexity_tools_under_test', module_path)
@@ -335,7 +492,3 @@ def _load_perplexity_tools():
 
 async def _async_return(value):
     return value
-
-
-async def _raise_gateway_called():
-    raise AssertionError('gateway web search should not run with feature mode off')

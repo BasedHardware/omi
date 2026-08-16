@@ -1,0 +1,7 @@
+{
+  "version": "0.12.26",
+  "date": "2026-07-05",
+  "changes": [
+    "Fixed a rare hang during push-to-talk audio-device teardown, and now warns when a recording runs too long instead of only failing when you finish"
+  ]
+}

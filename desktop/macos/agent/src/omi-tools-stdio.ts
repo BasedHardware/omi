@@ -11,7 +11,7 @@ import { createInterface } from "readline";
 import { createConnection } from "net";
 import { readFileSync, writeFileSync } from "fs";
 import { isAgentControlToolName } from "./runtime/control-tools.js";
-import { loadSkillInstructions } from "./runtime/node-tools.js";
+import { loadSkillInstructions, searchSkills } from "./runtime/node-tools.js";
 import {
   buildToolAvailabilitySnapshot,
   mcpToolDefinitionsForAdapter,
@@ -19,6 +19,7 @@ import {
   toolManifestEntry,
   toolsForAdapter,
 } from "./runtime/omi-tool-manifest.js";
+import { PROTOCOL_VERSION } from "./protocol.js";
 
 // Current query mode
 let currentMode: "ask" | "act" = process.env.OMI_QUERY_MODE === "ask" ? "ask" : "act";
@@ -42,51 +43,27 @@ function logErr(msg: string): void {
   process.stderr.write(`[omi-tools-stdio] ${msg}\n`);
 }
 
-function envProtocolVersion(): 2 | undefined {
-  return process.env.OMI_PROTOCOL_VERSION === "2" ? 2 : undefined;
-}
-
-function activeOmiContext(): Record<string, unknown> {
-  const envBase = {
-    protocolVersion: envProtocolVersion(),
-    adapterId: process.env.OMI_ADAPTER_ID,
-  };
+function activeRunCapability(): { capabilityRef?: string; contextError?: string } {
   if (process.env.OMI_CONTEXT_FILE) {
     try {
       const parsed = JSON.parse(readFileSync(process.env.OMI_CONTEXT_FILE, "utf8"));
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return {
-          ...envBase,
-          ...parsed,
-        };
+        return typeof parsed.capabilityRef === "string" && parsed.capabilityRef.length > 0
+          ? { capabilityRef: parsed.capabilityRef }
+          : { contextError: "OMI context file did not contain a capabilityRef" };
       }
       return {
-        ...envBase,
         contextError: "OMI context file did not contain an object",
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logErr(`Failed to read OMI context file: ${message}`);
       return {
-        ...envBase,
         contextError: message,
       };
     }
   }
-  return {
-    ...envBase,
-    ...(envProtocolVersion() === 2
-      ? {}
-      : {
-          requestId: process.env.OMI_REQUEST_ID,
-          clientId: process.env.OMI_CLIENT_ID,
-          sessionId: process.env.OMI_SESSION_ID,
-          runId: process.env.OMI_RUN_ID,
-          attemptId: process.env.OMI_ATTEMPT_ID,
-          adapterSessionId: process.env.OMI_ADAPTER_SESSION_ID,
-          legacyAdapterSessionId: process.env.OMI_LEGACY_ADAPTER_SESSION_ID,
-        }),
-  };
+  return { contextError: "OMI_CONTEXT_FILE is not configured" };
 }
 
 // --- Communication with parent bridge ---
@@ -152,9 +129,9 @@ async function requestSwiftTool(
     return "Error: not connected to bridge";
   }
 
-  const context = activeOmiContext();
-  if (context.protocolVersion === 2 && (context.contextError || !context.requestId || !context.clientId)) {
-    return `Error: missing active Omi request context for v2 tool relay${context.contextError ? `: ${context.contextError}` : ""}`;
+  const capability = activeRunCapability();
+  if (capability.contextError || !capability.capabilityRef) {
+    return `Error: missing active Omi run capability for tool relay${capability.contextError ? `: ${capability.contextError}` : ""}`;
   }
 
   return new Promise<string>((resolve) => {
@@ -162,9 +139,11 @@ async function requestSwiftTool(
     const msg = JSON.stringify({
       type: "tool_use",
       callId,
+      invocationId: callId,
       name,
       input,
-      ...context,
+      protocolVersion: PROTOCOL_VERSION,
+      capabilityRef: capability.capabilityRef,
     });
     pipeConnection!.write(msg + "\n");
   });
@@ -173,13 +152,25 @@ async function requestSwiftTool(
 // --- MCP tool definitions ---
 
 const isOnboarding = process.env.OMI_ONBOARDING === "true";
+const hasScreenContext = process.env.OMI_SCREEN_CONTEXT === "true";
+const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
+const chatFirstUi = process.env.OMI_CHAT_FIRST_UI === "true" && process.env.OMI_SURFACE_KIND === "main_chat";
+const controlGeneration = Number(process.env.OMI_CHAT_FIRST_CONTROL_GENERATION);
+const projectionContext = {
+  onboarding: isOnboarding,
+  screenContext: hasScreenContext,
+  executionRole,
+  surfaceKind: process.env.OMI_SURFACE_KIND,
+  chatFirstUi,
+  controlGeneration: Number.isSafeInteger(controlGeneration) && controlGeneration >= 0 ? controlGeneration : null,
+} as const;
 
 // Tool order is owned by the canonical manifest projection.
-const ADVERTISED_TOOLS = toolsForAdapter("omi-tools-stdio", { onboarding: isOnboarding });
+const ADVERTISED_TOOLS = toolsForAdapter("omi-tools-stdio", projectionContext);
 const ADVERTISED_CANONICAL_TOOL_NAMES = new Set(ADVERTISED_TOOLS.map((tool) => tool.name));
 // Filter tools based on session type: onboarding sessions get onboarding tools,
 // regular sessions exclude them
-const TOOLS = mcpToolDefinitionsForAdapter("omi-tools-stdio", { onboarding: isOnboarding });
+const TOOLS = mcpToolDefinitionsForAdapter("omi-tools-stdio", projectionContext);
 
 // --- JSON-RPC handling ---
 
@@ -268,7 +259,9 @@ async function handleJsonRpc(
             return;
           }
         }
-        const result = await requestSwiftTool("execute_sql", { query });
+        const input: Record<string, unknown> = { query };
+        if (args.parameters !== undefined) input.parameters = args.parameters;
+        const result = await requestSwiftTool("execute_sql", input);
         if (!isNotification) {
           send({
             jsonrpc: "2.0",
@@ -293,33 +286,6 @@ async function handleJsonRpc(
       } else if (toolName === "get_daily_recap") {
         const daysAgo = (args.days_ago as number) ?? 1;
         const result = await requestSwiftTool("get_daily_recap", { days_ago: daysAgo });
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: { content: [{ type: "text", text: result }] },
-          });
-        }
-      } else if (toolName === "get_task_agent_status") {
-        const result = await requestSwiftTool("get_task_agent_status", {});
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: { content: [{ type: "text", text: result }] },
-          });
-        }
-      } else if (toolName === "spawn_agent") {
-        const result = await requestSwiftTool("spawn_agent", args);
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: { content: [{ type: "text", text: result }] },
-          });
-        }
-      } else if (toolName === "manage_agent_pills") {
-        const result = await requestSwiftTool("manage_agent_pills", args);
         if (!isNotification) {
           send({
             jsonrpc: "2.0",
@@ -372,6 +338,34 @@ async function handleJsonRpc(
                 text: content,
               }],
             },
+          });
+        }
+      } else if (toolName === "search_skills") {
+        const query = (args.query as string || "").trim();
+        const content = await searchSkills(query);
+
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: {
+              content: [{
+                type: "text",
+                text: content,
+              }],
+            },
+          });
+        }
+      } else if (toolName === "search_chat_history") {
+        // This remains a relay request, not a child-process SQLite read. The
+        // parent kernel rechecks the run capability then scopes the search to
+        // the caller's current main-Chat journal generation.
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
           });
         }
       } else if (isAgentControlToolName(toolName)) {
@@ -477,7 +471,7 @@ async function main(): Promise<void> {
     process.exit(0);
   });
 
-  const snapshot = buildToolAvailabilitySnapshot("omi-tools-stdio", { onboarding: isOnboarding });
+  const snapshot = buildToolAvailabilitySnapshot("omi-tools-stdio", projectionContext);
   if (process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH) {
     try {
       writeFileSync(process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH, `${JSON.stringify(snapshot, null, 2)}\n`);

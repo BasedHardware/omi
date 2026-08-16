@@ -1,5 +1,6 @@
 {
     "@@locale": "bn",
+    "sessionExpiredSignInAgain": "সেশনের মেয়াদ শেষ হয়েছে — আবার সাইন ইন করুন।",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -965,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "আপনার প্ল্যান {date} এ নবায়ন হয়।",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "বিনামূল্যে পরিকল্পনা",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1482,7 +1473,7 @@
     "exportConfiguration": "কনফিগারেশন রপ্তানি করুন",
     "bringYourOwn": "নিজের নিয়ে আসুন",
     "payYourSttProvider": "Omi অবাধে ব্যবহার করুন। আপনি শুধুমাত্র আপনার STT প্রদানকারীকে সরাসরি অর্থ প্রদান করেন।",
-    "freeMinutesMonth": "প্রতি মাসে 600 বিনামূল্যে মিনিট অন্তর্ভুক্ত। সীমাহীন ",
+    "freeMinutesMonth": "প্রতি মাসে 300 বিনামূল্যে মিনিট অন্তর্ভুক্ত। সীমাহীন ",
     "omiUnlimited": "Omi আনলিমিটেড",
     "hostRequired": "হোস্ট প্রয়োজন",
     "validPortRequired": "বৈধ পোর্ট প্রয়োজন",
@@ -1697,22 +1688,6 @@
     "lovingOmi": "Omi ভালোবাসছেন?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "অ্যাপ স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Google Play স্টোরে পর্যালোচনা রেখে আমাদের আরও মানুষের কাছে পৌঁছাতে সাহায্য করুন। আপনার প্রতিক্রিয়া আমাদের কাছে বিশ্ব মানে!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "অ্যাপ স্টোরে রেটিং দিন",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play তে রেটিং দিন",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "হয়তো পরে",
     "@maybeLater": {
@@ -5505,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "১,২০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড",
+    "basicPlanDescription": "৩০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7280,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
+    "premiumMinutesInfo": "প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7391,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
+    "premiumMinutesMonth": "প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10520,7 +10495,7 @@
     "upgradePlan": "প্ল্যান আপগ্রেড করুন",
     "billingMonthly": "মাসিক",
     "billingYearly": "বার্ষিক",
-    "savePercent": "~17% সাশ্রয়",
+    "savePercent": "~{percent}% সাশ্রয়",
     "popular": "জনপ্রিয়",
     "currentPlan": "বর্তমান",
     "neoSubtitle": "মাসে {count}টি প্রশ্ন",
@@ -10582,6 +10557,7 @@
     "syncStatusWaiting": "সিঙ্কের অপেক্ষায়",
     "syncStatusRetrying": "প্রক্রিয়া করা যায়নি — আবার চেষ্টা চলছে",
     "syncStatusFailed": "ব্যর্থ — Retry চাপুন",
+    "syncStatusTooOld": "সিঙ্ক করার জন্য খুব পুরনো — Omi এটি গ্রহণ করতে পারে না",
     "syncStatusFileUnavailable": "ফাইল অনুপলব্ধ",
     "syncStatusUploaded": "আপলোড হয়েছে · Omi-তে প্রক্রিয়াধীন",
     "noRecordingsYet": "এখনও কোনো রেকর্ডিং নেই",
@@ -10632,7 +10608,7 @@
     "syncCustomSttWarningMessage": "আপনি নিজের ট্রান্সক্রিপশন প্রদানকারী ব্যবহার করেন। এই রেকর্ডিংগুলি সিঙ্ক করলে সেগুলি Omi-এর সার্ভারে ট্রান্সক্রাইব হবে এবং আপনার প্ল্যানের ট্রান্সক্রিপশন সীমার মধ্যে গণনা হবে।",
     "transcribeLaterTitle": "পরে ট্রান্সক্রাইব করুন",
     "transcribeLaterDescription": "এখন অডিও রেকর্ড করুন এবং লাইভ না করে পরে নিজের প্রয়োজনমতো ট্রান্সক্রাইব করুন। রেকর্ডিংগুলো আপনার ফোনেই সংরক্ষিত থাকে, এরপর আপনি সেগুলো আপলোড করে কথোপকথন তৈরি করতে পারেন।",
-    "transcribeLaterNote": "আপাতত শুধু Omi ডিভাইসের সঙ্গে কাজ করে। আপনি আপলোড করার সিদ্ধান্ত না নেওয়া পর্যন্ত অডিও আপনার ফোনেই থাকে।",
+    "transcribeLaterNote": "ফোনের মাইক্রোফোন, Omi এবং Limitless ডিভাইসের সঙ্গে কাজ করে। আপনি আপলোড করার সিদ্ধান্ত না নেওয়া পর্যন্ত অডিও আপনার ফোনেই থাকে।",
     "transcribeLaterStorageFull": "আপনার ফোনে জায়গা কম থাকায় রেকর্ডিং সাময়িকভাবে বন্ধ রাখা হয়েছে। কিছু জায়গা খালি করুন অথবা আপনার রেকর্ডিংগুলো আপলোড করুন, তাহলে এটি আপনাআপনি আবার শুরু হবে।",
     "unmute": "আনমিউট করুন",
     "newRecording": "নতুন রেকর্ডিং",
@@ -10682,5 +10658,127 @@
     "deviceOnboardingIntroDuration": "প্রায় ১ মিনিট",
     "jumpToLatestMessage": "সর্বশেষ বার্তায় যান",
     "latest": "সর্বশেষ",
-    "flashFirmware": "ফার্মওয়্যার ফ্ল্যাশ করুন"
+    "flashFirmware": "ফার্মওয়্যার ফ্ল্যাশ করুন",
+    "pendantRecordingTitle": "পেনড্যান্টে রেকর্ডিং চলছে",
+    "pendantRecordingNote": "আপনার পেনড্যান্ট নিজে থেকেই রেকর্ড করছে। অ্যাপ খোলা থাকাকালীন রেকর্ডিং আপনার ফোনে সিঙ্ক হয়।",
+    "pendantSyncingRecordings": "আপনার পেনড্যান্ট থেকে রেকর্ডিং সিঙ্ক হচ্ছে…",
+    "pendantMinutesStored": "~{minutes} মিনিট সংরক্ষিত",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "পেনড্যান্টের স্টোরেজ প্রায় পূর্ণ — সিঙ্ক করতে অ্যাপটি খোলা রাখুন।",
+    "connectRayBanMeta": "Ray-Ban Meta সংযুক্ত করুন",
+    "raybanMetaSetupDescription": "কথোপকথন এবং ভিজ্যুয়াল প্রসঙ্গের জন্য আপনার Ray-Ban Meta চশমা Omi ক্যাপচার ডিভাইস হিসেবে ব্যবহার করুন। Omi আপনার চশমা লিঙ্ক করতে Meta AI অ্যাপ খুলবে।",
+    "raybanMetaOpenMetaAI": "Meta AI-এর মাধ্যমে সংযুক্ত করুন",
+    "raybanMetaWaitingForMetaAI": "Meta AI অ্যাপে সংযোগ সম্পূর্ণ করুন, তারপর এখানে ফিরে আসুন।",
+    "raybanMetaCheckAgain": "আবার পরীক্ষা করুন",
+    "raybanMetaAllowCamera": "চশমায় ক্যামেরা অনুমতি দিন",
+    "raybanMetaCameraExplanation": "Omi আপনার কথোপকথনে ছবি যোগ করতে আপনার চশমার ক্যামেরা ব্যবহার করে। আপনি এটি এড়িয়ে গিয়ে শুধুমাত্র অডিও ব্যবহার করতে পারেন।",
+    "raybanMetaSkipForNow": "আপাতত এড়িয়ে যান",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta শুধুমাত্র অডিও মোড",
+    "raybanMetaAudioOnlyExplanation": "Omi-এর এই সংস্করণটি Bluetooth-এর মাধ্যমে আপনার চশমার মাইক্রোফোন ব্যবহার করতে পারে। ছবি ক্যাপচারের জন্য Omi-এর Meta ডেভেলপার বিল্ড প্রয়োজন।",
+    "raybanMetaMusicPauseNote": "চশমার মাইক্রোফোন ব্যবহারের সময় আপনার ফোনের সঙ্গীত থেমে যায়।",
+    "raybanMetaContinue": "চালিয়ে যান",
+    "raybanMetaCapturePhoto": "ছবি তুলুন",
+    "raybanMetaPhotoRequested": "ছবির অনুরোধ করা হয়েছে — এটি আপনার কথোপকথনে প্রদর্শিত হবে।",
+    "raybanMetaMicrophoneReady": "মাইক্রোফোন প্রস্তুত",
+    "raybanMetaImageCaptureReady": "ছবি ক্যাপচার প্রস্তুত",
+    "raybanMetaImageCaptureUnavailable": "শুধুমাত্র অডিও মোডে অনুপলব্ধ",
+    "raybanMetaCamera": "ক্যামেরা",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta-তে সংযোগ করতে ত্রুটি: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "ডিভাইস স্টোরেজ",
+    "deviceStoragePercentFull": "{percent}% পূর্ণ",
+    "deviceStorageUsedOfTotal": "{total}-এর মধ্যে {used} ব্যবহৃত",
+    "deviceStorageFree": "{free} খালি",
+    "deviceStorageNearlyFull": "ডিভাইস প্রায় পূর্ণ — জায়গা খালি করতে সিঙ্ক করুন।",
+    "phoneMicOfflineFallbackMessage": "সংযোগ নেই — স্থানীয়ভাবে রেকর্ড করা হচ্ছে। আপনি আবার অনলাইনে এলে এটি ট্রান্সক্রাইব করা হবে।",
+    "dataEncryptedBanner": "আপনার ডেটা ডিফল্টরূপে শক্তিশালী এনক্রিপশন দিয়ে সুরক্ষিত, এবং এটি কীভাবে সংরক্ষণ ও ব্যবহার করা হয় তা আপনি নিয়ন্ত্রণ করেন।",
+    "rayBanMetaMicPickerTitle": "আপনার Ray-Ban Meta মাইক্রোফোন বেছে নিন",
+    "rayBanMetaMicPickerDescription": "আপনার চশমার Bluetooth মাইক্রোফোন নির্বাচন করুন। Omi এটি ব্যবহার করার সময় গান থেমে থাকবে।",
+    "rayBanMetaMicPickerEmpty": "কোনো Bluetooth মাইক্রোফোন পাওয়া যায়নি। iPhone সেটিংসে আপনার চশমা সংযুক্ত করে আবার চেষ্টা করুন।",
+    "rayBanMetaMicPickerLoadError": "Bluetooth মাইক্রোফোন লোড করা যায়নি। Bluetooth চালু আছে কিনা দেখে আবার চেষ্টা করুন।",
+    "rayBanMetaMicPickerConnectError": "ওই মাইক্রোফোনে সংযোগ করা যায়নি। iPhone সেটিংসে এটি সংযুক্ত আছে কিনা নিশ্চিত করুন।",
+    "cloudTranscription": "ক্লাউড ট্রান্সক্রিপশন",
+    "copyMessage": "বার্তা অনুলিপি করুন",
+    "deleteOnDeviceModel": "মডেল মুছুন",
+    "deleteOnDeviceModelConfirm": "আপনি কি নিশ্চিত যে এই মডেলটি মুছতে চান?",
+    "downgradeAnyway": "তবুও ডাউনগ্রেড করুন",
+    "downgradeLimitBattery": "৭ গুণ বেশি ব্যাটারি খরচ",
+    "downgradeLimitDelay": "৫-৭ সেকেন্ড বিলম্ব",
+    "downgradeLimitQuality": "৩০% কম ট্রান্সক্রিপশন মান",
+    "downgradeLimitSpeakers": "বক্তা শনাক্ত করা যাবে না",
+    "downgradeLimitationsHeading": "আপনি এই সীমাবদ্ধতাগুলির সম্মুখীন হবেন:",
+    "downgradeToFreemiumTitle": "বিনামূল্যের প্ল্যানে ডাউনগ্রেড করবেন?",
+    "errorLoadingAudio": "অডিও লোড করতে সমস্যা হয়েছে",
+    "failedToLinkCalendarEvent": "ক্যালেন্ডার ইভেন্ট লিঙ্ক করা যায়নি",
+    "googleCalendarConnectPrompt": "কথোপকথনকে ক্যালেন্ডার ইভেন্টের সাথে লিঙ্ক করতে আপনার Google ক্যালেন্ডার সংযুক্ত করুন।",
+    "googleCalendarNotConnected": "Google ক্যালেন্ডার সংযুক্ত নয়",
+    "linkedToEvent": "“{title}”-এর সাথে লিঙ্ক করা হয়েছে",
+    "onDeviceModelDeleted": "মডেল মুছে ফেলা হয়েছে",
+    "onDeviceModelDownloadFailed": "মডেল ডাউনলোড ব্যর্থ হয়েছে",
+    "onDeviceModelDownloadFailedDesc": "Whisper মডেল ডাউনলোড করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।",
+    "onDeviceModelDownloadSuccess": "মডেল ডাউনলোড হয়েছে",
+    "onDeviceModelDownloadSuccessDesc": "Whisper মডেল সফলভাবে ডাউনলোড হয়েছে",
+    "onDeviceModelDownloaded": "ডাউনলোড হয়েছে",
+    "onDeviceModelSize": "মডেলের আকার",
+    "onDeviceTranscription": "ডিভাইসে ট্রান্সক্রিপশন",
+    "onDeviceTranscriptionDesc": "ট্রান্সক্রিপশন আপনার ডিভাইসেই স্থানীয়ভাবে প্রক্রিয়া করা হয়",
+    "searchSettings": "সেটিংস অনুসন্ধান করুন…",
+    "speechToTextProvider": "স্পিচ-টু-টেক্সট প্রদানকারী",
+    "speechToTextProviderDesc": "ট্রান্সক্রিপশনের জন্য ব্যবহৃত পরিষেবা বেছে নিন",
+    "sttFilterAuto": "স্বয়ংক্রিয়",
+    "sttModelAccuracy": "নির্ভুলতা",
+    "sttModelFaster": "দ্রুততর",
+    "sttModelHigher": "বেশি",
+    "sttModelLower": "কম",
+    "sttModelSlower": "ধীরতর",
+    "sttModelSpeed": "গতি",
+    "sttNone": "কোনোটি নয়",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "আপনার মতামতের জন্য ধন্যবাদ!",
+    "transcriptionLanguage": "ট্রান্সক্রিপশনের ভাষা",
+    "transcriptionLanguageDesc": "কথা ট্রান্সক্রিপশনের জন্য ভাষা বেছে নিন",
+    "whisperModel": "Whisper মডেল",
+    "whisperModelDesc": "ডিভাইসে ট্রান্সক্রিপশনের জন্য মডেল বেছে নিন",
+    "whisperModelSizeBase": "বেস",
+    "whisperModelSizeLarge": "বড়",
+    "whisperModelSizeMedium": "মাঝারি",
+    "whisperModelSizeSmall": "ছোট",
+    "whisperModelSizeTiny": "অতি ছোট",
+    "planSheetChooseYourPlan": "সীমাহীন Omi আনলক করতে আপনার প্ল্যান বেছে নিন।",
+    "availableOnMacMobileWeb": "Mac, মোবাইল এবং ওয়েবে উপলব্ধ",
+    "popularBadge": "জনপ্রিয়",
+    "worksOnDesktop": "ডেস্কটপে কাজ করে",
+    "noDesktopAccess": "ডেস্কটপে কাজ করে না",
+    "annualBillingSummary": "{months} মাস / {price}",
+    "monthsFreeBadge": "{count, plural, =1{১ মাস ফ্রি} other{{count} মাস ফ্রি}}",
+    "freemiumLimitsIntro": "Omi ফ্রি, তবে ফ্রি সংস্করণে কিছু সীমাবদ্ধতা আছে যা আপনার অভিজ্ঞতাকে প্রভাবিত করে:",
+    "downgradeLimitDelayNotRealTime": "৫-৭ সেকেন্ড বিলম্ব (রিয়েল-টাইম নয়)",
+    "downgradeToFreemiumAction": "ফ্রি সংস্করণে নেমে যান",
+    "getFreeUnlimitedAccess": "ফ্রি আনলিমিটেড অ্যাক্সেস পান",
+    "shareDataForTraining": "প্রশিক্ষণের জন্য ডেটা শেয়ার করুন",
+    "yourRequestUnderReview": "আপনার অনুরোধ পর্যালোচনাধীন",
+    "pinAsBaseline": "বেসলাইন হিসেবে পিন করুন",
+    "unpinAsBaseline": "বেসলাইন থেকে আনপিন করুন",
+    "baselineMemory": "বেসলাইন মেমরি",
+    "alwaysInContext": "সর্বদা প্রসঙ্গে",
+    "accountCutoverUpdateRequiredTitle": "अपडेट आवश्यक",
+    "accountCutoverUpdateRequiredMessage": "खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।",
+    "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
+    "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
+    "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
+    "accountCutoverOpenStore": "स्टोर खोलें"
 }

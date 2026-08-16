@@ -1,9 +1,10 @@
 import { omiApi } from './apiClient'
 import { mapGraphResponse, mapRebuildResponse } from './knowledgeGraphMap'
 import type { KnowledgeGraph, RebuildResult } from '../../../shared/types'
+import type { KnowledgeGraphResponse } from './omiApi.generated'
 
 export async function fetchKnowledgeGraph(): Promise<KnowledgeGraph> {
-  const r = await omiApi.get('/v1/knowledge-graph')
+  const r = await omiApi.get<KnowledgeGraphResponse>('/v1/knowledge-graph')
   return mapGraphResponse(r.data)
 }
 

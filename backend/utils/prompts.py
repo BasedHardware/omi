@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from langchain_core.prompts import ChatPromptTemplate
 
 # *
@@ -9,10 +11,11 @@ from langchain_core.prompts import ChatPromptTemplate
 
 # - **world**:  Clever world facts that {user_name} can share to others so it makes him look smarter.
 # - "{user_name} learned that second Notion cofounder joined 5 years after." (**world**)
-extract_memories_prompt = ChatPromptTemplate.from_messages(['''
+extract_memories_prompt = cast(Any, ChatPromptTemplate).from_messages(['''
 You are an expert memory curator. Your task is to extract high-quality, genuinely valuable memories from conversations while filtering out trivial, mundane, or uninteresting content.
 
 CRITICAL CONTEXT:
+• Today's date is {current_date}; treat it as the present. Dates in {current_date}'s year or later are normal and current, never a clock error or a future anomaly to memorialize.
 • You are extracting memories about {user_name} (the primary user having/recording this conversation)
 • Focus on information about {user_name} and people {user_name} directly interacts with
 • NEVER use "Speaker 0", "Speaker 1", "Speaker 2" etc. in memory descriptions
@@ -361,8 +364,10 @@ LANGUAGE INSTRUCTION:
 {format_instructions}
 '''.replace('    ', '').strip()])
 
-extract_memories_text_content_prompt = ChatPromptTemplate.from_messages(['''
+extract_memories_text_content_prompt = cast(Any, ChatPromptTemplate).from_messages(['''
     You are an expert at extracting both (1) new facts about {user_name} and (2) new learnings or insights relevant to {user_name}.
+
+    Today's date is {current_date}; treat it as the present. Dates in {current_date}'s year or later are normal and current, never a clock error or a future anomaly to flag.
 
     You will be provided with:
     1. A list of existing facts about {user_name} and learnings {user_name} already knows (to avoid repetition).
@@ -456,7 +461,7 @@ extract_memories_text_content_prompt = ChatPromptTemplate.from_messages(['''
     '''.replace('    ', '').strip()])
 
 
-extract_memories_text_content_prompt_v1 = ChatPromptTemplate.from_messages(['''
+extract_memories_text_content_prompt_v1 = cast(Any, ChatPromptTemplate).from_messages(['''
     You are an expert fact extractor. Your task is to analyze the {text_source} content and extract important facts about {user_name}.
 
     You will be provided with a text content from the {text_source} content, along with a list of existing facts about {user_name}. \
@@ -517,7 +522,7 @@ extract_memories_text_content_prompt_v1 = ChatPromptTemplate.from_messages(['''
     '''.replace('    ', '').strip()])
 
 
-extract_learnings_prompt = ChatPromptTemplate.from_messages(['''
+extract_learnings_prompt = cast(Any, ChatPromptTemplate).from_messages(['''
 You are an insightful assistant tasked with extracting key learnings and valuable facts from conversations.
 
 You will be provided with a conversation transcript or content that {user_name} has listened to.

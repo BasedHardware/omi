@@ -75,10 +75,7 @@ class OnboardingStepScaffold extends StatelessWidget {
           ],
           const SizedBox(height: 40),
           Expanded(child: content),
-          if (bottomAction != null) ...[
-            bottomAction!,
-            const SizedBox(height: 24),
-          ],
+          if (bottomAction != null) ...[bottomAction!, const SizedBox(height: 24)],
         ],
       ),
     );
@@ -89,11 +86,7 @@ class OnboardingContinueButton extends StatelessWidget {
   final VoidCallback onPressed;
   final String? label;
 
-  const OnboardingContinueButton({
-    super.key,
-    required this.onPressed,
-    this.label,
-  });
+  const OnboardingContinueButton({super.key, required this.onPressed, this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -108,8 +101,10 @@ class OnboardingContinueButton extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
           elevation: 0,
         ),
-        child: Text(label ?? context.l10n.deviceOnboardingContinue,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        child: Text(
+          label ?? context.l10n.deviceOnboardingContinue,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }

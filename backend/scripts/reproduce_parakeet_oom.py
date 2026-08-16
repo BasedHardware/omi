@@ -34,7 +34,8 @@ import subprocess
 import sys
 import time
 import wave
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from typing import List, Optional, Tuple, TypedDict
 from urllib.parse import urlparse
 
 PARAKEET_URL = os.getenv("PARAKEET_URL", "http://127.0.0.1:8080")
@@ -42,7 +43,7 @@ CONCURRENCY = int(os.getenv("REPRO_CONCURRENCY", "4"))
 DURATIONS = [10, 30, 60, 120, 300, 600]
 
 
-def get_gpu_memory():
+def get_gpu_memory() -> Tuple[Optional[float], Optional[float]]:
     try:
         out = (
             subprocess.check_output(
@@ -58,10 +59,10 @@ def get_gpu_memory():
         return None, None
 
 
-def get_server_config():
+def get_server_config() -> str:
     try:
         parsed = urlparse(PARAKEET_URL)
-        conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
+        conn = http.client.HTTPConnection(parsed.hostname or "127.0.0.1", parsed.port, timeout=5)
         conn.request("GET", "/health")
         resp = conn.getresponse()
         body = resp.read().decode()
@@ -73,10 +74,10 @@ def get_server_config():
     return "unknown"
 
 
-def get_oom_count():
+def get_oom_count() -> float:
     try:
         parsed = urlparse(PARAKEET_URL)
-        conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
+        conn = http.client.HTTPConnection(parsed.hostname or "127.0.0.1", parsed.port, timeout=5)
         conn.request("GET", "/metrics/")
         resp = conn.getresponse()
         body = resp.read().decode()
@@ -89,14 +90,14 @@ def get_oom_count():
     return 0
 
 
-def make_wav(duration_s, sample_rate=16000):
+def make_wav(duration_s: int, sample_rate: int = 16000) -> bytes:
     n_samples = int(duration_s * sample_rate)
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(sample_rate)
-        samples = []
+        samples: List[int] = []
         for i in range(n_samples):
             t = i / sample_rate
             val = 0.3 * math.sin(2 * math.pi * 250 * t)
@@ -106,7 +107,14 @@ def make_wav(duration_s, sample_rate=16000):
     return buf.getvalue()
 
 
-def send_request(wav_bytes, request_id=0, timeout=600):
+class TranscriptionResult(TypedDict):
+    id: int
+    status: int
+    error: Optional[str]
+    body: bytes
+
+
+def send_request(wav_bytes: bytes, request_id: int = 0, timeout: int = 600) -> TranscriptionResult:
     parsed = urlparse(PARAKEET_URL)
     boundary = f"----Repro{request_id}"
     body = b"".join(
@@ -121,7 +129,7 @@ def send_request(wav_bytes, request_id=0, timeout=600):
             f"\r\n--{boundary}--\r\n".encode(),
         ]
     )
-    conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=timeout)
+    conn = http.client.HTTPConnection(parsed.hostname or "127.0.0.1", parsed.port, timeout=timeout)
     try:
         conn.request(
             "POST",
@@ -138,7 +146,17 @@ def send_request(wav_bytes, request_id=0, timeout=600):
         return {"id": request_id, "status": 0, "error": str(e), "body": b""}
 
 
-def main():
+class TierResult(TypedDict):
+    duration: int
+    peak_mib: float
+    delta_mib: float
+    successes: int
+    failures: int
+    ooms: int
+    elapsed: float
+
+
+def main() -> int:
     print("=" * 70)
     print("Parakeet OOM Reproduction Script")
     print("=" * 70)
@@ -148,8 +166,8 @@ def main():
     print(f"Health: {health}")
 
     used, total = get_gpu_memory()
-    if used is not None:
-        print(f"GPU: {used:.0f}/{total:.0f} MiB ({used/total*100:.1f}%)")
+    if used is not None and total is not None:
+        print(f"GPU: {used:.0f}/{total:.0f} MiB ({used / total * 100:.1f}%)")
     else:
         print("GPU: nvidia-smi not available (running without VRAM monitoring)")
 
@@ -164,8 +182,8 @@ def main():
     )
     print("-" * 85)
 
-    all_results = []
-    oom_threshold_found = None
+    all_results: List[TierResult] = []
+    oom_threshold_found: Optional[int] = None
 
     for dur in DURATIONS:
         wav_data = make_wav(dur)
@@ -176,10 +194,12 @@ def main():
         t0 = time.time()
 
         with ThreadPoolExecutor(max_workers=CONCURRENCY) as pool:
-            futures = [pool.submit(send_request, wav_data, i) for i in range(CONCURRENCY)]
+            futures: List[Future[TranscriptionResult]] = [
+                pool.submit(send_request, wav_data, i) for i in range(CONCURRENCY)
+            ]
 
             done_count = 0
-            for f in as_completed(futures):
+            for _ in as_completed(futures):
                 done_count += 1
                 cur_used, _ = get_gpu_memory()
                 if cur_used and cur_used > peak_used:

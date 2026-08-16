@@ -12,13 +12,18 @@ import struct
 import tempfile
 import wave
 from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
+import httpx
 import numpy as np
 import pytest
+import requests
 
 from utils.stt import vad
 from utils.stt.vad import (
+    VADAudioDecodeError,
+    VADProcessingError,
+    VADEmptyError,
     vad_is_empty,
     _run_file_vad,
     _get_ort_session,
@@ -27,8 +32,17 @@ from utils.stt.vad import (
     VAD_SAMPLE_RATE,
     VAD_WINDOW_SAMPLES,
     VAD_CONTEXT_SAMPLES,
+    vad_is_empty_strict,
+    linear16_pcm_is_silent,
     _STATE_SHAPE,
 )
+
+
+def test_apply_vad_for_speech_profile_raises_for_zero_segments():
+    with patch.object(vad, 'vad_is_empty', return_value=[]):
+        with pytest.raises(VADEmptyError, match='Audio is empty'):
+            vad.apply_vad_for_speech_profile('/fake/path.wav')
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -132,6 +146,25 @@ def tmp_wav_dir(tmp_path):
     return tmp_path
 
 
+class TestLinear16PcmVad:
+    """Raw PCM eligibility must be local, strict, and never provider-shaped."""
+
+    @patch('utils.stt.vad._segments_from_16khz_samples', return_value=[])
+    def test_pcm_silence_uses_local_vad(self, mock_segments):
+        assert linear16_pcm_is_silent(b'\x00' * 1024, sample_rate=16000, channels=1) is True
+        mock_segments.assert_called_once()
+
+    def test_invalid_pcm_shape_is_typed_decode_failure(self):
+        with pytest.raises(VADAudioDecodeError):
+            linear16_pcm_is_silent(b'\x01', sample_rate=16000, channels=1)
+
+    @patch('utils.stt.vad._segments_from_16khz_samples', side_effect=RuntimeError('synthetic ONNX failure'))
+    def test_pcm_inference_failure_is_typed(self, mock_segments):
+        with pytest.raises(VADProcessingError):
+            linear16_pcm_is_silent(b'\x01\x00' * 512, sample_rate=16000, channels=1)
+        mock_segments.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # Tests: vad_is_empty — hosted success
 # ---------------------------------------------------------------------------
@@ -214,6 +247,63 @@ class TestVadIsEmptyFallback:
         result = vad_is_empty(wav_path)
         assert result is False
         mock_local.assert_called_once_with(wav_path)
+
+    @patch.dict(
+        os.environ,
+        {
+            'HOSTED_VAD_API_URL': 'http://vad.test/v1/vad',
+            'HOSTED_VAD_CONNECT_TIMEOUT_SECONDS': '1.25',
+            'HOSTED_VAD_READ_TIMEOUT_SECONDS': '12.5',
+        },
+    )
+    @patch('utils.stt.vad.requests.post', side_effect=requests.ConnectTimeout('unreachable'))
+    @patch('utils.stt.vad._run_file_vad', return_value=[])
+    @patch.object(vad, 'redis_db')
+    def test_hosted_connect_timeout_is_bounded_and_falls_back(self, mock_redis, mock_local, mock_post, tmp_wav_dir):
+        wav_path = str(tmp_wav_dir / 'test.wav')
+        _write_wav_file(wav_path, 1.0)
+
+        assert vad_is_empty(wav_path) is True
+
+        assert mock_post.call_args.kwargs['timeout'] == (1.25, 12.5)
+        mock_local.assert_called_once_with(wav_path)
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {'HOSTED_VAD_API_URL': 'http://vad.test/v1/vad'}, clear=False)
+    async def test_async_hosted_timeout_uses_safe_defaults_and_falls_back(self, tmp_wav_dir):
+        wav_path = str(tmp_wav_dir / 'test.wav')
+        _write_wav_file(wav_path, 1.0)
+        os.environ.pop('HOSTED_VAD_CONNECT_TIMEOUT_SECONDS', None)
+        os.environ.pop('HOSTED_VAD_READ_TIMEOUT_SECONDS', None)
+
+        client = MagicMock()
+        client.post = AsyncMock(side_effect=httpx.ConnectTimeout('unreachable'))
+        with (
+            patch.object(vad, 'get_stt_client', return_value=client),
+            patch.object(vad, '_run_file_vad', return_value=[]) as mock_local,
+        ):
+            assert await vad.async_vad_is_empty(wav_path) is True
+
+        timeout = client.post.call_args.kwargs['timeout']
+        assert timeout.connect == 3.0
+        assert timeout.read == 30.0
+        assert timeout.write == 30.0
+        assert timeout.pool == 3.0
+        mock_local.assert_called_once_with(wav_path)
+
+    @pytest.mark.parametrize(
+        'invalid_value',
+        ['0', '-1', 'abc', 'inf', 'Infinity', '1e309', '61', '301', '1000000000'],
+    )
+    def test_invalid_hosted_timeouts_use_safe_defaults(self, invalid_value):
+        with patch.dict(
+            os.environ,
+            {
+                'HOSTED_VAD_CONNECT_TIMEOUT_SECONDS': invalid_value,
+                'HOSTED_VAD_READ_TIMEOUT_SECONDS': invalid_value,
+            },
+        ):
+            assert vad._hosted_vad_timeout_seconds() == (3.0, 30.0)
 
     @patch.dict(os.environ, {'HOSTED_VAD_API_URL': 'http://vad.test/v1/vad'})
     @patch('utils.stt.vad.requests.post')
@@ -390,6 +480,34 @@ class TestRunFileVad:
 
         segments = _run_file_vad(bad_path)
         assert segments == []
+
+    def test_strict_corrupt_file_raises_decode_error(self, tmp_wav_dir):
+        """Strict eligibility never converts a decode failure into silence."""
+        bad_path = str(tmp_wav_dir / 'corrupt-strict.wav')
+        with open(bad_path, 'wb') as file:
+            file.write(b'NOT A WAV FILE')
+
+        with pytest.raises(VADAudioDecodeError):
+            vad_is_empty_strict(bad_path)
+
+    @patch('utils.stt.vad.run_vad_window', side_effect=_mock_run_vad_window_silence)
+    @patch('utils.stt.vad.make_fresh_state', side_effect=_mock_make_fresh_state)
+    def test_strict_valid_silence_returns_true(self, mock_state, mock_vad, tmp_wav_dir):
+        """A successfully decoded, VAD-negative file remains expected silence."""
+        wav_path = str(tmp_wav_dir / 'strict-silence.wav')
+        _write_wav_file(wav_path, 0.1)
+
+        assert vad_is_empty_strict(wav_path) is True
+
+    @patch('utils.stt.vad.run_vad_window', side_effect=RuntimeError('VAD inference failed'))
+    @patch('utils.stt.vad.make_fresh_state', side_effect=_mock_make_fresh_state)
+    def test_strict_inference_failure_propagates(self, mock_state, mock_vad, tmp_wav_dir):
+        """Strict eligibility never converts an inference failure into silence."""
+        wav_path = str(tmp_wav_dir / 'strict-inference.wav')
+        _write_wav_file(wav_path, 0.1, freq_hz=440.0)
+
+        with pytest.raises(VADProcessingError, match='local VAD could not evaluate audio'):
+            vad_is_empty_strict(wav_path)
 
     @patch('utils.stt.vad.run_vad_window', side_effect=_mock_run_vad_window_speech)
     @patch('utils.stt.vad.make_fresh_state', side_effect=_mock_make_fresh_state)

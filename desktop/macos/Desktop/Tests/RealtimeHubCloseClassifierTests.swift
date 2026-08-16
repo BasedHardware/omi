@@ -1,8 +1,69 @@
+import Network
 import XCTest
 
 @testable import Omi_Computer
 
 final class RealtimeHubCloseClassifierTests: XCTestCase {
+  func testClassifiesTypedPOSIXAddressFailureWithoutParsingLocalizedText() {
+    let systemError = NSError(
+      domain: NSPOSIXErrorDomain,
+      code: Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue),
+      userInfo: [NSLocalizedDescriptionKey: "locale-dependent text"])
+    let failure = RealtimeHubTransportFailure.system(systemError, phase: .receive)
+
+    XCTAssertEqual(failure.kind, .localAddressUnavailable)
+    XCTAssertEqual(failure.systemDomain, "posix")
+    XCTAssertEqual(failure.systemCode, Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue))
+    XCTAssertEqual(
+      RealtimeHubCloseClassifier.category(
+        failure: failure,
+        aliveFor: 1,
+        provider: .gemini),
+      .localAddressUnavailable)
+    XCTAssertTrue(
+      RealtimeHubCloseClassifier.shouldReportToSentry(.localAddressUnavailable))
+  }
+
+  func testProviderErrorDetailIsLocalOnlyWhileCategoryRemainsActionable() {
+    let failure = RealtimeHubTransportFailure.providerError("raw provider payload")
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 1,
+      provider: .gemini)
+    let plan = RealtimeHubFailureReportingPlan.make(
+      failure: failure,
+      category: category,
+      provider: "gemini",
+      aliveFor: 1,
+      activeTurn: true)
+
+    XCTAssertEqual(category, .providerError)
+    XCTAssertTrue(plan.localMessage.contains("raw provider payload"))
+    XCTAssertFalse(plan.sentryMessage.contains("raw provider payload"))
+  }
+
+  func testUnclassifiedProviderCloseReasonNeverEntersSentryMessage() {
+    let rawReason = "upstream 1011 secret marker"
+    let failure = RealtimeHubTransportFailure.providerClose(code: 1011, reason: rawReason)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 1,
+      provider: .gemini)
+    let plan = RealtimeHubFailureReportingPlan.make(
+      failure: failure,
+      category: category,
+      provider: "gemini",
+      aliveFor: 1,
+      activeTurn: true)
+
+    XCTAssertNil(category)
+    XCTAssertTrue(plan.localMessage.contains(rawReason))
+    XCTAssertEqual(
+      plan.sentryMessage,
+      "RealtimeHub: session error category=unclassified provider=gemini activeTurn=true")
+    XCTAssertFalse(plan.sentryMessage.contains(rawReason))
+  }
+
   func testClassifiesLongLivedWebSocket1008AsExpectedIdleTeardownOnlyWhenIdle() {
     let category = RealtimeHubCloseClassifier.category(
       message: "WebSocket closed (1008)",
@@ -22,6 +83,75 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
     XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
   }
 
+  func testClassifiesOpenAIMaximumDurationAsExpectedSessionRotation() {
+    let category = RealtimeHubCloseClassifier.category(
+      message: "Your session hit the maximum duration of 60 minutes.",
+      aliveFor: 60 * 60,
+      provider: .openai)
+
+    XCTAssertEqual(category, .expectedSessionRotation)
+    XCTAssertEqual(
+      RealtimeHubCloseClassifier.sessionRotationPlan(
+        for: category,
+        hasActiveTurn: false),
+      .rewarmIdleTransport)
+    XCTAssertFalse(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testOpenAISessionRotationDuringTurnRequiresReducerOwnedTerminalization() {
+    let category = RealtimeHubCloseClassifier.category(
+      message: "Your session hit the maximum duration of 60 minutes.",
+      aliveFor: 60 * 60,
+      hasActiveTurn: true,
+      provider: .openai)
+
+    XCTAssertEqual(
+      RealtimeHubCloseClassifier.sessionRotationPlan(
+        for: category,
+        hasActiveTurn: true),
+      .terminateActiveTurnAndRewarm)
+  }
+
+  func testDoesNotClassifyMaximumDurationForAnotherProvider() {
+    let category = RealtimeHubCloseClassifier.category(
+      message: "Your session hit the maximum duration of 60 minutes.",
+      aliveFor: 60 * 60,
+      provider: .gemini)
+
+    XCTAssertNil(category)
+  }
+
+  func testClassifiesAgedIdleSocketNotConnectedAsExpectedTeardown() {
+    let category = RealtimeHubCloseClassifier.category(
+      message: "The operation couldn’t be completed. Socket is not connected",
+      aliveFor: 60 * 60,
+      provider: .openai)
+
+    XCTAssertEqual(category, .expectedIdleTeardown)
+    XCTAssertFalse(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testClassifiesActiveTurnSocketNotConnectedAsReportableError() {
+    let category = RealtimeHubCloseClassifier.category(
+      message: "The operation couldn’t be completed. Socket is not connected",
+      aliveFor: 60 * 60,
+      hasActiveTurn: true,
+      provider: .openai)
+
+    XCTAssertNil(category)
+    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testClassifiesFastSocketNotConnectedAsReportableError() {
+    let category = RealtimeHubCloseClassifier.category(
+      message: "The operation couldn’t be completed. Socket is not connected",
+      aliveFor: 3,
+      provider: .openai)
+
+    XCTAssertNil(category)
+    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
   func testClassifiesFastWebSocket1008AsProviderPolicyClose() {
     let category = RealtimeHubCloseClassifier.category(
       message: "WebSocket closed (1008) policy violation",
@@ -37,6 +167,74 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
       aliveFor: 120)
 
     XCTAssertNil(category)
+    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testRecordsTypedPOSIXErrnoForNetworkFrameworkFailures() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ECONNRESET), phase: .receive)
+
+    XCTAssertEqual(failure.systemDomain, "posix")
+    XCTAssertEqual(failure.systemCode, Int(POSIXErrorCode.ECONNRESET.rawValue))
+  }
+
+  func testClassifiesAgedIdleReceiveResetAsExpectedTeardown() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ECONNRESET), phase: .receive)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: RealtimeHubCloseClassifier.idleTeardownThreshold + 1,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .expectedIdleTeardown)
+    XCTAssertFalse(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testClassifiesAgedIdleSendDisconnectAsExpectedTeardown() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ENOTCONN), phase: .send)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 600,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .expectedIdleTeardown)
+  }
+
+  func testClassifiesFastReceiveResetAsReportableTransportError() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ECONNRESET), phase: .receive)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 3,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .transportReceive)
+    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testClassifiesAgedReceiveResetDuringTurnAsReportableTransportError() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.ECONNRESET), phase: .receive)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 600,
+      hasActiveTurn: true,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .transportReceive)
+    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testClassifiesAgedIdleNonDisconnectReceiveFailureAsReportableTransportError() {
+    let failure = RealtimeHubTransportFailure.system(
+      NWError.posix(.EHOSTUNREACH), phase: .receive)
+    let category = RealtimeHubCloseClassifier.category(
+      failure: failure,
+      aliveFor: 600,
+      provider: .gemini)
+
+    XCTAssertEqual(category, .transportReceive)
     XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
   }
 

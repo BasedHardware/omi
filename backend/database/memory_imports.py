@@ -4,7 +4,8 @@ import hashlib
 import os
 import re
 from dataclasses import dataclass
-from typing import Optional
+from datetime import datetime
+from typing import Any, Optional
 
 from google.api_core.exceptions import AlreadyExists, Conflict
 from google.cloud import firestore
@@ -29,7 +30,7 @@ class MemoryImportIngestResult:
     response: MemoryImportBatchResponse
 
 
-def _firestore_increment(value: int):
+def _firestore_increment(value: int) -> Any:
     return firestore.Increment(value)
 
 
@@ -90,11 +91,11 @@ def ingest_memory_import_batch(
     uid: str,
     request: MemoryImportBatchRequest,
     *,
-    db_client,
-    now=None,
+    db_client: Any,
+    now: Optional[datetime] = None,
 ) -> MemoryImportIngestResult:
     """Persist import artifacts only; never create product memories or indexes."""
-    current_time = now or utc_now()
+    current_time: datetime = now or utc_now()
     source_type = _normalized_source_type(request.source_type)
     run_id = _run_id(uid, request)
     collections = MemoryCollections(uid=uid)
@@ -105,7 +106,7 @@ def ingest_memory_import_batch(
     for item in request.items:
         content_hash = _stable_content_hash(item)
         artifact_id = _artifact_id(uid, source_type, request.source_account_hash, item)
-        artifact_ref = db_client.document(f"{collections.memory_import_artifacts}/{artifact_id}")
+        artifact_ref: Any = db_client.document(f"{collections.memory_import_artifacts}/{artifact_id}")
         artifact = MemoryImportArtifact(
             artifact_id=artifact_id,
             uid=uid,
@@ -140,7 +141,7 @@ def ingest_memory_import_batch(
             )
             continue
 
-    run_ref = db_client.document(f"{collections.memory_import_runs}/{run_id}")
+    run_ref: Any = db_client.document(f"{collections.memory_import_runs}/{run_id}")
     try:
         run_ref.create(
             {

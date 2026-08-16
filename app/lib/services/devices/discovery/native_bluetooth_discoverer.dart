@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/logger.dart';
@@ -21,6 +22,9 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
 
   @override
   Future<DeviceDiscoveryResult> discover({int timeout = 5}) async {
+    if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery)) {
+      return const DeviceDiscoveryResult(devices: [], isBlocked: true);
+    }
     final List<BlePeripheral> results = [];
     final completer = Completer<void>();
 

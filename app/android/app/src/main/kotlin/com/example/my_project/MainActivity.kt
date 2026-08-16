@@ -1,6 +1,13 @@
 package com.friend.ios
 
 import android.content.Intent
+import com.friend.ios.ble.BleHostApiImpl
+import com.friend.ios.phonecalls.PhoneCallsPlugin
+import com.friend.ios.ble.OmiBleForegroundService
+import com.friend.ios.ble.OmiBleManager
+import com.friend.ios.ble.OmiCompanionManager
+import com.friend.ios.batch.OmiBackgroundAudioStreamer
+import com.friend.ios.phonemic.*
 import android.os.Bundle
 import androidx.annotation.NonNull
 import android.Manifest
@@ -38,6 +45,11 @@ class MainActivity: FlutterActivity() {
         hostApi.initCompanionManager(this)
         bleHostApiImpl = hostApi
         BleHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, hostApi)
+
+        // Register Native Phone Mic Pigeon APIs
+        PhoneMicController.initialize(application)
+        PhoneMicController.instance.bindFlutterApi(PhoneMicFlutterApi(flutterEngine.dartExecutor.binaryMessenger))
+        PhoneMicHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, PhoneMicHostApiImpl(PhoneMicController.instance))
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_BLE_TRANSCRIPT_CHANNEL).setMethodCallHandler {
             call, result ->
             if (call.method == "drain") {
@@ -88,12 +100,22 @@ class MainActivity: FlutterActivity() {
     }
 
     override fun onDestroy() {
+        // The engine dies with the activity whether or not it is finishing, so these flags
+        // must clear outside the isFinishing guard — a system-initiated destroy otherwise
+        // leaves native deferring audio to an engine that is gone (issue #10847).
+        // configureFlutterEngine re-arms both on the next attach.
+        OmiBleManager.isFlutterAlive = false
+        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .edit()
+            .putBoolean("flutter.nativeBleForegroundReady", false)
+            .apply()
         if (isFinishing) {
-            OmiBleManager.isFlutterAlive = false
-            // With Background Mode on, the foreground service keeps the pendant connected and
-            // transcribing after a task close. With it off (default), tear it down so the device
-            // disconnects when the app is closed.
-            if (!OmiBleForegroundService.isBackgroundModeEnabled(this)) {
+            // Engine + main isolate die with the activity; a live capture session must not outlive its consumer.
+            if (PhoneMicController.isInitialized) PhoneMicController.instance.onFlutterEngineDestroyed()
+            // Background Mode and Transcribe Later both need the foreground service to keep
+            // the device connected/capturing after a task close. With both off (default),
+            // tear it down so the device disconnects when the app is closed.
+            if (!OmiBleForegroundService.isPersistentModeEnabled(this)) {
                 OmiBleForegroundService.stopService(this)
             }
         }

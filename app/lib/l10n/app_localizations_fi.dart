@@ -9,6 +9,9 @@ class AppLocalizationsFi extends AppLocalizations {
   AppLocalizationsFi([String locale = 'fi']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Istunto on vanhentunut — kirjaudu uudelleen.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -741,11 +744,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Pakettisi uusiutuu $date.';
-  }
-
-  @override
   String get basicPlan => 'Ilmaispaketti';
 
   @override
@@ -1463,7 +1461,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get payYourSttProvider => 'Käytä omia vapaasti. Maksat vain STT-palveluntarjoajallesi suoraan.';
 
   @override
-  String get freeMinutesMonth => '1 200 ilmaisminuuttia kuukaudessa mukana. Rajoittamaton ';
+  String get freeMinutesMonth => '300 ilmaisminuuttia kuukaudessa mukana. Rajoittamaton ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1785,20 +1783,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Pidätkö Omista?';
-
-  @override
-  String get leaveReviewIos =>
-      'Auta meitä tavoittamaan lisää ihmisiä jättämällä arvostelu App Storeen. Palautteesi on meille tärkeää!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Auta meitä tavoittamaan lisää ihmisiä jättämällä arvostelu Google Play -kauppaan. Palautteesi on meille tärkeää!';
-
-  @override
-  String get rateOnAppStore => 'Arvostele App Storessa';
-
-  @override
-  String get rateOnGooglePlay => 'Arvostele Google Playssa';
 
   @override
   String get maybeLater => 'Ehkä myöhemmin';
@@ -2134,6 +2118,18 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Muokkaa muistia';
+
+  @override
+  String get pinAsBaseline => 'Kiinnitä perustaksi';
+
+  @override
+  String get unpinAsBaseline => 'Irrota perustasta';
+
+  @override
+  String get baselineMemory => 'Perusmuisti';
+
+  @override
+  String get alwaysInContext => 'Aina kontekstissa';
 
   @override
   String get memoryContentHint => 'Pidän jäätelön syömisestä...';
@@ -4705,7 +4701,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ei määritettyä tietojen käyttöoikeutta.';
 
   @override
-  String get basicPlanDescription => '1 200 premium-minuuttia + rajoittamaton laitteella';
+  String get basicPlanDescription => '300 premium-minuuttia + rajoittamaton laitteella';
 
   @override
   String get minutes => 'minuuttia';
@@ -5997,7 +5993,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1 200 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajattoman ilmaisen puheentunnistuksen.';
+      '300 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajattoman ilmaisen puheentunnistuksen.';
 
   @override
   String get viewUsage => 'Näytä käyttö';
@@ -6079,7 +6075,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1 200 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajoittamattoman ilmaisen transkription. ';
+      '300 premium-minuuttia/kk. Laitteella-välilehti tarjoaa rajoittamattoman ilmaisen transkription. ';
 
   @override
   String get audioProcessedLocally =>
@@ -8985,7 +8981,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get billingYearly => 'Vuosittain';
 
   @override
-  String get savePercent => 'Säästä ~17%';
+  String savePercent(int percent) {
+    return 'Säästä ~$percent%';
+  }
 
   @override
   String get popular => 'Suosittu';
@@ -9340,7 +9338,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Toimii toistaiseksi Omi-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.';
+      'Toimii puhelimen mikrofonin sekä Omi- ja Limitless-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9490,4 +9488,356 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Asenna laiteohjelmisto';
+
+  @override
+  String get pendantRecordingTitle => 'Tallennus riipuksella';
+
+  @override
+  String get pendantRecordingNote =>
+      'Riipuksesi tallentaa itsenäisesti. Tallenteet synkronoituvat puhelimeesi, kun sovellus on auki.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synkronoidaan tallenteita riipuksestasi…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min tallennettu';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Riipuksen tallennustila on lähes täynnä — pidä sovellus auki synkronointia varten.';
+
+  @override
+  String get connectRayBanMeta => 'Yhdistä Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Käytä Ray-Ban Meta -laseja Omi-tallennuslaitteena keskusteluihin ja visuaaliseen kontekstiin. Omi avaa Meta AI -sovelluksen lasien yhdistämistä varten.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Yhdistä Meta AI:n kautta';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Viimeistele yhdistäminen Meta AI -sovelluksessa ja palaa sitten tänne.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Tarkista uudelleen';
+
+  @override
+  String get raybanMetaAllowCamera => 'Salli lasien kamera';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi käyttää lasiesi kameraa lisätäkseen valokuvia keskusteluihisi. Voit ohittaa tämän ja käyttää vain ääntä.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Ohita toistaiseksi';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Metan vain ääni -tila';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Tämä Omi-versio voi käyttää lasiesi mikrofonia Bluetoothin kautta. Valokuvien ottaminen vaatii Omin Meta-kehittäjäversion.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Puhelimesi musiikki keskeytyy, kun lasien mikrofoni on käytössä.';
+
+  @override
+  String get raybanMetaContinue => 'Jatka';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Ota valokuva';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Valokuvaa pyydetty — se näkyy keskustelussasi.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofoni valmis';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Kuvan kaappaus valmis';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Ei käytettävissä vain ääni -tilassa';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Virhe yhdistettäessä Ray-Ban Metaan: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'Laitteen tallennustila';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent % täynnä';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used / $total käytössä';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free vapaana';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Laite on lähes täynnä — synkronoi vapauttaaksesi tilaa.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Ei yhteyttä – tallennetaan paikallisesti. Litterointi tehdään, kun olet taas verkossa.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Tietosi on oletuksena suojattu vahvalla salauksella, ja sinä hallitset, miten niitä säilytetään ja käytetään.';
+
+  @override
+  String get sttModelAccuracy => 'Tarkkuus';
+
+  @override
+  String get whisperModelSizeBase => 'Perus';
+
+  @override
+  String get cloudTranscription => 'Pilvitranskriptio';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Poista malli';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Haluatko varmasti poistaa tämän mallin?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Ladattu';
+
+  @override
+  String get sttModelFaster => 'Nopeampi';
+
+  @override
+  String get sttFilterAuto => 'Automaattinen';
+
+  @override
+  String get sttModelHigher => 'Korkeampi';
+
+  @override
+  String get whisperModelSizeLarge => 'Suuri';
+
+  @override
+  String get sttModelLower => 'Matalampi';
+
+  @override
+  String get whisperModelSizeMedium => 'Keskikokoinen';
+
+  @override
+  String get onDeviceModelDeleted => 'Malli poistettu';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Mallin lataus epäonnistui';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Whisper-mallin lataaminen epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Malli ladattu';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper-malli ladattiin onnistuneesti';
+
+  @override
+  String get onDeviceModelSize => 'Mallin koko';
+
+  @override
+  String get sttNone => 'Ei mitään';
+
+  @override
+  String get onDeviceTranscription => 'Laitteella tapahtuva transkriptio';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkriptio käsitellään paikallisesti laitteellasi';
+
+  @override
+  String get sttModelSlower => 'Hitaampi';
+
+  @override
+  String get whisperModelSizeSmall => 'Pieni';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Puheesta tekstiksi -palveluntarjoaja';
+
+  @override
+  String get speechToTextProviderDesc => 'Valitse transkriptioon käytettävä palvelu';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Nopeus';
+
+  @override
+  String get whisperModelSizeTiny => 'Pikkuruinen';
+
+  @override
+  String get transcriptionLanguage => 'Transkription kieli';
+
+  @override
+  String get transcriptionLanguageDesc => 'Valitse puheen transkription kieli';
+
+  @override
+  String get whisperModel => 'Whisper-malli';
+
+  @override
+  String get whisperModelDesc => 'Valitse malli laitteella tapahtuvaan transkriptioon';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Siirrytäänkö ilmaiseen tilaukseen?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Kohtaat nämä rajoitukset:';
+
+  @override
+  String get downgradeLimitBattery => '7-kertainen akunkulutus';
+
+  @override
+  String get downgradeLimitQuality => '30 % heikompi litterointilaatu';
+
+  @override
+  String get downgradeLimitDelay => '5–7 sekunnin viive';
+
+  @override
+  String get downgradeLimitSpeakers => 'Puhujia ei voi tunnistaa';
+
+  @override
+  String get downgradeAnyway => 'Vaihda silti';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Kalenteria ei ole yhdistetty';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Yhdistä Google Kalenteri, niin voit linkittää keskusteluja kalenteritapahtumiin.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Linkitetty tapahtumaan ”$title”';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Kalenteritapahtuman linkittäminen epäonnistui';
+
+  @override
+  String get thanksForYourFeedback => 'Kiitos palautteestasi!';
+
+  @override
+  String get copyMessage => 'Kopioi viesti';
+
+  @override
+  String get searchSettings => 'Etsi asetuksista…';
+
+  @override
+  String get errorLoadingAudio => 'Äänen lataaminen epäonnistui';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Valitse Ray-Ban Meta -mikrofoni';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Valitse lasiesi Bluetooth-mikrofoni. Musiikki keskeytyy, kun Omi käyttää sitä.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth-mikrofoneja ei löytynyt. Yhdistä lasit iPhonen asetuksissa ja yritä uudelleen.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth-mikrofoneja ei voitu ladata. Tarkista, että Bluetooth on päällä, ja yritä uudelleen.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Mikrofoniin ei voitu muodostaa yhteyttä. Varmista, että se on yhdistetty iPhonen asetuksissa.';
+
+  @override
+  String get syncStatusTooOld => 'Liian vanha synkronoitavaksi — Omi ei voi hyväksyä sitä';
+
+  @override
+  String get planSheetChooseYourPlan => 'Valitse tilauksesi ja avaa rajaton Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Saatavilla Macilla, mobiilissa ja verkossa';
+
+  @override
+  String get popularBadge => 'SUOSITTU';
+
+  @override
+  String get worksOnDesktop => 'Toimii tietokoneella';
+
+  @override
+  String get noDesktopAccess => 'Ei toimi tietokoneella';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months kuukautta / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kuukautta ilmaiseksi',
+      one: '1 kuukausi ilmaiseksi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi on ilmainen, mutta ilmaisversiossa on rajoituksia, jotka vaikuttavat kokemukseesi:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 sekunnin viive (ei reaaliaikainen)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Vaihda ilmaisversioon';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Hanki ilmainen rajaton käyttöoikeus';
+
+  @override
+  String get shareDataForTraining => 'Jaa dataa koulutukseen';
+
+  @override
+  String get yourRequestUnderReview => 'Pyyntösi on käsittelyssä';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Päivitys vaaditaan';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => 'Asenna uusin Omi-sovellus jatkaaksesi tilin siirron jälkeen.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Siirto käynnissä';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.';
+
+  @override
+  String get accountCutoverOpenStore => 'Avaa kauppa';
 }

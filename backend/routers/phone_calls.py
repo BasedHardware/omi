@@ -3,7 +3,7 @@ import re
 import traceback
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
@@ -12,11 +12,11 @@ from twilio.base.exceptions import TwilioRestException
 from twilio.twiml.voice_response import VoiceResponse, Dial
 
 import database.phone_calls as phone_calls_db
-import database.phone_call_usage as phone_call_usage_db
-from utils.phone_calls import check_call_access, check_destination_allowed, get_quota_snapshot
+from utils.phone_calls import check_call_access, check_destination_allowed, get_quota_snapshot, reserve_phone_call_quota
 from utils.other import endpoints as auth
 from utils.other.endpoints import rate_limit_dependency
-from utils.executors import db_executor, run_blocking
+from utils.executors import critical_executor, db_executor, run_blocking
+from utils.multipart import MultipartMaxPartSizeRoute, PHONE_CALL_MAX_PART_SIZE, parse_multipart_form
 from utils.twilio_service import (
     generate_access_token,
     start_caller_id_verification,
@@ -36,7 +36,23 @@ def _redact_phone(number: str) -> str:
     return '***'
 
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
+
+
+def _say(response: VoiceResponse, message: str) -> None:
+    """Wrap twilio ``VoiceResponse.say`` — its params are untyped in the SDK."""
+    response.say(message)  # type: ignore[reportUnknownMemberType]  # twilio VoiceResponse.say params untyped
+
+
+def _dial_number(dial: Dial, phone_number: str) -> None:
+    """Wrap twilio ``Dial.number`` — its params are untyped in the SDK."""
+    dial.number(phone_number)  # type: ignore[reportUnknownMemberType]  # twilio Dial.number params untyped
+
+
+def _append_dial(response: VoiceResponse, dial: Dial) -> None:
+    """Wrap twilio ``VoiceResponse.append`` — its params are untyped in the SDK."""
+    response.append(dial)  # type: ignore[reportUnknownMemberType]  # twilio VoiceResponse.append params untyped
+
 
 # ************************************************
 # *********** REQUEST/RESPONSE MODELS ************
@@ -69,6 +85,14 @@ class PhoneNumberResponse(BaseModel):
     friendly_name: Optional[str] = None
     verified_at: str
     is_primary: bool
+
+
+class PhoneNumbersResponse(BaseModel):
+    numbers: list[PhoneNumberResponse]
+
+
+class PhoneMutationResponse(BaseModel):
+    success: bool
 
 
 class TokenResponse(BaseModel):
@@ -131,7 +155,7 @@ def verify_phone_number(
 def check_phone_verification(
     request: CheckVerificationRequest,
     uid: str = Depends(auth.get_current_user_uid),
-    _rate_limit=Depends(
+    _rate_limit: Any = Depends(
         rate_limit_dependency(endpoint="phone_verify_check", requests_per_window=30, window_seconds=60)
     ),
 ):
@@ -158,7 +182,7 @@ def check_phone_verification(
     existing_numbers = phone_calls_db.get_phone_numbers(uid)
 
     phone_number_id = str(uuid.uuid4())
-    phone_number_data = {
+    phone_number_data: Dict[str, Any] = {
         'id': phone_number_id,
         'phone_number': phone_number,
         'friendly_name': caller_id_info.get('friendly_name') if caller_id_info else None,
@@ -172,7 +196,7 @@ def check_phone_verification(
     return CheckVerificationResponse(verified=True, phone_number_id=phone_number_id)
 
 
-@router.get("/v1/phone/numbers", tags=['phone-calls'])
+@router.get("/v1/phone/numbers", response_model=PhoneNumbersResponse, tags=['phone-calls'])
 def list_phone_numbers(uid: str = Depends(auth.get_current_user_uid)):
     """List all verified phone numbers for the user."""
     check_call_access(uid)
@@ -180,7 +204,7 @@ def list_phone_numbers(uid: str = Depends(auth.get_current_user_uid)):
     return {'numbers': numbers}
 
 
-@router.delete("/v1/phone/numbers/{phone_number_id}", tags=['phone-calls'])
+@router.delete("/v1/phone/numbers/{phone_number_id}", response_model=PhoneMutationResponse, tags=['phone-calls'])
 def remove_phone_number(phone_number_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Remove a verified phone number."""
     check_call_access(uid)
@@ -223,7 +247,7 @@ def get_phone_token(uid: str = Depends(auth.get_current_user_uid)):
 # ************************************************
 
 
-@router.post("/v1/phone/twiml", tags=['phone-calls'])
+@router.post("/v1/phone/twiml", tags=['phone-calls'], response_class=Response)
 async def twiml_voice_webhook(request: Request):
     """
     TwiML webhook called by Twilio when a VoIP call is initiated from the client SDK.
@@ -239,22 +263,25 @@ async def twiml_voice_webhook(request: Request):
         url = f"{base_api_url}{request.url.path}"
     else:
         url = str(request.url)
-    form_data = await request.form()
+    form_data = await parse_multipart_form(request, max_part_size=PHONE_CALL_MAX_PART_SIZE)
     params = dict(form_data)
 
     if not validate_twilio_signature(url, params, signature):
         raise HTTPException(status_code=403, detail="Invalid Twilio signature")
 
-    to_number = form_data.get('To', '')
-    caller_identity = form_data.get('From', '')  # This is the uid (SDK identity)
-    call_id = form_data.get('CallId', '')
+    to_number_raw: object = form_data.get('To', '')
+    to_number: str = to_number_raw if isinstance(to_number_raw, str) else ''
+    caller_identity_raw: object = form_data.get('From', '')  # This is the uid (SDK identity)
+    caller_identity: str = caller_identity_raw if isinstance(caller_identity_raw, str) else ''
+    call_id_raw: object = form_data.get('CallId', '')
+    call_id: str = call_id_raw if isinstance(call_id_raw, str) else ''
 
     print(f"twiml_voice_webhook: To={_redact_phone(to_number)}, From(identity)=***, CallId={call_id}")
 
     response = VoiceResponse()
 
     if not to_number:
-        response.say('No destination number provided. Goodbye.')
+        _say(response, 'No destination number provided. Goodbye.')
         return Response(content=str(response), media_type='text/xml')
 
     # Resolve the caller's verified phone number from their uid
@@ -271,7 +298,7 @@ async def twiml_voice_webhook(request: Request):
 
     if not caller_number:
         print(f"twiml_voice_webhook: no verified caller ID found for uid=***")
-        response.say('No verified caller ID found. Please verify a phone number first.')
+        _say(response, 'No verified caller ID found. Please verify a phone number first.')
         return Response(content=str(response), media_type='text/xml')
 
     # Ensure clean E.164 format (remove all whitespace, dashes, parens, dots)
@@ -280,48 +307,47 @@ async def twiml_voice_webhook(request: Request):
 
     # Validate destination number format
     if not E164_PATTERN.match(to_number):
-        response.say('Invalid destination number format. Goodbye.')
+        _say(response, 'Invalid destination number format. Goodbye.')
         return Response(content=str(response), media_type='text/xml')
 
     # Final quota + destination check before placing the call. Free-tier users
     # on exhausted monthly buckets or disallowed destinations are turned away
     # here so Twilio never actually dials; we then refuse to count the attempt.
-    snapshot = get_quota_snapshot(uid)
+    snapshot = await run_blocking(db_executor, get_quota_snapshot, uid)
     if not snapshot.has_access:
-        response.say('Monthly phone call limit reached. Goodbye.')
+        _say(response, 'Monthly phone call limit reached. Goodbye.')
         return Response(content=str(response), media_type='text/xml')
     try:
         check_destination_allowed(snapshot, to_number)
     except HTTPException:
-        response.say('This destination is not available on your plan. Goodbye.')
+        _say(response, 'This destination is not available on your plan. Goodbye.')
         return Response(content=str(response), media_type='text/xml')
 
     # Verify the number is still a valid outgoing caller ID in Twilio
-    is_verified = check_caller_id_verified(caller_number)
+    is_verified = await run_blocking(critical_executor, check_caller_id_verified, caller_number)
     print(
         f"twiml_voice_webhook: caller_id={_redact_phone(caller_number)}, verified_in_twilio={is_verified}, to={_redact_phone(to_number)}"
     )
 
     if not is_verified:
         print(f"twiml_voice_webhook: caller_id {_redact_phone(caller_number)} is NOT verified in Twilio!")
-        response.say('Your caller ID is not verified. Please re-verify your phone number.')
+        _say(response, 'Your caller ID is not verified. Please re-verify your phone number.')
         return Response(content=str(response), media_type='text/xml')
 
-    # Count the call against the free-tier bucket before handing Twilio the
-    # dial instructions. We increment only after all guards pass so rejected
-    # attempts don't eat the user's quota.
-    try:
-        if not snapshot.is_paid:
-            # Offloaded: the Firestore write is sync and blocks the event loop in this async handler.
-            await run_blocking(db_executor, phone_call_usage_db.increment_current_month, uid)
-    except Exception:
-        traceback.print_exc()
+    # Reserve quota immediately before handing Twilio the dial instructions.
+    # The reservation is atomic so concurrent TwiML requests cannot all pass
+    # the same stale quota snapshot.
+    if not snapshot.is_paid:
+        snapshot = await run_blocking(db_executor, reserve_phone_call_quota, uid)
+        if not snapshot.has_access:
+            _say(response, 'Monthly phone call limit reached. Goodbye.')
+            return Response(content=str(response), media_type='text/xml')
 
-    dial_kwargs = {'caller_id': caller_number}
+    dial_kwargs: Dict[str, Any] = {'caller_id': caller_number}
     if snapshot.max_duration_seconds and snapshot.max_duration_seconds > 0:
         dial_kwargs['time_limit'] = int(snapshot.max_duration_seconds)
     dial = Dial(**dial_kwargs)
-    dial.number(to_number)
-    response.append(dial)
+    _dial_number(dial, to_number)
+    _append_dial(response, dial)
 
     return Response(content=str(response), media_type='text/xml')

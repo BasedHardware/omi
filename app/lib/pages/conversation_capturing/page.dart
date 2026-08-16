@@ -21,6 +21,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/photo_viewer_page.dart';
+import 'package:omi/widgets/transcript.dart';
 
 class ConversationCapturingPage extends StatefulWidget {
   final String? topConversationId;
@@ -32,12 +33,13 @@ class ConversationCapturingPage extends StatefulWidget {
 }
 
 class _ConversationCapturingPageState extends State<ConversationCapturingPage> with TickerProviderStateMixin {
+  final TranscriptScrollStateStore _transcriptScrollStateStore = TranscriptScrollStateStore();
+
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
   late bool showSummarizeConfirmation;
   late AnimationController _animationController;
   bool _isMuted = false;
-  final ScrollController _timelineScrollController = ScrollController();
 
   @override
   void initState() {
@@ -47,6 +49,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))
       ..repeat(reverse: true);
     super.initState();
+  }
+
+  TranscriptScrollState _scrollStateFor(String sessionId) {
+    return _transcriptScrollStateStore.forSession(sessionId);
   }
 
   Future<void> _toggleMute(CaptureProvider provider) async {
@@ -89,7 +95,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   void dispose() {
     _controller?.dispose();
     _animationController.dispose();
-    _timelineScrollController.dispose();
     super.dispose();
   }
 
@@ -124,7 +129,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
 
       if (!showSummarizeConfirmation) {
         await stopRecordingAndProcess();
-        Navigator.of(context).pop();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
         return;
       }
       showDialog(
@@ -157,8 +164,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 onConfirm: () async {
                   SharedPreferencesUtil().showSummarizeConfirmation = showSummarizeConfirmation;
                   await stopRecordingAndProcess();
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pop();
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pop();
+                  }
                 },
               );
             },
@@ -173,6 +182,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
         final effectivelyMuted = _isMuted || provider.isCallActive;
+        final transcriptSessionId =
+            provider.activeCaptureSessionId ?? widget.topConversationId ?? 'pending-live-capture';
+        final transcriptScrollState = _scrollStateFor(transcriptSessionId);
         return PopScope(
           canPop: true,
           child: Scaffold(
@@ -234,15 +246,21 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                       ),
                                     )
                                   : provider.photos.isNotEmpty
-                                      ? _buildChronologicalTimeline(provider)
+                                      ? _buildChronologicalTimeline(
+                                          provider, transcriptSessionId, transcriptScrollState)
                                       : getTranscriptWidget(
                                           false,
                                           provider.segments,
                                           provider.photos,
                                           deviceProvider.connectedDevice,
-                                          bottomMargin: 150,
+                                          bottomMargin: 0,
                                           suggestions: provider.suggestionsBySegmentId,
                                           taggingSegmentIds: provider.taggingSegmentIds,
+                                          transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
+                                          followLatest: true,
+                                          scrollState: transcriptScrollState,
+                                          jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
+                                          contentVersion: provider.segmentsPhotosVersion,
                                           onAcceptSuggestion: (suggestion) {
                                             provider.assignSpeakerToConversation(
                                               suggestion.speakerId,
@@ -383,7 +401,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   /// Builds a chronological timeline interleaving photo groups and transcript segments.
-  Widget _buildChronologicalTimeline(CaptureProvider provider) {
+  Widget _buildChronologicalTimeline(CaptureProvider provider, String sessionId, TranscriptScrollState scrollState) {
     final photos = List<ConversationPhoto>.from(provider.photos)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final segments = provider.segments;
 
@@ -402,28 +420,30 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       photoGroups.add(currentGroup);
     }
 
-    final totalItems = photoGroups.length + segments.length;
+    final leadingItems = [
+      for (var index = 0; index < photoGroups.length; index++)
+        Padding(
+          padding: EdgeInsets.only(top: index == 0 ? 16 : 0),
+          child: _buildPhotoGroupTimelineItem(photoGroups[index], photos),
+        ),
+    ];
 
-    // Auto-scroll to bottom after frame renders
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_timelineScrollController.hasClients) {
-        _timelineScrollController.jumpTo(_timelineScrollController.position.maxScrollExtent);
-      }
-    });
-
-    return ListView.builder(
-      controller: _timelineScrollController,
-      padding: const EdgeInsets.only(top: 16, bottom: 180),
-      itemCount: totalItems,
-      itemBuilder: (context, index) {
-        // Show photo groups first, then transcript below
-        if (index < photoGroups.length) {
-          return _buildPhotoGroupTimelineItem(photoGroups[index], photos);
-        }
-        final segIndex = index - photoGroups.length;
-        if (segIndex >= segments.length) return const SizedBox.shrink();
-        return _buildTranscriptTimelineItem(segments[segIndex], provider);
-      },
+    return TranscriptWidget(
+      key: ValueKey('live-transcript-$sessionId'),
+      segments: segments,
+      horizontalMargin: false,
+      topMargin: false,
+      separator: false,
+      canDisplaySeconds: false,
+      bottomMargin: 0,
+      followLatest: true,
+      scrollState: scrollState,
+      jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
+      contentVersion: provider.segmentsPhotosVersion,
+      layoutIdentity: 'photo-timeline',
+      leadingItems: leadingItems,
+      leadingItemIds: photoGroups.map((group) => group.first.id).toList(),
+      segmentBuilder: (context, segment, index) => _buildTranscriptTimelineItem(segment, provider),
     );
   }
 
@@ -437,14 +457,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // Camera icon avatar
-          Column(
+          const Column(
             children: [
-              const CircleAvatar(
+              CircleAvatar(
                 radius: 16,
                 backgroundColor: Color(0xFF2A5D3E),
                 child: Icon(Icons.camera_alt, size: 16, color: Colors.white70),
               ),
-              const SizedBox(height: 2),
+              SizedBox(height: 2),
             ],
           ),
           const SizedBox(width: 8),

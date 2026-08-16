@@ -7,7 +7,7 @@ every page, even page 0 with a limit, returned the wrong items. A user paging th
 soon-due items that were created earlier. Pagination now runs after the sort, so it matches the
 returned order.
 
-``database.action_items`` is import-pure (``database._client.db`` is a lazy proxy that does not
+List reads are hard-capped (``FirestoreReadMode.BOUNDED``). ``database.action_items`` is import-pure (``database._client.db`` is a lazy proxy that does not
 construct a client at import time), so no ``sys.modules`` stubbing is required. The query chain is
 replaced per-test via ``monkeypatch.setattr(action_items, 'db', ...)`` -- the sanctioned Tier-2 seam.
 """
@@ -23,25 +23,36 @@ BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
 class _Doc:
-    def __init__(self, doc_id, created_at, due_at):
+    def __init__(self, doc_id, created_at, due_at, completed=None):
         self.id = doc_id
         self._data = {'created_at': created_at, 'due_at': due_at}
+        # Only stamp `completed` when the test cares about it, so the existing
+        # all-active fixtures keep exercising the missing-field default path.
+        if completed is not None:
+            self._data['completed'] = completed
 
     def to_dict(self):
         return dict(self._data)
 
 
 class _Query:
-    """Firestore query stand-in. stream() returns docs sliced the way Firestore would if offset()/
-    limit() were applied, so the pre-fix code (which paginates on the query) sees a pre-sliced set."""
+    """Firestore query stand-in with completed equality filtering (production semantics)."""
 
-    def __init__(self, docs):
+    def __init__(self, docs, completed=None):
         self._docs = docs
+        self._completed = completed
         self._offset = 0
         self._limit = None
 
     def where(self, *a, **k):
-        return self
+        filt = k.get('filter') if k else None
+        completed = self._completed
+        if filt is not None:
+            field = getattr(filt, 'field_path', None) or getattr(filt, 'field', None)
+            value = getattr(filt, 'value', None)
+            if field == 'completed':
+                completed = value
+        return _Query(self._docs, completed=completed)
 
     def order_by(self, *a, **k):
         return self
@@ -55,7 +66,11 @@ class _Query:
         return self
 
     def stream(self):
-        d = self._docs[self._offset :]
+        d = list(self._docs)
+        if self._completed is not None:
+            # Firestore equality excludes missing/null completed fields.
+            d = [doc for doc in d if doc._data.get('completed') is self._completed]
+        d = d[self._offset :]
         if self._limit is not None:
             d = d[: self._limit]
         return iter(d)
@@ -105,3 +120,62 @@ def test_non_positive_limit_does_not_truncate(fake_db):
     # negative slice). Such a limit means "no page cap", so the full sorted order is returned.
     assert _ids(fake_db, limit=0) == ['C', 'D', 'B', 'A', 'E']
     assert _ids(fake_db, limit=-5) == ['C', 'D', 'B', 'A', 'E']
+
+
+# Docs mixing completed + active. A completed task with an EARLIER due date must still sort
+# after every active task. Regression: for a user with 100+ old completed (due-dated) tasks,
+# active tasks were pushed past the client's first page (limit=100) on the default
+# completed=None fetch, so the task list rendered empty / all-done.
+MIXED = [
+    _Doc('done_soon', BASE, BASE + timedelta(days=1), completed=True),
+    _Doc('active_late', BASE, BASE + timedelta(days=9), completed=False),
+    _Doc('active_none', BASE, None, completed=False),
+    _Doc('done_late', BASE, BASE + timedelta(days=5), completed=True),
+]
+
+
+def _mixed_ids(fake_db, **kwargs):
+    query = _Query(list(MIXED))
+    fake_db.collection.return_value.document.return_value.collection.return_value = query
+    return [item['id'] for item in action_items.get_action_items('uid1', **kwargs)]
+
+
+def test_incomplete_items_sort_before_completed(fake_db):
+    # Active first (by due, no-due last), then completed (by due) — never a completed item ahead
+    # of an active one, even when the completed item is due sooner.
+    assert _mixed_ids(fake_db) == ['active_late', 'active_none', 'done_soon', 'done_late']
+
+
+def test_first_page_surfaces_active_items(fake_db):
+    # The core regression guard: a small first page must contain the active items, not be crowded
+    # out by sooner-due completed tasks.
+    page = _mixed_ids(fake_db, limit=2, offset=0)
+    assert page == ['active_late', 'active_none']
+
+
+def test_list_observes_every_scanned_document(fake_db, monkeypatch):
+    observed = []
+    monkeypatch.setattr(action_items, 'record_firestore_read', lambda *args: observed.append(args))
+
+    _ids(fake_db, limit=2)
+
+    assert len(observed) == 1
+    family, mode, documents = observed[0]
+    assert family.value == 'action_items_list'
+    assert mode.value == 'bounded'
+    assert documents >= 5
+
+
+@pytest.mark.parametrize(
+    "raw,expected_completed,expected_status",
+    [
+        ({'completed': None}, False, 'active'),  # explicit null (legacy/partial write)
+        ({}, False, 'active'),  # missing entirely
+        ({'completed': True}, True, 'completed'),
+        ({'completed': False}, False, 'active'),
+    ],
+)
+def test_completed_normalized_to_bool(raw, expected_completed, expected_status):
+    out = action_items._prepare_action_item_for_read(dict(raw))
+    assert out['completed'] is expected_completed
+    assert out['status'] == expected_status

@@ -20,7 +20,7 @@ import {
   orderBy,
   deleteDoc,
 } from 'firebase/firestore';
-import { signInWithPopup } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup } from 'firebase/auth';
 import { googleProvider } from '@/lib/firebase';
 import { getDoc, doc, setDoc } from 'firebase/firestore';
 import {
@@ -35,6 +35,31 @@ import { PreorderBanner } from '@/components/shared/PreorderBanner';
 import { Mixpanel } from '@/lib/mixpanel';
 
 function ChatContent() {
+  const chatRequestHeaders = async () => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const user = auth.currentUser;
+    if (user && !user.isAnonymous) {
+      headers.Authorization = `Bearer ${await user.getIdToken()}`;
+    }
+    return headers;
+  };
+
+  const streamText = (parsed: any): string =>
+    parsed?.text ?? parsed?.choices?.[0]?.delta?.content ?? '';
+
+  /**
+   * Split a raw SSE byte chunk into complete `data:` lines, carrying over any
+   * trailing partial line to the next read. The gateway response is forwarded as
+   * a raw ReadableStream, so a single read is not guaranteed to contain a whole
+   * SSE event — buffering prevents JSON fragments from being silently discarded.
+   */
+  const processSSEChunk = (chunk: string, buffer: { tail: string }): string[] => {
+    const combined = buffer.tail + chunk;
+    const parts = combined.split('\n');
+    buffer.tail = parts.pop() ?? '';
+    return parts.filter((line) => line.startsWith('data: '));
+  };
+
   useEffect(() => {
     // Identify the user first
     Mixpanel.identify();
@@ -71,6 +96,13 @@ function ChatContent() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [userMessageCount, setUserMessageCount] = useState(0);
   const [showDevicePopup, setShowDevicePopup] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+
+  // Wait for Firebase to restore the persisted session before selecting the
+  // auth tier. auth.currentUser is null until onAuthStateChanged fires the
+  // first time, so a returning user's initial message would otherwise use the
+  // unauthenticated lane permanently.
+  useEffect(() => onAuthStateChanged(auth, () => setAuthReady(true)), []);
 
   // Fetch bot data on component mount
   useEffect(() => {
@@ -195,12 +227,12 @@ function ChatContent() {
 
   useEffect(() => {
     const getInitialMessage = async () => {
-      if (initialMessageSent || !botId) return;
+      if (!authReady || initialMessageSent || !botId) return;
       setIsLoading(true);
       try {
         const response = await fetch('/api/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await chatRequestHeaders(),
           body: JSON.stringify({
             message:
               'lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.',
@@ -217,34 +249,34 @@ function ChatContent() {
         if (!reader) throw new Error('No reader available');
 
         let accumulatedText = '';
+        const sseBuffer = { tail: '' };
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
           const chunk = new TextDecoder().decode(value);
-          const lines = chunk.split('\n');
+          const dataLines = processSSEChunk(chunk, sseBuffer);
 
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
+          for (const line of dataLines) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
 
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.text) {
-                  accumulatedText += parsed.text;
-                  setTypingMessage((prev) => ({
-                    id: prev?.id || Date.now(),
-                    text: accumulatedText,
-                    sender: 'omi',
-                    type: 'text',
-                    status: 'sending',
-                  }));
-                }
-              } catch (e) {
-                console.warn('Failed to parse SSE message:', e);
+            try {
+              const parsed = JSON.parse(data);
+              const content = streamText(parsed);
+              if (content) {
+                accumulatedText += content;
+                setTypingMessage((prev) => ({
+                  id: prev?.id || Date.now(),
+                  text: accumulatedText,
+                  sender: 'omi',
+                  type: 'text',
+                  status: 'sending',
+                }));
               }
+            } catch (e) {
+              console.warn('Failed to parse SSE message:', e);
             }
           }
         }
@@ -278,7 +310,7 @@ function ChatContent() {
     };
 
     getInitialMessage();
-  }, [initialMessageSent, botId]);
+  }, [authReady, initialMessageSent, botId]);
 
   const handleSendMessage = async () => {
     if (!inputText.trim() || isLoading) return;
@@ -323,7 +355,7 @@ function ChatContent() {
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await chatRequestHeaders(),
         body: JSON.stringify({
           message: inputText,
           botId: botId,
@@ -343,33 +375,34 @@ function ChatContent() {
         status: 'sending',
       });
 
+      const sseBuffer = { tail: '' };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         const chunk = new TextDecoder().decode(value);
-        const lines = chunk.split('\n');
+        const dataLines = processSSEChunk(chunk, sseBuffer);
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
+        for (const line of dataLines) {
+          const data = line.slice(6);
+          if (data === '[DONE]') continue;
 
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.text) {
-                accumulatedText += parsed.text;
-                setTypingMessage((prev) => ({
-                  id: prev?.id || Date.now(),
-                  text: accumulatedText,
-                  sender: 'omi',
-                  type: 'text',
-                  status: 'sending',
-                }));
-              }
-            } catch (e) {
-              console.warn('Failed to parse SSE message:', e);
+          try {
+            const parsed = JSON.parse(data);
+            const content = streamText(parsed);
+            if (content) {
+              accumulatedText += content;
+              setTypingMessage((prev) => ({
+                id: prev?.id || Date.now(),
+                text: accumulatedText,
+                sender: 'omi',
+                type: 'text',
+                status: 'sending',
+              }));
             }
+          } catch (e) {
+            console.warn('Failed to parse SSE message:', e);
           }
         }
       }

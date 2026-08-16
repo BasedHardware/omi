@@ -1,3 +1,4 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
@@ -5,69 +6,93 @@ import WebKit
 
 extension SettingsContentView {
   var transcriptionSection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
+      // Microphone (input device — e.g. Ray-Ban Meta glasses)
+      settingsCard(settingId: "transcription.microphone") {
+        MicrophonePickerCard(onChanged: { restartTranscriptionIfNeeded() })
+      }
+
       // Language Mode
       settingsCard(settingId: "transcription.languagemode") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "globe")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
             Text("Language Mode")
-              .scaledFont(size: 15, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .foregroundColor(Ink.primary)
 
             Spacer()
           }
 
           // Auto-Detect option
           Button(action: {
+            guard autoDetectSupported else { return }
             transcriptionAutoDetect = true
             AssistantSettings.shared.transcriptionAutoDetect = true
             updateTranscriptionPreferences(singleLanguageMode: false)
             restartTranscriptionIfNeeded()
           }) {
-            HStack(alignment: .top, spacing: 12) {
-              Image(systemName: transcriptionAutoDetect ? "checkmark.circle.fill" : "circle")
-                .scaledFont(size: 20)
+            HStack(alignment: .top, spacing: OmiSpacing.md) {
+              Image(systemName: autoDetectIsActive ? "checkmark.circle.fill" : "circle")
+                .scaledFont(size: OmiType.heading)
                 .foregroundColor(
-                  transcriptionAutoDetect ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                  autoDetectIsActive ? Ink.accent : Ink.secondary)
 
-              VStack(alignment: .leading, spacing: 6) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 Text("Auto-Detect (Multi-Language)")
-                  .scaledFont(size: 14, weight: .medium)
-                  .foregroundColor(OmiColors.textPrimary)
+                  .scaledFont(size: OmiType.body, weight: .medium)
+                  .foregroundColor(Ink.primary)
 
                 Text("Automatically detects and transcribes:")
-                  .scaledFont(size: 12)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
 
                 // List of supported languages
                 Text(
                   "English, Spanish, French, German, Hindi, Russian, Portuguese, Japanese, Italian, Dutch"
                 )
-                .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textTertiary)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+                // Why the option is inert for this account, rather than a checkmark that
+                // moves and a transcriber that ignores it.
+                if !autoDetectSupported {
+                  HStack(spacing: OmiSpacing.xs) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                      .scaledFont(size: OmiType.micro)
+                      .foregroundColor(SettingsInk.notice)
+
+                    Text("\(autoDetectSubtitle) — pick one of the ten above to use it.")
+                      .scaledFont(size: OmiType.caption)
+                      .foregroundColor(SettingsInk.notice)
+                      .fixedSize(horizontal: false, vertical: true)
+                  }
+                  .padding(.top, OmiSpacing.xxs)
+                }
               }
 
               Spacer()
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .background(
-              RoundedRectangle(cornerRadius: 8)
-                .fill(transcriptionAutoDetect ? OmiColors.purplePrimary.opacity(0.1) : Color.clear)
+              RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+                .fill(autoDetectIsActive ? Ink.accent.opacity(0.1) : Color.clear)
                 .overlay(
-                  RoundedRectangle(cornerRadius: 8)
+                  RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
                     .stroke(
-                      transcriptionAutoDetect
-                        ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.backgroundQuaternary,
+                      autoDetectIsActive
+                        ? Ink.accent.opacity(0.3) : Ink.hairline,
                       lineWidth: 1)
                 )
             )
+            .contentShape(RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous))
           }
           .buttonStyle(.plain)
+          .disabled(!autoDetectSupported)
 
           // Single Language option
           Button(action: {
@@ -76,27 +101,27 @@ extension SettingsContentView {
             updateTranscriptionPreferences(singleLanguageMode: true)
             restartTranscriptionIfNeeded()
           }) {
-            HStack(alignment: .top, spacing: 12) {
-              Image(systemName: !transcriptionAutoDetect ? "checkmark.circle.fill" : "circle")
-                .scaledFont(size: 20)
+            HStack(alignment: .top, spacing: OmiSpacing.md) {
+              Image(systemName: !autoDetectIsActive ? "checkmark.circle.fill" : "circle")
+                .scaledFont(size: OmiType.heading)
                 .foregroundColor(
-                  !transcriptionAutoDetect ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                  !autoDetectIsActive ? Ink.accent : Ink.secondary)
 
-              VStack(alignment: .leading, spacing: 6) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 Text("Single Language (Better Accuracy)")
-                  .scaledFont(size: 14, weight: .medium)
-                  .foregroundColor(OmiColors.textPrimary)
+                  .scaledFont(size: OmiType.body, weight: .medium)
+                  .foregroundColor(Ink.primary)
 
                 Text("Best for speaking in one specific language")
-                  .scaledFont(size: 12)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
 
                 // Language picker (only shown when single language is selected)
-                if !transcriptionAutoDetect {
+                if !autoDetectIsActive {
                   HStack {
                     Text("Language:")
-                      .scaledFont(size: 12)
-                      .foregroundColor(OmiColors.textTertiary)
+                      .scaledFont(size: OmiType.caption)
+                      .foregroundColor(Ink.secondary)
 
                     SearchableDropdown(
                       title: "Language",
@@ -108,46 +133,43 @@ extension SettingsContentView {
                     ) { option in
                       transcriptionLanguage = option.id
                       AssistantSettings.shared.transcriptionLanguage = option.id
-                      let supportsMulti = AssistantSettings.supportsAutoDetect(option.id)
-                      transcriptionAutoDetect = supportsMulti
-                      AssistantSettings.shared.transcriptionAutoDetect = supportsMulti
-                      updateTranscriptionPreferences(singleLanguageMode: !supportsMulti)
-                      updateLanguage(option.id)
+                      saveSingleLanguageSelection(option.id)
                       restartTranscriptionIfNeeded()
                     }
                   }
-                  .padding(.top, 4)
+                  .padding(.top, OmiSpacing.xxs)
                 }
               }
 
               Spacer()
             }
-            .padding(12)
+            .padding(OmiSpacing.md)
             .background(
-              RoundedRectangle(cornerRadius: 8)
-                .fill(!transcriptionAutoDetect ? OmiColors.purplePrimary.opacity(0.1) : Color.clear)
+              RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+                .fill(!autoDetectIsActive ? Ink.accent.opacity(0.1) : Color.clear)
                 .overlay(
-                  RoundedRectangle(cornerRadius: 8)
+                  RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
                     .stroke(
-                      !transcriptionAutoDetect
-                        ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.backgroundQuaternary,
+                      !autoDetectIsActive
+                        ? Ink.accent.opacity(0.3) : Ink.hairline,
                       lineWidth: 1)
                 )
             )
+            .contentShape(RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous))
           }
           .buttonStyle(.plain)
 
           // Info about language support
-          HStack(spacing: 8) {
+          HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "info.circle")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
 
             Text(
               "Single language mode supports \(AssistantSettings.supportedLanguages.count) languages including Chinese, Ukrainian, Russian, and more."
             )
-            .scaledFont(size: 11)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
           }
         }
       }
@@ -159,66 +181,65 @@ extension SettingsContentView {
 
       // Custom Vocabulary
       settingsCard(settingId: "transcription.vocabulary") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "text.book.closed")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Custom Vocabulary")
-                .scaledFont(size: 15, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .scaledFont(size: OmiType.subheading, weight: .medium)
+                .foregroundColor(Ink.primary)
 
               Text("Improve recognition of names, brands, and technical terms")
-                .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textTertiary)
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(Ink.secondary)
             }
 
             Spacer()
 
             if !vocabularyList.isEmpty {
               Text("\(vocabularyList.count) terms")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
             }
           }
 
           // Current vocabulary display with removable tags
           if !vocabularyList.isEmpty {
-            FlowLayout(spacing: 6) {
+            FlowLayout(spacing: OmiSpacing.xs) {
               ForEach(vocabularyList, id: \.self) { term in
-                HStack(spacing: 4) {
+                HStack(spacing: OmiSpacing.xxs) {
                   Text(term)
-                    .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(Ink.secondary)
 
                   Button(action: {
                     removeVocabularyWord(term)
                   }) {
                     Image(systemName: "xmark")
-                      .scaledFont(size: 9, weight: .medium)
-                      .foregroundColor(OmiColors.textTertiary)
+                      .scaledFont(size: OmiType.micro, weight: .medium)
+                      .foregroundColor(Ink.secondary)
                   }
                   .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .padding(.horizontal, OmiSpacing.sm)
+                .padding(.vertical, OmiSpacing.xs)
                 .background(
-                  RoundedRectangle(cornerRadius: 6)
-                    .fill(OmiColors.backgroundQuaternary)
+                  RoundedRectangle(cornerRadius: SettingsGlassMetrics.pillRadius, style: .continuous)
+                    .fill(Ink.hairline)
                 )
               }
             }
           }
 
-          Divider()
-            .background(OmiColors.backgroundQuaternary)
+          GlassSeparator()
 
           // Add new word input
-          HStack(spacing: 8) {
+          HStack(spacing: OmiSpacing.sm) {
             TextField("Add a word...", text: $newVocabularyWord)
-              .textFieldStyle(.roundedBorder)
+              .settingsTextInputStyle()
               .onSubmit {
                 addVocabularyWord()
               }
@@ -227,46 +248,46 @@ extension SettingsContentView {
               addVocabularyWord()
             }) {
               Image(systemName: "plus.circle.fill")
-                .scaledFont(size: 20)
+                .scaledFont(size: OmiType.heading)
                 .foregroundColor(
                   newVocabularyWord.trimmingCharacters(in: .whitespaces).isEmpty
-                    ? OmiColors.textTertiary : OmiColors.purplePrimary)
+                    ? Ink.secondary : Ink.accent)
             }
             .buttonStyle(.plain)
             .disabled(newVocabularyWord.trimmingCharacters(in: .whitespaces).isEmpty)
           }
 
           Text("Press Enter or click + to add • Click × to remove")
-            .scaledFont(size: 11)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
         }
       }
 
       // Local VAD Gate
       settingsCard(settingId: "transcription.vadgate") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Image(systemName: "waveform.badge.minus")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Local VAD Gate")
-                .scaledFont(size: 15, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .scaledFont(size: OmiType.subheading, weight: .medium)
+                .foregroundColor(Ink.primary)
 
               Text(
                 "Uses on-device voice activity detection to skip silence, reducing Deepgram API usage. May save ~40% on transcription costs."
               )
-              .scaledFont(size: 13)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()
 
             Toggle("", isOn: $vadGateEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .onChange(of: vadGateEnabled) { _, newValue in
                 AssistantSettings.shared.vadGateEnabled = newValue
                 restartTranscriptionIfNeeded()
@@ -275,6 +296,36 @@ extension SettingsContentView {
         }
       }
 
+    }
+  }
+
+  /// What the transcriber will actually do, as opposed to what the stored flag says.
+  ///
+  /// `AssistantSettings.effectiveTranscriptionLanguage` only enters multi-language mode when the
+  /// selected language is one the provider can auto-detect. This pane used to paint the raw
+  /// `transcriptionAutoDetect` flag, so an account left on a language outside that set (Ukrainian,
+  /// Chinese, …) with the flag on showed "Auto-Detect" ticked, hid the language picker behind that
+  /// tick, and transcribed in the single language anyway — a state you could neither see nor leave.
+  var autoDetectIsActive: Bool {
+    transcriptionAutoDetect && autoDetectSupported
+  }
+
+  /// Persists a Single-Language selection to the account in the one order that survives a reload.
+  ///
+  /// See `TranscriptionLanguageWriter` for why the order is the whole point.
+  func saveSingleLanguageSelection(_ language: String) {
+    AnalyticsManager.shared.languageChanged(language: language)
+    Task { @MainActor in
+      _ = await TranscriptionLanguageWriter.apply(
+        language: language,
+        singleLanguageMode: true,
+        setLanguage: { code in
+          _ = try await APIClient.shared.updateUserLanguage(code)
+        },
+        setSingleLanguageMode: { mode in
+          _ = try await APIClient.shared.updateTranscriptionPreferences(singleLanguageMode: mode)
+        }
+      )
     }
   }
 
@@ -311,19 +362,68 @@ extension SettingsContentView {
 
   /// Restart transcription if currently running to apply new settings
   func restartTranscriptionIfNeeded() {
-    guard appState.isTranscribing else { return }
-
-    // Stop and restart to apply new language settings
-    appState.stopTranscription()
-
-    // Wait a moment for cleanup, then restart
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-      self.appState.startTranscription()
+    Task { @MainActor in
+      if await appState.prepareTranscriptionRestartAfterSettingsChange() {
+        appState.startTranscription()
+      }
     }
   }
 
   // MARK: - Notifications Section
 
+}
+
+/// The two account writes a transcription-language change needs, in the only order that survives.
+///
+/// `PATCH /v1/users/language` is not only a language write. The backend follows it with
+/// `set_user_transcription_preferences(single_language_mode: not supports_live_multilingual_mode(language))`,
+/// and that predicate is true — so `single_language_mode` lands as `false` — for every language this
+/// picker offers. The pane used to fire that PATCH and the transcription-preferences PATCH as two
+/// unordered `Task`s, so the language write raced the mode the user had just chosen and normally
+/// won. The next `loadBackendSettings()`, where the account is the authority for language, then
+/// pushed both this pane and `AssistantSettings` back to Auto-Detect: choosing Single Language and
+/// a language did not survive reopening Settings.
+///
+/// Ordering is the repair. The language write goes first precisely because it clobbers the mode;
+/// the mode write goes last so the user's choice is what the account ends up holding.
+@MainActor
+enum TranscriptionLanguageWriter {
+  /// Which of the two writes landed. Reported rather than thrown so a half-written change is
+  /// visible to the caller instead of disappearing into a detached `Task`.
+  struct Outcome: Equatable {
+    var languageWritten = false
+    var modeWritten = false
+
+    var isComplete: Bool { languageWritten && modeWritten }
+  }
+
+  static func apply(
+    language: String,
+    singleLanguageMode: Bool,
+    setLanguage: (String) async throws -> Void,
+    setSingleLanguageMode: (Bool) async throws -> Void
+  ) async -> Outcome {
+    var outcome = Outcome()
+
+    do {
+      try await setLanguage(language)
+      outcome.languageWritten = true
+    } catch {
+      logError("Settings: failed to save transcription language", error: error)
+      // Fall through deliberately. The language PATCH is the thing that resets the mode, so a
+      // failed one leaves the stored mode untouched and re-asserting the user's choice is still
+      // the correct next write.
+    }
+
+    do {
+      try await setSingleLanguageMode(singleLanguageMode)
+      outcome.modeWritten = true
+    } catch {
+      logError("Settings: failed to save transcription language mode", error: error)
+    }
+
+    return outcome
+  }
 }
 
 /// Multi-select for the languages the user speaks to the VOICE ASSISTANT (push-to-talk).
@@ -358,27 +458,29 @@ private struct VoiceAssistantLanguagesCard: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       HStack {
         Image(systemName: "person.wave.2")
-          .scaledFont(size: 16)
-          .foregroundColor(OmiColors.textSecondary)
+          .scaledFont(size: OmiType.subheading)
+          .foregroundColor(Ink.secondary)
 
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text("Voice Assistant Languages")
-            .scaledFont(size: 15, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .scaledFont(size: OmiType.subheading, weight: .medium)
+            .foregroundColor(Ink.primary)
 
-          Text("Languages you speak to Omi over push-to-talk — the first is your primary. Omi identifies which one you're speaking each turn.")
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textTertiary)
-            .fixedSize(horizontal: false, vertical: true)
+          Text(
+            "Languages you speak to Omi over push-to-talk — the first is your primary. Omi identifies which one you're speaking each turn."
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
         }
 
         Spacer()
       }
 
-      FlowLayout(spacing: 6) {
+      FlowLayout(spacing: OmiSpacing.xs) {
         ForEach(chipOptions, id: \.code) { option in
           languageChip(option)
         }
@@ -415,13 +517,13 @@ private struct VoiceAssistantLanguagesCard: View {
       persist()
     }) {
       Text(isPrimary ? "\(option.name) ✓" : option.name)
-        .scaledFont(size: 12, weight: isSelected ? .semibold : .regular)
-        .foregroundColor(isSelected ? OmiColors.backgroundPrimary : OmiColors.textSecondary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .scaledFont(size: OmiType.caption, weight: isSelected ? .semibold : .regular)
+        .foregroundColor(isSelected ? Ink.surface : Ink.secondary)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.xs)
         .background(
-          Capsule().fill(isSelected ? Color.white.opacity(0.9) : Color.clear)
-            .overlay(Capsule().stroke(OmiColors.backgroundQuaternary, lineWidth: isSelected ? 0 : 1))
+          Capsule().fill(isSelected ? Ink.primary : Color.clear)
+            .overlay(Capsule().stroke(Ink.hairline, lineWidth: isSelected ? 0 : 1))
         )
     }
     .buttonStyle(.plain)

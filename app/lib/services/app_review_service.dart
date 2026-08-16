@@ -107,7 +107,9 @@ class AppReviewService {
 
     if (shouldShow) {
       await markReviewPromptShown();
-      _showReviewDialog(context);
+      if (context.mounted) {
+        _showReviewDialog(context);
+      }
       return true;
     }
     return false;

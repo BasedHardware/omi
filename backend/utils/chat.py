@@ -14,19 +14,28 @@ from models.chat import ChatSession, Message, ResponseMessage, MessageConversati
 from models.notification_message import NotificationMessage
 from models.transcript_segment import TranscriptSegment
 from utils.apps import get_available_app_by_id
+from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
 from utils.conversation_helpers import extract_memory_ids
 from utils.conversations.factory import deserialize_conversation
 from utils.llm.chat import initial_chat_message
 from utils.llm.persona import initial_persona_chat_message
-from utils.notifications import send_notification
+from utils.notifications import send_notification, send_notification_async
+from utils.observability.fallback import record_fallback
 from utils.other.storage import get_syncing_file_temporal_signed_url, schedule_syncing_temporal_file_deletion
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import (
-    get_deepgram_model_for_language,
     postprocess_words,
     prerecorded,
     prerecorded_from_bytes,
+    get_prerecorded_service,
 )
+from utils.stt.outcomes import (
+    TranscriptionFailure,
+    TranscriptionOutcome,
+    empty_unexpected_failure,
+    failure_from_exception,
+)
+from utils.stt.vad import VADAudioDecodeError, VADProcessingError, linear16_pcm_is_silent, vad_is_empty_strict
 from utils.llm.usage_tracker import track_usage, set_usage_context, reset_usage_context, Features
 import logging
 
@@ -37,7 +46,7 @@ def acquire_chat_session(uid: str, app_id: Optional[str] = None):
     chat_session = chat_db.get_chat_session(uid, app_id=app_id)
     if chat_session is None:
         cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), plugin_id=app_id)
-        chat_session = chat_db.add_chat_session(uid, cs.dict())
+        chat_session = chat_db.add_chat_session(uid, cs.model_dump())
     return chat_session
 
 
@@ -84,7 +93,7 @@ def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id
         memories_id=[],
         chat_session_id=chat_session['id'],
     )
-    chat_db.add_message(uid, ai_message.dict())
+    chat_db.add_message(uid, ai_message.model_dump())
     chat_db.add_message_to_chat_session(uid, chat_session['id'], ai_message.id)
     return ai_message
 
@@ -115,48 +124,89 @@ def resolve_voice_message_language(uid: str, request_language: Optional[str]) ->
     return 'multi'
 
 
-def transcribe_voice_message_segment(
-    path: str,
-    uid: str,
-    language: str = 'multi',
-) -> Tuple[Optional[str], Optional[str]]:
+def _prepare_voice_message_url(path: str) -> str:
+    """Create the signed input URL and schedule its cleanup on the storage lane."""
     url = get_syncing_file_temporal_signed_url(path)
     schedule_syncing_temporal_file_deletion(path)
+    return url
 
-    if not language:
-        language = resolve_voice_message_language(uid, None)
 
-    # Get the appropriate Deepgram model for this language
-    stt_language, stt_model = get_deepgram_model_for_language(language)
+def _validated_wav_is_silent(path: str, *, provider: str) -> bool:
+    """Return strict VAD silence without converting decode failures to silence."""
 
+    try:
+        return vad_is_empty_strict(path)
+    except VADAudioDecodeError as error:
+        raise TranscriptionFailure(
+            TranscriptionOutcome.INVALID_INPUT,
+            provider=provider,
+            retryable=False,
+        ) from error
+    except Exception as error:
+        raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider) from error
+
+
+def _transcribe_voice_message_url(
+    url: str,
+    path: str,
+    language: str,
+    detect_language: bool = True,
+) -> Tuple[Optional[str], Optional[str]]:
+    """Run the synchronous prerecorded-STT pipeline for one signed URL."""
+    provider, stt_language, stt_model = get_prerecorded_service(language)
     is_multi = stt_language == 'multi'
     try:
-        if is_multi:
+        if is_multi and detect_language:
             words, detected_language = prerecorded(
                 url, diarize=False, language=stt_language, return_language=True, model=stt_model
             )
         else:
             words = prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
             detected_language = stt_language
-    except RuntimeError as e:
-        logger.error(f'Voice message transcription failed for {path}: {e}')
-        return None, stt_language if not is_multi else 'en'
+    except Exception as error:
+        failure = failure_from_exception(error, provider=provider)
+        logger.warning(
+            'Voice message transcription failed: outcome=%s provider=%s retryable=%s',
+            failure.outcome.value,
+            failure.provider,
+            failure.retryable,
+        )
+        raise failure from error
+
     if not words:
-        logger.info('no words')
-        return None, detected_language
-    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+        raise empty_unexpected_failure(provider)
+    try:
+        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    except Exception as error:
+        raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider) from error
     del words
     if not transcript_segments:
-        logger.error('failed to get deepgram segments')
-        return None, detected_language
+        raise empty_unexpected_failure(provider)
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
     transcript_segments.clear()
     if len(text) == 0:
-        logger.info('voice message text is empty')
-        return None, detected_language
+        raise empty_unexpected_failure(provider)
 
     return text, detected_language
+
+
+def transcribe_voice_message_segment(
+    path: str,
+    uid: str,
+    language: str = 'multi',
+) -> Tuple[Optional[str], Optional[str]]:
+    if not language:
+        language = resolve_voice_message_language(uid, None)
+    provider, provider_language, _ = get_prerecorded_service(language)
+    # Schedule deletion before the VAD gate as well: silence is a valid
+    # terminal outcome, not a reason to retain temporary customer audio.
+    url = _prepare_voice_message_url(path)
+    if _validated_wav_is_silent(path, provider=provider):
+        detected_language = provider_language if provider_language != 'multi' else None
+        return None, detected_language
+
+    return _transcribe_voice_message_url(url, path, language)
 
 
 def transcribe_pcm_bytes(
@@ -168,7 +218,7 @@ def transcribe_pcm_bytes(
     channels: int = 1,
     keywords: Optional[List[str]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
-    """Transcribe raw PCM audio bytes directly via Deepgram pre-recorded API.
+    """Transcribe raw PCM audio bytes through the selected pre-recorded STT provider.
 
     Skips GCS upload and WAV conversion for maximum speed.
     Used by desktop PTT batch mode.
@@ -176,51 +226,66 @@ def transcribe_pcm_bytes(
     if not language:
         language = resolve_voice_message_language(uid, None)
 
-    stt_language, stt_model = get_deepgram_model_for_language(language)
+    provider, stt_language, stt_model = get_prerecorded_service(language)
     is_multi = stt_language == 'multi'
 
-    # Let RuntimeError propagate so the router can distinguish backend failure from no-speech
-    if is_multi:
-        result = prerecorded_from_bytes(
-            audio_bytes,
-            sample_rate=sample_rate,
-            diarize=False,
-            encoding=encoding,
-            channels=channels,
-            language=stt_language,
-            model=stt_model,
-            return_language=True,
-            keywords=keywords,
-        )
-        words, detected_language = result
-    else:
-        words = prerecorded_from_bytes(
-            audio_bytes,
-            sample_rate=sample_rate,
-            diarize=False,
-            encoding=encoding,
-            channels=channels,
-            language=stt_language,
-            model=stt_model,
-            keywords=keywords,
-        )
-        detected_language = stt_language
+    if encoding == 'linear16':
+        try:
+            if linear16_pcm_is_silent(audio_bytes, sample_rate=sample_rate, channels=channels):
+                return None, stt_language if not is_multi else None
+        except VADAudioDecodeError as error:
+            raise TranscriptionFailure(
+                TranscriptionOutcome.INVALID_INPUT,
+                provider=provider,
+                retryable=False,
+            ) from error
+        except VADProcessingError as error:
+            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider) from error
+
+    try:
+        if is_multi:
+            result = prerecorded_from_bytes(
+                audio_bytes,
+                sample_rate=sample_rate,
+                diarize=False,
+                encoding=encoding,
+                channels=channels,
+                language=stt_language,
+                model=stt_model,
+                return_language=True,
+                keywords=keywords,
+            )
+            words, detected_language = result
+        else:
+            words = prerecorded_from_bytes(
+                audio_bytes,
+                sample_rate=sample_rate,
+                diarize=False,
+                encoding=encoding,
+                channels=channels,
+                language=stt_language,
+                model=stt_model,
+                keywords=keywords,
+            )
+            detected_language = stt_language
+    except Exception as error:
+        raise failure_from_exception(error, provider=provider) from error
 
     if not words:
-        logger.info('transcribe_pcm_bytes: no words')
-        return None, detected_language
+        raise empty_unexpected_failure(provider)
 
-    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    try:
+        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    except Exception as error:
+        raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider) from error
     del words
     if not transcript_segments:
-        logger.error('transcribe_pcm_bytes: failed to get segments')
-        return None, detected_language
+        raise empty_unexpected_failure(provider)
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
     transcript_segments.clear()
     if len(text) == 0:
-        logger.info('transcribe_pcm_bytes: text is empty')
-        return None, detected_language
+        raise empty_unexpected_failure(provider)
 
     return text, detected_language
 
@@ -230,37 +295,17 @@ def process_voice_message_segment(
     uid: str,
     language: str = 'multi',
 ):
-    url = get_syncing_file_temporal_signed_url(path)
-    schedule_syncing_temporal_file_deletion(path)
-
     if not language:
         language = resolve_voice_message_language(uid, None)
-
-    # Get the appropriate Deepgram model for this language
-    stt_language, stt_model = get_deepgram_model_for_language(language)
-
-    try:
-        words = prerecorded(url, diarize=False, language=stt_language, model=stt_model)
-    except RuntimeError as e:
-        logger.error(f'Voice message transcription failed for {path}: {e}')
-        return []
-    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
-    del words
-    if not transcript_segments:
-        logger.error('failed to get deepgram segments')
-        return []
-
-    text = " ".join([segment.text for segment in transcript_segments]).strip()
-    transcript_segments.clear()
-    if len(text) == 0:
-        logger.info('voice message text is empty')
+    text, _detected_language = transcribe_voice_message_segment(path, uid, language)
+    if text is None:
         return []
 
     # create message
     message = Message(
         id=str(uuid.uuid4()), text=text, created_at=datetime.now(timezone.utc), sender='human', type='text'
     )
-    chat_db.add_message(uid, message.dict())
+    chat_db.add_message(uid, message.model_dump())
 
     # not support plugin
     app = None
@@ -279,50 +324,147 @@ def process_voice_message_segment(
         type='text',
         memories_id=memories_id,
     )
-    chat_db.add_message(uid, ai_message.dict())
+    chat_db.add_message(uid, ai_message.model_dump())
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
     if app_id:
         record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
-    ai_message_resp = ai_message.dict()
+    ai_message_resp = ai_message.model_dump()
 
     ai_message_resp['ask_for_nps'] = ask_for_nps
 
     # send notification
     send_chat_message_notification(uid, "omi", "omi", ai_message.text, ai_message.id)
 
-    return [message.dict(), ai_message_resp]
+    return [message.model_dump(), ai_message_resp]
+
+
+CHAT_STREAM_ERROR_TEXT = "Sorry, something went wrong while generating a response. Please try again."
+
+
+def _new_stream_error_message(app_id: Optional[str], chat_session: Optional[ChatSession]) -> Message:
+    """Construct (but do not persist) the canned fallback AI message."""
+    ai_message = Message(
+        id=str(uuid.uuid4()),
+        text=CHAT_STREAM_ERROR_TEXT,
+        created_at=datetime.now(timezone.utc),
+        sender='ai',
+        app_id=app_id,
+        type='text',
+    )
+    if chat_session:
+        ai_message.chat_session_id = chat_session.id
+    return ai_message
+
+
+def build_stream_error_reply(
+    uid: str,
+    app_id: Optional[str] = None,
+    chat_session: Optional[ChatSession] = None,
+) -> ResponseMessage:
+    """Persist and return a graceful fallback AI reply for a chat turn that
+    failed mid-stream without producing an answer.
+
+    Without this, the SSE stream ends as a clean 200 with no ``done:`` frame and
+    every client renders a blank assistant bubble. Mirrors
+    ``_build_quota_exceeded_reply``: the reply is persisted so the message the
+    client renders from the ``done:`` frame stays consistent with server-side
+    history (clients persist what they receive). The user's message is already
+    persisted by the caller, so only the AI reply is saved here. The raw
+    exception is logged upstream in ``execute_*_chat_stream`` and is never
+    surfaced to the client.
+    """
+    ai_message = _new_stream_error_message(app_id, chat_session)
+    if chat_session:
+        chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
+    chat_db.add_message(uid, ai_message.model_dump())
+    return ResponseMessage(**ai_message.model_dump(), ask_for_nps=False)
+
+
+async def emit_stream_error_fallback(
+    uid: str,
+    app_id: Optional[str],
+    chat_session: Optional[ChatSession],
+    *,
+    label: str,
+    error_recorded: bool,
+    reason: Optional[str] = None,
+    route: Optional[str] = None,
+) -> str:
+    """Build the SSE ``done:`` frame for a chat stream that ended without an answer.
+
+    The pipeline failed mid-stream (raw error already logged in
+    ``execute_*_chat_stream``); this emits a graceful fallback so every client
+    renders real text instead of a blank bubble. ``label`` distinguishes the
+    calling surface (e.g. ``'chat'`` / ``'voice_chat'``) in server-side logs.
+
+    This is a fail-open correctness degrade (real LLM answer -> canned text), so
+    it records the shared fallback metric exactly once. Normal path persists the
+    reply and reports ``degraded``; if the Firestore write itself fails we still
+    emit an in-memory ``done:`` frame (unpersisted -- client/server history
+    diverges for this turn) and report ``exhausted``. Returns the full
+    ``"done: ...\\n\\n"`` frame.
+    """
+    resolved_reason = reason or ('stream_error' if error_recorded else 'empty_answer')
+    resolved_route = route or 'unknown'
+    logger.error(
+        '%s stream ended without an answer uid=%s reason=%s route=%s (error=%s)',
+        label,
+        uid,
+        resolved_reason,
+        resolved_route,
+        error_recorded,
+    )
+    try:
+        fallback = await run_blocking(db_executor, build_stream_error_reply, uid, app_id, chat_session)
+        outcome = 'degraded'
+    except Exception as persist_exc:
+        logger.error('%s stream fallback persistence failed for uid=%s: %s', label, uid, type(persist_exc).__name__)
+        ai_message = _new_stream_error_message(app_id, chat_session)
+        fallback = ResponseMessage(**ai_message.model_dump(), ask_for_nps=False)
+        outcome = 'exhausted'
+    record_fallback(
+        component='other',
+        from_mode='llm_answer',
+        to_mode='canned_reply',
+        reason='other',
+        outcome=outcome,
+    )
+    encoded_response = base64.b64encode(bytes(fallback.model_dump_json(), 'utf-8')).decode('utf-8')
+    return f"done: {encoded_response}\n\n"
 
 
 async def process_voice_message_segment_stream(
     path: str,
     uid: str,
     language: str = 'multi',
+    platform: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
-    url = get_syncing_file_temporal_signed_url(path)
-    schedule_syncing_temporal_file_deletion(path)
-
     if not language:
-        language = resolve_voice_message_language(uid, None)
-
-    # Get the appropriate Deepgram model for this language
-    stt_language, stt_model = get_deepgram_model_for_language(language)
-
-    try:
-        words = prerecorded(url, diarize=False, language=stt_language, model=stt_model)
-    except RuntimeError as e:
-        logger.error(f'Voice message transcription failed for {path}: {e}')
+        language = await run_blocking(db_executor, resolve_voice_message_language, uid, None)
+    provider, _, _ = get_prerecorded_service(language)
+    # The storage lifecycle must cover silent files too. Keep both signing and
+    # deletion scheduling on the storage executor before VAD decides whether
+    # transcription should proceed.
+    url = await run_blocking(storage_executor, _prepare_voice_message_url, path)
+    is_silent = await run_blocking(
+        sync_executor,
+        _validated_wav_is_silent,
+        path,
+        provider=provider,
+    )
+    if is_silent:
         return
-    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
-    del words
-    if not transcript_segments:
-        logger.error('failed to get deepgram segments')
-        return
 
-    text = " ".join([segment.text for segment in transcript_segments]).strip()
-    transcript_segments.clear()
-    if len(text) == 0:
-        logger.info('voice message text is empty')
+    text, _detected_language = await run_blocking(
+        sync_executor,
+        _transcribe_voice_message_url,
+        url,
+        path,
+        language,
+        False,
+    )
+    if text is None:
         return
 
     # create message
@@ -330,14 +472,14 @@ async def process_voice_message_segment_stream(
         id=str(uuid.uuid4()), text=text, created_at=datetime.now(timezone.utc), sender='human', type='text'
     )
 
-    chat_session = chat_db.get_chat_session(uid)
+    chat_session = await run_blocking(db_executor, chat_db.get_chat_session, uid)
     chat_session = ChatSession(**chat_session) if chat_session else None
 
     if chat_session:
         message.chat_session_id = chat_session.id
-        chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
+        await run_blocking(db_executor, chat_db.add_message_to_chat_session, uid, chat_session.id, message.id)
 
-    chat_db.add_message(uid, message.dict())
+    await run_blocking(db_executor, chat_db.add_message, uid, message.model_dump())
 
     # stream
     mdata = base64.b64encode(bytes(message.model_dump_json(), 'utf-8')).decode('utf-8')
@@ -347,7 +489,7 @@ async def process_voice_message_segment_stream(
     app = None
     app_id = None
 
-    def process_message(response: str, callback_data: dict):
+    async def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
         langsmith_run_id = callback_data.get('langsmith_run_id')
@@ -362,7 +504,7 @@ async def process_voice_message_segment_stream(
                     converted_memories.append(deserialize_conversation(m))
                 else:
                     converted_memories.append(m)
-            memories_id = [m.id for m in converted_memories]
+            memories_id = [str(getattr(m, 'id', '')) for m in converted_memories]
         ai_message = Message(
             id=str(uuid.uuid4()),
             text=response,
@@ -376,51 +518,141 @@ async def process_voice_message_segment_stream(
             prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
         )
 
-        chat_session = chat_db.get_chat_session(uid)
+        chat_session = await run_blocking(db_executor, chat_db.get_chat_session, uid)
         chat_session = ChatSession(**chat_session) if chat_session else None
 
         if chat_session:
             ai_message.chat_session_id = chat_session.id
-            chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
+            await run_blocking(db_executor, chat_db.add_message_to_chat_session, uid, chat_session.id, ai_message.id)
 
-        chat_db.add_message(uid, ai_message.dict())
+        await run_blocking(db_executor, chat_db.add_message, uid, ai_message.model_dump())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
 
         if app_id:
-            record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+            await run_blocking(
+                db_executor, record_app_usage, uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id
+            )
 
         return ai_message, ask_for_nps
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
+    messages = list(
+        reversed([Message(**msg) for msg in await run_blocking(db_executor, chat_db.get_messages, uid, limit=10)])
+    )
     callback_data = {}
+    answered = False
+    streamed_terminal_error = False
     # Set usage context for streaming (can't use 'with' across yields)
     usage_token = set_usage_context(uid, Features.CHAT)
+
+    async def emit_voice_done_frame(response: str):
+        """Persist (or fail-open) a terminal voice answer and return the done frame."""
+        persist_outcome = 'degraded'
+        try:
+            ai_message, ask_for_nps = await process_message(response, callback_data)
+        except Exception as persist_exc:
+            logger.error(
+                'voice_chat stream terminal answer persistence failed for uid=%s: %s',
+                uid,
+                type(persist_exc).__name__,
+            )
+            persist_outcome = 'exhausted'
+            ai_message = Message(
+                id=str(uuid.uuid4()),
+                text=response,
+                created_at=datetime.now(timezone.utc),
+                sender='ai',
+                app_id=app_id,
+                type='text',
+            )
+            if chat_session:
+                ai_message.chat_session_id = chat_session.id
+            ask_for_nps = False
+        response_message = ResponseMessage(**ai_message.model_dump())
+        response_message.ask_for_nps = ask_for_nps
+        data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+        if callback_data.get('error'):
+            record_fallback(
+                component='other',
+                from_mode='llm_answer',
+                to_mode='canned_reply',
+                reason='other',
+                outcome=persist_outcome,
+            )
+        elif persist_outcome == 'exhausted':
+            record_fallback(
+                component='other',
+                from_mode='llm_answer',
+                to_mode='canned_reply',
+                reason='other',
+                outcome='exhausted',
+            )
+        return f"done: {data}\n\n", ai_message
+
     try:
-        async for chunk in execute_graph_chat_stream(uid, messages, app, cited=False, callback_data=callback_data):
+        async for chunk in execute_graph_chat_stream(
+            uid, messages, app, cited=False, callback_data=callback_data, platform=platform
+        ):
             if chunk:
+                if chunk.startswith('error: '):
+                    streamed_terminal_error = True
+                    # Flutter returns on error without draining a later done: frame, and
+                    # also overwrites a preceding done: message when a plain-text error:
+                    # arrives. Persist/record the staged failure as done: and suppress the
+                    # error frame so history and UI stay on the typed terminal reply.
+                    response = callback_data.get('answer')
+                    if response and not answered:
+                        done_frame, ai_message = await emit_voice_done_frame(response)
+                        yield done_frame
+                        answered = True
+                        await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
+                        continue
                 data = chunk.replace("\n", "__CRLF__")
                 yield f'{data}\n\n'
 
             else:
                 response = callback_data.get('answer')
-                if response:
-                    ai_message, ask_for_nps = process_message(response, callback_data)
-                    ai_message_dict = ai_message.dict()
-                    response_message = ResponseMessage(**ai_message_dict)
-                    response_message.ask_for_nps = ask_for_nps
-                    data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
-                    yield f"done: {data}\n\n"
+                if response and not answered:
+                    done_frame, ai_message = await emit_voice_done_frame(response)
+                    yield done_frame
+                    answered = True
+                    await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
 
-                    # send notification
-                    send_chat_message_notification(uid, "omi", "omi", ai_message.text, ai_message.id)
+        if not answered:
+            response = callback_data.get('answer')
+            if response:
+                done_frame, ai_message = await emit_voice_done_frame(response)
+                yield done_frame
+                await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
+            else:
+                if streamed_terminal_error:
+                    logger.error(
+                        'voice_chat stream ended without an answer uid=%s reason=%s route=%s (error=%s)',
+                        uid,
+                        callback_data.get('error') or 'stream_failure',
+                        callback_data.get('route') or 'unknown',
+                        True,
+                    )
+                yield await emit_stream_error_fallback(
+                    uid,
+                    app_id,
+                    chat_session,
+                    label='voice_chat',
+                    error_recorded=bool(callback_data.get('error')),
+                    reason=callback_data.get('error'),
+                    route=callback_data.get('route'),
+                )
     finally:
         reset_usage_context(usage_token)
 
     return
 
 
-def send_chat_message_notification(user_id: str, app_name: str, app_id: str, message: str, message_id: str):
-    ai_message = NotificationMessage(
+def _chat_message_notification(
+    app_id: str,
+    message: str,
+    message_id: str,
+) -> NotificationMessage:
+    return NotificationMessage(
         id=message_id,
         text=message,
         plugin_id=app_id,
@@ -429,4 +661,25 @@ def send_chat_message_notification(user_id: str, app_name: str, app_id: str, mes
         notification_type='plugin',
         navigate_to=f'/chat/{app_id}',
     )
+
+
+def send_chat_message_notification(user_id: str, app_name: str, app_id: str, message: str, message_id: str):
+    ai_message = _chat_message_notification(app_id, message, message_id)
     send_notification(user_id, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+
+
+async def send_chat_message_notification_async(
+    user_id: str,
+    app_name: str,
+    app_id: str,
+    message: str,
+    message_id: str,
+) -> None:
+    """Async notification boundary for streaming chat responses."""
+    ai_message = _chat_message_notification(app_id, message, message_id)
+    await send_notification_async(
+        user_id,
+        app_name + ' says',
+        message,
+        NotificationMessage.get_message_as_dict(ai_message),
+    )

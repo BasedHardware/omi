@@ -4,142 +4,234 @@ Handles user goals with AI-powered suggestions and advice.
 """
 
 import uuid
-from datetime import datetime
-from typing import Optional, List
-from enum import Enum
+from typing import Annotated, Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from database import goals as goals_db
 from utils.other import endpoints as auth
 from utils.request_validation import HistoryDays
+from utils.subscription import enforce_chat_quota
+from utils.goals_response import normalize_goal_history_entry, normalize_goal_response
 from utils.llm.goals import (
     suggest_goal as suggest_goal_llm,
     get_goal_advice as get_goal_advice_llm,
     extract_and_update_goal_progress,
 )
+from models.goal import (
+    AdviceResponse,
+    GoalCreate,
+    GoalDeleteResponse,
+    GoalFocusRequest,
+    GoalHistoryEntryResponse,
+    GoalLifecycleRequest,
+    GoalProgressEvent,
+    GoalProgressEventCreate,
+    GoalResponse,
+    GoalSuggestionResponse,
+    GoalUpdate,
+)
+from models.workstream import GoalDetailProjection
+import database.workstreams as workstreams_db
+from routers.canonical_task_access import require_canonical_task_user
+from utils.task_intelligence.proactive_engine import run_goal_changed_wake
 
 router = APIRouter()
+IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=256)]
+AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
 
 
-class GoalType(str, Enum):
-    """Types of goals supported."""
+def _wake_goal_change(uid: str, goal_id: str, mutation_key: object) -> None:
+    """Notify proactive Chat-first after the route's goal write has committed."""
 
-    boolean = "boolean"  # 0/1, true/false
-    scale = "scale"  # e.g., 0-10
-    numeric = "numeric"  # e.g., 0-1,000,000
+    run_goal_changed_wake(uid, goal_id=goal_id, mutation_key=mutation_key)
 
 
-class GoalCreate(BaseModel):
-    """Model for creating a new goal."""
-
-    title: str = Field(..., description="The goal title/description")
-    goal_type: GoalType = Field(default=GoalType.scale, description="Type of goal metric")
-    target_value: float = Field(..., description="Target value to achieve")
-    current_value: float = Field(default=0, description="Current progress value")
-    min_value: float = Field(default=0, description="Minimum value of the scale")
-    max_value: float = Field(default=10, description="Maximum value of the scale")
-    unit: Optional[str] = Field(default=None, description="Unit label (e.g., 'users', 'points')")
-
-
-class GoalUpdate(BaseModel):
-    """Model for updating a goal."""
-
-    title: Optional[str] = None
-    target_value: Optional[float] = None
-    current_value: Optional[float] = None
-    min_value: Optional[float] = None
-    max_value: Optional[float] = None
-    unit: Optional[str] = None
-
-
-class GoalResponse(BaseModel):
-    """Response model for a goal."""
-
-    id: str
-    title: str
-    goal_type: str
-    target_value: float
-    current_value: float
-    min_value: float
-    max_value: float
-    unit: Optional[str]
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
-    advice: Optional[str] = None
-
-
-class GoalSuggestionResponse(BaseModel):
-    """Response model for AI-generated goal suggestion."""
-
-    suggested_title: str
-    suggested_type: str
-    suggested_target: float
-    reasoning: str
-
-
-class AdviceResponse(BaseModel):
-    """Response model for AI-generated advice."""
-
-    advice: str
-
-
-@router.get('/v1/goals', tags=['goals'])
+@router.get('/v1/goals', tags=['goals'], response_model=Optional[GoalResponse])
 def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Optional[dict]:
     """Get the current active goal for the user (backward compatibility)."""
     goal = goals_db.get_user_goal(uid)
-    if goal:
-        # Convert datetime objects to strings for JSON serialization
-        if 'created_at' in goal and hasattr(goal['created_at'], 'isoformat'):
-            goal['created_at'] = goal['created_at'].isoformat()
-        if 'updated_at' in goal and hasattr(goal['updated_at'], 'isoformat'):
-            goal['updated_at'] = goal['updated_at'].isoformat()
-    return goal
+    return normalize_goal_response(goal) if goal else None
 
 
-@router.get('/v1/goals/all', tags=['goals'])
-def get_all_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
-    """Get all active goals for the user (up to 4)."""
-    goals = goals_db.get_user_goals(uid, limit=4)
+@router.get('/v1/goals/all', tags=['goals'], response_model=List[GoalResponse])
+def get_all_goals(
+    include_ended: bool = Query(False),
+    uid: str = Depends(auth.get_current_user_uid),
+) -> List[dict]:
+    """Get all active goals; canonical clients opt into ended history."""
+    goals = goals_db.get_all_goals(uid, include_inactive=include_ended)
 
-    # Convert datetime objects to strings for JSON serialization
-    for goal in goals:
-        if 'created_at' in goal and hasattr(goal['created_at'], 'isoformat'):
-            goal['created_at'] = goal['created_at'].isoformat()
-        if 'updated_at' in goal and hasattr(goal['updated_at'], 'isoformat'):
-            goal['updated_at'] = goal['updated_at'].isoformat()
-
-    return goals
+    return [normalize_goal_response(goal) for goal in goals]
 
 
-@router.post('/v1/goals', tags=['goals'])
+@router.get('/v1/goals/canonical/list', tags=['goals'], response_model=List[GoalResponse])
+def get_canonical_goals(
+    include_ended: bool = Query(False),
+    uid: str = Depends(require_canonical_task_user),
+) -> List[dict]:
+    """List goals through the generation-fenced universal task system."""
+    goals = goals_db.get_all_goals(uid, include_inactive=include_ended)
+    return [normalize_goal_response(goal) for goal in goals]
+
+
+@router.post('/v1/goals', tags=['goals'], response_model=GoalResponse)
 def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
-    """Create a new goal. This will deactivate any existing active goal."""
-    goal_data = {
-        'id': f"goal_{uuid.uuid4().hex[:12]}",
-        'title': goal.title,
-        'goal_type': goal.goal_type.value,
-        'target_value': goal.target_value,
-        'current_value': goal.current_value,
-        'min_value': goal.min_value,
-        'max_value': goal.max_value,
-        'unit': goal.unit,
-    }
+    """Create a durable goal without changing any other goal's focus or lifecycle."""
+    goal_data = goal.model_dump(mode='python', exclude_none=True)
+    goal_data['id'] = f"goal_{uuid.uuid4().hex[:12]}"
 
-    created_goal = goals_db.create_goal(uid, goal_data)
+    try:
+        created_goal = goals_db.create_goal(uid, goal_data)
+    except goals_db.GoalConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    # Convert datetime for JSON
-    if 'created_at' in created_goal and hasattr(created_goal['created_at'], 'isoformat'):
-        created_goal['created_at'] = created_goal['created_at'].isoformat()
-    if 'updated_at' in created_goal and hasattr(created_goal['updated_at'], 'isoformat'):
-        created_goal['updated_at'] = created_goal['updated_at'].isoformat()
-
-    return created_goal
+    _wake_goal_change(uid, created_goal['id'], created_goal.get('updated_at'))
+    return normalize_goal_response(created_goal)
 
 
-@router.patch('/v1/goals/{goal_id}', tags=['goals'])
+@router.post('/v1/goals/canonical', tags=['goals'], response_model=GoalResponse)
+def create_canonical_goal(
+    goal: GoalCreate,
+    idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
+    uid: str = Depends(require_canonical_task_user),
+) -> dict:
+    """Create a generation-scoped canonical goal with safe retry semantics."""
+
+    try:
+        created_goal = goals_db.create_goal_idempotent(
+            uid,
+            goal.model_dump(mode='python', exclude_none=True),
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
+        )
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
+    _wake_goal_change(uid, created_goal['id'], created_goal.get('updated_at'))
+    return normalize_goal_response(created_goal)
+
+
+def _raise_goal_store_error(exc: Exception) -> None:
+    if isinstance(exc, goals_db.GoalNotFoundError):
+        raise HTTPException(status_code=404, detail='Goal not found') from exc
+    if isinstance(exc, goals_db.GoalConflictError):
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    raise exc
+
+
+@router.post('/v1/goals/{goal_id}/focus', tags=['goals'], response_model=GoalResponse)
+def focus_goal(
+    goal_id: str,
+    request: GoalFocusRequest,
+    idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
+    uid: str = Depends(require_canonical_task_user),
+) -> dict:
+    try:
+        goal = goals_db.focus_goal(
+            uid,
+            goal_id,
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
+            replacement_goal_id=request.replacement_goal_id,
+            focus_rank=request.focus_rank,
+        )
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
+    _wake_goal_change(uid, goal_id, goal.get('updated_at'))
+    return normalize_goal_response(goal)
+
+
+@router.delete('/v1/goals/{goal_id}/focus', tags=['goals'], response_model=GoalResponse)
+def unfocus_goal(
+    goal_id: str,
+    idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
+    uid: str = Depends(require_canonical_task_user),
+) -> dict:
+    try:
+        goal = goals_db.unfocus_goal(
+            uid,
+            goal_id,
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
+        )
+        _wake_goal_change(uid, goal_id, goal.get('updated_at'))
+        return normalize_goal_response(goal)
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
+
+
+@router.post('/v1/goals/{goal_id}/lifecycle', tags=['goals'], response_model=GoalResponse)
+def transition_goal_lifecycle(
+    goal_id: str,
+    request: GoalLifecycleRequest,
+    idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
+    uid: str = Depends(require_canonical_task_user),
+) -> dict:
+    try:
+        goal = goals_db.transition_goal_lifecycle(
+            uid,
+            goal_id,
+            status=request.status,
+            relationship_disposition=request.relationship_disposition,
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
+        )
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
+    _wake_goal_change(uid, goal_id, goal.get('updated_at'))
+    return normalize_goal_response(goal)
+
+
+@router.get('/v1/goals/{goal_id}/detail', tags=['goals'], response_model=GoalDetailProjection)
+def get_goal_detail(goal_id: str, uid: str = Depends(require_canonical_task_user)) -> GoalDetailProjection:
+    try:
+        return workstreams_db.get_goal_detail(uid, goal_id)
+    except workstreams_db.WorkstreamNotFoundError as exc:
+        raise HTTPException(status_code=404, detail='Goal not found') from exc
+
+
+@router.post('/v1/goals/{goal_id}/progress-events', tags=['goals'], response_model=GoalProgressEvent)
+def append_goal_progress_event(
+    goal_id: str,
+    request: GoalProgressEventCreate,
+    idempotency_key: IdempotencyHeader,
+    account_generation: AccountGenerationHeader,
+    uid: str = Depends(require_canonical_task_user),
+) -> GoalProgressEvent:
+    try:
+        event = goals_db.append_goal_progress_event(
+            uid,
+            goal_id,
+            request,
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
+        )
+        _wake_goal_change(uid, goal_id, event.sequence)
+        return event
+    except goals_db.GoalStoreError as exc:
+        _raise_goal_store_error(exc)
+        raise AssertionError('unreachable')
+
+
+@router.get('/v1/goals/{goal_id}/progress-events', tags=['goals'], response_model=list[GoalProgressEvent])
+def list_goal_progress_events(
+    goal_id: str,
+    limit: int = Query(100, ge=1, le=500),
+    uid: str = Depends(require_canonical_task_user),
+) -> list[GoalProgressEvent]:
+    return goals_db.list_goal_progress_events(uid, goal_id, limit=limit)
+
+
+@router.patch('/v1/goals/{goal_id}', tags=['goals'], response_model=GoalResponse)
 def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Update an existing goal."""
     update_data = updates.model_dump(exclude_unset=True)
@@ -152,16 +244,11 @@ def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_c
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
-    # Convert datetime for JSON
-    if 'created_at' in updated_goal and hasattr(updated_goal['created_at'], 'isoformat'):
-        updated_goal['created_at'] = updated_goal['created_at'].isoformat()
-    if 'updated_at' in updated_goal and hasattr(updated_goal['updated_at'], 'isoformat'):
-        updated_goal['updated_at'] = updated_goal['updated_at'].isoformat()
-
-    return updated_goal
+    _wake_goal_change(uid, goal_id, updated_goal.get('updated_at'))
+    return normalize_goal_response(updated_goal)
 
 
-@router.patch('/v1/goals/{goal_id}/progress', tags=['goals'])
+@router.patch('/v1/goals/{goal_id}/progress', tags=['goals'], response_model=GoalResponse)
 def update_goal_progress(
     goal_id: str,
     current_value: float = Query(..., description="New progress value"),
@@ -173,46 +260,37 @@ def update_goal_progress(
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
-    # Convert datetime for JSON
-    if 'created_at' in updated_goal and hasattr(updated_goal['created_at'], 'isoformat'):
-        updated_goal['created_at'] = updated_goal['created_at'].isoformat()
-    if 'updated_at' in updated_goal and hasattr(updated_goal['updated_at'], 'isoformat'):
-        updated_goal['updated_at'] = updated_goal['updated_at'].isoformat()
-
-    return updated_goal
+    _wake_goal_change(uid, goal_id, updated_goal.get('updated_at'))
+    return normalize_goal_response(updated_goal)
 
 
-@router.get('/v1/goals/{goal_id}/history', tags=['goals'])
+@router.get('/v1/goals/{goal_id}/history', tags=['goals'], response_model=List[GoalHistoryEntryResponse])
 def get_goal_history(goal_id: str, days: HistoryDays = 30, uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
     """Get progress history for a goal."""
     history = goals_db.get_goal_history(uid, goal_id, days)
 
-    # Convert datetime objects
-    for entry in history:
-        if 'recorded_at' in entry and hasattr(entry['recorded_at'], 'isoformat'):
-            entry['recorded_at'] = entry['recorded_at'].isoformat()
-
-    return history
+    return [normalize_goal_history_entry(entry) for entry in history]
 
 
-@router.delete('/v1/goals/{goal_id}', tags=['goals'])
+@router.delete('/v1/goals/{goal_id}', tags=['goals'], response_model=GoalDeleteResponse, deprecated=True)
 def delete_goal(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> dict:
-    """Delete a goal."""
+    """Released compatibility route: soft-abandon and retain links. Use the lifecycle route for explicit disposition."""
     success = goals_db.delete_goal(uid, goal_id)
 
     if not success:
         raise HTTPException(status_code=404, detail="Goal not found")
 
+    _wake_goal_change(uid, goal_id, 'deleted')
     return {"success": True, "deleted_id": goal_id}
 
 
-@router.get('/v1/goals/suggest', tags=['goals'])
+@router.get('/v1/goals/suggest', tags=['goals'], response_model=GoalSuggestionResponse)
 def suggest_goal(uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:suggest"))) -> dict:
     """Generate an AI-suggested goal based on user's memories and conversations."""
     return suggest_goal_llm(uid)
 
 
-@router.get('/v1/goals/{goal_id}/advice', tags=['goals'])
+@router.get('/v1/goals/{goal_id}/advice', tags=['goals'], response_model=AdviceResponse)
 def get_goal_advice(
     goal_id: str, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))
 ) -> dict:
@@ -224,7 +302,7 @@ def get_goal_advice(
         raise HTTPException(status_code=404, detail="Goal not found")
 
 
-@router.get('/v1/goals/advice', tags=['goals'])
+@router.get('/v1/goals/advice', tags=['goals'], response_model=AdviceResponse)
 def get_current_goal_advice(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:advice"))
 ) -> dict:
@@ -233,7 +311,7 @@ def get_current_goal_advice(
     if not goal:
         return {'advice': 'Set a goal to get personalized advice!'}
 
-    return get_goal_advice(goal['id'], uid)
+    return get_goal_advice(goal_id=goal['id'], uid=uid)
 
 
 class ProgressExtractRequest(BaseModel):
@@ -242,15 +320,32 @@ class ProgressExtractRequest(BaseModel):
     text: str
 
 
-@router.post('/v1/goals/extract-progress', tags=['goals'])
+class ProgressExtractUpdateResponse(BaseModel):
+    goal_id: str | None = None
+    goal_title: str | None = None
+    previous_value: float | int | str | None = None
+    new_value: float | int | str | None = None
+    reasoning: str = ''
+
+
+class ProgressExtractResponse(BaseModel):
+    updated: bool
+    reason: str | None = None
+    updates: List[ProgressExtractUpdateResponse] = Field(default_factory=list)
+
+
+@router.post('/v1/goals/extract-progress', tags=['goals'], response_model=ProgressExtractResponse)
 def extract_and_update_progress(
     request: ProgressExtractRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:extract")),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ) -> dict:
     """
     Extract goal progress from conversation/chat text and update if found.
     Uses LLM to understand context and extract numeric progress.
     """
+    # User-initiated LLM extraction — same free-tier gate as chat (402 past cap).
+    enforce_chat_quota(uid, platform=x_app_platform)
     result = extract_and_update_goal_progress(uid, request.text)
     if result is None:
         return {'updated': False, 'reason': 'No active goal'}
@@ -272,3 +367,19 @@ def extract_and_update_progress(
         }
 
     return {'updated': False, 'reason': result.get('message', 'No progress found in text')}
+
+
+# Declared after the static /v1/goals/* routes (/all, /suggest, /advice, /extract-progress) so
+# those match first and are not captured as a goal_id.
+@router.get('/v1/goals/{goal_id}', tags=['goals'], response_model=GoalResponse)
+def get_goal_by_id(goal_id: str, uid: str = Depends(auth.get_current_user_uid)) -> dict:
+    """Fetch a single goal by id.
+
+    The list routes cap how many goals are returned, and update/delete/progress/history/advice
+    already address a goal by id, so this exposes the matching read for one goal (404 if it does
+    not exist or belongs to another user).
+    """
+    goal = goals_db.get_goal_by_id(uid, goal_id)
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return normalize_goal_response(goal)

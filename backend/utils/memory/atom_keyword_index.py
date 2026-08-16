@@ -1,7 +1,7 @@
-"""Typesense keyword index for canonical long-term memory atoms (WS-M).
+"""Typesense keyword index for universal long-term memory atoms (WS-M).
 
-Prod-inert: indexing and search run only for the canonical cohort and only for
-``layer=long_term``, ``status=active``, ``processing_state=processed`` items.
+Indexing and search run only for ``layer=long_term``, ``status=active``,
+``processing_state=processed`` items.
 Users on ``e2ee`` data protection are skipped (same posture as conversation Typesense).
 """
 
@@ -10,13 +10,25 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import timezone
+from typing import Any, Dict, List, Optional, cast
 
 from database._client import db as default_db_client
-from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from database.memory_vector_metadata import canonical_memory_provider_id
+from models.memory_evidence import SourceState
+from models.product_memory import (
+    RESTRICTED_SENSITIVITY_LABELS,
+    MemoryItemStatus,
+    MemoryLayer,
+    ProcessingState,
+    MemoryItem,
+)
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
+from utils.memory.memory_system import (
+    MemorySystem as MemorySystem,  # compatibility export for legacy test doubles
+    ensure_canonical_apply_control_state,
+    resolve_memory_system as resolve_memory_system,  # compatibility export; user policy is not a UID gate
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +49,33 @@ _REQUIRED_SCHEMA_FIELDS = {
 }
 
 
-def _typesense_client():
+Payload = Dict[str, Any]
+
+
+def _payload_or_empty(value: object) -> Payload:
+    return cast(Payload, value) if isinstance(value, dict) else {}
+
+
+def _payload_list(value: object) -> List[Payload]:
+    return (
+        [cast(Payload, item) for item in cast(List[object], value) if isinstance(item, dict)]
+        if isinstance(value, list)
+        else []
+    )
+
+
+def _typesense_filter_literal(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("`", "\\`")
+    return f"`{escaped}`"
+
+
+def _provider_identity_delete_filter(uid: str, memory_id: str) -> str:
+    provider_id = canonical_memory_provider_id(uid, memory_id)
+    identity_values = ",".join(_typesense_filter_literal(value) for value in (provider_id, memory_id))
+    return f"userId:={_typesense_filter_literal(uid)} && id:=[{identity_values}]"
+
+
+def _typesense_client() -> Any:
     from utils.conversations.search import client
 
     return client
@@ -51,6 +89,7 @@ def memories_collection_name() -> str:
 class AtomKeywordRebuildReport:
     uid: str
     skipped_reason: Optional[str] = None
+    failure_reason: Optional[str] = None
     indexed_count: int = 0
     expected_count: int = 0
     verified: bool = False
@@ -62,18 +101,25 @@ def is_indexable_long_term_atom(item: MemoryItem) -> bool:
         item.tier == MemoryLayer.long_term
         and item.status == MemoryItemStatus.active
         and item.processing_state == ProcessingState.processed
+        and item.source_state == SourceState.active
+        and (item.promotion or {}).get("user_review") is not False
+        and not set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
         and bool((item.content or "").strip())
     )
 
 
-def user_allows_atom_keyword_index(uid: str, *, db_client=None) -> bool:
-    """Canonical cohort + conversation-Typesense-compatible data protection."""
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+def user_allows_atom_keyword_index(uid: str, *, db_client: Any = None) -> bool:
+    """Return whether the universal account may use the keyword projection.
+
+    Indexing remains opt-out for E2EE accounts, matching the conversation
+    Typesense policy.  There is no UID entitlement/cohort branch.
+    """
+    if not uid.strip():
         return False
     client = db_client if db_client is not None else default_db_client
-    user_doc = client.document(f"users/{uid}").get()
-    user_data = user_doc.to_dict() if getattr(user_doc, "exists", False) else {}
-    return (user_data or {}).get("data_protection_level", "enhanced") != "e2ee"
+    user_doc: Any = client.document(f"users/{uid}").get()
+    user_data = _payload_or_empty(user_doc.to_dict() if getattr(user_doc, "exists", False) else {})
+    return user_data.get("data_protection_level", "enhanced") != "e2ee"
 
 
 def _created_at_epoch(item: MemoryItem) -> int:
@@ -89,17 +135,16 @@ def _entity_terms_for_item(item: MemoryItem) -> str:
     subject_entity_id = getattr(item, "subject_entity_id", None)
     if isinstance(subject_entity_id, str) and subject_entity_id.strip():
         terms.append(subject_entity_id.strip())
-    arguments = getattr(item, "arguments", None) or {}
-    if isinstance(arguments, dict):
-        terms.extend(str(value).strip() for value in arguments.values() if str(value).strip())
-    promotion = item.promotion or {}
+    arguments = _payload_or_empty(getattr(item, "arguments", None))
+    terms.extend(str(value).strip() for value in arguments.values() if str(value).strip())
+    promotion = _payload_or_empty(item.promotion)
     for key in ("entity", "entity_name", "subject"):
         value = promotion.get(key)
         if isinstance(value, str) and value.strip():
             terms.append(value.strip())
     aliases = promotion.get("aliases")
     if isinstance(aliases, list):
-        terms.extend(str(alias).strip() for alias in aliases if str(alias).strip())
+        terms.extend(str(alias).strip() for alias in cast(List[object], aliases) if str(alias).strip())
     return " ".join(dict.fromkeys(terms))
 
 
@@ -107,7 +152,7 @@ def _predicate_for_item(item: MemoryItem) -> str:
     predicate = getattr(item, "predicate", None)
     if isinstance(predicate, str) and predicate.strip():
         return predicate.strip()
-    promotion = item.promotion or {}
+    promotion = _payload_or_empty(item.promotion)
     promotion_predicate = promotion.get("predicate")
     return promotion_predicate.strip() if isinstance(promotion_predicate, str) else ""
 
@@ -115,7 +160,7 @@ def _predicate_for_item(item: MemoryItem) -> str:
 def build_atom_keyword_document(item: MemoryItem) -> Dict[str, Any]:
     """Build a Typesense document for one indexable long-term atom."""
     return {
-        "id": item.memory_id,
+        "id": canonical_memory_provider_id(item.uid, item.memory_id),
         "memory_id": item.memory_id,
         "userId": item.uid,
         "content": item.content or "",
@@ -138,7 +183,7 @@ def ensure_memories_collection() -> None:
     """Create the canonical atom Typesense collection when missing (idempotent)."""
     collection_name = memories_collection_name()
     try:
-        schema = _typesense_client().collections[collection_name].retrieve()
+        schema = _payload_or_empty(_typesense_client().collections[collection_name].retrieve())
     except Exception:
         schema = {
             "name": collection_name,
@@ -159,7 +204,7 @@ def ensure_memories_collection() -> None:
         _typesense_client().collections.create(schema)
         return
 
-    actual_fields = {field.get("name") for field in schema.get("fields", [])}
+    actual_fields = {str(field.get("name")) for field in _payload_list(schema.get("fields")) if field.get("name")}
     missing = sorted(_REQUIRED_SCHEMA_FIELDS - actual_fields)
     if missing:
         raise RuntimeError(
@@ -168,8 +213,16 @@ def ensure_memories_collection() -> None:
         )
 
 
-def upsert_atom_keyword_doc(item: MemoryItem, *, db_client=None) -> bool:
+def upsert_atom_keyword_doc(item: MemoryItem, *, db_client: Any = None) -> bool:
     """Upsert one long-term atom when indexable; no-op otherwise."""
+    try:
+        ensure_canonical_apply_control_state(
+            item.uid,
+            db_client=db_client if db_client is not None else default_db_client,
+        )
+    except Exception:
+        logger.warning("upsert_atom_keyword_doc blocked by canonical state uid=%s", item.uid)
+        return False
     if not user_allows_atom_keyword_index(item.uid, db_client=db_client):
         return False
     if not is_indexable_long_term_atom(item):
@@ -177,7 +230,12 @@ def upsert_atom_keyword_doc(item: MemoryItem, *, db_client=None) -> bool:
     try:
         ensure_memories_collection()
         doc = build_atom_keyword_document(item)
-        _typesense_client().collections[memories_collection_name()].documents.upsert(doc)
+        documents = _typesense_client().collections[memories_collection_name()].documents
+        # Remove the former bare ``memory_id`` identity and any previous
+        # user-scoped projection before writing the replacement. A cleanup
+        # failure must not acknowledge the upsert; the durable outbox retries.
+        documents.delete({"filter_by": _provider_identity_delete_filter(item.uid, item.memory_id)})
+        documents.upsert(doc)
         return True
     except Exception as exc:
         logger.warning(
@@ -189,42 +247,61 @@ def upsert_atom_keyword_doc(item: MemoryItem, *, db_client=None) -> bool:
         return False
 
 
-def delete_atom_keyword_doc(uid: str, memory_id: str, *, db_client=None) -> None:
-    """Remove one keyword doc. Canonical-gated; legacy users are no-ops."""
-    if not user_allows_atom_keyword_index(uid, db_client=db_client):
-        return
-    if not memory_id:
-        return
+def delete_atom_keyword_doc(uid: str, memory_id: str, *, db_client: Any = None) -> bool:
+    """Remove one keyword doc and report whether the desired absence was confirmed."""
+    if not uid or not memory_id:
+        return False
     try:
-        _typesense_client().collections[memories_collection_name()].documents[memory_id].delete()
+        _typesense_client().collections[memories_collection_name()].documents.delete(
+            {"filter_by": _provider_identity_delete_filter(uid, memory_id)}
+        )
+        return True
     except Exception as exc:
+        # Keep this optional projection module importable for callers that do
+        # not use Typesense. Some lightweight runtimes and tests intentionally
+        # provide only a top-level ``typesense`` placeholder.
+        try:
+            from typesense.exceptions import ObjectNotFound
+        except ImportError:
+            object_not_found_type = None
+        else:
+            object_not_found_type = ObjectNotFound
+        if object_not_found_type is not None and isinstance(exc, object_not_found_type):
+            return True
         logger.warning("delete_atom_keyword_doc failed uid=%s memory_id=%s: %s", uid, memory_id, exc)
+        return False
 
 
-def purge_user_atom_keyword_index(uid: str, *, db_client=None, force: bool = False) -> int:
+def purge_user_atom_keyword_index(
+    uid: str, *, db_client: Any = None, force: bool = False, raise_on_failure: bool = False
+) -> int:
     """Delete all keyword docs for a canonical user. Returns deleted count when available."""
     if not force and not user_allows_atom_keyword_index(uid, db_client=db_client):
         return 0
     try:
-        result = (
+        result = _payload_or_empty(
             _typesense_client()
             .collections[memories_collection_name()]
-            .documents.delete({"filter_by": f"userId:={uid}"})
+            .documents.delete({"filter_by": f"userId:={_typesense_filter_literal(uid)}"})
         )
         return int(result.get("num_deleted") or 0)
     except Exception as exc:
         logger.warning("purge_user_atom_keyword_index failed uid=%s: %s", uid, exc)
+        if raise_on_failure:
+            raise
         return 0
 
 
-def sync_atom_keyword_index_for_item(item: MemoryItem, *, db_client=None) -> bool:
+def sync_atom_keyword_index_for_item(item: MemoryItem, *, db_client: Any = None) -> bool:
     """Index or purge one atom based on its current authoritative state."""
     if not user_allows_atom_keyword_index(item.uid, db_client=db_client):
-        return True
+        # A policy change can revoke eligibility after this atom was indexed.
+        # Exact deletion is therefore required; treating revocation as a
+        # successful no-op would leave the prior provider document readable.
+        return delete_atom_keyword_doc(item.uid, item.memory_id, db_client=db_client)
     if is_indexable_long_term_atom(item):
         return upsert_atom_keyword_doc(item, db_client=db_client)
-    delete_atom_keyword_doc(item.uid, item.memory_id, db_client=db_client)
-    return True
+    return delete_atom_keyword_doc(item.uid, item.memory_id, db_client=db_client)
 
 
 def keyword_search_memory_ids(
@@ -232,9 +309,9 @@ def keyword_search_memory_ids(
     query: str,
     *,
     limit: int = 5,
-    start_date: int = None,
-    end_date: int = None,
-    db_client=None,
+    start_date: Optional[int] = None,
+    end_date: Optional[int] = None,
+    db_client: Any = None,
 ) -> List[str]:
     """Typesense keyword search returning memory ids for hybrid retrieval.
 
@@ -246,7 +323,7 @@ def keyword_search_memory_ids(
         return []
     try:
         filter_by = (
-            f"userId:={uid} && layer:={MemoryLayer.long_term.value} "
+            f"userId:={_typesense_filter_literal(uid)} && layer:={MemoryLayer.long_term.value} "
             f"&& status:={MemoryItemStatus.active.value} && schema_version:=1"
         )
         if start_date is not None:
@@ -262,29 +339,53 @@ def keyword_search_memory_ids(
             "per_page": max(1, min(limit, 60)),
             "page": 1,
         }
-        results = _typesense_client().collections[memories_collection_name()].documents.search(search_parameters)
+        results = _payload_or_empty(
+            _typesense_client().collections[memories_collection_name()].documents.search(search_parameters)
+        )
         memory_ids: List[str] = []
-        for hit in results.get("hits", []):
-            doc = hit.get("document") or {}
+        for hit in _payload_list(results.get("hits")):
+            doc = _payload_or_empty(hit.get("document"))
             memory_id = doc.get("memory_id") or doc.get("id")
             if memory_id:
-                memory_ids.append(memory_id)
+                memory_ids.append(str(memory_id))
         return memory_ids
     except Exception as exc:
         logger.warning("keyword_search_memory_ids failed uid=%s, falling back to vector-only: %s", uid, exc)
         return []
 
 
-def rebuild_atom_keyword_index(uid: str, *, db_client=None) -> AtomKeywordRebuildReport:
+def rebuild_atom_keyword_index(uid: str, *, db_client: Any = None) -> AtomKeywordRebuildReport:
     """Rebuild the keyword index for one user from the canonical store (idempotent)."""
     client = db_client if db_client is not None else default_db_client
-    if not user_allows_atom_keyword_index(uid, db_client=client):
-        return AtomKeywordRebuildReport(uid=uid, skipped_reason="not_indexable_user")
+    try:
+        ensure_canonical_apply_control_state(uid, db_client=client)
+    except Exception:
+        return AtomKeywordRebuildReport(uid=uid, failure_reason="canonical_state_unavailable")
+    is_indexable_user = user_allows_atom_keyword_index(uid, db_client=client)
+    try:
+        # Purge first and fail closed. A rebuild is also the repair path for
+        # rows that became restricted, lost source authority, or whose account
+        # policy was changed after their content reached Typesense.
+        purge_user_atom_keyword_index(
+            uid,
+            db_client=client,
+            force=True,
+            raise_on_failure=True,
+        )
+    except Exception:
+        logger.exception("rebuild_atom_keyword_index purge failed uid=%s", uid)
+        return AtomKeywordRebuildReport(uid=uid, failure_reason="purge_failed")
+
+    if not is_indexable_user:
+        return AtomKeywordRebuildReport(
+            uid=uid,
+            skipped_reason="not_indexable_user",
+            verified=True,
+        )
 
     items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
     indexable = [item for item in items if is_indexable_long_term_atom(item)]
 
-    purge_user_atom_keyword_index(uid, db_client=client)
     indexed = 0
     for item in indexable:
         if upsert_atom_keyword_doc(item, db_client=client):
@@ -296,6 +397,7 @@ def rebuild_atom_keyword_index(uid: str, *, db_client=None) -> AtomKeywordRebuil
         indexed_count=indexed,
         expected_count=expected,
         verified=indexed == expected,
+        failure_reason=None if indexed == expected else "upsert_failed",
     )
 
 

@@ -1,5 +1,6 @@
 {
     "@@locale": "he",
+    "sessionExpiredSignInAgain": "ההפעלה פגה — יש להתחבר שוב.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -965,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "התוכנית שלך מתחדשת ב-{date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "תוכנית חינם",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1482,7 +1473,7 @@
     "exportConfiguration": "ייצא תצורה",
     "bringYourOwn": "הביא שלך",
     "payYourSttProvider": "השתמש בomi בחופשיות. אתה משלם ישירות לספק STT שלך.",
-    "freeMinutesMonth": "600 דקות חינם לחודש כלולות. בלתי מוגבל עם ",
+    "freeMinutesMonth": "300 דקות חינם לחודש כלולות. בלתי מוגבל עם ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "דרוש Host",
     "validPortRequired": "דרוש Port תקף",
@@ -1697,22 +1688,6 @@
     "lovingOmi": "אוהב את Omi?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "עזור לנו להגיע ליותר אנשים על ידי השארת ביקורת ב-App Store. המשוב שלך אומר לנו הרבה!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "עזור לנו להגיע ליותר אנשים על ידי השארת ביקורת ב-Google Play Store. המשוב שלך אומר לנו הרבה!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "דרג ב-App Store",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "דרג ב-Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "אולי מאוחר יותר",
     "@maybeLater": {
@@ -5505,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "600 דקות פרימיום + בלתי מוגבל במכשיר",
+    "basicPlanDescription": "300 דקות פרימיום + בלתי מוגבל במכשיר",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7280,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "600 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה.",
+    "premiumMinutesInfo": "300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7391,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "600 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה. ",
+    "premiumMinutesMonth": "300 דקות פרמיום/חודש. כרטיסייה On-Device מציעה תמלול בחינם ללא הגבלה. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10520,7 +10495,7 @@
     "upgradePlan": "שדרג תוכנית",
     "billingMonthly": "חודשי",
     "billingYearly": "שנתי",
-    "savePercent": "חסוך ~17%",
+    "savePercent": "חסוך ~{percent}%",
     "popular": "פופולרי",
     "currentPlan": "נוכחי",
     "neoSubtitle": "{count} שאלות בחודש",
@@ -10582,6 +10557,7 @@
     "syncStatusWaiting": "ממתין לסנכרון",
     "syncStatusRetrying": "העיבוד נכשל — מנסה שוב",
     "syncStatusFailed": "נכשל — הקש על נסה שוב",
+    "syncStatusTooOld": "ישן מדי לסנכרון — Omi לא יכול לקבל אותו",
     "syncStatusFileUnavailable": "הקובץ אינו זמין",
     "syncStatusUploaded": "הועלה · בעיבוד ב-Omi",
     "noRecordingsYet": "אין הקלטות עדיין",
@@ -10632,7 +10608,7 @@
     "syncCustomSttWarningMessage": "אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.",
     "transcribeLaterTitle": "תמלול מאוחר יותר",
     "transcribeLaterDescription": "הקלט אודיו עכשיו ותמלל אותו לפי דרישה במקום בזמן אמת. ההקלטות נשמרות בטלפון, ואז אתה מעלה אותן כדי ליצור שיחות.",
-    "transcribeLaterNote": "פועל עם מכשירי Omi בשלב זה. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.",
+    "transcribeLaterNote": "פועל עם מיקרופון הטלפון ועם מכשירי Omi ו-Limitless. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.",
     "transcribeLaterStorageFull": "האחסון בטלפון שלך כמעט מלא, ולכן ההקלטה הושהתה. פנה מקום או העלה את ההקלטות, וההקלטה תתחדש אוטומטית.",
     "unmute": "בטל השתקה",
     "newRecording": "הקלטה חדשה",
@@ -10682,5 +10658,127 @@
     "deviceOnboardingIntroDuration": "כדקה אחת",
     "jumpToLatestMessage": "קפוץ להודעה האחרונה",
     "latest": "האחרון",
-    "flashFirmware": "צריבת קושחה"
+    "flashFirmware": "צריבת קושחה",
+    "pendantRecordingTitle": "מקליט על התליון",
+    "pendantRecordingNote": "התליון שלך מקליט באופן עצמאי. ההקלטות מסתנכרנות לטלפון שלך כשהאפליקציה פתוחה.",
+    "pendantSyncingRecordings": "מסנכרן הקלטות מהתליון שלך…",
+    "pendantMinutesStored": "~{minutes} דקות מאוחסנות",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "אחסון התליון כמעט מלא — השאר את האפליקציה פתוחה כדי לסנכרן.",
+    "connectRayBanMeta": "חבר את Ray-Ban Meta",
+    "raybanMetaSetupDescription": "השתמש במשקפי Ray-Ban Meta שלך כמכשיר הלכידה של Omi עבור שיחות והקשר חזותי. Omi יפתח את אפליקציית Meta AI כדי לקשר את המשקפיים שלך.",
+    "raybanMetaOpenMetaAI": "התחבר דרך Meta AI",
+    "raybanMetaWaitingForMetaAI": "סיים את ההתחברות באפליקציית Meta AI, ואז חזור לכאן.",
+    "raybanMetaCheckAgain": "בדוק שוב",
+    "raybanMetaAllowCamera": "אפשר מצלמה במשקפיים",
+    "raybanMetaCameraExplanation": "Omi משתמש במצלמת המשקפיים שלך כדי להוסיף תמונות לשיחות שלך. אפשר לדלג על כך ולהשתמש בשמע בלבד.",
+    "raybanMetaSkipForNow": "דלג לעת עתה",
+    "raybanMetaAudioOnlyTitle": "מצב שמע בלבד של Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "גרסה זו של Omi יכולה להשתמש במיקרופון המשקפיים שלך באמצעות Bluetooth. לכידת תמונות דורשת את גרסת המפתחים של Meta עבור Omi.",
+    "raybanMetaMusicPauseNote": "המוזיקה בטלפון שלך מושהית בזמן השימוש במיקרופון המשקפיים.",
+    "raybanMetaContinue": "המשך",
+    "raybanMetaCapturePhoto": "צלם תמונה",
+    "raybanMetaPhotoRequested": "התמונה התבקשה — היא תופיע בשיחה שלך.",
+    "raybanMetaMicrophoneReady": "המיקרופון מוכן",
+    "raybanMetaImageCaptureReady": "לכידת תמונה מוכנה",
+    "raybanMetaImageCaptureUnavailable": "לא זמין במצב שמע בלבד",
+    "raybanMetaCamera": "מצלמה",
+    "errorConnectingRayBanMeta": "שגיאה בהתחברות ל-Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "אחסון המכשיר",
+    "deviceStoragePercentFull": "{percent}% מלא",
+    "deviceStorageUsedOfTotal": "{used} מתוך {total} בשימוש",
+    "deviceStorageFree": "{free} פנוי",
+    "deviceStorageNearlyFull": "המכשיר כמעט מלא — סנכרן כדי לפנות מקום.",
+    "phoneMicOfflineFallbackMessage": "אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת.",
+    "dataEncryptedBanner": "הנתונים שלך מאובטחים כברירת מחדל בהצפנה חזקה, ואתה שולט באופן שבו הם נשמרים ומשמשים.",
+    "rayBanMetaMicPickerTitle": "בחירת המיקרופון של Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "בחרו את מיקרופון ה-Bluetooth של המשקפיים. המוזיקה מושהית בזמן ש-Omi משתמש בו.",
+    "rayBanMetaMicPickerEmpty": "לא נמצאו מיקרופוני Bluetooth. חברו את המשקפיים בהגדרות ה-iPhone ונסו שוב.",
+    "rayBanMetaMicPickerLoadError": "לא ניתן היה לטעון את מיקרופוני ה-Bluetooth. ודאו ש-Bluetooth מופעל ונסו שוב.",
+    "rayBanMetaMicPickerConnectError": "לא ניתן היה להתחבר למיקרופון הזה. ודאו שהוא מחובר בהגדרות ה-iPhone.",
+    "cloudTranscription": "תמלול בענן",
+    "copyMessage": "העתקת הודעה",
+    "deleteOnDeviceModel": "מחיקת מודל",
+    "deleteOnDeviceModelConfirm": "האם אתה בטוח שברצונך למחוק מודל זה?",
+    "downgradeAnyway": "שנמך בכל זאת",
+    "downgradeLimitBattery": "צריכת סוללה גבוהה פי 7",
+    "downgradeLimitDelay": "עיכוב של 5-7 שניות",
+    "downgradeLimitQuality": "איכות תמלול נמוכה ב-30%",
+    "downgradeLimitSpeakers": "לא ניתן לזהות דוברים",
+    "downgradeLimitationsHeading": "אלה המגבלות שתיתקל בהן:",
+    "downgradeToFreemiumTitle": "לשנמך לתוכנית החינם?",
+    "errorLoadingAudio": "שגיאה בטעינת האודיו",
+    "failedToLinkCalendarEvent": "קישור אירוע היומן נכשל",
+    "googleCalendarConnectPrompt": "חבר את Google Calendar כדי לקשר שיחות לאירועי יומן.",
+    "googleCalendarNotConnected": "Google Calendar אינו מחובר",
+    "linkedToEvent": "מקושר ל\"{title}\"",
+    "onDeviceModelDeleted": "המודל נמחק",
+    "onDeviceModelDownloadFailed": "הורדת המודל נכשלה",
+    "onDeviceModelDownloadFailedDesc": "הורדת מודל Whisper נכשלה. נסה שנית.",
+    "onDeviceModelDownloadSuccess": "המודל הורד",
+    "onDeviceModelDownloadSuccessDesc": "מודל Whisper הורד בהצלחה",
+    "onDeviceModelDownloaded": "הורד",
+    "onDeviceModelSize": "גודל המודל",
+    "onDeviceTranscription": "תמלול על המכשיר",
+    "onDeviceTranscriptionDesc": "התמלול מעובד מקומית על המכשיר שלך",
+    "searchSettings": "חיפוש בהגדרות…",
+    "speechToTextProvider": "ספק המרת דיבור לטקסט",
+    "speechToTextProviderDesc": "בחר את השירות שישמש לתמלול",
+    "sttFilterAuto": "אוטומטי",
+    "sttModelAccuracy": "דיוק",
+    "sttModelFaster": "מהיר יותר",
+    "sttModelHigher": "גבוה יותר",
+    "sttModelLower": "נמוך יותר",
+    "sttModelSlower": "איטי יותר",
+    "sttModelSpeed": "מהירות",
+    "sttNone": "ללא",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "תודה על המשוב שלך!",
+    "transcriptionLanguage": "שפת התמלול",
+    "transcriptionLanguageDesc": "בחר את השפה לתמלול הדיבור",
+    "whisperModel": "מודל Whisper",
+    "whisperModelDesc": "בחר את המודל לתמלול על המכשיר",
+    "whisperModelSizeBase": "בסיסי",
+    "whisperModelSizeLarge": "גדול",
+    "whisperModelSizeMedium": "בינוני",
+    "whisperModelSizeSmall": "קטן",
+    "whisperModelSizeTiny": "זעיר",
+    "planSheetChooseYourPlan": "בחרו תוכנית כדי לפתוח את Omi ללא הגבלה.",
+    "availableOnMacMobileWeb": "זמין ב-Mac, בנייד ובאינטרנט",
+    "popularBadge": "פופולרי",
+    "worksOnDesktop": "עובד במחשב",
+    "noDesktopAccess": "לא עובד במחשב",
+    "annualBillingSummary": "{months} חודשים / {price}",
+    "monthsFreeBadge": "{count, plural, =1{חודש אחד חינם} other{{count} חודשים חינם}}",
+    "freemiumLimitsIntro": "Omi בחינם, אבל לגרסה החינמית יש מגבלות שמשפיעות על החוויה שלכם:",
+    "downgradeLimitDelayNotRealTime": "עיכוב של 5-7 שניות (לא בזמן אמת)",
+    "downgradeToFreemiumAction": "מעבר לגרסה החינמית",
+    "getFreeUnlimitedAccess": "קבלו גישה בלתי מוגבלת בחינם",
+    "shareDataForTraining": "שיתוף נתונים לאימון",
+    "yourRequestUnderReview": "הבקשה שלכם בבדיקה",
+    "pinAsBaseline": "הצמדה כבסיס",
+    "unpinAsBaseline": "ביטול הצמדה מהבסיס",
+    "baselineMemory": "זיכרון בסיס",
+    "alwaysInContext": "תמיד בהקשר",
+    "accountCutoverUpdateRequiredTitle": "נדרש עדכון",
+    "accountCutoverUpdateRequiredMessage": "התקינו את אפליקציית Omi העדכנית כדי להמשיך לאחר העברת החשבון.",
+    "accountCutoverMigrationInProgressTitle": "העברה בתהליך",
+    "accountCutoverMigrationInProgressMessage": "החשבון שלכם בהעברה. תכונות המוצר מושהות עד לסיום ההעברה.",
+    "accountCutoverMigrationRollbackMessage": "החשבון שלכם בתחזוקה לאחר ביטול העברה. ייתכן שנתונים חדשים יותר נותרו מבודדים.",
+    "accountCutoverOpenStore": "פתחו חנות"
 }

@@ -1,36 +1,21 @@
 #!/usr/bin/env python3
 """Live streaming test for #5577 — verifies async Deepgram backoff with real podcast audio.
 
-Mimics Flutter app behavior:
-1. Opens WebSocket to /v4/listen with auth
-2. Reads PCM16 WAV file and sends chunks at real-time pace (100ms chunks)
-3. Monitors transcription responses + tracks segments, latency
-4. Tests client disconnect during retry (is_active abort)
-
-Usage:
-    # Level 1: local dev backend, podcast durations
-    python3 scripts/test_live_streaming_backoff.py --port 8790 --audio /tmp/podcast-test/podcast_1m.wav
-    python3 scripts/test_live_streaming_backoff.py --port 8790 --audio /tmp/podcast-test/podcast_5m.wav
-    python3 scripts/test_live_streaming_backoff.py --port 8790 --audio /tmp/podcast-test/podcast_15m.wav
-
-    # Level 2: remote backend via Tailscale
-    python3 scripts/test_live_streaming_backoff.py --host <tailscale-ip> --port 8790 --audio ...
-
-    # All tests on one file
-    python3 scripts/test_live_streaming_backoff.py --port 8790 --audio /tmp/podcast-test/podcast_1m.wav --all
+Run against a local backend with a real Deepgram API key configured. Streams an
+8kHz mono PCM16 WAV file through /v4/listen and checks that the connection holds,
+segments arrive, and concurrent streams don't block the event loop.
 """
 
 import argparse
 import asyncio
 import json
 import logging
-import math
 import os
-import struct
 import sys
 import time
 import wave
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import websockets
 
@@ -47,10 +32,10 @@ ADMIN_KEY = os.getenv('ADMIN_KEY', '123')
 TEST_UID = 'test-streaming-5577'
 
 
-def load_audio_chunks(audio_path: str, chunk_duration_ms: int = 100, sample_rate: int = 8000) -> list:
+def load_audio_chunks(audio_path: str, chunk_duration_ms: int = 100, sample_rate: int = 8000) -> List[bytes]:
     """Load WAV file and split into fixed-size PCM16 chunks for real-time streaming."""
     chunk_bytes = int(sample_rate * (chunk_duration_ms / 1000) * 2)  # 16-bit = 2 bytes/sample
-    chunks = []
+    chunks: List[bytes] = []
     with wave.open(audio_path, 'rb') as wf:
         assert wf.getsampwidth() == 2, f"Expected 16-bit audio, got {wf.getsampwidth() * 8}-bit"
         assert wf.getnchannels() == 1, f"Expected mono, got {wf.getnchannels()} channels"
@@ -73,7 +58,7 @@ def load_audio_chunks(audio_path: str, chunk_duration_ms: int = 100, sample_rate
     return chunks
 
 
-def generate_silence_chunks(duration_s: float, chunk_duration_ms: int = 100, sample_rate: int = 8000) -> list:
+def generate_silence_chunks(duration_s: float, chunk_duration_ms: int = 100, sample_rate: int = 8000) -> List[bytes]:
     """Generate silent PCM16 chunks as fallback when no audio file provided."""
     chunk_bytes = int(sample_rate * (chunk_duration_ms / 1000) * 2)
     silence = b'\x00' * chunk_bytes
@@ -81,7 +66,9 @@ def generate_silence_chunks(duration_s: float, chunk_duration_ms: int = 100, sam
     return [silence] * total_chunks
 
 
-async def stream_audio_test(host: str, port: int, chunks: list, label: str, uid_suffix: str = ''):
+async def stream_audio_test(
+    host: str, port: int, chunks: List[bytes], label: str, uid_suffix: str = ''
+) -> Dict[str, Any]:
     """Core streaming test — sends audio chunks at real-time pace, collects metrics.
 
     Returns dict with metrics or None on connection failure.
@@ -95,7 +82,7 @@ async def stream_audio_test(host: str, port: int, chunks: list, label: str, uid_
     auth_token = f"{ADMIN_KEY}{uid}"
     headers = {"Authorization": f"Bearer {auth_token}"}
 
-    metrics = {
+    metrics: Dict[str, Any] = {
         'label': label,
         'total_chunks': len(chunks),
         'duration_s': len(chunks) * CHUNK_DURATION_MS / 1000,
@@ -117,23 +104,23 @@ async def stream_audio_test(host: str, port: int, chunks: list, label: str, uid_
             t_start = time.time()
             send_done = asyncio.Event()
 
-            async def receive_loop():
+            async def receive_loop() -> None:
                 try:
                     async for msg in ws:
                         elapsed = time.time() - t_start
                         try:
-                            data = json.loads(msg)
+                            data: Any = json.loads(msg)
                             # Backend sends segments as a plain JSON array, or as
                             # {"segments": [...]} in some code paths, or {"type": ...} events
-                            segments = None
+                            segments: Optional[List[Any]] = None
                             if isinstance(data, list) and data:
-                                segments = data
+                                segments = cast(List[Any], data)
                             elif isinstance(data, dict) and 'segments' in data and data['segments']:
-                                segments = data['segments']
+                                segments = cast(List[Any], data['segments'])
 
                             if segments:
                                 metrics['segments_received'] += len(segments)
-                                words = sum(len(s.get('text', '').split()) for s in segments)
+                                words = sum(len(str(s.get('text', '')).split()) for s in segments)
                                 metrics['transcript_words'] += words
                                 if metrics['first_segment_latency_s'] is None:
                                     metrics['first_segment_latency_s'] = elapsed
@@ -200,7 +187,7 @@ async def stream_audio_test(host: str, port: int, chunks: list, label: str, uid_
     return metrics
 
 
-async def test_podcast_streaming(host: str, port: int, audio_path: str):
+async def test_podcast_streaming(host: str, port: int, audio_path: str) -> Tuple[bool, Dict[str, Any]]:
     """Test: Stream podcast audio file end-to-end and verify connection stability + transcription."""
     duration_label = Path(audio_path).stem
     logger.info("=" * 70)
@@ -212,7 +199,7 @@ async def test_podcast_streaming(host: str, port: int, audio_path: str):
 
     # Evaluate
     passed = True
-    reasons = []
+    reasons: List[str] = []
 
     if not metrics['connection_held']:
         passed = False
@@ -243,7 +230,7 @@ async def test_podcast_streaming(host: str, port: int, audio_path: str):
     return passed, metrics
 
 
-async def test_client_disconnect(host: str, port: int, audio_path: str):
+async def test_client_disconnect(host: str, port: int, audio_path: str) -> Tuple[bool, Dict[str, Any]]:
     """Test: Client disconnects mid-stream — backend should abort DG retries via is_active."""
     logger.info("=" * 70)
     logger.info("TEST: Client disconnect mid-stream (is_active abort)")
@@ -283,7 +270,9 @@ async def test_client_disconnect(host: str, port: int, audio_path: str):
         return False, {}
 
 
-async def test_concurrent_streaming(host: str, port: int, audio_path: str, num_connections: int = 3):
+async def test_concurrent_streaming(
+    host: str, port: int, audio_path: str, num_connections: int = 3
+) -> Tuple[bool, List[Dict[str, Any]]]:
     """Test: Multiple concurrent podcast streams — verifies no event loop blocking.
 
     With old time.sleep(), one DG retry would stall ALL connections on the pod.
@@ -300,8 +289,7 @@ async def test_concurrent_streaming(host: str, port: int, audio_path: str, num_c
     logger.info(f"  Using first {cutoff * CHUNK_DURATION_MS / 1000:.0f}s of audio per connection")
 
     # Stagger connections by 3s to avoid overwhelming single-worker handshake
-    results = []
-    tasks = []
+    tasks: List[Any] = []
     for i in range(num_connections):
         if i > 0:
             await asyncio.sleep(3)
@@ -310,7 +298,7 @@ async def test_concurrent_streaming(host: str, port: int, audio_path: str, num_c
         )
         tasks.append(task)
 
-    results = await asyncio.gather(*tasks)
+    results = cast(List[Dict[str, Any]], await asyncio.gather(*tasks))
 
     passed_count = sum(1 for m in results if m['connection_held'] and not m['errors'])
     total_segments = sum(m['segments_received'] for m in results)
@@ -327,7 +315,7 @@ async def test_concurrent_streaming(host: str, port: int, audio_path: str, num_c
     return passed, results
 
 
-async def main():
+async def main() -> None:
     parser = argparse.ArgumentParser(description='Live podcast streaming test for #5577')
     parser.add_argument('--host', default='localhost', help='Backend host')
     parser.add_argument('--port', type=int, default=8790, help='Backend port')
@@ -342,14 +330,14 @@ async def main():
         logger.error(f"Audio file not found: {args.audio}")
         sys.exit(1)
 
-    results = {}
+    results: Dict[str, bool] = {}
 
     logger.info(f"Target: ws://{args.host}:{args.port}/v4/listen")
     logger.info(f"Audio:  {args.audio}")
     logger.info("")
 
     # Test 1: Full podcast streaming
-    passed, metrics = await test_podcast_streaming(args.host, args.port, args.audio)
+    passed, _metrics = await test_podcast_streaming(args.host, args.port, args.audio)
     results['podcast'] = passed
 
     # Test 2: Client disconnect
@@ -368,10 +356,10 @@ async def main():
     logger.info("SUMMARY")
     logger.info("=" * 70)
     all_passed = True
-    for name, passed in results.items():
-        status = "PASSED" if passed else "FAILED"
+    for name, tpassed in results.items():
+        status = "PASSED" if tpassed else "FAILED"
         logger.info(f"  {name}: {status}")
-        if not passed:
+        if not tpassed:
             all_passed = False
 
     if all_passed:

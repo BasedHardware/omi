@@ -1,42 +1,40 @@
-import SwiftUI
 import AppKit
+import OmiTheme
+import SwiftUI
 
 struct ExcludedAppRow: View {
   let appName: String
   let onRemove: () -> Void
 
-  @State var isHovered = false
+  @State private var isHovered = false
 
   var body: some View {
-    HStack(spacing: 12) {
+    HStack(spacing: OmiSpacing.md) {
       AppIconView(appName: appName, size: 24)
 
       Text(appName)
-        .scaledFont(size: 14)
-        .foregroundColor(OmiColors.textPrimary)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.primary)
 
       Spacer()
 
-      Button(action: onRemove) {
-        Image(systemName: "xmark.circle.fill")
-          .scaledFont(size: 16)
-          .foregroundColor(isHovered ? OmiColors.error : OmiColors.textTertiary)
-      }
-      .buttonStyle(.plain)
+      Button("Remove \(appName)", systemImage: "xmark.circle.fill", action: onRemove)
+        .labelStyle(.iconOnly)
+        .scaledFont(size: OmiType.subheading)
+        .foregroundColor(isHovered ? Ink.errorRed : Ink.secondary)
+        .buttonStyle(.plain)
     }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 8)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
     .background(
-      RoundedRectangle(cornerRadius: 8)
-        .fill(isHovered ? OmiColors.backgroundQuaternary.opacity(0.5) : Color.clear)
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+        .fill(isHovered ? Ink.hairline : Color.clear)
     )
     .onHover { hovering in
       isHovered = hovering
     }
   }
 }
-
-
 
 struct AppRuleEditorView: View {
   let title: String
@@ -46,43 +44,40 @@ struct AppRuleEditorView: View {
   let builtInApps: Set<String>
   let onAdd: (String) -> Void
 
-  @State var newAppName: String = ""
-  @State var runningApps: [String] = []
+  @State private var newAppName: String = ""
+  @State private var runningApps: [String] = []
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text(title)
-        .scaledFont(size: 13, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .scaledFont(size: OmiType.body, weight: .medium)
+        .foregroundColor(Ink.secondary)
 
-      HStack(spacing: 8) {
+      HStack(spacing: OmiSpacing.sm) {
         TextField(placeholder, text: $newAppName)
-          .textFieldStyle(.roundedBorder)
+          .settingsTextInputStyle()
           .onSubmit { addApp() }
 
         Button(addButtonTitle) { addApp() }
-          .buttonStyle(.bordered)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           .disabled(newAppName.trimmingCharacters(in: .whitespaces).isEmpty)
       }
 
-      VStack(alignment: .leading, spacing: 8) {
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         HStack {
           Text("Currently Running Apps")
-            .scaledFont(size: 12, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(Ink.secondary)
           Spacer()
-          Button {
-            refreshRunningApps()
-          } label: {
-            Image(systemName: "arrow.clockwise")
-              .scaledFont(size: 11)
-              .foregroundColor(OmiColors.textTertiary)
-          }
-          .buttonStyle(.plain)
+          Button("Refresh running apps", systemImage: "arrow.clockwise", action: refreshRunningApps)
+            .labelStyle(.iconOnly)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
+            .buttonStyle(.plain)
         }
 
-        ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: 8) {
+        ScrollView(.horizontal) {
+          HStack(spacing: OmiSpacing.sm) {
             ForEach(
               runningApps.filter { !existingApps.contains($0) && !builtInApps.contains($0) },
               id: \.self
@@ -93,8 +88,9 @@ struct AppRuleEditorView: View {
             }
           }
         }
+        .scrollIndicators(.hidden)
       }
-      .padding(.top, 4)
+      .padding(.top, OmiSpacing.xxs)
     }
     .onAppear { refreshRunningApps() }
   }
@@ -122,85 +118,81 @@ struct BrowserKeywordListView: View {
   let onAdd: (String) -> Void
   let onRemove: (String) -> Void
 
-  @State var newKeyword: String = ""
-  @State var filterText: String = ""
+  @State private var newKeyword: String = ""
+  @State private var filterText: String = ""
 
   var filteredKeywords: [String] {
     if filterText.isEmpty {
       return keywords
     }
-    return keywords.filter { $0.lowercased().contains(filterText.lowercased()) }
+    return keywords.filter { $0.localizedStandardContains(filterText) }
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       // Filter field
-      HStack(spacing: 8) {
+      HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "line.3.horizontal.decrease")
-          .scaledFont(size: 11)
-          .foregroundColor(OmiColors.textTertiary)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
         TextField("Filter keywords...", text: $filterText)
           .textFieldStyle(.plain)
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
         if !filterText.isEmpty {
-          Button {
+          Button("Clear keyword filter", systemImage: "xmark.circle.fill") {
             filterText = ""
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-              .scaledFont(size: 11)
-              .foregroundColor(OmiColors.textTertiary)
           }
+          .labelStyle(.iconOnly)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
           .buttonStyle(.plain)
         }
       }
-      .padding(.horizontal, 8)
-      .padding(.vertical, 4)
-      .background(OmiColors.backgroundTertiary)
-      .cornerRadius(6)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xxs)
+      .background(Ink.rowFill)
+      .cornerRadius(SettingsGlassMetrics.pillRadius)
 
       // Keyword chips in a wrapping flow layout
       ScrollView {
-        FlowLayout(spacing: 6) {
+        FlowLayout(spacing: OmiSpacing.xs) {
           ForEach(filteredKeywords, id: \.self) { keyword in
-            HStack(spacing: 4) {
+            HStack(spacing: OmiSpacing.xxs) {
               Text(keyword)
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textPrimary)
-              Button {
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.primary)
+              Button("Remove \(keyword)", systemImage: "xmark") {
                 onRemove(keyword)
-              } label: {
-                Image(systemName: "xmark")
-                  .scaledFont(size: 8, weight: .bold)
-                  .foregroundColor(OmiColors.textTertiary)
               }
+              .labelStyle(.iconOnly)
+              .scaledFont(size: 8, weight: .bold)
+              .foregroundColor(Ink.secondary)
               .buttonStyle(.plain)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(OmiColors.backgroundTertiary)
-            .cornerRadius(6)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xxs)
+            .background(Ink.rowFill)
+            .cornerRadius(SettingsGlassMetrics.pillRadius)
           }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, OmiSpacing.hairline)
       }
       .frame(maxHeight: 150)
 
       // Add new keyword
-      HStack(spacing: 8) {
+      HStack(spacing: OmiSpacing.sm) {
         TextField("Add keyword...", text: $newKeyword)
-          .textFieldStyle(.roundedBorder)
-          .scaledFont(size: 12)
+          .settingsTextInputStyle()
           .onSubmit { addKeyword() }
 
         Button("Add") { addKeyword() }
-          .buttonStyle(.bordered)
-          .controlSize(.small)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           .disabled(newKeyword.trimmingCharacters(in: .whitespaces).isEmpty)
       }
 
       Text("\(keywords.count) keywords")
-        .scaledFont(size: 11)
-        .foregroundColor(OmiColors.textTertiary)
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
     }
   }
 
@@ -218,27 +210,27 @@ struct RunningAppChip: View {
   let appName: String
   let onTap: () -> Void
 
-  @State var isHovered = false
+  @State private var isHovered = false
 
   var body: some View {
     Button(action: onTap) {
-      HStack(spacing: 6) {
+      HStack(spacing: OmiSpacing.xs) {
         AppIconView(appName: appName, size: 16)
 
         Text(appName)
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textSecondary)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
 
         Image(systemName: "plus.circle.fill")
-          .scaledFont(size: 12)
-          .foregroundColor(isHovered ? OmiColors.purplePrimary : OmiColors.textTertiary)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(isHovered ? Ink.accent : Ink.secondary)
       }
-      .padding(.horizontal, 10)
-      .padding(.vertical, 6)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xs)
       .background(
-        RoundedRectangle(cornerRadius: 6)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.pillRadius, style: .continuous)
           .fill(
-            isHovered ? OmiColors.backgroundQuaternary : OmiColors.backgroundTertiary.opacity(0.5))
+            isHovered ? Ink.hairline : Ink.rowFill)
       )
     }
     .buttonStyle(.plain)
@@ -249,11 +241,11 @@ struct RunningAppChip: View {
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  SettingsPage(
-    appState: AppState(),
-    selectedSection: .constant(.advanced),
-    highlightedSettingId: .constant(nil)
-  )
-}
+  #Preview {
+    SettingsPage(
+      appState: AppState(),
+      selectedSection: .constant(.advanced),
+      highlightedSettingId: .constant(nil)
+    )
+  }
 #endif

@@ -1,17 +1,55 @@
+import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Literal, Optional, TypedDict
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
-
-from ._client import db, document_id_from_seed
+from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
+from database.account_deletion_policy import normalize_account_deletion_status
+from database.account_deletion_transitions import (
+    adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
+    mark_wipe_completed as _mark_user_deletion_wipe_completed_txn,
+    record_late_agent_vm_cleanup as _record_late_agent_vm_cleanup_txn,
+)
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
-from database.redis_db import try_acquire_client_device_write_lock, try_acquire_user_platform_write_lock
-from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
+from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
+from database.redis_db import (
+    delete_cached_user_geolocation,
+    try_acquire_client_device_write_lock,
+    try_acquire_user_platform_write_lock,
+)
+from models.users import (
+    LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
+    LOCATION_CONTEXT_PURPOSE,
+    LocationContextConsent,
+    LocationContextConsentStatus,
+    Subscription,
+    PlanType,
+    SubscriptionStatus,
+)
+from models.other import Person
 from utils.subscription import get_default_basic_subscription
 import logging
 
 logger = logging.getLogger(__name__)
+DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
+_DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
+_DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES = frozenset({'pending', 'retrying', 'running', 'failed'})
+LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
+
+
+class DeletionWipeTaskResolution(TypedDict):
+    outcome: Literal['resolved', 'missing', 'ambiguous', 'completed', 'not_actionable']
+    uid: str | None
+
+
+class DeletionWipeIntent(TypedDict):
+    """Result of creating or joining an account-deletion wipe authority."""
+
+    wipe_job_id: str
+    dispatch_claimed: bool
+
 
 # Conservative low-risk user projections. Do NOT use these policies for
 # entitlement, BYOK, data-protection, privacy-consent, or full user-doc caching.
@@ -28,11 +66,13 @@ _USER_AI_PROFILE_CACHE = CachePolicy(namespace='user_ai_profile', version=1, ttl
 #
 # We normalize the raw header into a coarse `desktop | mobile` bucket, matching
 # the profitability dashboard splits, and preserve the granular value
-# (`ios`/`android`/`macos`) in `last_active_os` for finer drill-down.
+# (`ios`/`android`/`macos`/`windows`) in `last_active_os` for finer drill-down.
 _PLATFORM_ALIASES = {
     'macos': 'desktop',
     'mac': 'desktop',
     'mac os x': 'desktop',
+    'windows': 'desktop',
+    'win32': 'desktop',
     'desktop': 'desktop',
     'ios': 'mobile',
     'iphone os': 'mobile',
@@ -214,15 +254,15 @@ def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Option
 BYOK_HEARTBEAT_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 
-def get_byok_state(uid: str) -> dict:
-    user_ref = db.collection('users').document(uid)
+def get_byok_state(uid: str, *, firestore_client: Any | None = None) -> dict:
+    user_ref = (firestore_client or db).collection('users').document(uid)
     data = user_ref.get().to_dict() or {}
     return data.get('byok', {})
 
 
-def is_byok_active(uid: str) -> bool:
+def is_byok_active(uid: str, *, firestore_client: Any | None = None) -> bool:
     """True if user has a live BYOK activation (heartbeat within TTL)."""
-    state = get_byok_state(uid)
+    state = get_byok_state(uid, firestore_client=firestore_client)
     if not state.get('active'):
         return False
     last_seen = state.get('last_seen_at')
@@ -278,31 +318,27 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
     )
 
 
-def mark_user_deletion_wipe_started(uid: str):
-    """Mark that the background data wipe has been queued but not yet completed.
+def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
+    """Return the authoritative deletion lifecycle state for an authenticated UID.
 
-    Persisted in the top-level ``account_deletions`` collection so it survives a
-    deploy or pod restart. A reconciliation worker can query for documents where
-    ``wipe_status == 'pending'`` and re-enqueue incomplete wipes, ensuring the
-    in-process ``cleanup_executor`` backlog is not silently lost.
-
-    The worker transitions the marker to ``'running'`` (via
-    ``mark_user_deletion_wipe_running``) as soon as it actually starts
-    executing, so the reconciler can distinguish a genuinely orphaned queued
-    wipe from one that is actively executing but slow.
+    This intentionally bypasses caches: an accepted deletion must become an
+    access barrier on the very next request, and a cached pre-delete miss would
+    reopen the exact half-deleted-account window this marker closes.
     """
-    db.collection('account_deletions').document(uid).set(
-        {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
-        merge=True,
-    )
+    client = firestore_client or get_firestore_client()
+    snapshot = client.collection('account_deletions').document(uid).get()
+    if not snapshot.exists:
+        return None
+    status = (snapshot.to_dict() or {}).get('wipe_status')
+    return normalize_account_deletion_status(marker_exists=True, raw_status=status)
 
 
 def mark_user_deletion_wipe_running(uid: str):
     """Transition a queued wipe marker to ``running`` once the worker starts.
 
-    Called by ``background_wipe_user_data`` at the top of the executor future.
+    Called by ``background_wipe_user_data`` at the top of the wipe worker.
     This lets the reconciler distinguish a genuinely orphaned ``pending`` wipe
-    (queued in the executor backlog but never picked up — safe to re-enqueue)
+    (queued but never picked up — safe to re-enqueue)
     from a ``running`` wipe (actively executing — only recovered if the claim
     is stale, i.e. the worker probably crashed).
 
@@ -316,30 +352,88 @@ def mark_user_deletion_wipe_running(uid: str):
     )
 
 
-def mark_user_deletion_wipe_intent(uid: str):
-    """Persist a non-actionable deletion intent *before* auth deletion.
+@transactional
+def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) -> DeletionWipeIntent:
+    snapshot = doc_ref.get(transaction=transaction)
+    if snapshot.exists:
+        data = snapshot.to_dict() or {}
+        existing_job_id = data.get('wipe_job_id')
+        # A repeat request must join the existing durable deletion authority,
+        # never reset a claimed/running/completed job backwards.
+        if isinstance(existing_job_id, str) and existing_job_id:
+            status = data.get('wipe_status')
+            # ``deleting_auth`` is a legacy pre-worker state. New admissions
+            # create ``pending`` atomically, but a retry may safely promote an
+            # older durable intent because the worker owns Firebase Auth
+            # deletion.
+            if status == 'deleting_auth':
+                transaction.update(
+                    doc_ref,
+                    {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
+                )
+                return {'wipe_job_id': existing_job_id, 'dispatch_claimed': True}
+            if status in {'pending', 'retrying', 'running', 'failed', 'completed'}:
+                return {'wipe_job_id': existing_job_id, 'dispatch_claimed': False}
+    transaction.set(
+        doc_ref,
+        {
+            'wipe_status': 'pending',
+            'wipe_intent_at': datetime.now(timezone.utc),
+            'wipe_queued_at': datetime.now(timezone.utc),
+            'wipe_job_id': wipe_job_id,
+        },
+        merge=True,
+    )
+    return {'wipe_job_id': wipe_job_id, 'dispatch_claimed': True}
 
-    Written BEFORE ``auth.delete_account()`` succeeds. The reconciler only
-    recovers stale ``'deleting_auth'`` records *after* verifying the Firebase
-    auth user is actually gone, so a crash between this write and the confirmed
-    auth deletion cannot trigger a premature data wipe for a user whose Firebase
-    account still exists.
 
-    Call ``mark_user_deletion_wipe_started`` to transition the marker to the
-    actionable ``'pending'`` state once auth deletion is confirmed.
+def mark_user_deletion_wipe_intent(uid: str) -> DeletionWipeIntent:
+    """Create or join the durable account-deletion authority.
+
+    New intents become ``pending`` in the same transaction that creates their
+    opaque job id, eliminating the crash window between intent and admission.
+    Repeated requests reuse an existing active job id rather than moving a
+    claimed, running, failed, or completed wipe backwards. ``deleting_auth``
+    remains a legacy recovery state and is promoted by a retry or reconciler.
     """
-    db.collection('account_deletions').document(uid).set(
-        {'wipe_status': 'deleting_auth', 'wipe_intent_at': datetime.now(timezone.utc)},
-        merge=True,
-    )
+    wipe_job_id = uuid.uuid4().hex
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id)
 
 
-def mark_user_deletion_wipe_completed(uid: str):
-    """Mark the background data wipe as finished."""
-    db.collection('account_deletions').document(uid).set(
-        {'wipe_status': 'completed', 'wipe_completed_at': datetime.now(timezone.utc)},
-        merge=True,
+@transactional
+def _mark_user_deletion_wipe_started_txn(transaction, doc_ref, wipe_job_id: str) -> bool:
+    """Promote a newly-created intent to pending exactly once.
+
+    The status and opaque job id are checked in the same transaction as the
+    write. This fences a retry/repeated request from moving an already claimed,
+    running, failed, or completed wipe backwards before it can enqueue again.
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return False
+    data = snapshot.to_dict() or {}
+    if data.get('wipe_status') != 'deleting_auth' or data.get('wipe_job_id') != wipe_job_id:
+        return False
+    transaction.update(
+        doc_ref,
+        {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
     )
+    return True
+
+
+def mark_user_deletion_wipe_started(uid: str, wipe_job_id: str) -> bool:
+    """Atomically promote one newly-created wipe intent to queue-pending."""
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _mark_user_deletion_wipe_started_txn(transaction, doc_ref, wipe_job_id)
+
+
+def mark_user_deletion_wipe_completed(uid: str) -> bool:
+    """Complete the wipe only if no provider cleanup remains outstanding."""
+    doc_ref = db.collection('account_deletions').document(uid)
+    return _mark_user_deletion_wipe_completed_txn(db.transaction(), doc_ref)
 
 
 def mark_user_deletion_wipe_failed(uid: str):
@@ -348,6 +442,154 @@ def mark_user_deletion_wipe_failed(uid: str):
         {'wipe_status': 'failed', 'wipe_failed_at': datetime.now(timezone.utc)},
         merge=True,
     )
+
+
+def record_late_agent_vm_cleanup(
+    uid: str,
+    vm_name: str,
+    zone: str,
+    expected_instance_id: str | None = None,
+) -> bool:
+    """Persist a late VM only when an admitted deletion owns its cleanup."""
+    doc_ref = db.collection('account_deletions').document(uid)
+    return _record_late_agent_vm_cleanup_txn(
+        db.transaction(),
+        doc_ref,
+        vm_name,
+        zone,
+        expected_instance_id,
+    )
+
+
+def get_late_agent_vm_cleanup(uid: str) -> dict[str, str] | None:
+    """Return a late-created VM that must be retried independently of user data."""
+    snapshot = db.collection('account_deletions').document(uid).get()
+    data = snapshot.to_dict() or {}
+    pending = data.get('late_agent_vm_cleanup') if snapshot.exists else None
+    if not isinstance(pending, dict):
+        return None
+    vm_name = pending.get('vmName')
+    zone = pending.get('zone')
+    if not isinstance(vm_name, str) or not vm_name or not isinstance(zone, str) or not zone:
+        return None
+    result = {'vmName': vm_name, 'zone': zone}
+    expected_instance_id = pending.get('expectedInstanceId')
+    if expected_instance_id is not None:
+        if (
+            not isinstance(expected_instance_id, str)
+            or not expected_instance_id.isascii()
+            or not expected_instance_id.isdigit()
+        ):
+            raise RuntimeError('late Agent VM cleanup instance identity is malformed')
+        result['expectedInstanceId'] = expected_instance_id
+    return result
+
+
+def adopt_legacy_late_agent_vm_cleanup(uid: str, vm_name: str, zone: str, expected_instance_id: str) -> bool:
+    """CAS-upgrade a pre-instance-ID cleanup record before provider deletion."""
+    doc_ref = db.collection('account_deletions').document(uid)
+    return _adopt_legacy_late_agent_vm_cleanup_txn(db.transaction(), doc_ref, vm_name, zone, expected_instance_id)
+
+
+def clear_late_agent_vm_cleanup(uid: str, vm_name: str) -> None:
+    """Clear a late-VM retry record only after its matching GCE instance is gone."""
+    doc_ref = db.collection('account_deletions').document(uid)
+    snapshot = doc_ref.get()
+    pending = (snapshot.to_dict() or {}).get('late_agent_vm_cleanup') if snapshot.exists else None
+    if isinstance(pending, dict) and pending.get('vmName') == vm_name:
+        doc_ref.update({'late_agent_vm_cleanup': firestore.DELETE_FIELD})
+
+
+@transactional
+def _ensure_deletion_wipe_job_id_txn(transaction, doc_ref, generated_job_id: str) -> str | None:
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return None
+    existing_job_id = (snapshot.to_dict() or {}).get('wipe_job_id')
+    if isinstance(existing_job_id, str) and existing_job_id:
+        return existing_job_id
+    transaction.update(doc_ref, {'wipe_job_id': generated_job_id})
+    return generated_job_id
+
+
+def ensure_deletion_wipe_job_id(uid: str) -> str | None:
+    """Backfill an opaque job id for a pre-job-id deletion record.
+
+    Records created before the job-scoped payload migration remain recoverable:
+    the reconciler claims the state first, then atomically assigns an opaque id
+    before it re-enqueues the task.
+    """
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _ensure_deletion_wipe_job_id_txn(transaction, doc_ref, uuid.uuid4().hex)
+
+
+def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution:
+    """Resolve an opaque task id to one canonical deletion job document."""
+    docs = list(db.collection('account_deletions').where('wipe_job_id', '==', wipe_job_id).limit(2).stream())
+    if not docs:
+        return {'outcome': 'missing', 'uid': None}
+    if len(docs) != 1:
+        return {'outcome': 'ambiguous', 'uid': None}
+
+    doc = docs[0]
+    status = (doc.to_dict() or {}).get('wipe_status')
+    if status == 'completed':
+        return {'outcome': 'completed', 'uid': None}
+    if status in _DELETION_WIPE_TERMINAL_STATUSES:
+        return {'outcome': 'not_actionable', 'uid': None}
+    return {'outcome': 'resolved', 'uid': doc.id}
+
+
+def resolve_legacy_deletion_wipe_uid(legacy_uid: str) -> DeletionWipeTaskResolution:
+    """Resolve a bounded legacy payload through the persisted deletion record.
+
+    This compatibility path is deliberately narrower than the historical
+    handler: a UID from a queued legacy task is never executable on its own.
+    It must name a still-actionable canonical deletion record, and the handler
+    uses the document id returned here rather than the payload value.
+    """
+    doc = db.collection('account_deletions').document(legacy_uid).get()
+    if not doc.exists:
+        return {'outcome': 'missing', 'uid': None}
+    status = (doc.to_dict() or {}).get('wipe_status')
+    if status == 'completed':
+        return {'outcome': 'completed', 'uid': None}
+    if status not in _DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES:
+        return {'outcome': 'not_actionable', 'uid': None}
+    return {'outcome': 'resolved', 'uid': doc.id}
+
+
+@transactional
+def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subscription_id: str | None, error: str):
+    snapshot = doc_ref.get(transaction=transaction)
+    if snapshot.exists:
+        status = (snapshot.to_dict() or {}).get('wipe_status')
+        if status in ('pending', 'retrying', 'running', 'failed', 'completed'):
+            return False
+
+    transaction.set(
+        doc_ref,
+        {
+            'wipe_status': 'billing_failed',
+            'billing_failed_at': datetime.now(timezone.utc),
+            'billing_subscription_id': subscription_id or '',
+            'billing_error': error,
+        },
+        merge=True,
+    )
+    return True
+
+
+def mark_user_deletion_billing_failed(uid: str, subscription_id: str | None, error: str) -> bool:
+    """Record that account deletion is blocked on Stripe cancellation.
+
+    Never clobbers an actionable or terminal wipe state. A billing failure can
+    only block deletion before a destructive wipe has been queued or started.
+    """
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid, subscription_id, error)
 
 
 def cancel_user_deletion_wipe(uid: str):
@@ -366,7 +608,7 @@ def cancel_user_deletion_wipe(uid: str):
 def get_pending_deletion_wipes(
     limit: int = 100,
     stale_after: timedelta = timedelta(minutes=10),
-    running_stale_after: timedelta = timedelta(minutes=30),
+    running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER,
 ) -> list[dict]:
     """Return account_deletions documents whose wipe needs retry.
 
@@ -449,7 +691,7 @@ def get_pending_deletion_wipes(
             claimed_at = data.get('wipe_claimed_at')
             # Use the longer ``running_stale_after`` window so a queued-but-
             # not-yet-running retrying claim is not returned as a candidate
-            # before the executor future has had a chance to start.
+            # before the worker has had a chance to start.
             if claimed_at and claimed_at < running_cutoff:
                 result.append(data | {'uid': doc.id})
 
@@ -513,7 +755,7 @@ def _claim_deletion_wipe_txn(
         claimed_at = data.get('wipe_claimed_at')
         # Use the longer ``running_stale_after`` window (not ``stale_after``)
         # because a retrying wipe was just claimed by the reconciler and
-        # enqueued. If the executor backlog is full, the future may sit queued
+        # enqueued. If the worker queue is delayed, the task may sit queued
         # beyond ``stale_after`` (10 min) without transitioning to ``running``.
         # Using the short window would let the periodic reconciler enqueue
         # another copy every pass, causing duplicate wipes to race.
@@ -527,7 +769,7 @@ def _claim_deletion_wipe_txn(
 def claim_deletion_wipe(
     uid: str,
     stale_after: timedelta = timedelta(minutes=10),
-    running_stale_after: timedelta = timedelta(minutes=30),
+    running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER,
 ) -> str | None:
     """Attempt to claim a pending/failed/stale wipe for re-enqueueing.
 
@@ -538,6 +780,50 @@ def claim_deletion_wipe(
     doc_ref = db.collection('account_deletions').document(uid)
     transaction = db.transaction()
     return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after)
+
+
+@transactional
+def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: timedelta) -> str:
+    """Claim a Cloud Tasks delivery before running an account-deletion wipe.
+
+    The claim intentionally stays in ``retrying`` until the cleanup worker
+    starts and ``background_wipe_user_data`` marks it ``running``. If the HTTP
+    request is cancelled while waiting for a cleanup thread, a later delivery can
+    retry without waiting for the long running-stale lease.
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return 'missing'
+
+    data = snapshot.to_dict()
+    status = data.get('wipe_status')
+    now = datetime.now(timezone.utc)
+
+    if status == 'completed':
+        return 'completed'
+    if status in ('cancelled', 'deleting_auth'):
+        return 'not_actionable'
+    if status == 'running':
+        running_at = data.get('wipe_running_at')
+        if running_at and running_at >= now - running_stale_after:
+            return 'running'
+
+    if status in ('pending', 'retrying', 'failed', 'running'):
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return 'claimed'
+
+    return 'not_actionable'
+
+
+def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER) -> str:
+    """Claim an account-deletion wipe for a Cloud Tasks worker.
+
+    Returns one of: ``claimed``, ``running``, ``completed``, ``missing``, or
+    ``not_actionable``. Only ``claimed`` callers may run the destructive wipe.
+    """
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after)
 
 
 def create_person(uid: str, data: dict):
@@ -594,13 +880,24 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
         if doc.exists:
             data = doc.to_dict()
             data.setdefault('id', doc.id)
-            all_people.append(data)
+            if parse_snapshot_or_none(Person, doc, document_id_field='id') is not None:
+                all_people.append(data)
     return all_people
 
 
-def update_person(uid: str, person_id: str, name: str):
+def update_person(uid: str, person_id: str, name: str) -> bool:
+    """Rename a person. Returns False when the person does not exist so callers can 404,
+    instead of letting Firestore .update() raise NotFound and surface as an HTTP 500."""
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_ref.update({'name': name})
+    if not person_ref.get().exists:
+        return False
+    try:
+        person_ref.update({'name': name})
+    except NotFound:
+        # The person was deleted between the existence check and the update; treat as missing so
+        # the caller 404s instead of 500ing on the Firestore NotFound race.
+        return False
+    return True
 
 
 def delete_person(uid: str, person_id: str):
@@ -941,42 +1238,25 @@ def update_person_speech_samples_version(uid: str, person_id: str, version: int)
     return True
 
 
-def _delete_collection_recursive(collection_ref, batch_size: int = 450):
-    """Delete every document under a collection, descending into nested subcollections first."""
-    while True:
-        docs = list(collection_ref.limit(batch_size).stream())
-        if not docs:
-            return
-
-        for doc in docs:
-            for sub in doc.reference.collections():
-                _delete_collection_recursive(sub, batch_size)
-
-        batch = db.batch()
-        for doc in docs:
-            batch.delete(doc.reference)
-        batch.commit()
-
-        if len(docs) < batch_size:
-            return
-
-
 def delete_user_data(uid: str):
     user_ref = db.collection('users').document(uid)
-    if not user_ref.get().exists:
-        return {'status': 'error', 'message': 'User not found'}
+    root_exists = user_ref.get().exists
 
-    # Enumerate subcollections live instead of hardcoding a list — picks up
+    # Enumerate subcollections live even when the root document is missing.
+    # Firestore permits immediate children to survive a parent deletion; an
+    # early "User not found" return would falsely mark the deletion complete.
+    # This picks up
     # everything the user has written (conversations, memories, action_items,
     # folders, goals, integrations, task_integrations, fcm_tokens, fair_use_*,
     # hourly_usage, meetings, screen_activity, files, people, chat_sessions,
     # messages, and any future additions).
     for sub in user_ref.collections():
         logger.info(f"Deleting subcollection {sub.id} for user {uid}")
-        _delete_collection_recursive(sub)
+        delete_collection_recursive(sub, client=db)
 
-    logger.info(f"Deleting user document: {uid}")
-    user_ref.delete()
+    if root_exists:
+        logger.info(f"Deleting user document: {uid}")
+        user_ref.delete()
     return {'status': 'ok', 'message': 'Account deleted successfully'}
 
 
@@ -1241,33 +1521,44 @@ def set_user_onboarding_state(uid: str, onboarding_data: dict) -> None:
     user_ref.set({'onboarding': onboarding_data}, merge=True)
 
 
-def get_user_subscription(uid: str) -> Subscription:
+def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> Subscription:
     """Gets the user's subscription, creating a default free one if it doesn't exist."""
-    user_ref = db.collection('users').document(uid)
+    user_ref = (firestore_client or db).collection('users').document(uid)
     user_doc = user_ref.get(['subscription'])
     if user_doc.exists:
         user_data = user_doc.to_dict()
         if 'subscription' in user_data:
             sub_data = user_data['subscription']
-            # Handle migration for old 'free' plan identifier
-            if sub_data.get('plan') == 'free':
+            legacy_free_plan = isinstance(sub_data, dict) and sub_data.get('plan') == 'free'
+
+            def subscription_payload(_snapshot: object) -> dict:
+                if not isinstance(sub_data, dict):
+                    raise TypeError('Firestore subscription payload must be a mapping')
+                payload = dict(sub_data)
+                if legacy_free_plan:
+                    payload['plan'] = PlanType.basic.value
+                return payload
+
+            subscription = parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
+            # Handle migration for old 'free' plan identifier after validating the normalized payload.
+            if legacy_free_plan:
                 sub_data['plan'] = PlanType.basic.value
                 update_user_subscription(uid, sub_data)
-            return Subscription(**sub_data)
+            return subscription
 
     # If subscription doesn't exist for the user, create and return a default free plan.
     default_subscription = get_default_basic_subscription()
     # Strip dynamic fields before storing
-    sub_to_store = default_subscription.dict()
+    sub_to_store = default_subscription.model_dump()
     sub_to_store.pop('features', None)
     sub_to_store.pop('limits', None)
     user_ref.set({'subscription': sub_to_store}, merge=True)
     return default_subscription
 
 
-def get_existing_user_subscription(uid: str) -> Optional[Subscription]:
+def get_existing_user_subscription(uid: str, *, firestore_client: Any | None = None) -> Optional[Subscription]:
     """Gets the user's stored subscription without creating a default record."""
-    user_ref = db.collection('users').document(uid)
+    user_ref = (firestore_client or db).collection('users').document(uid)
     user_doc = user_ref.get(['subscription'])
     if not user_doc.exists:
         return None
@@ -1277,9 +1568,16 @@ def get_existing_user_subscription(uid: str) -> Optional[Subscription]:
         return None
 
     sub_data = user_data['subscription']
-    if sub_data.get('plan') == 'free':
-        sub_data['plan'] = PlanType.basic.value
-    return Subscription(**sub_data)
+
+    def subscription_payload(_snapshot: object) -> dict:
+        if not isinstance(sub_data, dict):
+            raise TypeError('Firestore subscription payload must be a mapping')
+        payload = dict(sub_data)
+        if payload.get('plan') == 'free':
+            payload['plan'] = PlanType.basic.value
+        return payload
+
+    return parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
 
 
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
@@ -1287,6 +1585,66 @@ def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
     user_ref = db.collection('users').document(uid)
     user_data = user_ref.get().to_dict() or {}
     return user_data.get('training_data_opt_in', None)
+
+
+def get_user_location_context_consent(
+    uid: str, *, firestore_client: Any | None = None
+) -> Optional[LocationContextConsent]:
+    """Read the uncached, server-owned city-context consent record fail-closed."""
+    client = firestore_client or get_firestore_client()
+    snapshot = client.collection('users').document(uid).get(['location_context_consent'])
+    user_data = snapshot.to_dict() or {}
+    if not isinstance(user_data, dict):
+        return None
+    raw_consent = user_data.get('location_context_consent')
+    if not isinstance(raw_consent, dict):
+        return None
+    return parse_snapshot_or_none(
+        LocationContextConsent,
+        snapshot,
+        payload_from_snapshot=lambda _snapshot: raw_consent,
+    )
+
+
+def set_user_location_context_consent(
+    uid: str,
+    *,
+    enabled: bool,
+    now: datetime | None = None,
+    firestore_client: Any | None = None,
+) -> LocationContextConsent:
+    """Persist the only authority for city-context disclosure and revoke fail-closed."""
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None:
+        raise ValueError('location-context consent timestamp must be timezone-aware')
+
+    if enabled:
+        consent = LocationContextConsent(
+            status=LocationContextConsentStatus.granted,
+            purpose=LOCATION_CONTEXT_PURPOSE,
+            disclosed_providers=LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
+            granted_at=current_time,
+            expires_at=current_time + LOCATION_CONTEXT_CONSENT_TTL,
+        )
+    else:
+        consent = LocationContextConsent(
+            status=LocationContextConsentStatus.revoked,
+            purpose=LOCATION_CONTEXT_PURPOSE,
+            disclosed_providers=LOCATION_CONTEXT_DISCLOSED_PROVIDERS,
+            granted_at=current_time,
+            expires_at=current_time,
+            revoked_at=current_time,
+        )
+
+    client = firestore_client or get_firestore_client()
+    client.collection('users').document(uid).set({'location_context_consent': consent.model_dump()}, merge=True)
+    if not enabled:
+        try:
+            delete_cached_user_geolocation(uid)
+        except Exception as error:
+            # The persisted revocation is the read gate; Redis cleanup is a best-effort reduction of retained cache.
+            logger.warning('location-context cache deletion failed uid=%s error_type=%s', uid, type(error).__name__)
+    return consent
 
 
 def set_user_training_data_opt_in(uid: str, status: str):
@@ -1302,7 +1660,9 @@ def set_user_training_data_opt_in(uid: str, status: str):
     )
 
 
-def get_user_valid_subscription(uid: str) -> Optional[Subscription]:
+def get_user_valid_subscription(
+    uid: str, *, firestore_client: Any | None = None, provision: bool = True
+) -> Optional[Subscription]:
     """
     Gets the user's subscription if it is currently valid for use.
 
@@ -1313,8 +1673,17 @@ def get_user_valid_subscription(uid: str) -> Optional[Subscription]:
       they paid for, even after cancelling.
 
     Returns the Subscription object if valid, otherwise None.
+
+    ``provision=False`` never merge-writes a default Free plan. Desktop-backend
+    quota must use that mode against the customer Firestore so a miss cannot
+    stamp ``plan: basic`` onto a paying user.
     """
-    subscription = get_user_subscription(uid)
+    if provision:
+        subscription = get_user_subscription(uid, firestore_client=firestore_client)
+    else:
+        subscription = get_existing_user_subscription(uid, firestore_client=firestore_client)
+        if subscription is None:
+            subscription = get_default_basic_subscription()
 
     # Basic (free) plans are only valid if their status is active.
     if subscription.plan == PlanType.basic:

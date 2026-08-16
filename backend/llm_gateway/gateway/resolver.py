@@ -19,6 +19,7 @@ AUTO_LANE_PREFIX = 'omi:auto:'
 NEVER_LKG_FAILURE_CLASSES = frozenset(
     {
         FailureClass.CAPABILITY_MISMATCH,
+        FailureClass.PROVIDER_INVALID_REQUEST,
         FailureClass.INVALID_CONFIG,
         FailureClass.BYOK_AUTH,
         FailureClass.BYOK_QUOTA,
@@ -38,14 +39,14 @@ class ResolvedRoute:
 
 
 def is_auto_lane_id(model: str) -> bool:
-    return isinstance(model, str) and model.startswith(AUTO_LANE_PREFIX)
+    return model.startswith(AUTO_LANE_PREFIX)
 
 
 def resolve_chat_completion_route(
     config: GatewayConfig,
     request: Mapping[str, Any],
 ) -> ResolvedRoute:
-    model = request.get('model') if isinstance(request, Mapping) else None
+    model = request.get('model')
     if not isinstance(model, str) or not model.strip():
         raise GatewayInvalidRequestError('model is required', param='model')
 
@@ -82,7 +83,10 @@ def resolve_lane(config: GatewayConfig, model: str) -> LaneConfig:
 def select_lkg_route_for_failure(
     resolved_route: ResolvedRoute, failure_class: FailureClass | str
 ) -> RouteArtifact | None:
-    if is_lkg_eligible(resolved_route.active_route, failure_class):
+    if (
+        resolved_route.active_route.route_artifact_id != resolved_route.last_known_good_route.route_artifact_id
+        and is_lkg_eligible(resolved_route.active_route, failure_class)
+    ):
         return resolved_route.last_known_good_route
     return None
 

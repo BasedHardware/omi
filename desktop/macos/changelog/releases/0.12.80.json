@@ -1,0 +1,7 @@
+{
+  "version": "0.12.80",
+  "date": "2026-07-18",
+  "changes": [
+    "Improved macOS beta qualification reliability during fault-path testing."
+  ]
+}

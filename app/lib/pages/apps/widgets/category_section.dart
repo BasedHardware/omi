@@ -137,7 +137,9 @@ class SectionAppItemCard extends StatelessWidget {
           onTap: () async {
             PlatformManager.instance.analytics.pageOpened('App Detail');
             await routeToPage(context, AppDetailPage(app: app));
-            context.read<AppProvider>().filterApps();
+            if (context.mounted) {
+              context.read<AppProvider>().filterApps();
+            }
           },
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
@@ -163,12 +165,12 @@ class SectionAppItemCard extends StatelessWidget {
                   placeholder: (context, url) => Container(
                     width: 60,
                     height: 60,
-                    decoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
+                    decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
                   ),
                   errorWidget: (context, url, error) => Container(
                     width: 60,
                     height: 60,
-                    decoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
+                    decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
                     child: const Icon(Icons.error_outline, color: Colors.white54, size: 24),
                   ),
                 ),

@@ -5,6 +5,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", os.environ.get("GCLOUD_PROJECT", "demo-memory"))
 os.environ.setdefault("GCLOUD_PROJECT", PROJECT_ID)
@@ -22,23 +23,23 @@ from database.memory_vector_repair_outbox import (
 
 
 class _FailingDocument:
-    def set(self, _payload):
+    def set(self, _payload: Any) -> None:
         raise RuntimeError("intentional emulator validation write failure")
 
 
 class _FailingDb:
-    def document(self, _path):
+    def document(self, _path: str) -> _FailingDocument:
         return _FailingDocument()
 
 
-def _required_doc(db_client, path):
+def _required_doc(db_client: Any, path: str) -> dict[str, Any]:
     snapshot = db_client.document(path).get()
     if not snapshot.exists:
         raise AssertionError(f"missing expected Firestore document: {path}")
     return snapshot.to_dict() or {}
 
 
-def _candidate() -> dict:
+def _candidate() -> dict[str, Any]:
     return {
         "vector_id": "u1:short_term:mem-stale:rev1",
         "memory_id": "mem-stale",
@@ -65,7 +66,7 @@ def main() -> int:
 
     uid = "memory-vector-repair-outbox-emulator-user"
     queued_at = datetime(2026, 6, 19, 12, 0, 0, tzinfo=timezone.utc)
-    db_client = firestore.Client(project=PROJECT_ID)
+    db_client: Any = firestore.Client(project=PROJECT_ID)
 
     records = build_vector_repair_purge_outbox_records(uid=uid, candidates=[_candidate()], queued_at=queued_at)
     if len(records) != 1:

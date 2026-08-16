@@ -17,11 +17,16 @@ enum BridgeUnavailableReason: Equatable, Sendable {
   /// `./run.sh`). Maps from `BridgeError.nodeNotFound`.
   case nodeMissing
   /// Bridge JS / AI components not on disk. Maps from
-  /// `BridgeError.bridgeScriptNotFound`.
+  /// `BridgeError.bridgeScriptNotFound` and
+  /// `BridgeError.agentRuntimePayloadIncomplete` — both mean this install cannot
+  /// run chat until it is repaired, so both take the install-runtime recovery.
   case runtimeMissing
   /// Bridge process started but exited / OOM'd. Maps from
   /// `BridgeError.processExited` and `.outOfMemory`.
   case crashed
+  /// A typed launch or handshake failure. The retry flow retains this cause
+  /// instead of collapsing all startup failures into generic unavailability.
+  case failedToStart(AgentRuntimeBridgeLifecycle.StartFailure)
   /// Catch-all for "we don't know why it's not running"; maps from
   /// `BridgeError.notRunning`, `.restarting`, and any other un-classified
   /// start failure.
@@ -31,7 +36,7 @@ enum BridgeUnavailableReason: Equatable, Sendable {
 /// The five recoverable error states the chat UI renders inline.
 ///
 /// Anything that does NOT map to a case here (e.g. `BridgeError.encodingError`,
-/// `.quotaExceeded`, `.agentError`) is intentionally left to the existing
+/// `.quotaExceeded`, opaque `.agentError`) is intentionally left to the existing
 /// `errorMessage` banner / sheets. The `from(_:)` factory returns `nil` in
 /// those cases so callers can fall through.
 enum ChatErrorState: Equatable, Sendable {
@@ -47,8 +52,8 @@ enum ChatErrorState: Equatable, Sendable {
   /// runtimeMissing open runtime install docs; crashed / unknown retry.
   case bridgeUnavailable(reason: BridgeUnavailableReason)
 
-  /// User pressed Stop / Cancel mid-turn. Recovery: resume (replay last
-  /// user turn with a fresh `turnId`) or discard.
+  /// User pressed Stop / Cancel mid-turn. Recovery: dismiss; the user can
+  /// type and send a new message when they want to continue.
   case interrupted
 
   /// Tools returned empty payloads and the model produced no text. Recovery:
@@ -61,9 +66,9 @@ enum ChatErrorState: Equatable, Sendable {
 // MARK: - Recovery actions
 
 /// One primary recovery action per error card. Multiple cases may share the
-/// same recovery (e.g. timeout + interrupted both → retry) — that's intentional.
+/// same recovery — that's intentional.
 enum ChatErrorRecoveryAction: Equatable, Sendable, CaseIterable {
-  /// Replay the last user turn with a fresh `turnId`.
+  /// Replay the last failed user turn with a fresh `turnId`.
   case retry
   /// Open the sign-in flow (Firebase / OAuth, NOT the Claude paywall).
   case signIn
@@ -90,13 +95,42 @@ extension ChatErrorState {
       switch reason {
       case .nodeMissing, .runtimeMissing:
         return .installRuntime
-      case .crashed, .unknown:
+      case .crashed, .failedToStart, .unknown:
         return .retry
       }
     case .interrupted:
-      return .retry
+      return .dismiss
     case .noDataFound:
       return .dismiss
+    }
+  }
+
+  /// Compact summary for surfaces that only show a single line (floating bar).
+  var userFacingSummary: String {
+    switch self {
+    case .authRequired:
+      return "Please sign in to continue."
+    case .timeout:
+      return "AI took too long to respond."
+    case .bridgeUnavailable(let reason):
+      switch reason {
+      case .failedToStart(let failure):
+        switch failure {
+        case .handshakeTimedOut: return "AI took too long to start. Try again."
+        case .incompatibleHandshake: return "AI needs to restart before it can respond. Try again."
+        case .exitedDuringStartup, .launchFailed: return "AI couldn't start. Try again."
+        }
+      // Repairing the install is the only way out, so even the one-line
+      // floating-bar summary has to say that rather than "not available".
+      case .nodeMissing, .runtimeMissing:
+        return "AI components aren't installed."
+      case .crashed, .unknown:
+        return "AI isn't available right now."
+      }
+    case .interrupted:
+      return "Response stopped."
+    case .noDataFound:
+      return "No matching data found."
     }
   }
 }
@@ -111,19 +145,23 @@ extension ChatErrorState {
   ///
   /// Cases handled:
   ///   - `.timeout`              → `.timeout(toolName: nil)`
-  ///   - `.stopped`              → `.interrupted`
   ///   - `.nodeNotFound`         → `.bridgeUnavailable(.nodeMissing)`
   ///   - `.bridgeScriptNotFound` → `.bridgeUnavailable(.runtimeMissing)`
+  ///   - `.agentRuntimePayloadIncomplete` → `.bridgeUnavailable(.runtimeMissing)`
   ///   - `.processExited`        → `.bridgeUnavailable(.crashed)`
   ///   - `.outOfMemory`          → `.bridgeUnavailable(.crashed)`
+  ///   - `.failedToStart`        → `.bridgeUnavailable(.unknown)` with retry
   ///   - `.notRunning`           → `.bridgeUnavailable(.unknown)`
   ///   - `.restarting`           → `.bridgeUnavailable(.unknown)`
   ///   - `.authMissing`          → `.authRequired`
   ///
+  /// Cases conditionally handled:
+  ///   - `.agentError` session-token auth strings → `.authRequired`
+  ///
   /// Cases intentionally returning `nil` (fall through to existing banner):
   ///   - `.encodingError`        (internal error, retry won't help)
   ///   - `.quotaExceeded`        (paywall — kept as separate sheet)
-  ///   - `.agentError`           (varied; existing banner already classifies)
+  ///   - opaque `.agentError`    (varied; existing banner already classifies)
   ///   - `.agentRuntimeFailure`  (already carries runtime-specific copy)
   ///   - `.requestAlreadyActive` (the existing banner explains the active turn)
   static func from(_ bridgeError: BridgeError) -> ChatErrorState? {
@@ -131,18 +169,22 @@ extension ChatErrorState {
     case .timeout:
       return .timeout(toolName: nil)
     case .stopped:
-      return .interrupted
+      return nil
     case .nodeNotFound:
       return .bridgeUnavailable(reason: .nodeMissing)
-    case .bridgeScriptNotFound:
+    case .bridgeScriptNotFound, .agentRuntimePayloadIncomplete:
       return .bridgeUnavailable(reason: .runtimeMissing)
     case .processExited, .outOfMemory:
       return .bridgeUnavailable(reason: .crashed)
+    case .failedToStart(let failure):
+      return .bridgeUnavailable(reason: .failedToStart(failure))
     case .notRunning, .restarting:
       return .bridgeUnavailable(reason: .unknown)
     case .authMissing:
       return .authRequired
-    case .encodingError, .quotaExceeded, .agentError, .agentRuntimeFailure, .requestAlreadyActive:
+    case .agentError(let message):
+      return BridgeError.agentError(message).isSessionAuthenticationFailure ? .authRequired : nil
+    case .encodingError, .quotaExceeded, .agentRuntimeFailure, .requestAlreadyActive:
       return nil
     }
   }

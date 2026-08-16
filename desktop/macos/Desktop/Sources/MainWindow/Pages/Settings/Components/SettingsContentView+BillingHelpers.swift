@@ -1,7 +1,17 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
+
+enum SubscriptionPlanPresentation {
+  static func selectionLabel(planTitle: String, startingPrice: String?) -> String {
+    guard let startingPrice, !startingPrice.isEmpty else {
+      return "Select \(planTitle)"
+    }
+    return "Select \(planTitle) · \(startingPrice)"
+  }
+}
 
 extension SettingsContentView {
   var hasPaidSubscription: Bool {
@@ -15,11 +25,12 @@ extension SettingsContentView {
   }
 
   var subscriptionPlansForDisplay: [SubscriptionPlanOption] {
-    // Operator (mass-market, green) on the left, Architect (premium, purple)
+    // Operator (mass-market, green) on the left, Architect (premium, white accent)
     // on the right. Hide the user's current plan — they already see it above.
     // Neo ($20) | Operator ($49) | Architect ($200) — cheapest to premium
     let order = ["unlimited": 0, "operator": 1, "architect": 2]
-    return mergedPlanCatalog
+    return
+      mergedPlanCatalog
       .filter { !isCurrentSubscriptionPlan($0) }
       .sorted { lhs, rhs in
         let lhsOrder = order[lhs.id, default: Int.max]
@@ -65,7 +76,7 @@ extension SettingsContentView {
   /// Operator→Unlimited remapping in `/v1/users/me/subscription`.
   func isCurrentSubscriptionOperator() -> Bool {
     guard let subscription = userSubscription?.subscription,
-          let currentPriceId = subscription.currentPriceId
+      let currentPriceId = subscription.currentPriceId
     else { return false }
     for plan in mergedPlanCatalog {
       guard plan.title == "Operator" else { continue }
@@ -131,17 +142,23 @@ extension SettingsContentView {
   }
 
   func planAccentColor(for planId: String) -> Color {
-    // Architect is the premium/purple tier; Operator + legacy Unlimited
+    // Architect is the premium white-accent tier; Operator + legacy Unlimited
     // are the mass-market green tier.
-    planId == "architect" ? OmiColors.purplePrimary : OmiColors.success
+    planId == "architect" ? Ink.accent : Ink.listeningGreen
   }
 
   func planSummaryText(for plan: SubscriptionPlanOption) -> String {
     preferredStartingPrice(for: plan)?.priceString ?? ""
   }
 
-  func preferredStartingPrice(for plan: SubscriptionPlanOption) -> SubscriptionPriceOption?
-  {
+  func planSelectionLabel(for plan: SubscriptionPlanOption) -> String {
+    SubscriptionPlanPresentation.selectionLabel(
+      planTitle: plan.title,
+      startingPrice: preferredStartingPrice(for: plan)?.priceString
+    )
+  }
+
+  func preferredStartingPrice(for plan: SubscriptionPlanOption) -> SubscriptionPriceOption? {
     let prices = sortedPrices(for: plan)
     if let monthly = prices.first(where: { price in
       let title = price.title.lowercased()
@@ -307,104 +324,118 @@ extension SettingsContentView {
     let isDowngrade = isArchitectUser && plan.id == "unlimited"
     let canPurchase = !isCurrentPlan && !isDowngrade
 
-    VStack(alignment: .leading, spacing: 16) {
-      HStack(alignment: .top, spacing: 12) {
-        VStack(alignment: .leading, spacing: 6) {
-          Text((plan.eyebrow ?? planEyebrow(for: plan.id)).uppercased())
-            .scaledFont(size: 10, weight: .bold)
-            .foregroundColor(accent)
-            .tracking(0.8)
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+      HStack(alignment: .top, spacing: OmiSpacing.md) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+          // The tint is the disc, not the word — the same measurement `SettingsStatusChip`
+          // documents. These are *named system colours* on a light panel: `systemGreen` sets a
+          // 10 pt bold eyebrow at ≈1.6:1 against this card and `systemBlue` at ≈2.4:1, so the
+          // plan's colour was there and the plan's name could not be read. Moving the hue to a
+          // 6 pt disc keeps the tier legible at a glance *and* legible as words.
+          HStack(spacing: 5) {
+            Circle()
+              .fill(accent)
+              .frame(width: 6, height: 6)
+            Text((plan.eyebrow ?? planEyebrow(for: plan.id)).uppercased())
+              .scaledFont(size: OmiType.micro, weight: .bold)
+              .foregroundColor(Ink.secondary)
+              .tracking(0.8)
+          }
 
           Text(plan.title)
-            .scaledFont(size: 18, weight: .bold)
-            .foregroundColor(OmiColors.textPrimary)
+            .scaledFont(size: OmiType.heading, weight: .bold)
+            .foregroundColor(Ink.primary)
 
           if let subtitle = plan.subtitle ?? planSubtitle(for: plan.id) {
             Text(subtitle)
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
           }
         }
 
         Spacer()
 
-        VStack(alignment: .trailing, spacing: 2) {
+        // Selection is carried by the tile's own fill and border, so the price does not also change
+        // colour to say it. The selected branch of both of these used to tint the copy — and at
+        // `accent.opacity(0.8)` on a selected card that was the faintest text on the pane, i.e. the
+        // state that most wanted reading was the one hardest to read.
+        VStack(alignment: .trailing, spacing: OmiSpacing.hairline) {
           Text(planSummaryText(for: plan))
-            .scaledFont(size: 17, weight: .bold)
-            .foregroundColor(isSelected ? accent : OmiColors.textPrimary)
+            .scaledFont(size: OmiType.subheading, weight: .bold)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
             .minimumScaleFactor(0.72)
 
           Text("starting price")
-            .scaledFont(size: 10, weight: .medium)
-            .foregroundColor(isSelected ? accent.opacity(0.8) : OmiColors.textTertiary)
+            .scaledFont(size: OmiType.micro, weight: .medium)
+            .foregroundColor(Ink.secondary)
         }
         .fixedSize(horizontal: true, vertical: false)
       }
 
       Text(plan.description ?? planDescription(for: plan.id))
-        .scaledFont(size: 13)
-        .foregroundColor(OmiColors.textSecondary)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.secondary)
 
-      VStack(alignment: .leading, spacing: 8) {
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         ForEach(plan.features.prefix(4), id: \.self) { feature in
-          HStack(spacing: 8) {
+          HStack(spacing: OmiSpacing.sm) {
             ZStack {
               Circle()
                 .fill(accent.opacity(0.16))
                 .frame(width: 18, height: 18)
+              // The disc carries the tint; the mark on it is ink. A `systemGreen` glyph on a 16%
+              // `systemGreen` disc is the same sub-2:1 pair the eyebrow had.
               Image(systemName: "checkmark")
-                .scaledFont(size: 9, weight: .bold)
-                .foregroundColor(accent)
+                .scaledFont(size: OmiType.micro, weight: .bold)
+                .foregroundColor(Ink.primary)
             }
             Text(feature)
-              .scaledFont(size: 13, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(Ink.secondary)
           }
         }
       }
 
       if isSelected && canPurchase {
-        Divider()
-          .overlay(OmiColors.backgroundQuaternary)
+        GlassSeparator()
 
-        VStack(alignment: .leading, spacing: 10) {
-          VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xs) {
             Button(action: {
-              withAnimation(.easeInOut(duration: 0.2)) {
+              OmiMotion.withGated(.easeInOut(duration: 0.2)) {
                 isPromoCodeExpanded.toggle()
               }
             }) {
-              HStack(spacing: 6) {
+              HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: "tag")
-                  .scaledFont(size: 12)
+                  .scaledFont(size: OmiType.caption)
                 Text("Promo code")
-                  .scaledFont(size: 12)
+                  .scaledFont(size: OmiType.caption)
                 Image(systemName: isPromoCodeExpanded ? "chevron.up" : "chevron.down")
-                  .scaledFont(size: 10)
+                  .scaledFont(size: OmiType.micro)
               }
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
             }
             .buttonStyle(.plain)
 
             if isPromoCodeExpanded {
-              VStack(alignment: .leading, spacing: 6) {
+              VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 TextField("Enter promo code", text: $upgradePromotionCode)
-                  .textFieldStyle(.roundedBorder)
-                  .scaledFont(size: 13)
+                  .settingsTextInputStyle()
                   .disabled(activeCheckoutPriceId != nil)
                   .onChange(of: upgradePromotionCode) {
                     subscriptionError = nil
                   }
 
                 if let error = subscriptionError {
-                  HStack(spacing: 4) {
+                  HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "exclamationmark.circle")
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                     Text(error)
-                      .scaledFont(size: 11)
+                      .scaledFont(size: OmiType.caption)
                   }
-                  .foregroundColor(OmiColors.warning)
+                  .foregroundColor(SettingsInk.notice)
                 }
               }
               .transition(.opacity.combined(with: .move(edge: .top)))
@@ -412,10 +443,10 @@ extension SettingsContentView {
           }
 
           Text("Choose billing")
-            .scaledFont(size: 12, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(Ink.secondary)
 
-          HStack(spacing: 10) {
+          HStack(spacing: OmiSpacing.sm) {
             ForEach(sortedPrices(for: plan)) { price in
               Button(action: {
                 startCheckout(for: price.id)
@@ -426,21 +457,18 @@ extension SettingsContentView {
                       .controlSize(.small)
                       .frame(maxWidth: .infinity)
                   } else {
-                    VStack(spacing: 3) {
+                    VStack(spacing: OmiSpacing.hairline) {
                       Text(price.title)
-                        .scaledFont(size: 12, weight: .bold)
+                        .scaledFont(size: OmiType.caption, weight: .bold)
                       Text(price.priceString)
-                        .scaledFont(size: 11)
-                        .foregroundColor(Color.white.opacity(0.92))
+                        .scaledFont(size: OmiType.caption)
+                        .foregroundColor(Ink.secondary)
                     }
-                    .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                   }
                 }
-                .padding(.vertical, 10)
               }
-              .buttonStyle(.borderedProminent)
-              .tint(accent)
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               .disabled(activeCheckoutPriceId != nil)
             }
           }
@@ -448,43 +476,49 @@ extension SettingsContentView {
       } else if isCurrentPlan {
         HStack {
           Text("Current Plan")
-            .scaledFont(size: 12, weight: .bold)
+            .scaledFont(size: OmiType.caption, weight: .bold)
+            .foregroundColor(Ink.primary)
           Spacer()
+          // The glyph keeps the tint — it is a graphical object, which is a 3:1 bar rather than a
+          // 4.5:1 one — and the words next to it stop being set in a hue that cannot clear either.
           Image(systemName: "checkmark.circle.fill")
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(accent)
         }
-        .foregroundColor(accent)
-        .padding(.vertical, 10)
+        .padding(.vertical, OmiSpacing.sm)
       } else {
         Button(action: {
           selectedPlanIdForCheckout = plan.id
         }) {
           HStack {
-            Text("Select \(plan.title)")
-              .scaledFont(size: 12, weight: .bold)
+            Text(planSelectionLabel(for: plan))
+              .scaledFont(size: OmiType.caption, weight: .bold)
             Spacer()
             Image(systemName: "arrow.right")
-              .scaledFont(size: 11, weight: .bold)
+              .scaledFont(size: OmiType.caption, weight: .bold)
           }
-          .padding(.vertical, 10)
+          .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(accent)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
       }
     }
-    .padding(20)
+    .padding(OmiSpacing.xxl)
     .frame(maxWidth: .infinity, alignment: .leading)
+    // The tile is now the pane's *only* card here rather than content inside one, so at rest it is
+    // exactly the card every other pane draws — `Ink.rowFill` behind an `Ink.separator` hairline.
+    // It was `Ink.wash` behind `Ink.hairline`, which are the well and control-outline tokens: right
+    // for something sitting on a card, a shade too heavy once it *is* the card.
     .background(
-      RoundedRectangle(cornerRadius: 18)
-        .fill(isSelected ? accent.opacity(0.12) : OmiColors.backgroundPrimary.opacity(0.68))
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+        .fill(isSelected ? accent.opacity(0.12) : Ink.rowFill)
         .overlay(
-          RoundedRectangle(cornerRadius: 18)
+          RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
             .stroke(
-              isSelected ? accent.opacity(0.85) : OmiColors.backgroundQuaternary,
+              isSelected ? accent.opacity(0.85) : Ink.separator,
               lineWidth: isSelected ? 1.5 : 1)
         )
     )
-    .contentShape(RoundedRectangle(cornerRadius: 18))
+    .contentShape(RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous))
     .onTapGesture {
       guard canPurchase else { return }
       selectedPlanIdForCheckout = plan.id
@@ -514,20 +548,28 @@ extension SettingsContentView {
 
   // MARK: - Slider Index Helpers
 
+  // Each of these was `options.firstIndex(of: stored) ?? 0`. See
+  // `SettingsControlMetrics.nearestLadderIndex` for what that `?? 0` did to a stored value the
+  // slider does not offer, and why the handle now snaps to the nearest step instead. When it is only
+  // an approximation, `offLadderStepNote` says so under the slider.
+
   var analysisDelaySliderIndex: Int {
-    analysisDelayOptions.firstIndex(of: analysisDelay) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(of: analysisDelay, in: analysisDelayOptions)
   }
 
   var taskIntervalSliderIndex: Int {
-    extractionIntervalOptions.firstIndex(of: taskExtractionInterval) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(
+      of: taskExtractionInterval, in: extractionIntervalOptions)
   }
 
   var insightIntervalSliderIndex: Int {
-    extractionIntervalOptions.firstIndex(of: insightExtractionInterval) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(
+      of: insightExtractionInterval, in: extractionIntervalOptions)
   }
 
   var memoryIntervalSliderIndex: Int {
-    extractionIntervalOptions.firstIndex(of: memoryExtractionInterval) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(
+      of: memoryExtractionInterval, in: extractionIntervalOptions)
   }
 
   // MARK: - Helpers
@@ -536,7 +578,7 @@ extension SettingsContentView {
     if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
       permissionError = "Screen recording permission required"
       isMonitoring = false
-      ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+      ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
       return
     }
 
@@ -563,42 +605,6 @@ extension SettingsContentView {
 
     // Persist the setting
     AssistantSettings.shared.screenAnalysisEnabled = enabled
-  }
-
-  func toggleTranscription(enabled: Bool) {
-    // Check microphone permission
-    if enabled && !appState.hasMicrophonePermission {
-      transcriptionError = "Microphone permission required"
-      isTranscribing = false
-      return
-    }
-
-    transcriptionError = nil
-    isTogglingTranscription = true
-
-    // Track setting change
-    AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
-
-    if enabled {
-      appState.startTranscription()
-      isTogglingTranscription = false
-      isTranscribing = true
-    } else {
-      appState.stopTranscription()
-      isTogglingTranscription = false
-      isTranscribing = false
-    }
-
-    // Persist the setting
-    AssistantSettings.shared.transcriptionEnabled = enabled
-  }
-
-  func setSystemAudioCaptureMode(_ mode: AssistantSettings.SystemAudioCaptureMode) {
-    AnalyticsManager.shared.settingToggled(
-      setting: "system_audio_capture_mode_\(mode.rawValue)", enabled: mode != .never)
-    // Persisting posts .systemAudioCaptureModeDidChange; AppState re-applies the gate live for
-    // any in-progress recording.
-    AssistantSettings.shared.systemAudioCaptureMode = mode
   }
 
   func startGlowPreview() {
@@ -723,14 +729,14 @@ extension SettingsContentView {
     transcriptionLanguage = AssistantSettings.shared.transcriptionLanguage
     transcriptionAutoDetect = AssistantSettings.shared.transcriptionAutoDetect
     vocabularyList = AssistantSettings.shared.transcriptionVocabulary
+    let transcriptionVocabularyRevisionAtLoadStart =
+      AssistantSettings.shared.transcriptionVocabularyRevision
     vadGateEnabled = AssistantSettings.shared.vadGateEnabled
-    systemAudioCaptureMode = AssistantSettings.shared.systemAudioCaptureMode
-
     Task {
       do {
         // Load all settings in parallel
         async let dailySummaryTask = APIClient.shared.getDailySummarySettings()
-        async let notificationsTask = APIClient.shared.getNotificationSettings()
+        async let notificationsReconcile: Void = NotificationSettingsSyncCoordinator.shared.reconcile()
         async let languageTask = APIClient.shared.getUserLanguage()
         async let recordingTask = APIClient.shared.getRecordingPermission()
         async let cloudSyncTask = APIClient.shared.getPrivateCloudSync()
@@ -739,33 +745,38 @@ extension SettingsContentView {
         // Sync assistant settings from server in parallel
         async let assistantSyncTask: () = SettingsSyncManager.shared.syncFromServer()
 
-        let (dailySummary, notifications, language, recording, cloudSync, transcription, _) = try
-          await (
-            dailySummaryTask,
-            notificationsTask,
-            languageTask,
-            recordingTask,
-            cloudSyncTask,
-            transcriptionTask,
-            assistantSyncTask
-          )
+        let (dailySummary, _, language, recording, cloudSync, transcription, _) = try await (
+          dailySummaryTask,
+          notificationsReconcile,
+          languageTask,
+          recordingTask,
+          cloudSyncTask,
+          transcriptionTask,
+          assistantSyncTask
+        )
 
         await MainActor.run {
           dailySummaryEnabled = dailySummary.enabled
           dailySummaryHour = dailySummary.hour
-          notificationsEnabled = notifications.enabled
-          notificationFrequency = notifications.frequency
-          // Mirror to UserDefaults so NotificationService can gate/throttle without a backend roundtrip.
-          UserDefaults.standard.set(
-            notifications.enabled, forKey: NotificationService.masterEnabledDefaultsKey)
-          UserDefaults.standard.set(notifications.frequency, forKey: NotificationService.frequencyDefaultsKey)
+          dailySummaryTime = SettingsControlMetrics.dailySummaryDate(
+            forHour: dailySummary.hour, referenceDate: Date())
+          // Local UserDefaults remain the gate. The coordinator owns GET/hydrate/retry.
+          notificationsEnabled = NotificationService.areNotificationsEnabled()
+          notificationFrequency = NotificationService.currentFrequencyLevel()
           userLanguage = language.language
           recordingPermissionEnabled = recording.enabled
           privateCloudSyncEnabled = cloudSync.enabled
           singleLanguageMode = transcription.singleLanguageMode
-          vocabularyList = transcription.vocabulary
-          // Sync backend vocabulary to local settings
-          AssistantSettings.shared.transcriptionVocabulary = transcription.vocabulary
+          // Do not let a GET that began before a local/PATCH mutation overwrite
+          // the newer vocabulary when it finally completes.
+          if AssistantSettings.shared.shouldApplyTranscriptionVocabularyHydration(
+            startedAtRevision: transcriptionVocabularyRevisionAtLoadStart
+          ) {
+            vocabularyList = transcription.vocabulary
+            AssistantSettings.shared.transcriptionVocabulary = transcription.vocabulary
+          } else {
+            vocabularyList = AssistantSettings.shared.transcriptionVocabulary
+          }
 
           // Sync backend language to local if different (backend is source of truth for language)
           let normalizedLanguage = AssistantSettings.normalizeTranscriptionLanguageCode(language.language)
@@ -821,8 +832,9 @@ extension SettingsContentView {
           // the trial cache) — without this they'd stay paywalled until the
           // next app restart even after their Operator/Architect plan is active.
           if subscription.subscription.plan != .basic,
-             subscription.subscription.status == .active,
-             AppState.current?.isPaywalled == true {
+            subscription.subscription.status == .active,
+            AppState.current?.isPaywalled == true
+          {
             AppState.current?.isPaywalled = false
             log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
           }
@@ -893,12 +905,14 @@ extension SettingsContentView {
 
     FloatingBarUsageLimiter.shared.applyPlan(
       plan: subscription.subscription.plan,
-      status: subscription.subscription.status
+      status: subscription.subscription.status,
+      desktopGrandfatherUntil: subscription.desktopGrandfatherUntil
     )
 
     if subscription.subscription.plan != .basic,
-       subscription.subscription.status == .active,
-       AppState.current?.isPaywalled == true {
+      subscription.subscription.status == .active,
+      AppState.current?.isPaywalled == true
+    {
       AppState.current?.isPaywalled = false
       log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
     }
@@ -918,8 +932,8 @@ extension SettingsContentView {
     // If user already has an active paid subscription (not canceled), use upgrade endpoint
     // to schedule the plan change at end of billing period (no double-charging)
     if hasPaidSubscription,
-       let subscription = userSubscription?.subscription,
-       !subscription.cancelAtPeriodEnd
+      let subscription = userSubscription?.subscription,
+      !subscription.cancelAtPeriodEnd
     {
       Task {
         do {

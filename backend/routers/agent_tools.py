@@ -5,195 +5,122 @@ Endpoints:
 - GET  /v1/agent/tools         — returns tool definitions (name, description, parameters)
 - POST /v1/agent/execute-tool  — executes a named tool and returns the result
 - GET  /v1/agent/vm-status     — returns basic VM status from Firestore
-- POST /v1/agent/vm-ensure     — checks VM status, restarts if stopped, returns current state
+- POST /v1/agent/vm-ensure     — requests reconciliation for an unavailable VM, returns current state
 - POST /v1/agent/keepalive     — pings the VM to reset its idle auto-stop timer
 """
 
-import asyncio
 import logging
+from typing import Any
 
 from utils.executors import db_executor, run_blocking
 
-import google.auth
-import google.auth.transport.requests
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
 from database.users import get_agent_vm
+from services.agent_vm_lifecycle import reconcile_requested, request_vm_start
+from services.agent_vm_read import decide_agent_vm_read
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.tools.app_tools import load_app_tools
 from utils.log_sanitizer import sanitize
 
+from utils.observability.fallback import record_fallback
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-GCE_PROJECT = "based-hardware"
+# Legacy placeholder that earlier builds persisted as agentVm.ip when the GCE
+# IP poll timed out. Never written any more; still read so already-poisoned
+# records are re-provisioned instead of being reported ready.
+UNRESOLVED_VM_IP = "unknown"
 
 
-# --------------- GCE helpers ---------------
+class AgentVmInfo(BaseModel):
+    has_vm: bool
+    status: str | None = None
 
 
-def _get_gce_access_token() -> str:
-    """Get a GCE access token via Application Default Credentials."""
-    creds, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])
-    creds.refresh(google.auth.transport.requests.Request())
-    return creds.token
+class AgentKeepaliveResponse(BaseModel):
+    ok: bool
+    reason: str | None = None
 
 
-async def _check_gce_status(vm_name: str, zone: str) -> str:
-    """Check the actual GCE instance status (RUNNING, TERMINATED, STOPPED, etc.)."""
-    token = await run_blocking(db_executor, _get_gce_access_token)
-    url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
-        if resp.status_code != 200:
-            logger.error(f"[gce] Failed to get instance status: {resp.status_code} {sanitize(resp.text)}")
-            return "UNKNOWN"
-        return resp.json().get("status", "UNKNOWN")
+class AgentToolSchema(BaseModel):
+    name: str
+    description: str
+    parameters: dict[str, Any]
 
 
-async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
-    """Start a stopped/terminated GCE VM and wait for it to get an IP. Returns the new IP."""
-    import time
-
-    t0 = time.monotonic()
-    token = await run_blocking(db_executor, _get_gce_access_token)
-    start_url = (
-        f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}/start"
-    )
-
-    async with httpx.AsyncClient(timeout=180) as client:
-        resp = await client.post(start_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
-        if resp.status_code not in (200, 204):
-            raise Exception(f"GCE start failed: {resp.status_code} {sanitize(resp.text)}")
-        t_start = time.monotonic() - t0
-        logger.info(f"[vm-start] {vm_name} start API call: {t_start:.1f}s")
-
-        op_name = resp.json().get("name")
-        if not op_name:
-            raise Exception("Missing operation name in GCE start response")
-
-        op_url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
-        for i in range(24):
-            await asyncio.sleep(5)
-            token = await run_blocking(db_executor, _get_gce_access_token)
-            status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {token}"})
-            status = status_resp.json()
-            if status.get("status") == "DONE":
-                if "error" in status:
-                    raise Exception(f"GCE start operation failed: {status['error']}")
-                t_op = time.monotonic() - t0
-                logger.info(f"[vm-start] {vm_name} operation done after {i + 1} polls: {t_op:.1f}s")
-                break
-
-        # Poll for a valid external IP (may take a few seconds after operation completes)
-        instance_url = (
-            f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
-        )
-        ip = None
-        for attempt in range(6):
-            token = await run_blocking(db_executor, _get_gce_access_token)
-            inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
-            instance = inst_resp.json()
-            try:
-                candidate = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-                if candidate and candidate != "unknown":
-                    ip = candidate
-                    t_ip = time.monotonic() - t0
-                    logger.info(f"[vm-start] {vm_name} got IP {ip} on attempt {attempt + 1}: {t_ip:.1f}s total")
-                    break
-            except (KeyError, IndexError):
-                pass
-            if attempt < 5:
-                logger.info(f"[vm-start] {vm_name} no IP yet, retrying ({attempt + 1}/6)...")
-                await asyncio.sleep(3)
-
-        if not ip:
-            t_fail = time.monotonic() - t0
-            logger.error(f"[vm-start] {vm_name} failed to get IP after 6 attempts: {t_fail:.1f}s")
-            ip = "unknown"
-
-        return ip
+class AgentToolsResponse(BaseModel):
+    tools: list[AgentToolSchema]
 
 
-def _update_firestore_vm(uid: str, ip: str | None, status: str):
-    """Update the user's agentVm fields in Firestore."""
-    from database.users import db as firestore_db
+def _is_usable_vm_ip(ip) -> bool:
+    """True when `ip` is an address a caller can actually dial.
 
-    update = {"agentVm.status": status}
-    if ip:
-        update["agentVm.ip"] = ip
-    firestore_db.collection('users').document(uid).update(update)
+    `UNRESOLVED_VM_IP` is truthy, so a stored placeholder satisfies every
+    `if ip:` reader while resolving to nothing.
+    """
+    return isinstance(ip, str) and bool(ip) and ip != UNRESOLVED_VM_IP
 
 
-async def _restart_vm_background(uid: str, vm_name: str, zone: str):
-    """Background task: start stopped VM, update Firestore with new IP when ready."""
-    try:
-        ip = await _start_vm_and_wait(vm_name, zone)
-        await run_blocking(db_executor, _update_firestore_vm, uid, ip, "ready")
-        logger.info(f"[vm-ensure] VM {vm_name} restarted, ip={ip}")
-    except Exception as e:
-        logger.error(f"[vm-ensure] Failed to restart VM {vm_name}: {e}")
-        await run_blocking(db_executor, _update_firestore_vm, uid, None, "error")
+def _vm_info_from_decision(vm: dict[str, Any] | None, decision_status: str | None) -> dict[str, Any]:
+    if not vm:
+        return {"has_vm": False}
+    if decision_status == "ready":
+        return {"has_vm": True, "status": "ready"}
+    if decision_status == "updating":
+        return {"has_vm": True, "status": "updating"}
+    return {"has_vm": False, "status": decision_status}
 
 
 # --------------- endpoints ---------------
 
 
-@router.get("/v1/agent/vm-status")
+@router.get("/v1/agent/vm-status", response_model=AgentVmInfo)
 def get_vm_status(uid: str = Depends(get_current_user_uid)):
-    """Return the user's agent VM info from Firestore."""
+    """Return the user's agent VM info from Firestore.
+
+    Tools paths do not probe GCE (reconciler authority). They still refuse to
+    report eternal ``ready`` while reconciler demand/missing/lease state is
+    already recorded — that is the shared read contract with desktop status.
+    """
     vm = get_agent_vm(uid)
     logger.info(f"[vm-status] uid={uid} vm={sanitize(vm)}")
-    if not vm or vm.get("status") != "ready":
+    if not vm:
         return {"has_vm": False}
-    return {
-        "has_vm": True,
-        "status": vm.get("status"),
-    }
+    decision = decide_agent_vm_read(vm, usable_cached_ip=_is_usable_vm_ip(vm.get("ip")))
+    return _vm_info_from_decision(vm, decision.client_status)
 
 
-@router.post("/v1/agent/vm-ensure")
+@router.post("/v1/agent/vm-ensure", response_model=AgentVmInfo)
 async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_current_user_uid)):
-    """Check VM status; if stopped/terminated, restart it in the background."""
+    """Queue a fenced reconciliation when the persisted VM is unavailable."""
+    del background_tasks
     vm = await run_blocking(db_executor, get_agent_vm, uid)
     if not vm:
         return {"has_vm": False}
 
-    vm_name = vm.get("vmName")
-    zone = vm.get("zone", "us-central1-a")
-    fs_status = vm.get("status", "")
-
-    # If Firestore already says provisioning, don't double-start
-    if fs_status == "provisioning":
-        return {"has_vm": True, "status": "provisioning"}
-
-    # Check actual GCE status for ready/error/stopped VMs
-    if fs_status in ("ready", "error", "stopped"):
-        try:
-            gce_status = await _check_gce_status(vm_name, zone)
-        except Exception as e:
-            logger.error(f"[vm-ensure] GCE status check failed: {e}")
-            return {"has_vm": True, "status": fs_status}
-
-        if gce_status in ("TERMINATED", "STOPPED"):
-            logger.info(f"[vm-ensure] VM {vm_name} is {gce_status}, restarting...")
-            await run_blocking(db_executor, _update_firestore_vm, uid, None, "provisioning")
-            background_tasks.add_task(_restart_vm_background, uid, vm_name, zone)
-            return {"has_vm": True, "status": "provisioning"}
-
-        if gce_status == "RUNNING" and fs_status != "ready":
-            await run_blocking(db_executor, _update_firestore_vm, uid, vm.get("ip"), "ready")
-            return {"has_vm": True, "status": "ready"}
-
-    return {"has_vm": True, "status": fs_status}
+    if reconcile_requested(vm):
+        return {"has_vm": True, "status": "updating"}
+    # Firestore's IP/status is a cache, not provider availability evidence.
+    # Every client ensure records demand; only the reconciler observes GCE and
+    # decides whether a healthy VM needs work.
+    requested = await run_blocking(
+        db_executor,
+        request_vm_start,
+        uid,
+        str(vm.get("vmName") or ""),
+        str(vm.get("authToken") or ""),
+    )
+    return {"has_vm": True, "status": "updating" if requested else str(vm.get("status") or "unknown")}
 
 
-@router.post("/v1/agent/keepalive")
+@router.post("/v1/agent/keepalive", response_model=AgentKeepaliveResponse)
 async def keepalive(uid: str = Depends(get_current_user_uid)):
     """Ping the VM's /ping endpoint to reset its idle auto-stop timer."""
     vm = await run_blocking(db_executor, get_agent_vm, uid)
@@ -239,7 +166,7 @@ def _tool_schema(t) -> dict:
     }
 
 
-@router.get("/v1/agent/tools")
+@router.get("/v1/agent/tools", response_model=AgentToolsResponse)
 def list_tools(uid: str = Depends(get_current_user_uid)):
     """Return all available tool definitions for a user."""
     tools = []
@@ -247,12 +174,29 @@ def list_tools(uid: str = Depends(get_current_user_uid)):
     for t in CORE_TOOLS:
         tools.append(_tool_schema(t))
 
+    degraded = False
     try:
         app_tools = load_app_tools(uid)
-        for t in app_tools:
+    except Exception:
+        # Whole app-tool lane unavailable — core tools still serve.
+        logger.error("⚠️ Error loading app tools for agent_tools", exc_info=True)
+        app_tools = []
+        degraded = True
+    for t in app_tools:
+        try:
             tools.append(_tool_schema(t))
-    except Exception as e:
-        logger.error(f"⚠️ Error loading app tools for agent_tools: {e}")
+        except Exception:
+            # One malformed schema must not drop the remaining app tools.
+            logger.error(f"⚠️ Skipping app tool with malformed schema: {getattr(t, 'name', '?')}", exc_info=True)
+            degraded = True
+    if degraded:
+        record_fallback(
+            component='agent_tools',
+            from_mode='full_toolset',
+            to_mode='partial_toolset',
+            reason='malformed_doc',
+            outcome='degraded',
+        )
 
     return {"tools": tools}
 
@@ -281,13 +225,22 @@ async def execute_tool(
     }
     agent_config_context.set(config)
 
-    # Find the tool
+    # Find the tool. `load_app_tools` reads Redis plus one Firestore document
+    # per enabled app, so it must not run on the event loop — see the canonical
+    # path in utils/retrieval/agentic.py.
     all_tools = list(CORE_TOOLS)
     try:
-        app_tools = load_app_tools(uid)
+        app_tools = await run_blocking(db_executor, load_app_tools, uid)
         all_tools.extend(app_tools)
-    except Exception as e:
-        logger.error(f"⚠️ Error loading app tools: {e}")
+    except Exception as error:
+        logger.error("⚠️ Error loading app tools error_type=%s", type(error).__name__)
+        record_fallback(
+            component='agent_tools',
+            from_mode='full_toolset',
+            to_mode='partial_toolset',
+            reason='other',
+            outcome='degraded',
+        )
 
     target = None
     for t in all_tools:
@@ -306,10 +259,16 @@ async def execute_tool(
         if hasattr(target, "coroutine") and target.coroutine is not None:
             result = await target.coroutine(**params)
         else:
+            # Every CORE_TOOLS entry is a sync @tool that fans out to Firestore
+            # and Pinecone, so invoking it here would park the whole event loop
+            # for the duration. `run_blocking` copies the current context, so
+            # `agent_config_context` still resolves inside the worker thread.
             # Pass config as second arg (LangChain RunnableConfig), not as tool input
-            result = target.invoke(params, config=config)
+            result = await run_blocking(db_executor, target.invoke, params, config=config)
         result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))
         return {"result": result}
-    except Exception as e:
-        logger.error(f"❌ Error executing tool {body.tool_name}: {e}")
-        return {"error": str(e)}
+    except Exception as error:
+        # Exception text can embed caller params (pydantic renders
+        # `input_value=...`), so keep it off both the log and response planes.
+        logger.error("❌ Error executing tool %s error_type=%s", body.tool_name, type(error).__name__)
+        return {"error": "Tool execution failed"}

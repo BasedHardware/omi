@@ -43,6 +43,10 @@ except ModuleNotFoundError as exc:
 # ---------------------------------------------------------------------------
 # Pre-mock heavy deps before any imports touch them (same pattern as test_omi_qos_tiers.py)
 # ---------------------------------------------------------------------------
+gateway_client_stub = types.ModuleType('utils.llm.gateway_client')
+gateway_client_stub.generate_image_via_gateway = MagicMock()
+gateway_client_stub.should_route_features_through_gateway = MagicMock(return_value=False)
+
 _HEAVY_MOCKS = {
     'firebase_admin': MagicMock(),
     'firebase_admin.auth': MagicMock(),
@@ -60,6 +64,7 @@ _HEAVY_MOCKS = {
     'database.vector_db': MagicMock(),
     'openai': MagicMock(),
     'utils.llm.clients': MagicMock(),
+    'utils.llm.gateway_client': gateway_client_stub,
 }
 
 for _mod, _mock in _HEAVY_MOCKS.items():

@@ -1,18 +1,19 @@
 import os
-import random
 import asyncio
 import time
 import websockets
 import logging
 from enum import Enum
+from typing import Any, Callable, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from utils.metrics import PUSHER_CIRCUIT_BREAKER_STATE
+from utils.other.backoff import calculate_backoff_with_jitter
 
 logger = logging.getLogger(__name__)
 
 _CIRCUIT_STATE_MAP = {'closed': 0, 'open': 1, 'half_open': 2}
-
-PusherAPI = os.getenv('HOSTED_PUSHER_API_URL')
+PusherAPI: Optional[str] = os.getenv('HOSTED_PUSHER_API_URL')
 
 
 # ---------------------------------------------------------------------------
@@ -56,10 +57,9 @@ class PusherCircuitBreaker:
         self.failure_window = failure_window
         self.cooldown = cooldown
 
-        self._state = CircuitState.CLOSED
-        self._failures: list = []  # timestamps of recent failures
+        self._state: CircuitState = CircuitState.CLOSED
+        self._failures: List[float] = []  # timestamps of recent failures
         self._opened_at: float = 0.0
-        self._probe_lock = asyncio.Lock()
         self._probe_in_progress = False
 
     @property
@@ -95,7 +95,9 @@ class PusherCircuitBreaker:
             self._update_metric()
             logger.warning("Pusher circuit breaker -> OPEN (half-open probe failed)")
 
-    def record_success(self):
+    def record_success(self, *, is_probe: bool = False):
+        if self._state != CircuitState.CLOSED and not (is_probe and self._state == CircuitState.HALF_OPEN):
+            return
         if self._state in (CircuitState.HALF_OPEN, CircuitState.OPEN):
             logger.info(f"Pusher circuit breaker -> CLOSED (success from {self._state.value})")
         self._state = CircuitState.CLOSED
@@ -128,7 +130,9 @@ def get_circuit_breaker() -> PusherCircuitBreaker:
     return _circuit_breaker
 
 
-async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: int = 3, is_active: callable = None):
+async def connect_to_trigger_pusher(
+    uid: str, sample_rate: int = 8000, retries: int = 3, is_active: Optional[Callable[..., Any]] = None
+):
     breaker = get_circuit_breaker()
     logger.info(f"connect_to_trigger_pusher {uid} (breaker={breaker.state.value})")
 
@@ -150,8 +154,12 @@ async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: 
 
         try:
             result = await _connect_to_trigger_pusher(uid, sample_rate)
-            breaker.record_success()
+            breaker.record_success(is_probe=is_probe)
             return result
+        except asyncio.CancelledError:
+            if is_probe:
+                breaker.record_failure()
+            raise
         except Exception as error:
             breaker.record_failure()
             logger.error(f'An error occurred: {error} {uid}')
@@ -162,7 +170,7 @@ async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: 
                 logger.warning(f"Pusher circuit breaker tripped during retries, failing fast {uid}")
                 raise PusherCircuitBreakerOpen(f"Circuit breaker open during retries {uid}")
 
-        backoff_delay = calculate_backoff_with_jitter(attempt)
+        backoff_delay = calculate_backoff_with_jitter(attempt, max_delay=15000)
         logger.warning(f"Waiting {backoff_delay:.0f}ms before next retry... {uid}")
         await asyncio.sleep(backoff_delay / 1000)
 
@@ -172,9 +180,25 @@ async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: 
 async def _connect_to_trigger_pusher(uid: str, sample_rate: int = 8000):
     try:
         logger.info(f"Connecting to Pusher transcripts trigger WebSocket... {uid}")
-        ws_host = PusherAPI.replace("http", "ws")
+        if not PusherAPI:
+            raise ValueError('HOSTED_PUSHER_API_URL is required')
+        parsed = urlsplit(PusherAPI)
+        if parsed.scheme not in {'http', 'https'} or not parsed.netloc:
+            raise ValueError('HOSTED_PUSHER_API_URL must be an absolute HTTP URL')
+        query = urlencode(
+            (*parse_qsl(parsed.query, keep_blank_values=True), ('uid', uid), ('sample_rate', sample_rate))
+        )
+        ws_url = urlunsplit(
+            (
+                'wss' if parsed.scheme == 'https' else 'ws',
+                parsed.netloc,
+                f"{parsed.path.rstrip('/')}/v1/trigger/listen",
+                query,
+                '',
+            )
+        )
         socket = await websockets.connect(
-            f"{ws_host}/v1/trigger/listen?uid={uid}&sample_rate={sample_rate}",
+            ws_url,
             ping_interval=30,
             ping_timeout=60,
             close_timeout=3,
@@ -184,10 +208,3 @@ async def _connect_to_trigger_pusher(uid: str, sample_rate: int = 8000):
     except Exception as e:
         logger.error(f"Exception in connect_to_transcript_pusher: {e} {uid}")
         raise
-
-
-# Calculate backoff with jitter
-def calculate_backoff_with_jitter(attempt, base_delay=1000, max_delay=15000):
-    jitter = random.random() * base_delay
-    backoff = min(((2**attempt) * base_delay) + jitter, max_delay)
-    return backoff

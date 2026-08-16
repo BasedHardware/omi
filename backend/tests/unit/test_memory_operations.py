@@ -48,6 +48,54 @@ def test_operation_id_is_scoped_by_generation_fences():
     assert first != third
 
 
+def test_user_mutation_identity_includes_visibility_demotion_and_bound_metadata():
+    base = dict(
+        uid="u1",
+        operation_type=MemoryOperationType.user_mutation,
+        source_packet_id="user-mutation",
+        target_memory_id="mem1",
+        evidence_ids=["ev1"],
+        account_generation=1,
+        source_generation=1,
+    )
+    public = build_operation_id(
+        **base,
+        logical_payload={
+            "decision": "update",
+            "target_memory_id": "mem1",
+            "result_status": "active",
+            "target_visibility": "public",
+            "mutation_metadata": {"promotion_audit": {"tags": ["one"]}},
+        },
+    )
+    private = build_operation_id(
+        **base,
+        logical_payload={
+            "decision": "update",
+            "target_memory_id": "mem1",
+            "result_status": "active",
+            "target_visibility": "private",
+            "mutation_metadata": {"promotion_audit": {"tags": ["two"]}},
+        },
+    )
+    demotion = MemoryOperation.new(
+        **base,
+        logical_payload={
+            "decision": "update",
+            "target_memory_id": "mem1",
+            "result_status": "active",
+            "target_tier": "short_term",
+            "target_user_asserted": True,
+            "clear_graph_assertion": True,
+        },
+    )
+
+    assert public != private
+    assert demotion.logical_payload.target_tier == "short_term"
+    assert demotion.logical_payload.target_user_asserted is True
+    assert demotion.logical_payload.clear_graph_assertion is True
+
+
 def test_memory_operation_records_generations_and_retryable_status():
     operation = MemoryOperation.new(
         uid="u1",

@@ -16,6 +16,8 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
+typedef FetchMemoriesRequest = Future<GetMemoriesResult> Function({int limit, int offset, bool thisDeviceOnly});
+
 class MemoriesProvider extends ChangeNotifier {
   List<Memory> _memories = [];
   bool _loading = true;
@@ -31,6 +33,13 @@ class MemoriesProvider extends ChangeNotifier {
   // Connectivity handling for offline sync
   ConnectivityProvider? _connectivityProvider;
   bool _isSyncing = false;
+  int _sessionGeneration = 0;
+  final FetchMemoriesRequest _fetchMemoriesRequest;
+  final Future<bool> Function(String) _deleteMemoryRequest;
+
+  MemoriesProvider({FetchMemoriesRequest? fetchMemoriesRequest, Future<bool> Function(String)? deleteMemoryRequest})
+      : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
+        _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer;
 
   List<Memory> get memories => _memories;
   bool get loading => _loading;
@@ -129,9 +138,19 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void clearUserData() {
+    _sessionGeneration++;
     _memories = [];
     _selectedCategories = {};
     _showOnlyManual = false;
+    _searchQuery = '';
+    _filterThisDeviceOnly = false;
+    categories = [];
+    selectedCategory = null;
+    _loading = false;
+    _isSyncing = false;
+    _cancelDeletionTimer();
+    _lastDeletedMemory = null;
+    _pendingDeletionId = null;
     notifyListeners();
   }
 
@@ -150,9 +169,13 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   Future<void> init() async {
+    final generation = _sessionGeneration;
     await _ensureClientDeviceInitialized();
+    if (generation != _sessionGeneration) return;
     await _loadFilter();
+    if (generation != _sessionGeneration) return;
     await loadMemories();
+    if (generation != _sessionGeneration) return;
     // Try to sync any pending memories on init
     await syncPendingMemories();
   }
@@ -199,21 +222,55 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   Future<void> loadMemories({int limit = 100}) async {
+    final generation = _sessionGeneration;
+    // Snapshot the pending-deletion ID before any await: a refresh that
+    // started during the undo window must still suppress the deleted item
+    // even if _finalizeDeletion() clears the field while the fetch is in
+    // flight.
+    final tombstoneId = _pendingDeletionId;
     _loading = true;
     notifyListeners();
 
     if (_filterThisDeviceOnly) {
       await _ensureClientDeviceInitialized();
+      if (generation != _sessionGeneration) {
+        return;
+      }
     }
 
-    final result = await getMemoriesResult(limit: limit, thisDeviceOnly: _filterThisDeviceOnly);
-    _memories = result.memories;
-    _deviceScopeSupported = result.deviceScopeSupported;
+    // Page until a short page: backend no longer expands the first page to 5000
+    // (prod GET /v3/memories 504s). Cap total fetch so a huge account cannot hang the UI.
+    const maxPages = 20;
+    final all = <Memory>[];
+    var offset = 0;
+    var deviceScopeSupported = true;
+    for (var page = 0; page < maxPages; page++) {
+      final result = await _fetchMemoriesRequest(limit: limit, offset: offset, thisDeviceOnly: _filterThisDeviceOnly);
+      if (generation != _sessionGeneration) {
+        return;
+      }
+      deviceScopeSupported = result.deviceScopeSupported;
+      all.addAll(result.memories);
+      if (result.memories.length < limit) {
+        break;
+      }
+      offset += result.memories.length;
+    }
+    // Keep an optimistic delete hidden throughout its undo window. Use the
+    // snapshot taken before the fetch so a concurrent finalization that
+    // clears _pendingDeletionId mid-fetch cannot reinsert the row.
+    // Re-check _pendingDeletionId at apply time: if the user deleted a memory
+    // after loadMemories() started (tombstoneId was null at snapshot), the
+    // stale response still contains it and would reinsert the row.
+    final currentTombstoneId = _pendingDeletionId;
+    final effectiveTombstoneId = currentTombstoneId ?? tombstoneId;
+    _memories = effectiveTombstoneId != null ? all.where((memory) => memory.id != effectiveTombstoneId).toList() : all;
+    _deviceScopeSupported = deviceScopeSupported;
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
     for (var pending in pendingMemories) {
-      if (!_memories.any((m) => m.id == pending.id)) {
+      if (pending.id != effectiveTombstoneId && !_memories.any((m) => m.id == pending.id)) {
         _memories.add(pending);
       }
     }
@@ -225,32 +282,40 @@ class MemoriesProvider extends ChangeNotifier {
   /// Sync pending memories to server when online
   Future<void> syncPendingMemories() async {
     if (_isSyncing) return;
+    final generation = _sessionGeneration;
+    final ownerUid = SharedPreferencesUtil().uid;
+    if (ownerUid.isEmpty) return;
 
-    final pendingMemories = SharedPreferencesUtil().pendingMemories;
+    final pendingMemories = SharedPreferencesUtil().pendingMemories.where((memory) => memory.uid == ownerUid).toList();
     if (pendingMemories.isEmpty) return;
 
     _isSyncing = true;
     Logger.debug('MemoriesProvider: Syncing ${pendingMemories.length} pending memories...');
 
     for (var memory in List.from(pendingMemories)) {
+      if (generation != _sessionGeneration) return;
       try {
         final serverMemory = await createMemoryServer(memory.content, memory.visibility.name, memory.category.name);
 
         if (serverMemory != null) {
-          SharedPreferencesUtil().removePendingMemory(memory.id);
+          SharedPreferencesUtil().removePendingMemory(memory.id, ownerUid: ownerUid);
+          if (generation != _sessionGeneration) return;
           final idx = _memories.indexWhere((m) => m.id == memory.id);
           if (idx != -1) {
             _memories[idx].id = serverMemory.id;
           }
         }
+        if (generation != _sessionGeneration) return;
       } catch (e) {
         Logger.debug('MemoriesProvider: Failed to sync memory ${memory.id}: $e');
         // Keep in pending list for next sync attempt
       }
     }
 
-    _isSyncing = false;
-    notifyListeners();
+    if (generation == _sessionGeneration) {
+      _isSyncing = false;
+      notifyListeners();
+    }
   }
 
   Memory? _lastDeletedMemory;
@@ -293,16 +358,34 @@ class MemoriesProvider extends ChangeNotifier {
 
     final id = _pendingDeletionId!;
 
+    final deletedMemory = _lastDeletedMemory;
+    var deleteSucceeded = true;
+
     // If memory was created offline and not yet synced
     if (SharedPreferencesUtil().pendingMemories.any((m) => m.id == id)) {
       SharedPreferencesUtil().removePendingMemory(id);
     } else {
       // Memory exists on server
-      await deleteMemoryServer(id);
+      try {
+        deleteSucceeded = await _deleteMemoryRequest(id);
+      } catch (e) {
+        Logger.debug('MemoriesProvider: Failed to delete memory $id: $e');
+        deleteSucceeded = false;
+      }
     }
 
-    _pendingDeletionId = null;
-    _lastDeletedMemory = null;
+    if (!deleteSucceeded && _pendingDeletionId == id && deletedMemory?.id == id) {
+      if (!_memories.any((memory) => memory.id == id)) {
+        _memories.add(deletedMemory!);
+      }
+      _setCategories();
+      notifyListeners();
+    }
+
+    if (_pendingDeletionId == id) {
+      _pendingDeletionId = null;
+      _lastDeletedMemory = null;
+    }
   }
 
   Future<void> confirmPendingDeletion() async {
@@ -342,10 +425,13 @@ class MemoriesProvider extends ChangeNotifier {
     MemoryVisibility visibility = MemoryVisibility.public,
     MemoryCategory category = MemoryCategory.manual,
   ]) async {
+    final generation = _sessionGeneration;
+    final ownerUid = SharedPreferencesUtil().uid;
+    if (ownerUid.isEmpty) return false;
     // Create the memory object first
     final newMemory = Memory(
       id: const Uuid().v4(),
-      uid: SharedPreferencesUtil().uid,
+      uid: ownerUid,
       content: content,
       category: category,
       createdAt: DateTime.now(),
@@ -368,13 +454,16 @@ class MemoriesProvider extends ChangeNotifier {
     final serverMemory = await createMemoryServer(content, visibility.name, category.name);
 
     if (serverMemory != null) {
-      // Remove from pending and update local memory with server ID
-      SharedPreferencesUtil().removePendingMemory(newMemory.id);
+      // Remove from the original account's pending queue even if the visible
+      // session changed while the request was in flight.
+      SharedPreferencesUtil().removePendingMemory(newMemory.id, ownerUid: ownerUid);
+      if (generation != _sessionGeneration) return true;
       final idx = _memories.indexWhere((m) => m.id == newMemory.id);
       if (idx != -1) {
         _memories[idx].id = serverMemory.id;
       }
     }
+    if (generation != _sessionGeneration) return true;
 
     // Return true since memory is saved locally regardless of server sync
     return true;
@@ -392,6 +481,20 @@ class MemoriesProvider extends ChangeNotifier {
       PlatformManager.instance.analytics.memoryVisibilityChanged(memoryToUpdate, visibility);
       _setCategories();
     }
+  }
+
+  Future<bool> toggleMemoryBaseline(Memory memory, bool isBaseline) async {
+    final success = await updateMemoryBaselineServer(memory.id, isBaseline);
+
+    if (success) {
+      final idx = _memories.indexWhere((m) => m.id == memory.id);
+      if (idx != -1) {
+        _memories[idx].isBaseline = isBaseline;
+        notifyListeners();
+        _setCategories();
+      }
+    }
+    return success;
   }
 
   Future<bool> editMemory(Memory memory, String value, [MemoryCategory? category]) async {

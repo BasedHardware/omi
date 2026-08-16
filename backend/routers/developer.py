@@ -2,23 +2,22 @@ import uuid
 from datetime import datetime, timezone, timedelta
 
 from enum import Enum
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 import database.folders as folders_db
-import database.memories as memories_db
 import database.conversations as conversations_db
-import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
 from database._client import db
-from database.vector_db import upsert_memory_vectors_batch
 
 from models.folder import Folder
+from models.goal import GoalHistoryEntryResponse, GoalMetric
 from utils.client_device import resolve_client_device_from_request
+from utils.goals_response import normalize_goal_history_entry
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import (
     Conversation as OmiConversation,
@@ -31,15 +30,13 @@ from models.conversation_enums import (
     ConversationStatus,
     ExternalIntegrationConversationSource,
 )
-from models.geolocation import Geolocation
+from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
 from models.structured import Structured
 from utils.conversations.render import populate_speaker_names, populate_folder_names
-from utils.dev_cache import invalidate_developer_cache
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
     ApiKeyAuth,
     check_conversation_transcript_read_limit,
-    get_current_user_id,
     get_auth_with_conversation_detail_read,
     get_auth_with_conversations_read,
     get_uid_with_conversations_read,
@@ -55,33 +52,22 @@ from dependencies import (
 from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
-from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
-from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
-from utils.conversations.location import get_google_maps_location
+from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.location import resolve_geolocation
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
-from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
-from utils.memory.memory_service import MemoryService
+from utils.memory.memory_service import MemoryService, fetch_memory_dict
+from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
-from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
-from utils.mcp_memories import collect_filtered_memories
-from utils.memory.developer_memory_adapter import (
-    search_memory_default_developer_memories,
-    search_memory_default_developer_memories_vector,
-)
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
-from utils.memory.default_read_rollout import (
-    MemoryReadDecision,
-    guard_legacy_memory_write,
-    read_default_read_rollout,
-)
+from utils.task_intelligence.proactive_engine import persist_desktop_meeting_arrival_best_effort
 import logging
 
 logger = logging.getLogger(__name__)
@@ -90,6 +76,29 @@ router = APIRouter()
 FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
+
+
+class DeveloperSuccessResponse(BaseModel):
+    success: bool
+
+
+DEVELOPER_MEMORY_ACCESS_NOT_READY = 'developer_memory_access_not_ready'
+
+
+def _developer_memory_access_not_ready_detail(reason: Optional[str]) -> dict:
+    return {
+        'enabled': False,
+        'code': DEVELOPER_MEMORY_ACCESS_NOT_READY,
+        'message': (
+            'Developer Memory API access is not enabled for this account. '
+            'Your API key can be valid and correctly scoped; this endpoint also requires server-side memory '
+            'readiness. Try again after access is enabled, or contact Omi support if it remains unavailable.'
+        ),
+        'reason': reason,
+        'consumer': 'developer_api',
+        'archive_default_visible': False,
+        'archive_capability': False,
+    }
 
 
 def _developer_request_ip(request: Request) -> Optional[str]:
@@ -130,55 +139,6 @@ def _audit_developer_read(
         returned_count,
         sanitize(resource_id) if resource_id else None,
     )
-
-
-# ******************************************************
-# ****************** API KEY MANAGEMENT ****************
-# ******************************************************
-
-
-@router.get("/v1/dev/keys", response_model=List[DevApiKey], tags=["API Keys"], operation_id="listApiKeys")
-def get_keys(uid: str = Depends(get_current_user_id)):
-    return dev_api_key_db.get_dev_keys_for_user(uid)
-
-
-@router.post("/v1/dev/keys", response_model=DevApiKeyCreated, tags=["API Keys"], operation_id="createApiKey")
-def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id)):
-    """
-    Create a new Developer API key with optional scopes.
-
-    - **name**: Descriptive name for the key
-    - **scopes**: Optional list of scopes. If not provided, defaults to read-only access.
-      Available scopes:
-      - conversations:read
-      - conversations:write
-      - memories:read
-      - memories:write
-      - action_items:read
-      - action_items:write
-      - goals:read
-      - goals:write
-    """
-    if not key_data.name or len(key_data.name.strip()) == 0:
-        raise HTTPException(status_code=422, detail="Key name cannot be empty")
-
-    # Validate scopes if provided
-    if key_data.scopes is not None:
-        if not validate_scopes(key_data.scopes):
-            raise HTTPException(status_code=400, detail=f"Invalid scopes. Available: {AVAILABLE_SCOPES}")
-
-    raw_key, api_key_data = dev_api_key_db.create_dev_key(uid, key_data.name.strip(), scopes=key_data.scopes)
-    # The proactive-notification cap exempts developers, so refresh that cache now
-    # that this user has a key, rather than waiting out its TTL.
-    invalidate_developer_cache(uid)
-    return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
-
-
-@router.delete("/v1/dev/keys/{key_id}", status_code=204, tags=["API Keys"], operation_id="revokeApiKey")
-def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
-    dev_api_key_db.delete_dev_key(uid, key_id)
-    invalidate_developer_cache(uid)
-    return
 
 
 # ******************************************************
@@ -286,6 +246,29 @@ class DeveloperMemory(BaseModel):
         return str(value)
 
 
+class DeveloperMemoryVectorItem(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    id: str
+    content: str = ''
+    category: Optional[str] = None
+    relevance_score: Optional[float] = None
+
+
+class DeveloperMemoryVectorPolicy(BaseModel):
+    consumer: str
+    app_has_default_memory_grant: bool
+    archive_capability: bool
+    raw_provenance_capability: bool
+
+
+class DeveloperMemoryVectorSearchResponse(BaseModel):
+    items: List[DeveloperMemoryVectorItem] = Field(default_factory=list)
+    returned_count: int
+    archive_default_visible: bool
+    policy: DeveloperMemoryVectorPolicy
+
+
 # Backward-compatible name used by unit tests and older docs.
 CleanerMemory = DeveloperMemory
 
@@ -347,95 +330,69 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
-    # Grant check must run before the memory-system branch so a canonical-cohort
-    # user holding a legacy/read-only Developer key without a persisted default-read
-    # grant is denied, instead of listing canonical memories before authorization.
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
         raise HTTPException(
             status_code=app_key_grant.status_code,
             detail={
-                'enabled': False,
-                'reason': app_key_grant.reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-                'app_id': auth_context.app_id,
-                'key_id': auth_context.key_id,
+                "enabled": False,
+                "reason": app_key_grant.reason,
+                "consumer": "developer_api",
+                "archive_default_visible": False,
+                "archive_capability": False,
+                "app_id": auth_context.app_id,
+                "key_id": auth_context.key_id,
             },
         )
 
-    memory_system = pin_memory_system(uid, db_client=db)
-    if memory_system == MemorySystem.CANONICAL:
-        # Over-fetch raw pages and let collect_filtered_memories apply category
-        # filtering during the scan, so categories=manual&limit=25 always returns
-        # up to 25 matching rows instead of filtering a single unfiltered page.
-        filtered = collect_filtered_memories(
-            lambda batch_offset, batch_limit: [
-                m.model_dump(mode='json')
-                for m in memorydb_list_with_locked_preview(
-                    MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
-                )
-            ],
-            limit=limit,
-            offset=offset,
-            categories=[c.value for c in category_list] if category_list else None,
-            sort='scoring_desc',
-        )
-        memories = filtered['memories']
-        return [CleanerMemory.model_validate(memory) for memory in memories]
-    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
-    memory_result = search_memory_default_developer_memories(
-        uid=uid,
-        query='',
-        limit=limit,
-        offset=offset,
-        db_client=db,
-        rollout_decision=memory_rollout,
-        categories=[c.value for c in category_list],
-    )
-
-    if memory_result.read_decision == MemoryReadDecision.USE_MEMORY:
-        return [CleanerMemory.model_validate(memory) for memory in memory_result.memories]
-    if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                'enabled': False,
-                'reason': memory_result.fallback_reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-            },
-        )
-    if memory_result.should_use_legacy_fallback:
-        pass
-
-    memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
-    # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
-    # field or an out-of-enum category) doesn't fail the whole page with a 500. Mirrors the
-    # hardening already applied to GET /v3/memories.
+    service = MemoryService(db_client=db)
+    allowed = {category.value for category in category_list} if category_list else None
+    if allowed is None:
+        memories = service.read(uid, limit=limit, offset=offset, include_pending_processing=True)
+        valid_memories = []
+        for memory in memories:
+            try:
+                valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
+            except (AttributeError, TypeError, ValidationError, ValueError):
+                logger.warning("Skipping malformed memory in Developer API list")
+        return valid_memories
+    # Category is a sparse filter.  Read ordered universal pages until the
+    # requested category page is filled instead of filtering after a raw page
+    # (which returned short/empty pages whenever non-matching memories led it).
+    target_end = offset + limit
+    scan_offset = 0
+    matched = []
+    max_scan = 5000
+    while scan_offset < max_scan and len(matched) < target_end:
+        batch_limit = min(500, max_scan - scan_offset)
+        batch = service.read(uid, limit=batch_limit, offset=scan_offset, include_pending_processing=True)
+        if not batch:
+            break
+        scan_offset += len(batch)
+        if allowed is None:
+            matched.extend(batch)
+        else:
+            matched.extend(memory for memory in batch if getattr(memory.category, "value", memory.category) in allowed)
+        if len(batch) < batch_limit:
+            break
+    memories = matched[offset:target_end]
     valid_memories = []
     for memory in memories:
-        if not isinstance(memory, dict) or not memory.get('id'):
-            logger.warning('Skipping malformed memory in Developer API memory list')
-            continue
-        if memory.get('is_locked', False):
-            content = str(memory.get('content') or '')
-            memory['content'] = (content[:70] + '...') if len(content) > 70 else content
         try:
-            valid_memories.append(DeveloperMemory.model_validate(memory))
-        except ValidationError as e:
-            missing_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
-            logger.warning(
-                f"Skipping invalid memory doc {memory.get('id', 'unknown')} for uid {uid}: "
-                f"missing/invalid fields {missing_fields}"
-            )
-            continue
+            valid_memories.append(CleanerMemory.model_validate(memory.model_dump(mode="json")))
+        except (AttributeError, TypeError, ValidationError, ValueError):
+            # MemoryService normally returns validated MemoryDB rows, but a
+            # malformed historical adapter row must not turn this compatibility
+            # endpoint into a 500 for every otherwise healthy memory.
+            logger.warning("Skipping malformed memory in Developer API list")
     return valid_memories
 
 
-@router.get("/v1/dev/user/memories/vector/search", tags=["developer"])
+@router.get(
+    "/v1/dev/user/memories/vector/search",
+    tags=["developer"],
+    response_model=DeveloperMemoryVectorSearchResponse,
+)
 def search_memories_vector(
     auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_read_context),
     query: str = Query(..., min_length=1),
@@ -444,18 +401,15 @@ def search_memories_vector(
     """Search developer-readable default memory memory through hydrated vector candidates.
 
     This narrow developer API vector endpoint fails closed unless the authenticated
-    Developer API app/key has a verified memories.read scope, a persisted app/key
-    default-read grant, and the server-owned rollout state enables developer_api
-    memory default-memory reads. Vector hits are hydrated from authoritative
+    Developer API app/key has a verified memories.read scope and a persisted app/key
+    default-read grant. Vector hits are hydrated through the universal repository
+    against authoritative
     `users/{uid}/memory_items` before returning results, so stale Short-term and
     Archive remain unavailable by default.
     """
 
     uid = auth_context.uid
 
-    # Grant check must run before the memory-system branch so a canonical-cohort
-    # user holding a legacy/read-only Developer key without a persisted default-read
-    # grant is denied, instead of searching canonical memories before authorization.
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
         raise HTTPException(
@@ -471,65 +425,21 @@ def search_memories_vector(
             },
         )
 
-    memory_system = pin_memory_system(uid, db_client=db)
-    if memory_system == MemorySystem.CANONICAL:
-        matches = MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))
-        items = []
-        for match in matches:
-            memory = match.memory
-            items.append(
-                {
-                    'id': memory.id,
-                    'content': memory.content,
-                    'category': memory.category.value if hasattr(memory.category, 'value') else memory.category,
-                    'relevance_score': round(match.score, 4),
-                }
-            )
-        return {
-            'items': items,
-            'returned_count': len(items),
-            'archive_default_visible': False,
-            'policy': {
-                'consumer': 'developer_api',
-                'app_has_default_memory_grant': True,
-                'archive_capability': False,
-                'raw_provenance_capability': False,
-            },
+    matches = MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))
+    items = [
+        {
+            'id': match.memory.id,
+            'content': match.memory.content,
+            'category': (
+                match.memory.category.value if hasattr(match.memory.category, 'value') else match.memory.category
+            ),
+            'relevance_score': round(match.score, 4),
         }
-
-    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
-    memory_result = search_memory_default_developer_memories_vector(
-        uid=uid,
-        query=query,
-        limit=limit,
-        db_client=db,
-        rollout_decision=memory_rollout,
-    )
-    if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                'enabled': False,
-                'reason': memory_result.fallback_reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-            },
-        )
-    if memory_result.should_use_legacy_fallback:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                'enabled': False,
-                'reason': memory_result.fallback_reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-            },
-        )
+        for match in matches
+    ]
     return {
-        'items': memory_result.memories,
-        'returned_count': len(memory_result.memories),
+        'items': items,
+        'returned_count': len(items),
         'archive_default_visible': False,
         'policy': {
             'consumer': 'developer_api',
@@ -570,38 +480,6 @@ def create_memory(
 
     category = request.category if request.category else identify_category_for_memory(request.content.strip())
 
-    memory_system = pin_memory_system(uid, db_client=db)
-    if memory_system == MemorySystem.CANONICAL:
-        memory = Memory(
-            content=request.content.strip(),
-            category=category,
-            visibility=request.visibility,
-            tags=request.tags,
-        )
-        memory_db = MemoryDB.from_memory(memory, uid, None, True)
-        memory_db = MemoryService(db_client=db).create_external_memory(
-            uid,
-            memory_db,
-            memory_system=memory_system,
-            consumer='developer_api',
-            operation='create_memory',
-            upsert_vector=False,
-            require_canonical_promotion=True,
-        )
-        if memory.visibility == 'public':
-            postprocess_executor.submit(update_personas_async, uid)
-        return DeveloperMemory(
-            id=memory_db.id,
-            content=memory_db.content,
-            category=memory_db.category,
-            visibility=memory_db.visibility,
-            tags=memory_db.tags,
-            created_at=memory_db.created_at,
-            updated_at=memory_db.updated_at,
-            manually_added=memory_db.manually_added,
-            scoring=memory_db.scoring,
-        )
-
     memory = Memory(
         content=request.content.strip(),
         category=category,
@@ -612,11 +490,17 @@ def create_memory(
     memory_db = MemoryService(db_client=db).create_external_memory(
         uid,
         memory_db,
-        memory_system=memory_system,
+        memory_system=MemorySystem.CANONICAL,
         consumer='developer_api',
         operation='create_memory',
         upsert_vector=False,
         require_canonical_promotion=True,
+    )
+    capture_memory_write(
+        principal_id=uid,
+        source="developer_memory_create",
+        session_id=memory_db.id,
+        memories=[memory_db],
     )
     if memory.visibility == 'public':
         postprocess_executor.submit(update_personas_async, uid)
@@ -682,15 +566,20 @@ def create_memories_batch(
         if memory.visibility == 'public':
             has_public = True
 
-    memory_system = pin_memory_system(uid, db_client=db)
     created_dbs = MemoryService(db_client=db).create_external_memory_batch(
         uid,
         memory_dbs,
-        memory_system=memory_system,
+        memory_system=MemorySystem.CANONICAL,
         consumer='developer_api',
         operation='batch_create_memories',
-        upsert_vectors=memory_system != MemorySystem.CANONICAL,
+        upsert_vectors=False,
         require_canonical_promotion=True,
+    )
+    capture_memory_write(
+        principal_id=uid,
+        source="developer_memory_batch_create",
+        session_id=str(uuid.uuid4()),
+        memories=created_dbs,
     )
     if has_public:
         postprocess_executor.submit(update_personas_async, uid)
@@ -711,7 +600,12 @@ def create_memories_batch(
     return BatchMemoriesResponse(memories=created_memories, created_count=len(created_memories))
 
 
-@router.delete("/v1/dev/user/memories/{memory_id}", tags=["Memories"], operation_id="deleteMemory")
+@router.delete(
+    "/v1/dev/user/memories/{memory_id}",
+    tags=["Memories"],
+    operation_id="deleteMemory",
+    response_model=DeveloperSuccessResponse,
+)
 def delete_memory(
     memory_id: str,
     auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
@@ -731,11 +625,10 @@ def delete_memory(
         )
     uid = auth_context.uid
 
-    memory_system = pin_memory_system(uid, db_client=db)
     MemoryService(db_client=db).delete_external_memory(
         uid,
         memory_id,
-        memory_system=memory_system,
+        memory_system=MemorySystem.CANONICAL,
         consumer='developer_api',
         operation='delete_memory',
         delete_vector=False,
@@ -779,63 +672,27 @@ def update_memory(
         )
 
     memory_service = MemoryService(db_client=db)
-    memory_system = pin_memory_system(uid, db_client=db)
-    if memory_system == MemorySystem.CANONICAL:
-        # Validate existence before mutations so a missing memory returns 404
-        # (matching legacy) rather than letting the update helpers raise
-        # ValueError, which FastAPI surfaces as a 500.
-        if _read_canonical_memory_item(uid, memory_id, db_client=db) is None:
-            raise HTTPException(status_code=404, detail="Memory not found")
-        if request.content is not None and not request.content.strip():
-            raise HTTPException(status_code=422, detail="content must not be empty")
-        if request.content is not None:
-            memory_service.update_content(uid, memory_id, request.content.strip())
-        if request.visibility is not None:
-            if request.visibility not in ['public', 'private']:
-                raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
-            memory_service.update_visibility(uid, memory_id, request.visibility)
-        if request.tags is not None or request.category is not None:
-            memory_service.update_product_fields(
-                uid,
-                memory_id,
-                tags=request.tags,
-                category=request.category.value if request.category is not None else None,
-            )
-        item = _read_canonical_memory_item(uid, memory_id, db_client=db)
-        if item is None:
-            raise HTTPException(status_code=404, detail="Memory not found")
-        return memory_item_to_memorydb(item).model_dump()
-
-    write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='update_memory')
-    if not write_guard.allowed:
-        raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
-
-    memory = memories_db.get_memory(uid, memory_id)
-    if not memory:
-        raise HTTPException(status_code=404, detail="Memory not found")
-    if memory.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
-
-    old_visibility = memory.get('visibility')
-
     if request.content is not None:
-        memories_db.edit_memory(uid, memory_id, request.content.strip())
-
+        if not request.content.strip():
+            raise HTTPException(status_code=422, detail="content must not be empty")
+        memory_service.update_content(uid, memory_id, request.content.strip())
     if request.visibility is not None:
         if request.visibility not in ['public', 'private']:
             raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
-        memories_db.change_memory_visibility(uid, memory_id, request.visibility)
-
-    update_data = {}
-    if request.tags is not None:
-        update_data['tags'] = request.tags
-    if request.category is not None:
-        update_data['category'] = request.category.value
-
-    if update_data:
-        memories_db.update_memory_fields(uid, memory_id, update_data)
-
-    return memories_db.get_memory(uid, memory_id)
+        memory_service.update_visibility(uid, memory_id, request.visibility)
+    if request.tags is not None or request.category is not None:
+        memory_service.update_product_fields(
+            uid,
+            memory_id,
+            tags=request.tags,
+            category=request.category.value if request.category is not None else None,
+        )
+    try:
+        return fetch_memory_dict(uid, memory_id, db_client=db)
+    except HTTPException:
+        raise
+    except (KeyError, ValueError):
+        raise HTTPException(status_code=404, detail="Memory not found")
 
 
 # ******************************************************
@@ -1054,6 +911,7 @@ def create_action_items_batch(
     "/v1/dev/user/action-items/{action_item_id}",
     tags=["Action Items"],
     operation_id="deleteActionItem",
+    response_model=DeveloperSuccessResponse,
 )
 def delete_action_item(
     action_item_id: str,
@@ -1217,7 +1075,7 @@ class CreateConversationRequest(BaseModel):
         default=None, description="When the conversation finished (defaults to started_at + 5 minutes)"
     )
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
-    geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
+    geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
 
 
 class ConversationResponse(BaseModel):
@@ -1273,9 +1131,24 @@ class CreateConversationFromTranscriptRequest(BaseModel):
         default=None, description="When conversation finished (calculated from segments duration if not provided)"
     )
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
-    geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
+    geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
     client_device_id: Optional[str] = Field(default=None, description="Capture device id ({platform}_{hash})")
     client_platform: Optional[str] = Field(default=None, description="Client platform (ios/android/macos)")
+    conversation_role: Literal['ambient', 'meeting'] = 'ambient'
+    # Optional for backwards compatibility. When supplied, rotation fragments
+    # are persisted but do not create a notes-ready receipt.
+    conversation_finalization_reason: (
+        Literal[
+            'user_stop',
+            'finish_and_continue',
+            'meeting_started',
+            'meeting_ended',
+            'max_duration_rotation',
+            'crash_recovery',
+            'retry',
+        ]
+        | None
+    ) = None
 
     @field_validator('client_session_id')
     @classmethod
@@ -1481,14 +1354,8 @@ def create_conversation(
     if finished_at < started_at:
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
-    # Process geolocation if provided
-    geolocation = request.geolocation
-    if geolocation and not geolocation.google_place_id:
-        try:
-            geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
-        except Exception as e:
-            logger.error(f"Error enriching geolocation: {e}")
-            # Continue with original geolocation if enrichment fails
+    # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
+    geolocation = resolve_geolocation(validated_geolocation_or_none(request.geolocation))
 
     # Language defaults
     language_code = request.language or 'en'
@@ -1667,14 +1534,8 @@ def _create_conversation_from_segments(
     if finished_at <= started_at:
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
-    # Process geolocation if provided
-    geolocation = request.geolocation
-    if geolocation and not geolocation.google_place_id:
-        try:
-            geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
-        except Exception as e:
-            logger.error(f"Error enriching geolocation: {e}")
-            # Continue with original geolocation if enrichment fails
+    # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
+    geolocation = resolve_geolocation(validated_geolocation_or_none(request.geolocation))
 
     # Language defaults
     language_code = request.language or 'en'
@@ -1705,6 +1566,7 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
+                persist_desktop_meeting_arrival_best_effort(uid, existing_conversation)
                 return _conversation_response_from_data(existing_conversation)
 
     resolved_client_device_id = client_device_id or request.client_device_id
@@ -1727,10 +1589,18 @@ def _create_conversation_from_segments(
             external_data={
                 'from_segments_client_session_id': request.client_session_id,
                 'from_segments_claimed_at': datetime.now(timezone.utc),
+                'conversation_role': request.conversation_role,
+                **(
+                    {'conversation_finalization_reason': request.conversation_finalization_reason}
+                    if request.conversation_finalization_reason is not None
+                    else {}
+                ),
             },
             status=ConversationStatus.processing,
         )
-        if not conversations_db.create_conversation_if_absent(uid, create_conversation_obj.dict()):
+        if not lifecycle_service.create_processing_conversation(
+            uid, create_conversation_obj.model_dump(), idempotent=True
+        ):
             existing_conversation = conversations_db.get_conversation(uid, conversation_id)
             if existing_conversation:
                 logger.info(
@@ -1739,6 +1609,7 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
+                persist_desktop_meeting_arrival_best_effort(uid, existing_conversation)
                 return _conversation_response_from_data(existing_conversation)
             raise HTTPException(status_code=409, detail="Conversation creation already in progress")
     else:
@@ -1751,11 +1622,26 @@ def _create_conversation_from_segments(
             source=source,
             client_device_id=resolved_client_device_id,
             client_platform=resolved_client_platform,
+            external_data={
+                'conversation_role': request.conversation_role,
+                **(
+                    {'conversation_finalization_reason': request.conversation_finalization_reason}
+                    if request.conversation_finalization_reason is not None
+                    else {}
+                ),
+            },
         )
 
-    # Process conversation
+    # Process conversation. The idempotent (client_session_id) path creates a
+    # processing row; the admission guard's lease heartbeat keeps it fresh so the
+    # crash-orphan sweep can never terminalize active work. rollback_on_failure is
+    # False because this path owns its own recovery (delete on exception below).
     try:
-        conversation = process_conversation(uid, language_code, create_conversation_obj)
+        if conversation_id:
+            with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
+                conversation = process_conversation(uid, language_code, create_conversation_obj)
+        else:
+            conversation = process_conversation(uid, language_code, create_conversation_obj)
     except Exception:
         if request.client_session_id and conversation_id:
             conversations_db.delete_conversation(uid, conversation_id)
@@ -1767,7 +1653,18 @@ def _create_conversation_from_segments(
             request.client_session_id,
             conversation.id,
         )
-        conversations_db.upsert_conversation(uid, conversation.dict())
+        lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
+
+    conversation.external_data = {
+        **(conversation.external_data or {}),
+        'conversation_role': request.conversation_role,
+        **(
+            {'conversation_finalization_reason': request.conversation_finalization_reason}
+            if request.conversation_finalization_reason is not None
+            else {}
+        ),
+    }
+    persist_desktop_meeting_arrival_best_effort(uid, conversation)
 
     return ConversationResponse(
         id=conversation.id,
@@ -1867,6 +1764,7 @@ def create_conversation_from_segments(
     "/v1/dev/user/conversations/{conversation_id}",
     tags=["Conversations"],
     operation_id="deleteConversation",
+    response_model=DeveloperSuccessResponse,
 )
 def delete_conversation_endpoint(
     conversation_id: str,
@@ -1921,9 +1819,9 @@ def update_conversation_endpoint(
 
     if request.discarded is not None:
         if request.discarded:
-            conversations_db.set_conversation_as_discarded(uid, conversation_id)
+            lifecycle_service.discard(uid, conversation_id)
         else:
-            conversations_db.update_conversation(uid, conversation_id, {'discarded': False})
+            lifecycle_service.restore_discarded(uid, conversation_id)
 
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation:
@@ -1946,7 +1844,16 @@ class GoalResponse(BaseModel):
     model_config = ConfigDict(title='DeveloperGoal')
 
     id: str
+    goal_id: str
     title: str
+    desired_outcome: str
+    why_it_matters: Optional[str] = None
+    success_criteria: List[str] = Field(default_factory=list)
+    horizon_at: Optional[datetime] = None
+    status: str
+    focus_rank: Optional[int] = None
+    metric: Optional[GoalMetric] = None
+    source: str
     goal_type: str
     target_value: float
     current_value: float
@@ -1962,11 +1869,15 @@ class CreateGoalRequest(BaseModel):
     model_config = ConfigDict(title='CreateGoalRequest')
 
     title: str = Field(description="The goal title/description", min_length=1, max_length=500)
-    goal_type: GoalType = Field(default=GoalType.scale, description="Type of goal metric: boolean, scale, or numeric")
-    target_value: float = Field(description="Target value to achieve")
-    current_value: float = Field(default=0, description="Current progress value")
-    min_value: float = Field(default=0, description="Minimum value of the scale")
-    max_value: float = Field(default=10, description="Maximum value of the scale")
+    desired_outcome: Optional[str] = Field(default=None, max_length=2000)
+    why_it_matters: Optional[str] = Field(default=None, max_length=2000)
+    success_criteria: List[str] = Field(default_factory=list, max_length=20)
+    horizon_at: Optional[datetime] = None
+    goal_type: Optional[GoalType] = Field(default=None, description="Optional metric type")
+    target_value: Optional[float] = Field(default=None, description="Optional target value")
+    current_value: Optional[float] = Field(default=None, description="Optional current progress")
+    min_value: Optional[float] = Field(default=None, description="Optional minimum scale value")
+    max_value: Optional[float] = Field(default=None, description="Optional maximum scale value")
     unit: Optional[str] = Field(default=None, description="Unit label (e.g., 'users', 'points')")
 
 
@@ -1974,11 +1885,36 @@ class UpdateGoalRequest(BaseModel):
     model_config = ConfigDict(title='UpdateGoalRequest')
 
     title: Optional[str] = Field(default=None, description="New title", min_length=1, max_length=500)
+    desired_outcome: Optional[str] = Field(default=None, max_length=2000)
+    why_it_matters: Optional[str] = Field(default=None, max_length=2000)
+    success_criteria: Optional[List[str]] = Field(default=None, max_length=20)
+    horizon_at: Optional[datetime] = None
     target_value: Optional[float] = Field(default=None, description="New target value")
     current_value: Optional[float] = Field(default=None, description="New progress value")
     min_value: Optional[float] = Field(default=None, description="New minimum value")
     max_value: Optional[float] = Field(default=None, description="New maximum value")
     unit: Optional[str] = Field(default=None, description="New unit label")
+
+    @field_validator('title', 'desired_outcome')
+    @classmethod
+    def required_text_cannot_be_null_or_blank(cls, value: Optional[str]) -> str:
+        if value is None or not value.strip():
+            raise ValueError('required goal text cannot be null or blank')
+        return value.strip()
+
+    @field_validator('success_criteria')
+    @classmethod
+    def success_criteria_cannot_be_null(cls, value: Optional[List[str]]) -> List[str]:
+        if value is None:
+            raise ValueError('success_criteria cannot be null; use an empty list to clear it')
+        return value
+
+    @field_validator('target_value', 'current_value')
+    @classmethod
+    def required_metric_values_cannot_be_null(cls, value: Optional[float]) -> float:
+        if value is None:
+            raise ValueError('metric value cannot be null')
+        return value
 
 
 def _serialize_goal_datetimes(goal: dict) -> dict:
@@ -2002,6 +1938,9 @@ def get_goals(
     - **limit**: Maximum number of goals to return
     - **include_inactive**: If True, includes inactive/completed goals
     """
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
+    limit = max(1, min(limit, 1000))
     if include_inactive:
         goals = goals_db.get_all_goals(uid, include_inactive=True)
     else:
@@ -2035,15 +1974,17 @@ def create_goal(
     uid: str = Depends(get_uid_with_goals_write),
 ):
     """
-    Create a new goal. Supports up to 3 active goals; the oldest is deactivated if at max.
+    Create a durable goal. Metrics are optional and other goals are never changed implicitly.
 
     - **title**: The goal title/description (1-500 characters)
-    - **goal_type**: Type of goal metric: boolean, scale, or numeric (default: scale)
-    - **target_value**: Target value to achieve
-    - **current_value**: Current progress (default: 0)
-    - **min_value**: Minimum scale value (default: 0)
-    - **max_value**: Maximum scale value (default: 10)
+    - **goal_type**: Optional metric type: boolean, scale, or numeric
+    - **target_value**: Optional target value
+    - **current_value**: Optional current progress
+    - **min_value**: Optional minimum scale value
+    - **max_value**: Optional maximum scale value
     - **unit**: Optional unit label (e.g., 'users', 'points')
+
+    Omit all metric fields to create a qualitative goal.
     """
     if not request.title or len(request.title.strip()) == 0:
         raise HTTPException(status_code=422, detail="title cannot be empty")
@@ -2051,7 +1992,11 @@ def create_goal(
     goal_data = {
         'id': f"goal_{uuid.uuid4().hex[:12]}",
         'title': request.title.strip(),
-        'goal_type': request.goal_type.value,
+        'desired_outcome': request.desired_outcome or request.title.strip(),
+        'why_it_matters': request.why_it_matters,
+        'success_criteria': request.success_criteria,
+        'horizon_at': request.horizon_at,
+        'goal_type': request.goal_type.value if request.goal_type is not None else None,
         'target_value': request.target_value,
         'current_value': request.current_value,
         'min_value': request.min_value,
@@ -2121,7 +2066,12 @@ def update_goal_progress(
     return _serialize_goal_datetimes(updated_goal)
 
 
-@router.get("/v1/dev/user/goals/{goal_id}/history", tags=["Goals"], operation_id="listGoalHistory")
+@router.get(
+    "/v1/dev/user/goals/{goal_id}/history",
+    tags=["Goals"],
+    operation_id="listGoalHistory",
+    response_model=List[GoalHistoryEntryResponse],
+)
 def get_goal_history(
     goal_id: str,
     days: HistoryDays = 30,
@@ -2134,15 +2084,15 @@ def get_goal_history(
     - **days**: Number of days of history to return (max 365, default 30)
     """
     history = goals_db.get_goal_history(uid, goal_id, days)
-
-    for entry in history:
-        if 'recorded_at' in entry and hasattr(entry['recorded_at'], 'isoformat'):
-            entry['recorded_at'] = entry['recorded_at'].isoformat()
-
-    return history
+    return [normalize_goal_history_entry(entry) for entry in history]
 
 
-@router.delete("/v1/dev/user/goals/{goal_id}", tags=["Goals"], operation_id="deleteGoal")
+@router.delete(
+    "/v1/dev/user/goals/{goal_id}",
+    tags=["Goals"],
+    operation_id="deleteGoal",
+    response_model=DeveloperSuccessResponse,
+)
 def delete_goal(
     goal_id: str,
     uid: str = Depends(get_uid_with_goals_write),

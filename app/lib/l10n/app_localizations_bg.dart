@@ -9,6 +9,9 @@ class AppLocalizationsBg extends AppLocalizations {
   AppLocalizationsBg([String locale = 'bg']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Сесията изтече — влезте отново.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -746,11 +749,6 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Вашият план се подновява на $date.';
-  }
-
-  @override
   String get basicPlan => 'Безплатен план';
 
   @override
@@ -1467,7 +1465,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get payYourSttProvider => 'Използвайте omi свободно. Плащате само на вашия STT доставчик директно.';
 
   @override
-  String get freeMinutesMonth => '1 200 безплатни минути/месец включени. Неограничено с ';
+  String get freeMinutesMonth => '300 безплатни минути/месец включени. Неограничено с ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1790,20 +1788,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Обичате ли Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Помогнете ни да достигнем до повече хора, като оставите отзив в App Store. Вашата обратна връзка е много важна за нас!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Помогнете ни да достигнем до повече хора, като оставите отзив в Google Play Store. Вашата обратна връзка е много важна за нас!';
-
-  @override
-  String get rateOnAppStore => 'Оценете в App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Оценете в Google Play';
 
   @override
   String get maybeLater => 'Може би по-късно';
@@ -2140,6 +2124,18 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Редактирай спомен';
+
+  @override
+  String get pinAsBaseline => 'Закачване като базово';
+
+  @override
+  String get unpinAsBaseline => 'Откачване от базово';
+
+  @override
+  String get baselineMemory => 'Базова памет';
+
+  @override
+  String get alwaysInContext => 'Винаги в контекста';
 
   @override
   String get memoryContentHint => 'Обичам да ям сладолед...';
@@ -4719,7 +4715,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Няма конфигуриран специфичен достъп до данни.';
 
   @override
-  String get basicPlanDescription => '1 200 премиум минути + неограничено на устройството';
+  String get basicPlanDescription => '300 премиум минути + неограничено на устройството';
 
   @override
   String get minutes => 'минути';
@@ -6017,7 +6013,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
+      '300 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
 
   @override
   String get viewUsage => 'Преглед на използването';
@@ -6100,7 +6096,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
+      '300 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9019,7 +9015,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get billingYearly => 'Годишно';
 
   @override
-  String get savePercent => 'Спестете ~17%';
+  String savePercent(int percent) {
+    return 'Спестете ~$percent%';
+  }
 
   @override
   String get popular => 'Популярен';
@@ -9375,7 +9373,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Засега работи с устройства Omi. Аудиото остава на телефона ви, докато не решите да го качите.';
+      'Работи с микрофона на телефона и с устройства Omi и Limitless. Аудиото остава на телефона ви, докато не решите да го качите.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9525,4 +9523,358 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Инсталирай фърмуера';
+
+  @override
+  String get pendantRecordingTitle => 'Запис на висулката';
+
+  @override
+  String get pendantRecordingNote =>
+      'Висулката ви записва самостоятелно. Записите се синхронизират с телефона ви, докато приложението е отворено.';
+
+  @override
+  String get pendantSyncingRecordings => 'Синхронизиране на записите от висулката ви…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes мин съхранени';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Паметта на висулката е почти пълна — дръжте приложението отворено, за да се синхронизира.';
+
+  @override
+  String get connectRayBanMeta => 'Свързване на Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Използвайте вашите очила Ray-Ban Meta като устройство за заснемане на Omi за разговори и визуален контекст. Omi ще отвори приложението Meta AI, за да свърже очилата ви.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Свързване чрез Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Завършете свързването в приложението Meta AI и след това се върнете тук.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Провери отново';
+
+  @override
+  String get raybanMetaAllowCamera => 'Разреши камерата на очилата';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi използва камерата на очилата ви, за да добавя снимки към разговорите ви. Можете да пропуснете това и да използвате само аудио.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Пропусни засега';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Режим само аудио на Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Тази версия на Omi може да използва микрофона на очилата ви през Bluetooth. Заснемането на снимки изисква версията за разработчици на Omi от Meta.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'Музиката на телефона ви се поставя на пауза, докато микрофонът на очилата се използва.';
+
+  @override
+  String get raybanMetaContinue => 'Продължи';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Заснеми снимка';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Заявена е снимка — тя ще се появи в разговора ви.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Микрофонът е готов';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Заснемането на изображение е готово';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Недостъпно в режим само аудио';
+
+  @override
+  String get raybanMetaCamera => 'Камера';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Грешка при свързване с Ray-Ban Meta: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'Памет на устройството';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% запълнена';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used от $total използвани';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free свободни';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Устройството е почти пълно — синхронизирайте, за да освободите място.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Няма връзка — записва се локално. Ще бъде транскрибирано, когато отново сте онлайн.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Вашите данни са защитени по подразбиране със силно криптиране и вие контролирате как се съхраняват и използват.';
+
+  @override
+  String get sttModelAccuracy => 'Точност';
+
+  @override
+  String get whisperModelSizeBase => 'Базов';
+
+  @override
+  String get cloudTranscription => 'Облачна транскрипция';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Изтриване на модела';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Сигурни ли сте, че искате да изтриете този модел?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Изтеглен';
+
+  @override
+  String get sttModelFaster => 'По-бързо';
+
+  @override
+  String get sttFilterAuto => 'Автоматично';
+
+  @override
+  String get sttModelHigher => 'По-висока';
+
+  @override
+  String get whisperModelSizeLarge => 'Голям';
+
+  @override
+  String get sttModelLower => 'По-ниска';
+
+  @override
+  String get whisperModelSizeMedium => 'Среден';
+
+  @override
+  String get onDeviceModelDeleted => 'Моделът е изтрит';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Изтеглянето на модела не бе успешно';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Изтеглянето на модела Whisper не бе успешно. Опитайте отново.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Моделът е изтеглен';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Моделът Whisper бе изтеглен успешно';
+
+  @override
+  String get onDeviceModelSize => 'Размер на модела';
+
+  @override
+  String get sttNone => 'Няма';
+
+  @override
+  String get onDeviceTranscription => 'Транскрипция на устройството';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Транскрипцията се обработва локално на вашето устройство';
+
+  @override
+  String get sttModelSlower => 'По-бавно';
+
+  @override
+  String get whisperModelSizeSmall => 'Малък';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Доставчик за реч към текст';
+
+  @override
+  String get speechToTextProviderDesc => 'Изберете услугата, използвана за транскрипция';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Скорост';
+
+  @override
+  String get whisperModelSizeTiny => 'Много малък';
+
+  @override
+  String get transcriptionLanguage => 'Език на транскрипцията';
+
+  @override
+  String get transcriptionLanguageDesc => 'Изберете езика за транскрипция на речта';
+
+  @override
+  String get whisperModel => 'Модел Whisper';
+
+  @override
+  String get whisperModelDesc => 'Изберете модела за транскрипция на устройството';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Преминаване към безплатния план?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Ще срещнете следните ограничения:';
+
+  @override
+  String get downgradeLimitBattery => '7 пъти по-голям разход на батерия';
+
+  @override
+  String get downgradeLimitQuality => '30% по-ниско качество на транскрипцията';
+
+  @override
+  String get downgradeLimitDelay => 'Забавяне от 5–7 секунди';
+
+  @override
+  String get downgradeLimitSpeakers => 'Няма разпознаване на говорители';
+
+  @override
+  String get downgradeAnyway => 'Понижи въпреки това';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Календар не е свързан';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Свържете Google Календар, за да свързвате разговори със събития в календара.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Свързано с „$title“';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Свързването със събитие от календара не бе успешно';
+
+  @override
+  String get thanksForYourFeedback => 'Благодарим за обратната връзка!';
+
+  @override
+  String get copyMessage => 'Копиране на съобщението';
+
+  @override
+  String get searchSettings => 'Търсене в настройките…';
+
+  @override
+  String get errorLoadingAudio => 'Грешка при зареждане на аудиото';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Изберете микрофона на Ray-Ban Meta';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Изберете Bluetooth микрофона на очилата. Музиката спира, докато Omi го използва.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Не са намерени Bluetooth микрофони. Свържете очилата в настройките на iPhone и опитайте отново.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth микрофоните не можаха да се заредят. Проверете дали Bluetooth е включен и опитайте отново.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Неуспешно свързване с този микрофон. Уверете се, че е свързан в настройките на iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Твърде стар за синхронизиране — Omi не може да го приеме';
+
+  @override
+  String get planSheetChooseYourPlan => 'Изберете своя план, за да отключите неограничен Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Достъпно на Mac, мобилни устройства и в мрежата';
+
+  @override
+  String get popularBadge => 'ПОПУЛЯРЕН';
+
+  @override
+  String get worksOnDesktop => 'Работи на настолен компютър';
+
+  @override
+  String get noDesktopAccess => 'Не работи на настолен компютър';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months месеца / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count месеца безплатно',
+      one: '1 месец безплатно',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi е безплатен, но безплатната версия има ограничения, които влияят на изживяването ви:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Забавяне от 5-7 секунди (не в реално време)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Преминаване към безплатен план';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Получете безплатен неограничен достъп';
+
+  @override
+  String get shareDataForTraining => 'Споделяне на данни за обучение';
+
+  @override
+  String get yourRequestUnderReview => 'Заявката ви се разглежда';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Требуется обновление';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Установите последнее приложение Omi, чтобы продолжить после миграции аккаунта.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Идёт миграция';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Ваш аккаунт мигрирует. Функции продукта приостановлены до завершения миграции.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Ваш аккаунт на обслуживании после отката миграции. Часть более новых данных может быть изолирована.';
+
+  @override
+  String get accountCutoverOpenStore => 'Открыть магазин';
 }

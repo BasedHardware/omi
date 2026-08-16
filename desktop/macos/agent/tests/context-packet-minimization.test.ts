@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import { buildDesktopContextPacket } from "../src/runtime/desktop-context-packet.js";
 
 describe("desktop context packet builder", () => {
+  it("allocates unique occurrence ids for simultaneous identical packets", () => {
+    const input = {
+      ownerId: "owner-a",
+      surfaceKind: "task_chat",
+      objective: "same objective",
+      snippets: [],
+      retentionClass: "ephemeral" as const,
+      ttlMs: 60_000,
+      nowMs: 1_700_000_000_000,
+    };
+
+    expect(buildDesktopContextPacket(input).packet.packetId)
+      .not.toBe(buildDesktopContextPacket(input).packet.packetId);
+  });
+
   it("builds a minimized packet with hash, TTL, redacted preview, and access logs", () => {
     const result = buildDesktopContextPacket({
       ownerId: "owner-1",

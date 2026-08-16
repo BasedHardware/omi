@@ -43,8 +43,11 @@ class RecordingListItem extends StatelessWidget {
       builder: (context, provider, _) {
         final (statusColor, statusLabel) = _status(context);
         final isPlaying = provider.isPlaying(recording);
-        final timeStr =
-            dateTimeFormat('h:mm a', recording.startedAt, locale: Localizations.localeOf(context).languageCode);
+        final timeStr = dateTimeFormat(
+          'h:mm a',
+          recording.startedAt,
+          locale: Localizations.localeOf(context).languageCode,
+        );
 
         return Padding(
           padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
@@ -107,11 +110,7 @@ class RecordingListItem extends StatelessWidget {
                             width: 44,
                             height: 44,
                             decoration: const BoxDecoration(color: Color(0xFF35343B), shape: BoxShape.circle),
-                            child: Icon(
-                              isPlaying ? Icons.pause : Icons.play_arrow,
-                              color: Colors.white,
-                              size: 24,
-                            ),
+                            child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white, size: 24),
                           ),
                         ),
                       ],

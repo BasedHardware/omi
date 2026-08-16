@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { createInterface, type Interface as ReadlineInterface } from "readline";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { legacyPermissionPolicy } from "../legacy-permission-policy.js";
+import { resolveAcpPermission, resolveExternalAcpPermission } from "../runtime/desktop-tool-policy.js";
 import { adapterCapabilitiesFor, type ProductionAdapterId } from "./interface.js";
 import type {
   AdapterAttemptContext,
@@ -17,7 +17,13 @@ import type {
   ResumeBindingInput,
   RuntimeAdapter,
 } from "./interface.js";
-import { AdapterRuntimeError, failureFromProcessError, failureFromProcessExit } from "../runtime/failures.js";
+import {
+  AdapterRuntimeError,
+  failureFromProcessError,
+  failureFromProcessExit,
+  normalizeRuntimeFailure,
+  type RuntimeFailure,
+} from "../runtime/failures.js";
 
 type ResponseHandler = {
   resolve: (result: unknown) => void;
@@ -109,7 +115,112 @@ export class AcpError extends Error {
   }
 }
 
+const RECOVERABLE_AUTH_ERROR_MARKERS = [
+  "authentication_error",
+  "authentication_failed",
+  "failed to authenticate",
+  "invalid authentication credentials",
+  "oauth token has been revoked",
+  "not logged in",
+  "please run /login",
+] as const;
+
+/**
+ * Detect ACP authentication failures that should re-enter the login flow.
+ *
+ * Claude ACP reports missing credentials with the canonical -32000 code, but
+ * provider 401s during session/prompt are wrapped as -32603 internal errors.
+ * Restrict wrapped-error matching to known auth markers so unrelated internal
+ * errors remain terminal instead of opening a surprise login flow.
+ */
+/** Classifies ACP provider auth failures. Classification-only — never retry OAuth in-band. */
+export function isAcpProviderAuthFailure(error: unknown): boolean {
+  if (!(error instanceof AcpError)) return false;
+  if (error.code === -32000) return true;
+  if (error.code !== -32603) return false;
+
+  let data = "";
+  if (error.data !== undefined) {
+    try {
+      data = typeof error.data === "string" ? error.data : JSON.stringify(error.data);
+    } catch {
+      // The message remains authoritative when error data is not serializable.
+    }
+  }
+  const searchable = `${error.message}\n${data}`.toLowerCase();
+  return RECOVERABLE_AUTH_ERROR_MARKERS.some((marker) => searchable.includes(marker));
+}
+
+/** @deprecated Renamed to {@link isAcpProviderAuthFailure}; classify-only, no in-band recovery. */
+export const isRecoverableAcpAuthError = isAcpProviderAuthFailure;
+
+/** Seams for {@link beginProviderAuthWithoutBlocking}. */
+export type ProviderAuthKickoffDeps = {
+  /** Tell the host provider auth is required, so a pending turn can terminalize now. */
+  signalAuthRequired: () => void;
+  /**
+   * Run the OAuth flow: local callback server, token exchange, credential
+   * storage, ACP restart. It emits its own `auth_required` carrying the
+   * bridge-issued `authUrl` once one exists.
+   */
+  startAuthFlow: () => Promise<void>;
+  logErr: (message: string) => void;
+};
+
+/**
+ * Begin provider auth without blocking the caller.
+ *
+ * `initialize` used to `await` the OAuth flow, so a cold start with expired
+ * credentials sat inside init for the whole callback timeout with no turn on
+ * the wire to terminalize — the user's first send hung instead of failing fast
+ * (#10407). Signalling first lets that send terminalize as `authentication`
+ * immediately.
+ *
+ * The flow is still *started*, just not awaited: the host's sign-in button needs
+ * the `authUrl` only this flow can mint (Swift `ChatProvider.startClaudeAuth`
+ * refuses to open sign-in without one), so dropping the call outright would
+ * strand the user in an auth-required state with no way out.
+ */
+export function beginProviderAuthWithoutBlocking(deps: ProviderAuthKickoffDeps): void {
+  deps.signalAuthRequired();
+  // Detached on purpose — awaiting is the bug. The rejection is swallowed here so
+  // a failed flow can never surface as an unhandled rejection.
+  void deps.startAuthFlow().catch((error) => {
+    deps.logErr(`ACP background auth flow failed: ${error instanceof Error ? error.message : String(error)}`);
+  });
+}
+
 const MAX_RECENT_STDERR_CHARS = 2_000;
+
+const EXTERNAL_TERMINAL_HTTP_FAILURE = /^\s*HTTP\s+([45]\d{2})\s*:\s*(?:\{|\[)/i;
+
+/**
+ * Some external ACP servers emit an HTTP provider failure as their final text
+ * while still returning ACP `end_turn`.  Treat that exact terminal wire shape
+ * as a failure so the runtime never projects a green Done state for it.
+ *
+ * We keep this deliberately narrow: only local external adapters and only a
+ * leading 4xx/5xx JSON response are classified.  A normal agent discussion of
+ * an HTTP status therefore remains ordinary assistant text.
+ */
+function externalTerminalHttpFailure(
+  adapterId: ProductionAdapterId,
+  text: string,
+): RuntimeFailure | undefined {
+  if (adapterId !== "hermes" && adapterId !== "openclaw") return undefined;
+  const match = EXTERNAL_TERMINAL_HTTP_FAILURE.exec(text);
+  if (!match) return undefined;
+  const statusCode = Number(match[1]);
+  const label = adapterId === "hermes" ? "Hermes" : "OpenClaw";
+  return normalizeRuntimeFailure({
+    code: "adapter_terminal_http_failure",
+    source: "adapter_execution",
+    adapterId,
+    retryable: statusCode >= 500,
+    userMessage: `${label} could not complete the request. Try again.`,
+    technicalMessage: `${adapterId} ACP reported terminal HTTP ${statusCode}`,
+  });
+}
 
 function appendRecentStderr(current: string, next: string): string {
   const combined = `${current}${next}`;
@@ -457,10 +568,16 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         _meta?: { costUsd?: number };
       };
 
+      const failure = signal.aborted ? undefined : externalTerminalHttpFailure(this.adapterId, fullText);
       return {
-        text: fullText,
+        // Preserve only a bounded diagnostic in runtime/UI state when an
+        // external adapter has reported an HTTP failure as text.  The raw
+        // provider body stays in the adapter's local logs rather than being
+        // rendered as a successful agent answer.
+        text: failure?.userMessage ?? fullText,
         adapterSessionId,
-        terminalStatus: signal.aborted ? "cancelled" : "succeeded",
+        terminalStatus: signal.aborted ? "cancelled" : failure ? "failed" : "succeeded",
+        failure,
         costUsd: result._meta?.costUsd ?? 0,
         inputTokens: result.usage?.inputTokens ?? 0,
         outputTokens: result.usage?.outputTokens ?? 0,
@@ -536,14 +653,14 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   }
 
   async closeBinding(_binding: AdapterBindingHandle): Promise<void> {
-    // ACP exposes no explicit close primitive in the compatibility protocol.
+    // ACP exposes no explicit close primitive.
   }
 
   /**
    * OpenClaw (and any adapter configured with {@code sessionMcpServersMode:
    * "empty"}) strips per-session MCP servers before creating a session, so the
    * adapter-effective MCP set is always empty. Returning `[]` here lets the
-   * kernel's binding-compatibility hash reflect what the adapter actually saw,
+   * kernel's binding hash reflect what the adapter actually saw,
    * preventing spurious binding replacements when a request-scoped env var
    * (e.g. OMI_QUERY_MODE) changes in the raw input.
    */
@@ -596,8 +713,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       const options =
         (params?.options as Array<{ kind: string; optionId: string }>) ?? [];
       const decision = this.adapterId === "acp"
-        ? legacyPermissionPolicy.resolveAcpPermission({ requestId: id, options })
-        : legacyPermissionPolicy.resolveExternalAcpPermission({ adapterId: this.adapterId, requestId: id, options });
+        ? resolveAcpPermission({ requestId: id, options })
+        : resolveExternalAcpPermission({ adapterId: this.adapterId, requestId: id, options });
       this.log(`ACP permission resolved: ${JSON.stringify(decision.auditEvent)}`);
       if ("acpError" in decision) {
         this.stdinWriter?.(JSON.stringify({
@@ -712,7 +829,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         sink({
           type: "tool_activity",
           name: title,
-          status: status === "completed" ? "completed" : "failed",
+          status,
           toolUseId: toolCallId,
         });
 

@@ -15,7 +15,6 @@ class CompareTranscriptsPage extends StatefulWidget {
 }
 
 class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
-  int _selectedTab = 0;
   TranscriptsResponse? transcripts;
 
   @override
@@ -42,13 +41,9 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
         child: Column(
           children: [
             TabBar(
+              key: const ValueKey('compare_transcripts_tab_bar'),
               indicatorSize: TabBarIndicatorSize.label,
               isScrollable: false,
-              onTap: (value) {
-                setState(() {
-                  _selectedTab = value;
-                });
-              },
               padding: EdgeInsets.zero,
               indicatorPadding: EdgeInsets.zero,
               labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),

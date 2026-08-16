@@ -17,6 +17,8 @@ install_websockets_stub()
 
 from websockets.exceptions import ConnectionClosed
 
+pytestmark = pytest.mark.slow
+
 # ---------------------------------------------------------------------------
 # Helper: build a minimal pusher_heartbeat coroutine matching the real impl
 # ---------------------------------------------------------------------------

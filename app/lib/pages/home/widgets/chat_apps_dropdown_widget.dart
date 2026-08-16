@@ -103,7 +103,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                   appProvider.setSelectedChatAppId(val);
                   await context.read<MessageProvider>().refreshMessages(dropdownSelected: true);
                   var app = messageProvider.chatApps.firstWhereOrNull((a) => a.id == val);
-                  if (context.read<MessageProvider>().messages.isEmpty) {
+                  if (context.mounted && context.read<MessageProvider>().messages.isEmpty) {
                     context.read<MessageProvider>().sendInitialAppMessage(app);
                   }
                 },

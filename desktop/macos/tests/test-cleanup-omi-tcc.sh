@@ -87,8 +87,25 @@ conn.commit()
 conn.close()
 PY
 
+summary_out="$TMPDIR/summary.json"
+OMI_TCC_HOME="$home" OMI_TCC_APP_ROOTS="$apps" "$SCRIPT" --json >"$summary_out"
+
+python3 - "$summary_out" <<'PY'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+assert data["detail_mode"] == "summary", data
+assert data["details_available"] is True, data
+assert data["candidate_bundle_ids_count"] == 2, data
+assert data["tccutil_bundle_ids_count"] == 1, data
+assert data["tcc"]["row_count"] == 7, data
+assert "apps" not in data, data
+assert "preferences" not in data, data
+PY
+
 json_out="$TMPDIR/inventory.json"
-OMI_TCC_HOME="$home" OMI_TCC_APP_ROOTS="$apps" "$SCRIPT" --json >"$json_out"
+OMI_TCC_HOME="$home" OMI_TCC_APP_ROOTS="$apps" "$SCRIPT" --json --verbose >"$json_out"
 
 python3 - "$json_out" <<'PY'
 import json
@@ -130,12 +147,34 @@ import sys
 data = json.load(open(sys.argv[1]))
 log = open(sys.argv[2]).read().splitlines()
 assert log == ["reset All com.omi.omi-test-one"], log
+assert data["detail_mode"] == "summary", data
+assert data["details_available"] is True, data
+assert data["apply"]["summary"] == {"ok": 1}, data["apply"]
+assert "results" not in data["apply"], data["apply"]
+PY
+
+apply_verbose_json="$TMPDIR/apply-verbose.json"
+TCCUTIL_LOG="$TMPDIR/tccutil-verbose.log" \
+PATH="$bin:$PATH" \
+OMI_TCC_HOME="$home" \
+OMI_TCC_APP_ROOTS="$apps" \
+  "$SCRIPT" --apply-tccutil --json --verbose >"$apply_verbose_json"
+
+python3 - "$apply_verbose_json" "$TMPDIR/tccutil-verbose.log" <<'PY'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+log = open(sys.argv[2]).read().splitlines()
+assert log == ["reset All com.omi.omi-test-one"], log
+assert data["detail_mode"] == "full", data
+assert len(data["apply"]["results"]) == 1, data["apply"]
 assert data["apply"]["summary"] == {"ok": 1}, data["apply"]
 PY
 
 custom_json="$TMPDIR/custom.json"
 OMI_TCC_HOME="$home" OMI_TCC_APP_ROOTS="$apps" \
-  "$SCRIPT" --json --candidate-prefix com.omi.review- --keep-bundle-id com.omi.review-build >"$custom_json"
+  "$SCRIPT" --json --verbose --candidate-prefix com.omi.review- --keep-bundle-id com.omi.review-build >"$custom_json"
 python3 - "$custom_json" <<'PY'
 import json
 import sys

@@ -490,10 +490,10 @@ class TestSourceTrackUsageWrapping:
         count = source.count("with track_usage(")
         assert count >= 4, f"Expected >= 4 track_usage wrappers in utils/apps.py, found {count}"
 
-    def test_transcribe_py_describe_image_call(self):
-        """routers/transcribe.py must pass uid to describe_image."""
-        source = (BACKEND_ROOT / "routers" / "transcribe.py").read_text(encoding="utf-8")
-        assert "describe_image(uid," in source, "describe_image must be called with uid as first arg"
+    def test_listen_receiver_describe_image_call(self):
+        """The listen receiver must pass the request uid to describe_image."""
+        source = (BACKEND_ROOT / "routers" / "listen" / "receiver.py").read_text(encoding="utf-8")
+        assert "describe_image(self.host.request.uid," in source, "describe_image must be called with uid as first arg"
 
     def test_users_py_followup_call(self):
         """routers/users.py must pass uid to followup_question_prompt."""
@@ -506,7 +506,9 @@ class TestSourceTrackUsageWrapping:
         """utils/llm/clients.py must attach _usage_callback to ChatOpenAI."""
         source = (BACKEND_ROOT / "utils" / "llm" / "clients.py").read_text(encoding="utf-8")
         assert "_usage_callback = get_usage_callback()" in source, "clients.py must initialize the usage callback"
-        assert "'callbacks': [_usage_callback]" in source, "clients.py must attach usage callback"
+        assert (
+            "'callbacks': [_usage_callback]" in source or "callbacks.append(_usage_callback)" in source
+        ), "clients.py must attach usage callback"
 
     def test_usage_tracker_imports_in_modified_files(self):
         """Each modified file must import track_usage and Features from usage_tracker."""

@@ -12,6 +12,13 @@ The fix rejects a length mismatch with 422 and bounds-checks both ends
 corrupting data or 500ing. This test loads the conversations router fresh against stubbed heavy
 dependencies (the router pulls in clients that construct at import time -- typesense, pinecone,
 firebase -- so the fakes must precede the import) and calls the handler directly.
+
+The same index-bounds class also affected PATCH /v1/conversations/{id}/segments/{segment_idx}/assign
+(set_assignee_conversation_segment), which indexed transcript_segments[segment_idx] with no bound at
+all: an out-of-range idx 500ed (IndexError) and a negative idx silently mutated the wrong segment.
+Because that route targets a single named segment rather than a batch of parallel arrays, the fix
+returns 404 for a missing segment instead of skipping. Those regression tests live alongside the
+events ones below since they share the fixture and the same failure class.
 """
 
 import hashlib
@@ -23,6 +30,7 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
@@ -91,8 +99,8 @@ def router():
     memory_service = ModuleType("utils.memory.memory_service")
     memory_service.MemoryService = MagicMock()
 
-    surface_routing = ModuleType("utils.memory.surface_routing")
-    surface_routing.pin_memory_system = MagicMock()
+    retraction_scope = ModuleType("utils.memory.retraction_scope")
+    setattr(retraction_scope, "retraction_can_be_skipped", MagicMock(return_value=False))
 
     request_validation = ModuleType("utils.request_validation")
     setattr(request_validation, "NonNegativeOffset", int)
@@ -110,6 +118,21 @@ def router():
         "database.action_items": _pkg("database.action_items"),
         "database.memories": _pkg("database.memories"),
         "database.redis_db": _pkg("database.redis_db"),
+        "database.cache": _pkg("database.cache"),
+        "database.apps": _pkg("database.apps"),
+        "database.folders": _pkg("database.folders"),
+        "database.trends": _pkg("database.trends"),
+        "database.calendar_meetings": _pkg("database.calendar_meetings"),
+        "database.tasks": _pkg("database.tasks"),
+        "database.goals": _pkg("database.goals"),
+        "database.llm_usage": _pkg("database.llm_usage"),
+        "database.chat": _pkg("database.chat"),
+        "database.notifications": _pkg("database.notifications"),
+        "database.fair_use": _pkg("database.fair_use"),
+        "database.webhook_health": _pkg("database.webhook_health"),
+        "database.mem_db": _pkg("database.mem_db"),
+        "utils.apps": _pkg("utils.apps"),
+        "utils.conversations.merge_conversations": _pkg("utils.conversations.merge_conversations"),
         "database.users": _pkg("database.users"),
         "database.vector_db": _pkg("database.vector_db"),
         # firebase
@@ -135,6 +158,7 @@ def router():
         "utils.conversations.calendar_linking": _pkg("utils.conversations.calendar_linking"),
         "utils.conversations.calendar_utils": _pkg("utils.conversations.calendar_utils"),
         "utils.conversations.location": _pkg("utils.conversations.location"),
+        "utils.conversations.analytics": _pkg("utils.conversations.analytics"),
         "utils.llm": _pkg("utils.llm"),
         "utils.llm.conversation_processing": _pkg("utils.llm.conversation_processing"),
         "utils.speaker_identification": _pkg("utils.speaker_identification"),
@@ -143,7 +167,7 @@ def router():
         "utils.memory.memory_service": memory_service,
         "utils.memory.memory_system": memory_system,
         "utils.memory.canonical_activation": canonical_activation,
-        "utils.memory.surface_routing": surface_routing,
+        "utils.memory.retraction_scope": retraction_scope,
         "utils.retrieval": _pkg("utils.retrieval"),
         "utils.retrieval.tools": _pkg("utils.retrieval.tools"),
         "utils.retrieval.tools.calendar_tools": _pkg("utils.retrieval.tools.calendar_tools"),
@@ -167,7 +191,7 @@ class _FakeEvent:
     def __init__(self):
         self.created = False
 
-    def dict(self):
+    def model_dump(self):
         return {"created": self.created}
 
 
@@ -208,3 +232,159 @@ def test_valid_index_still_updates(router):
 
     assert events[1].created is True
     assert events[0].created is False
+
+
+class _FakeSegment:
+    """Minimal transcript segment: assignable (.is_user / .person_id) and model_dump-able."""
+
+    def __init__(self, segment_id=None):
+        self.id = segment_id
+        self.is_user = False
+        self.person_id = None
+
+    def model_dump(self):
+        return {"id": self.id, "is_user": self.is_user, "person_id": self.person_id}
+
+
+def _fake_conversation_with_segments(count, status=None, with_ids=False):
+    segments = [_FakeSegment(f"segment-{index}" if with_ids else None) for index in range(count)]
+    return SimpleNamespace(transcript_segments=segments, status=status), segments
+
+
+def _segment_assign_handler(conv):
+    """Return the real segments/{segment_idx}/assign handler off its APIRoute.
+
+    Two functions share the name ``set_assignee_conversation_segment`` in the module -- the second
+    (the ``assign-speaker/{speaker_id}`` route) rebinds the module global -- so the module attribute
+    points at the wrong one. The registered route captured the correct function object at decoration
+    time, so pull the handler from ``router.routes`` by path instead.
+    """
+    target = "/v1/conversations/{conversation_id}/segments/{segment_idx}/assign"
+    for route in conv.router.routes:
+        if getattr(route, "path", None) == target and "PATCH" in getattr(route, "methods", set()):
+            return route.endpoint
+    raise AssertionError("segments/{segment_idx}/assign route is not registered")
+
+
+def test_segment_assign_out_of_range_returns_404(router):
+    """An out-of-range segment_idx must raise 404, not IndexError -> HTTP 500."""
+    convo, segments = _fake_conversation_with_segments(2)
+    handler = _segment_assign_handler(router.conv)
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ):
+        with pytest.raises(HTTPException) as exc:
+            handler("c1", 999, "is_user", uid="u1")
+
+    assert exc.value.status_code == 404
+    # Nothing mutated: the guard fired before any assignment.
+    assert all(seg.is_user is False and seg.person_id is None for seg in segments)
+
+
+def test_segment_assign_negative_index_returns_404(router):
+    """A negative segment_idx (-1) must 404 instead of silently mutating the last segment."""
+    convo, segments = _fake_conversation_with_segments(2)
+    handler = _segment_assign_handler(router.conv)
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ):
+        with pytest.raises(HTTPException) as exc:
+            handler("c1", -1, "person_id", value="person-9", uid="u1")
+
+    assert exc.value.status_code == 404
+    assert segments[-1].person_id is None  # last segment untouched
+
+
+def test_segment_assign_valid_index_still_updates(router):
+    """Sanity: an in-range index still applies the assignment (fix must not break the happy path)."""
+    convo, segments = _fake_conversation_with_segments(2)
+    handler = _segment_assign_handler(router.conv)
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ):
+        result = handler("c1", 1, "is_user", value="true", uid="u1")
+
+    assert segments[1].is_user is True
+    assert segments[0].is_user is False  # untouched
+    assert result is convo
+
+
+def test_bulk_assign_resolves_legacy_positional_target_and_persists_canonical_id(router):
+    """The desktop's #index fallback must resolve to the same segment the backend persists."""
+    convo, segments = _fake_conversation_with_segments(
+        2,
+        status=router.conv.ConversationStatus.completed,
+        with_ids=True,
+    )
+    background_tasks = router.conv.BackgroundTasks()
+    data = router.conv.BulkAssignSegmentsRequest(
+        segment_ids=["#index:0"],
+        assign_type="person_id",
+        value="person-9",
+    )
+
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ), patch.object(router.conv.conversations_db, "update_conversation_segments"):
+        result = router.conv.assign_segments_bulk("c1", data, background_tasks, uid="u1")
+
+    assert result is convo
+    assert segments[0].person_id == "person-9"
+    assert segments[0].is_user is False
+    assert segments[1].person_id is None
+    assert len(background_tasks.tasks) == 1
+    assert background_tasks.tasks[0].kwargs["segment_ids"] == ["segment-0"]
+
+
+def test_bulk_assign_exact_id_still_supports_user_assignment(router):
+    """Already-shipped clients using persisted IDs retain the existing assignment path."""
+    convo, segments = _fake_conversation_with_segments(
+        2,
+        status=router.conv.ConversationStatus.completed,
+        with_ids=True,
+    )
+    segments[0].person_id = "old-person"
+    background_tasks = router.conv.BackgroundTasks()
+    data = router.conv.BulkAssignSegmentsRequest(
+        segment_ids=["segment-0"],
+        assign_type="is_user",
+        value="true",
+    )
+
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ), patch.object(router.conv.conversations_db, "update_conversation_segments"):
+        router.conv.assign_segments_bulk("c1", data, background_tasks, uid="u1")
+
+    assert segments[0].is_user is True
+    assert segments[0].person_id is None
+    assert segments[1].is_user is False
+    assert background_tasks.tasks == []
+
+
+def test_bulk_assign_rejects_unresolved_target_without_partial_mutation(router):
+    """A stale or malformed target must fail closed instead of reporting a silent no-op."""
+    convo, segments = _fake_conversation_with_segments(
+        2,
+        status=router.conv.ConversationStatus.completed,
+        with_ids=True,
+    )
+    segments[0].person_id = "old-person"
+    background_tasks = router.conv.BackgroundTasks()
+    data = router.conv.BulkAssignSegmentsRequest(
+        segment_ids=["segment-0", "#index:99"],
+        assign_type="person_id",
+        value="person-9",
+    )
+    update = MagicMock()
+
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ), patch.object(router.conv.conversations_db, "update_conversation_segments", update):
+        with pytest.raises(HTTPException) as exc:
+            router.conv.assign_segments_bulk("c1", data, background_tasks, uid="u1")
+
+    assert exc.value.status_code == 409
+    assert segments[0].person_id == "old-person"
+    assert update.call_count == 0
+    assert background_tasks.tasks == []

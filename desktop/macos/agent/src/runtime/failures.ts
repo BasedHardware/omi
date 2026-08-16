@@ -1,15 +1,46 @@
+import { AcpError, isAcpProviderAuthFailure } from "../adapters/acp.js";
 import type { ProductionAdapterId } from "../adapters/interface.js";
 
 export type RuntimeFailureSource = "adapter_process" | "adapter_execution" | "runtime";
 
+/** Closed cross-surface taxonomy; detailed legacy codes remain diagnostic-only. */
+export const RUNTIME_FAILURE_CODES = [
+  "authentication",
+  "quota_exceeded",
+  "invalid_request",
+  "timeout",
+  "transport_interruption",
+  "adapter_unavailable",
+  "adapter_incompatible",
+  "bridge_start_failed",
+  "provider_setup_needed",
+  "malformed_or_oversized_tool_result",
+  "cancelled",
+  "stale_owner",
+  "policy_denied",
+  "unknown",
+] as const;
+
+export type RuntimeFailureCode = (typeof RUNTIME_FAILURE_CODES)[number];
+
+export function isRuntimeFailureCode(value: unknown): value is RuntimeFailureCode {
+  return typeof value === "string" && (RUNTIME_FAILURE_CODES as readonly string[]).includes(value);
+}
+
 export interface RuntimeFailure {
+  /** Detailed local code retained for logs and backward-compatible UI copy. */
   code: string;
+  /** Bounded code carried across adapters and checked by the shared fixture. */
+  failureCode?: RuntimeFailureCode;
   userMessage: string;
   technicalMessage?: string;
   source?: RuntimeFailureSource;
   adapterId?: string;
   provider?: string;
   retryable?: boolean;
+  recoveryAction?: "worker_recycled";
+  recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
+  retryDisposition?: "next_send";
 }
 
 export class AdapterRuntimeError extends Error {
@@ -29,18 +60,93 @@ export function messageFrom(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+const CONTEXT_SNAPSHOT_PROJECTION_MISMATCH = "context_snapshot_projection_mismatch";
+
+export function unexpectedQueryErrorDiagnostic(error: unknown): string | null {
+  const message = messageFrom(error);
+  if (message === CONTEXT_SNAPSHOT_PROJECTION_MISMATCH) return null;
+  return `Unhandled query error: ${String(error)}`;
+}
+
+export const WORKER_RECYCLED_NEXT_SEND_MESSAGE =
+  "The local agent reset its session after an error. Send your message again.";
+
+const PROVIDER_BILLING_HTTP_402 = /\bhttp[\s/]*402\b/i;
+const PROVIDER_BILLING_402_STATUS = /\b(?:402\s+status|status(?:\s+code)?\s*[:=]?\s*402)\b/i;
+
+/** A 402 is a provider billing rejection, not a poisoned worker. Recycle can
+ * still clean the process; retrying the same turn cannot clear Payment Required.
+ */
+export function isProviderBillingFailure(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("payment required")
+    || PROVIDER_BILLING_HTTP_402.test(lower)
+    || PROVIDER_BILLING_402_STATUS.test(lower)
+    || lower.includes("credit balance is too low")
+  );
+}
+
+export function applyProviderBillingClassification(failure: RuntimeFailure): RuntimeFailure {
+  const haystack = `${failure.technicalMessage ?? ""}\n${failure.userMessage}`;
+  if (!isProviderBillingFailure(haystack)) return failure;
+  return {
+    ...failure,
+    failureCode: "quota_exceeded",
+    retryable: false,
+  };
+}
+
+/** Recycle metadata stays on every pi-mono execution throw so the next send
+ * can mint a fresh worker. Non-retryable causes keep their own copy — wrapping
+ * them as "send again" hid HTTP 402 behind the unclassified transcript marker.
+ */
+export function attachWorkerRecycle(
+  failure: RuntimeFailure,
+  outcome: { stopSucceeded: boolean; bindingInvalidationSucceeded: boolean },
+): RuntimeFailure {
+  const recoveryOutcome: NonNullable<RuntimeFailure["recoveryOutcome"]> = !outcome.stopSucceeded
+    ? "stop_failed"
+    : outcome.bindingInvalidationSucceeded
+      ? "recovered"
+      : "binding_stale_failed";
+  const recycled: RuntimeFailure = {
+    ...failure,
+    recoveryAction: "worker_recycled",
+    recoveryOutcome,
+  };
+  if (failure.retryable === false) return recycled;
+  return {
+    ...recycled,
+    userMessage: WORKER_RECYCLED_NEXT_SEND_MESSAGE,
+    retryable: true,
+    retryDisposition: "next_send",
+  };
+}
+
 export function failureFromError(
   error: unknown,
   fallback: Omit<RuntimeFailure, "userMessage"> & { userMessage?: string }
 ): RuntimeFailure {
   if (error instanceof AdapterRuntimeError) {
-    return error.failure;
+    return applyProviderBillingClassification(error.failure);
   }
-  return normalizeRuntimeFailure({
+  if (error instanceof AcpError && isAcpProviderAuthFailure(error)) {
+    return normalizeRuntimeFailure({
+      code: "provider_auth_required",
+      failureCode: "authentication",
+      userMessage: "Claude sign-in is required to continue this chat.",
+      technicalMessage: messageFrom(error),
+      source: fallback.source ?? "adapter_execution",
+      adapterId: fallback.adapterId ?? "acp",
+      retryable: false,
+    });
+  }
+  return applyProviderBillingClassification(normalizeRuntimeFailure({
     ...fallback,
     userMessage: fallback.userMessage ?? messageFrom(error),
     technicalMessage: fallback.technicalMessage ?? messageFrom(error),
-  });
+  }));
 }
 
 export function normalizeRuntimeFailure(failure: RuntimeFailure): RuntimeFailure {
@@ -48,9 +154,29 @@ export function normalizeRuntimeFailure(failure: RuntimeFailure): RuntimeFailure
   const technicalMessage = compactWhitespace(failure.technicalMessage ?? "");
   return {
     ...failure,
+    failureCode: failure.failureCode ?? normalizeRuntimeFailureCode(failure.code),
     userMessage,
     technicalMessage: technicalMessage || undefined,
   };
+}
+
+/** Maps every adapter/runtime detail code onto the shared bounded vocabulary. */
+export function normalizeRuntimeFailureCode(value: string): RuntimeFailureCode {
+  const code = value.toLowerCase();
+  if (code.includes("auth")) return "authentication";
+  if (code.includes("quota") || code.includes("rate_limit") || code.includes("429")) return "quota_exceeded";
+  if (code.includes("invalid") || code.includes("malformed") || code.includes("400")) return "invalid_request";
+  if (code.includes("timeout") || code.includes("timed_out")) return "timeout";
+  if (code.includes("transport") || code.includes("process") || code.includes("connection")) return "transport_interruption";
+  if (code.includes("not_registered") || code.includes("unavailable")) return "adapter_unavailable";
+  if (code.includes("config") || code.includes("incompatible") || code.includes("stale_binding")) return "adapter_incompatible";
+  if (code.includes("bridge_start")) return "bridge_start_failed";
+  if (code.includes("provider_setup")) return "provider_setup_needed";
+  if (code.includes("oversized") || code.includes("tool_result")) return "malformed_or_oversized_tool_result";
+  if (code.includes("cancel")) return "cancelled";
+  if (code.includes("stale_owner") || code.includes("owner_changed")) return "stale_owner";
+  if (code.includes("policy") || code.includes("permission") || code.includes("authority")) return "policy_denied";
+  return "unknown";
 }
 
 export function sanitizeProcessDiagnostic(text: string): string {
@@ -107,6 +233,8 @@ function classifyAdapterProcessFailure(
   return undefined;
 }
 
+// Adapter stderr is unstructured; this is the sanctioned adapter-boundary sniffing site
+// (Phase 6 item 7 exception). Prefer typed RuntimeFailure codes when the adapter can classify.
 function isOpenClawInvalidConfig(diagnostic: string): boolean {
   const lower = diagnostic.toLowerCase();
   return (

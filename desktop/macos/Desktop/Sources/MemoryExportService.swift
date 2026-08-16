@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import OmiSupport
 
 enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   case notion
@@ -21,20 +22,81 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     DesktopBackendEnvironment.pythonBaseURL()
   }
 
+  /// MCP data serving follows the selected Python serving plane, but OAuth grant
+  /// issuance and readback belong to the production identity authority for every
+  /// production-family app (including Beta).
+  static var mcpOAuthBaseURL: String {
+    DesktopBackendEnvironment.authBaseURL()
+  }
+
+  static func mcpServerURL(
+    bundleIdentifier: String,
+    environmentValue: String? = nil
+  ) -> String {
+    let useDevelopmentBackends = DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+      bundleIdentifier: bundleIdentifier,
+      updateChannel: AppBuild.currentUpdateChannel
+    )
+    return DesktopBackendEnvironment.pythonBaseURL(
+      useDevelopmentBackends: useDevelopmentBackends,
+      bundleIdentifier: bundleIdentifier,
+      environmentValue: environmentValue
+    ) + "v1/mcp/sse"
+  }
+
+  static func mcpAuthorizeURL(
+    bundleIdentifier: String,
+    environmentValue: String? = nil
+  ) -> String {
+    let useDevelopmentBackends = DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+      bundleIdentifier: bundleIdentifier,
+      updateChannel: AppBuild.currentUpdateChannel
+    )
+    return DesktopBackendEnvironment.authBaseURL(
+      useDevelopmentBackends: useDevelopmentBackends,
+      bundleIdentifier: bundleIdentifier,
+      environmentValue: environmentValue
+    ) + "authorize"
+  }
+
+  static func mcpTokenURL(
+    bundleIdentifier: String,
+    environmentValue: String? = nil
+  ) -> String {
+    let useDevelopmentBackends = DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+      bundleIdentifier: bundleIdentifier,
+      updateChannel: AppBuild.currentUpdateChannel
+    )
+    return DesktopBackendEnvironment.authBaseURL(
+      useDevelopmentBackends: useDevelopmentBackends,
+      bundleIdentifier: bundleIdentifier,
+      environmentValue: environmentValue
+    ) + "token"
+  }
+
   /// The hosted Omi MCP SSE endpoint every client connects to.
   static var mcpServerURL: String { "\(mcpBaseURL)v1/mcp/sse" }
 
   /// OAuth endpoints exposed by the same backend for MCP custom-connector setup.
-  static var mcpAuthorizeURL: String { "\(mcpBaseURL)authorize" }
-  static var mcpTokenURL: String { "\(mcpBaseURL)token" }
+  static var mcpAuthorizeURL: String { "\(mcpOAuthBaseURL)authorize" }
+  static var mcpTokenURL: String { "\(mcpOAuthBaseURL)token" }
 
   /// Registered OAuth client for ChatGPT custom connectors on this backend.
   /// Prod registers `omi-chatgpt-prod` as a PUBLIC PKCE client — the token
   /// endpoint rejects any client secret for it, so setup must leave the
   /// secret blank. Dev registers `omi-chatgpt-dev`.
   static var chatgptOAuthClientID: String {
-    mcpBaseURL.contains("api.omi.me") ? "omi-chatgpt-prod" : "omi-chatgpt-dev"
+    chatgptOAuthClientID(forOAuthBaseURL: mcpOAuthBaseURL)
   }
+
+  static func chatgptOAuthClientID(forOAuthBaseURL baseURL: String) -> String {
+    URL(string: baseURL)?.host == "api.omi.me" ? "omi-chatgpt-prod" : "omi-chatgpt-dev"
+  }
+
+  /// The approved ChatGPT directory listing. This is the primary ChatGPT
+  /// connection path; the custom-connector flow remains an advanced fallback.
+  static let chatGPTDirectoryInstallURL = URL(
+    string: "https://chatgpt.com/plugins/plugin_asdk_app_6a1490df4c588191b9339ae21978c873?q=omi")!
 
   var cloudOAuthClientID: String? {
     switch self {
@@ -42,6 +104,20 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .claude: return "omi-claude-prod"
     case .notion, .obsidian, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
       return nil
+    }
+  }
+
+  /// Client IDs that count as "authorized" when scanning OAuth grants — NOT the
+  /// same as `cloudOAuthClientID` (the setup form's per-backend value). The
+  /// ChatGPT directory is one global plugin that always grants under
+  /// `omi-chatgpt-prod`, even on a dev-backend build, so verification must accept
+  /// it or ChatGPT never connects on Beta. Mirrors backend `PUBLIC_CHATGPT_CLIENT_IDS`.
+  var cloudOAuthGrantClientIDs: Set<String> {
+    switch self {
+    case .chatgpt: return ["omi-chatgpt-prod", "omi-chatgpt-dev"]
+    case .claude: return ["omi-claude-prod"]
+    case .notion, .obsidian, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
+      return []
     }
   }
 
@@ -89,14 +165,14 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   var subtitle: String {
     switch self {
-    case .notion: return "Copy-ready page export"
+    case .notion: return "Live page in your workspace"
     case .obsidian: return "Choose once, refresh anytime"
-    case .chatgpt: return "Live MCP or memory pack"
-    case .claude: return "Live MCP or memory pack"
+    case .chatgpt: return "Use your Omi context in every chat"
+    case .claude: return "Use your Omi context in every chat"
     case .gemini: return "Prompt + memory pack"
     case .agents: return "One prompt for your agent"
-    case .claudeCode: return "Connect via MCP"
-    case .codex: return "Connect via MCP"
+    case .claudeCode: return "MCP + context skill"
+    case .codex: return "MCP + context skill"
     case .openclaw: return "Memory bank for OpenClaw"
     case .hermes: return "Memory bank for Hermes"
     }
@@ -104,16 +180,19 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   var description: String {
     switch self {
-    case .notion: return "Copy a ready-to-paste memory page and jump into Notion."
+    case .notion: return "Connect once and Omi keeps an Omi Memories page fresh in your workspace."
     case .obsidian: return "Write Omi memories into your Obsidian vault."
     case .chatgpt:
-      return "Connect over MCP so ChatGPT reads your memories live, or copy a memory pack."
+      return
+        "Add Omi in ChatGPT once, then retrieve memories, conversations, people, commitments, and screen history with source evidence."
     case .claude:
-      return "Connect over MCP so Claude reads your memories live, or copy a memory pack."
+      return "Connect over MCP so Claude can retrieve your Omi context live with source evidence."
     case .gemini: return "Copy the prompt and memory pack, then open Gemini."
     case .agents: return "Give your agent one prompt that connects Omi memories and this Mac."
-    case .claudeCode: return "Add Omi as an MCP server so Claude Code always reads your memories."
-    case .codex: return "Add Omi as an MCP server so Codex always reads your memories."
+    case .claudeCode:
+      return "Connect Omi MCP and install a skill that teaches Claude Code when to retrieve your context."
+    case .codex:
+      return "Connect Omi MCP and install a skill that teaches Codex when to retrieve your context."
     case .openclaw: return "Wire Omi memory into OpenClaw so your agent reads your memories."
     case .hermes: return "Wire Omi memory into Hermes so your agent reads your memories."
     }
@@ -153,7 +232,9 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     }
   }
 
-  /// How the "Do it for me" button performs setup.
+  /// How the primary connection button performs setup.
+  /// - `.directoryApp`: opens an approved provider directory listing. Provider
+  ///   consent completes the connection, then Omi refreshes the OAuth grant.
   /// - `.localAutonomous`: deterministic local CLI/config/file work.
   /// - `.browserAutonomous`: open the cloud connector in the user's default
   ///   signed-in browser and use native macOS automation, with assisted fallback
@@ -162,11 +243,12 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   ///   docs/cloud-connectors-roadmap.md before mapping anything back here.
   /// - `.assisted`: deterministic open + copy, with an on-screen guidance card
   ///   for cloud connectors. The user performs the final paste/click.
-  enum MCPExecuteKind { case localAutonomous, browserAutonomous, assisted }
+  enum MCPExecuteKind: Equatable { case directoryApp, localAutonomous, browserAutonomous, assisted }
   var mcpExecuteKind: MCPExecuteKind {
     switch self {
+    case .chatgpt: return .directoryApp
     case .claudeCode, .codex, .openclaw, .hermes: return .localAutonomous
-    case .chatgpt, .claude, .notion, .obsidian, .gemini, .agents: return .assisted
+    case .claude, .notion, .obsidian, .gemini, .agents: return .assisted
     }
   }
 
@@ -208,6 +290,10 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .agents, .claudeCode, .codex, .openclaw, .hermes:
       return nil
     }
+  }
+
+  var directoryInstallURL: URL? {
+    self == .chatgpt ? Self.chatGPTDirectoryInstallURL : nil
   }
 
   var manualPrompt: String {
@@ -370,7 +456,12 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         title: "Connected",
         subtitle: "OpenClaw is ready to read Omi Memory."
       )
-    case .chatgpt, .claude:
+    case .chatgpt:
+      return MCPSetupCompletionSummary(
+        title: "Authorized in ChatGPT",
+        subtitle: "ChatGPT can now use your Omi memories."
+      )
+    case .claude:
       return MCPSetupCompletionSummary(
         title: "Connected",
         subtitle: "\(title) can read Omi Memory."
@@ -483,11 +574,6 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         ("token_auth_method", cloudTokenAuthMethod ?? "none"),
         ("auth_url", Self.mcpAuthorizeURL),
         ("token_url", Self.mcpTokenURL),
-      ])
-    } else if !usesPublicCloudOAuthClient {
-      nativeToolArgs.append(contentsOf: [
-        ("oauth_client_id", "omi"),
-        ("oauth_client_secret", key),
       ])
     }
     let nativeToolJSON =
@@ -624,10 +710,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         "Copy each value into the Add custom connector form, then click Add and Connect."
       )
     case .chatgpt:
-      return (
-        "Finish in ChatGPT",
-        "In Settings → Apps → Advanced, enable Developer mode. Then click Create app and fill the fields below."
-      )
+      return nil
     default:
       return nil
     }
@@ -650,104 +733,6 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   fileprivate var connectedAtKey: String { "memoryExportConnectedAt.\(rawValue)" }
 }
 
-struct MemoryExportStatus: Sendable {
-  let exportedCount: Int
-  let lastExportedAt: Date?
-  let detailText: String?
-  let isConfigured: Bool
-  let hasConnection: Bool
-}
-
-struct MCPSetupCompletionSummary: Equatable, Sendable {
-  let title: String
-  let subtitle: String
-}
-
-struct MemoryExportConnectionPresentation: Equatable {
-  let primaryActionTitle: String?
-  let completion: MCPSetupCompletionSummary?
-
-  static func make(
-    destination: MemoryExportDestination,
-    status: MemoryExportStatus?,
-    isRunning: Bool,
-    accessibilityPreflightMissing: Bool = false
-  ) -> MemoryExportConnectionPresentation {
-    if status?.hasConnection == true {
-      return MemoryExportConnectionPresentation(
-        primaryActionTitle: nil,
-        completion: destination.mcpSetupCompletionSummary
-      )
-    }
-
-    let title: String
-    if isRunning {
-      title = "Connecting…"
-    } else {
-      switch destination.mcpExecuteKind {
-      case .localAutonomous:
-        title = "Do it for me"
-      case .browserAutonomous:
-        title = accessibilityPreflightMissing ? "Grant Accessibility" : "Do it for me"
-      case .assisted:
-        title = destination.assistedOverlayHint != nil ? "Open & guide me" : "Open & copy key"
-      }
-    }
-
-    return MemoryExportConnectionPresentation(primaryActionTitle: title, completion: nil)
-  }
-}
-
-/// Rendered MCP connection instructions for a single client.
-struct MCPSetup: Sendable {
-  let serverURL: String
-  let copyTitle: String?
-  let copyText: String?
-  let steps: [String]
-  let openURL: URL?
-  let openTitle: String?
-}
-
-struct MemoryExportResult: Sendable {
-  let memoryCount: Int
-  let detailText: String?
-  let destinationURL: URL?
-  let fileURL: URL?
-  let clipboardText: String?
-}
-
-struct AgentConnectionTestResult: Sendable {
-  let hostedMemoryCount: Int
-  let localToolCount: Int
-
-  var summary: String {
-    "Connection looks good: Omi returned \(hostedMemoryCount) hosted memories, and Desktop shared \(localToolCount) local tools."
-  }
-}
-
-enum MemoryExportError: LocalizedError {
-  case noMemories
-  case invalidNotionConfiguration
-  case invalidNotionResponse
-  case invalidObsidianVault
-  case requestFailed(String)
-
-  var errorDescription: String? {
-    switch self {
-    case .noMemories:
-      return "There are no memories available to export yet."
-    case .invalidNotionConfiguration:
-      return "Enter both a Notion integration token and a parent page ID."
-    case .invalidNotionResponse:
-      return "Notion returned an unexpected response."
-    case .invalidObsidianVault:
-      return "Choose a valid Obsidian vault folder first."
-    case .requestFailed(let message):
-      return message
-    }
-  }
-}
-
 actor MemoryExportService {
   static let shared = MemoryExportService()
 
@@ -761,17 +746,42 @@ actor MemoryExportService {
   private let notionBaseURL = URL(string: "https://api.notion.com/v1")!
   private var mcpKeyWarmTask: (ownerUserId: String, id: UUID, task: Task<String, Error>)?
 
+  private struct OAuthGrant: Decodable {
+    let clientID: String
+    let status: String?
+    let revokedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+      case clientID = "client_id"
+      case status
+      case revokedAt = "revoked_at"
+    }
+
+    var isActive: Bool {
+      revokedAt == nil && status != "revoked"
+    }
+  }
+
+  private struct OAuthGrantsResponse: Decodable {
+    let grants: [OAuthGrant]
+  }
+
   func status(for destination: MemoryExportDestination) -> MemoryExportStatus {
     let currentMCPKey = storedMCPKey()
-    let localConnections: Set<MemoryExportDestination> = destination.supportsMCP
+    let localConnections: Set<MemoryExportDestination> =
+      destination.supportsMCP
       ? MemoryExportConnectionDetector.scanLocalMCPConnections(for: destination, matchingKey: currentMCPKey)
       : []
-    return status(for: destination, localMCPConnections: localConnections)
+    return status(
+      for: destination,
+      localMCPConnections: localConnections,
+      cloudGrantObservation: destination.cloudOAuthGrantClientIDs.isEmpty ? nil : "cached_or_derived")
   }
 
   private func status(
     for destination: MemoryExportDestination,
-    localMCPConnections: Set<MemoryExportDestination>
+    localMCPConnections: Set<MemoryExportDestination>,
+    cloudGrantObservation: String? = nil
   ) -> MemoryExportStatus {
     let exportedCount = max(defaults.integer(forKey: destination.exportedCountKey), 0)
 
@@ -792,8 +802,20 @@ actor MemoryExportService {
       hasConnection = hasLocalMCPConnection
     case .claude:
       hasConnection = exportedCount > 0 || hasConnectedTimestamp || hasLocalMCPConnection
-    case .chatgpt, .notion, .obsidian, .gemini, .agents:
+    case .chatgpt:
+      // A copied memory pack is not an OAuth authorization. ChatGPT's status
+      // is only changed by the provider-backed grant refresh below.
+      hasConnection = hasConnectedTimestamp || hasLocalMCPConnection
+    case .notion, .obsidian, .gemini, .agents:
       hasConnection = exportedCount > 0 || hasConnectedTimestamp || hasLocalMCPConnection
+    }
+    if let cloudGrantObservation {
+      DesktopDiagnosticsManager.shared.recordStateAuthoritySignal(
+        seam: .connectorStatus,
+        from: cloudGrantObservation,
+        to: hasConnection ? "connected" : "not_connected",
+        direction: "cloud_grant_status_inferred",
+        subject: destination.rawValue)
     }
     let isConfigured: Bool
     switch destination {
@@ -808,7 +830,7 @@ actor MemoryExportService {
     case .chatgpt, .claude:
       isConfigured = hasConnection
     case .notion, .gemini:
-      isConfigured = exportedCount > 0
+      isConfigured = destination == .notion ? NotionMCPConnector.shared.isConnected : exportedCount > 0
     }
 
     return MemoryExportStatus(
@@ -823,9 +845,49 @@ actor MemoryExportService {
   func allStatuses() -> [MemoryExportDestination: MemoryExportStatus] {
     let localConnections = MemoryExportConnectionDetector.scanLocalMCPConnections(matchingKey: storedMCPKey())
     return Dictionary(
-      uniqueKeysWithValues: MemoryExportDestination.allCases.map { destination in
-        (destination, status(for: destination, localMCPConnections: localConnections))
+      lastWriteWins: MemoryExportDestination.allCases.map { destination in
+        (
+          destination,
+          status(
+            for: destination,
+            localMCPConnections: localConnections,
+            cloudGrantObservation: destination.cloudOAuthGrantClientIDs.isEmpty ? nil : "cached_or_derived")
+        )
       })
+  }
+
+  /// Refreshes the authoritative connection state for a cloud OAuth connector
+  /// (ChatGPT/Claude) after the user authorizes in the browser — only the backend
+  /// grant list knows the truth. Network failures intentionally retain the last
+  /// known state rather than presenting an authorization as revoked.
+  func refreshCloudGrantConnectionStatus(for destination: MemoryExportDestination) async -> MemoryExportStatus {
+    let clientIDs = destination.cloudOAuthGrantClientIDs
+    guard !clientIDs.isEmpty else { return status(for: destination) }
+    var observation = "authoritative_grant_check"
+    do {
+      let response: OAuthGrantsResponse = try await APIClient.shared.get(
+        "v1/mcp/oauth/grants", customBaseURL: MemoryExportDestination.mcpOAuthBaseURL, includeBYOK: false)
+      let isAuthorized = response.grants.contains { clientIDs.contains($0.clientID) && $0.isActive }
+
+      if isAuthorized {
+        defaults.set(Date().timeIntervalSince1970, forKey: destination.connectedAtKey)
+        defaults.set("Authorized through \(destination.title)", forKey: destination.detailKey)
+      } else {
+        defaults.removeObject(forKey: destination.connectedAtKey)
+        defaults.removeObject(forKey: destination.detailKey)
+      }
+    } catch {
+      log("MemoryExportService: \(destination.title) OAuth grant refresh failed: \(error.localizedDescription)")
+      observation = "cached_after_check_failed"
+    }
+
+    let localConnections = MemoryExportConnectionDetector.scanLocalMCPConnections(
+      for: destination,
+      matchingKey: storedMCPKey())
+    return status(
+      for: destination,
+      localMCPConnections: localConnections,
+      cloudGrantObservation: observation == "authoritative_grant_check" ? nil : observation)
   }
 
   func notionConfiguration() -> (token: String, parentPageID: String) {
@@ -1060,57 +1122,7 @@ actor MemoryExportService {
   }
 
   static var omiAgentSkillText: String {
-    """
-    ---
-    name: omi
-    description: Use Omi memories, conversations, and same-Mac context through hosted MCP and the Omi local CLI.
-    ---
-
-    # Omi Agent Skill
-
-    Use this skill when the user asks about their Omi memories, conversations, screen history, transcriptions, tasks, or wants you to use Omi context while helping.
-
-    ## Discovery
-
-    - Hosted MCP: list available tools before use. If `get_user_profile` exists, use it for a high-level summary. If it is absent or returns `profile: null`, use `get_memories(limit=5)` and `search_memories`.
-    - Local Omi CLI: run `omi --json local status` and `omi --json local tools` before local work. If status fails, Omi Desktop, the local URL, or the local token is not ready.
-
-    ## Routing
-
-    - Hosted MCP: durable memories, synced conversations, preferences, relationships, projects, goals, and profile-like context.
-    - Local CLI: this Mac's screen history, screenshots, app/window activity, local transcriptions, read-only SQL, daily recaps, indexed files, local goals, and tasks.
-    - Use `search_conversations` for synced meetings, calls, and remembered events. Use local transcription tables only for recent same-Mac or unsynced local history.
-    - Use `omi --json local search-screen` for fuzzy Rewind/OCR questions. Use `omi --json local screenshot` only after a result returns a screenshot ID and the screenshot tool is present.
-    - Use `omi --json local sql` for read-only counts, exact filters, local transcriptions, action items, indexed files, goals, and database questions.
-    - Use `omi --json local task search` only if task tools are listed.
-    - Use `omi --json local task complete` or `omi --json local task delete --yes` only when the user clearly asked you to complete or delete that task. If task tools are absent, do not mutate tasks.
-    - Use `omi --json local call <tool> --args-json '{...}'` only when a listed local tool is not covered by a friendly command.
-    - Create, edit, or delete hosted memories only after explicit user intent.
-
-    ## Verification Checklist
-
-    - Hosted MCP tools are listed.
-    - Hosted memory query succeeds with `get_memories(limit=5)` or equivalent.
-    - Local status succeeds with `omi --json local status`.
-    - Local tools are listed with `omi --json local tools`.
-    - Route only to tools that were discovered.
-
-    ## Write Discipline
-
-    - Do not create, edit, complete, or delete Omi memories or local tasks unless the user clearly asked for that change.
-    - Prefer proposing the memory or task change first when intent is ambiguous.
-    - Never treat transient screen activity as a durable memory without explicit user intent or strong evidence.
-
-    ## Setup
-
-    Hosted MCP endpoint: \(MemoryExportDestination.mcpServerURL)
-    Authorization header: Bearer <omi_mcp_key>
-    Config-file MCP clients should prefer `mcp-remote` with the endpoint and Authorization header above.
-
-    Local Omi Desktop CLI:
-    - Install or update `omi-cli`.
-    - Configure local access with `omi local configure --url <local_api_url> --token <omi_local_key>`.
-    """
+    AgentContextSkillInstaller.document
   }
 
   static func omiAgentSetupPrompt(
@@ -1269,9 +1281,16 @@ actor MemoryExportService {
     )
   }
 
-  private func fetchMemories(limit: Int) async throws -> [ServerMemory] {
+  func fetchMemories(limit: Int) async throws -> [ServerMemory] {
+    let pageSize = max(1, min(limit, 500))
     do {
-      let remoteMemories = try await APIClient.shared.getMemories(limit: limit)
+      let remoteMemories: [ServerMemory] = try await Self.fetchAllCursorPages(pageSize: pageSize) {
+        pageLimit, cursor in
+        try await APIClient.shared.getMemoriesPage(
+          limit: pageLimit,
+          cursor: cursor,
+          includeArchive: true)
+      }
       if !remoteMemories.isEmpty {
         return remoteMemories
       }
@@ -1279,7 +1298,10 @@ actor MemoryExportService {
       log("MemoryExportService: Remote memory fetch failed, falling back to local cache: \(error)")
     }
 
-    let localMemories = try await MemoryStorage.shared.getLocalMemories(limit: limit)
+    let localMemories: [ServerMemory] = try await Self.fetchAllPages(pageSize: pageSize) {
+      pageLimit, offset in
+      try await MemoryStorage.shared.getLocalMemories(limit: pageLimit, offset: offset)
+    }
     if !localMemories.isEmpty {
       return localMemories
     }
@@ -1287,7 +1309,50 @@ actor MemoryExportService {
     throw MemoryExportError.noMemories
   }
 
-  private func buildMarkdownPack(
+  /// Fetch a complete export without silently treating a UI page size as a
+  /// total-account cap. Advancing by the count returned also avoids gaps when a
+  /// backend clamps the requested page size.
+  static func fetchAllPages<Element>(
+    pageSize: Int,
+    fetch: (_ limit: Int, _ offset: Int) async throws -> [Element]
+  ) async throws -> [Element] {
+    let boundedPageSize = max(1, min(pageSize, 500))
+    var offset = 0
+    var result: [Element] = []
+    while true {
+      let page = try await fetch(boundedPageSize, offset)
+      result.append(contentsOf: page)
+      guard page.count == boundedPageSize else { return result }
+      offset += page.count
+    }
+  }
+
+  /// Page a remote memory list until the backend omits ``X-Omi-Memory-Next-Cursor``.
+  static func fetchAllCursorPages(
+    pageSize: Int,
+    fetch: (_ limit: Int, _ cursor: String?) async throws -> APIClient.MemoryListPage
+  ) async throws -> [ServerMemory] {
+    let boundedPageSize = max(1, min(pageSize, 500))
+    var cursor: String? = nil
+    var result: [ServerMemory] = []
+    var seenCursors = Set<String>()
+    while true {
+      let page = try await fetch(boundedPageSize, cursor)
+      result.append(contentsOf: page.memories)
+      guard let nextCursor = page.nextCursor, !nextCursor.isEmpty else {
+        return result
+      }
+      // Fail closed on a repeated continuation token so a buggy backend cannot
+      // pin export in an infinite loop.
+      if !seenCursors.insert(nextCursor).inserted {
+        throw MemoryExportError.requestFailed(
+          "Memory export stopped because the server repeated a continuation token.")
+      }
+      cursor = nextCursor
+    }
+  }
+
+  func buildMarkdownPack(
     memories: [ServerMemory],
     destination: MemoryExportDestination
   ) -> String {
@@ -1336,7 +1401,7 @@ actor MemoryExportService {
     return directory
   }
 
-  private func persistStatus(
+  func persistStatus(
     destination: MemoryExportDestination,
     exportedCount: Int,
     detailText: String?,

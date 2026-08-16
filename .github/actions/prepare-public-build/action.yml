@@ -1,0 +1,25 @@
+name: Prepare public build
+description: Resolve the reviewed public-build inputs for one target before Docker can build.
+inputs:
+  target:
+    description: Canonical public-build target name.
+    required: true
+  environment:
+    description: Deployment environment declared by the public-build contract.
+    required: true
+outputs:
+  build_args:
+    description: Newline-delimited Docker build arguments from the reviewed source.
+    value: ${{ steps.preflight.outputs.build_args }}
+runs:
+  using: composite
+  steps:
+    - id: preflight
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        python3 .github/scripts/preflight_public_build_config.py \
+          --target "${{ inputs.target }}" \
+          --environment "${{ inputs.environment }}" \
+          --github-output "$GITHUB_OUTPUT"

@@ -44,7 +44,7 @@ def make_openai_chat_response(content: str = None) -> dict:
     return {
         "id": "chatcmpl-fake-e2e-test",
         "object": "chat.completion",
-        "model": "gpt-4.1-mini",
+        "model": "gpt-5.6-luna",
         "choices": [
             {
                 "index": 0,

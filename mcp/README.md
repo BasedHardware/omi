@@ -43,11 +43,38 @@ A Model Context Protocol server for Omi interaction and automation. This server 
 
 ### API Key
 
-To use the Omi MCP server, you need an API key. You can generate one in the Omi app under `Settings > Developer > MCP`. The API key can be provided with each tool call. If not provided, the server will use the `OMI_API_KEY` environment variable as a fallback.
+This local stdio server uses an MCP API key. In the current Omi macOS app, choose a
+key-based destination under `Use omi memory anywhere` and expand `Manual installation` to
+copy the generated key. In the cross-platform app, open `Settings > Developer Settings`,
+scroll to `MCP Server`, and create a key in the `API Keys` list. Copy the complete
+`omi_mcp_...` value when it is created.
+
+The key can be provided with each tool call. If it is omitted, the server uses the
+`OMI_API_KEY` environment variable. The hosted Omi MCP endpoint also supports OAuth for
+registered cloud clients; this local stdio package uses the manual-key path.
 
 ### Usage with Claude Desktop
 
 Add this to your `claude_desktop_config.json`:
+
+<details>
+<summary>Using uvx (recommended)</summary>
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) first. No separate
+package installation is needed; `uvx` downloads and runs the published server:
+
+```json
+"mcpServers": {
+  "omi": {
+    "command": "uvx",
+    "args": ["mcp-server-omi"],
+    "env": {
+      "OMI_API_KEY": "omi_mcp_YOUR_KEY_HERE"
+    }
+  }
+}
+```
+</details>
 
 <details>
 <summary>Using docker</summary>
@@ -66,22 +93,26 @@ Replace `your_api_key_here` with the key you generated in the Omi app.
 ```
 </details>
 
-<!-- <details>
-<summary>Using pip installation</summary>
+<details>
+<summary>Using pip</summary>
 
-Requires python >= 3.11.6. 
-- Check `python --version`, and `brew list --versions | grep python` (you might have other versions of python installed)
-- Get the path of the python version (`which python`) or with brew
+Requires Python 3.11.6 or newer:
+
+```bash
+pip install mcp-server-omi
+```
 
 ```json
 "mcpServers": {
   "omi": {
-    "command": "/opt/homebrew/bin/python3.12",
-    "args": ["-m", "mcp_server_omi"]
+    "command": "mcp-server-omi",
+    "env": {
+      "OMI_API_KEY": "omi_mcp_YOUR_KEY_HERE"
+    }
   }
 }
 ```
-</details> -->
+</details>
 
 ## Debugging
 

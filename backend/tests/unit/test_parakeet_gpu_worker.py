@@ -72,6 +72,7 @@ def _gpu_worker_module():
         g["WorkItem"] = gw.WorkItem
         g["WorkType"] = gw.WorkType
         g["AudioDurationExceededError"] = gw.AudioDurationExceededError
+        g["classify_fatal_cuda_error"] = gw.classify_fatal_cuda_error
         g["_safe_set_result"] = gw._safe_set_result
         g["_safe_set_exception"] = gw._safe_set_exception
         g["_torch"] = _torch
@@ -99,8 +100,8 @@ def _make_mock_model():
     return model
 
 
-def _start_worker_with_mock():
-    w = GPUWorker()
+def _start_worker_with_mock(on_fatal_cuda_error=None):
+    w = GPUWorker(on_fatal_cuda_error=on_fatal_cuda_error)
     mock_model = _make_mock_model()
     nemo_asr = _get_nemo_asr()
     nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
@@ -110,8 +111,11 @@ def _start_worker_with_mock():
     return w
 
 
-class TestGPUWorkerLifecycle:
+class AcceleratorError(RuntimeError):
+    pass
 
+
+class TestGPUWorkerLifecycle:
     def test_start_and_stop(self):
         worker = _start_worker_with_mock()
         assert worker.is_ready
@@ -157,8 +161,78 @@ class TestGPUWorkerLifecycle:
         worker.stop()
 
 
-class TestGPUWorkerSubmitSync:
+class TestGPUWorkerFatalCUDA:
+    def test_typed_accelerator_error_is_fatal_without_known_message(self):
+        import gpu_worker as gw_mod
 
+        gw_mod._torch.cuda.AcceleratorError = AcceleratorError
+
+        assert classify_fatal_cuda_error(AcceleratorError("unknown CUDA runtime failure")) == "accelerator_error"
+
+    def test_accelerator_error_fails_worker_closed_and_reports_once(self):
+        import gpu_worker as gw_mod
+
+        gw_mod._torch.cuda.AcceleratorError = AcceleratorError
+        fatal_reasons = []
+        worker = _start_worker_with_mock(on_fatal_cuda_error=fatal_reasons.append)
+        model = worker._model
+        model.transcribe.side_effect = AcceleratorError("CUDA error: operation not permitted when stream is capturing")
+
+        with pytest.raises(AcceleratorError):
+            worker.submit_sync({"audio_paths": ["/tmp/a.wav"], "timestamps": True})
+
+        assert not worker.is_ready
+        assert worker.fatal_cuda_reason == "stream_capture"
+        assert fatal_reasons == ["stream_capture"]
+        assert worker.report_inference_error(AcceleratorError("another CUDA failure"))
+        assert fatal_reasons == ["stream_capture"]
+        with pytest.raises(RuntimeError, match="not ready"):
+            worker.submit_sync({"audio_paths": ["/tmp/b.wav"], "timestamps": True})
+        assert model.transcribe.call_count == 1
+        worker.stop()
+        assert worker._thread is not None and not worker._thread.is_alive()
+
+    def test_ordinary_runtime_error_does_not_poison_next_request(self):
+        worker = _start_worker_with_mock()
+        original_transcribe = worker._model.transcribe.side_effect
+        attempts = 0
+
+        def transient_error(*args, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("temporary decoder failure")
+            return original_transcribe(*args, **kwargs)
+
+        worker._model.transcribe.side_effect = transient_error
+        try:
+            with pytest.raises(RuntimeError, match="temporary decoder failure"):
+                worker.submit_sync({"audio_paths": ["/tmp/a.wav"], "timestamps": True})
+            assert worker.is_ready
+
+            result = worker.submit_sync({"audio_paths": ["/tmp/b.wav"], "timestamps": True})
+            assert result[0]["text"] == "transcribed:/tmp/b.wav"
+            assert worker.fatal_cuda_reason is None
+        finally:
+            worker.stop()
+
+    def test_cuda_oom_is_not_classified_as_fatal(self):
+        assert classify_fatal_cuda_error(RuntimeError("CUDA out of memory")) is None
+
+    def test_cuda_graphs_are_rejected_when_streaming_shares_the_gpu(self):
+        worker = GPUWorker()
+        with patch.dict(
+            os.environ,
+            {
+                "PARAKEET_STREAM_MODEL": "nvidia/parakeet-rnnt-1.1b",
+                "PARAKEET_CUDA_GRAPHS": "true",
+            },
+        ):
+            with pytest.raises(ValueError, match="must be false"):
+                worker._load_model()
+
+
+class TestGPUWorkerSubmitSync:
     @pytest.fixture(autouse=True)
     def worker(self):
         w = _start_worker_with_mock()
@@ -197,7 +271,6 @@ class TestGPUWorkerSubmitSync:
 
 
 class TestGPUWorkerSubmitAsync:
-
     @pytest.fixture(autouse=True)
     def worker(self):
         w = _start_worker_with_mock()
@@ -229,7 +302,6 @@ class TestGPUWorkerSubmitAsync:
 
 
 class TestGPUWorkerQueueFull:
-
     def test_sync_queue_full(self):
         worker = GPUWorker()
         worker._running = True
@@ -260,7 +332,6 @@ class TestGPUWorkerQueueFull:
 
 
 class TestExtractResults:
-
     def test_extract_with_timestamps(self):
         hyp = MagicMock()
         hyp.text = "hello world"
@@ -298,7 +369,6 @@ class TestExtractResults:
 
 
 class TestGPUWorkerGC:
-
     def test_gc_collect_increments_counter(self):
         worker = GPUWorker()
         worker._gc_interval = 3
@@ -321,7 +391,6 @@ class TestGPUWorkerGC:
 
 
 class TestDrainQueue:
-
     def test_drain_rejects_pending_sync_items(self):
         worker = GPUWorker()
         evt = threading.Event()
@@ -359,7 +428,6 @@ class TestDrainQueue:
 
 
 class TestSafeSetHelpers:
-
     def test_safe_set_result_on_pending(self):
         loop = asyncio.new_event_loop()
         try:
@@ -401,7 +469,6 @@ class TestSafeSetHelpers:
 
 
 class TestBF16Loading:
-
     def test_bf16_enabled_calls_to_bfloat16(self):
         import gpu_worker as gw_mod
 
@@ -449,7 +516,6 @@ class TestBF16Loading:
 
 
 class TestTorchCompile:
-
     def test_compile_enabled_wraps_model(self):
         import gpu_worker as gw_mod
 
@@ -494,7 +560,6 @@ class TestTorchCompile:
 
 
 class TestCUDAGraphConfig:
-
     def test_cuda_graphs_disabled_calls_disable(self):
         nemo_asr = _get_nemo_asr()
         mock_model = _make_mock_model()
@@ -519,7 +584,13 @@ class TestCUDAGraphConfig:
 
         worker = GPUWorker()
         with patch.dict(
-            os.environ, {"PARAKEET_CUDA_GRAPHS": "true", "PARAKEET_TORCH_COMPILE": "false", "PARAKEET_BF16": "0"}
+            os.environ,
+            {
+                "PARAKEET_STREAM_MODEL": "",
+                "PARAKEET_CUDA_GRAPHS": "true",
+                "PARAKEET_TORCH_COMPILE": "false",
+                "PARAKEET_BF16": "0",
+            },
         ):
             worker._load_model()
 
@@ -528,7 +599,6 @@ class TestCUDAGraphConfig:
 
 
 class TestTorchStartupOptimizations:
-
     def test_cudnn_benchmark_enabled(self):
         import gpu_worker as gw_mod
 
@@ -567,7 +637,6 @@ class TestTorchStartupOptimizations:
 
 
 class TestAttentionModeConfig:
-
     def test_default_attention_mode_is_full(self):
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("PARAKEET_ATTENTION_MODE", None)
@@ -675,7 +744,6 @@ class TestAttentionModeConfig:
 
 
 class TestSwitchAttention:
-
     def test_switch_to_local(self):
         with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto", "PARAKEET_LOCAL_ATTN_CONTEXT": "64,64"}):
             worker = GPUWorker()
@@ -744,7 +812,6 @@ class TestSwitchAttention:
 
 
 class TestDurationGuard:
-
     def test_duration_guard_raises_on_oversized_file(self):
         with patch.dict(os.environ, {"PARAKEET_MAX_FILE_DURATION": "60"}):
             worker = _start_worker_with_mock()
@@ -775,7 +842,6 @@ class TestDurationGuard:
 
 
 class TestAudioDurationSec:
-
     def test_soundfile_path(self, tmp_path):
         import gpu_worker as gw_mod
 
@@ -840,7 +906,6 @@ class TestAudioDurationSec:
 
 
 class TestAutoAttentionSwitching:
-
     def test_auto_switches_to_local_for_long_audio(self):
         with patch.dict(
             os.environ,
@@ -914,7 +979,6 @@ class TestAutoAttentionSwitching:
 
 
 class TestDurationGuardBoundary:
-
     def test_duration_exactly_at_limit_passes(self):
         with patch.dict(os.environ, {"PARAKEET_MAX_FILE_DURATION": "60"}):
             worker = _start_worker_with_mock()
@@ -933,7 +997,6 @@ class TestDurationGuardBoundary:
 
 
 class TestMemGetInfoGuard:
-
     def test_mem_get_info_not_called_when_cuda_unavailable(self):
         import gpu_worker as gw_mod
 
@@ -985,7 +1048,6 @@ class TestMemGetInfoGuard:
 
 
 class TestDurationPassthroughInGPUWorker:
-
     def test_durations_from_batcher_used_instead_of_file_probe(self):
         with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto", "PARAKEET_AUTO_ATTN_THRESHOLD": "300"}):
             worker = _start_worker_with_mock()

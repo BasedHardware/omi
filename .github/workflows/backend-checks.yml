@@ -1,0 +1,61 @@
+name: Backend Checks
+
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+
+concurrency:
+  group: backend-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      diff_base: ${{ steps.changes.outputs.diff_base }}
+      has_backend_runtime_env: ${{ steps.changes.outputs.has_backend_runtime_env }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: changes
+        uses: ./.github/actions/detect-changes
+
+  static-contracts:
+    name: Static Contracts
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.has_backend_runtime_env == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock*.toml
+
+      - name: Install pinned backend dependencies
+        working-directory: backend
+        run: uv pip sync pylock.toml --system
+
+      - name: Check backend runtime env manifest
+        if: needs.changes.outputs.has_backend_runtime_env == 'true'
+        run: |
+          CLOUD_RUN_VPC_NETWORK=offline-check-network \
+          CLOUD_RUN_VPC_SUBNET=offline-check-subnet \
+            backend/scripts/pre-deploy-check.sh

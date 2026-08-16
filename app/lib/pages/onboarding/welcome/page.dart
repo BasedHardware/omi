@@ -110,22 +110,24 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
       });
       _expansionController.reset();
 
-      showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () {
-            Navigator.of(context).pop();
-            openAppSettings();
-          },
-          () {},
-          context.l10n.permissionsRequired,
-          context.l10n.permissionsRequiredDesc,
-          okButtonText: context.l10n.openSettings,
-          singleButton: true,
-        ),
-        barrierDismissible: false,
-      );
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () {
+              Navigator.of(context).pop();
+              openAppSettings();
+            },
+            () {},
+            context.l10n.permissionsRequired,
+            context.l10n.permissionsRequiredDesc,
+            okButtonText: context.l10n.openSettings,
+            singleButton: true,
+          ),
+          barrierDismissible: false,
+        );
+      }
     }
   }
 

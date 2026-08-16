@@ -54,13 +54,24 @@ def merge():
     # none of it is touched by the pure functions under test.
     storage_stub = ModuleType("utils.other.storage")
     for _name in [
+        "compute_audio_files_fingerprint",
         "delete_conversation_audio_files",
+        "enqueue_conversation_artifact_build",
         "list_audio_chunks",
         "_get_storage_client",
         "private_cloud_sync_bucket",
         "_get_extension_for_path",
     ]:
         setattr(storage_stub, _name, MagicMock())
+
+    cloud_tasks_stub = ModuleType("utils.cloud_tasks")
+    cloud_tasks_stub.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+
+    # The lifecycle service owns writes used only by perform_merge_async. The
+    # pure validation surface under test must not import its database graph.
+    lifecycle_stub = ModuleType("utils.conversations.lifecycle")
+    lifecycle_stub.create_processing_conversation = MagicMock()
+    lifecycle_stub.complete = MagicMock()
 
     # models.* — referenced only inside perform_merge_async (not the validate
     # function under test), but the top-level imports still resolve at load.
@@ -93,8 +104,11 @@ def merge():
     canonical_activation_stub = ModuleType("utils.memory.canonical_activation")
     setattr(canonical_activation_stub, "canonical_write_enabled", MagicMock(return_value=False))
 
-    surface_routing_stub = ModuleType("utils.memory.surface_routing")
-    setattr(surface_routing_stub, "pin_memory_system", MagicMock(return_value=_MemorySystem.LEGACY))
+    # The retraction-scope helpers decide whether a source's canonical retraction
+    # can be skipped; only the delete path in perform_merge_async calls them.
+    retraction_scope_stub = ModuleType("utils.memory.retraction_scope")
+    for _name in ["canonical_intake_is_fenced", "historical_source_conversation_ids", "retraction_can_be_skipped"]:
+        setattr(retraction_scope_stub, _name, MagicMock())
 
     fakes: dict[str, ModuleType] = {
         "database": database_pkg,
@@ -103,12 +117,14 @@ def merge():
         "database.vector_db": vector_db_stub,
         "database.redis_db": redis_db_stub,
         "database.users": users_stub,
+        "utils.cloud_tasks": cloud_tasks_stub,
+        "utils.conversations.lifecycle": lifecycle_stub,
         "utils.other.storage": storage_stub,
         "models": models_pkg,
         "utils.memory.memory_service": memory_service_stub,
         "utils.memory.memory_system": memory_system_stub,
         "utils.memory.canonical_activation": canonical_activation_stub,
-        "utils.memory.surface_routing": surface_routing_stub,
+        "utils.memory.retraction_scope": retraction_scope_stub,
     }
     fakes.update(model_stubs)
 
@@ -174,14 +190,39 @@ class TestCoerceDt:
 # ---------------------------------------------------------------------------
 
 
-def _conv(conv_id="c1", started=None, finished=None, status="completed", locked=False):
+def _conv(conv_id="c1", started=None, finished=None, status="completed", locked=False, deleted=False):
     return {
         "id": conv_id,
         "started_at": started,
         "finished_at": finished,
         "status": status,
         "is_locked": locked,
+        "deleted": deleted,
     }
+
+
+class TestMergedDeviceProvenance:
+    def test_retains_provenance_when_all_sources_agree(self, merge):
+        assert merge._shared_client_device_provenance(
+            [
+                {"client_device_id": "ios_a1b2c3d4", "client_platform": "ios"},
+                {"client_device_id": "ios_a1b2c3d4", "client_platform": "ios"},
+            ]
+        ) == ("ios_a1b2c3d4", "ios")
+
+    def test_drops_provenance_for_mixed_or_unknown_sources(self, merge):
+        assert merge._shared_client_device_provenance(
+            [
+                {"client_device_id": "ios_a1b2c3d4", "client_platform": "ios"},
+                {"client_device_id": "macos_deadbeef", "client_platform": "macos"},
+            ]
+        ) == (None, None)
+        assert merge._shared_client_device_provenance(
+            [
+                {"client_device_id": "ios_a1b2c3d4", "client_platform": "ios"},
+                {"client_device_id": None, "client_platform": None},
+            ]
+        ) == (None, None)
 
 
 class TestValidateGateChecks:
@@ -201,6 +242,22 @@ class TestValidateGateChecks:
         ok, err, warn = merge.validate_merge_compatibility(convs)
         assert ok is False
         assert "locked" in err.lower()
+
+    def test_rejects_deleted_conversation(self, merge):
+        # A soft-deleted tombstone must never be a merge source: merging it
+        # resurrects deleted content into a new visible conversation (#10119
+        # guards the sync merge path; this guards the user-initiated merge).
+        convs = [_conv("c1", deleted=True), _conv("c2")]
+        ok, err, warn = merge.validate_merge_compatibility(convs)
+        assert ok is False
+        assert "deleted" in err.lower()
+        assert warn is None
+
+    def test_allows_non_deleted_conversations(self, merge):
+        # Baseline: the deleted guard must not reject ordinary sources.
+        ok, err, warn = merge.validate_merge_compatibility([_conv("c1"), _conv("c2")])
+        assert ok is True
+        assert err is None
 
     def test_rejects_non_completed_conversation(self, merge):
         convs = [_conv("c1"), _conv("c2", status="processing")]

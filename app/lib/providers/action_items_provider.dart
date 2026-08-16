@@ -14,7 +14,31 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
+typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
+  int limit,
+  int offset,
+  bool? completed,
+  String? conversationId,
+  DateTime? startDate,
+  DateTime? endDate,
+});
+
+typedef DeleteActionItemRequest = Future<bool> Function(String id);
+
 class ActionItemsProvider extends ChangeNotifier {
+  ActionItemsProvider({
+    ActionItemsFetcher? getActionItems,
+    DeleteActionItemRequest? deleteActionItemRequest,
+  })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
+        _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem {
+    unawaited(_preload());
+  }
+
+  final ActionItemsFetcher _getActionItems;
+  final DeleteActionItemRequest _deleteActionItemRequest;
+  Future<void>? _initialLoad;
+  bool _initialLoadCompleted = false;
+
   List<ActionItemWithMetadata> _actionItems = [];
 
   bool _isLoading = false;
@@ -44,6 +68,10 @@ class ActionItemsProvider extends ChangeNotifier {
   // Multi-selection state
   bool _isSelectionMode = false;
   Set<String> _selectedItems = {};
+
+  // IDs of action items that have been optimistically deleted but whose server
+  // delete may still be in flight. Guarded against re-insertion by fetch/load.
+  final Set<String> _pendingDeletionIds = {};
 
   // Search state — lexical client-side filter over already-loaded items.
   // Backend vector search will replace the filter implementation behind
@@ -127,13 +155,25 @@ class ActionItemsProvider extends ChangeNotifier {
     }).toList();
   }
 
-  ActionItemsProvider() {
-    _preload();
+  Future<void> _preload() async {
+    await ensureLoaded(showShimmer: true);
+    await _migrateCategoryOrderFromPrefs();
   }
 
-  void _preload() async {
-    await fetchActionItems();
-    _migrateCategoryOrderFromPrefs();
+  /// Shares the eager Home preload with the Tasks page's first visible load.
+  Future<void> ensureLoaded({bool showShimmer = false}) {
+    if (_initialLoadCompleted) return Future.value();
+
+    final existingLoad = _initialLoad;
+    if (existingLoad != null) return existingLoad;
+
+    final load = fetchActionItems(showShimmer: showShimmer).then((loaded) {
+      _initialLoadCompleted = loaded;
+    });
+    _initialLoad = load.whenComplete(() {
+      _initialLoad = null;
+    });
+    return _initialLoad!;
   }
 
   /// One-time migration: convert SharedPreferences taskCategoryOrder to sort_order on items
@@ -166,7 +206,11 @@ class ActionItemsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> fetchActionItems({bool showShimmer = false}) async {
+  static bool shouldAutoRevealCompleted(List<ActionItemWithMetadata> items) =>
+      items.isNotEmpty && items.every((item) => item.completed);
+
+  Future<bool> fetchActionItems({bool showShimmer = false}) async {
+    var loaded = false;
     if (showShimmer) {
       setLoading(true);
     } else {
@@ -174,7 +218,7 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     try {
-      final response = await api.getActionItems(
+      final response = await _getActionItems(
         limit: 100,
         offset: 0,
         completed: _includeCompleted ? null : false,
@@ -182,8 +226,31 @@ class ActionItemsProvider extends ChangeNotifier {
         endDate: _endDate,
       );
 
-      _actionItems = response.actionItems;
-      _hasMore = response.hasMore;
+      if (response != null) {
+        // Snapshot server IDs before filtering so tombstone retirement is
+        // based on the full server response, not the filtered subset.
+        final serverIds = response.actionItems.map((e) => e.id).toSet();
+        // Filter into a new list rather than mutating response.actionItems
+        // in-place: the response list may be unmodifiable, and aliasing it
+        // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
+        // and retire tombstones prematurely.
+        _actionItems = _pendingDeletionIds.isEmpty
+            ? List.of(response.actionItems)
+            : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+        // Lazily retire tombstones once the server confirms the item is gone:
+        // any ID still tracked as pending-deletion that did not appear in the
+        // fresh server response can be cleared, because subsequent refreshes
+        // will no longer see it.
+        if (_pendingDeletionIds.isNotEmpty) {
+          _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
+        }
+        _hasMore = response.hasMore;
+        loaded = true;
+
+        if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
+          _showCompletedView = true;
+        }
+      }
     } catch (e) {
       Logger.debug('Error fetching action items: $e');
     } finally {
@@ -195,6 +262,7 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     notifyListeners();
+    return loaded;
   }
 
   Future<void> loadMoreActionItems() async {
@@ -203,7 +271,7 @@ class ActionItemsProvider extends ChangeNotifier {
     setFetching(true);
 
     try {
-      final response = await api.getActionItems(
+      final response = await _getActionItems(
         limit: 50,
         offset: _actionItems.length,
         completed: _includeCompleted ? null : false,
@@ -211,8 +279,11 @@ class ActionItemsProvider extends ChangeNotifier {
         endDate: _endDate,
       );
 
-      _actionItems.addAll(response.actionItems);
-      _hasMore = response.hasMore;
+      if (response != null) {
+        final filtered = response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+        _actionItems.addAll(filtered);
+        _hasMore = response.hasMore;
+      }
     } catch (e) {
       Logger.debug('Error loading more action items: $e');
     } finally {
@@ -403,19 +474,31 @@ class ActionItemsProvider extends ChangeNotifier {
     // Delete linked Apple Reminder if one exists
     _deleteAppleReminderIfLinked(item);
 
+    // Track as pending-deletion so any background refresh doesn't re-insert it
+    // while the server delete is in flight.
+    _pendingDeletionIds.add(item.id);
+
     // Remove immediately to prevent dismissed Dismissible from being rebuilt
     _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
     notifyListeners();
 
     try {
-      final success = await api.deleteActionItem(item.id);
+      final success = await _deleteActionItemRequest(item.id);
 
       if (!success) {
         Logger.debug('Failed to delete action item on server');
+        // On failure, remove from pending set so a future reload can re-fetch it
+        _pendingDeletionIds.remove(item.id);
       }
+      // On success, the tombstone is intentionally retained: a refresh that
+      // started before the server processed the deletion may still return the
+      // deleted item. It is cleaned up lazily in fetchActionItems() once the
+      // server confirms the item is gone.
       return success;
     } catch (e) {
       Logger.debug('Error deleting action item: $e');
+      // On error, remove from pending set so a future reload can re-fetch it
+      _pendingDeletionIds.remove(item.id);
       return false;
     }
   }
@@ -745,6 +828,9 @@ class ActionItemsProvider extends ChangeNotifier {
 
     // Dismiss UI immediately — don't wait for API
     _actionItems.removeWhere((item) => _selectedItems.contains(item.id));
+    // Register all bulk-deleted IDs as pending so a concurrent background
+    // fetch cannot reinsert them while the server delete is in flight.
+    _pendingDeletionIds.addAll(ids);
     _selectedItems.clear();
     _isSelectionMode = false;
     notifyListeners();
@@ -758,6 +844,9 @@ class ActionItemsProvider extends ChangeNotifier {
     final deleted = await api.bulkDeleteActionItems(ids);
     if (deleted == null) {
       Logger.debug('bulkDeleteActionItems returned null — rolling back local list');
+      // Clear tombstones on rollback so future refreshes don't filter the
+      // re-inserted items.
+      _pendingDeletionIds.removeAll(ids);
       // Re-insert rows at their original positions, oldest index first.
       final entries = snapshot.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
       for (final entry in entries) {

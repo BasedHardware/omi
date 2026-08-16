@@ -3,6 +3,15 @@
 interface ImportMetaEnv {
   readonly MAIN_VITE_GOOGLE_CLIENT_ID?: string
   readonly MAIN_VITE_GOOGLE_CLIENT_SECRET?: string
+  /** Sentry DSN for main-process error reporting. Unset → reporting disabled. */
+  readonly MAIN_VITE_SENTRY_DSN?: string
+  /** Omi backend base URL (shared VITE_ prefix — visible to all processes).
+   *  Main uses it for the sign-in authorize/token endpoints. */
+  readonly VITE_OMI_API_BASE?: string
+  /** Firebase project id (shared VITE_ prefix — frozen into the main bundle at
+   *  build time). Main verifies the relayed Firebase ID token's aud/iss against
+   *  it (auth/firebaseIdToken.ts); it must come from here, never the renderer. */
+  readonly VITE_FIREBASE_PROJECT_ID?: string
 }
 
 interface ImportMeta {
@@ -24,5 +33,8 @@ declare namespace NodeJS {
      *  Windows UI actions) is ON by default. Set OMI_AUTOMATION='0' to disable it
      *  (kill-switch for builds that don't want the experimental feature). */
     OMI_AUTOMATION?: string
+    /** '1' forces the auto-updater to run against dev-app-update.yml even in an
+     *  unpackaged build (local update testing only). */
+    OMI_UPDATER_DEV?: string
   }
 }

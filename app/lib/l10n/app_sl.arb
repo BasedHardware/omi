@@ -1,5 +1,6 @@
 {
     "@@locale": "sl",
+    "sessionExpiredSignInAgain": "Seja je potekla — znova se prijavite.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -965,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "Vaš načrt se obnavlja na {date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "Brezplačni načrt",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1482,7 +1473,7 @@
     "exportConfiguration": "Izvozite nastavitve",
     "bringYourOwn": "Prinesite svoje",
     "payYourSttProvider": "Prostorocno uporabite omi. Plačujete samo svojemu STT ponudniku.",
-    "freeMinutesMonth": "1.200 brezplačnih minut/mesec vključenih. Neomejeno z ",
+    "freeMinutesMonth": "300 brezplačnih minut/mesec vključenih. Neomejeno z ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Potreben je gostitelj",
     "validPortRequired": "Potreben je veljaven port",
@@ -1697,22 +1688,6 @@
     "lovingOmi": "Vam je všeč Omi?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "Pomagajte nam dosegati več ljudi s povzetkom v App Storu. Vaše povratne informacije pomenijo svet!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Pomagajte nam dosegati več ljudi s povzetkom v Google Play Storu. Vaše povratne informacije pomenijo svet!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Ocenite v App Storu",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Ocenite v Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "Morda pozneje",
     "@maybeLater": {
@@ -5505,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1.200 premium minut + neomejeno na naprava",
+    "basicPlanDescription": "300 premium minut + neomejeno na naprava",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7280,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1.200 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo.",
+    "premiumMinutesInfo": "300 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7391,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1.200 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo. ",
+    "premiumMinutesMonth": "300 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10520,7 +10495,7 @@
     "upgradePlan": "Nadgradi načrt",
     "billingMonthly": "Mesečno",
     "billingYearly": "Letno",
-    "savePercent": "Prihranite ~17%",
+    "savePercent": "Prihranite ~{percent}%",
     "popular": "Priljubljeno",
     "currentPlan": "Trenutni",
     "neoSubtitle": "{count} vprašanj na mesec",
@@ -10582,6 +10557,7 @@
     "syncStatusWaiting": "Čaka na sinhronizacijo",
     "syncStatusRetrying": "Obdelava ni uspela — vnovični poskus",
     "syncStatusFailed": "Ni uspelo — tapnite Poskusi znova",
+    "syncStatusTooOld": "Prestaro za sinhronizacijo — Omi ga ne more sprejeti",
     "syncStatusFileUnavailable": "Datoteka ni na voljo",
     "syncStatusUploaded": "Naloženo · obdelava v Omi",
     "noRecordingsYet": "Še ni posnetkov",
@@ -10632,7 +10608,7 @@
     "syncCustomSttWarningMessage": "Uporabljate svojega ponudnika prepisa. Sinhronizacija teh posnetkov jih prepiše na strežnikih Omi in se štejejo v omejitev prepisa vašega paketa.",
     "transcribeLaterTitle": "Prepiši pozneje",
     "transcribeLaterDescription": "Zvok posnemite zdaj in ga prepišite pozneje, ko želite, namesto sproti. Posnetki se shranijo v vaš telefon, nato jih naložite in iz njih nastanejo pogovori.",
-    "transcribeLaterNote": "Zaenkrat deluje z napravami Omi. Zvok ostane v vašem telefonu, dokler ga ne naložite sami.",
+    "transcribeLaterNote": "Deluje z mikrofonom telefona ter napravami Omi in Limitless. Zvok ostane v vašem telefonu, dokler ga ne naložite sami.",
     "transcribeLaterStorageFull": "V telefonu primanjkuje prostora, zato je snemanje začasno ustavljeno. Sprostite prostor ali naložite posnetke in samodejno se bo nadaljevalo.",
     "unmute": "Vklopi zvok",
     "newRecording": "Novo snemanje",
@@ -10682,5 +10658,127 @@
     "deviceOnboardingIntroDuration": "Približno 1 minuta",
     "jumpToLatestMessage": "Skoči na najnovejše sporočilo",
     "latest": "Najnovejše",
-    "flashFirmware": "Namesti vdelano programsko opremo"
+    "flashFirmware": "Namesti vdelano programsko opremo",
+    "pendantRecordingTitle": "Snemanje na obesku",
+    "pendantRecordingNote": "Vaš obesek snema samostojno. Posnetki se sinhronizirajo s telefonom, dokler je aplikacija odprta.",
+    "pendantSyncingRecordings": "Sinhronizacija posnetkov z vašega obeska…",
+    "pendantMinutesStored": "~{minutes} min shranjeno",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Pomnilnik obeska je skoraj poln — pustite aplikacijo odprto za sinhronizacijo.",
+    "connectRayBanMeta": "Povežite Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Uporabite očala Ray-Ban Meta kot napravo za zajem Omi za pogovore in vizualni kontekst. Omi bo odprl aplikacijo Meta AI za povezavo vaših očal.",
+    "raybanMetaOpenMetaAI": "Povežite prek Meta AI",
+    "raybanMetaWaitingForMetaAI": "Dokončajte povezovanje v aplikaciji Meta AI, nato se vrnite sem.",
+    "raybanMetaCheckAgain": "Preverite znova",
+    "raybanMetaAllowCamera": "Dovolite kamero na očalih",
+    "raybanMetaCameraExplanation": "Omi uporablja kamero vaših očal za dodajanje fotografij k vašim pogovorom. To lahko preskočite in uporabljate samo zvok.",
+    "raybanMetaSkipForNow": "Preskoči za zdaj",
+    "raybanMetaAudioOnlyTitle": "Način samo za zvok Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Ta različica Omi lahko uporablja mikrofon vaših očal prek Bluetooth. Zajem fotografij zahteva Meta razvijalsko različico Omi.",
+    "raybanMetaMusicPauseNote": "Glasba na vašem telefonu se ustavi, medtem ko je mikrofon očal v uporabi.",
+    "raybanMetaContinue": "Nadaljujte",
+    "raybanMetaCapturePhoto": "Zajemi fotografijo",
+    "raybanMetaPhotoRequested": "Fotografija zahtevana — pojavila se bo v vašem pogovoru.",
+    "raybanMetaMicrophoneReady": "Mikrofon pripravljen",
+    "raybanMetaImageCaptureReady": "Zajem slike pripravljen",
+    "raybanMetaImageCaptureUnavailable": "Ni na voljo v načinu samo za zvok",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Napaka pri povezovanju z Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "Shramba naprave",
+    "deviceStoragePercentFull": "{percent}% zasedeno",
+    "deviceStorageUsedOfTotal": "{used} od {total} porabljeno",
+    "deviceStorageFree": "{free} prosto",
+    "deviceStorageNearlyFull": "Naprava je skoraj polna — sinhronizirajte za sprostitev prostora.",
+    "phoneMicOfflineFallbackMessage": "Ni povezave – snemanje poteka lokalno. Prepis bo opravljen, ko boste spet povezani.",
+    "dataEncryptedBanner": "Vaši podatki so privzeto zaščiteni z močnim šifriranjem, vi pa nadzorujete, kako so shranjeni in uporabljeni.",
+    "rayBanMetaMicPickerTitle": "Izberite mikrofon Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Izberite Bluetooth mikrofon očal. Glasba se začasno ustavi, ko ga uporablja Omi.",
+    "rayBanMetaMicPickerEmpty": "Ni bilo mogoče najti mikrofonov Bluetooth. Povežite očala v nastavitvah iPhona in poskusite znova.",
+    "rayBanMetaMicPickerLoadError": "Mikrofonov Bluetooth ni bilo mogoče naložiti. Preverite, ali je Bluetooth vklopljen, in poskusite znova.",
+    "rayBanMetaMicPickerConnectError": "S tem mikrofonom se ni bilo mogoče povezati. Prepričajte se, da je povezan v nastavitvah iPhona.",
+    "cloudTranscription": "Prepis v oblaku",
+    "copyMessage": "Kopiraj sporočilo",
+    "deleteOnDeviceModel": "Izbriši model",
+    "deleteOnDeviceModelConfirm": "Ali ste prepričani, da želite izbrisati ta model?",
+    "downgradeAnyway": "Vseeno preklopi",
+    "downgradeLimitBattery": "7-krat večja poraba baterije",
+    "downgradeLimitDelay": "Zakasnitev 5–7 sekund",
+    "downgradeLimitQuality": "30 % slabša kakovost prepisa",
+    "downgradeLimitSpeakers": "Govorcev ni mogoče prepoznati",
+    "downgradeLimitationsHeading": "Soočili se boste s temi omejitvami:",
+    "downgradeToFreemiumTitle": "Preklop na brezplačni paket?",
+    "errorLoadingAudio": "Napaka pri nalaganju zvoka",
+    "failedToLinkCalendarEvent": "Povezovanje s koledarskim dogodkom ni uspelo",
+    "googleCalendarConnectPrompt": "Povežite Google Koledar, da boste pogovore lahko povezali s koledarskimi dogodki.",
+    "googleCalendarNotConnected": "Google Koledar ni povezan",
+    "linkedToEvent": "Povezano z »{title}«",
+    "onDeviceModelDeleted": "Model je izbrisan",
+    "onDeviceModelDownloadFailed": "Prenos modela ni uspel",
+    "onDeviceModelDownloadFailedDesc": "Modela Whisper ni bilo mogoče prenesti. Poskusite znova.",
+    "onDeviceModelDownloadSuccess": "Model je prenesen",
+    "onDeviceModelDownloadSuccessDesc": "Model Whisper je bil uspešno prenesen",
+    "onDeviceModelDownloaded": "Preneseno",
+    "onDeviceModelSize": "Velikost modela",
+    "onDeviceTranscription": "Prepis na napravi",
+    "onDeviceTranscriptionDesc": "Prepis se obdeluje lokalno na vaši napravi",
+    "searchSettings": "Iskanje po nastavitvah…",
+    "speechToTextProvider": "Ponudnik pretvorbe govora v besedilo",
+    "speechToTextProviderDesc": "Izberite storitev, ki se uporablja za prepis",
+    "sttFilterAuto": "Samodejno",
+    "sttModelAccuracy": "Natančnost",
+    "sttModelFaster": "Hitreje",
+    "sttModelHigher": "Višja",
+    "sttModelLower": "Nižja",
+    "sttModelSlower": "Počasneje",
+    "sttModelSpeed": "Hitrost",
+    "sttNone": "Brez",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "Hvala za povratno informacijo!",
+    "transcriptionLanguage": "Jezik prepisa",
+    "transcriptionLanguageDesc": "Izberite jezik za prepis govora",
+    "whisperModel": "Model Whisper",
+    "whisperModelDesc": "Izberite model za prepis na napravi",
+    "whisperModelSizeBase": "Osnovni",
+    "whisperModelSizeLarge": "Velik",
+    "whisperModelSizeMedium": "Srednji",
+    "whisperModelSizeSmall": "Majhen",
+    "whisperModelSizeTiny": "Najmanjši",
+    "planSheetChooseYourPlan": "Izberite svoj paket in odklenite neomejeni Omi.",
+    "availableOnMacMobileWeb": "Na voljo na Macu, mobilnem in spletu",
+    "popularBadge": "PRILJUBLJENO",
+    "worksOnDesktop": "Deluje na računalniku",
+    "noDesktopAccess": "Ne deluje na računalniku",
+    "annualBillingSummary": "{months} mesecev / {price}",
+    "monthsFreeBadge": "{count, plural, one{{count} mesec brezplačno} two{{count} meseca brezplačno} few{{count} mesece brezplačno} other{{count} mesecev brezplačno}}",
+    "freemiumLimitsIntro": "Omi je brezplačen, vendar ima brezplačna različica omejitve, ki vplivajo na vašo izkušnjo:",
+    "downgradeLimitDelayNotRealTime": "Zamik 5–7 sekund (ne v realnem času)",
+    "downgradeToFreemiumAction": "Preklopi na brezplačno različico",
+    "getFreeUnlimitedAccess": "Pridobite brezplačen neomejen dostop",
+    "shareDataForTraining": "Deli podatke za učenje",
+    "yourRequestUnderReview": "Vaša zahteva je v pregledu",
+    "pinAsBaseline": "Pripni kot osnovo",
+    "unpinAsBaseline": "Odpni z osnove",
+    "baselineMemory": "Osnovni spomin",
+    "alwaysInContext": "Vedno v kontekstu",
+    "accountCutoverUpdateRequiredTitle": "Je vyžadována aktualizace",
+    "accountCutoverUpdateRequiredMessage": "Nainstalujte nejnovější aplikaci Omi, abyste mohli pokračovat po migraci účtu.",
+    "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
+    "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
+    "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
+    "accountCutoverOpenStore": "Otevřít obchod"
 }

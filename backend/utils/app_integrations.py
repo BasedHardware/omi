@@ -7,13 +7,15 @@ import time
 import httpx
 
 from utils.http_client import (
+    safe_request_target,
+    UnsafeWebhookURLError,
     get_webhook_client,
     get_webhook_circuit_breaker,
     get_webhook_semaphore,
     latest_wins_start,
     latest_wins_check,
 )
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.async_tasks import gather_safe
 import utils.dev_cache as dev_cache
 
@@ -48,8 +50,8 @@ from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
-from utils.notifications import send_notification
-from utils.llm.clients import generate_embedding
+from utils.notifications import send_notification, send_notification_async
+from utils.llm.clients import generate_embedding, get_llm
 from utils.llm.proactive_notification import (
     evaluate_relevance,
     generate_notification,
@@ -64,9 +66,25 @@ import database.conversations as conversations_db
 from utils.conversations.render import conversation_to_dict, serialize_datetimes
 from utils.log_sanitizer import sanitize
 from utils.mentor_notifications import process_mentor_notification
+from utils.observability.fallback import record_fallback
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class ExternalIntegrationFanoutError(RuntimeError):
+    """At least one durable finalization webhook did not acknowledge delivery."""
+
+
+# A retry only helps when the destination may answer differently next time.
+# Webhook health tracking (`record_app_webhook_failure`) owns the permanent
+# case: it warns the app owner and auto-disables the webhook after 72h.
+_RETRYABLE_DELIVERY_STATUSES = frozenset({408, 425, 429})
+
+
+def _delivery_failure_is_retryable(status_code: int) -> bool:
+    """Whether a non-2xx webhook response leaves the finalization job retryable."""
+    return status_code >= 500 or status_code in _RETRYABLE_DELIVERY_STATUSES
 
 
 def _notify_app_owner(app_id: str, title: str, body: str):
@@ -129,7 +147,7 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
 
     def get_contents(path):
         url = f"https://api.github.com/repos/{repo}/contents/{path}"
-        response = httpx.get(url, headers=headers)
+        response = httpx.get(url, headers=headers, timeout=30.0)
 
         if response.status_code != 200:
             logger.error(f"Failed to fetch contents for {path}: {response.status_code}")
@@ -143,7 +161,7 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
         for item in contents:
             if item["type"] == "file" and (item["name"].endswith(".md") or item["name"].endswith(".mdx")):
                 # Get raw content for documentation files
-                raw_response = httpx.get(item["download_url"], headers=headers)
+                raw_response = httpx.get(item["download_url"], headers=headers, timeout=30.0)
                 if raw_response.status_code == 200:
                     docs_content[item["path"]] = raw_response.text
 
@@ -161,8 +179,20 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
 # **************************************************
 
 
-async def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
-    """ON CONVERSATION CREATED — uses asyncio.gather + httpx (Lane 1)."""
+async def trigger_external_integrations(
+    uid: str,
+    conversation: Conversation,
+    *,
+    idempotency_key: str | None = None,
+    require_delivery: bool = False,
+) -> list:
+    """ON CONVERSATION CREATED — uses asyncio.gather + httpx (Lane 1).
+
+    Finalization workers provide a durable key so a lease replay can safely
+    retry an interrupted external fanout without creating a second effect.
+    They also require a delivery acknowledgement, preserving the existing
+    best-effort behavior for non-finalization callers.
+    """
     if not conversation or conversation.discarded:
         return []
     if conversation.is_locked:
@@ -174,6 +204,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
         return []
 
     results = {}
+    failed_deliveries: list[str] = []
 
     async def _single(app: App):
         if not app.external_integration.webhook_url:
@@ -194,18 +225,38 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
         else:
             url += '?uid=' + uid
 
+        # SSRF guard: a developer-configured webhook that resolves to a
+        # private/loopback/link-local/metadata address is a configuration
+        # error, not a delivery failure — reject it without recording a
+        # failure, tripping the circuit breaker, or failing the durable
+        # fan-out. Resolution is a blocking getaddrinfo call, so offload it
+        # to the owned db executor rather than stalling the event loop.
+        try:
+            pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, url)
+        except UnsafeWebhookURLError as e:
+            logger.warning('Rejected non-public webhook URL for app %s: %s', app.id, e)
+            return
+
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():
             logger.info(f'trigger_external_integrations: circuit breaker open for {app.id}')
+            if require_delivery:
+                failed_deliveries.append(app.id)
             return
 
         try:
             payload = serialize_datetimes(conversation_dict)
+            headers = dict(pin_kwargs['headers'])
+            if idempotency_key:
+                headers['X-Omi-Idempotency-Key'] = idempotency_key
             async with get_webhook_semaphore():
                 client = get_webhook_client()
                 response = await client.post(
-                    url,
+                    pinned_url,
                     json=payload,
+                    headers=headers,
+                    extensions=pin_kwargs['extensions'],
+                    follow_redirects=False,
                 )
             if response.status_code < 200 or response.status_code >= 300:
                 cb.record_failure()
@@ -217,6 +268,22 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
                 logger.info(
                     f'App integration failed {app.id} status: {response.status_code} result: {sanitize(response.text[:100])}'
                 )
+                if require_delivery:
+                    if _delivery_failure_is_retryable(response.status_code):
+                        failed_deliveries.append(app.id)
+                    else:
+                        # The destination rejected this payload permanently (expired
+                        # OAuth token, deleted target, malformed for that app). Every
+                        # retry repeats it verbatim, so keeping the conversation's
+                        # finalization job retryable would only strand the
+                        # conversation until the job dead-letters.
+                        record_fallback(
+                            component='webhook',
+                            from_mode='durable_delivery',
+                            to_mode='dropped',
+                            reason='auth' if response.status_code in (401, 403) else 'policy',
+                            outcome='degraded',
+                        )
                 return
 
             cb.record_success()
@@ -252,10 +319,15 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
             error_str = type(e).__name__
             action = await run_blocking(db_executor, record_app_webhook_failure, app.id, 0, error_str)
             await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
-            logger.error(f"Plugin integration error: {e}")
+            logger.error('Plugin integration request failed app=%s error=%s', app.id, type(e).__name__)
+            if require_delivery:
+                failed_deliveries.append(app.id)
             return
 
     await gather_safe(*[_single(app) for app in filtered_apps], label="trigger_integrations", max_concurrency=10)
+
+    if failed_deliveries:
+        raise ExternalIntegrationFanoutError(f'{len(failed_deliveries)} durable integration deliveries failed')
 
     messages = []
     for key, message in results.items():
@@ -588,9 +660,12 @@ def _process_proactive_notification(uid: str, app: App, data):
 
     chat_messages = []
     if 'user_chat' in filter_scopes:
-        chat_messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
-
-    from utils.llm.clients import get_llm
+        # Skip any malformed/legacy stored message rather than letting one bad record raise a
+        # ValidationError that aborts the whole notification. The sole caller swallows exceptions
+        # from here, so an unguarded build silently dropped the proactive notification every run
+        # until the bad row aged out of the last-10 window. deserialize_many_safe (#8882) is the
+        # shared safe-deserialize path for exactly this class.
+        chat_messages = list(reversed(Message.deserialize_many_safe(get_app_messages(uid, app.id, limit=10))))
 
     # Build prompt with substitutions
     for param in filter_scopes:
@@ -606,7 +681,8 @@ def _process_proactive_notification(uid: str, app: App, data):
             )
     prompt = prompt.replace('    ', '').strip()
 
-    message = get_llm('app_integration').invoke(prompt).content
+    with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
+        message = get_llm('app_integration').invoke(prompt).content
     if not message or len(message) < min_message_char_limit:
         logger.info(f"Plugins {app.id}, message too short {uid}")
         return None
@@ -621,7 +697,7 @@ def _process_proactive_notification(uid: str, app: App, data):
 
 
 async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
-    apps: List[App] = get_available_apps(uid)
+    apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_realtime_audio_bytes() and app.enabled]
     if not filtered_apps:
         return {}
@@ -644,17 +720,32 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
         separator = '&' if '?' in url else '?'
         url += f'{separator}sample_rate={sample_rate}&uid={uid}'
 
+        # SSRF guard (see trigger_external_integrations): a non-public
+        # developer-configured webhook URL is a config error, not a delivery
+        # failure — reject without recording failure or tripping the breaker.
+        try:
+            pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, url)
+        except UnsafeWebhookURLError as e:
+            logger.warning('Rejected non-public webhook URL for app %s: %s', app.id, e)
+            return
+
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():
             return
 
         try:
+            headers = dict(pin_kwargs['headers'])
+            headers['Content-Type'] = 'application/octet-stream'
             async with get_webhook_semaphore():
                 if not latest_wins_check(uid, version):
                     return  # Check again after acquiring semaphore
                 client = get_webhook_client()
                 response = await client.post(
-                    url, content=bytes(data), headers={'Content-Type': 'application/octet-stream'}
+                    pinned_url,
+                    content=bytes(data),
+                    headers=headers,
+                    extensions=pin_kwargs['extensions'],
+                    follow_redirects=False,
                 )
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
@@ -692,7 +783,7 @@ async def _async_trigger_realtime_integrations(
     # Paywall: skip mentor + third-party proactive notifications when this
     # transcription session belongs to a paywalled desktop user.
     # Reactivates automatically when the user upgrades or activates BYOK.
-    if is_trial_paywalled(uid, source):
+    if await run_blocking(db_executor, is_trial_paywalled, uid, source):
         return {}
 
     # Process mentor notification first (built-in feature) — sync, runs in thread
@@ -700,7 +791,12 @@ async def _async_trigger_realtime_integrations(
     conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
     if conversation_messages:
         with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-            mentor_message = _process_mentor_proactive_notification(uid, conversation_messages)
+            mentor_message = await run_blocking(
+                postprocess_executor,
+                _process_mentor_proactive_notification,
+                uid,
+                conversation_messages,
+            )
         if mentor_message:
             mentor_results['mentor'] = mentor_message
             logger.info(f"Sent mentor notification to user {uid}")
@@ -731,6 +827,15 @@ async def _async_trigger_realtime_integrations(
         else:
             url += '?uid=' + uid
 
+        # SSRF guard (see trigger_external_integrations): a non-public
+        # developer-configured webhook URL is a config error, not a delivery
+        # failure — reject without recording failure or tripping the breaker.
+        try:
+            pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, url)
+        except UnsafeWebhookURLError as e:
+            logger.warning('Rejected non-public webhook URL for app %s: %s', app.id, e)
+            return
+
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():
             logger.info(f'trigger_realtime_integrations: circuit breaker open for {app.id}')
@@ -739,7 +844,13 @@ async def _async_trigger_realtime_integrations(
         try:
             async with get_webhook_semaphore():
                 client = get_webhook_client()
-                response = await client.post(url, json={"session_id": uid, "segments": segments})
+                response = await client.post(
+                    pinned_url,
+                    json={"session_id": uid, "segments": segments},
+                    headers=pin_kwargs['headers'],
+                    extensions=pin_kwargs['extensions'],
+                    follow_redirects=False,
+                )
             if response.status_code < 200 or response.status_code >= 300:
                 cb.record_failure()
                 error_str = f'HTTP {response.status_code}'
@@ -773,14 +884,20 @@ async def _async_trigger_realtime_integrations(
                 # message
                 message = response_data.get('message', '')
                 if message and len(message) > 5:
-                    send_app_notification(uid, app.name, app.id, message)
+                    await send_app_notification_async(uid, app.name, app.id, message)
                     results[app.id] = message
 
                 # proactive_notification
                 noti = response_data.get('notification', None)
                 if app.has_capability("proactive_notification"):
                     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-                        message = _process_proactive_notification(uid, app, noti)
+                        message = await run_blocking(
+                            postprocess_executor,
+                            _process_proactive_notification,
+                            uid,
+                            app,
+                            noti,
+                        )
                     if message:
                         results[app.id] = message
             except Exception:
@@ -808,7 +925,9 @@ async def _async_trigger_realtime_integrations(
     return messages
 
 
-def send_app_notification(user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'):
+def _build_app_notification_payload(
+    app_name: str, app_id: str, message: str, target: str
+) -> tuple[str, dict[str, object]]:
     navigate_to = '/chat/omi' if target == 'main' else f'/chat/{app_id}'
     ai_message = NotificationMessage(
         text=message,
@@ -818,5 +937,17 @@ def send_app_notification(user_id: str, app_name: str, app_id: str, message: str
         notification_type='plugin',
         navigate_to=navigate_to,
     )
+    return app_name + ' says', NotificationMessage.get_message_as_dict(ai_message)
 
-    send_notification(user_id, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+
+def send_app_notification(user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'):
+    title, data = _build_app_notification_payload(app_name, app_id, message, target)
+    send_notification(user_id, title, message, data)
+
+
+async def send_app_notification_async(
+    user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'
+) -> None:
+    """Async notification boundary for realtime integration coordinators."""
+    title, data = _build_app_notification_payload(app_name, app_id, message, target)
+    await send_notification_async(user_id, title, message, data)

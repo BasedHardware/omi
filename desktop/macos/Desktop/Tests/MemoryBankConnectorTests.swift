@@ -15,7 +15,7 @@ final class MemoryBankConnectorTests: XCTestCase {
     MemoryBankConnector.claudeCLIPathOverrideForTesting = ""
     MemoryBankConnector.codexCLIPathOverrideForTesting = ""
     MemoryBankConnector.openClawCLIPathOverrideForTesting = try writeFakeOpenClawCLI().path
-    MemoryBankConnector.processTimeoutSecondsForTesting = 2
+    MemoryBankConnector.processTimeoutSecondsForTesting = 5
   }
 
   override func tearDownWithError() throws {
@@ -34,16 +34,16 @@ final class MemoryBankConnectorTests: XCTestCase {
   func testClaudeCodeConnectWritesUserScopedMCPServer() throws {
     let config = tempHome.appendingPathComponent(".claude.json")
     try """
-      {
-        "theme": "dark",
-        "mcpServers": {
-          "other": {
-            "type": "http",
-            "url": "https://example.com/mcp"
-          }
+    {
+      "theme": "dark",
+      "mcpServers": {
+        "other": {
+          "type": "http",
+          "url": "https://example.com/mcp"
         }
       }
-      """.write(to: config, atomically: true, encoding: .utf8)
+    }
+    """.write(to: config, atomically: true, encoding: .utf8)
 
     let message = try MemoryBankConnector.connect(.claudeCode, key: "test-key")
 
@@ -59,6 +59,13 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertEqual(headers["Authorization"] as? String, "Bearer test-key")
     XCTAssertNotNil(servers["other"])
     XCTAssertTrue(MemoryExportConnectionDetector.hasExistingConnection(for: .claudeCode, matchingKey: "test-key"))
+    let skillURL = try XCTUnwrap(AgentContextSkillInstaller.skillURL(for: .claudeCode, home: tempHome))
+    let skill = try String(contentsOf: skillURL, encoding: .utf8)
+    XCTAssertEqual(skill, MemoryExportService.omiAgentSkillText)
+    XCTAssertTrue(skill.contains("`search_conversations`"))
+    XCTAssertTrue(skill.contains("`get_people`"))
+    XCTAssertTrue(skill.contains("`get_action_items`"))
+    XCTAssertTrue(skill.contains("`get_screen_activity`"))
 
     let backups = try FileManager.default.contentsOfDirectory(
       at: tempHome.appendingPathComponent(".claude/backups", isDirectory: true),
@@ -69,18 +76,18 @@ final class MemoryBankConnectorTests: XCTestCase {
   func testClaudeCodeConnectUpdatesExistingOmiServerKey() throws {
     let config = tempHome.appendingPathComponent(".claude.json")
     try """
-      {
-        "mcpServers": {
-          "omi-memory": {
-            "type": "http",
-            "url": "\(MemoryExportDestination.mcpServerURL)",
-            "headers": {
-              "Authorization": "Bearer old-key"
-            }
+    {
+      "mcpServers": {
+        "omi-memory": {
+          "type": "http",
+          "url": "\(MemoryExportDestination.mcpServerURL)",
+          "headers": {
+            "Authorization": "Bearer old-key"
           }
         }
       }
-      """.write(to: config, atomically: true, encoding: .utf8)
+    }
+    """.write(to: config, atomically: true, encoding: .utf8)
 
     let message = try MemoryBankConnector.connect(.claudeCode, key: "new-key")
 
@@ -98,10 +105,10 @@ final class MemoryBankConnectorTests: XCTestCase {
   func testClaudeCodeConfigBackupsAreBounded() throws {
     let config = tempHome.appendingPathComponent(".claude.json")
     try """
-      {
-        "theme": "dark"
-      }
-      """.write(to: config, atomically: true, encoding: .utf8)
+    {
+      "theme": "dark"
+    }
+    """.write(to: config, atomically: true, encoding: .utf8)
 
     for index in 0..<7 {
       _ = try MemoryBankConnector.connect(.claudeCode, key: "key-\(index)")
@@ -132,6 +139,28 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertTrue(content.contains(MemoryExportDestination.mcpServerURL))
     XCTAssertTrue(content.contains("Authorization: Bearer test-key"))
     XCTAssertTrue(MemoryExportConnectionDetector.hasExistingConnection(for: .codex, matchingKey: "test-key"))
+    let skillURL = try XCTUnwrap(AgentContextSkillInstaller.skillURL(for: .codex, home: tempHome))
+    XCTAssertEqual(
+      try String(contentsOf: skillURL, encoding: .utf8),
+      MemoryExportService.omiAgentSkillText
+    )
+  }
+
+  func testClaudeCodeConnectPreservesExistingUserAuthoredOmiSkill() throws {
+    try "{}".write(
+      to: tempHome.appendingPathComponent(".claude.json"),
+      atomically: true,
+      encoding: .utf8
+    )
+    let skillURL = try XCTUnwrap(AgentContextSkillInstaller.skillURL(for: .claudeCode, home: tempHome))
+    try FileManager.default.createDirectory(
+      at: skillURL.deletingLastPathComponent(),
+      withIntermediateDirectories: true
+    )
+    try "user-authored".write(to: skillURL, atomically: true, encoding: .utf8)
+
+    XCTAssertEqual(try MemoryBankConnector.connect(.claudeCode, key: "test-key"), "Claude Code is now connected.")
+    XCTAssertEqual(try String(contentsOf: skillURL, encoding: .utf8), "user-authored")
   }
 
   func testCodexConnectRequiresCLI() throws {
@@ -143,10 +172,10 @@ final class MemoryBankConnectorTests: XCTestCase {
   func testCodexConnectRedactsTokenFromCLIError() throws {
     let cli = tempHome.appendingPathComponent("echoing-codex")
     try """
-      #!/bin/sh
-      echo "bad args: $*" >&2
-      exit 1
-      """.write(to: cli, atomically: true, encoding: .utf8)
+    #!/bin/sh
+    echo "bad args: $*" >&2
+    exit 1
+    """.write(to: cli, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
     MemoryBankConnector.codexCLIPathOverrideForTesting = cli.path
 
@@ -185,10 +214,10 @@ final class MemoryBankConnectorTests: XCTestCase {
     try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
     let config = configDir.appendingPathComponent("openclaw.json")
     try """
-      {
-        agents: { defaults: { workspace: "\(workspace.path)" } },
-      }
-      """.write(to: config, atomically: true, encoding: .utf8)
+    {
+      agents: { defaults: { workspace: "\(workspace.path)" } },
+    }
+    """.write(to: config, atomically: true, encoding: .utf8)
     _ = try MemoryBankConnector.connect(.openclaw, key: "test-key")
 
     let configContent = try String(contentsOf: config, encoding: .utf8)
@@ -208,21 +237,21 @@ final class MemoryBankConnectorTests: XCTestCase {
     let node = install.appendingPathComponent("node")
     try "#!/usr/bin/env definitely-missing-node\n".write(to: cli, atomically: true, encoding: .utf8)
     try """
-      #!/bin/sh
-      shift
-      if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
-        exit 1
-      fi
-      if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
-        printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
-        exit 0
-      fi
-      if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
-        exit 0
-      fi
-      echo "unexpected arguments: $*" >&2
-      exit 2
-      """.write(to: node, atomically: true, encoding: .utf8)
+    #!/bin/sh
+    shift
+    if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
+      exit 1
+    fi
+    if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
+      printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
+      exit 0
+    fi
+    if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
+      exit 0
+    fi
+    echo "unexpected arguments: $*" >&2
+    exit 2
+    """.write(to: node, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: node.path)
     MemoryBankConnector.openClawCLIPathOverrideForTesting = cli.path
@@ -278,7 +307,8 @@ final class MemoryBankConnectorTests: XCTestCase {
     try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
     let config = try writeOpenClawConfig(workspace: workspace)
     let cliBin = tempHome.appendingPathComponent(".local/bin", isDirectory: true)
-    let nodeBin = tempHome.appendingPathComponent(".local/share/fnm/node-versions/v22.0.0/installation/bin", isDirectory: true)
+    let nodeBin = tempHome.appendingPathComponent(
+      ".local/share/fnm/node-versions/v22.0.0/installation/bin", isDirectory: true)
     try FileManager.default.createDirectory(at: cliBin, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: nodeBin, withIntermediateDirectories: true)
     let cli = cliBin.appendingPathComponent("openclaw")
@@ -335,14 +365,14 @@ final class MemoryBankConnectorTests: XCTestCase {
     try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
     let config = configDir.appendingPathComponent("openclaw.json")
     try """
-      {
-        "agents": {
-          "defaults": {
-            "workspace": "${HOME}/custom-openclaw-workspace"
-          }
+    {
+      "agents": {
+        "defaults": {
+          "workspace": "${HOME}/custom-openclaw-workspace"
         }
       }
-      """.write(to: config, atomically: true, encoding: .utf8)
+    }
+    """.write(to: config, atomically: true, encoding: .utf8)
 
     _ = try MemoryBankConnector.connect(.openclaw, key: "test-key")
 
@@ -369,16 +399,16 @@ final class MemoryBankConnectorTests: XCTestCase {
     _ = try writeOpenClawConfig(workspace: workspace)
     let cli = tempHome.appendingPathComponent("echoing-openclaw")
     try """
-      #!/bin/sh
-      if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
-        exit 1
-      fi
-      if [ "$1" = "mcp" ] && [ "$2" = "set" ]; then
-        echo "rejected payload $4" >&2
-        exit 1
-      fi
-      exit 0
-      """.write(to: cli, atomically: true, encoding: .utf8)
+    #!/bin/sh
+    if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
+      exit 1
+    fi
+    if [ "$1" = "mcp" ] && [ "$2" = "set" ]; then
+      echo "rejected payload $4" >&2
+      exit 1
+    fi
+    exit 0
+    """.write(to: cli, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
     MemoryBankConnector.openClawCLIPathOverrideForTesting = cli.path
 
@@ -410,21 +440,21 @@ final class MemoryBankConnectorTests: XCTestCase {
     let reloadMarker = tempHome.appendingPathComponent("openclaw-reloaded")
     let cli = tempHome.appendingPathComponent("reload-openclaw")
     try """
-      #!/bin/sh
-      if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
-        exit 1
-      fi
-      if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
-        printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
-        exit 0
-      fi
-      if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
-        touch "\(reloadMarker.path)"
-        exit 0
-      fi
-      echo "unexpected arguments: $*" >&2
-      exit 2
-      """.write(to: cli, atomically: true, encoding: .utf8)
+    #!/bin/sh
+    if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
+      exit 1
+    fi
+    if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
+      printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
+      exit 0
+    fi
+    if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
+      touch "\(reloadMarker.path)"
+      exit 0
+    fi
+    echo "unexpected arguments: $*" >&2
+    exit 2
+    """.write(to: cli, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
     MemoryBankConnector.openClawCLIPathOverrideForTesting = cli.path
 
@@ -439,21 +469,21 @@ final class MemoryBankConnectorTests: XCTestCase {
     _ = try writeOpenClawConfig(workspace: workspace)
     let cli = tempHome.appendingPathComponent("reload-failing-openclaw")
     try """
-      #!/bin/sh
-      if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
-        exit 1
-      fi
-      if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
-        printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
-        exit 0
-      fi
-      if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
-        echo "reload unavailable" >&2
-        exit 7
-      fi
-      echo "unexpected arguments: $*" >&2
-      exit 2
-      """.write(to: cli, atomically: true, encoding: .utf8)
+    #!/bin/sh
+    if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
+      exit 1
+    fi
+    if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
+      printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
+      exit 0
+    fi
+    if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
+      echo "reload unavailable" >&2
+      exit 7
+    fi
+    echo "unexpected arguments: $*" >&2
+    exit 2
+    """.write(to: cli, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
     MemoryBankConnector.openClawCLIPathOverrideForTesting = cli.path
 
@@ -543,6 +573,44 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertEqual(agents, "legacy agents prompt")
   }
 
+  // MARK: - isInstalled (onboarding upfront probe must match the connect path)
+
+  func testIsInstalledCodexRequiresCLINotJustConfigDir() throws {
+    // The exact regression: a stray ~/.codex dir with no `codex` on PATH used to
+    // pass the loose upfront probe, so onboarding showed "Connect" and only flipped
+    // to "not installed" after the click. isInstalled must require the CLI.
+    try FileManager.default.createDirectory(
+      at: tempHome.appendingPathComponent(".codex", isDirectory: true), withIntermediateDirectories: true)
+    XCTAssertFalse(MemoryBankConnector.isInstalled(.codex))  // codexCLIPathOverrideForTesting == "" from setUp
+
+    MemoryBankConnector.codexCLIPathOverrideForTesting = try writeFakeCodexCLI().path
+    XCTAssertTrue(MemoryBankConnector.isInstalled(.codex))
+  }
+
+  func testIsInstalledClaudeCodeDetectsConfig() throws {
+    XCTAssertFalse(MemoryBankConnector.isInstalled(.claudeCode))
+    try "{}".write(
+      to: tempHome.appendingPathComponent(".claude.json"), atomically: true, encoding: .utf8)
+    XCTAssertTrue(MemoryBankConnector.isInstalled(.claudeCode))
+  }
+
+  func testIsInstalledOpenClawRequiresConfigAndWorkspace() throws {
+    // setUp already provides a fake openclaw CLI, so this isolates the config gate.
+    XCTAssertFalse(MemoryBankConnector.isInstalled(.openclaw))  // no config yet
+    let workspace = tempHome.appendingPathComponent(".openclaw/workspace", isDirectory: true)
+    try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+    _ = try writeOpenClawConfig(workspace: workspace)
+    XCTAssertTrue(MemoryBankConnector.isInstalled(.openclaw))
+  }
+
+  func testIsInstalledHermesRequiresInstallEvidence() throws {
+    let hermes = tempHome.appendingPathComponent(".hermes", isDirectory: true)
+    try FileManager.default.createDirectory(at: hermes, withIntermediateDirectories: true)
+    XCTAssertFalse(MemoryBankConnector.isInstalled(.hermes))  // bare dir, no config/install
+    _ = try writeHermesInstall()
+    XCTAssertTrue(MemoryBankConnector.isInstalled(.hermes))
+  }
+
   private func writeOpenClawConfig(workspace: URL, extra: String = "") throws -> URL {
     let configDir = tempHome.appendingPathComponent(".openclaw", isDirectory: true)
     try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
@@ -570,62 +638,62 @@ final class MemoryBankConnectorTests: XCTestCase {
   private func writeFakeCodexCLI() throws -> URL {
     let cli = tempHome.appendingPathComponent("codex")
     try """
-      #!/bin/sh
-      if [ "$1" = "mcp" ] && [ "$2" = "add" ] && [ "$3" = "omi-memory" ]; then
-        mkdir -p "$CODEX_HOME"
-        cat > "$CODEX_HOME/config.toml" <<EOF
-      [mcp_servers.omi-memory]
-      command = "npx"
-      args = ["-y", "mcp-remote", "$8", "--header", "${10}"]
-      EOF
-        exit 0
-      fi
-      echo "unexpected arguments: $*" >&2
-      exit 2
-      """.write(to: cli, atomically: true, encoding: .utf8)
+    #!/bin/sh
+    if [ "$1" = "mcp" ] && [ "$2" = "add" ] && [ "$3" = "omi-memory" ]; then
+      mkdir -p "$CODEX_HOME"
+      cat > "$CODEX_HOME/config.toml" <<EOF
+    [mcp_servers.omi-memory]
+    command = "npx"
+    args = ["-y", "mcp-remote", "$8", "--header", "${10}"]
+    EOF
+      exit 0
+    fi
+    echo "unexpected arguments: $*" >&2
+    exit 2
+    """.write(to: cli, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
     return cli
   }
 
   private func fakeOpenClawScript() -> String {
     """
-      #!/bin/sh
-      if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
+    #!/bin/sh
+    if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
+      exit 1
+    fi
+    if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
+      if grep -Fq '"mcp":[]' "$OPENCLAW_CONFIG_PATH"; then
+        echo "mcp: Invalid input: expected object, received array" >&2
         exit 1
       fi
-      if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
-        if grep -Fq '"mcp":[]' "$OPENCLAW_CONFIG_PATH"; then
-          echo "mcp: Invalid input: expected object, received array" >&2
-          exit 1
-        fi
-        printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
-        exit 0
-      fi
-      if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
-        exit 0
-      fi
-      echo "unexpected arguments: $*" >&2
-      exit 2
-      """
+      printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
+      exit 0
+    fi
+    if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
+      exit 0
+    fi
+    echo "unexpected arguments: $*" >&2
+    exit 2
+    """
   }
 
   private func nodeBackedFakeOpenClawScript() -> String {
     """
-      #!/bin/sh
-      shift
-      if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
-        exit 1
-      fi
-      if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
-        printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
-        exit 0
-      fi
-      if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
-        exit 0
-      fi
-      echo "unexpected arguments: $*" >&2
-      exit 2
-      """
+    #!/bin/sh
+    shift
+    if [ "$1" = "mcp" ] && [ "$2" = "show" ]; then
+      exit 1
+    fi
+    if [ "$1" = "mcp" ] && [ "$2" = "set" ] && [ "$3" = "omi-memory" ]; then
+      printf '{"mcp":{"servers":{"omi-memory":%s}}}\\n' "$4" > "$OPENCLAW_CONFIG_PATH"
+      exit 0
+    fi
+    if [ "$1" = "mcp" ] && [ "$2" = "reload" ]; then
+      exit 0
+    fi
+    echo "unexpected arguments: $*" >&2
+    exit 2
+    """
   }
 
   private func writeHermesInstall(config: String = "model:\n  default: test\n") throws -> URL {

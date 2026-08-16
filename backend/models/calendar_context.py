@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Callable, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -27,7 +27,11 @@ class CalendarMeetingContext(BaseModel):
     )
 
     @classmethod
-    def from_records(cls, records, on_error=None) -> List['CalendarMeetingContext']:
+    def from_records(
+        cls,
+        records: List[dict[str, Any]],
+        on_error: Optional[Callable[[dict[str, Any], Exception], None]] = None,
+    ) -> List['CalendarMeetingContext']:
         """Build a list of contexts from raw stored records, skipping any that fail
         validation so a single malformed meeting cannot hide all of a user's meetings.
         `on_error(record, exception)`, when provided, is called for each skipped record.

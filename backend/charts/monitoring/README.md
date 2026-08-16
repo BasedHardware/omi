@@ -2,6 +2,21 @@
 
 Prometheus + Grafana + Loki observability stack for the Omi backend on GKE.
 
+## Production telemetry contract (#9587)
+
+Repo-enforceable inventory of expected prod scrape targets, routing labels, and
+no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.prod.yaml).
+
+- **Enforced in CI** by `backend/tests/unit/test_monitoring_telemetry_contract.py`.
+- Jobs marked `coverage_status: enforced` must appear in `omi-journey-scrape-missing`.
+- Jobs marked `coverage_status: declared` are wired in values/ServiceMonitors but
+  do not yet have a dedicated coverage alert (follow-up to expand the scrape-missing rule).
+- Managed GKE control-plane exclusions (`kubeProxy` / `kubeScheduler` /
+  `kubeControllerManager`) are documented here and owned by #9138 / PR #11093 —
+  do not page `TargetDown` for those endpoints.
+- Live Instatus delivery verification and notification-policy rework remain
+  maintainer-approved Phase 2 work (not claimed by the inventory).
+
 ## Architecture
 
 ```
@@ -77,11 +92,11 @@ The service chart includes a `ServiceMonitor` CRD that Prometheus auto-discovers
 
 **2. Pod annotations + additionalScrapeConfigs**
 
-Used by: backend-listen, pusher, deepgram engine, GPU metrics, Stackdriver.
+Used by: backend-listen, pusher, llm-gateway, deepgram engine, GPU metrics, Stackdriver.
 
 Pods set annotations (`prometheus.io/scrape: "true"`, `prometheus.io/port`, `prometheus.io/path`) and a matching `additionalScrapeConfigs` entry in `kube-prometheus-stack` values defines the scrape job.
 
-Backend-listen and pusher require bearer token auth via the `metrics-scrape-token` secret.
+Backend-listen, pusher, and llm-gateway require bearer token auth via the `metrics-scrape-token` secret.
 
 ### Custom Scrape Jobs (prod)
 
@@ -91,10 +106,18 @@ These are the `additionalScrapeConfigs` and ServiceMonitor targets. Built-in kub
 |-----|--------|----------|------|
 | `backend-listen-metrics` | backend-listen pods `/metrics:8080` | 15s | Bearer token |
 | `pusher-metrics` | pusher pods `/metrics:8080` | 15s | Bearer token |
+| `llm-gateway-metrics` | llm-gateway pods `/metrics:8080` | 15s | Bearer token |
 | `dg_engine_metrics` | DG engine pods in `prod-omi-dg-self-hosted` | 2s | None |
 | `gpu-metrics` | all pods in `gke-managed-system` (includes DCGM exporter) | 1s | None |
 | `prometheus-stackdriver-metrics` | Stackdriver exporter in `prod-omi-monitoring` | 1s | None |
 | ServiceMonitor: `parakeet` | parakeet pods `/metrics:9091` | 15s | None |
+
+For llm-gateway streams, `llm_gateway_requests_total{outcome="success"}` is emitted only after the provider's
+terminal SSE marker (`data: [DONE]` or Anthropic `event: message_stop`) is observed. EOF without that marker,
+transport failure after first output, and client cancellation have separate bounded `outcome`, `phase`, and
+`error_class` values. This proves provider completion, not guaranteed delivery of the terminal chunk to the client.
+`credential_source` separates Omi-managed traffic from service-forwarded BYOK without putting key material or user
+identity in labels. `llm_gateway_stream_ttfb_seconds` records time to the first non-empty provider chunk.
 
 ### Log Pipeline
 
@@ -236,7 +259,7 @@ Folder: `GKE` (folder UID: `aev9igt5fwgsgc`)
 | Pusher | `c758b698-01a0-4b5c-b58c-e81e4ff33ccd` | Audio pusher service |
 | VAD | `72cfe240-ae8c-4076-845e-c58e28f12d87` | Voice activity detection GPU service |
 
-### Omi Services (4) — cross-cutting dashboards
+### Omi Services (5) — cross-cutting dashboards
 
 Folder: `Omi Services` (folder UID: `betdycdziadc0e`)
 
@@ -246,15 +269,16 @@ Folder: `Omi Services` (folder UID: `betdycdziadc0e`)
 | Cloud Run Services - Logs | `d2d782ef-f537-46b8-969d-f73561ec7d07` | Aggregated Cloud Run logs view |
 | Global External ALB | `59aa0de7-15c6-413f-acba-b7e99296ad75` | External load balancer metrics |
 | Omi Kubernetes Events | `3714dbfa-114b-47a0-99ca-1a26354e792a` | K8s event stream (OOM kills, pod evictions) |
+| Resilience / Fallbacks | `omi-resilience-fallbacks` | Fallback rates, sync/pusher SLOs, gateway ticket tier — see `backend/docs/runbooks/resilience-dashboards.md` |
 
 ### Dashboard Summary
 
 | Category | Count | Source | Version-controlled |
 |----------|------:|--------|--------------------|
 | Bundled (kube-prometheus-stack) | 28 | Helm chart sidecar | Yes (via chart defaults) |
-| Custom (Omi-specific) | 16 | Exported from Grafana UI | Yes — `dashboards/` directory |
+| Custom (Omi-specific) | 17 | Exported from Grafana UI | Yes — `dashboards/` directory |
 
-All 16 custom dashboards are exported to `dashboards/` as provisioning-ready JSON (`.id` and `.version` stripped). The K8s Node Metrics dashboard (`your_custom_uid_X0dfg`) is a community import bundled with the chart and not separately exported.
+All 17 custom dashboards are exported to `dashboards/` as provisioning-ready JSON (`.id` and `.version` stripped). The K8s Node Metrics dashboard (`your_custom_uid_X0dfg`) is a community import bundled with the chart and not separately exported.
 
 ## Developer Guide
 
@@ -468,7 +492,7 @@ git add dashboards/parakeet-asr-monitoring.json
 git commit -m "sync(monitoring): export parakeet dashboard from Grafana UI"
 ```
 
-**Bulk sync (all 16 custom dashboards):**
+**Bulk sync (all 17 custom dashboards):**
 ```bash
 export GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omi.me"
@@ -495,6 +519,7 @@ declare -A DASHBOARDS=(
   ["d2d782ef-f537-46b8-969d-f73561ec7d07"]="omi-services"
   ["59aa0de7-15c6-413f-acba-b7e99296ad75"]="omi-services"
   ["3714dbfa-114b-47a0-99ca-1a26354e792a"]="omi-services"
+  ["omi-resilience-fallbacks"]="omi-services"
 )
 
 for uid in "${!DASHBOARDS[@]}"; do
@@ -538,6 +563,54 @@ curl -s -X POST -H "Authorization: Bearer $PROD_GRAFANA_TOKEN" \
 Alerting is configured through Grafana unified alerting (not Prometheus AlertManager rules directly). Alert screenshots are enabled via the Grafana image renderer.
 
 Loki ruler is configured to send alerts to AlertManager at `http://prod-kube-prometheus-stack-alertmanager:9093`.
+
+### Human-Impact Alert Contract
+
+Grafana rules are operational runbook entries, not raw metric dumps. The split files in `alerts/*.json` are the
+maintained sources; `alert-rules.json` is the canonical combined Grafana import. They must contain the same rules
+with byte-for-byte equal objects when indexed by stable Grafana UID. The deterministic monitoring contract test checks
+both exports, including duplicate UIDs, before a change can land.
+
+Every rule carries these notification fields:
+
+| Field | Purpose |
+|---|---|
+| `labels.alert_identity` | Stable Grafana rule UID for deduplication and cross-export matching. |
+| `labels.component` | Static affected Omi component. |
+| `labels.impact` | One of `infrastructure`, `product`, or `user-experience`. |
+| `annotations.summary` | A short human description of the condition. |
+| `annotations.user_impact` | What an Omi user may experience; state uncertainty when impact is only potential. |
+| `annotations.scope` | The bounded service or user path covered by the signal. |
+| `annotations.verification` | The next evidence to confirm before intervention. |
+| `annotations.safe_next_action` | The reversible, documented operator action after verification. |
+
+The tiers describe evidence, not paging severity:
+
+- `infrastructure`: capacity, readiness, resource, or scrape signals. They may warn before a user is affected.
+- `product`: evidence that an Omi service capability may fail, be delayed, or be unavailable.
+- `user-experience`: observed degradation of a real Omi user path.
+
+Product and user-experience rules must use production, real-traffic evidence. Do not treat synthetic checks, load tests,
+staging traffic, or an inferred proxy metric as proof of user impact. Infrastructure rules may use service-health metrics,
+but their `user_impact` annotation must make potential impact clear rather than claim a confirmed user outage.
+
+Never place raw provider responses, exception text, stack traces, or dynamic Grafana error output in these annotations.
+Keep the message human-readable and direct the operator to the linked dashboard for bounded verification. Do not change
+Grafana credentials, contact points, or routing configuration while adding a rule.
+
+Parakeet stream-capacity alerts use the existing `parakeet_active_streams` gauge divided by ready Parakeet replicas:
+
+```promql
+sum(parakeet_active_streams{container="parakeet", namespace="prod-omi-backend"})
+  / clamp_min(sum(kube_deployment_status_replicas_ready{
+      deployment="prod-omi-parakeet", namespace="prod-omi-backend"}), 1)
+```
+
+This avoids a cluster-total threshold that would become misleading as HPA replica count changes. The warning threshold is
+15 streams per ready replica for five minutes and the critical threshold is 20 for two minutes, both below the known
+approximately 25–30 stream per-replica capability. No-data is healthy for these capacity rules: absent metrics are not
+evidence of saturation. Operator response is in
+[`parakeet-stream-capacity.md`](../../docs/runbooks/parakeet-stream-capacity.md).
 
 ## Dashboard & Metrics Lifecycle
 
@@ -584,7 +657,8 @@ backend/charts/monitoring/
 │       ├── cloud-armor-denied-requests.json
 │       ├── cloud-run-services-logs.json
 │       ├── global-external-alb.json
-│       └── omi-kubernetes-events.json
+│       ├── omi-kubernetes-events.json
+│       └── resilience-fallbacks.json
 ├── alerts/                              # (proposed) PrometheusRule or Grafana alert YAML
 │   └── ...
 ├── kube-prometheus-stack/               # existing

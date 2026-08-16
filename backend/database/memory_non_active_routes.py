@@ -36,6 +36,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from database._client import db
 from database.memory_collections import MemoryCollections
+from database.read_boundary import parse_snapshot_strict
 
 
 class NonActiveRoute(str, Enum):
@@ -118,7 +119,7 @@ def _persist_non_active_route_outcome_transaction(
     outcome_ref = db_client.document(f"{collections.non_active_memory_routes}/{persisted.outcome_id}")
     snapshot = outcome_ref.get(transaction=transaction)
     if snapshot.exists:
-        existing = PersistedNonActiveRouteOutcome(**(snapshot.to_dict() or {}))
+        existing = parse_snapshot_strict(PersistedNonActiveRouteOutcome, snapshot)
         if existing.payload_fingerprint != persisted.payload_fingerprint:
             raise NonActiveRouteStoreConflict("idempotency key payload mismatch")
         return existing

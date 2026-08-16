@@ -2,6 +2,7 @@
 
 **Status:** Locked product/architecture decisions after Oracle prescription + David decisions
 **Date:** 2026-06-18
+**Last updated:** 2026-07-27 — broad Short-term intake, one terminal consolidation route, and atomic graph-backed Long-term admission
 **Supersedes:** Historical Wave 1/2/3 planning language in `memory_product_integration_epic.md` where it conflicts with this document.
 
 ---
@@ -11,8 +12,8 @@
 | Concept | Normative decision |
 |---|---|
 | Product tiers | Exactly `short_term`, `long_term`, `archive`. |
-| Short-term | Fresh/default-access source-backed memory, while useful and not yet stabilized. |
-| Long-term | Stable synthesized memory, backed by ledger commits. |
+| Short-term | Broad, fresh, source-backed intake while useful and not yet stabilized. Every new memory starts here. |
+| Long-term | Stable synthesized memory, backed by an atomic promotion admission receipt, ledger commit, and per-memory graph assertion. |
 | Archive | Explicit-query historical/source-backed context; never default access. |
 | Context-only | Not a product tier. May remain only as a legacy/internal processing alias and must normalize to Archive or another non-default outcome. |
 | Review/reject/skip | Processing outcomes, not user-visible product tiers. |
@@ -47,7 +48,13 @@ Existing/current stores:
 ### Long-term authority
 
 - Long-term source of truth remains the append-only memory ledger.
-- `memory_items/{memory_id}` contains the transactionally synchronized product projection for Long-term reads/UI/API compatibility.
+- A newly admitted active Long-term item is authoritative only when its
+  `memory_items/{memory_id}` row, server-authored promotion admission receipt,
+  and `memory_graph_assertions/{memory_id}` document share the same atomic
+  ledger commit and version fences.
+- Shared knowledge-graph nodes/edges, keyword indexes, vectors, and compatibility
+  rows are derived projections. They never substitute for the per-memory
+  assertion or canonical item.
 
 ### Stable identity
 
@@ -76,39 +83,43 @@ captured_at
 updated_at
 expires_at  # required for Short-term
 ledger_commit_id / ledger_sequence  # required for active Long-term
+promotion.admission_receipt  # required for every new Short-term → Long-term admission
+graph_ready / graph_assertion_id / graph_plan_hash  # required for admitted active Long-term
 ```
 
 Access is derived from canonical state; do not persist drifting booleans like `normal_default_access` as authority.
 
 ---
 
-## 3. Rollout and rollback
+## 3. Universal operations and rollback
 
-Keep a simple external rollout mode, but define exact semantics:
+Every authenticated account uses the same memory authority. Deployment modes
+are global incident/cost declarations only; they never select users or stores:
 
 | Mode | Behavior |
 |---|---|
-| `off` | Legacy only. No memory reads/writes/workers for non-whitelisted users. |
-| `shadow` | Legacy authoritative; memory audit artifacts only; no product-visible writes. |
-| `write` | Legacy reads remain authoritative; memory sidecar writes may run for whitelisted users after gates pass. |
-| `read` | Superset of `write`; memory read service becomes authoritative for whitelisted users. |
+| `off` | Pause new canonical intake and scheduled maintenance; keep the universal dual-format reader so canonical data never disappears. |
+| `shadow` | Deprecated observation declaration; it cannot change product routing. |
+| `write` | Canonical intake enabled globally; the universal reader remains authoritative. |
+| `read` | Normal universal operation: canonical writes plus canonical/historical merged reads. |
 
-Required per-user rollout state:
+Required per-account correctness state:
 
 ```text
-mode_epoch
-cutover_epoch
 account_generation
-last_reconciled_legacy_revision
-fallback_projection_ready
-stage gate statuses
+head_commit_id / source_generation
+writes_blocked
+historical materialization overrides and tombstones
 ```
 
 Rollback:
 
-- `read → write` can be one config change only because reads fall back to the reconciled memory-derived compatibility projection.
-- `write → off` is not a blind flag flip after persistent memory writes; it requires explicit decommission reconciliation.
-- Rollback must not make memory-created memories disappear, resurrect deleted legacy values, or expose stale vectors.
+- The universal dual-format reader is the rollback floor. Never roll back to a
+  legacy-only reader after canonical writes have started.
+- A global pause may stop intake or L2 work, but cannot make canonical memories
+  disappear or resurrect suppressed historical rows.
+- Privacy tombstones and account-generation fences are irreversible routing
+  authority even while provider cleanup is retrying.
 
 ---
 
@@ -128,6 +139,7 @@ memory_state/head
 memory_operations/{operation_id}
 account_generation / writes_blocked
 all referenced source/memory versions and tombstones
+the server-authored promotion admission receipt and graph plan for a Short-term → Long-term transition
 ```
 
 The transaction must write atomically:
@@ -137,6 +149,7 @@ memory_commits/{commit_id}
 memory_state/head
 memory_operations/{operation_id}
 affected memory_items/{memory_id}
+memory_graph_assertions/{memory_id} for every newly admitted active Long-term item
 memory_outbox/{event_id}
 memory_legacy_fallback/{memory_id} when required for rollback/cutover
 ```
@@ -148,7 +161,12 @@ Rules:
 - Logical idempotency excludes observed head, retry count, and patch array index.
 - Head mismatch creates `needs_replan`, not blind apply.
 - A process crash before transaction leaves retryable operation; crash after commit is harmless and replay returns stored result.
-- No commit may exist without matching head, operation result, and product projection.
+- No new active Long-term commit may exist without the matching admission
+  receipt, version-fenced graph assertion, head, operation result, product
+  item, and outbox records.
+- Projection delivery is not part of admission. The transaction durably
+  records projection intent; bounded workers hydrate current authoritative
+  state, apply idempotent/version-checked side effects, and retry failures.
 
 ### Operation journal
 
@@ -183,15 +201,30 @@ A cursor may advance only when every input has a terminal outcome or a recorded 
 ## 5. Live ingestion and lifecycle
 
 - Replace generic `L1MemoryArchiveItem` as the normal source-backed extraction contract with `SourceBackedMemoryCandidate`.
-- Fresh extracted candidates start as `tier=short_term` unless imported/aged directly to Archive by explicit policy.
+- Every newly captured candidate starts as `tier=short_term`, including
+  conversation extraction, first-party “remember this,” imports, generic API
+  writes, plugins, and integrations.
 - Existing `L1MemoryArchiveItem` may stay only as a deprecated fixture/import adapter.
-- Explicit first-party “remember this” may create Long-term directly as a user assertion.
-- Automated extraction and generic third-party/API writes default to Short-term.
+- Historical migration/backfill may materialize a prior tier under its explicit
+  migration policy; that is not new intake and must not introduce a reusable
+  direct-to-Long-term write path.
 
 Short-term lifecycle:
 
 - Default freshness window: **30 days** from capture or last corroboration.
-- Successful Long-term promotion transitions/supersedes source-backed items atomically.
+- Required normalization and TTL audit run before one authoritative
+  consolidation pass.
+- Every pending, eligible item receives exactly one terminal consolidation
+  route: `promote`, `archive`, `review`, or `reject`. Model output must be an
+  exact partition of the pending batch before any route mutates state.
+- `promote` is the only route to Long-term. It binds the current item revision,
+  output content hash, evidence IDs, supersedes set, and graph plan into a
+  server-authored admission receipt, then writes the Long-term item and
+  per-memory graph assertion in the same transaction.
+- `archive`, `review`, and `reject` settle outside default access according to
+  their status/review policy; they never fall through to promotion.
+- There is no generic batch/daily promotion pass and no first-party,
+  user-asserted, or fast-track bypass.
 - Unprocessed expiry moves the item to Archive with reason `expired_unprocessed`.
 - Review defaults unresolved items to Archive, not a user-visible review tier.
 - MVP review remains internal/admin/conversational; no mandatory end-user review queue.
@@ -209,14 +242,20 @@ Mandatory guardrails:
 - Missing/malformed tier/status/user/version/source-state metadata fails closed.
 - Vector results are candidate IDs only; authoritative `memory_items` hydration is required before returning anything.
 - Hydration rejects stale versions, cross-user records, Archive in default mode, hidden/tombstoned records, and restricted sensitivity/app-scope records.
-- Outbox consumers are idempotent/version-checked; deletes and tombstones outrank upserts.
+- Canonical commits persist keyword/vector/compatibility projection intent in
+  `memory_outbox`; consumers lease due events, hydrate authoritative state,
+  apply idempotent/version-checked side effects, retry failures with bounded
+  backoff, and acknowledge only success. Deletes and tombstones outrank
+  upserts.
 - Repair must never overwrite a newer edit/delete.
 
 Read service rules:
 
 - Default result set = active Long-term + eligible Short-term.
 - Archive requires explicit Archive operation; `tier=all` alone is insufficient for third parties.
-- Deduplicate Short-term/Long-term via alias/lineage.
+- Deduplicate Short-term/Long-term via alias/lineage on default lists and
+  searches; prefer the active Long-term canonical survivor while retaining
+  unique fresh Short-term evidence.
 - User corrections outrank Long-term; current Long-term outranks inferred Short-term.
 - Initial prompt budget: 70% Long-term / 30% Short-term, adjustable after benchmark evidence.
 - Product list pagination uses unified `memory_items` and stable `(updated_at, memory_id)` cursor.
@@ -267,7 +306,7 @@ Normative policy:
 - Existing broad memory permission maps to default memory access: Short-term + Long-term.
 - Archive and raw provenance require separate explicit capability/request.
 - Revocation must take effect server-side regardless of cached vector results.
-- Third-party/API generic writes default to Short-term, not Long-term, unless first-party/user-asserted policy explicitly applies.
+- Third-party/API writes, like every other new intake surface, enter Short-term.
 
 ---
 

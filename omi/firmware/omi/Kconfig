@@ -111,6 +111,16 @@ config OMI_ENABLE_T5838_AAD
          point the driver resumes PDM and the software VAD takes over.
          Requires THSEL (P1.5) and WAKE (P1.2) to be wired to the T5838."
 
+config OMI_AAD_SETTLE_MS
+    int "T5838 AAD settle time before arming WAKE (ms)"
+    range 100 3000
+    default 800
+    depends on OMI_ENABLE_T5838_AAD
+    help
+        "Time to wait after clocking the T5838 into hardware AAD sleep before
+         arming the WAKE interrupt. Lets the mic settle its noise floor and
+         swallow the entry transient so it does not immediately false-wake."
+
 config OMI_WATCHDOG_TIMEOUT_MS
     int "Watchdog timeout (ms)"
     range 5000 300000

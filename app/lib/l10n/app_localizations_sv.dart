@@ -9,6 +9,9 @@ class AppLocalizationsSv extends AppLocalizations {
   AppLocalizationsSv([String locale = 'sv']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sessionen har gått ut — logga in igen.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -745,11 +748,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Din plan förnyas den $date.';
-  }
-
-  @override
   String get basicPlan => 'Gratisplan';
 
   @override
@@ -1466,7 +1464,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get payYourSttProvider => 'Använd Omi fritt. Du betalar bara din STT-leverantör direkt.';
 
   @override
-  String get freeMinutesMonth => '1 200 gratis minuter/månad ingår. Obegränsat med ';
+  String get freeMinutesMonth => '300 gratis minuter/månad ingår. Obegränsat med ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1788,20 +1786,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Älskar du Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Hjälp oss att nå fler människor genom att lämna en recension i App Store. Din återkoppling betyder världen för oss!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Hjälp oss att nå fler människor genom att lämna en recension i Google Play Store. Din återkoppling betyder världen för oss!';
-
-  @override
-  String get rateOnAppStore => 'Betygsätt i App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Betygsätt i Google Play';
 
   @override
   String get maybeLater => 'Kanske senare';
@@ -2138,6 +2122,18 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Redigera minne';
+
+  @override
+  String get pinAsBaseline => 'Fäst som utgångspunkt';
+
+  @override
+  String get unpinAsBaseline => 'Lossa från utgångspunkt';
+
+  @override
+  String get baselineMemory => 'Utgångsminne';
+
+  @override
+  String get alwaysInContext => 'Alltid i kontexten';
 
   @override
   String get memoryContentHint => 'Jag gillar att äta glass...';
@@ -4707,7 +4703,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ingen specifik dataåtkomst konfigurerad.';
 
   @override
-  String get basicPlanDescription => '1 200 premium-minuter + obegränsat på enheten';
+  String get basicPlanDescription => '300 premium-minuter + obegränsat på enheten';
 
   @override
   String get minutes => 'minuter';
@@ -6000,7 +5996,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1 200 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription.';
+      '300 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription.';
 
   @override
   String get viewUsage => 'Visa användning';
@@ -6081,7 +6077,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1 200 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription. ';
+      '300 premiumminuter/månad. Fliken På enheten erbjuder obegränsad gratis transkription. ';
 
   @override
   String get audioProcessedLocally => 'Ljud behandlas lokalt. Fungerar offline, mer privat, men använder mer batteri.';
@@ -8990,7 +8986,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get billingYearly => 'Årsvis';
 
   @override
-  String get savePercent => 'Spara ~17%';
+  String savePercent(int percent) {
+    return 'Spara ~$percent%';
+  }
 
   @override
   String get popular => 'Populärt';
@@ -9345,7 +9343,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Fungerar med Omi-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.';
+      'Fungerar med telefonens mikrofon samt Omi- och Limitless-enheter. Ljudet stannar på din telefon tills du väljer att ladda upp det.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9495,4 +9493,355 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Installera firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Spelar in på hänget';
+
+  @override
+  String get pendantRecordingNote =>
+      'Ditt hänge spelar in på egen hand. Inspelningar synkroniseras till din telefon medan appen är öppen.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synkroniserar inspelningar från ditt hänge…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min lagrat';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Hängets lagringsutrymme är nästan fullt — håll appen öppen för att synkronisera.';
+
+  @override
+  String get connectRayBanMeta => 'Anslut Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Använd dina Ray-Ban Meta-glasögon som din Omi-inspelningsenhet för konversationer och visuell kontext. Omi öppnar Meta AI-appen för att länka dina glasögon.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Anslut via Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Slutför anslutningen i Meta AI-appen och kom sedan tillbaka hit.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Kontrollera igen';
+
+  @override
+  String get raybanMetaAllowCamera => 'Tillåt kamera på glasögonen';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi använder dina glasögons kamera för att lägga till foton i dina konversationer. Du kan hoppa över detta och endast använda ljud.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Hoppa över för nu';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta läge med endast ljud';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Den här versionen av Omi kan använda dina glasögons mikrofon via Bluetooth. Fotografering kräver Meta-utvecklarversionen av Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Musik på din telefon pausas medan glasögonens mikrofon används.';
+
+  @override
+  String get raybanMetaContinue => 'Fortsätt';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Ta foto';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Foto begärt — det visas i din konversation.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon redo';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Bildtagning redo';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Inte tillgängligt i läge med endast ljud';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Fel vid anslutning till Ray-Ban Meta: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'Enhetens lagring';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% fullt';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used av $total använt';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ledigt';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Enheten är nästan full — synkronisera för att frigöra utrymme.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Ingen anslutning – spelas in lokalt. Det transkriberas när du är online igen.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Dina data skyddas som standard med stark kryptering, och du bestämmer hur de lagras och används.';
+
+  @override
+  String get sttModelAccuracy => 'Noggrannhet';
+
+  @override
+  String get whisperModelSizeBase => 'Bas';
+
+  @override
+  String get cloudTranscription => 'Molntranskription';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Radera modell';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Är du säker på att du vill radera den här modellen?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Nedladdad';
+
+  @override
+  String get sttModelFaster => 'Snabbare';
+
+  @override
+  String get sttFilterAuto => 'Automatisk';
+
+  @override
+  String get sttModelHigher => 'Högre';
+
+  @override
+  String get whisperModelSizeLarge => 'Stor';
+
+  @override
+  String get sttModelLower => 'Lägre';
+
+  @override
+  String get whisperModelSizeMedium => 'Mellan';
+
+  @override
+  String get onDeviceModelDeleted => 'Modellen har raderats';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Nedladdningen av modellen misslyckades';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Det gick inte att ladda ner Whisper-modellen. Försök igen.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Modellen har laddats ner';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper-modellen laddades ner';
+
+  @override
+  String get onDeviceModelSize => 'Modellstorlek';
+
+  @override
+  String get sttNone => 'Ingen';
+
+  @override
+  String get onDeviceTranscription => 'Transkription på enheten';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkription bearbetas lokalt på din enhet';
+
+  @override
+  String get sttModelSlower => 'Långsammare';
+
+  @override
+  String get whisperModelSizeSmall => 'Liten';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Tal-till-text-leverantör';
+
+  @override
+  String get speechToTextProviderDesc => 'Välj tjänsten som används för transkription';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Hastighet';
+
+  @override
+  String get whisperModelSizeTiny => 'Mycket liten';
+
+  @override
+  String get transcriptionLanguage => 'Transkriptionsspråk';
+
+  @override
+  String get transcriptionLanguageDesc => 'Välj språk för taltranskription';
+
+  @override
+  String get whisperModel => 'Whisper-modell';
+
+  @override
+  String get whisperModelDesc => 'Välj modell för transkription på enheten';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Nedgradera till gratisversionen?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Du kommer att märka dessa begränsningar:';
+
+  @override
+  String get downgradeLimitBattery => '7 gånger högre batteriförbrukning';
+
+  @override
+  String get downgradeLimitQuality => '30 % sämre transkriptionskvalitet';
+
+  @override
+  String get downgradeLimitDelay => '5–7 sekunders fördröjning';
+
+  @override
+  String get downgradeLimitSpeakers => 'Talare kan inte identifieras';
+
+  @override
+  String get downgradeAnyway => 'Nedgradera ändå';
+
+  @override
+  String get googleCalendarNotConnected => 'Google Kalender är inte ansluten';
+
+  @override
+  String get googleCalendarConnectPrompt => 'Anslut din Google Kalender för att länka samtal till kalenderhändelser.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Länkad till ”$title”';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Det gick inte att länka kalenderhändelsen';
+
+  @override
+  String get thanksForYourFeedback => 'Tack för din feedback!';
+
+  @override
+  String get copyMessage => 'Kopiera meddelande';
+
+  @override
+  String get searchSettings => 'Sök inställningar…';
+
+  @override
+  String get errorLoadingAudio => 'Det gick inte att läsa in ljudet';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Välj din Ray-Ban Meta-mikrofon';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Välj Bluetooth-mikrofonen för dina glasögon. Musiken pausas medan Omi använder den.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Inga Bluetooth-mikrofoner hittades. Anslut glasögonen i iPhone-inställningarna och försök igen.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth-mikrofonerna kunde inte läsas in. Kontrollera att Bluetooth är på och försök igen.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Det gick inte att ansluta till mikrofonen. Kontrollera att den är ansluten i iPhone-inställningarna.';
+
+  @override
+  String get syncStatusTooOld => 'För gammal för att synkas — Omi kan inte ta emot den';
+
+  @override
+  String get planSheetChooseYourPlan => 'Välj din plan för att låsa upp obegränsad Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Tillgänglig på Mac, mobil och webb';
+
+  @override
+  String get popularBadge => 'POPULÄR';
+
+  @override
+  String get worksOnDesktop => 'Fungerar på datorn';
+
+  @override
+  String get noDesktopAccess => 'Fungerar inte på datorn';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months månader / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count månader gratis',
+      one: '1 månad gratis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi är gratis, men gratisversionen har begränsningar som påverkar din upplevelse:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 sekunders fördröjning (inte i realtid)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Byt till gratisversionen';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Få gratis obegränsad åtkomst';
+
+  @override
+  String get shareDataForTraining => 'Dela data för träning';
+
+  @override
+  String get yourRequestUnderReview => 'Din förfrågan granskas';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Uppdatering krävs';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Installera den senaste Omi-appen för att fortsätta efter kontomigreringen.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migrering pågår';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Ditt konto migreras. Produktfunktioner pausas tills migreringen är klar.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Ditt konto är under underhåll efter en migreringsåterställning. Nyare data kan vara isolerad.';
+
+  @override
+  String get accountCutoverOpenStore => 'Öppna butik';
 }

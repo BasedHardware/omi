@@ -9,6 +9,9 @@ class AppLocalizationsLv extends AppLocalizations {
   AppLocalizationsLv([String locale = 'lv']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sesija ir beigusies — pierakstieties vēlreiz.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -744,11 +747,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Jūsu plāns atjaunojas $date.';
-  }
-
-  @override
   String get basicPlan => 'Bezmaksas plāns';
 
   @override
@@ -1467,7 +1465,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get payYourSttProvider => 'Brīvi izmantojiet omi. Jūs maksājat tikai savam STT pakalpojumu sniedzējam tieši.';
 
   @override
-  String get freeMinutesMonth => '600 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ';
+  String get freeMinutesMonth => '300 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ';
 
   @override
   String get omiUnlimited => 'Omi Neierobežots';
@@ -1789,20 +1787,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get lovingOmi => 'Patīk Omi?';
-
-  @override
-  String get leaveReviewIos =>
-      'Palīdziet mums sasniegt vairāk cilvēku, atstājot atsauksmi App Store. Jūsu atsauksmes mums nozīmē visu!';
-
-  @override
-  String get leaveReviewAndroid =>
-      'Palīdziet mums sasniegt vairāk cilvēku, atstājot atsauksmi Google Play Store. Jūsu atsauksmes mums nozīmē visu!';
-
-  @override
-  String get rateOnAppStore => 'Novērtēt App Store';
-
-  @override
-  String get rateOnGooglePlay => 'Novērtēt Google Play';
 
   @override
   String get maybeLater => 'Varbūt vēlāk';
@@ -2141,6 +2125,18 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get editMemory => '✏️ Rediģēt atmiņu';
+
+  @override
+  String get pinAsBaseline => 'Piespraust kā pamatu';
+
+  @override
+  String get unpinAsBaseline => 'Atspraust no pamata';
+
+  @override
+  String get baselineMemory => 'Pamata atmiņa';
+
+  @override
+  String get alwaysInContext => 'Vienmēr kontekstā';
 
   @override
   String get memoryContentHint => 'Man patīk ēst saldējumu...';
@@ -4713,7 +4709,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nav konfigurēta specifiska datu piekļuve.';
 
   @override
-  String get basicPlanDescription => '600 premium minūtes + neierobežots ierīcē';
+  String get basicPlanDescription => '300 premium minūtes + neierobežots ierīcē';
 
   @override
   String get minutes => 'minūtes';
@@ -6008,7 +6004,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.';
+      '300 premium minūtes mēnesī. Cilne \"Ierīcē\" piedāvā neierobežotu bezmaksas transkripciju.';
 
   @override
   String get viewUsage => 'Skatīt lietojumu';
@@ -6090,7 +6086,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ';
+      '300 premium minūtes/mēnesī. Cilnē Ierīcē piedāvā neierobežotu bezmaksas transkripciju. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9004,7 +9000,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get billingYearly => 'Gadā';
 
   @override
-  String get savePercent => 'Ietaupiet ~17%';
+  String savePercent(int percent) {
+    return 'Ietaupiet ~$percent%';
+  }
 
   @override
   String get popular => 'Populārs';
@@ -9362,7 +9360,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Pagaidām darbojas ar Omi ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.';
+      'Darbojas ar tālruņa mikrofonu un Omi un Limitless ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9512,4 +9510,357 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Instalēt aparātprogrammatūru';
+
+  @override
+  String get pendantRecordingTitle => 'Ierakstīšana kulonā';
+
+  @override
+  String get pendantRecordingNote =>
+      'Jūsu kulons ieraksta patstāvīgi. Ieraksti tiek sinhronizēti ar jūsu tālruni, kamēr lietotne ir atvērta.';
+
+  @override
+  String get pendantSyncingRecordings => 'Notiek ierakstu sinhronizēšana no jūsu kulona…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min saglabāts';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Kulona krātuve ir gandrīz pilna — turiet lietotni atvērtu, lai sinhronizētu.';
+
+  @override
+  String get connectRayBanMeta => 'Savienot Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Izmantojiet savas Ray-Ban Meta brilles kā Omi tveršanas ierīci sarunām un vizuālajam kontekstam. Omi atvērs Meta AI lietotni, lai savienotu jūsu brilles.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Savienot, izmantojot Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Pabeidziet savienošanu Meta AI lietotnē un pēc tam atgriezieties šeit.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Pārbaudīt vēlreiz';
+
+  @override
+  String get raybanMetaAllowCamera => 'Atļaut kameru brillēs';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi izmanto jūsu briļļu kameru, lai pievienotu fotoattēlus jūsu sarunām. Jūs varat to izlaist un izmantot tikai audio.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Izlaist pagaidām';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta tikai audio režīms';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Šī Omi versija var izmantot jūsu briļļu mikrofonu, izmantojot Bluetooth. Fotoattēlu tveršanai nepieciešama Omi Meta izstrādātāja versija.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Mūzika jūsu tālrunī tiek pauzēta, kamēr tiek izmantots briļļu mikrofons.';
+
+  @override
+  String get raybanMetaContinue => 'Turpināt';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Uzņemt fotoattēlu';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Fotoattēls pieprasīts — tas parādīsies jūsu sarunā.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofons gatavs';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Attēlu tveršana gatava';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Nav pieejams tikai audio režīmā';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Kļūda, veidojot savienojumu ar Ray-Ban Meta: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'Ierīces krātuve';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% aizpildīts';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return 'izmantoti $used no $total';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free brīvi';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Ierīce ir gandrīz pilna — sinhronizējiet, lai atbrīvotu vietu.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Nav savienojuma — ieraksta lokāli. Tas tiks transkribēts, kad atkal būsiet tiešsaistē.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Jūsu dati pēc noklusējuma ir aizsargāti ar spēcīgu šifrēšanu, un jūs kontrolējat, kā tie tiek glabāti un izmantoti.';
+
+  @override
+  String get sttModelAccuracy => 'Precizitāte';
+
+  @override
+  String get whisperModelSizeBase => 'Pamata';
+
+  @override
+  String get cloudTranscription => 'Mākoņa transkripcija';
+
+  @override
+  String get sttProviderDeepgram => 'Deepgram';
+
+  @override
+  String get deleteOnDeviceModel => 'Dzēst modeli';
+
+  @override
+  String get deleteOnDeviceModelConfirm => 'Vai tiešām vēlaties dzēst šo modeli?';
+
+  @override
+  String get onDeviceModelDownloaded => 'Lejupielādēts';
+
+  @override
+  String get sttModelFaster => 'Ātrāks';
+
+  @override
+  String get sttFilterAuto => 'Automātiski';
+
+  @override
+  String get sttModelHigher => 'Augstāka';
+
+  @override
+  String get whisperModelSizeLarge => 'Liels';
+
+  @override
+  String get sttModelLower => 'Zemāka';
+
+  @override
+  String get whisperModelSizeMedium => 'Vidējs';
+
+  @override
+  String get onDeviceModelDeleted => 'Modelis dzēsts';
+
+  @override
+  String get onDeviceModelDownloadFailed => 'Modeļa lejupielāde neizdevās';
+
+  @override
+  String get onDeviceModelDownloadFailedDesc => 'Neizdevās lejupielādēt Whisper modeli. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get onDeviceModelDownloadSuccess => 'Modelis lejupielādēts';
+
+  @override
+  String get onDeviceModelDownloadSuccessDesc => 'Whisper modelis veiksmīgi lejupielādēts';
+
+  @override
+  String get onDeviceModelSize => 'Modeļa izmērs';
+
+  @override
+  String get sttNone => 'Nav';
+
+  @override
+  String get onDeviceTranscription => 'Ierīces transkripcija';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripcija tiek apstrādāta lokāli jūsu ierīcē';
+
+  @override
+  String get sttModelSlower => 'Lēnāks';
+
+  @override
+  String get whisperModelSizeSmall => 'Mazs';
+
+  @override
+  String get sttProviderSoniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Runas-teksta nodrošinātājs';
+
+  @override
+  String get speechToTextProviderDesc => 'Izvēlieties transkripcijas pakalpojumu';
+
+  @override
+  String get sttProviderSpeechmatics => 'Speechmatics';
+
+  @override
+  String get sttModelSpeed => 'Ātrums';
+
+  @override
+  String get whisperModelSizeTiny => 'Sīks';
+
+  @override
+  String get transcriptionLanguage => 'Transkripcijas valoda';
+
+  @override
+  String get transcriptionLanguageDesc => 'Izvēlieties runas transkripcijas valodu';
+
+  @override
+  String get whisperModel => 'Whisper modelis';
+
+  @override
+  String get whisperModelDesc => 'Izvēlieties modeli ierīces transkripcijai';
+
+  @override
+  String get downgradeToFreemiumTitle => 'Pāriet uz bezmaksas plānu?';
+
+  @override
+  String get downgradeLimitationsHeading => 'Jūs saskarsieties ar šiem ierobežojumiem:';
+
+  @override
+  String get downgradeLimitBattery => '7x lielāks akumulatora patēriņš';
+
+  @override
+  String get downgradeLimitQuality => 'Par 30% zemāka transkripcijas kvalitāte';
+
+  @override
+  String get downgradeLimitDelay => '5–7 sekunžu aizkave';
+
+  @override
+  String get downgradeLimitSpeakers => 'Nevar atpazīt runātājus';
+
+  @override
+  String get downgradeAnyway => 'Tomēr pazemināt';
+
+  @override
+  String get googleCalendarNotConnected => 'Google kalendārs nav savienots';
+
+  @override
+  String get googleCalendarConnectPrompt =>
+      'Savienojiet savu Google kalendāru, lai saistītu sarunas ar kalendāra notikumiem.';
+
+  @override
+  String linkedToEvent(String title) {
+    return 'Saistīts ar „$title“';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'Neizdevās saistīt kalendāra notikumu';
+
+  @override
+  String get thanksForYourFeedback => 'Paldies par atsauksmi!';
+
+  @override
+  String get copyMessage => 'Kopēt ziņojumu';
+
+  @override
+  String get searchSettings => 'Meklēt iestatījumos…';
+
+  @override
+  String get errorLoadingAudio => 'Kļūda, ielādējot audio';
+
+  @override
+  String get rayBanMetaMicPickerTitle => 'Izvēlieties Ray-Ban Meta mikrofonu';
+
+  @override
+  String get rayBanMetaMicPickerDescription =>
+      'Izvēlieties briļļu Bluetooth mikrofonu. Mūzika tiek apturēta, kamēr Omi to izmanto.';
+
+  @override
+  String get rayBanMetaMicPickerEmpty =>
+      'Bluetooth mikrofoni nav atrasti. Pievienojiet brilles iPhone iestatījumos un mēģiniet vēlreiz.';
+
+  @override
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth mikrofonus nevarēja ielādēt. Pārbaudiet, vai Bluetooth ir ieslēgts, un mēģiniet vēlreiz.';
+
+  @override
+  String get rayBanMetaMicPickerConnectError =>
+      'Neizdevās izveidot savienojumu ar šo mikrofonu. Pārliecinieties, ka tas ir pievienots iPhone iestatījumos.';
+
+  @override
+  String get syncStatusTooOld => 'Pārāk vecs, lai sinhronizētu — Omi to nevar pieņemt';
+
+  @override
+  String get planSheetChooseYourPlan => 'Izvēlieties savu plānu, lai atbloķētu neierobežotu Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Pieejams Mac, mobilajā ierīcē un tīmeklī';
+
+  @override
+  String get popularBadge => 'POPULĀRS';
+
+  @override
+  String get worksOnDesktop => 'Darbojas datorā';
+
+  @override
+  String get noDesktopAccess => 'Nedarbojas datorā';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months mēneši / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mēneši bez maksas',
+      one: '$count mēnesis bez maksas',
+      zero: '$count mēnešu bez maksas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi ir bez maksas, taču bezmaksas versijai ir ierobežojumi, kas ietekmē jūsu pieredzi:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 sekunžu aizkave (nav reāllaikā)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Pāriet uz bezmaksas versiju';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Iegūstiet bezmaksas neierobežotu piekļuvi';
+
+  @override
+  String get shareDataForTraining => 'Kopīgot datus apmācībai';
+
+  @override
+  String get yourRequestUnderReview => 'Jūsu pieprasījums tiek izskatīts';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Wymagana aktualizacja';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Zainstaluj najnowszą aplikację Omi, aby kontynuować po migracji konta.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Trwa migracja';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Twoje konto jest migrowane. Funkcje produktu są wstrzymane do końca migracji.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Twoje konto jest w trybie konserwacji po cofnięciu migracji. Nowsze dane mogą zostać odizolowane.';
+
+  @override
+  String get accountCutoverOpenStore => 'Otwórz sklep';
 }
