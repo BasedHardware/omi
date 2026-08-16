@@ -127,9 +127,9 @@ export const registerConversationRoutes = (
       deps.counter.recordDomainRead("denied");
       return errorResponse(400, "invalid_url");
     }
-    // Dual-serve: `offset` present keeps the legacy bare array so Home and
-    // adapters-legacy keep working until the next lane deletes them. Absence
-    // of `offset` is the ratified envelope (`limit`/`cursor`).
+    // Dual-serve: `offset` present keeps the bare array (offset/limit slice).
+    // Absence of `offset` is the ratified envelope (`limit`/`cursor`).
+    // Control-acceptance, boot-acceptance, and route tests still send offset.
     if (url.searchParams.has("offset")) {
       const limit = parseLimit(url.searchParams.get("limit"), DEFAULT_LIMIT);
       const offset = parseLimit(url.searchParams.get("offset"), 0);

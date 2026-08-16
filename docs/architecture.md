@@ -141,36 +141,35 @@ not walk that cutover through `/v1/qa/control`; `bin/dev-server.ts` calls
 the process-registered `afterReset` hook on `/v1/qa/reset`. That is still
 process-owned, never factory-owned.
 
-**Backend generation** is the client knob: `legacy` (old wire, through
-`packages/adapters-legacy`) versus `platform` (contracts-native wire,
-through `packages/adapters-platform`). The selector is
+**Backend generation** is the client knob. David's 2026-08-16 ruling
+retired the `legacy` wire (`packages/adapters-legacy` is gone;
+`815d133d6d`). One generation remains: `platform`, through
+`packages/adapters-platform`. The selector is
 `frontend/packages/domain/src/generation-selection.ts`. An omitted or
-null host config is legacy on every domain
-(`generation-selection.ts:62-67, 115`). A malformed request is rejected
-and reported, never silently downgraded (`generation-selection.ts:20-24`).
+null host config is platform on every domain
+(`generation-selection.ts:55-61, 98-102`). A malformed or unavailable
+request — including `--generation legacy` — is rejected and reported,
+never silently downgraded (`generation-selection.ts:19-23`).
 
-Availability today (`generation-selection.ts:47-60`): memories,
-conversations, folders, and tasks each offer both `legacy` and `platform`.
-Listen, chat, settings, and screen are not in that table; they are not
-selected this way.
+Availability today (`generation-selection.ts:46-53`): memories,
+conversations, folders, and tasks each offer only `platform`. Listen,
+chat, settings, and screen are not in that table; they are not selected
+this way. `legacy` remains a recognized name so a retired request can be
+refused by name (`generation-unavailable`) rather than looking like a typo.
 
 David's 2026-08-16 rulings that have already landed:
 
 - Tasks park lifted: `tasks` is ratified on platform
-  (`generation-selection.ts:56-59`).
+  (`generation-selection.ts:51-52`).
 - In-place memory editing retired: the platform Memories surface adds a
   fact through the correction composer; it does not patch a synthesized
   proposition (`home-sources.ts:19-22`, and the rendered-absence test in
   `frontend/packages/surfaces/test/memories-platform.test.mjs`).
-- Live launchers pin `generation=platform`
-  (`frontend/shells/macos/scripts/dev-run-macos.sh:160-167`;
+- Live launchers pin `generation=platform` and refuse `--generation legacy`
+  at exit 2 (`frontend/shells/macos/scripts/dev-run-macos.sh:91-97`;
   `frontend/shells/ios/scripts/dev-run-ios.sh` does the same). L3 no longer
   carries a `--generation` split
   (`integration/single-service-structure.test.mjs:38-40`).
-
-`packages/adapters-legacy` is still in the tree. A sibling lane is deleting
-it. Until that lands, omitting `generation=` still selects legacy
-everywhere, and `--generation legacy` is still a reachable launcher arm.
 
 Surfaces must not know which generation they are on; `ProductionStores`
 ports hide it (`generation-selection.ts:9-10`). The shell knows, and says
@@ -247,8 +246,8 @@ observation, not a product SLO.
 
 ## Landing under this tree (not done here)
 
-Sibling lanes are deleting `adapters-legacy` and proving the real chat
-provider. When those land, the generation availability table, the launcher
-`--generation legacy` arm, and the Chat default in
-[`docs/verification.md`](verification.md) are the lines that move. Re-read
-those files; do not take this paragraph as the new state.
+`adapters-legacy` is gone (`815d133d6d`). A sibling lane is proving the
+real chat provider. Until that is the lane you ran, do not quote a canned
+L3 as a real-model result; the Chat default in
+[`docs/verification.md`](verification.md) is the line that moves. Re-read
+that file; do not take this paragraph as the new state.

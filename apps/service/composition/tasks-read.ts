@@ -32,8 +32,9 @@
  *    which is reader-scoped. Three days before this landed, the QA door was
  *    serving `retrieval-node-v1:seed-0000` — a raw fixture row id — as a public
  *    item id, and the cross-side test was PINNING that leak rather than catching
- *    it. D2 closes the class by construction: the alias `adapters-legacy`
- *    maintains between a local slug and a server id does not cross this wire.
+ *    it. D2 closes the class by construction: the alias the retired
+ *    `adapters-legacy` package used to maintain between a local slug and a
+ *    server id does not cross this wire.
  *
  * 2. COVERAGE IS DECLARED BY THE CALLER, NEVER COMPUTED HERE FROM THE STORE.
  *    A coverage state derived from row counts varies with rows the reader is not
@@ -65,11 +66,12 @@
  *   never patched up with a default.
  *
  *   Rejected: fabricating a value (an invented `completed: false` is the exact
- *   class as the fabricated `locked: false` that `adapters-legacy/src/memories.ts`
- *   documents as a data-loss path — it tells the user something false about
- *   their own record). Rejected: silently omitting the record, which serves a
- *   short page that looks complete — the precise thing the completeness envelope
- *   exists to make impossible. Rejected: declaring a `partial` coverage reason,
+ *   class as the fabricated `locked: false` that the retired
+ *   `adapters-legacy/src/memories.ts` documented as a data-loss path — it tells
+ *   the user something false about their own record). Rejected: silently omitting
+ *   the record, which serves a short page that looks complete — the precise thing
+ *   the completeness envelope exists to make impossible. Rejected: declaring a
+ *   `partial` coverage reason,
  *   because that would assign a load-bearing new MEANING to a ratified reason
  *   code, and doing that unilaterally at night is above this lane's bar.
  *
