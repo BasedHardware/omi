@@ -10,6 +10,14 @@ final class ChatCitationTests: XCTestCase {
       [20, 27, 3, 20])
   }
 
+  func testOrdinalParserAcceptsKindPrefixedMarkersAndIgnoresBareKindLabels() {
+    XCTAssertEqual(
+      ChatCitationMarkup.ordinals(
+        in: "Copied label [memory 5023] then [memory:5001] and [TASK 12]. Bare [memory] stays prose."
+      ),
+      [5023, 5001, 12])
+  }
+
   func testOrdinalParserIgnoresInlineCodeAndNumericMarkdownLinks() {
     XCTAssertEqual(
       ChatCitationMarkup.ordinals(
@@ -117,6 +125,7 @@ final class ChatCitationTests: XCTestCase {
     XCTAssertEqual(ledger.marker(kind: .task, sourceID: "task-1"), "[5002]")
     XCTAssertNil(ledger.marker(kind: .goal, sourceID: "goal-1"))
     XCTAssertTrue(ledger.responseInstruction?.contains("Do not claim to provide citations") == true)
+    XCTAssertTrue(ledger.responseInstruction?.contains("Never write [memory]") == true)
   }
 
   func testPromptAndToolReferencesCanCoexistInOneAnswer() {
@@ -294,5 +303,306 @@ final class ChatCitationTests: XCTestCase {
     RewindCitationFocusState.shared.request(42)
     XCTAssertEqual(RewindCitationFocusState.shared.consume(), 42)
     XCTAssertNil(RewindCitationFocusState.shared.consume())
+  }
+
+  func testRegistryConsumeFallsBackToUniqueRunWhenAttemptIdDiffers() async {
+    let runID = UUID().uuidString
+    let sources = [
+      APIClient.ToolSource(
+        kind: "conversation", sourceID: "conversation-20", title: "Planning", preview: "Ship the beta",
+        createdAt: nil, momentTimestampMs: nil, appName: nil, url: nil)
+    ]
+    _ = await ChatCitationProvenanceRegistry.shared.register(
+      sources, runID: runID, attemptID: "tool-attempt")
+
+    let snapshot = await ChatCitationProvenanceRegistry.shared.consumeSnapshot(
+      runID: runID, attemptID: "query-attempt")
+
+    XCTAssertEqual(snapshot.references.map(\.sourceID), ["conversation-20"])
+    XCTAssertEqual(snapshot.references.first?.ordinal, 1)
+  }
+
+  func testRegistryConsumeFallsBackWhenTerminalAttemptIdIsEmpty() async {
+    let runID = UUID().uuidString
+    let sources = [
+      APIClient.ToolSource(
+        kind: "memory", sourceID: "memory-9", title: "Preference", preview: "Uses Omi Beta",
+        createdAt: nil, momentTimestampMs: nil, appName: nil, url: nil)
+    ]
+    _ = await ChatCitationProvenanceRegistry.shared.register(
+      sources, runID: runID, attemptID: "tool-attempt")
+
+    let snapshot = await ChatCitationProvenanceRegistry.shared.consumeSnapshot(
+      runID: runID, attemptID: "")
+
+    XCTAssertEqual(snapshot.references.map(\.sourceID), ["memory-9"])
+  }
+
+  func testRegistryConsumeDoesNotGuessWhenMultipleAttemptsShareARun() async {
+    let runID = UUID().uuidString
+    let first = [
+      APIClient.ToolSource(
+        kind: "task", sourceID: "task-1", title: "One", preview: "One",
+        createdAt: nil, momentTimestampMs: nil, appName: nil, url: nil)
+    ]
+    let second = [
+      APIClient.ToolSource(
+        kind: "task", sourceID: "task-2", title: "Two", preview: "Two",
+        createdAt: nil, momentTimestampMs: nil, appName: nil, url: nil)
+    ]
+    _ = await ChatCitationProvenanceRegistry.shared.register(
+      first, runID: runID, attemptID: "attempt-a")
+    _ = await ChatCitationProvenanceRegistry.shared.register(
+      second, runID: runID, attemptID: "attempt-b")
+
+    let snapshot = await ChatCitationProvenanceRegistry.shared.consumeSnapshot(
+      runID: runID, attemptID: "attempt-missing")
+
+    XCTAssertTrue(snapshot.references.isEmpty)
+    let exact = await ChatCitationProvenanceRegistry.shared.consumeSnapshot(
+      runID: runID, attemptID: "attempt-a")
+    XCTAssertEqual(exact.references.map(\.sourceID), ["task-1"])
+  }
+
+  func testCitationEncodeKeepsTypedBlocksWhenASiblingIsNotJSON() throws {
+    let reference = ChatCitationReference(
+      ordinal: 21, kind: .conversation, sourceID: "conversation-21", title: "Demo notes")
+    let encoded = try XCTUnwrap(
+      ChatContentBlockCodec.encode([
+        .citation(id: "citation-21", reference: reference),
+        .questionCard(
+          id: "question-1",
+          questionId: "question-1",
+          text: "Which task?",
+          subjectKind: "task",
+          subjectId: "task-1",
+          options: [["label": Date()]],
+          selectedOptionId: nil),
+      ]))
+    let decoded = try XCTUnwrap(ChatContentBlockCodec.decode(encoded))
+    XCTAssertEqual(decoded.count, 1)
+    guard case .citation(_, let restored) = decoded[0] else {
+      return XCTFail("Expected the citation to survive an unserializable sibling")
+    }
+    XCTAssertEqual(restored, reference)
+  }
+
+  func testCitationCodecDecodesNSNumberOrdinals() throws {
+    let encoded = try JSONSerialization.data(
+      withJSONObject: [
+        [
+          "type": "citation",
+          "id": "citation-3",
+          "ordinal": NSNumber(value: 3),
+          "kind": "conversation",
+          "sourceId": "conversation-3",
+          "title": "Saturday recap",
+          "preview": "Worked on Omi",
+        ]
+      ])
+    let decoded = try XCTUnwrap(
+      ChatContentBlockCodec.decode(String(data: encoded, encoding: .utf8) ?? ""))
+    guard case .citation(_, let restored) = try XCTUnwrap(decoded.first) else {
+      return XCTFail("Expected NSNumber ordinals to decode")
+    }
+    XCTAssertEqual(restored.ordinal, 3)
+    XCTAssertEqual(restored.sourceID, "conversation-3")
+  }
+
+  @MainActor
+  func testJournalHydrateRestoresCitationBackupWhenContentBlocksVanish() throws {
+    let reference = ChatCitationReference(
+      ordinal: 20, kind: .conversation, sourceID: "conversation-20", title: "Planning")
+    let message = ChatMessage(
+      id: "turn-citation-backup",
+      text: "Worked on the launch video [20][21][3].",
+      sender: .ai,
+      contentBlocks: [.citation(id: "citation-20", reference: reference)])
+    let write = message.journalWrite(origin: "legacy", status: .completed)
+    XCTAssertTrue(write.metadataJSON.contains("\"type\":\"citation\""))
+
+    let turn = try XCTUnwrap(
+      KernelJournalTurn(dictionary: [
+        "turnId": "turn-citation-backup",
+        "role": "assistant",
+        "content": message.text,
+        "status": "completed",
+        "contentBlocks": [],
+        "metadataJson": write.metadataJSON,
+        "createdAtMs": 1,
+      ]))
+    let restored = turn.chatMessage()
+    XCTAssertEqual(restored.inlineCitationReferences, [reference])
+  }
+
+  func testToolCallOutputRecoversTypedCitationLedger() {
+    let original = ChatCitationReference(
+      ordinal: 14, kind: .conversation, sourceID: "conversation-14", title: "Backend costs")
+    let annotated = ChatCitationProvenanceRegistry.annotatedToolResult(
+      "Conversation #14: backend costs", references: [original])
+    let recovered = ChatCitationProvenanceRegistry.references(
+      fromToolCallBlocks: [
+        .toolCall(
+          id: "tool-1",
+          name: "get_conversations",
+          status: .completed,
+          toolUseId: "use-1",
+          input: nil,
+          output: annotated)
+      ])
+    XCTAssertEqual(recovered, [original])
+  }
+
+  func testTruncatedEnvelopeExposesRunAndAttemptForLedgerPeek() {
+    let output = """
+      {"ok":false,"error":{"code":"tool_result_projection_exceeded_budget"},\
+      "toolResultEnvelope":{"version":1,"status":"failed","truncated":true,\
+      "provenance":{"runId":"run-truncated","attemptId":"att-truncated","toolName":"get_daily_recap"}}}
+      """
+    let ids = ChatCitationProvenanceRegistry.provenanceIDs(fromToolOutput: output)
+    XCTAssertEqual(ids?.runID, "run-truncated")
+    XCTAssertEqual(ids?.attemptID, "att-truncated")
+  }
+
+  func testKindOnlyLabelsBindByClaimOverlap() {
+    let memory = ChatCitationReference(
+      ordinal: 8001, kind: .memory, sourceID: "m1", title: "Launch",
+      preview: "Ship the beta recap on Wednesday")
+    let other = ChatCitationReference(
+      ordinal: 8002, kind: .memory, sourceID: "m2", title: "Unrelated",
+      preview: "Grocery list and milk")
+    let resolved = ChatCitationMarkup.resolvingKindLabels(
+      in: "You shipped the beta recap [memory]",
+      using: [memory, other])
+    XCTAssertEqual(resolved.text, "You shipped the beta recap [8001]")
+    XCTAssertEqual(resolved.references, [memory])
+  }
+
+  func testKindOnlyLabelsBindUniqueSourceOfThatKind() {
+    let conversation = ChatCitationReference(
+      ordinal: 12, kind: .conversation, sourceID: "c1", title: "Standup")
+    let resolved = ChatCitationMarkup.resolvingKindLabels(
+      in: "Catch-up notes [conversation]",
+      using: [conversation])
+    XCTAssertEqual(resolved.text, "Catch-up notes [12]")
+  }
+
+  func testSearchPassDoesNotUniqueBindAOneHitMemory() {
+    let memory = ChatCitationReference(
+      ordinal: 8001, kind: .memory, sourceID: "m1",
+      preview: "GLM key has rate limiting issues during live tests")
+    let resolved = ChatCitationMarkup.resolvingKindLabels(
+      in: "PR reliability fix exceeded the expected 10K char limit [memory]",
+      using: [memory],
+      allowUniqueKindFallback: false)
+    XCTAssertEqual(
+      resolved.text, "PR reliability fix exceeded the expected 10K char limit [memory]")
+    XCTAssertTrue(resolved.references.isEmpty)
+  }
+
+  func testKindOnlyLabelsStayInertWithoutOverlap() {
+    let first = ChatCitationReference(
+      ordinal: 8001, kind: .memory, sourceID: "m1", preview: "Alpha project timeline")
+    let second = ChatCitationReference(
+      ordinal: 8002, kind: .memory, sourceID: "m2", preview: "Beta grocery list")
+    let resolved = ChatCitationMarkup.resolvingKindLabels(
+      in: "Something vague happened [memory]",
+      using: [first, second])
+    XCTAssertEqual(resolved.text, "Something vague happened [memory]")
+    XCTAssertTrue(resolved.references.isEmpty)
+  }
+
+  func testKindOnlyLabelsDoNotBindOnSharedSubstrings() {
+    let memory = ChatCitationReference(
+      ordinal: 8001, kind: .memory, sourceID: "m1",
+      preview: "GLM key has rate limiting issues during live tests")
+    let other = ChatCitationReference(
+      ordinal: 8002, kind: .memory, sourceID: "m2",
+      preview: "Unrelated grocery list and milk run")
+    let resolved = ChatCitationMarkup.resolvingKindLabels(
+      in: "PR reliability fix exceeded the expected 10K char limit [memory]",
+      using: [memory, other])
+    XCTAssertEqual(
+      resolved.text, "PR reliability fix exceeded the expected 10K char limit [memory]")
+    XCTAssertTrue(resolved.references.isEmpty)
+  }
+
+  func testKindOnlyLabelsBindBoldClaimPhrases() {
+    let memory = ChatCitationReference(
+      ordinal: 8001, kind: .memory, sourceID: "m1",
+      preview: "The brain map is empty and new memories are not stored")
+    let other = ChatCitationReference(
+      ordinal: 8002, kind: .memory, sourceID: "m2",
+      preview: "Installer onboarding problems on new computers")
+    let resolved = ChatCitationMarkup.resolvingKindLabels(
+      in: "- **Brain map is empty** — flagged as a critical bug [memory]",
+      using: [memory, other])
+    XCTAssertEqual(resolved.text, "- **Brain map is empty** — flagged as a critical bug [8001]")
+    XCTAssertEqual(resolved.references, [memory])
+  }
+
+  func testKindOnlySearchQueryPrefersBoldPhrase() {
+    let queries = ChatCitationMarkup.kindOnlySearchQueries(
+      in: "- **TikTok to X loop** — adapt winners [memory]")
+    XCTAssertEqual(queries.map(\.query), ["tiktok to x loop"])
+  }
+
+  func testKindPrefixedNumericMarkersAreNotRewrittenAsKindOnly() {
+    let memory = ChatCitationReference(
+      ordinal: 8001, kind: .memory, sourceID: "m1", preview: "Ship the beta recap")
+    let resolved = ChatCitationMarkup.resolvingKindLabels(
+      in: "Copied label [memory 5023] after the recap.",
+      using: [memory])
+    XCTAssertEqual(resolved.text, "Copied label [memory 5023] after the recap.")
+  }
+
+  func testAppendLookupAssignsDisjointOrdinalsAndDedupes() {
+    let existing = ChatCitationReference(
+      ordinal: 5001, kind: .memory, sourceID: "m1", preview: "Prompt")
+    let extraSame = ChatCitationReference(
+      ordinal: 1, kind: .memory, sourceID: "m1", preview: "Ignored")
+    let extraNew = ChatCitationReference(
+      ordinal: 1, kind: .conversation, sourceID: "c1", title: "Talk")
+    let merged = ChatCitationReference.appendingLookup([extraSame, extraNew], to: [existing])
+    XCTAssertEqual(merged.map(\.ordinal), [5001, 8001])
+    XCTAssertEqual(merged.map(\.sourceID), ["m1", "c1"])
+  }
+
+  func testMessageRewritePersistsBoundCitationBlocks() {
+    var message = ChatMessage(
+      id: "ai-1",
+      text: "Shipped the beta recap [memory]",
+      sender: .ai,
+      contentBlocks: [.text(id: "t1", text: "Shipped the beta recap [memory]")])
+    let memory = ChatCitationReference(
+      ordinal: 8001, kind: .memory, sourceID: "m1",
+      preview: "Shipped the beta recap on Wednesday")
+    message.bindInlineCitations(using: [memory])
+    XCTAssertEqual(message.text, "Shipped the beta recap [8001]")
+    guard case .text(_, let blockText) = message.contentBlocks[0] else {
+      return XCTFail("Expected the rewritten text block to remain first")
+    }
+    XCTAssertEqual(blockText, "Shipped the beta recap [8001]")
+    XCTAssertEqual(message.inlineCitationReferences, [memory])
+  }
+
+  func testPeekSnapshotLeavesLedgerForLaterConsume() async {
+    let runID = UUID().uuidString
+    let attemptID = UUID().uuidString
+    let sources = [
+      APIClient.ToolSource(
+        kind: "conversation", sourceID: "conversation-20", title: "Planning", preview: "Ship",
+        createdAt: nil, momentTimestampMs: nil, appName: nil, url: nil)
+    ]
+    _ = await ChatCitationProvenanceRegistry.shared.register(
+      sources, runID: runID, attemptID: attemptID)
+
+    let peeked = await ChatCitationProvenanceRegistry.shared.peekSnapshot(
+      runID: runID, attemptID: attemptID)
+    let consumed = await ChatCitationProvenanceRegistry.shared.consumeSnapshot(
+      runID: runID, attemptID: attemptID)
+
+    XCTAssertEqual(peeked.references.map(\.sourceID), ["conversation-20"])
+    XCTAssertEqual(consumed.references.map(\.sourceID), ["conversation-20"])
   }
 }
