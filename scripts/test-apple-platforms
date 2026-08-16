@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+ios_derived=$(mktemp -d "${TMPDIR:-/tmp}/omi-v5-ios.XXXXXX")
+macos_derived=$(mktemp -d "${TMPDIR:-/tmp}/omi-v5-macos.XXXXXX")
+
+xcodebuild \
+  -workspace "$repo_root/react-native/ios/RnRuntime.xcworkspace" \
+  -scheme RnRuntime \
+  -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath "$ios_derived" \
+  ARCHS=arm64 \
+  CODE_SIGNING_ALLOWED=NO \
+  ONLY_ACTIVE_ARCH=YES \
+  build
+
+xcodebuild \
+  -workspace "$repo_root/react-native/macos/RnRuntime.xcworkspace" \
+  -scheme RnRuntime-macOS \
+  -configuration Debug \
+  -destination 'platform=macOS,arch=arm64' \
+  -derivedDataPath "$macos_derived" \
+  CODE_SIGNING_ALLOWED=NO \
+  build

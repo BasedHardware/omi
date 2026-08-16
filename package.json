@@ -14,6 +14,7 @@
     "format": "bun x prettier --write 'react-native/*.{js,json,ts,tsx}' 'react-native/src/**/*.{ts,tsx}' 'react-native/__tests__/**/*.{ts,tsx}' 'scripts/**/*.ts'",
     "format:check": "bun x prettier --check 'react-native/*.{js,json,ts,tsx}' 'react-native/src/**/*.{ts,tsx}' 'react-native/__tests__/**/*.{ts,tsx}' 'scripts/**/*.ts'",
     "lint": "bun run --cwd react-native lint",
+    "platforms:test": "scripts/test-apple-platforms",
     "native:test": "scripts/test-native-core",
     "setup": "scripts/setup",
     "test": "bun run --cwd react-native test -- --runInBand && bun run --cwd packages/contracts/ratified verify",
