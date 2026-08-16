@@ -88,8 +88,11 @@ async def test_lifespan_publishes_deployment_and_config_identity(monkeypatch):
     async def noop_cleanup():
         return None
 
+    async def load_config():
+        return config
+
     monkeypatch.setenv('OMI_LLM_GATEWAY_BUILD_IDENTITY', 'deadbee')
-    monkeypatch.setattr(main, 'get_gateway_config', lambda: config)
+    monkeypatch.setattr(main, 'get_gateway_config', load_config)
     monkeypatch.setattr(
         main,
         'observe_gateway_config_identity',
