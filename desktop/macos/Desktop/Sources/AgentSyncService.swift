@@ -96,8 +96,6 @@ actor AgentSyncService {
     "ocrText", "ocrDataJson", "imagePath", "videoChunkPath", "embedding",
   ]
 
-  static var syncedTableNames: [String] { tableSpecs.map(\.name) }
-
   /// Tables with an explicit column allow-list (new columns never sync by default).
   static var graphSyncTableNames: [String] {
     tableSpecs.filter { !$0.includedColumns.isEmpty }.map(\.name)
