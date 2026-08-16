@@ -16,8 +16,10 @@
  * client minted on create. HMAC is one-way, so the alias that maps a read
  * handle back to a write id is client-private and is joined on the store-owned
  * `revision` returned in `WriteAccepted`. Tasks this client did not create
- * have no write id; a patch against a bare opaque handle is refused rather
- * than upserting a second record.
+ * still arrive as opaque handles; the write door resolves a listed handle
+ * onto the live storage id rather than upserting a second row. An opaque
+ * handle that was never served on a read is still refused here, so a
+ * fabricated HMAC cannot mint a ghost.
  */
 
 import type {
@@ -334,9 +336,10 @@ export class PlatformTasksStore {
   }
 
   private assertWritableId(id: string): void {
-    if (OPAQUE_TASK_REF.test(id) && !this.knownRecordIds.has(id)) {
-      throw new Error("platform task write refused: opaque read handle has no write id");
-    }
+    if (!OPAQUE_TASK_REF.test(id)) return;
+    if (this.knownRecordIds.has(id)) return;
+    if (this.items.some((item) => item.id === id)) return;
+    throw new Error("platform task write refused: opaque read handle has no write id");
   }
 
   private pageRequest(cursor: string | null): PlatformTasksPageRequest {

@@ -56,6 +56,7 @@ import {
   WRITE_REFUSALS,
   isWritableDomain,
   parseWriteOpEnvelopeJson,
+  type WriteOp,
   type WriteOpEnvelope,
 } from "@omi-core/ratified-contracts/write/ops";
 
@@ -112,6 +113,16 @@ export interface TasksOpsRouteDependencies {
   readonly counter: WriteOpsCounter;
   /** Injected clock, in epoch seconds. There is no wall clock in this module. */
   readonly now: () => number;
+  /**
+   * Map a write `record_id` onto the storage id the tasks store holds.
+   *
+   * The read wire serves HMAC handles; the store keys rows by storage id.
+   * Returning the storage id applies the op to the live row. Returning the
+   * input unchanged is the identity for a storage id. Returning `null` means
+   * the handle looked like a public id and matched no live row — refuse,
+   * never upsert a ghost keyed by the HMAC.
+   */
+  readonly resolveWriteRecordId: (principal: DevPrincipal, recordId: string) => string | null;
 }
 
 const fixedResponse = (body: string, status: number): Response =>
@@ -225,12 +236,22 @@ export const registerTasksOpsRoutes = (app: Hono, deps: TasksOpsRouteDependencie
     }
 
     // ── 4–5. The `write_id` registry and apply, as one unit of work ─────────
+    // Fingerprint the envelope the client sent. Resolve the public handle
+    // onto a storage id only for apply, so a replay of the same write_id
+    // still matches and an HMAC handle cannot mint a second row.
+    const resolvedId = deps.resolveWriteRecordId(principal, envelope.op.record_id);
+    if (resolvedId === null) {
+      return answer("conflict", fixedResponse(WRITE_ERRORS.conflict.body, WRITE_ERRORS.conflict.status));
+    }
+    const op: WriteOp = envelope.op.record_id === resolvedId
+      ? envelope.op
+      : { ...envelope.op, record_id: resolvedId };
     const write = await deps.unitOfWork.execute({
       accountId: principal.uid,
       writeId: envelope.write_id,
       fingerprintOf: opFingerprint(envelope),
       accountEpoch: envelope.account_epoch,
-      op: envelope.op,
+      op,
     });
     if (write.kind === "reuse") {
       return answer(
