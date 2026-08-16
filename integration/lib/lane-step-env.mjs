@@ -1,3 +1,5 @@
+import { rmSync } from "node:fs";
+
 /**
  * Build one command's child environment without changing the caller.
  *
@@ -11,4 +13,15 @@ export function laneStepEnvironment({ callerEnv, stepEnv = undefined, l3RunDir =
   const childEnv = { ...callerEnv, ...(stepEnv ?? {}) };
   if (l3RunDir !== null) childEnv.OMI_DEV_STACK_RUNDIR = l3RunDir;
   return childEnv;
+}
+
+/**
+ * Mirror integration/dev-stack.sh: keep the L3 run directory when the lane
+ * failed so the sanitized log the error line points at is still there.
+ * Passing runs still delete it.
+ */
+export function disposeL3RunDir(l3RunDir, { passed }) {
+  if (l3RunDir === null || !passed) return false;
+  rmSync(l3RunDir, { recursive: true, force: true });
+  return true;
 }

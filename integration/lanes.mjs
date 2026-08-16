@@ -42,7 +42,7 @@
 // CI lane worth registering. When it does, these rows move over as-is.
 
 import { execSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -54,7 +54,7 @@ import {
   readStampFile,
   verifyArtifact,
 } from "./lib/provenance.mjs";
-import { laneStepEnvironment } from "./lib/lane-step-env.mjs";
+import { disposeL3RunDir, laneStepEnvironment } from "./lib/lane-step-env.mjs";
 import { appendDeviceArgument, holdSimulatorLease } from "./lib/ios-lane-device.mjs";
 
 const CORE_REPO = REPO_PATHS["core-foundation"];
@@ -505,7 +505,10 @@ function runLane(laneId, { json = false } = {}) {
   }
 
   if (simulatorLease !== null) simulatorLease.release();
-  if (l3RunDir !== null) rmSync(l3RunDir, { recursive: true, force: true });
+  // Keep failed-run diagnostics. Deleting the run dir on every L3 used to
+  // erase the sanitized log the error line points at. Mirror
+  // integration/dev-stack.sh: only remove the run dir when the lane passed.
+  disposeL3RunDir(l3RunDir, { passed: receipt.result === "pass" });
 
   if (json) process.stdout.write(`${JSON.stringify({ ...receipt, arbiters, receiptPath: receiptFile }, null, 2)}\n`);
   else process.stdout.write(`  ${receipt.result.toUpperCase()} in ${durationMs}ms${receiptFile ? ` — receipt ${receiptFile}` : ""}\n`);
