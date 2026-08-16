@@ -337,10 +337,12 @@ import XCTest
       )
     )
     XCTAssertTrue(
-      pickerSource.contains(".onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))")
+      pickerSource.contains(
+        ".onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))")
     )
     XCTAssertTrue(
-      sheetSource.contains(".onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))")
+      sheetSource.contains(
+        ".onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))")
     )
   }
 
@@ -900,8 +902,10 @@ private func sourceFile(_ relativePath: String) throws -> String {
   let testsURL = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()
     .deletingLastPathComponent()
-  let sourceURL = testsURL
+  let sourceURL =
+    testsURL
     .appendingPathComponent("Sources")
     .appendingPathComponent(relativePath)
+  // omi-test-quality: source-inspection -- static contract: pins that the export sheets subscribe the accessibility polling timer only while a preflight is missing
   return try String(contentsOf: sourceURL, encoding: .utf8)
 }
