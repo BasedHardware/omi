@@ -264,6 +264,21 @@ def _embeddings_ctor_kwargs() -> Dict[str, Any]:
     return {'base_url': base_url, 'api_key': api_key, 'check_embedding_ctx_length': False}
 
 
+# Char cap for the LOCAL embeddings path. check_embedding_ctx_length=False (required for Ollama) disables
+# LangChain's built-in over-context splitting, so an over-length input is sent whole and the server rejects
+# it — long memories then fail to embed/index (cubic PR 10887 clients.py:264). A char cap restores
+# length-safety in an Ollama-compatible way (no token-id arrays). Default ~32000 chars ≈ 8k tokens (bge-m3/
+# nomic context); the operator sets OMI_EMBEDDINGS_MAX_INPUT_CHARS to their model's real window.
+_DEFAULT_EMBEDDINGS_MAX_INPUT_CHARS = 32000
+
+
+def _local_embed_char_cap() -> int:
+    raw = os.getenv('OMI_EMBEDDINGS_MAX_INPUT_CHARS', '').strip()
+    if raw.isdigit() and int(raw) > 0:
+        return int(raw)
+    return _DEFAULT_EMBEDDINGS_MAX_INPUT_CHARS
+
+
 class _OpenAIEmbeddingsProxy:
     """Transparent proxy for OpenAIEmbeddings that uses BYOK OpenAI when set."""
 
@@ -300,6 +315,19 @@ class _OpenAIEmbeddingsProxy:
             cached = self._ctor_kwargs_factory()
             object.__setattr__(self, '_ctor_kwargs_cached', cached)
         return cached
+
+    def _cap_local_input(self, value: Any) -> Any:
+        """On the LOCAL endpoint path (check_embedding_ctx_length disabled for Ollama), cap input length so
+        an over-context string is not sent whole and rejected (cubic PR 10887 clients.py:264). No-op on the
+        cloud path, where LangChain's own ctx-length handling applies."""
+        if self._ctor_kwargs.get('check_embedding_ctx_length') is not False:
+            return value
+        cap = _local_embed_char_cap()
+        if isinstance(value, str):
+            return value[:cap]
+        if isinstance(value, list):
+            return [t[:cap] if isinstance(t, str) else t for t in value]
+        return value
 
     def _default_client(self) -> OpenAIEmbeddings:
         default = self._default
@@ -353,6 +381,7 @@ class _OpenAIEmbeddingsProxy:
 
     def embed_query(self, text: str) -> List[float]:
         inst = self._resolve()
+        text = self._cap_local_input(text)
         try:
             return inst.embed_query(text)
         except Exception as e:
@@ -365,6 +394,7 @@ class _OpenAIEmbeddingsProxy:
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         inst = self._resolve()
+        texts = self._cap_local_input(texts)
         try:
             return inst.embed_documents(texts)
         except Exception as e:
@@ -383,6 +413,8 @@ class _OpenAIEmbeddingsProxy:
         if name.startswith('a'):
 
             async def _wrapped_async(*args, **kwargs):
+                if args:  # aembed_query/aembed_documents: cap the input on the local endpoint path
+                    args = (self._cap_local_input(args[0]), *args[1:])
                 try:
                     return await attr(*args, **kwargs)
                 except Exception as e:
