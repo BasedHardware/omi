@@ -359,7 +359,9 @@ class MongoDocumentStore:
         timeout: Optional[float] = None,
     ) -> StoredDocument:
         collection_name, _, _ = _doc_meta(path)
-        projection = {"d." + field: 1 for field in fields} if fields is not None else None
+        # fields=[] means ids-only; an empty dict projection would make pymongo return ALL fields, so fall
+        # back to {"_id": 1} (cubic 10887 facade:258). fields=None = no projection (full doc).
+        projection = ({"d." + field: 1 for field in fields} or {"_id": 1}) if fields is not None else None
         # ``timeout`` (seconds) -> Mongo ``maxTimeMS`` so a slow server-side read aborts at the
         # deadline instead of holding the worker until the (much larger) socket timeout.
         kw: Dict[str, Any] = {} if timeout is None else {"max_time_ms": int(timeout * 1000)}
@@ -544,7 +546,9 @@ class MongoDocumentStore:
             ors.append({"$and": prefix + [id_step]} if prefix else id_step)
             keyset = ors[0] if len(ors) == 1 else {"$or": ors}
             mongo_filter = {"$and": [mongo_filter, keyset]}
-        projection = {"d." + field: 1 for field in fields} if fields is not None else None
+        # fields=[] means ids-only; an empty dict projection would make pymongo return ALL fields, so fall
+        # back to {"_id": 1} (cubic 10887 facade:258). fields=None = no projection (full doc).
+        projection = ({"d." + field: 1 for field in fields} or {"_id": 1}) if fields is not None else None
         cursor = self._db[_collection_name(collection)].find(mongo_filter, projection, session=None)
         if specs:
             # Map ``__name__`` order to _id (the document name); other fields sort by their payload key.

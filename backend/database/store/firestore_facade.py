@@ -346,6 +346,7 @@ class _Query:
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         start_after: Optional[Any] = None,
+        fields: Optional[List[str]] = None,
     ) -> None:
         self._client = client
         self._collection = collection.strip("/")
@@ -354,6 +355,9 @@ class _Query:
         self._limit = limit
         self._offset = offset
         self._start_after = start_after
+        # ``select()`` projection: None = no projection (full doc); [] = ids only; ['f', …] = those payload
+        # fields. Preserve the empty list (it is NOT "no projection") — that is Firestore's ids-only select.
+        self._fields = list(fields) if fields is not None else None
 
     def _clone(self, **kw: Any) -> "_Query":
         base = dict(
@@ -362,6 +366,7 @@ class _Query:
             limit=self._limit,
             offset=self._offset,
             start_after=self._start_after,
+            fields=self._fields,
         )
         base.update(kw)
         return _Query(self._client, self._collection, **base)
@@ -392,8 +397,11 @@ class _Query:
         return self._clone(start_after=snapshot_or_values)
 
     def select(self, field_paths: Any) -> "_Query":
-        # Projection is a read optimisation; the neutral store returns full docs. Safe to ignore.
-        return self
+        # Propagate the projection to the store (which builds a Mongo ``find`` projection / a Firestore
+        # ``select``) instead of fetching every field — bulk migration reads (e.g. select(['data_protection_
+        # level']) over a whole collection) otherwise over-fetch and expose every document field (cubic
+        # 10887 firestore_facade.py:258). ``select([])`` stays ids-only (list preserved, not treated as None).
+        return self._clone(fields=list(field_paths))
 
     def _resolve_start_after(self) -> Optional[Dict[str, Any]]:
         """Translate a Firestore ``start_after`` cursor into the store's composite keyset
@@ -452,6 +460,7 @@ class _Query:
             limit=self._limit,
             offset=self._offset,
             start_after=self._resolve_start_after(),
+            fields=self._fields,
         )
 
     def count(self) -> "_AggregationQuery":

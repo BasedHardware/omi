@@ -273,6 +273,21 @@ def test_query_equality_order_and_limit(store, uid):
     assert [d.id for d in limited] == ["p2"]
 
 
+def test_query_fields_projection(store, uid):
+    # cubic PR 10887 facade:258: a fields projection returns only the requested payload fields (ids-only for
+    # []), so bulk migration reads don't over-fetch every field. Both backends honor it (Mongo find projection
+    # / Firestore .select()).
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"name": "p1", "team": "x", "secret": "s1"})
+    store.set(f"{base}/p2", {"name": "p2", "team": "y", "secret": "s2"})
+
+    projected = {d.id: d.to_dict() for d in store.query(base, fields=["name"])}
+    assert projected == {"p1": {"name": "p1"}, "p2": {"name": "p2"}}  # team/secret NOT fetched
+
+    ids_only = {d.id: d.to_dict() for d in store.query(base, fields=[])}
+    assert ids_only == {"p1": {}, "p2": {}}  # [] is ids-only, not "no projection"
+
+
 def test_query_multi_field_order_by(store, uid):
     base = f"users/{uid}/people"
     # Same score for a,b (b created later); c lower score. Primary scoring desc, secondary created_at desc.

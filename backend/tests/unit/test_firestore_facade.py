@@ -377,6 +377,19 @@ def test_txn_write_conflict_at_write_time_translates_to_aborted():
         txn.set(c.document("users/u1/goals/reservation"), {"version": 2})
 
 
+def test_select_projects_fields_to_the_store():
+    # cubic PR 10887 facade:258: .select() must propagate the projection to the store instead of fetching
+    # every field. select(['f']) returns only f; select([]) is ids-only; no select returns the full doc.
+    c = _client()
+    c.document("users/u1/goals/g1").set({"title": "a", "rank": 1, "secret": "x"})
+    c.document("users/u1/goals/g2").set({"title": "b", "rank": 2, "secret": "y"})
+    coll = c.collection("users/u1/goals")
+    assert {s.id: s.to_dict() for s in coll.select(["title"]).stream()} == {"g1": {"title": "a"}, "g2": {"title": "b"}}
+    assert sorted(s.id for s in coll.select([]).stream()) == ["g1", "g2"]  # ids preserved
+    assert all(s.to_dict() == {} for s in coll.select([]).stream())  # [] is ids-only, not "no projection"
+    assert {s.id: s.to_dict() for s in coll.stream()}["g1"] == {"title": "a", "rank": 1, "secret": "x"}
+
+
 def test_name_filter_normalizes_membership_list_of_refs():
     # cubic PR 10887 facade:350: a __name__ in/not-in filter carries a LIST of references; each must be
     # normalized element-wise, else a valid Firestore .where('__name__','in',[ref,...]) matches nothing.
