@@ -14,19 +14,17 @@ test("unconnected shipped destinations stay reachable without fabricated content
     "DeferredDestinationProduction.tsx",
     "DeferredDestinationProduction",
   );
-  for (const [destination, label] of [["apps", "Apps"], ["brain-map", "Brain Map"]]) {
-    const rendered = await renderComponent(DeferredDestinationProduction, { destination, locale: "en" });
-    try {
-      const shell = rendered.container.querySelector("[data-production-shell='true']");
-      assert.equal(shell?.getAttribute("data-route"), destination);
-      assert.equal(shell?.getAttribute("data-surface-state"), "unavailable");
-      assert.match(shell?.textContent ?? "", new RegExp(label));
-      assert.match(shell?.textContent ?? "", /not available in this build yet/);
-      assert.doesNotMatch(shell?.textContent ?? "", /sample|demo|placeholder/iu);
-      assert.ok(rendered.container.querySelector(`[aria-current="page"][href*="route=${destination}"]`));
-    } finally {
-      await rendered.cleanup();
-    }
+  const rendered = await renderComponent(DeferredDestinationProduction, { destination: "brain-map", locale: "en" });
+  try {
+    const shell = rendered.container.querySelector("[data-production-shell='true']");
+    assert.equal(shell?.getAttribute("data-route"), "brain-map");
+    assert.equal(shell?.getAttribute("data-surface-state"), "unavailable");
+    assert.match(shell?.textContent ?? "", /Brain Map/);
+    assert.match(shell?.textContent ?? "", /not available in this build yet/);
+    assert.doesNotMatch(shell?.textContent ?? "", /sample|demo|placeholder/iu);
+    assert.ok(rendered.container.querySelector(`[aria-current="page"][href*="route=brain-map"]`));
+  } finally {
+    await rendered.cleanup();
   }
 });
 

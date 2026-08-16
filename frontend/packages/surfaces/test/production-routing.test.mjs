@@ -203,6 +203,7 @@ test("what actually rendered is observable from outside the bundle", async () =>
     'markRendered("memories-platform", "platform")',
     'markRendered("home", memoriesGeneration, { conversations: conversationsGeneration })',
     'markRendered("tasks", null, { tasks: tasksGeneration })',
+    'markRendered("apps", null)',
     'markRendered(route, null)',
     'markRendered("listen", null)',
     'markRendered("chat", null)',
