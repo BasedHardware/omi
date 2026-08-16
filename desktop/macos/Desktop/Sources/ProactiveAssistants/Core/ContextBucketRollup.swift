@@ -85,17 +85,33 @@ enum BucketFactValidator {
     }
   }
 
+  /// Validity is evidence-resolution only. A missing identifier no longer
+  /// demotes a fact to `needs_review`.
+  ///
+  /// The identifier requirement was measured to have no discriminative value:
+  /// on 2,461 live facts it demoted 41.9% of content statements and 41.5% of
+  /// scenery statements — identical rates — while `needs_review` makes a fact
+  /// invisible to the director, the reconciler, pooling, and candidate
+  /// grounding, and the write path forces its worthiness to 0. 1,083 of the
+  /// 1,085 demotions failed on identifiers alone (evidence resolved fine), and
+  /// the destroyed half included exactly the class the system exists for
+  /// ("Aarav asked me to reach out to you to change my status from a
+  /// contributor to a maintainer" died here). The magnitude is usage-dependent
+  /// (18.4% on an independent beta install), but the mechanism is the same.
+  ///
+  /// Identifier omission is a known behavior of the extraction model, not a
+  /// quality signal: it leaves structured fields empty even while writing the
+  /// same information into the statement (measured 0/39 on real work screens).
+  /// Identifiers that ARE supplied still pass through `acceptedIdentifiers`,
+  /// which requires them to appear in the quoted evidence.
   static func validity(
-    identifiers: [String], evidenceText: String, evidenceRefs: [String], duplicate: Bool
+    evidenceText: String, evidenceRefs: [String], duplicate: Bool
   ) -> BucketFactValidity {
     if duplicate { return .superseded }
-    let hasIdentifier = identifiers.contains {
-      !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
     let evidenceResolves =
       !evidenceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       && !evidenceRefs.isEmpty
-    return hasIdentifier && evidenceResolves ? .validated : .needsReview
+    return evidenceResolves ? .validated : .needsReview
   }
 
   /// Model bookkeeping (`fact-001`, `f-002`, `visit:3`) and handles that never
@@ -388,6 +404,9 @@ enum ContextProactivityPromptBuilder {
       - A material change, status update, recommendation, or useful follow-up without an
         explicit commitment, promise, or request is insight or suggest. Never infer an
         owner or a due date. Never create a task candidate from actionability alone.
+      - A commitment is required only for task_candidate. Insight, suggest, and resurface
+        never require one: new, useful, grounded information the user has not seen is
+        enough. Do not stay silent just because nobody made a commitment.
       Use only supplied bucket-entry refs.
       Timestamps supplied below are already in the user's local time zone. When a message
       mentions a date or time, use that local form as written; never convert to or mention UTC.\(lookup)
@@ -621,7 +640,6 @@ extension ContextBucketStore {
               sql: "SELECT EXISTS(SELECT 1 FROM bucket_facts WHERE bucketID = ? AND statement = ?)",
               arguments: [bucketID, statement]) ?? false
           let validity = BucketFactValidator.validity(
-            identifiers: identifiers,
             evidenceText: evidenceText,
             evidenceRefs: evidenceRefs,
             duplicate: duplicate)

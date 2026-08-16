@@ -150,14 +150,33 @@ final class ContextProactivityEngineTests: XCTestCase {
     }
   }
 
-  func testNonSilenceGroundingRequiresBothValidatedEntryAndFactCitations() {
+  func testNonSilenceGroundingIsPerDecisionType() {
+    // insight/suggest/task_candidate make new claims about bucket content and
+    // keep the full anti-hallucination invariant: one entry ref AND one fact ref.
+    for decision in ["insight", "suggest", "task_candidate"] {
+      XCTAssertTrue(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: ["entry:one"], factIDs: ["fact:one"]))
+      XCTAssertFalse(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: ["entry:one"], factIDs: []))
+      XCTAssertFalse(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: [], factIDs: ["fact:one"]))
+    }
+    // A resurface grounds on an open task connected to current context; its
+    // citable half is the validated fact evidencing the connection. Nine of
+    // these were vetoed in one dogfood window by the old unconditional AND.
     XCTAssertTrue(
       ContextDirectorGrounding.permitsNonSilence(
-        entryRefs: ["entry:one"], factIDs: ["fact:one"]))
+        decision: "resurface", entryRefs: [], factIDs: ["fact:one"]))
+    XCTAssertTrue(
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "resurface", entryRefs: ["entry:one"], factIDs: []))
     XCTAssertFalse(
-      ContextDirectorGrounding.permitsNonSilence(entryRefs: ["entry:one"], factIDs: []))
-    XCTAssertFalse(
-      ContextDirectorGrounding.permitsNonSilence(entryRefs: [], factIDs: ["fact:one"]))
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "resurface", entryRefs: [], factIDs: []),
+      "a resurface with no citation of either kind stays vetoed")
   }
 
   @MainActor
@@ -888,8 +907,10 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
             evidenceRefs: ["visit:1"],
             confidence: 1,
             notifyWorthiness: 0.6),
-          // Higher worthiness, but no identifier: needs_review, so it must not
-          // count toward the departure-evaluation admission signal.
+          // No identifier, but resolvable evidence: validates under
+          // evidence-only validity, so its 0.9 IS the admission signal. (The
+          // old identifier gate demoted this shape to needs_review and zeroed
+          // it — measured at zero discriminative value on live data.)
           BucketExtraction.Fact(
             statement: "unidentified claim",
             identifiers: [],
@@ -897,6 +918,14 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
             evidenceRefs: ["visit:1"],
             confidence: 1,
             notifyWorthiness: 0.9),
+          // Unresolvable evidence still demotes and must not count.
+          BucketExtraction.Fact(
+            statement: "evidence-free claim",
+            identifiers: ["handle"],
+            evidenceText: " ",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 1.0),
         ]),
       for: fence,
       appName: "Test App",
@@ -905,7 +934,7 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
       now: now)
 
     let writeResult = try XCTUnwrap(result)
-    XCTAssertEqual(writeResult.maximumValidatedWorthiness, 0.6, accuracy: 0.000_001)
+    XCTAssertEqual(writeResult.maximumValidatedWorthiness, 0.9, accuracy: 0.000_001)
     XCTAssertTrue(
       ContextDepartureEvaluationPolicy.triggers(
         maximumValidatedWorthiness: writeResult.maximumValidatedWorthiness, flagEnabled: true))
