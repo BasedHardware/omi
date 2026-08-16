@@ -160,6 +160,26 @@ def test_update_with_stale_precondition_raises(store, uid):
     assert store.get(f"users/{uid}").to_dict()["v"] == 2  # refused write did not apply
 
 
+def test_precondition_update_advances_revision_even_under_same_ms_writes(store, uid):
+    # cubic PR 10887 mongo.py:321: Mongo truncates _updated_at to BSON millisecond, so rapid same-doc
+    # precondition updates could stamp an identical revision, letting a stale if_updated_at replay pass
+    # (lost update). Every precondition update must advance the revision STRICTLY past the read value on
+    # both backends (Firestore's update_time is already server-monotonic; the Mongo adapter forces
+    # max(now, if_updated_at + 1ms)). Rapid loop to provoke same-ms collisions.
+    base = f"users/{uid}"
+    store.set(base, {"n": 0})
+    first = store.get(base).updated_at
+    prev = first
+    for i in range(1, 60):
+        store.update(base, {"n": i}, if_updated_at=prev)
+        cur = store.get(base).updated_at
+        assert cur > prev, f"revision not strictly increasing at iter {i}: {prev} -> {cur}"
+        prev = cur
+    # the original (now stale) revision must be rejected — the hole the collision opened
+    with pytest.raises(PreconditionFailed):
+        store.update(base, {"n": 999}, if_updated_at=first)
+
+
 def test_delete_with_matching_precondition_applies(store, uid):
     store.set(f"users/{uid}", {"v": 1})
     rev = store.get(f"users/{uid}").updated_at

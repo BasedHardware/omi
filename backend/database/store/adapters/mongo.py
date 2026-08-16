@@ -29,7 +29,7 @@ from __future__ import annotations
 import os
 import re
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from pymongo import ASCENDING, DESCENDING, DeleteOne, InsertOne, MongoClient, ReplaceOne, UpdateOne
@@ -54,6 +54,20 @@ _OP = {
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _rev_stamp(if_updated_at: Any = None) -> datetime:
+    """The ``_updated_at`` revision to write. With no precondition it is ``now``. With a precondition it is
+    ``max(now, if_updated_at + 1ms)`` so the NEW revision is strictly greater than the one the caller read.
+    Mongo truncates dates to BSON millisecond, so two writes in the same ms would otherwise share a token
+    and let a stale ``if_updated_at`` write slip through the optimistic-concurrency check (cubic PR 10887
+    mongo.py:321; repro'd lost update). Firestore's ``update_time`` is already server-monotonic. The neutral
+    revision stays a ``datetime`` — the port/facade/upstream contract is unchanged; only the Mongo adapter
+    guarantees strict per-doc monotonicity for precondition writes (amends the Mongo mapping of ADR-0017)."""
+    now = _now()
+    if if_updated_at is None:
+        return now
+    return max(now, if_updated_at + timedelta(milliseconds=1))
 
 
 def _is_sentinel(value: Any) -> bool:
@@ -189,7 +203,7 @@ class _MongoBatch:
     def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
         update = _build_update_ops(data)
-        update.setdefault("$set", {})["_updated_at"] = _now()
+        update.setdefault("$set", {})["_updated_at"] = _rev_stamp(if_updated_at)
         query: Dict[str, Any] = {"_id": path}
         if if_updated_at is not None:
             query["_updated_at"] = if_updated_at
@@ -335,7 +349,7 @@ class MongoDocumentStore:
     def _update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None, session: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
         update = _build_update_ops(data)
-        update.setdefault("$set", {})["_updated_at"] = _now()
+        update.setdefault("$set", {})["_updated_at"] = _rev_stamp(if_updated_at)
         # ``update`` requires an existing document (the Firestore reference adapter raises NotFound
         # otherwise). Mongo's update_one silently no-ops on no match, so translate matched_count==0
         # into the neutral NotFound to preserve parity across backends.
