@@ -1,0 +1,49 @@
+desktop/context-for-claude/Sources/ContextCore/Paths.swift
+  s_d58145f2e376ea::t_17aa29ededc013 10-61
+desktop/context-for-claude/Tests/ContextCoreTests/BuildIdentityTests.swift
+  s_d58145f2e376ea::t_5d83f57c954158 1-150
+desktop/context-for-claude/Tests/ContextAppTests/DiagnosticTraceTests.swift
+  s_d58145f2e376ea::t_37c01a542ca8e4 231-233,235-242
+desktop/context-for-claude/Sources/ContextMCPKit/MCPServer.swift
+  s_d58145f2e376ea::t_420d1d44844922 125-129
+desktop/context-for-claude/Tests/ContextAppTests/ScreenStaleGrantTests.swift
+  s_d58145f2e376ea::t_1926b7bb3e0498 1
+  s_d58145f2e376ea::t_82c18b414fb3a6 251,257-261
+desktop/context-for-claude/Sources/ContextApp/Support/Log.swift
+  s_d58145f2e376ea::t_637b470fa56a95 37-42
+  s_d58145f2e376ea::t_cdc0325eb259e0 94-99
+  s_d58145f2e376ea::t_04ab483665e8df 1
+desktop/context-for-claude/Tests/ContextAppTests/BuildIdentityTests.swift
+  s_d58145f2e376ea::t_38eb09c48b03a4 1-63
+desktop/context-for-claude/Sources/ContextApp/Account/SessionStore.swift
+  s_d58145f2e376ea::t_9ec9a95fb7ba77 1
+  s_d58145f2e376ea::t_bcae573a948b40 40-44,47-49
+  s_d58145f2e376ea::t_83ec00dcf2f6ec 50
+desktop/context-for-claude/Sources/ContextApp/Permissions.swift
+  s_d58145f2e376ea::t_dd08dbe6e5ef2d 509-517
+desktop/context-for-claude/Sources/ContextCore/ClaudeSkill.swift
+  s_d58145f2e376ea::t_9730f6b6afa1dd 52
+  s_d58145f2e376ea::t_2941611aa9a30c 65
+  s_d58145f2e376ea::t_f01c798f1a216d 20-28
+desktop/context-for-claude/Sources/ContextCore/ClaudeConfig.swift
+  s_d58145f2e376ea::t_b7a4aba8b16992 118-120
+  s_d58145f2e376ea::t_43a3af8ffe8e03 101-103
+  s_d58145f2e376ea::t_5adea07a8d5be6 74-81
+  s_d58145f2e376ea::t_446cb8946bc4fa 18-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f243c376a49a2c16fa16afc0ddb08fc4b410d074",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
