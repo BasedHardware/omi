@@ -4,9 +4,9 @@ import 'package:uuid/uuid.dart';
 
 class FirmwareUpdateTelemetry {
   FirmwareUpdateTelemetry.start({required BtDevice device, required this.protocol, AnalyticsManager? analytics})
-    : _analytics = analytics ?? AnalyticsManager(),
-      _attemptId = const Uuid().v4(),
-      _fromVersion = device.firmwareRevision {
+      : _analytics = analytics ?? AnalyticsManager(),
+        _attemptId = const Uuid().v4(),
+        _fromVersion = device.firmwareRevision {
     _analytics.track('Firmware Update Started', properties: _properties());
   }
 
@@ -29,10 +29,10 @@ class FirmwareUpdateTelemetry {
   }
 
   Map<String, Object> _properties({String? toVersion, String? failureClass}) => {
-    'firmware_update_attempt_id': _attemptId,
-    'protocol': protocol,
-    'from_version': _fromVersion.isEmpty ? 'unknown' : _fromVersion,
-    if (toVersion != null) 'to_version': toVersion,
-    if (failureClass != null) 'failure_class': failureClass,
-  };
+        'firmware_update_attempt_id': _attemptId,
+        'protocol': protocol,
+        'from_version': _fromVersion.isEmpty ? 'unknown' : _fromVersion,
+        if (toVersion != null) 'to_version': toVersion,
+        if (failureClass != null) 'failure_class': failureClass,
+      };
 }

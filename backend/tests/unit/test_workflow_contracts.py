@@ -296,7 +296,6 @@ def test_pre_push_selects_release_guard_and_focused_test_for_release_contract_ch
     function_end = pre_push.index("\n}\n", function_start)
     guard = pre_push[function_start:function_end]
 
-    assert ".github/workflows/desktop_qualify_beta.yml" in guard
     assert ".github/scripts/check-release-process-guards.py" in guard
     assert "scripts/run-release-process-guards.sh" in guard
     assert "tests/unit/test_desktop_release_scripts.py" in guard

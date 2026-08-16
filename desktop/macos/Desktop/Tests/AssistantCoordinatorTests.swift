@@ -46,4 +46,59 @@ final class AssistantCoordinatorTests: XCTestCase {
     XCTAssertEqual(queue.inFlight, destinationB)
     XCTAssertEqual(queue.finish(destinationB), nil)
   }
+
+  /// Regression (Aug 13–14 2026): the context-buckets rollout forwarded context switches
+  /// only to the task assistant, silently starving the suggestion and memory assistants —
+  /// focus nudges stopped for everyone in the flag cohort with no error logged anywhere.
+  /// Buckets mode changes who writes bucket exits, never who hears switches.
+  @MainActor
+  func testBucketsModeDispatchesContextSwitchToEveryAssistant() async {
+    let spy = ContextSwitchSpyAssistant(identifier: "context-switch-spy-\(UUID().uuidString)")
+    AssistantCoordinator.shared.register(spy)
+    defer { AssistantCoordinator.shared.unregister(identifier: spy.spyIdentifier) }
+
+    // register() stores the assistant from a MainActor task; yield until it is visible.
+    for _ in 0..<1000 where AssistantCoordinator.shared.assistant(withIdentifier: spy.spyIdentifier) == nil {
+      await Task.yield()
+    }
+    XCTAssertNotNil(AssistantCoordinator.shared.assistant(withIdentifier: spy.spyIdentifier))
+
+    // First call primes the tracked context; the second is a real switch. The dispatch is
+    // awaited inside checkContextSwitch, so by the time it returns the spy has heard it.
+    _ = await AssistantCoordinator.shared.checkContextSwitch(
+      newApp: "SpyBaselineApp", newWindowTitle: "baseline", bucketsEnabled: true)
+    _ = await AssistantCoordinator.shared.checkContextSwitch(
+      newApp: "SpyTargetApp", newWindowTitle: "target", bucketsEnabled: true)
+
+    let apps = await spy.switchedApps()
+    XCTAssertTrue(
+      apps.contains("SpyTargetApp"),
+      "buckets mode must deliver onContextSwitch to every registered assistant, got \(apps)")
+  }
+}
+
+private actor ContextSwitchSpyAssistant: ProactiveAssistant {
+  nonisolated let spyIdentifier: String
+  var identifier: String { spyIdentifier }
+  var displayName: String { "Context Switch Spy" }
+  var isEnabled: Bool { true }
+  var needsFrameDuringDelay: Bool { false }
+
+  private var apps: [String] = []
+
+  init(identifier: String) {
+    self.spyIdentifier = identifier
+  }
+
+  func switchedApps() -> [String] { apps }
+
+  func analyze(frame: CapturedFrame) async -> AssistantResult? { nil }
+  func handleResult(
+    _ result: AssistantResult, sendEvent: @escaping @Sendable (String, [String: Any]) -> Void
+  ) async {}
+  func onContextSwitch(departingFrame: CapturedFrame?, newApp: String, newWindowTitle: String?) async {
+    apps.append(newApp)
+  }
+  func clearPendingWork() async {}
+  func stop() async {}
 }

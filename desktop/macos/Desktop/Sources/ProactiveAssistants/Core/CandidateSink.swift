@@ -1,16 +1,56 @@
 import Foundation
 @preconcurrency import GRDB
 
+/// Bounded outcome of graduating a context-director `task_candidate`. Interactive
+/// presentation is allowed only for `.graduated`; every other case is a distinct
+/// reason the ledger can record without collapsing them into a generic failure.
+enum CandidateGraduationReason: String, Equatable, Sendable {
+  case graduated
+  case noFactIDs = "no_fact_ids"
+  case ownerChanged = "owner_changed"
+  case storeUnavailable = "store_unavailable"
+  case workflowNotReadable = "workflow_not_readable"
+  case ineligibleDisposition = "ineligible_disposition"
+  case stale
+}
+
+/// Merges a bounded graduation-failure token into an existing director
+/// provenance object so bucket refs survive the failed path.
+enum CandidateGraduationProvenance {
+  static let failureToken = "candidate_graduation_failed"
+
+  static func mergingFailure(
+    into provenanceJSON: String,
+    reason: CandidateGraduationReason
+  ) -> String {
+    var object: [String: Any] = [:]
+    if let data = provenanceJSON.data(using: .utf8),
+      let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    {
+      object = parsed
+    }
+    object["failure"] = failureToken
+    object["graduation_reason"] = reason.rawValue
+    guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return
+        "{\"failure\":\"\(failureToken)\",\"graduation_reason\":\"\(reason.rawValue)\"}"
+    }
+    return json
+  }
+}
+
 /// Presentation gate for context-director task candidates. Interactive
 /// notifications must not become user-visible until graduation has produced
 /// (or confirmed) a durable canonical candidate.
 enum CandidateSinkDeliveryGate {
   static func mayPresentInteractively(
     decisionType: String,
-    graduationSucceeded: Bool
+    graduation: CandidateGraduationReason
   ) -> Bool {
     guard decisionType == "task_candidate" else { return true }
-    return graduationSucceeded
+    return graduation == .graduated
   }
 
   static func hasCompleteValidatedFactSet(requestedIDs: [String], fetchedIDs: [String]) -> Bool {
@@ -65,47 +105,59 @@ actor CandidateSink {
   func graduateValidatedFacts(
     deliveryID: String,
     factIDs: [String],
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-  ) async -> Bool {
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    now: Date = Date()
+  ) async -> CandidateGraduationReason {
     let normalizedFactIDs = Array(
       Set(factIDs.map { $0.hasPrefix("fact:") ? String($0.dropFirst(5)) : $0 })
     ).sorted()
-    guard !normalizedFactIDs.isEmpty else { return false }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
+    guard !normalizedFactIDs.isEmpty else { return .noFactIDs }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      return .ownerChanged
+    }
     let (pool, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let pool else { return false }
-    let now = Date()
+    guard let pool else { return .storeUnavailable }
     do {
       let facts = try await pool.read { db in
         try Self.graduationFacts(
           in: db, deliveryID: deliveryID, factIDs: normalizedFactIDs, now: now)
       }
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+        return .ownerChanged
+      }
       guard
-        RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
         CandidateSinkDeliveryGate.hasCompleteValidatedFactSet(
           requestedIDs: normalizedFactIDs,
           fetchedIDs: facts.map(\.id))
       else {
-        return false
+        return .stale
       }
-      let control = try await APIClient.shared.getCandidateWorkflowControl(
-        expectedOwnerId: authorizationSnapshot.ownerID,
-        authorizationSnapshot: authorizationSnapshot)
-      guard control.workflowMode == .read, let generation = control.accountGeneration else {
-        return false
+      let needsCreate = facts.contains { $0.dispositionState == "none" }
+      var generation: Int?
+      if needsCreate {
+        let control = try await APIClient.shared.getCandidateWorkflowControl(
+          expectedOwnerId: authorizationSnapshot.ownerID,
+          authorizationSnapshot: authorizationSnapshot)
+        guard control.workflowMode == .read, let accountGeneration = control.accountGeneration else {
+          return .workflowNotReadable
+        }
+        generation = accountGeneration
       }
       for fact in facts {
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+          return .ownerChanged
+        }
         guard CandidateSinkDeliveryGate.isGraduationEligibleDisposition(fact.dispositionState) else {
-          return false
+          return .ineligibleDisposition
         }
         if fact.dispositionState == "none" {
+          guard let accountGeneration = generation else { return .workflowNotReadable }
           let stillFresh = try await pool.read { db in
             try Self.graduationFacts(
-              in: db, deliveryID: deliveryID, factIDs: [fact.id], now: Date()
+              in: db, deliveryID: deliveryID, factIDs: [fact.id], now: now
             ).count == 1
           }
-          guard stillFresh else { return false }
+          guard stillFresh else { return .stale }
           let excerptHash = ContextBucketStore.referenceHash(fact.evidenceText)
           let candidate = OmiAPI.CandidateCreate.taskCreate(
             OmiAPI.TaskCreateCandidate(
@@ -126,10 +178,12 @@ actor CandidateSink {
           _ = try await APIClient.shared.createCanonicalCandidate(
             candidate,
             idempotencyKey: CandidateSinkDeliveryGate.canonicalCandidateIdempotencyKey(factID: fact.id),
-            accountGeneration: generation,
+            accountGeneration: accountGeneration,
             expectedOwnerId: authorizationSnapshot.ownerID,
             authorizationSnapshot: authorizationSnapshot)
-          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return false }
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+            return .ownerChanged
+          }
           let mutationAuthorization = LocalMutationAuthorization {
             RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
           }
@@ -142,16 +196,19 @@ actor CandidateSink {
               try db.execute(
                 sql:
                   "UPDATE bucket_facts SET dispositionState = 'candidate_pending', updatedAt = ? WHERE id = ? AND validityState = 'validated' AND dispositionState = 'none' AND (expiresAt IS NULL OR expiresAt > ?)",
-                arguments: [Date(), fact.id, Date()])
+                arguments: [now, fact.id, now])
               guard db.changesCount == 1 else { throw ContextBucketStoreError.staleFence }
             }
           }
         }
       }
-      return true
+      return .graduated
     } catch {
       log("CandidateSink: canonical candidate graduation deferred: \(error.localizedDescription)")
-      return false
+      if case .databaseUnavailable = error as? ContextBucketStoreError {
+        return .storeUnavailable
+      }
+      return .stale
     }
   }
 }

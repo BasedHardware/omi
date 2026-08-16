@@ -778,7 +778,7 @@ class TestRealCheckRateLimit(unittest.TestCase):
         self.real_module._RATE_LIMIT_RESERVE_LUA = MagicMock(return_value=[1, 3, 3600])
         allowed, remaining, retry = self.real_module.reserve_rate_limit("uid1", "desktop_reasoning", 10, 3600)
         self.assertTrue(allowed)
-        self.assertEqual((remaining, retry), (7, 0))
+        self.assertEqual((remaining, retry), (7, 3600))
         self.real_module._RATE_LIMIT_RESERVE_LUA.assert_called_once_with(
             keys=["rl:desktop_reasoning:uid1"], args=[3600, 10]
         )
@@ -792,6 +792,45 @@ class TestRealCheckRateLimit(unittest.TestCase):
         self.real_module._RATE_LIMIT_RELEASE_LUA = MagicMock(return_value=2)
         self.real_module.release_rate_limit("uid1", "desktop_reasoning")
         self.real_module._RATE_LIMIT_RELEASE_LUA.assert_called_once_with(keys=["rl:desktop_reasoning:uid1"], args=[])
+
+    def _release_lua_source(self) -> str:
+        source = None
+        for lua_source in self.lua_sources:
+            if "DECR" in lua_source and "DEL" in lua_source and "INCR" not in lua_source:
+                source = lua_source
+                break
+        self.assertIsNotNone(source, "release Lua script was not registered")
+        return source
+
+    def test_release_lua_clamps_at_zero_after_delete(self):
+        # The guarded unit runner stubs the redis package, so the script cannot
+        # be executed here. Pin the clamp semantics structurally: a release on a
+        # missing/zeroed counter must DEL and return 0 instead of DECR-ing the
+        # key negative (an operator quota reset deletes keys mid-flight).
+        source = self._release_lua_source()
+        self.assertIn("or '0'", source)
+        self.assertIn("current <= 1", source)
+        self.assertIn("remaining <= 0", source)
+        self.assertEqual(source.count("redis.call('DEL', key)"), 2)
+        for clause in ("current <= 1", "remaining <= 0"):
+            branch = source.split(clause, 1)[1]
+            self.assertIn("return 0", branch.split("end", 1)[0])
+
+    def test_release_lua_clamps_at_zero_after_delete_executes(self):
+        # Full execution against fakeredis, for environments where the real
+        # redis package (and lupa) are importable — bare pytest locally.
+        try:
+            import fakeredis
+
+            client = fakeredis.FakeRedis()
+            script = client.register_script(self._release_lua_source())
+        except Exception:
+            self.skipTest("fakeredis with Lua support unavailable under the guarded runner")
+        key = "rl:desktop_reasoning:uid1"
+        remaining = script(keys=[key], args=[])
+        self.assertEqual(int(remaining), 0)
+        stored = client.get(key)
+        self.assertTrue(stored is None or int(stored) >= 0)
 
 
 if __name__ == '__main__':

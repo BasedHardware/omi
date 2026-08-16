@@ -109,8 +109,8 @@ def validate_workflow(text: str) -> list[str]:
             for match in re.finditer(r"(?m)^  (?P<key>[\"']?[A-Za-z_]+[\"']?):", on_block)
         ]
     )
-    if trigger_keys != ["push"]:
-        errors.append("release eligibility must declare only the automatic push trigger")
+    if trigger_keys != ["push", "workflow_dispatch"]:
+        errors.append("release eligibility must declare the automatic push trigger and workflow_dispatch")
     require_fragment(errors, text, "name: Release Eligibility", "release eligibility workflow is missing its unique check name")
     require_fragment(
         errors,
@@ -135,11 +135,35 @@ def validate_workflow(text: str) -> list[str]:
         "uses: ./.github/actions/release-eligibility",
         "release eligibility workflow must use the canonical release-eligibility action",
     )
+    require_fragment(
+        errors,
+        text,
+        'echo "before=${{ github.event.before }}" >> "$GITHUB_OUTPUT"',
+        "release eligibility must resolve the push event before SHA on automatic runs",
+    )
+    require_fragment(
+        errors,
+        text,
+        'echo "after=${{ github.event.after }}" >> "$GITHUB_OUTPUT"',
+        "release eligibility must resolve the push event after SHA on automatic runs",
+    )
+    require_fragment(
+        errors,
+        text,
+        "echo \"before=$(git rev-parse --verify HEAD^)\" >> \"$GITHUB_OUTPUT\"",
+        "release eligibility dispatch must resolve before as HEAD^",
+    )
+    require_fragment(
+        errors,
+        text,
+        "echo \"after=$(git rev-parse --verify HEAD)\" >> \"$GITHUB_OUTPUT\"",
+        "release eligibility dispatch must resolve after as HEAD",
+    )
     for name, expression in {
         "ref": "${{ github.ref }}",
         "sha": "${{ github.sha }}",
-        "before": "${{ github.event.before }}",
-        "after": "${{ github.event.after }}",
+        "before": "${{ steps.range.outputs.before }}",
+        "after": "${{ steps.range.outputs.after }}",
     }.items():
         require_fragment(
             errors,

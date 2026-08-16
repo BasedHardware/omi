@@ -223,9 +223,11 @@ def register_release_manifest(data: dict[str, Any], *, firestore_client: Any = N
 
 #: Pointer transitions differ only in which preconditions they enforce, so the
 #: policy is data and :func:`_build_pointer` is the single mutation authority.
-#: ``direction`` is the permitted build-number movement; every transition
-#: accepts normal Codemagic signed-smoke evidence (or retained T2 evidence)
-#: while keeping emergency manifests out of the Stable path.
+#: ``direction`` is the permitted build-number movement. ``qualification_tier``
+#: and ``qualification_passed`` are legacy evidence-class fields; ``signed-smoke``
+#: is the only tier new manifests carry. The set still accepts retained T2
+#: evidence so historical manifests keep resolving. Emergency manifests stay
+#: out of the Stable path.
 TRANSITIONS: dict[str, dict[str, Any]] = {
     "promote": {
         "direction": "forward",
@@ -266,7 +268,7 @@ def _build_pointer(
     if manifest["platform"] != platform:
         raise ValueError("release manifest platform does not match pointer platform")
     accepted_evidence = policy["accepted_evidence"]
-    evidence = (manifest["qualification_tier"], manifest["qualification_passed"])
+    evidence = (manifest["qualification_tier"], manifest["qualification_passed"])  # legacy evidence-class fields
     if accepted_evidence is not None and evidence not in accepted_evidence:
         raise ValueError("release manifest qualification is missing accepted normal-path evidence")
 

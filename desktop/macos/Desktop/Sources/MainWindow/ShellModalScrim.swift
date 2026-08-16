@@ -58,9 +58,8 @@ import SwiftUI
 /// a fact about where the modal is, not a judgement someone had to make.
 enum ShellModalScrimBounds: Equatable, Sendable, CaseIterable {
   /// Mounted over the whole shell window (`DesktopHomeView`'s overlays), or over any surface that is
-  /// not one of the two below. The window's own extent is invisible, so the dim takes the lane
-  /// instead, starting under the transparent drag band the shell reserves
-  /// (`GlassShell.titlebarClearance`) and ending at the page panel's bottom margin.
+  /// not one of the two below. The lane fills the window, so the dim does too — ending at the page
+  /// panel's bottom margin so it does not paint the air under the stack.
   ///
   /// The default, and deliberately the *conservative* one: an unknown surface is treated as one whose
   /// edges cannot be trusted, which fails towards a dim that is too small rather than one that paints
@@ -130,8 +129,8 @@ enum ShellModalScrimLayout {
   static func topInset(_ bounds: ShellModalScrimBounds) -> CGFloat {
     switch bounds {
     case .wholeShell:
-      // The window's drag band. Painting into it would put a dark strip on the desktop *above* the
-      // top bar, which is the defect drawn a little smaller.
+      // The window is flush with the glass; the top bar is the top edge. Zero here lets the dim
+      // cover the bar. A leftover title-bar band would leave an undimmed strip above it.
       return GlassShell.titlebarClearance
     case .contentArea:
       return PageGlassLaneLayout.topGap
@@ -172,8 +171,8 @@ enum ShellModalScrimLayout {
 
 // MARK: - The dim
 
-/// A modal dim: an invisible barrier at the host's full size, and a painted surface that never
-/// reaches the window's edge.
+/// A modal dim: an invisible barrier at the host's full size, and a painted surface that follows
+/// the glass rather than the leftover air between panels.
 ///
 /// Use it for every modal dim in the shell. A caller that reaches for a bare
 /// `Color.black.opacity(…).ignoresSafeArea()` is drawing a rectangle on the wallpaper.
@@ -198,10 +197,14 @@ struct ShellModalScrim: View {
       ZStack {
         if blocksInteraction {
           // Modality, at the host's full size — the part that was never wrong to draw host-wide,
-          // because it draws nothing.
+          // because it draws nothing. The reporter keeps the transparent barrier inside the
+          // window's pointer ownership: without it, the shell's click-through sync would pass
+          // clicks on the barrier straight to whatever is behind the window (see
+          // `ShellClickThrough.swift`), and the modal would stop being modal.
           Color.clear
             .contentShape(Rectangle())
             .onTapGesture { onTap?() }
+            .background(InkGlassHitRegionReporter())
         }
 
         RoundedRectangle(cornerRadius: ShellModalScrimLayout.cornerRadius, style: .continuous)

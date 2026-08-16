@@ -34,9 +34,8 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   int installProgress = 0;
   bool isLegacySecureDFU = true;
   List<String> otaUpdateSteps = [];
-  late final mcumgr.FirmwareUpdateManagerFactory? managerFactory = firmwareUpdatePolicy.allowsOmiFirmwareUpdate
-      ? mcumgr.FirmwareUpdateManagerFactory()
-      : null;
+  late final mcumgr.FirmwareUpdateManagerFactory? managerFactory =
+      firmwareUpdatePolicy.allowsOmiFirmwareUpdate ? mcumgr.FirmwareUpdateManagerFactory() : null;
   mcumgr.FirmwareUpdateManager? _mcuUpdateManager;
   FirmwareUpdateTelemetry? _firmwareTelemetry;
 
@@ -169,8 +168,8 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     updateManager.logger.logMessageStream
         .where((log) => log.level.rawValue > 1) // Filter debug messages
         .listen((log) {
-          Logger.debug('dfu log: ${log.message}');
-        });
+      Logger.debug('dfu log: ${log.message}');
+    });
 
     await updateManager.update(images, configuration: configuration);
   }

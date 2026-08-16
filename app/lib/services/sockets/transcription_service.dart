@@ -104,8 +104,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.onboardingMode = false,
     this.clientConversationId,
   }) {
-    var params =
-        '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
+    var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
         '&conversation_timeout=${SharedPreferencesUtil().conversationSilenceDuration}';
 
@@ -319,6 +318,10 @@ class TranscriptSocketServiceFactory {
     return _customSttSupportedCodecs.contains(codec);
   }
 
+  static bool shouldBlockUnsupportedCodecFallback(BleAudioCodec codec, CustomSttConfig config) {
+    return config.isEnabled && !isCodecSupportedForCustomStt(codec) && !config.sendRawAudioToOmi;
+  }
+
   /// Create default Omi transcription service
   static TranscriptSegmentSocketService createDefault(
     int sampleRate,
@@ -386,6 +389,7 @@ class TranscriptSocketServiceFactory {
       sttConfigId: sttConfigId,
       sttProvider: config.provider.name,
       clientConversationId: clientConversationId,
+      forwardRawAudioToSecondary: config.sendRawAudioToOmi,
     );
   }
 
@@ -397,9 +401,8 @@ class TranscriptSocketServiceFactory {
     if (config.provider == SttProvider.geminiLive) {
       return GeminiStreamingSttSocket(
         apiKey: config.apiKey ?? '',
-        model: config.effectiveModel.isNotEmpty
-            ? config.effectiveModel
-            : 'gemini-2.5-flash-native-audio-preview-12-2025',
+        model:
+            config.effectiveModel.isNotEmpty ? config.effectiveModel : 'gemini-2.5-flash-native-audio-preview-12-2025',
         language: config.effectiveLanguage,
         sampleRate: sampleRate,
         transcoder: transcoder,
@@ -409,12 +412,10 @@ class TranscriptSocketServiceFactory {
     // Deepgram Live and other streaming providers
     final requestConfig = config.requestConfig;
     final url = requestConfig['url'] ?? config.effectiveUrl;
-    final headers = requestConfig['headers'] != null
-        ? Map<String, String>.from(requestConfig['headers'])
-        : (config.headers ?? {});
-    final params = requestConfig['params'] != null
-        ? Map<String, String>.from(requestConfig['params'])
-        : (config.params ?? {});
+    final headers =
+        requestConfig['headers'] != null ? Map<String, String>.from(requestConfig['headers']) : (config.headers ?? {});
+    final params =
+        requestConfig['params'] != null ? Map<String, String>.from(requestConfig['params']) : (config.params ?? {});
 
     // Build WebSocket URL with query params
     final wsUrl = _buildUrlWithParams(url, params);
@@ -438,12 +439,10 @@ class TranscriptSocketServiceFactory {
 
     final requestConfig = config.requestConfig;
     final url = requestConfig['url'] ?? config.effectiveUrl;
-    final headers = requestConfig['headers'] != null
-        ? Map<String, String>.from(requestConfig['headers'])
-        : (config.headers ?? {});
-    final params = requestConfig['params'] != null
-        ? Map<String, String>.from(requestConfig['params'])
-        : (config.params ?? {});
+    final headers =
+        requestConfig['headers'] != null ? Map<String, String>.from(requestConfig['headers']) : (config.headers ?? {});
+    final params =
+        requestConfig['params'] != null ? Map<String, String>.from(requestConfig['params']) : (config.params ?? {});
     final audioFieldName = requestConfig['audio_field_name'] ?? config.audioFieldName ?? 'file';
     final requestType = config.effectiveRequestType;
 
@@ -518,6 +517,7 @@ class TranscriptSocketServiceFactory {
     String? sttConfigId,
     String? sttProvider,
     String? clientConversationId,
+    required bool forwardRawAudioToSecondary,
   }) {
     final secondaryService = CustomSttTranscriptSegmentSocketService.create(
       sampleRate,
@@ -530,6 +530,7 @@ class TranscriptSocketServiceFactory {
       primarySocket: primarySocket,
       secondarySocket: secondaryService.socket,
       sttProvider: sttProvider,
+      forwardRawAudioToSecondary: forwardRawAudioToSecondary,
     );
     return TranscriptSegmentSocketService.withSocket(
       sampleRate,

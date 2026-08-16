@@ -295,6 +295,7 @@ class SelectionTests(unittest.TestCase):
             {
                 "check-manifest-contract",
                 "diff-hygiene",
+                "git-author-identity",
                 "architecture-guardrails",
                 "product-invariants",
                 "failure-class-protocol",

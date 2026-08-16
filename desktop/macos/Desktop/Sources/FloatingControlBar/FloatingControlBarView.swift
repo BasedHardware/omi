@@ -826,7 +826,7 @@ struct FloatingControlBarView: View {
 
   @ViewBuilder
   private var barContextMenu: some View {
-    Button("Disable for 2 hours") {
+    Button("Hide for 2 hours") {
       FloatingControlBarManager.shared.snooze(
         for: FloatingControlBarManager.snoozeTwoHoursDuration
       )
@@ -2075,10 +2075,14 @@ private struct AgentMainChatView: View {
           switch group {
           case .text(_, let text):
             if !text.isEmpty {
-              OmiMarkdown(text: text, sender: .ai)
+              OmiMarkdown(text: text, sender: .ai, citations: message.inlineCitationReferences)
                 .environment(\.colorScheme, .dark)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+          case .commentary(_, let text):
+            TurnCommentaryRow(text: text)
+              .environment(\.colorScheme, .dark)
+              .frame(maxWidth: .infinity, alignment: .leading)
           case .toolCalls(_, let calls):
             ToolCallsGroup(calls: calls, compact: true)
               .frame(maxWidth: .infinity, alignment: .leading)
@@ -2121,7 +2125,7 @@ private struct AgentMainChatView: View {
     } else {
       let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
       if !trimmed.isEmpty {
-        OmiMarkdown(text: trimmed, sender: .ai)
+        OmiMarkdown(text: trimmed, sender: .ai, citations: message.inlineCitationReferences)
           .textSelection(.enabled)
           .environment(\.fontScale, 0.88)
           .fixedSize(horizontal: false, vertical: true)

@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, List, Literal, Optional, Union
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class MessageSender(str, Enum):
@@ -133,11 +133,9 @@ class Message(BaseModel):
         def get_sender_name(message: Message) -> str:
             if message.sender == 'human':
                 return 'User'
-            # elif use_plugin_name_if_available and message.app_id is not None:
-            #     plugin = next((p for p in plugins if p.id == message.app_id), None)
-            #     if plugin:
-            #         return plugin.name RESTORE ME
-            return message.sender.upper()  # TODO: use app id
+            if use_plugin_name_if_available and message.app_id and message.app_id.strip():
+                return message.app_id
+            return message.sender.upper()
 
         formatted_messages = []
         for message in sorted_messages:
@@ -166,11 +164,9 @@ class Message(BaseModel):
         def get_sender_name(message: Message) -> str:
             if message.sender == 'human':
                 return 'User'
-            # elif use_plugin_name_if_available and message.app_id is not None:
-            #     plugin = next((p for p in plugins if p.id == message.app_id), None)
-            #     if plugin:
-            #         return plugin.name RESTORE ME
-            return message.sender.upper()  # TODO: use app id
+            if use_plugin_name_if_available and message.app_id and message.app_id.strip():
+                return message.app_id
+            return message.sender.upper()
 
         formatted_messages = []
         for message in sorted_messages:
@@ -224,6 +220,24 @@ class SendMessageRequest(BaseModel):
     text: str
     file_ids: Optional[List[str]] = []
     context: Optional[PageContext] = None
+
+
+class GenerateReplyTurn(BaseModel):
+    """A prior turn supplied by the caller purely as generation context."""
+
+    text: str = Field(..., min_length=1, max_length=100000)
+    sender: MessageSender
+
+
+class GenerateReplyRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=100000)
+    history: List[GenerateReplyTurn] = Field(default_factory=list, max_length=50)
+    app_id: Optional[str] = Field(None, max_length=200)
+
+
+class GenerateReplyResponse(BaseModel):
+    text: str
+    app_id: Optional[str] = None
 
 
 class RateMessageRequest(BaseModel):

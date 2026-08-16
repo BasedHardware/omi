@@ -23,7 +23,6 @@ enum SuggestionAssistantTelemetry {
     case eligible
     case disabled
     case excludedApp = "excluded_app"
-    case snoozed
     case dwell
     case cooldown
     case dailyBudget = "daily_budget"
@@ -34,7 +33,6 @@ enum SuggestionAssistantTelemetry {
       case .evaluate: self = .eligible
       case .skippedDisabled: self = .disabled
       case .skippedExcludedApp: self = .excludedApp
-      case .skippedSnoozed: self = .snoozed
       case .skippedDwell: self = .dwell
       case .skippedCooldown: self = .cooldown
       case .skippedDailyBudget: self = .dailyBudget
@@ -78,6 +76,79 @@ enum SuggestionAssistantTelemetry {
     case from10To30Seconds = "10_30s"
     case from30To120Seconds = "30_120s"
     case over120Seconds = "120s_plus"
+  }
+
+  /// Closed failure class for `Suggestion Assistant Evaluation Failed`.
+  /// Raw error strings, URLs, and user content are never accepted.
+  enum EvaluationFailureReason: String, CaseIterable, Sendable {
+    case network
+    case httpStatus4xx = "http_status_4xx"
+    case httpStatus5xx = "http_status_5xx"
+    case rateLimited = "rate_limited"
+    case decodeFailed = "decode_failed"
+    case timeout
+    case cancelled
+    case other
+
+    init(_ error: Error) {
+      self = Self.classify(error)
+    }
+
+    private static func classify(_ error: Error) -> EvaluationFailureReason {
+      if error is CancellationError { return .cancelled }
+      if error is DecodingError { return .decodeFailed }
+      if let urlError = error as? URLError {
+        switch urlError.code {
+        case .timedOut: return .timeout
+        case .cancelled: return .cancelled
+        default: return .network
+        }
+      }
+      if let geminiError = error as? GeminiClient.GeminiClientError {
+        switch geminiError {
+        case .networkError(let underlying):
+          return classify(underlying)
+        case .invalidResponse:
+          return .decodeFailed
+        case .apiError(let message, _):
+          return classifyAPIMessage(message)
+        case .missingAPIKey:
+          return .other
+        }
+      }
+      let nsError = error as NSError
+      if nsError.domain == NSURLErrorDomain {
+        switch nsError.code {
+        case NSURLErrorTimedOut: return .timeout
+        case NSURLErrorCancelled: return .cancelled
+        default: return .network
+        }
+      }
+      let typeName = String(describing: type(of: error))
+      if typeName.contains("SuggestionEvaluationError") { return .decodeFailed }
+      return .other
+    }
+
+    private static func classifyAPIMessage(_ message: String) -> EvaluationFailureReason {
+      if let status = httpStatus(from: message) {
+        if status == 429 { return .rateLimited }
+        if (400..<500).contains(status) { return .httpStatus4xx }
+        if (500..<600).contains(status) { return .httpStatus5xx }
+      }
+      let lower = message.lowercased()
+      if lower.contains("rate limit") || lower.contains("resource exhausted") || lower.contains("quota") {
+        return .rateLimited
+      }
+      if lower.contains("timeout") || lower.contains("timed out") { return .timeout }
+      return .other
+    }
+
+    private static func httpStatus(from message: String) -> Int? {
+      let prefix = "HTTP "
+      guard message.hasPrefix(prefix) else { return nil }
+      let digits = message.dropFirst(prefix.count).prefix(while: \.isNumber)
+      return Int(digits)
+    }
   }
 
   /// Terminal state after a decoded model yield asks to interrupt the user.
@@ -203,10 +274,12 @@ enum SuggestionAssistantTelemetry {
   static func evaluationFailedPayload(
     identity: Identity,
     shape: EvaluationShape,
-    latency: TimeInterval
+    latency: TimeInterval,
+    reason: EvaluationFailureReason
   ) -> [String: Any] {
     var payload = evaluationPayload(identity: identity, shape: shape)
     payload["latency_bucket"] = latencyBucket(latency).rawValue
+    payload["reason"] = reason.rawValue
     return payload
   }
 

@@ -15,9 +15,9 @@ class RecordingLifecycleTelemetry {
     RecordingTelemetryEmitter? emitter,
     RecordingIdFactory? idFactory,
     RecordingClock? clock,
-  }) : _emitter = emitter ?? _emitProductionEvent,
-       _idFactory = idFactory ?? _defaultId,
-       _clock = clock ?? DateTime.now;
+  })  : _emitter = emitter ?? _emitProductionEvent,
+        _idFactory = idFactory ?? _defaultId,
+        _clock = clock ?? DateTime.now;
 
   static const String startedEvent = 'Recording Started';
   static const String completedEvent = 'Recording Completed';
@@ -102,12 +102,12 @@ class RecordingLifecycleTelemetry {
   }
 
   static String _normalizeReason(String reason) => switch (reason) {
-    'user_stopped' || 'device_disconnected' || 'mode_changed' || 'pipeline_closed' => reason,
-    _ => 'unknown',
-  };
+        'user_stopped' || 'device_disconnected' || 'mode_changed' || 'pipeline_closed' => reason,
+        _ => 'unknown',
+      };
 
   static String _normalizeFailureClass(String failureClass) => switch (failureClass) {
-    'permission_denied' || 'capture_unavailable' || 'pipeline_unavailable' || 'unknown' => failureClass,
-    _ => 'unknown',
-  };
+        'permission_denied' || 'capture_unavailable' || 'pipeline_unavailable' || 'unknown' => failureClass,
+        _ => 'unknown',
+      };
 }
