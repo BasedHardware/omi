@@ -83,6 +83,18 @@ export type TypographyTokens = {
   meta: TypographyRole;
   button: TypographyRole;
   code: TypographyRole;
+  /** Home omnisearch. Desktop override measured 21px; title is 22px and must not absorb it. */
+  search: TypographyRole;
+  /** Icon-sized control glyphs (+, create). Desktop override measured 18px. */
+  glyph: TypographyRole;
+  /** Row-level action glyphs. Desktop override measured 17px. */
+  accessory: TypographyRole;
+  /** Overflow/settings trigger. Desktop override measured 10px. */
+  micro: TypographyRole;
+  /** Shortcut captions. Desktop override measured 9px; settled, do not raise. */
+  hint: TypographyRole;
+  /** Shortcut keycaps. Desktop override measured 8px; settled, do not raise. */
+  kbd: TypographyRole;
 };
 
 export type TypographyContentPolicy = {
@@ -107,6 +119,12 @@ export const TYPOGRAPHY_CONTENT_POLICY = Object.freeze({
   meta: { measureCh: 44, overflow: "single-line-ellipsis", maxLines: 1 },
   button: { measureCh: 28, overflow: "wrap", maxLines: 2 },
   code: { measureCh: 96, overflow: "scroll", maxLines: null },
+  search: { measureCh: 40, overflow: "single-line-ellipsis", maxLines: 1 },
+  glyph: { measureCh: 4, overflow: "wrap", maxLines: 1 },
+  accessory: { measureCh: 4, overflow: "wrap", maxLines: 1 },
+  micro: { measureCh: 8, overflow: "single-line-ellipsis", maxLines: 1 },
+  hint: { measureCh: 28, overflow: "single-line-ellipsis", maxLines: 1 },
+  kbd: { measureCh: 6, overflow: "single-line-ellipsis", maxLines: 1 },
 } satisfies Readonly<Record<keyof TypographyTokens, TypographyContentPolicy>>);
 
 /** Locale-aware dates are human-readable first; exact time is secondary detail. */
@@ -197,6 +215,21 @@ const sharedInteraction: InteractionTokens = {
   disabledOpacity: 0.46,
 };
 
+/**
+ * Chrome sizes measured from the desktop production override layer. They are
+ * not a rounded ladder: 21 stays 21, 8 and 9 stay 8 and 9. Mobile themes carry
+ * the same numbers so the contract is complete; production mobile CSS does not
+ * reference these roles.
+ */
+const chromeTypography = {
+  search: { family: "system", size: 21, weight: 400, lineHeight: 24 / 21, tracking: -0.25 },
+  glyph: { family: "system", size: 18, weight: 400, lineHeight: 1, tracking: 0 },
+  accessory: { family: "system", size: 17, weight: 400, lineHeight: 1.2, tracking: 0 },
+  micro: { family: "system", size: 10, weight: 500, lineHeight: 1.2, tracking: 1 },
+  hint: { family: "system", size: 9, weight: 400, lineHeight: 1.2, tracking: 0 },
+  kbd: { family: "system", size: 8, weight: 400, lineHeight: 1.2, tracking: 0 },
+} as const satisfies Pick<TypographyTokens, "search" | "glyph" | "accessory" | "micro" | "hint" | "kbd">;
+
 const mobileDark: SemanticTheme = {
   name: "mobileDark",
   colors: {
@@ -252,6 +285,7 @@ const mobileDark: SemanticTheme = {
     meta: { family: "system", size: 12, weight: 400, lineHeight: 1.3, tracking: 0 },
     button: { family: "system", size: 15, weight: 600, lineHeight: 1.2, tracking: 0 },
     code: { family: "mono", size: 13, weight: 500, lineHeight: 1.4, tracking: 0 },
+    ...chromeTypography,
   },
   motion: sharedMotion,
   layout: {
@@ -360,6 +394,7 @@ const desktopLightGlass: SemanticTheme = {
     meta: { family: "system", size: 11, weight: 400, lineHeight: 1.3, tracking: 0 },
     button: { family: "system", size: 13, weight: 600, lineHeight: 1.2, tracking: -0.08 },
     code: { family: "mono", size: 12, weight: 500, lineHeight: 1.4, tracking: 0 },
+    ...chromeTypography,
   },
   motion: sharedMotion,
   layout: {

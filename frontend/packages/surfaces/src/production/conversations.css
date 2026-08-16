@@ -283,7 +283,7 @@ html[data-platform="desktop"] .conversation-search input {
   padding: 7px 14px 7px 38px;
   background: var(--glass-surface-soft);
   box-shadow: inset 0 1px 0 var(--glass-highlight);
-  font-size: 12px;
+  font-size: var(--type-code-size);
 }
 html[data-platform="desktop"] .conversation-search-icon { left: 14px; width: 13px; height: 13px; border-width: 1.5px; }
 html[data-platform="desktop"] .conversation-search-icon::after { border-width: 1.5px; }
@@ -294,7 +294,7 @@ html[data-platform="desktop"] .conversation-filter button {
   border-color: transparent;
   color: var(--content-secondary);
   background: var(--glass-surface-soft);
-  font-size: 11px;
+  font-size: var(--type-label-size);
 }
 html[data-platform="desktop"] .conversation-filter button[aria-pressed="true"] {
   border-color: var(--accent);
@@ -332,7 +332,7 @@ html[data-platform="desktop"] .conversation-avatar {
 }
 html[data-platform="desktop"] .conversation-row-title { font-size: var(--type-row-size); font-weight: var(--type-row-weight); line-height: var(--type-row-line); }
 html[data-platform="desktop"] .conversation-row-meta { margin-top: var(--space-xs); font-size: var(--type-meta-size); }
-html[data-platform="desktop"] .conversation-row-actions button { min-width: var(--min-tap-target); width: var(--min-tap-target); min-height: var(--min-tap-target); font-size: 17px; }
+html[data-platform="desktop"] .conversation-row-actions button { min-width: var(--min-tap-target); width: var(--min-tap-target); min-height: var(--min-tap-target); font-size: var(--type-accessory-size); }
 html[data-platform="desktop"] .conversation-detail { max-width: 860px; gap: 15px; }
 html[data-platform="desktop"] .conversation-detail-header h2 {
   font-family: var(--type-title-family);

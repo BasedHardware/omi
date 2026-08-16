@@ -211,12 +211,12 @@ html[data-platform="desktop"] .tasks-header-actions { display: flex; min-width: 
 html[data-platform="desktop"] .tasks-search { position: relative; min-width: 0; flex: 1; }
 html[data-platform="desktop"] .tasks-search::before,
 html[data-platform="desktop"] .tasks-search::after { display: none; content: none; }
-html[data-platform="desktop"] .tasks-search input { width: 100%; min-height: var(--min-tap-target); border: 1px solid var(--control-border); border-radius: 11px; padding: 7px 12px 7px 36px; color: var(--content-primary); background: var(--glass-surface-soft); font: inherit; font-size: 12px; }
+html[data-platform="desktop"] .tasks-search input { width: 100%; min-height: var(--min-tap-target); border: 1px solid var(--control-border); border-radius: 11px; padding: 7px 12px 7px 36px; color: var(--content-primary); background: var(--glass-surface-soft); font: inherit; font-size: var(--type-code-size); }
 html[data-platform="desktop"] .tasks-search input::placeholder { color: var(--content-tertiary); }
 html[data-platform="desktop"] .tasks-add-trigger,
 html[data-platform="desktop"] .tasks-settings-trigger { width: var(--min-tap-target); min-width: var(--min-tap-target); min-height: var(--min-tap-target); padding: 0; border-radius: var(--radius-circular); }
-html[data-platform="desktop"] .tasks-add-trigger { font-size: 18px; }
-html[data-platform="desktop"] .tasks-settings-trigger { font-size: 10px; letter-spacing: 1px; }
+html[data-platform="desktop"] .tasks-add-trigger { font-size: var(--type-glyph-size); }
+html[data-platform="desktop"] .tasks-settings-trigger { font-size: var(--type-micro-size); letter-spacing: 1px; }
 html[data-platform="desktop"] .tasks-create textarea,
 html[data-platform="desktop"] .tasks-create input { min-height: var(--min-tap-target); padding: 7px 10px; border-color: var(--control-border); background: var(--glass-surface-soft); }
 html[data-platform="desktop"] .tasks-create textarea { height: var(--min-tap-target); resize: none; }
@@ -246,7 +246,7 @@ html[data-platform="desktop"] .task-card {
 html[data-platform="desktop"] .task-card:hover,
 html[data-platform="desktop"] .task-card.is-selected { border-color: transparent; background: var(--surface-hover); }
 html[data-platform="desktop"] .task-card-main { align-items: center; gap: 10px; }
-html[data-platform="desktop"] .task-check { flex-basis: var(--min-tap-target); width: var(--min-tap-target); min-width: var(--min-tap-target); min-height: var(--min-tap-target); padding: 0; border-color: var(--border); background: var(--glass-surface-soft); font-size: 12px; }
+html[data-platform="desktop"] .task-check { flex-basis: var(--min-tap-target); width: var(--min-tap-target); min-width: var(--min-tap-target); min-height: var(--min-tap-target); padding: 0; border-color: var(--border); background: var(--glass-surface-soft); font-size: var(--type-code-size); }
 html[data-platform="desktop"] .task-description { font-size: var(--type-row-size); line-height: var(--type-row-line); }
 html[data-platform="desktop"] .task-meta { display: none; }
 html[data-platform="desktop"] .task-actions { align-items: center; opacity: 0; transition: opacity 120ms ease; }
@@ -272,6 +272,6 @@ html[data-platform="desktop"] .tasks-shortcuts {
   flex-wrap: nowrap;
   gap: 2px;
 }
-html[data-platform="desktop"] .tasks-shortcuts span { min-height: var(--min-tap-target); padding: 0 3px; font-size: 9px; }
+html[data-platform="desktop"] .tasks-shortcuts span { min-height: var(--min-tap-target); padding: 0 3px; font-size: var(--type-hint-size); }
 html[data-platform="desktop"] .tasks-shortcuts span:first-child { display: none; }
-html[data-platform="desktop"] .tasks-shortcuts kbd { margin-right: 2px; padding: 1px 3px; font-size: 8px; }
+html[data-platform="desktop"] .tasks-shortcuts kbd { margin-right: 2px; padding: 1px 3px; font-size: var(--type-kbd-size); }
