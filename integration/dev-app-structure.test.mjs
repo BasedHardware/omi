@@ -21,10 +21,21 @@ test("RED-PROOF dev-app.sh composes the existing stack and macOS launcher", () =
 });
 
 test("RED-PROOF the demo launcher exports the persona only for the stack it boots", () => {
-  assert.match(app, /OMI_SEED_PERSONA=demo "\$STACK" --up/);
+  assert.match(app, /OMI_SEED_PERSONA=demo OMI_STT_ENGINE=mlx-whisper "\$STACK" --up/);
   assert.match(app, /serving "\$SERVICE_URL"/);
   assert.match(app, /serving "\$GATEWAY_URL"/);
   assert.match(app, /reused the listeners already serving 4851 and 8788/);
+});
+
+test("RED-PROOF the headed human path asks for on-device STT, not the scripted adapter", () => {
+  assert.match(app, /OMI_STT_ENGINE=mlx-whisper "\$STACK" --up/);
+  assert.match(app, /status\?\.stt_engine/);
+  assert.match(app, /this stack is not transcribing real speech/);
+  assert.match(app, /exit 1/);
+  assert.doesNotMatch(app, /--lease/);
+  assert.match(stack, /LEASE_MODE=1/);
+  // red-proof: dropping OMI_STT_ENGINE from the boot line, or launching against
+  // a reused scripted stack, leaves Listen on createScriptedTranscriptionSource.
 });
 
 test("RED-PROOF the demo launcher never prints a token", () => {
@@ -47,6 +58,15 @@ test("RED-PROOF the demo launcher stays on the pinned origin 5290", () => {
 
 test("RED-PROOF bun run app is wired to the one launcher", () => {
   assert.equal(pkg.scripts.app, "bash integration/dev-app.sh");
+});
+
+test("RED-PROOF scripted STT canned lines stay in lockstep on the Listen surface", () => {
+  const source = read("../apps/service/listen/transcription-source.ts");
+  const surface = read("../frontend/packages/surfaces/src/production/listen-presentation.ts");
+  for (const line of ["Local transcription is connected.", "This segment arrived with real timing."]) {
+    assert.match(source, new RegExp(line.replace(/[.*]/g, "\\$&")));
+    assert.match(surface, new RegExp(line.replace(/[.*]/g, "\\$&")));
+  }
 });
 
 test("RED-PROOF the launcher discloses the local test gateway, never production", () => {

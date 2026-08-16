@@ -206,3 +206,25 @@ export function frameAtCursor(
   const index = Math.min(Math.max(0, cursor), frames.length - 1);
   return frames[index] ?? null;
 }
+
+/** Stay on a historical day unless the user was already on the newest day. */
+export function followNewestCaptureDay(input: {
+  readonly previousDays: readonly string[];
+  readonly selectedDay: string | null;
+  readonly nextDays: readonly string[];
+}): string | null {
+  const nextNewest = input.nextDays.at(-1) ?? input.nextDays[0] ?? null;
+  if (input.selectedDay === null) return nextNewest;
+  const previousNewest = input.previousDays.at(-1) ?? null;
+  if (input.selectedDay === previousNewest) return nextNewest;
+  if (input.nextDays.includes(input.selectedDay)) return input.selectedDay;
+  return nextNewest;
+}
+
+export function screenPausedMessageKey(
+  reason: string | null,
+): "screen.capturePausedExcluded" | "screen.capturePausedIdle" | "screen.capturePaused" {
+  if (reason === "excluded") return "screen.capturePausedExcluded";
+  if (reason === "idle") return "screen.capturePausedIdle";
+  return "screen.capturePaused";
+}

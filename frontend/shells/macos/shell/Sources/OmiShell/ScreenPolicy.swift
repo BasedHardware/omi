@@ -300,6 +300,16 @@ enum ScreenCadencePolicy {
     return .capture("heartbeat")
   }
 
+  /// Skip reasons that must not look like an active recording.
+  static func pausesRecording(_ skipReason: String) -> Bool {
+    skipReason == "lock"
+      || skipReason == "screensaver"
+      || skipReason == "loginwindow"
+      || skipReason == "screen-sharing"
+      || skipReason == "excluded"
+      || skipReason == "idle"
+  }
+
   static func nextSharingBackoff(now: Date) -> Date {
     now.addingTimeInterval(sharingBackoffSeconds)
   }

@@ -336,6 +336,7 @@ const main = async (): Promise<void> => {
       listenDefaultUnmetered: true,
       generationSource,
       ...(transcriptionSource === null ? {} : { transcriptionSource }),
+      sttEngine: config.stt.kind,
       screenRetentionIntervalMs: SCREEN_RETENTION_INTERVAL_MS,
       ...(config.generationLiveness === null
         ? {}

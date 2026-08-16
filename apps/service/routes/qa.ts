@@ -31,6 +31,8 @@ export interface QaRouteDependencies {
   readonly isAuthorizedControlToken: (token: string) => boolean;
   /** Non-secret identity of the current seed, for display. */
   readonly seedIdentity: () => Readonly<Record<string, string | number>>;
+  /** Live Listen engine. Configuration identity, not user content. */
+  readonly sttEngine: () => string;
 }
 
 const fixedResponse = (body: string, status: number): Response =>
@@ -58,6 +60,7 @@ export const registerQaRoutes = (app: Hono, deps: QaRouteDependencies): void => 
         version: "qa-status-v1",
         served: deps.counter.snapshot(),
         seed: deps.seedIdentity(),
+        stt_engine: deps.sttEngine(),
       }),
       { status: 200, headers: JSON_HEADERS },
     );

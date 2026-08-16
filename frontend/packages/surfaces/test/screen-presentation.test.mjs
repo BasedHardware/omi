@@ -3,9 +3,11 @@ import test from "node:test";
 
 import {
   adjacentCaptureDay,
+  followNewestCaptureDay,
   groupScreenSearchHits,
   highlightRectsFor,
   screenEmptyKind,
+  screenPausedMessageKey,
   snippetParts,
   storageSummaryLabel,
 } from "../src/production/screen-presentation.ts";
@@ -77,4 +79,35 @@ test("day jumps skip dates that hold no captures", () => {
 test("storage card never invents a zero size when bytes were not readable", () => {
   assert.deepEqual(storageSummaryLabel({ frames: 3, bytesOnDisk: null }), { frames: 3, size: null });
   assert.deepEqual(storageSummaryLabel({ frames: 3, bytesOnDisk: 2_400_000_000 }), { frames: 3, size: "2.4 GB" });
+});
+
+test("live capture follows the newest day only when that is already the selected day", () => {
+  assert.equal(
+    followNewestCaptureDay({
+      previousDays: ["2026-08-04", "2026-08-07"],
+      selectedDay: "2026-08-07",
+      nextDays: ["2026-08-04", "2026-08-07", "2026-08-16"],
+    }),
+    "2026-08-16",
+  );
+  assert.equal(
+    followNewestCaptureDay({
+      previousDays: ["2026-08-04", "2026-08-07"],
+      selectedDay: "2026-08-04",
+      nextDays: ["2026-08-04", "2026-08-07", "2026-08-16"],
+    }),
+    "2026-08-04",
+  );
+  assert.equal(
+    followNewestCaptureDay({ previousDays: [], selectedDay: null, nextDays: ["2026-08-07"] }),
+    "2026-08-07",
+  );
+  // red-proof: always jumping to newest steals a user who was reading an older day.
+});
+
+test("paused capture copy names excluded and idle instead of a generic pause", () => {
+  assert.equal(screenPausedMessageKey("excluded"), "screen.capturePausedExcluded");
+  assert.equal(screenPausedMessageKey("idle"), "screen.capturePausedIdle");
+  assert.equal(screenPausedMessageKey("lock"), "screen.capturePaused");
+  assert.equal(screenPausedMessageKey(null), "screen.capturePaused");
 });

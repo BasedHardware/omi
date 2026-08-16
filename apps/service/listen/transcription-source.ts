@@ -35,9 +35,17 @@ export interface ScriptedTranscriptionStep {
   readonly consumedSeconds?: number;
 }
 
+/** Canned lines the scripted adapter emits. Not user speech. Keep in lockstep with `SCRIPTED_LISTEN_TRANSCRIPT_TEXTS`. */
+export const SCRIPTED_LOCAL_TRANSCRIPT_CONNECTED = "Local transcription is connected.";
+export const SCRIPTED_LOCAL_TRANSCRIPT_TIMING = "This segment arrived with real timing.";
+export const SCRIPTED_LOCAL_TRANSCRIPT_TEXTS = Object.freeze([
+  SCRIPTED_LOCAL_TRANSCRIPT_CONNECTED,
+  SCRIPTED_LOCAL_TRANSCRIPT_TIMING,
+]);
+
 const DEFAULT_SCRIPT: readonly ScriptedTranscriptionStep[] = Object.freeze([
-  Object.freeze({ delayMs: 25, text: "Local transcription is connected.", start: 0, end: 1 }),
-  Object.freeze({ delayMs: 40, text: "This segment arrived with real timing.", start: 1, end: 2 }),
+  Object.freeze({ delayMs: 25, text: SCRIPTED_LOCAL_TRANSCRIPT_CONNECTED, start: 0, end: 1 }),
+  Object.freeze({ delayMs: 40, text: SCRIPTED_LOCAL_TRANSCRIPT_TIMING, start: 1, end: 2 }),
 ]);
 
 const validateStep = (step: ScriptedTranscriptionStep): ScriptedTranscriptionStep => {

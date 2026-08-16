@@ -90,6 +90,11 @@ switch ScreenCadencePolicy.decide(input(excluded: true)) {
 case .skip(let r): check("excluded", r == "excluded")
 default: check("excluded", false)
 }
+check("pause-excluded", ScreenCadencePolicy.pausesRecording("excluded"))
+check("pause-idle", ScreenCadencePolicy.pausesRecording("idle"))
+check("pause-lock", ScreenCadencePolicy.pausesRecording("lock"))
+check("pause-not-heartbeat", !ScreenCadencePolicy.pausesRecording("heartbeat"))
+check("pause-not-dhash", !ScreenCadencePolicy.pausesRecording("dhash-static"))
 switch ScreenCadencePolicy.decide(input(idle: 90, media: false)) {
 case .skip(let r): check("idle", r == "idle")
 default: check("idle", false)
@@ -260,7 +265,9 @@ test(
       const fails = output.split("\n").filter((l) => l.startsWith("FAIL:"));
       assert.equal(fails.length, 0, output);
       assert.match(output, /^POLICY-DONE$/m);
-      assert.match(output, /^OK: lock$/m);
+      assert.match(output, /^OK: excluded$/m);
+      assert.match(output, /^OK: pause-excluded$/m);
+      assert.match(output, /^OK: pause-not-heartbeat$/m);
       assert.match(output, /^OK: dhash-static$/m);
       assert.match(output, /^OK: anchor-overrides-static$/m);
       assert.match(output, /^OK: ret-invalid$/m);

@@ -8,7 +8,7 @@ import { backlogHours, describeCapture } from "./capture-state.js";
 import { ProductionChrome, productionRouteHref } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionEmptyState, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, type ProductionAnnouncementScheduler, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { boundedRenderedTranscript } from "./consumer-observation.js";
-import { listenPanelCopy } from "./listen-presentation.js";
+import { isScriptedListenTranscript, listenPanelCopy } from "./listen-presentation.js";
 import "./listen.css";
 
 type Locale = string;
@@ -346,6 +346,11 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
               <a className="listen-open-conversations" href={productionRouteHref("conversations")}>
                 {t(locale, "listen.openConversations")}
               </a>
+            )}
+            {isScriptedListenTranscript(segments) && (
+              <p className="listen-scripted-stt" data-stt-engine="scripted">
+                {t(locale, "listen.scriptedStt")}
+              </p>
             )}
             {elapsed !== null && (
               <p className="listen-elapsed">{t(locale, "listen.elapsed", { duration: formatDuration(elapsed, locale) })}</p>

@@ -1088,3 +1088,41 @@ test("Listen stop with no transcript says the session produced nothing", async (
     await rendered.cleanup();
   }
 });
+
+test("scripted STT canned lines render a not-your-speech banner on the Listen panel", async () => {
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const { SCRIPTED_LISTEN_TRANSCRIPT_CONNECTED, SCRIPTED_LISTEN_TRANSCRIPT_TIMING } = await import(
+    "../src/production/listen-presentation.ts"
+  );
+  const rendered = await renderComponent(ListenProduction, {
+    store: stateStore({ kind: "idle" }, {
+      segments: [
+        segment("scripted-1", SCRIPTED_LISTEN_TRANSCRIPT_CONNECTED, 0, 1),
+        segment("scripted-2", SCRIPTED_LISTEN_TRANSCRIPT_TIMING, 1, 2),
+      ],
+    }),
+  });
+  try {
+    const banner = rendered.container.querySelector("[data-stt-engine='scripted']");
+    assert.ok(banner, "scripted STT is named on the panel the user reads");
+    assert.equal(banner.textContent, EN_MESSAGES["listen.scriptedStt"]);
+    const rows = [...rendered.container.querySelectorAll(".listen-transcript-row .listen-transcript-text")]
+      .map((node) => node.textContent);
+    assert.deepEqual(rows, [SCRIPTED_LISTEN_TRANSCRIPT_CONNECTED, SCRIPTED_LISTEN_TRANSCRIPT_TIMING]);
+  } finally {
+    await rendered.cleanup();
+  }
+
+  const spoken = await renderComponent(ListenProduction, {
+    store: stateStore({ kind: "idle" }, {
+      segments: [segment("spoken-1", "harborline table at noon", 0, 2)],
+    }),
+  });
+  try {
+    assert.equal(spoken.container.querySelector("[data-stt-engine='scripted']"), null);
+    assert.match(spoken.container.textContent ?? "", /harborline table at noon/);
+  } finally {
+    await spoken.cleanup();
+  }
+  // red-proof: omit the banner and the canned pair still looks like captured speech.
+});

@@ -236,6 +236,12 @@ export interface LocalServiceOptions {
   readonly persistentQaStores?: boolean;
   /** Required fail-closed adapter for production-shaped composition. */
   readonly transcriptionSource: TranscriptionSource;
+  /**
+   * Live Listen engine label reported on `/v1/qa/status`. Defaults to
+   * scripted. The headed launcher refuses to attach when this is not the
+   * on-device engine — canned STT lines look like captured speech.
+   */
+  readonly sttEngine?: string;
   /** Required downstream processing adapter factory, bound to this composition's store. */
   readonly conversationProcessorFactory: ListenConversationProcessorFactory;
   /** Dev-server-only seed. Existing Settings fixtures keep entitlement absent. */
@@ -1092,6 +1098,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     resetSeed: reseed,
     isAuthorizedControlToken: (token) => resolvePrincipal(token) !== null,
     seedIdentity,
+    sttEngine: () => options.sttEngine ?? "scripted",
   });
   registerQaEvidenceRoutes(app, {
     evidence: producerEvidence,
