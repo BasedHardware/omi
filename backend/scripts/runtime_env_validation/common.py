@@ -19,6 +19,7 @@ StringMap = dict[str, str]
 
 _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
     {
+        'MEMORY_ENABLED',
         'MEMORY_MODE',
         'MEMORY_V3_GET_ENABLED',
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',

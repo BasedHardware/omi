@@ -412,10 +412,11 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     surfaces: ["desktop_chat"],
     capabilityDoc: doc(
       "Create Memory",
-      "Save one user-provided fact or preference to short-term memory.",
+      "Save one explicitly requested fact or preference to short-term memory.",
       [
-        "Use only when the user explicitly and affirmatively asks you to remember or save the supplied content.",
-        "Do not infer memories from conversation context, and do not call for a negative request such as 'do not remember this'.",
+        "Use only when the user explicitly and affirmatively asks you to remember or save something.",
+        "Pass a clean standalone fact: strip the command and lightly clean pronouns. Do not invent names, dates, or facts the user did not ask to persist, and do not infer from the rest of the chat.",
+        "Do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
         "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
       ],
     ),
@@ -1025,19 +1026,24 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "create_memory",
     label: "Create Memory",
     description:
-      "Save exactly one user-provided fact or preference to short-term memory. Call only after an explicit affirmative user command such as 'remember this' or 'save this'. Never infer a memory, and never call for a negative request such as 'do not remember this'.",
+      "Save one explicitly requested fact or preference to short-term memory as a clean standalone fact. Call only after an explicit affirmative user command such as 'remember this' or 'save this'. Strip the command and lightly clean pronouns; do not invent facts. Never call for a mere statement, a question, or a negative request such as 'do not remember this'.",
     promptSnippet: "create_memory - Save one explicitly requested fact or preference to short-term memory",
     promptGuidelines: [
-      "The current user message must explicitly and affirmatively ask Omi to remember or save the supplied content.",
-      "Pass only the content to remember; do not add inferred facts, categories, tags, or metadata.",
-      "Do not call when the user merely states a fact, asks a question, asks for a suggestion, or says not to remember/save something.",
+      "When the current user message explicitly and affirmatively asks Omi to remember or save something, call this tool with a clean standalone fact.",
+      "Strip the command (for example, 'Please remember that I prefer tea' → 'I prefer tea'). Light rewrite and pronoun cleanup are OK; do not invent names, dates, or facts the user did not ask to persist.",
+      "Do not infer from the rest of the chat, and do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
+      "Confirm the save in one line. Never tell the user about validators or internal save rules.",
       "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
       "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory.",
     ],
     latency: "fast network",
     inputSchema: schema(
       {
-        content: { type: "string", description: "The exact user-provided content to save as a short-term memory." },
+        content: {
+          type: "string",
+          description:
+            "A clean standalone fact to save as a short-term memory. Strip the remember/save command; light rewrite is OK. Do not invent facts.",
+        },
       },
       ["content"],
     ),

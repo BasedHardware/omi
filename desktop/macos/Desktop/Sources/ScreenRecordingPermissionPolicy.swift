@@ -18,4 +18,13 @@ enum ScreenRecordingPermissionPolicy {
   static func needsRelaunchToApply(grantedNow: Bool, grantedAtLaunch: Bool) -> Bool {
     grantedNow && !grantedAtLaunch
   }
+
+  /// ScreenCaptureKit talks to the window-server connection opened at launch.
+  /// A TCC grant that landed after that connection was created is visible to
+  /// `CGPreflightScreenCaptureAccess` and dead to SCK; calling
+  /// `SCShareableContent` / `SCScreenshotManager` in that window aborts instead
+  /// of throwing. Only invoke SCK when this process launched with the grant.
+  static func shouldInvokeScreenCaptureKit(grantedAtLaunch: Bool) -> Bool {
+    grantedAtLaunch
+  }
 }

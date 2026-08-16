@@ -52,7 +52,8 @@ typedef _ConversationPageSnapshot = ({
   String previousQuery,
   String? selectedFolderId,
   String? selectedSpeakerId,
-  DateTime? selectedDate,
+  DateTime? selectedStartDate,
+  DateTime? selectedEndDate,
   bool showStarredOnly,
   bool showDailySummaries,
   bool hasDailySummaries,
@@ -74,29 +75,29 @@ bool shouldReleaseConversationLoadMoreLatch({
   required String? currentRequestKey,
   required String requestKey,
   required bool succeeded,
-}) =>
-    !succeeded && currentRequestKey == requestKey;
+}) => !succeeded && currentRequestKey == requestKey;
 
 String conversationLoadMoreFilterKey({
   required String query,
   required String? folderId,
   required String? speakerId,
-  required DateTime? date,
+  required DateTime? startDate,
+  required DateTime? endDate,
   required bool starredOnly,
   required bool discarded,
   required bool shortOnly,
   required int shortThreshold,
-}) =>
-    [
-      query,
-      folderId ?? '',
-      speakerId ?? '',
-      date?.toIso8601String() ?? '',
-      starredOnly,
-      discarded,
-      shortOnly,
-      shortThreshold,
-    ].join('|');
+}) => [
+  query,
+  folderId ?? '',
+  speakerId ?? '',
+  startDate?.toIso8601String() ?? '',
+  endDate?.toIso8601String() ?? '',
+  starredOnly,
+  discarded,
+  shortOnly,
+  shortThreshold,
+].join('|');
 
 _ConversationPageSnapshot _conversationPageSnapshot(
   ConversationProvider conversations,
@@ -110,7 +111,8 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     previousQuery: conversations.previousQuery,
     selectedFolderId: conversations.selectedFolderId,
     selectedSpeakerId: conversations.selectedSpeakerId,
-    selectedDate: conversations.selectedDate,
+    selectedStartDate: conversations.selectedStartDate,
+    selectedEndDate: conversations.selectedEndDate,
     showStarredOnly: conversations.showStarredOnly,
     showDailySummaries: conversations.showDailySummaries,
     hasDailySummaries: conversations.hasDailySummaries,
@@ -283,7 +285,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       query: provider.previousQuery,
       folderId: provider.selectedFolderId,
       speakerId: provider.selectedSpeakerId,
-      date: provider.selectedDate,
+      startDate: provider.selectedStartDate,
+      endDate: provider.selectedEndDate,
       starredOnly: provider.showStarredOnly,
       discarded: provider.showDiscardedConversations,
       shortOnly: provider.showShortConversations,
@@ -311,18 +314,20 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     if (isSearch) {
       unawaited(provider.searchMoreConversations());
     } else {
-      unawaited(provider.getMoreConversationsFromServer().then((succeeded) {
-        if (mounted &&
-            shouldReleaseConversationLoadMoreLatch(
-              currentRequestKey: _lastLoadMoreRequestKey,
-              requestKey: requestKey,
-              succeeded: succeeded,
-            )) {
-          // A failed page fetch leaves the server cursor unchanged; release
-          // the latch so the next scroll can retry the same offset.
-          _lastLoadMoreRequestKey = null;
-        }
-      }));
+      unawaited(
+        provider.getMoreConversationsFromServer().then((succeeded) {
+          if (mounted &&
+              shouldReleaseConversationLoadMoreLatch(
+                currentRequestKey: _lastLoadMoreRequestKey,
+                requestKey: requestKey,
+                succeeded: succeeded,
+              )) {
+            // A failed page fetch leaves the server cursor unchanged; release
+            // the latch so the next scroll can retry the same offset.
+            _lastLoadMoreRequestKey = null;
+          }
+        }),
+      );
     }
     return true;
   }
@@ -389,7 +394,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   // folder-tab chips would hide on empty filtered results, leaving no way to
   // clear filters short of restarting the app.
   bool _hasActiveFilter(ConversationProvider provider) {
-    return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedDate != null;
+    return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedStartDate != null;
   }
 
   Widget _buildNoConversationsHero(BuildContext context) {
@@ -494,7 +499,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
+        final bool showRecordings =
+            convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly &&
             !convoProvider.showDailySummaries;
@@ -510,7 +516,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         final bool isWaitingForInitialData = _isBootstrapping && snapshot.conversations.isEmpty && !hasRecordings;
-        final bool isShowingConversationSkeleton = isWaitingForInitialData ||
+        final bool isShowingConversationSkeleton =
+            isWaitingForInitialData ||
             convoProvider.isLoadingConversations ||
             convoProvider.isFetchingConversations ||
             convoProvider.isAwaitingInitialFetchRetry;
@@ -568,7 +575,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 selector: (_, homeProvider) => homeProvider.showConvoSearchBar,
                 builder: (context, showConvoSearchBar, _) {
                   final isSearchActive = showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
-                  final hasCalendarFilter = convoProvider.selectedDate != null;
+                  final hasCalendarFilter = convoProvider.selectedStartDate != null;
                   final prefs = SharedPreferencesUtil();
                   if (convoProvider.showDailySummaries || isSearchActive || hasCalendarFilter) {
                     return const SliverToBoxAdapter(child: SizedBox.shrink());

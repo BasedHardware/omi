@@ -94,5 +94,59 @@ def test_pending_x_source_is_acknowledged_only_after_memory_writes_succeed(monke
     assert acknowledgements == [('uid-1', ['post-1'])]
 
 
+def test_scheduled_flex_extraction_is_strict_and_fenced_before_acknowledgement(monkeypatch):
+    post = {'id': 'post-1', 'text': 'I prefer tea', 'created_at': '2026-07-14T00:00:00Z', 'kind': 'tweet'}
+    model = object()
+    events = []
+
+    def extract(*_args, **kwargs):
+        events.append(('extract', kwargs))
+        return []
+
+    monkeypatch.setattr(x_connector, 'extract_memories_from_text', extract)
+    monkeypatch.setattr(
+        x_connector.x_posts_db,
+        'mark_memory_extraction_completed',
+        lambda _uid, _post_ids: events.append(('ack', None)),
+    )
+
+    assert (
+        x_connector._extract_and_index(
+            'uid-1',
+            [post],
+            llm=model,
+            result_guard=lambda: events.append(('guard', None)),
+        )
+        == 0
+    )
+    assert events == [
+        ('extract', {'strict': True, 'llm': model}),
+        ('guard', None),
+        ('ack', None),
+    ]
+
+
+def test_scheduled_x_flex_deferral_remains_pending_without_acknowledgement(monkeypatch):
+    from utils.memory.promotion_flex import PromotionFlexDeferred
+
+    post = {'id': 'post-1', 'text': 'I prefer tea', 'created_at': '2026-07-14T00:00:00Z', 'kind': 'tweet'}
+    acknowledgements = []
+    monkeypatch.setattr(
+        x_connector,
+        'extract_memories_from_text',
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(PromotionFlexDeferred('capacity')),
+    )
+    monkeypatch.setattr(
+        x_connector.x_posts_db,
+        'mark_memory_extraction_completed',
+        lambda uid, post_ids: acknowledgements.append((uid, post_ids)),
+    )
+
+    with pytest.raises(PromotionFlexDeferred, match='capacity'):
+        x_connector._extract_and_index('uid-1', [post], llm=object())
+
+    assert acknowledgements == []
+
+
 async def _async_value(value):
     return value

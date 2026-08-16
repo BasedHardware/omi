@@ -18,6 +18,7 @@ struct ProactiveLaneResult: Equatable, Sendable {
 enum ProactiveLaneClientError: LocalizedError {
   case invalidResponse
   case http(status: Int, retryAfterSeconds: Int?)
+  case quotaCooldown(retryAfterSeconds: Int)
   case ownerChanged
 
   var errorDescription: String? {
@@ -26,6 +27,8 @@ enum ProactiveLaneClientError: LocalizedError {
       return "proactive_invalid_response"
     case .http(let statusCode, _):
       return "proactive_http_error status=\(statusCode)"
+    case .quotaCooldown(_):
+      return "proactive_quota_cooldown status=429"
     case .ownerChanged:
       return "proactive_owner_changed"
     }
@@ -59,6 +62,10 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
     switch failure {
     case "http_error":
       return "http_error status=\(status ?? 0)"
+    case "invalid_structured_output":
+      return "invalid_structured_output status=\(status ?? 0)"
+    case "quota_cooldown":
+      return "quota_cooldown status=\(status ?? 0)"
     case "network":
       return "network error_type=\(errorType ?? "unknown")"
     default:
@@ -70,7 +77,13 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
     if let laneError = error as? ProactiveLaneClientError {
       switch laneError {
       case .http(let status, _):
+        if status == 422 {
+          return ProactiveLaneFailureClassification(
+            failure: "invalid_structured_output", status: status, errorType: nil)
+        }
         return ProactiveLaneFailureClassification(failure: "http_error", status: status, errorType: nil)
+      case .quotaCooldown(_):
+        return ProactiveLaneFailureClassification(failure: "quota_cooldown", status: 429, errorType: nil)
       case .invalidResponse:
         return ProactiveLaneFailureClassification(failure: "invalid_response", status: nil, errorType: nil)
       case .ownerChanged:
@@ -111,12 +124,16 @@ actor ProactiveLaneClient {
   static let shared = ProactiveLaneClient()
   static var backendBaseURL: String { DesktopBackendEnvironment.rustBackendURL() }
   static let defaultQuotaCooldownSeconds = 10 * 60
+  static let minQuotaCooldownSeconds = 60
+  static let maxQuotaCooldownSeconds = 60 * 60
   private let session: URLSession
   private let baseURL: () -> String
   private let authorization: () async throws -> String
   private let now: @Sendable () -> Date
-  private var quotaCooldownUntil: Date?
-  private var loggedQuotaSkip = false
+  private var quotaCooldownUntil: [String: Date] = [:]
+  private var loggedQuotaSkip: Set<String> = []
+  private var loggedQuotaClamp: Set<String> = []
+  private var cooldownOwner: String?
 
   init(
     session: URLSession = .shared,
@@ -144,7 +161,9 @@ actor ProactiveLaneClient {
     maxCompletionTokens: Int = 1024,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> ProactiveLaneResult {
-    try checkQuotaCooldown()
+    let currentOwner = authorizationSnapshot?.ownerID
+    clearCooldownsIfOwnerChanged(currentOwner)
+    try checkQuotaCooldown(operation: operation)
     if let authorizationSnapshot {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw ProactiveLaneClientError.ownerChanged
@@ -200,11 +219,12 @@ actor ProactiveLaneClient {
       }
     }
     guard let http = response as? HTTPURLResponse else { throw ProactiveLaneClientError.invalidResponse }
+    Self.logQuotaIfNeeded(operation: operation, response: http)
     guard (200..<300).contains(http.statusCode) else {
       let retryAfter: Int?
       if http.statusCode == 429 {
         retryAfter = Self.parseRetryAfterSeconds(from: http)
-        armQuotaCooldown(retryAfterSeconds: retryAfter)
+        armQuotaCooldown(operation: operation, retryAfterSeconds: retryAfter)
       } else {
         retryAfter = nil
       }
@@ -213,31 +233,61 @@ actor ProactiveLaneClient {
     return try Self.parseEnvelope(data)
   }
 
-  private func checkQuotaCooldown() throws {
-    guard let until = quotaCooldownUntil else { return }
-    let current = now()
-    if current >= until {
-      quotaCooldownUntil = nil
-      loggedQuotaSkip = false
-      return
-    }
-    if !loggedQuotaSkip {
-      loggedQuotaSkip = true
-      log("Proactive lane skipped: quota_cooldown")
-    }
-    let remaining = max(1, Int(ceil(until.timeIntervalSince(current))))
-    throw ProactiveLaneClientError.http(status: 429, retryAfterSeconds: remaining)
+  private func clearCooldownsIfOwnerChanged(_ owner: String?) {
+    guard cooldownOwner != owner else { return }
+    cooldownOwner = owner
+    guard !quotaCooldownUntil.isEmpty || !loggedQuotaSkip.isEmpty || !loggedQuotaClamp.isEmpty else { return }
+    quotaCooldownUntil.removeAll()
+    loggedQuotaSkip.removeAll()
+    loggedQuotaClamp.removeAll()
+    log("Proactive lane cooldowns cleared: owner changed")
   }
 
-  private func armQuotaCooldown(retryAfterSeconds: Int?) {
-    let delay = retryAfterSeconds.flatMap { $0 > 0 ? $0 : nil } ?? Self.defaultQuotaCooldownSeconds
-    quotaCooldownUntil = now().addingTimeInterval(TimeInterval(delay))
-    loggedQuotaSkip = false
+  private func checkQuotaCooldown(operation: String) throws {
+    guard let until = quotaCooldownUntil[operation] else { return }
+    let current = now()
+    if current >= until {
+      quotaCooldownUntil[operation] = nil
+      loggedQuotaSkip.remove(operation)
+      loggedQuotaClamp.remove(operation)
+      return
+    }
+    if !loggedQuotaSkip.contains(operation) {
+      loggedQuotaSkip.insert(operation)
+      log("Proactive lane skipped: quota_cooldown operation=\(operation)")
+    }
+    let remaining = max(1, Int(ceil(until.timeIntervalSince(current))))
+    throw ProactiveLaneClientError.quotaCooldown(retryAfterSeconds: remaining)
+  }
+
+  private func armQuotaCooldown(operation: String, retryAfterSeconds: Int?) {
+    let requested = retryAfterSeconds.flatMap { $0 > 0 ? $0 : nil } ?? Self.defaultQuotaCooldownSeconds
+    let delay = min(max(requested, Self.minQuotaCooldownSeconds), Self.maxQuotaCooldownSeconds)
+    let newDeadline = now().addingTimeInterval(TimeInterval(delay))
+    if let existing = quotaCooldownUntil[operation], existing > newDeadline {
+      return
+    }
+    quotaCooldownUntil[operation] = newDeadline
+    loggedQuotaSkip.remove(operation)
+    if delay != requested, !loggedQuotaClamp.contains(operation) {
+      loggedQuotaClamp.insert(operation)
+      log("Proactive lane quota cooldown clamped: operation=\(operation) duration=\(delay)")
+    }
   }
 
   static func parseRetryAfterSeconds(from response: HTTPURLResponse) -> Int? {
     guard let raw = response.value(forHTTPHeaderField: "Retry-After") else { return nil }
     return Int(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+  }
+
+  static func parseQuotaObservation(from response: HTTPURLResponse) -> ProactiveQuotaObservation? {
+    ProactiveQuotaObservation.parse(from: response)
+  }
+
+  static func logQuotaIfNeeded(operation: String, response: HTTPURLResponse) {
+    let observation = ProactiveQuotaObservation.parse(from: response)
+    guard ProactiveQuotaObservation.shouldLog(observation, statusCode: response.statusCode) else { return }
+    log(ProactiveQuotaObservation.logLine(operation: operation, observation: observation))
   }
 
   static func parseEnvelope(_ data: Data) throws -> ProactiveLaneResult {
@@ -267,6 +317,43 @@ actor ProactiveLaneClient {
       cacheWrite: root["cache_write"] as? Bool ?? false,
       fallbackClass: root["fallback_class"] as? String ?? "unknown",
       content: content)
+  }
+}
+
+struct ProactiveQuotaObservation: Equatable, Sendable {
+  let remaining: Int
+  let limit: Int
+  let resetSeconds: Int
+
+  var isLow: Bool {
+    limit > 0 && remaining * 10 <= limit
+  }
+
+  static func parse(from response: HTTPURLResponse) -> ProactiveQuotaObservation? {
+    guard let remaining = intHeader("X-Proactive-Quota-Remaining", from: response),
+      let limit = intHeader("X-Proactive-Quota-Limit", from: response)
+    else { return nil }
+    let resetSeconds = intHeader("X-Proactive-Quota-Reset", from: response) ?? 0
+    return ProactiveQuotaObservation(remaining: remaining, limit: limit, resetSeconds: resetSeconds)
+  }
+
+  static func shouldLog(_ observation: ProactiveQuotaObservation?, statusCode: Int) -> Bool {
+    if statusCode == 429 { return true }
+    return observation?.isLow == true
+  }
+
+  static func logLine(operation: String, observation: ProactiveQuotaObservation?) -> String {
+    let label = operation.hasPrefix("proactive_") ? String(operation.dropFirst("proactive_".count)) : operation
+    guard let observation else {
+      return "ProactiveLaneClient: quota \(label) remaining=unknown"
+    }
+    return
+      "ProactiveLaneClient: quota \(label) remaining=\(observation.remaining)/\(observation.limit) reset=\(observation.resetSeconds)s"
+  }
+
+  private static func intHeader(_ name: String, from response: HTTPURLResponse) -> Int? {
+    guard let raw = response.value(forHTTPHeaderField: name) else { return nil }
+    return Int(raw.trimmingCharacters(in: .whitespacesAndNewlines))
   }
 }
 
@@ -310,6 +397,89 @@ enum ContextProactivityTelemetry {
           "cache_write_tokens": result.usage.cacheWriteTokens,
           "cache_write": result.cacheWrite,
           "fallback_class": result.fallbackClass,
+        ])
+    }
+  }
+
+  /// Bounded terminal outcome of one screen extraction attempt. Attempts are the
+  /// sum over outcomes; quota skips and successes are subsets. The event carries
+  /// outcome only — no app, title, bucket, narrative, or fact data.
+  static func recordExtractionOutcome(_ outcome: ExtractionOutcome) async {
+    await MainActor.run {
+      PostHogManager.shared.track(
+        "context_bucket_extraction",
+        properties: ["outcome": outcome.rawValue])
+    }
+  }
+
+  enum ExtractionOutcome: String, Sendable {
+    case success
+    case quotaSkip = "quota_skip"
+    case staleContext = "stale_context"
+    case failure
+  }
+
+  /// Director decisions come from model output, so they pass through this
+  /// allowlist before entering telemetry: only the schema's enum values are
+  /// reportable, anything else collapses to "other".
+  static func boundedDirectorDecision(_ value: String) -> String {
+    switch value {
+    case "suggest", "insight", "task_candidate", "resurface", "silence": value
+    default: "other"
+    }
+  }
+
+  /// One event per settled director evaluation. Decision type only — title,
+  /// message, reasoning, refs, and fact IDs never enter telemetry.
+  static func recordDirectorDecision(_ decision: String) async {
+    await MainActor.run {
+      PostHogManager.shared.track(
+        "context_director_decision",
+        properties: ["decision": boundedDirectorDecision(decision)])
+    }
+  }
+
+  /// The engine's fixed free-gate sites. An enum rather than a call-site string
+  /// so a future caller cannot ship unbounded text as a stage.
+  enum GateStage: String, Sendable {
+    case preflight
+    case attempt
+    case reservation
+    case preModel = "pre_model"
+    case presentation
+    case handoff
+    case retrievalHop = "retrieval_hop"
+  }
+
+  /// A free-gate rejection at one of the engine's fixed gate sites. Both values
+  /// are bounded enums — no bucket, owner, or content data.
+  static func recordGateRejection(reason: ContextDeliveryGateReason, stage: GateStage) async {
+    await MainActor.run {
+      PostHogManager.shared.track(
+        "context_delivery_gate_rejected",
+        properties: ["reason": reason.rawValue, "stage": stage.rawValue])
+    }
+  }
+
+  /// Notification-settings drift between the local gate (authoritative) and the
+  /// server mirror, observed by the sync coordinator. Metadata only: two bools,
+  /// two clamped frequency levels, and the pending-sync flag — no identifiers.
+  static func recordSettingsDrift(
+    localEnabled: Bool,
+    serverEnabled: Bool,
+    localFrequency: Int,
+    serverFrequency: Int,
+    pendingSync: Bool
+  ) async {
+    await MainActor.run {
+      PostHogManager.shared.track(
+        "notification_settings_drift",
+        properties: [
+          "local_enabled": localEnabled,
+          "server_enabled": serverEnabled,
+          "local_frequency": min(max(localFrequency, 0), 5),
+          "server_frequency": min(max(serverFrequency, 0), 5),
+          "pending_sync": pendingSync,
         ])
     }
   }

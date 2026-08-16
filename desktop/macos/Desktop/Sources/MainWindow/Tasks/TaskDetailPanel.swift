@@ -14,6 +14,7 @@ struct TaskDetailPanel: View {
   let onIncrementIndent: (() -> Void)?
   let onDecrementIndent: (() -> Void)?
   let onDelete: () -> Void
+  let onPriorityChange: ((String) -> Void)?
 
   @State private var isCopyingLink = false
   @State private var copyStatus: String?
@@ -31,7 +32,8 @@ struct TaskDetailPanel: View {
     onOpenChat: (() -> Void)? = nil,
     onIncrementIndent: (() -> Void)? = nil,
     onDecrementIndent: (() -> Void)? = nil,
-    onDelete: @escaping () -> Void
+    onDelete: @escaping () -> Void,
+    onPriorityChange: ((String) -> Void)? = nil
   ) {
     self.task = task
     self.onDismiss = onDismiss
@@ -42,6 +44,7 @@ struct TaskDetailPanel: View {
     self.onIncrementIndent = onIncrementIndent
     self.onDecrementIndent = onDecrementIndent
     self.onDelete = onDelete
+    self.onPriorityChange = onPriorityChange
   }
 
   var body: some View {
@@ -52,6 +55,7 @@ struct TaskDetailPanel: View {
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.xl) {
           descriptionSection
+          prioritySection
           whySection
           linkedSourcesSection
           detailsSection
@@ -96,6 +100,43 @@ struct TaskDetailPanel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
+
+  /// Priority lives here rather than on the task row: it is a rarely-changed
+  /// attribute, and the row's hover strip is reserved for per-task actions.
+  @ViewBuilder
+  private var prioritySection: some View {
+    if let onPriorityChange {
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+        sectionTitle("Priority")
+        HStack(spacing: OmiSpacing.xs) {
+          ForEach(TaskDetailPanel.priorityOptions, id: \.value) { option in
+            let isSelected = task.priority?.lowercased() == option.value
+            Button {
+              guard !isSelected else { return }
+              onPriorityChange(option.value)
+            } label: {
+              Text(option.label)
+                .scaledFont(size: OmiType.caption, weight: isSelected ? .semibold : .regular)
+                .foregroundColor(isSelected ? Ink.surface : Ink.primary)
+                .padding(.horizontal, OmiSpacing.md)
+                .padding(.vertical, OmiSpacing.xs)
+                .background(
+                  Capsule().fill(isSelected ? Ink.primary : Ink.rowFillHover)
+                )
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("Set \(option.label.lowercased()) priority")
+            .accessibilityIdentifier("task-detail-priority-\(option.value)")
+          }
+        }
+      }
+    }
+  }
+
+  private static let priorityOptions: [(value: String, label: String)] = [
+    ("low", "Low"), ("medium", "Medium"), ("high", "High"),
+  ]
 
   private var whySection: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {

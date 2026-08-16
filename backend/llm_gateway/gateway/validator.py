@@ -4,7 +4,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
-from llm_gateway.gateway.errors import GatewayCapabilityMismatchError, GatewayInvalidRequestError
+from llm_gateway.gateway.errors import (
+    GatewayCapabilityMismatchError,
+    GatewayInvalidRequestError,
+)
 from llm_gateway.gateway.schemas import LaneConfig, StructuredOutputMode
 
 
@@ -30,6 +33,7 @@ FORWARDED_CHAT_COMPLETION_PARAMS = frozenset(
         'prompt_cache_options',
         'prompt_cache_key',
         'seed',
+        'service_tier',
         'stop',
         'stream_options',
         'temperature',
@@ -57,7 +61,7 @@ def validate_chat_completion_request(
 
     messages = _validate_messages(request.get('messages'))
     response_format = _validate_response_format(request.get('response_format'), lane)
-    forwarded_params = _validate_forwarded_params(request)
+    forwarded_params = _validate_forwarded_params(request, lane)
 
     return ValidatedChatCompletionRequest(
         model=model.strip(),
@@ -150,19 +154,22 @@ def _validate_response_format(value: object, lane: LaneConfig) -> Mapping[str, A
 
     if lane.capabilities.structured_output != StructuredOutputMode.JSON_SCHEMA:
         raise GatewayCapabilityMismatchError(
-            'lane does not support json_schema structured output', param='response_format'
+            'lane does not support json_schema structured output',
+            param='response_format',
         )
 
     json_schema = response_format.get('json_schema')
     if not isinstance(json_schema, Mapping):
         raise GatewayInvalidRequestError(
-            'response_format.json_schema must be an object', param='response_format.json_schema'
+            'response_format.json_schema must be an object',
+            param='response_format.json_schema',
         )
     typed_json_schema = cast(Mapping[str, Any], json_schema)
     name = typed_json_schema.get('name')
     if not isinstance(name, str) or not name.strip():
         raise GatewayInvalidRequestError(
-            'response_format.json_schema.name is required', param='response_format.json_schema.name'
+            'response_format.json_schema.name is required',
+            param='response_format.json_schema.name',
         )
     schema = typed_json_schema.get('schema')
     if not isinstance(schema, Mapping):
@@ -174,7 +181,7 @@ def _validate_response_format(value: object, lane: LaneConfig) -> Mapping[str, A
     return response_format
 
 
-def _validate_forwarded_params(request: Mapping[str, Any]) -> Mapping[str, Any]:
+def _validate_forwarded_params(request: Mapping[str, Any], lane: LaneConfig) -> Mapping[str, Any]:
     unsupported = sorted(set(request.keys()) - CONTROL_PARAMS - GATEWAY_LOCAL_PARAMS - FORWARDED_CHAT_COMPLETION_PARAMS)
     if unsupported:
         raise GatewayInvalidRequestError(
@@ -185,10 +192,26 @@ def _validate_forwarded_params(request: Mapping[str, Any]) -> Mapping[str, Any]:
     _validate_output_limit_aliases(forwarded)
     if 'prompt_cache_options' in forwarded:
         _validate_prompt_cache_options(forwarded['prompt_cache_options'])
+    if 'service_tier' in forwarded:
+        _validate_service_tier(forwarded['service_tier'], lane)
     for key in ('tools', 'tool_choice', 'stream'):
         if key in request:
             forwarded[key] = request[key]
     return forwarded
+
+
+def _validate_service_tier(value: object, lane: LaneConfig) -> None:
+    if value != 'flex':
+        raise GatewayInvalidRequestError('service_tier must be flex', param='service_tier')
+    if lane.lane_id not in {
+        'omi:auto:memory-conflict-flex',
+        'omi:auto:memory-l2-flex',
+        'omi:auto:x-memory-extraction-flex',
+    }:
+        raise GatewayCapabilityMismatchError(
+            'Flex processing is only enabled for scheduled background memory work',
+            param='service_tier',
+        )
 
 
 def _validate_prompt_cache_options(value: object) -> None:

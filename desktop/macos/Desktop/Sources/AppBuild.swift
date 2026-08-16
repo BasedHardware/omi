@@ -16,15 +16,6 @@ enum AppBuild {
   static let externalPreviewBundleIdentifierPrefix = "com.omi.preview."
   static let externalPreviewMarkerInfoKey = "OMIExternalPreview"
   static let externalPreviewBackendInfoKey = "OMIExternalPreviewBackend"
-  private static let updateChannelDefaultsKey = "update_channel"
-  private static let betaOverwriteMigrationKey = "didMigrateBetaOverwrite_v1"
-  private static let desktopAppcastURL = URL(
-    string: "https://api.omi.me/v2/desktop/appcast.xml?platform=macos")!
-
-  /// How long the launch-time channel probe may hold the main thread. It runs before the
-  /// first frame, so it has to stay clear of the 3s watchdog that reports "App Hanging".
-  private static let channelProbeMainThreadBudget: TimeInterval = 1.5
-  private static let channelProbeRequestTimeout: TimeInterval = 3
 
   enum ExternalPreviewBackend: String, Equatable {
     case production
@@ -216,16 +207,25 @@ enum AppBuild {
     return "\(releasesBaseURL)/tag/\(tag.replacingOccurrences(of: "+", with: "%2B"))"
   }
 
+  /// Sparkle channel is identity-bound. Omi Beta is permanently a beta-channel
+  /// client. Stable.app never consumes the beta Sparkle channel: leftover
+  /// `update_channel` defaults and server-synced settings must not opt it into
+  /// newer stable-identity zips against production APIs.
   static var currentUpdateChannel: String {
-    // The Omi Beta app is permanently a beta-channel client; a stray defaults value
-    // (imported settings, sync) must never flip it to stable-identity updates.
-    if isBetaProductionBundle { return "beta" }
-    let raw = UserDefaults.standard.string(forKey: updateChannelDefaultsKey) ?? "stable"
-    return raw == "staging" ? "beta" : raw
+    updateChannel(isBetaIdentity: isBetaProductionBundle)
+  }
+
+  static func updateChannel(isBetaIdentity: Bool) -> String {
+    isBetaIdentity ? "beta" : "stable"
   }
 
   static var manualDownloadURL: URL {
     manualDownloadURL(channel: currentUpdateChannel, isBetaIdentity: isBetaProductionBundle)
+  }
+
+  /// Fail-closed Omi Beta DMG. Stable Settings uses this instead of flipping Sparkle.
+  static var omiBetaInstallURL: URL {
+    manualDownloadURL(channel: "beta", isBetaIdentity: true)
   }
 
   static func manualDownloadURL(channel: String, isBetaIdentity: Bool) -> URL {
@@ -241,252 +241,5 @@ enum AppBuild {
     components.queryItems = queryItems
     // Fixed scheme/host/path always produce a URL; the fallback is unreachable.
     return components.url ?? URL(fileURLWithPath: "/")
-  }
-
-  static var inferredUpdateChannel: String {
-    let bundlePath = Bundle.main.bundleURL.path.lowercased()
-    let display = displayName.lowercased()
-    let bundle = bundleIdentifier.lowercased()
-
-    if bundle.contains("beta")
-      || display.contains("beta")
-      || bundlePath.contains("/beta")
-      || bundlePath.contains("omi beta")
-    {
-      return "beta"
-    }
-
-    return "stable"
-  }
-
-  /// Only set the channel on first launch when no preference exists yet.
-  /// Never overwrite a user-chosen channel (e.g. beta selected in settings).
-  @discardableResult
-  static func syncUpdateChannelOnFirstLaunch() -> String? {
-    guard UserDefaults.standard.string(forKey: updateChannelDefaultsKey) == nil else { return nil }
-    let resolved = probeFreshInstallUpdateChannel()
-    UserDefaults.standard.set(resolved, forKey: updateChannelDefaultsKey)
-    return resolved
-  }
-
-  /// One-time migration for users whose beta channel was overwritten to stable
-  /// by the syncUpdateChannelWithInstalledApp() bug (commit 8c60fafe8, March 27 2026).
-  /// Re-checks the appcast: if the current build is ahead of latest stable, restore beta.
-  static func migrateBetaChannelOverwrite() {
-    migrateBetaChannelOverwrite(probeAppcast: probeFreshInstallUpdateChannel)
-  }
-
-  static func migrateBetaChannelOverwrite(probeAppcast: () -> String) {
-    guard !UserDefaults.standard.bool(forKey: betaOverwriteMigrationKey) else { return }
-    UserDefaults.standard.set(true, forKey: betaOverwriteMigrationKey)
-
-    // A fresh install has no stored channel, so there is nothing to restore — and
-    // syncUpdateChannelOnFirstLaunch() probes the same appcast moments later. Probing
-    // here as well made every new install pay for two serial launch-blocking round
-    // trips to answer one question.
-    guard UserDefaults.standard.string(forKey: updateChannelDefaultsKey) != nil else { return }
-    guard currentUpdateChannel == "stable" else { return }
-
-    if probeAppcast() == "beta" {
-      UserDefaults.standard.set("beta", forKey: updateChannelDefaultsKey)
-    }
-  }
-
-  static func prepareUpdateChannelForBackendRouting() {
-    guard isProductionBundle else { return }
-    // Beta identity: channel is pinned, so the launch-blocking appcast probes and the
-    // stable-overwrite migration have nothing to decide.
-    guard !isBetaProductionBundle else { return }
-
-    migrateBetaChannelOverwrite()
-    if UserDefaults.standard.string(forKey: updateChannelDefaultsKey) == nil {
-      syncUpdateChannelOnFirstLaunch()
-    }
-  }
-
-  static func resolveFreshInstallUpdateChannel(
-    currentBuild: Int,
-    fallback: String,
-    appcastXML: String
-  ) -> String {
-    if fallback == "beta" {
-      return "beta"
-    }
-
-    guard let latestStableBuild = latestStableBuildNumber(in: appcastXML) else {
-      return fallback
-    }
-
-    return currentBuild > latestStableBuild ? "beta" : "stable"
-  }
-
-  static func latestStableBuildNumber(in appcastXML: String) -> Int? {
-    let itemPattern = #"<item>(.*?)</item>"#
-    let versionPattern = #"<sparkle:version>(\d+)</sparkle:version>"#
-
-    guard
-      let itemRegex = try? NSRegularExpression(
-        pattern: itemPattern,
-        options: [.dotMatchesLineSeparators]
-      ),
-      let versionRegex = try? NSRegularExpression(pattern: versionPattern)
-    else {
-      return nil
-    }
-
-    let xmlRange = NSRange(appcastXML.startIndex..<appcastXML.endIndex, in: appcastXML)
-    var latestStableBuild: Int?
-
-    for match in itemRegex.matches(in: appcastXML, options: [], range: xmlRange) {
-      guard
-        let itemRange = Range(match.range(at: 1), in: appcastXML)
-      else {
-        continue
-      }
-
-      let itemXML = String(appcastXML[itemRange])
-      if itemXML.contains("<sparkle:channel>beta</sparkle:channel>")
-        || itemXML.contains("<sparkle:channel>staging</sparkle:channel>")
-      {
-        continue
-      }
-
-      let itemNSRange = NSRange(itemXML.startIndex..<itemXML.endIndex, in: itemXML)
-      guard
-        let versionMatch = versionRegex.firstMatch(in: itemXML, options: [], range: itemNSRange),
-        let versionRange = Range(versionMatch.range(at: 1), in: itemXML),
-        let build = Int(itemXML[versionRange])
-      else {
-        continue
-      }
-
-      latestStableBuild = max(latestStableBuild ?? build, build)
-    }
-
-    return latestStableBuild
-  }
-
-  private static var currentBuildNumber: Int? {
-    guard
-      let raw = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-    else {
-      return nil
-    }
-
-    return Int(raw)
-  }
-
-  private static func probeFreshInstallUpdateChannel() -> String {
-    probeFreshInstallUpdateChannel(
-      fallback: inferredUpdateChannel,
-      currentBuild: currentBuildNumber,
-      mainThreadBudget: channelProbeMainThreadBudget,
-      fetchAppcast: fetchDesktopAppcast,
-      persistLateCorrection: { storeLateChannelCorrection($0) }
-    )
-  }
-
-  /// Resolve the channel for an install with no stored preference.
-  ///
-  /// This runs on the main thread during launch (`AppState.init` needs the channel before
-  /// it loads backend URLs), so it waits at most `mainThreadBudget` for the appcast. Past
-  /// that it returns the bundle-inferred channel and lets the request finish in the
-  /// background: a late answer that disagrees is written through `persistLateCorrection`,
-  /// so the next launch starts on the right channel.
-  ///
-  /// It used to block for up to 3.5s inline, and pinned the timed-out guess permanently.
-  static func probeFreshInstallUpdateChannel(
-    fallback: String,
-    currentBuild: Int?,
-    mainThreadBudget: TimeInterval,
-    fetchAppcast: @escaping (@escaping @Sendable (String?) -> Void) -> Void,
-    persistLateCorrection: @escaping @Sendable (String) -> Void
-  ) -> String {
-    if fallback == "beta" {
-      return "beta"
-    }
-
-    guard let currentBuild else {
-      return fallback
-    }
-
-    let appcast = AppcastProbeResult()
-    let semaphore = DispatchSemaphore(value: 0)
-
-    fetchAppcast { xml in
-      appcast.set(xml)
-      semaphore.signal()
-    }
-
-    if semaphore.wait(timeout: .now() + mainThreadBudget) == .success {
-      guard let appcastXML = appcast.value else { return fallback }
-      return resolveFreshInstallUpdateChannel(
-        currentBuild: currentBuild,
-        fallback: fallback,
-        appcastXML: appcastXML
-      )
-    }
-
-    DispatchQueue.global(qos: .utility).async {
-      guard
-        semaphore.wait(timeout: .now() + channelProbeRequestTimeout + 0.5) == .success,
-        let appcastXML = appcast.value
-      else { return }
-
-      let resolved = resolveFreshInstallUpdateChannel(
-        currentBuild: currentBuild,
-        fallback: fallback,
-        appcastXML: appcastXML
-      )
-      guard resolved != fallback else { return }
-      persistLateCorrection(resolved)
-    }
-
-    return fallback
-  }
-
-  private static func fetchDesktopAppcast(completion: @escaping @Sendable (String?) -> Void) {
-    let configuration = URLSessionConfiguration.ephemeral
-    configuration.timeoutIntervalForRequest = channelProbeRequestTimeout
-    configuration.timeoutIntervalForResource = channelProbeRequestTimeout
-
-    let session = URLSession(configuration: configuration)
-    /// Release path advancement v0.12.149.
-    /// Fixture fix validated for release path.
-    session.dataTask(with: desktopAppcastURL) { data, _, _ in
-      defer { session.finishTasksAndInvalidate() }
-      guard let data, let xml = String(data: data, encoding: .utf8) else {
-        completion(nil)
-        return
-      }
-      completion(xml)
-    }.resume()
-  }
-
-  private static func storeLateChannelCorrection(_ resolved: String) {
-    DispatchQueue.main.async {
-      // Only upgrade the guess this probe stored — never clobber a channel the user
-      // picked in Settings while the appcast was still in flight.
-      guard currentUpdateChannel == "stable" else { return }
-      UserDefaults.standard.set(resolved, forKey: updateChannelDefaultsKey)
-      log("AppBuild: appcast answered after the launch budget; update channel set to \(resolved)")
-    }
-  }
-}
-
-private final class AppcastProbeResult: @unchecked Sendable {
-  private let lock = NSLock()
-  private var xml: String?
-
-  func set(_ value: String?) {
-    lock.lock()
-    defer { lock.unlock() }
-    xml = value
-  }
-
-  var value: String? {
-    lock.lock()
-    defer { lock.unlock() }
-    return xml
   }
 }

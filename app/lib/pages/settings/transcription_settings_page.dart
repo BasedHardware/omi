@@ -46,6 +46,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _showAdvanced = false;
   bool _showLogs = true;
   bool _isSaving = false;
+  bool _sendRawAudioToOmi = true;
   String? _validationError;
 
   // On-device model download state
@@ -193,6 +194,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     _hostController.text = config?.host ?? '127.0.0.1';
     _portController.text = (config?.port ?? 8080).toString();
     _urlController.text = config?.url ?? '';
+    _sendRawAudioToOmi = config?.sendRawAudioToOmi ?? true;
 
     // Auto-detect model for on-device whisper if not set
     if (_selectedProvider == SttProvider.onDeviceWhisper && _urlController.text.isEmpty) {
@@ -250,7 +252,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     // Restore JSON configs if customized
     if (config != null) {
-      final hasCustomRequest = config.requestType != null ||
+      final hasCustomRequest =
+          config.requestType != null ||
           config.headers != null ||
           config.params != null ||
           config.audioFieldName != null;
@@ -375,6 +378,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     String? url,
     String? host,
     int? port,
+    bool? sendRawAudioToOmi,
   }) {
     final current = _configsPerProvider[_selectedProvider];
     final providerDefaults = SttProviderConfig.get(_selectedProvider);
@@ -392,6 +396,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       params: current?.params,
       audioFieldName: current?.audioFieldName,
       schemaJson: current?.schemaJson,
+      sendRawAudioToOmi: sendRawAudioToOmi ?? current?.sendRawAudioToOmi ?? _sendRawAudioToOmi,
     );
   }
 
@@ -459,6 +464,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       params: params,
       audioFieldName: audioFieldName,
       schemaJson: schemaJson,
+      sendRawAudioToOmi: _sendRawAudioToOmi,
     );
   }
 
@@ -611,6 +617,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       if (config.params != null) 'params': config.params,
       if (config.audioFieldName != null) 'audio_field_name': config.audioFieldName,
       if (config.schemaJson != null) 'schema': config.schemaJson,
+      'send_raw_audio_to_omi': config.sendRawAudioToOmi,
     };
 
     final jsonString = const JsonEncoder.withIndent('  ').convert(exportableConfig);
@@ -739,6 +746,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         _urlController.text = config.url ?? '';
         _hostController.text = config.host ?? '127.0.0.1';
         _portController.text = (config.port ?? 8080).toString();
+        _sendRawAudioToOmi = config.sendRawAudioToOmi;
 
         // Update JSON configs
         if (config.requestType != null || config.headers != null || config.params != null) {
@@ -820,6 +828,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     _buildProviderSection(),
                     const SizedBox(height: 20),
                     _buildConfigSection(),
+                    const SizedBox(height: 20),
+                    _buildRawAudioForwardingSetting(),
                     const SizedBox(height: 10),
                     _buildAdvancedSection(),
                     _buildLogsSection(),
@@ -889,7 +899,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     if (isLowSpec && !isIOS) {
       // Android low-spec: "Not Compatible" Dialog (Whisper may crash)
-      proceed = await showDialog<bool>(
+      proceed =
+          await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
@@ -936,7 +947,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           false;
     } else if (isLowSpec && isIOS) {
       // iOS low-spec: Milder "Performance Warning" (Apple Speech won't crash)
-      proceed = await showDialog<bool>(
+      proceed =
+          await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
@@ -982,7 +994,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           false;
     } else {
       // Standard "High Resource Usage" Warning for capable devices
-      proceed = await showDialog<bool>(
+      proceed =
+          await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
@@ -990,7 +1003,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 children: [
                   const Icon(Icons.battery_alert, color: Colors.orange, size: 24),
                   const SizedBox(width: 8),
-                  Text(context.l10n.highResourceUsage, style: const TextStyle(color: Colors.white, fontSize: 18)),
+                  Expanded(
+                    child: Text(
+                      context.l10n.highResourceUsage,
+                      style: const TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                  ),
                 ],
               ),
               content: Column(
@@ -1024,12 +1042,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     if (!proceed) return;
 
+    await _saveCurrentProviderConfig();
+    if (!mounted) return;
+
     setState(() {
       _useCustomStt = true;
       _selectedProvider = SttProvider.onDeviceWhisper;
-      if (!isIOS) {
-        _checkLocalModel();
-      }
+      _populateUIFromConfig(_configsPerProvider[_selectedProvider]);
       PlatformManager.instance.analytics.transcriptionSourceSelected(
         source: isIOS ? 'custom_on_device_ios' : 'custom_on_device',
       );
@@ -1056,7 +1075,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     }
   }
 
-  void _selectMode(TranscriptionMode mode) {
+  Future<void> _selectMode(TranscriptionMode mode) async {
     switch (mode) {
       case TranscriptionMode.omi:
         setState(() {
@@ -1066,15 +1085,20 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi');
         break;
       case TranscriptionMode.onDevice:
-        _switchToOnDevice();
+        await _switchToOnDevice();
         break;
       case TranscriptionMode.cloudProvider:
+        if (_selectedProvider == SttProvider.onDeviceWhisper) {
+          await _saveCurrentProviderConfig();
+          if (!mounted) return;
+        }
         setState(() {
           _useCustomStt = true;
           _omiParakeet = false;
           // Leaving on-device: fall back to a real BYO cloud provider.
           if (_selectedProvider == SttProvider.onDeviceWhisper) {
             _selectedProvider = SttProvider.openai;
+            _populateUIFromConfig(_configsPerProvider[_selectedProvider]);
           }
         });
         PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'custom_cloud');
@@ -1115,8 +1139,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               items: TranscriptionMode.values
                   .map((m) => DropdownMenuItem<TranscriptionMode>(value: m, child: Text(_modeLabel(m))))
                   .toList(),
-              onChanged: (m) {
-                if (m != null && m != mode) _selectMode(m);
+              onChanged: (m) async {
+                if (m != null && m != mode) await _selectMode(m);
               },
             ),
           ),
@@ -1163,6 +1187,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     if (_isCodecCompatible || !_useCustomStt) return const SizedBox.shrink();
 
     final codecReason = _connectedDeviceCodec?.customSttUnsupportedReason ?? 'unsupported format';
+    final warningText = _sendRawAudioToOmi
+        ? context.l10n.deviceUsesCodec(_connectedDeviceName ?? context.l10n.device, codecReason)
+        : context.l10n.transcriptionUnavailable;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -1170,10 +1197,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 14),
           const SizedBox(width: 6),
           Expanded(
-            child: Text(
-              context.l10n.deviceUsesCodec(_connectedDeviceName ?? context.l10n.device, codecReason),
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-            ),
+            child: Text(warningText, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
           ),
         ],
       ),
@@ -1298,6 +1322,32 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [_buildApiKeyInput(), const SizedBox(height: 20), _buildLanguageSelector()],
+    );
+  }
+
+  Widget _buildRawAudioForwardingSetting() {
+    return Material(
+      color: const Color(0xFF1A1A1A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.grey.shade800),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SwitchListTile(
+        value: _sendRawAudioToOmi,
+        onChanged: (value) {
+          setState(() {
+            _sendRawAudioToOmi = value;
+            _updateCurrentProviderConfig(sendRawAudioToOmi: value);
+          });
+        },
+        secondary: const Icon(Icons.cloud_upload_outlined, color: Colors.white70),
+        title: Text(context.l10n.sendRawAudioToOmi, style: const TextStyle(color: Colors.white, fontSize: 14)),
+        subtitle: Text(
+          context.l10n.sendRawAudioToOmiDescription,
+          style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+        ),
+      ),
     );
   }
 
@@ -1788,8 +1838,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
           ),
           TextButton(
-            onPressed:
-                (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) ? null : () => Navigator.pop(context, true),
+            onPressed: (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB)
+                ? null
+                : () => Navigator.pop(context, true),
             child: Text(context.l10n.download, style: const TextStyle(color: Colors.blue)),
           ),
         ],
@@ -2002,6 +2053,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               params: null,
               audioFieldName: null,
               schemaJson: current.schemaJson,
+              sendRawAudioToOmi: current.sendRawAudioToOmi,
             );
           }
           _regenerateRequestJson(_selectedProvider);
@@ -2164,6 +2216,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 params: current.params,
                 audioFieldName: current.audioFieldName,
                 schemaJson: schemaJson,
+                sendRawAudioToOmi: current.sendRawAudioToOmi,
               );
             } catch (_) {}
           }
@@ -2251,14 +2304,14 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                               isError
                                   ? Icons.error_outline
                                   : isWarning
-                                      ? Icons.warning_amber_outlined
-                                      : Icons.info_outline,
+                                  ? Icons.warning_amber_outlined
+                                  : Icons.info_outline,
                               size: 12,
                               color: isError
                                   ? Colors.red.shade400
                                   : isWarning
-                                      ? Colors.orange.shade400
-                                      : Colors.grey.shade500,
+                                  ? Colors.orange.shade400
+                                  : Colors.grey.shade500,
                             ),
                             const SizedBox(width: 6),
                             Expanded(
@@ -2268,8 +2321,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                                   color: isError
                                       ? Colors.red.shade300
                                       : isWarning
-                                          ? Colors.orange.shade300
-                                          : Colors.grey.shade400,
+                                      ? Colors.orange.shade300
+                                      : Colors.grey.shade400,
                                   fontSize: 11,
                                   fontFamily: 'monospace',
                                 ),
@@ -2428,8 +2481,9 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
 
   Widget _buildTemplateSelector() {
     final isResponseSchema = widget.isResponseSchema;
-    final templates =
-        isResponseSchema ? SttResponseSchema.templates.keys.toList() : SttProviderConfig.requestTemplates.keys.toList();
+    final templates = isResponseSchema
+        ? SttResponseSchema.templates.keys.toList()
+        : SttProviderConfig.requestTemplates.keys.toList();
     final description = isResponseSchema ? context.l10n.quicklyPopulateResponse : context.l10n.quicklyPopulateRequest;
 
     return Column(

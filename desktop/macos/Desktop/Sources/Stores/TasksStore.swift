@@ -499,13 +499,14 @@ class TasksStore: ObservableObject {
         )
       }
       guard isCurrent(lease) else { return }
-      // Unaccepted AI captures stay out of the dashboard lanes (and out of every
-      // consumer of these lists, e.g. proactive-nudge grounding) until accepted.
-      let sortedOverdue = snapshot.overdue.filter { !$0.isPendingSuggestion }
+      // Unreviewed AI captures stay out of dashboard / nudge / realtime lanes.
+      // The Tasks page uses incompleteTasks and shows those rows as ordinary
+      // due-date tasks after Candidate review replaced the sparkle list.
+      let sortedOverdue = snapshot.overdue.filter(DashboardTaskLanePolicy.admits)
         .sorted(by: Self.sortByDueDateThenSource)
-      let sortedToday = snapshot.today.filter { !$0.isPendingSuggestion }
+      let sortedToday = snapshot.today.filter(DashboardTaskLanePolicy.admits)
         .sorted(by: Self.sortByDueDateThenSource)
-      let sortedNoDueDate = snapshot.noDueDate.filter { !$0.isPendingSuggestion }
+      let sortedNoDueDate = snapshot.noDueDate.filter(DashboardTaskLanePolicy.admits)
         .sorted(by: Self.sortByDueDateThenSource)
       // Only update @Published properties if values actually changed to avoid unnecessary objectWillChange
       if overdueTasks != sortedOverdue { overdueTasks = sortedOverdue }
@@ -2517,9 +2518,8 @@ class TasksStore: ObservableObject {
 
     guard isCurrent(lease) else { return }
     for id in confirmed {
-      try? await ActionItemStorage.shared.deleteActionItemByBackendId(
-        id,
-        deletedBy: "user",
+      try? await ActionItemStorage.shared.markActionItemDeletionAcknowledged(
+        backendId: id,
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
       guard isCurrent(lease) else { return }
@@ -3174,7 +3174,6 @@ class TasksStore: ObservableObject {
         // No backend row exists; a tombstone would wait forever for an ack.
         try await ActionItemStorage.shared.deleteActionItemByBackendId(
           task.id,
-          deletedBy: "user",
           authorization: Self.localMutationAuthorization(
             snapshot: lease.authorizationSnapshot
           )
@@ -3248,9 +3247,8 @@ class TasksStore: ObservableObject {
         authorizationSnapshot: lease.authorizationSnapshot
       )
       guard isCurrent(lease) else { return }
-      try? await ActionItemStorage.shared.deleteActionItemByBackendId(
-        task.id,
-        deletedBy: "user",
+      try? await ActionItemStorage.shared.markActionItemDeletionAcknowledged(
+        backendId: task.id,
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
     } catch {
@@ -3267,11 +3265,10 @@ class TasksStore: ObservableObject {
     expectedOwnerID: String? = nil
   ) async {
     guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
-    // Undo of a tombstoned delete: the row still exists locally (deleted, awaiting the
-    // backend ack). Purge it before the re-insert below or undo would create a duplicate.
+    // Undo of a tombstoned delete: the row still exists locally (deleted, whether or not
+    // the backend acked). Purge it before the re-insert below or undo would duplicate it.
     try? await ActionItemStorage.shared.deleteActionItemByBackendId(
       task.id,
-      deletedBy: "user",
       authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
     )
     guard isCurrent(lease) else { return }
@@ -3524,40 +3521,6 @@ class TasksStore: ObservableObject {
       if rolledBack { return .rolledBackAfterRemoteFailure }
       return isCurrent(lease) ? .rollbackFailed : .ownerChanged
     }
-  }
-
-  /// Accept an AI-suggested task: rewrite `source` to "manual" so it leaves the
-  /// Suggestions category and joins the due-date categories on every device.
-  /// Remote-first — a failed accept leaves the suggestion in place with an error.
-  @discardableResult
-  func acceptSuggestedTask(
-    _ task: TaskActionItem,
-    expectedOwnerID: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
-  ) async -> TaskUpdateOutcome {
-    await updateTask(
-      task,
-      expectedOwnerID: expectedOwnerID,
-      authorizationSnapshot: authorizationSnapshot,
-      operationOverrides: TaskUpdateOperationOverrides(
-        updateLocal: { _ in task },
-        updateRemote: { ownerID in
-          try await APIClient.shared.updateActionItem(
-            id: task.id,
-            source: "manual",
-            expectedOwnerId: ownerID
-          )
-        },
-        syncRemote: { apiResult, _ in
-          guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
-          try await ActionItemStorage.shared.syncTaskActionItems(
-            [apiResult],
-            authorization: Self.localMutationAuthorization(snapshot: snapshot)
-          )
-        },
-        rollbackLocal: {}
-      )
-    )
   }
 
   @discardableResult

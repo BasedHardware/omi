@@ -202,10 +202,12 @@ def test_memory_global_safety_symbols_are_canonical():
 
 
 def test_global_memory_mode_env_read():
-    from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
+    from config.memory_rollout import MemoryRolloutMode, memory_enabled_env_value, rollout_mode_env_value
 
     assert rollout_mode_env_value({"MEMORY_MODE": "read"}) == "read"
     assert MemoryRolloutMode(rollout_mode_env_value({"MEMORY_MODE": "read"})) == MemoryRolloutMode.read
+    assert memory_enabled_env_value({"MEMORY_ENABLED": "on"}) is True
+    assert rollout_mode_env_value({"MEMORY_ENABLED": "on"}) == "write"
 
 
 def test_global_memory_mode_env_reads_process_environment(monkeypatch):

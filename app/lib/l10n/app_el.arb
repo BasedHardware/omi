@@ -3214,5 +3214,7 @@
     "accountCutoverMigrationInProgressTitle": "Η μετεγκατάσταση είναι σε εξέλιξη",
     "accountCutoverMigrationInProgressMessage": "Ο λογαριασμός σας μεταφέρεται. Οι λειτουργίες προϊόντος είναι σε παύση μέχρι να ολοκληρωθεί η μετεγκατάσταση.",
     "accountCutoverMigrationRollbackMessage": "Ο λογαριασμός σας είναι σε συντήρηση μετά από επαναφορά μετεγκατάστασης. Νεότερα δεδομένα ενδέχεται να έχουν απομονωθεί.",
-    "accountCutoverOpenStore": "Άνοιγμα καταστήματος"
+    "accountCutoverOpenStore": "Άνοιγμα καταστήματος",
+    "sendRawAudioToOmi": "Αποστολή ακατέργαστου ήχου στο Omi",
+    "sendRawAudioToOmiDescription": "Απενεργοποιήστε το για να μην αποστέλλεται ακατέργαστος ήχος στο Omi. Οι απομαγνητοφωνήσεις και τα δεδομένα που απαιτούν οι λειτουργίες cloud ενδέχεται να συνεχίσουν να αποστέλλονται στο Omi."
 }

@@ -24,7 +24,7 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
     XCTAssertEqual(
       Set(SuggestionAssistantTelemetry.GateOutcome.allCases.map(\.rawValue)),
       Set([
-        "eligible", "disabled", "excluded_app", "snoozed", "dwell",
+        "eligible", "disabled", "excluded_app", "dwell",
         "cooldown", "daily_budget", "no_grounding",
       ])
     )
@@ -95,7 +95,8 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
     let failed = SuggestionAssistantTelemetry.evaluationFailedPayload(
       identity: identity,
       shape: shape(),
-      latency: 125
+      latency: 125,
+      reason: .timeout
     )
 
     XCTAssertEqual(completed["evaluation_id"] as? String, evaluationID.uuidString)
@@ -104,8 +105,56 @@ final class SuggestionAssistantTelemetryTests: XCTestCase {
     XCTAssertEqual(completed["produced_suggestion"] as? Bool, true)
     XCTAssertEqual(failed["evaluation_id"] as? String, evaluationID.uuidString)
     XCTAssertEqual(failed["latency_bucket"] as? String, "120s_plus")
+    XCTAssertEqual(failed["reason"] as? String, "timeout")
     XCTAssertNil(failed["suggestion_id"])
     XCTAssertNil(failed["produced_suggestion"])
+  }
+
+  func testEvaluationFailureReasonsAreClosedAndNeverCarryRawErrorMaterial() {
+    XCTAssertEqual(
+      Set(SuggestionAssistantTelemetry.EvaluationFailureReason.allCases.map(\.rawValue)),
+      Set([
+        "network", "http_status_4xx", "http_status_5xx", "rate_limited",
+        "decode_failed", "timeout", "cancelled", "other",
+      ])
+    )
+
+    let classified: [(Error, SuggestionAssistantTelemetry.EvaluationFailureReason)] = [
+      (CancellationError(), .cancelled),
+      (URLError(.timedOut), .timeout),
+      (URLError(.notConnectedToInternet), .network),
+      (URLError(.cancelled), .cancelled),
+      (DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "secret payload")), .decodeFailed),
+      (GeminiClient.GeminiClientError.invalidResponse, .decodeFailed),
+      (GeminiClient.GeminiClientError.apiError("HTTP 429: quota-key-xyz", retryable: true), .rateLimited),
+      (GeminiClient.GeminiClientError.apiError("HTTP 503: upstream body", retryable: true), .httpStatus5xx),
+      (GeminiClient.GeminiClientError.apiError("HTTP 400: prompt leaked", retryable: false), .httpStatus4xx),
+      (GeminiClient.GeminiClientError.missingAPIKey, .other),
+    ]
+    for (error, expected) in classified {
+      XCTAssertEqual(SuggestionAssistantTelemetry.EvaluationFailureReason(error), expected, String(describing: error))
+    }
+
+    let payload = SuggestionAssistantTelemetry.evaluationFailedPayload(
+      identity: SuggestionAssistantTelemetry.Identity(),
+      shape: shape(),
+      latency: 1,
+      reason: SuggestionAssistantTelemetry.EvaluationFailureReason(
+        GeminiClient.GeminiClientError.apiError("HTTP 429: user@example.com leaked", retryable: true)
+      )
+    )
+    let serialized = String(describing: payload)
+    XCTAssertEqual(payload["reason"] as? String, "rate_limited")
+    XCTAssertFalse(serialized.contains("user@example.com"))
+    XCTAssertFalse(serialized.contains("leaked"))
+    XCTAssertFalse(serialized.contains("HTTP 429"))
+  }
+
+  func testNotificationDismissalKindIsClosed() {
+    XCTAssertEqual(
+      Set(NotificationDismissalKind.allCases.map(\.rawValue)),
+      Set(["user", "timeout", "replaced"])
+    )
   }
 
   func testNotificationIdentityCarriesOnlyEvaluationAndSuggestionJoinKeys() throws {

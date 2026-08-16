@@ -141,6 +141,18 @@ if [ "$suite" = "AlphaTests" ]; then
   exit 42
 fi
 
+if [ "$suite" = "CrasherTests" ]; then
+  # What SwiftPM actually emits when the xctest host dies on a signal: the
+  # signal line and nothing else. The crash reporter writes the frames.
+  if [ -z "${FAKE_XCRUN_SKIP_CRASH_REPORT:-}" ]; then
+    mkdir -p "$OMI_SWIFT_TEST_CRASH_REPORT_DIR"
+    printf 'fixture crash report for %s\nThread 0 Crashed: SwiftUI layout frame\n' "$suite" \
+      >"$OMI_SWIFT_TEST_CRASH_REPORT_DIR/xctest-fixture.ips"
+  fi
+  echo "error: Exited with unexpected signal code 11"
+  exit 1
+fi
+
 if [ -n "${FAKE_XCRUN_HANG_SUITE:-}" ] && [ "$FAKE_XCRUN_HANG_SUITE" = "$suite" ]; then
   sleep 30 &
   child_pid=$!
@@ -166,6 +178,7 @@ export FAKE_XCRUN_SCRATCH_LOG="$TMPDIR/xcrun-scratch.log"
 export FAKE_XCRUN_SYNC_DIR="$TMPDIR/xcrun-sync"
 export OMI_SWIFT_TEST_DISCOVERY_ROOT="$TMPDIR/tests"
 export OMI_SWIFT_TEST_PACKAGE_PATH="$TMPDIR/package"
+export OMI_SWIFT_TEST_CRASH_REPORT_DIR="$TMPDIR/crash-reports"
 export OMI_SWIFT_TEST_SUITE_WORKERS=2
 export OMI_SWIFT_TEST_SERIAL_SUITES="AuthRefreshResilienceTests AuthTokenStorageTests"
 mkdir -p "$FAKE_XCRUN_SYNC_DIR"
@@ -276,6 +289,46 @@ export FAKE_XCRUN_LOCKWAIT_SECONDS=5
 "$RUNNER" >"$TMPDIR/lockwait-runner.out" 2>"$TMPDIR/lockwait-runner.err" || true
 if grep -q -- "--- FAILED: BetaTests ---" "$TMPDIR/lockwait-runner.out"; then
   fail "runner charged SwiftPM build-lock wait against the per-suite run budget"
+fi
+
+# A suite killed by a signal leaves no frames in SwiftPM's log, and the hosted
+# runner's crash reports die with the machine. The runner must surface them
+# next to the failing suite or a CI-only crasher stays undiagnosable (#11573).
+unset FAKE_XCRUN_LOCKWAIT_SUITE FAKE_XCRUN_LOCKWAIT_SECONDS
+unset OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS
+cat >"$TMPDIR/tests/CrasherTests.swift" <<'SWIFT'
+import XCTest
+final class CrasherTests: XCTestCase {
+    func testOne() {}
+}
+SWIFT
+if "$RUNNER" >"$TMPDIR/crash-runner.out" 2>"$TMPDIR/crash-runner.err"; then
+  fail "crash fixture unexpectedly succeeded"
+fi
+if ! grep -q "Signal-killed Swift suites: CrasherTests" "$TMPDIR/crash-runner.out"; then
+  fail "runner did not name the signal-killed suite"
+fi
+if ! grep -q -- "--- CRASH REPORT: " "$TMPDIR/crash-runner.out"; then
+  fail "runner did not surface the crash report for a signal-killed suite"
+fi
+if ! grep -q "Thread 0 Crashed: SwiftUI layout frame" "$TMPDIR/crash-runner.out"; then
+  fail "runner did not print the crash report's contents"
+fi
+
+# A report predating the run belongs to some earlier process; attributing it to
+# this run's crasher would send the next reader after the wrong backtrace.
+rm -f "$OMI_SWIFT_TEST_CRASH_REPORT_DIR/xctest-fixture.ips"
+printf 'stale report\n' >"$OMI_SWIFT_TEST_CRASH_REPORT_DIR/xctest-stale.ips"
+touch -t 202001010000 "$OMI_SWIFT_TEST_CRASH_REPORT_DIR/xctest-stale.ips"
+export FAKE_XCRUN_SKIP_CRASH_REPORT=1
+if "$RUNNER" >"$TMPDIR/stale-crash-runner.out" 2>"$TMPDIR/stale-crash-runner.err"; then
+  fail "stale-report fixture unexpectedly succeeded"
+fi
+if grep -q "stale report" "$TMPDIR/stale-crash-runner.out"; then
+  fail "runner attributed a pre-run crash report to this run"
+fi
+if ! grep -q "No crash reports newer than this run" "$TMPDIR/stale-crash-runner.out"; then
+  fail "runner did not report the absence of a fresh crash report"
 fi
 
 echo "swift-test-suites tests passed"

@@ -10,6 +10,27 @@ import XCTest
   // notification regression step must compile the bundle without them.
 
   final class RealtimeHubSessionHandoffPolicyTests: XCTestCase {
+    // Every policy here is evaluated against `RealtimeHubOwnerScope.signedOut`,
+    // which is only current while the standard domain holds no `auth_userId`.
+    // Inheriting that domain let a concurrent suite's signed-in owner make
+    // `isOwnerScopeCurrent(.signedOut)` false, so `failoverBargeInReplacement`
+    // returned false and the barge-in test failed on CI only. Pin the owner
+    // (which also moves this suite into the sequential cluster).
+    private var ownerFixture: RuntimeOwnerAuthorityTestFixture?
+
+    override func setUp() async throws {
+      try await super.setUp()
+      let fixture = await RuntimeOwnerAuthorityTestFixture()
+      ownerFixture = fixture
+      await fixture.establish(authOwnerID: nil)
+    }
+
+    override func tearDown() async throws {
+      await ownerFixture?.restore()
+      ownerFixture = nil
+      try await super.tearDown()
+    }
+
     @MainActor
     func testPhysicalReplacementGateDrainsBeforeStartingAndCoalescesDuplicates() async {
       let gate = RealtimeHubTransportReplacementGate()

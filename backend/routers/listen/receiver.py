@@ -599,11 +599,11 @@ class ListenReceiver:
             if decoded_audio_bytes:
                 sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
                 emit_product_event(
-                    uid=request.uid,
+                    uid=str(getattr(request, 'uid', '') or ''),
                     event='Encoded Audio Duration Measured',
                     properties={
-                        'recording_id': self.host.recording_session_id,
-                        'conversation_id': self.host.state.current_conversation_id,
+                        'recording_id': getattr(self.host, 'recording_session_id', None),
+                        'conversation_id': getattr(self.host.state, 'current_conversation_id', None),
                         'codec': request.codec,
                         'decoded_audio_bytes': decoded_audio_bytes,
                         'duration_seconds': decoded_audio_bytes / (sample_rate * 2),
@@ -615,11 +615,11 @@ class ListenReceiver:
                 speech_ms = max(0, int(vad_metrics.get('speech_ms_total') or 0))
                 if speech_ms:
                     emit_product_event(
-                        uid=request.uid,
+                        uid=str(getattr(request, 'uid', '') or ''),
                         event='Speech Positive Duration Measured',
                         properties={
-                            'recording_id': self.host.recording_session_id,
-                            'conversation_id': self.host.state.current_conversation_id,
+                            'recording_id': getattr(self.host, 'recording_session_id', None),
+                            'conversation_id': getattr(self.host.state, 'current_conversation_id', None),
                             'duration_seconds': speech_ms / 1000,
                             'measurement': 'server_vad',
                             'vad_mode': vad_metrics.get('mode') or 'unknown',

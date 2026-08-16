@@ -48,6 +48,7 @@ from utils.conversations.process_conversation import process_conversation, retri
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
+from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils import byok
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
@@ -817,7 +818,13 @@ def delete_conversation(
         # Delete associated memories and action items before removing the conversation doc
         # so a partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
-        MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
+        memory_service = MemoryService(db_client=db_client)
+        # Retraction is fenced with canonical intake (MEMORY_MODE). Skipping it
+        # when there is provably nothing to retract keeps delete working while
+        # the fence is closed; anything real still raises rather than orphaning
+        # live memories against a deleted conversation.
+        if not retraction_can_be_skipped(uid, conversation_id, memory_service=memory_service, db_client=db_client):
+            memory_service.retract_conversation_memories(uid, conversation_id)
 
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)

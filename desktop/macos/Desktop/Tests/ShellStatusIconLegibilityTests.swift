@@ -596,7 +596,7 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
   /// capability's name, so no future state can be added that forgets to.
   func testEveryTooltipOpensWithTheNameOfItsCapability() {
     for state in [HomeStatusState.active, .inactive, .blocked] {
-      let audio = ShellStatusTooltip.audio(state: state, mode: "In meeting")
+      let audio = ShellStatusTooltip.audio(state: state, mode: "In meeting", next: "Off")
       XCTAssertTrue(
         audio.hasPrefix("Audio"),
         """
@@ -616,12 +616,26 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
   /// Naming the capability must not cost the qualifier. "Listening" with no mode is a claim the
   /// meetings-only mode does not actually make, so the mode still has to survive into the sentence.
   func testTheRunningAudioTooltipStillCarriesItsCaptureMode() {
-    let tooltip = ShellStatusTooltip.audio(state: .active, mode: "Meetings only")
+    let tooltip = ShellStatusTooltip.audio(state: .active, mode: "Meetings only", next: "Off")
     XCTAssertTrue(
       tooltip.contains("Meetings only"),
       """
       the running audio tooltip reads "\(tooltip)" and has dropped its capture mode — unqualified \
       "listening" overclaims whenever the mode is armed rather than live.
       """)
+  }
+
+  func testTheAwaitingMeetingAudioTooltipDoesNotClaimOffOrStart() {
+    let tooltip = ShellStatusTooltip.audio(
+      state: .inactive, mode: "Only Meetings", isAwaitingMeeting: true,
+      next: CaptureListeningLogic.audioRecordingModeTitle(
+        CaptureListeningLogic.nextAudioRecordingMode(after: .onlyMeetings)))
+    XCTAssertTrue(tooltip.hasPrefix("Audio"))
+    XCTAssertTrue(tooltip.contains("waiting for a call"))
+    XCTAssertTrue(tooltip.contains("Only Meetings"))
+    XCTAssertTrue(tooltip.contains("Click for Off"))
+    XCTAssertFalse(
+      tooltip.contains("Click to start"),
+      "An armed Only Meetings wait is not off; clicking turns listening off, it does not start it.")
   }
 }
