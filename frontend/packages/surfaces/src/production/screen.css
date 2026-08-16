@@ -291,7 +291,7 @@ html[data-platform="desktop"][data-color-mode="dark"] .screen-timeline {
   top: 9px;
   height: 26px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-element);
   /* A faint wash of the label colour, so an empty track reads as empty rather than as a slab. */
   background: color-mix(in srgb, var(--content-primary) 10%, transparent);
   overflow: hidden;
@@ -385,7 +385,7 @@ html[data-platform="desktop"][data-color-mode="dark"] .screen-timeline {
 .screen-track:focus-within {
   outline: var(--focus-ring-width) solid var(--focus);
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: var(--radius-element);
 }
 
 .screen-track-footer {
@@ -399,7 +399,6 @@ html[data-platform="desktop"][data-color-mode="dark"] .screen-timeline {
   font-size: var(--type-micro-size);
 }
 
-.screen-track-footer-stamp,
 .screen-track-footer .screen-frame-counter {
   font-family: var(--type-code-family);
   font-variant-numeric: tabular-nums;
