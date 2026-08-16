@@ -59907,6 +59907,82 @@
         ]
       }
     },
+    "/v3/speech-profile/status": {
+      "get": {
+        "description": "Consolidated speech-profile status for the settings UI.\n\nSurfaces users:{uid}:speech_profile_duration (written on upload but currently read by\nnothing) and folds together data split across GET /v3/speech-profile (existence) and\nGET /v4/speech-profile (url).",
+        "operationId": "get_speech_profile_status_v3_speech_profile_status_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Speech Profile Status",
+        "tags": [
+          "v3"
+        ]
+      }
+    },
     "/v3/upload-audio": {
       "post": {
         "operationId": "upload_profile_v3_upload_audio_post",
