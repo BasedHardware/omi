@@ -206,6 +206,12 @@ test("the in-page driver clicks surface controls and does not call stores", () =
   assert.match(driver, /timeout\(state, "mic", listenTranscript\(root\)\)/);
   assert.match(driver, /timeout\(state, "screen", screenFrame\(root\)\)/);
   assert.match(driver, /OUTCOME_TICK_LIMIT = 40/);
+  assert.match(driver, /REAL_CHAT_TICK_LIMIT = 160/);
+  assert.match(driver, /phase === "chat-wait-result" \|\| phase === "journey-chat-wait-result"/);
+  assert.match(driver, /streaming:1/);
+  assert.match(driver, /phaseTicks = 1/);
+  assert.doesNotMatch(buildDriverSource(driver, {}), /window\.__omiCAReal = true;/);
+  assert.match(buildDriverSource(driver, { real: true }), /window\.__omiCAReal = true;/);
   assert.match(driver, /root\?\.querySelectorAll\("\.listen-transcript-row"\)/);
   assert.match(driver, /screen-wait-outcome/);
   assert.match(driver, /screenFrameSelected/);
@@ -250,14 +256,19 @@ test("the runner is a sibling of --accept and never aims at production", () => {
   assert.match(run, /"--up", "--lease"/);
   assert.match(run, /refusing to use the pinned app origin 5290/);
   assert.doesNotMatch(run, /if \(!SCREEN_PROOF && !serviceUp && !gatewayUp\)/);
-  assert.match(run, /OMI_PROBE_MAX_ATTEMPTS: "100"/);
+  assert.match(run, /OMI_PROBE_MAX_ATTEMPTS: realChat \? "250" : "100"/);
   assert.doesNotMatch(run, /OMI_PROBE_MAX_ATTEMPTS: "150"/);
   assert.match(run, /--journey/);
   assert.match(run, /--seam-break/);
 });
 
 test("the driver reaches WKWebView as parseable JavaScript", () => {
-  for (const options of [{}, { screenProof: true }, { journey: true, baseline: { conversationIds: ["c1"], memoryIds: ["m1"] } }]) {
+  for (const options of [
+    {},
+    { screenProof: true },
+    { journey: true, baseline: { conversationIds: ["c1"], memoryIds: ["m1"] } },
+    { journey: true, real: true, baseline: { conversationIds: ["c1"], memoryIds: ["m1"] } },
+  ]) {
     const sent = buildDriverSource(driver, options);
     assert.doesNotThrow(
       () => new Function(sent),

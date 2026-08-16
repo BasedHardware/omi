@@ -819,7 +819,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
         guard let self else { return }
         let pendingValue = self.env["OMI_PROBE_PENDING_VALUE"]
-        let maxAttempts = max(1, min(Int(self.env["OMI_PROBE_MAX_ATTEMPTS"] ?? "1") ?? 1, 100))
+        // 250 leaves room for a real-model journey chat wait (60s first-content
+        // liveness) without shrinking Listen's 40-tick outcome budget. 100 made
+        // CONTROL chat.memory=timeout after a 34s GLM reasoning preamble.
+        let maxAttempts = max(1, min(Int(self.env["OMI_PROBE_MAX_ATTEMPTS"] ?? "1") ?? 1, 250))
         let retryInterval = max(0.01, min(Double(self.env["OMI_PROBE_RETRY_INTERVAL"] ?? "0.1") ?? 0.1, 1))
         var evaluateProbe: ((Int) -> Void)!
         evaluateProbe = { [weak self] attempt in

@@ -129,7 +129,7 @@ IDENTITY="$(SETTINGS_JSON="$SETTINGS_JSON" STATUS_JSON="$STATUS_JSON" node -e '
 printf 'omi local demo app\n\n'
 printf '  base URL   %s\n' "$SERVICE_URL"
 if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
-  printf '  gateway    %s  (local real-model proxy — Chat UI still says Local test gateway; attachments still fail closed)\n' "$GATEWAY_URL"
+  printf '  gateway    %s  (local real-model proxy — Chat UI says External model response; attachments still fail closed)\n' "$GATEWAY_URL"
 else
   printf '  gateway    %s  (local test gateway — chat generation is not a real model)\n' "$GATEWAY_URL"
 fi
