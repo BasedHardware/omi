@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Omi_Computer
 
-final class BrowserAutomationTargetTests: XCTestCase {
+@MainActor final class BrowserAutomationTargetTests: XCTestCase {
   func testDetectsExtensionInConfiguredProfileRoot() throws {
     let root = FileManager.default.temporaryDirectory
       .appendingPathComponent("omi-browser-target-\(UUID().uuidString)")
@@ -32,14 +32,17 @@ final class BrowserAutomationTargetTests: XCTestCase {
   }
 
   func testDestinationModesSeparateCloudBrowserAndLocalSetup() {
-    // ChatGPT/Claude cloud are assisted-first: deterministic open+copy plus an
-    // on-screen guidance card. See docs/cloud-connectors-roadmap.md.
-    XCTAssertEqual(MemoryExportDestination.chatgpt.mcpExecuteKind, .assisted)
+    // ChatGPT uses the approved directory listing. Claude remains assisted-first.
+    XCTAssertEqual(MemoryExportDestination.chatgpt.mcpExecuteKind, .directoryApp)
+    XCTAssertEqual(
+      MemoryExportDestination.chatgpt.directoryInstallURL?.absoluteString,
+      "https://chatgpt.com/plugins/plugin_asdk_app_6a1490df4c588191b9339ae21978c873?q=omi")
     XCTAssertEqual(MemoryExportDestination.claude.mcpExecuteKind, .assisted)
-    XCTAssertNotNil(MemoryExportDestination.chatgpt.assistedOverlayHint)
+    XCTAssertNil(MemoryExportDestination.chatgpt.assistedOverlayHint)
     XCTAssertNotNil(MemoryExportDestination.claude.assistedOverlayHint)
     XCTAssertNil(MemoryExportDestination.gemini.assistedOverlayHint)
     XCTAssertEqual(MemoryExportDestination.claude.assistedSetupFields(key: "k")?.count, 4)
+    // Preserve the developer-mode custom app fields as the advanced fallback.
     XCTAssertEqual(MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?.count, 8)
     // Prod ChatGPT client is public PKCE — the secret row must stay blank.
     XCTAssertEqual(
@@ -65,6 +68,11 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertEqual(MemoryExportDestination.codex.mcpExecuteKind, .localAutonomous)
     XCTAssertEqual(MemoryExportDestination.claudeCode.mcpExecuteKind, .localAutonomous)
     XCTAssertEqual(MemoryExportDestination.gemini.mcpExecuteKind, .assisted)
+  }
+
+  func testChatGPTAndCodexShareOnePickerChoice() {
+    XCTAssertEqual(ConnectDestinationSheet.group(for: .chatgpt), [.chatgpt, .codex])
+    XCTAssertEqual(ConnectDestinationSheet.group(for: .codex), [.chatgpt, .codex])
   }
 
   func testAgentSkillHandlesNullableHostedProfileAndRemoteTransport() {

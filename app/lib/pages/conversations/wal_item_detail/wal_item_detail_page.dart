@@ -417,7 +417,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _buildControlButton(
-                    icon: Icons.replay_10,
+                    icon: FontAwesomeIcons.backward,
                     onPressed: playbackState.canPlayOrShare && isPlaying
                         ? () => _handleSkipBackward(context.read<SyncProvider>())
                         : null,
@@ -425,8 +425,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   ),
                   _buildControlButton(
                     icon: playbackState.isProcessing
-                        ? Icons.hourglass_empty
-                        : (isPlaying ? Icons.pause : Icons.play_arrow),
+                        ? FontAwesomeIcons.hourglass
+                        : (isPlaying ? FontAwesomeIcons.pause : FontAwesomeIcons.play),
                     size: 80,
                     backgroundColor: Theme.of(context).colorScheme.secondary,
                     iconColor: Colors.white,
@@ -435,7 +435,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                         : null,
                   ),
                   _buildControlButton(
-                    icon: Icons.forward_10,
+                    icon: FontAwesomeIcons.forward,
                     onPressed: playbackState.canPlayOrShare && isPlaying
                         ? () => _handleSkipForward(context.read<SyncProvider>())
                         : null,
@@ -460,7 +460,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   Widget _buildControlButton({
-    required IconData icon,
+    required FaIconData icon,
     VoidCallback? onPressed,
     double size = 48,
     Color? backgroundColor,
@@ -475,7 +475,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       ),
       child: IconButton(
         onPressed: onPressed,
-        icon: Icon(icon, color: iconColor ?? Colors.white, size: size * 0.4),
+        icon: FaIcon(icon, color: iconColor ?? Colors.white, size: size * 0.4),
       ),
     );
   }
@@ -596,7 +596,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       confirmColor: Colors.red,
     );
 
-    if (confirmed == true && mounted) {
+    if (confirmed == true && context.mounted) {
       Navigator.of(context).pop(); // Go back to previous screen
       context.read<SyncProvider>().deleteWal(widget.wal);
     }
@@ -631,7 +631,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               Center(
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
-                  child: Image.asset(DeviceUtils.getDeviceImagePathByModel(widget.wal.deviceModel), height: 60),
+                  child: Image.asset(DeviceUtils.getDeviceImagePath(deviceName: widget.wal.deviceModel), height: 60),
                 ),
               ),
               _buildDetailRow(context.l10n.recordingIdLabel, widget.wal.id),

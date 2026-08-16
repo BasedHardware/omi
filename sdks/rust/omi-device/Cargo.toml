@@ -1,0 +1,13 @@
+[package]
+name = "omi-device"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "Rust protocol SDK for Omi Bluetooth devices"
+repository = "https://github.com/BasedHardware/Omi"
+keywords = ["omi", "bluetooth", "ble", "wearable"]
+categories = ["hardware-support"]
+
+[lints.clippy]
+all = "warn"

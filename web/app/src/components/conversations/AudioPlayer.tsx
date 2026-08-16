@@ -11,11 +11,11 @@ import {
 import { Play, Pause, Volume2, VolumeX, Loader2, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getConversationAudioUrlsWithPoll } from '@/lib/api';
-import type { AudioFile } from '@/types/conversation';
+import type { AudioFileUrlInfo } from '@/types/conversation';
 
 interface AudioPlayerProps {
   conversationId: string;
-  audioFiles: AudioFile[];
+  audioFiles: AudioFileUrlInfo[];
   onTimeUpdate?: (currentTime: number) => void;
   className?: string;
 }

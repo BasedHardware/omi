@@ -1,0 +1,39 @@
+name: Promote Signed Desktop Candidate
+
+# Manual/reusable retry only. Normal Beta promotion happens inside the
+# successful Codemagic release build; signed-smoke promotion never triggers this.
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: 'Signed v*-macos candidate tag to promote to Beta'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-beta-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    environment: beta
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask the backend to verify and promote the signed candidate
+        env:
+          BETA_PROMOTION_TOKEN: ${{ secrets.BETA_PROMOTION_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*-macos$' || {
+            echo 'release_tag must be an exact immutable macOS candidate tag' >&2
+            exit 1
+          }
+          curl --fail-with-body --silent --show-error \
+            --request POST https://api.omi.me/v2/desktop/beta/promote-candidate \
+            --header "Authorization: Bearer ${BETA_PROMOTION_TOKEN}" \
+            --header 'Content-Type: application/json' \
+            --data "{\"tag\":\"${RELEASE_TAG}\"}"

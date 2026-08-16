@@ -1,21 +1,31 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @MainActor
 extension AppState {
   func requestMicrophonePermission() {
+    let status = AudioCaptureService.authorizationStatus()
+    log("Requesting microphone permission, current status: \(status.rawValue)")
+
+    // Already denied/restricted: requestAccess would return false without ever showing a
+    // prompt, so the user who just asked to record would get silence. Tell them the real
+    // problem and open the pane that fixes it instead.
+    if MicrophoneCaptureAuthorizationPolicy.action(for: status) == .surfacePermissionAlert {
+      hasMicrophonePermission = false
+      surfaceMicrophonePermissionAlert()
+      return
+    }
+
+    let shellWasSuspended = ShellSummon.suspendForPermissionPrompt()
     // Activate app to ensure permission dialog appears
     NSApp.activate()
-
-    log(
-      "Requesting microphone permission, current status: \(AudioCaptureService.authorizationStatus().rawValue)"
-    )
 
     Task {
       let granted = await AudioCaptureService.requestPermission()
       await MainActor.run {
+        if shellWasSuspended { ShellSummon.restoreAfterPermissionPrompt() }
         self.hasMicrophonePermission = granted
         log("Microphone permission request completed, granted: \(granted)")
         if granted {
@@ -62,22 +72,84 @@ extension AppState {
       return
     }
 
+    // Never relaunch a DMG/translocated path — `open` on the mounted-DMG bundle
+    // re-reveals the installer's "Drag to Applications" Finder window. Prefer an
+    // installed copy when one exists (AppInstaller normally guarantees this).
+    var relaunchURL = bundleURL
+    if AppInstaller.isInstallerLocation(bundleURL.path) {
+      let installed = AppInstaller.installedURL(forBundleURL: bundleURL)
+      if FileManager.default.fileExists(atPath: installed.path) {
+        log("Restart: bundle is on an installer mount, relaunching installed copy instead")
+        relaunchURL = installed
+      }
+    }
+
     // Use a shell script to wait briefly, then relaunch the app
     let task = Process()
     task.executableURL = URL(fileURLWithPath: "/bin/sh")
-    task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+    task.arguments = [
+      "-c",
+      Self.relaunchCommand(
+        appPath: relaunchURL.path,
+        isNonProduction: AppBuild.isNonProduction,
+        automationPort: DesktopAutomationLaunchOptions.port,
+        terminatingProcessIdentifier: ProcessInfo.processInfo.processIdentifier,
+        automationUIPresentationMode: DesktopAutomationLaunchOptions.uiPresentationMode),
+    ]
 
     do {
       try task.run()
       log("Restart scheduled, terminating current instance...")
 
-      // Terminate the current app
+      // Terminate on AppKit's main queue.  Keep an explicit before/after marker:
+      // a restart helper intentionally waits on this PID, so a cancelled AppKit
+      // quit must be distinguishable from a failed helper launch in local logs.
       DispatchQueue.main.async {
+        log("Restart: requesting AppKit termination for pid=\(ProcessInfo.processInfo.processIdentifier)")
         NSApplication.shared.terminate(nil)
+        log("Restart: AppKit termination request returned")
       }
     } catch {
       log("Failed to schedule restart: \(error)")
     }
+  }
+
+  /// Builds the `/bin/sh -c` payload that relaunches the app after a short delay.
+  ///
+  /// On **non-production** builds the automation port is re-passed as an argv
+  /// (`--automation-port=`) so the reopened bundle rebinds the SAME port the harness
+  /// launched with. A plain `open <bundle>` carries no argv and no env, so on its own
+  /// the reopened app would fall back to a launchd-session-inherited
+  /// `OMI_AUTOMATION_PORT` (or the default port), and the automation harness, still
+  /// polling the pre-quit port, would find nothing after Quit & Reopen (PERM-06). argv
+  /// is the highest-precedence port source, so it wins over any inherited env.
+  ///
+  /// The command also waits for the terminating process to exit before asking Launch
+  /// Services to open the bundle.  A fixed delay alone races app termination: if
+  /// `open` reaches Launch Services while the old process is still alive, macOS
+  /// treats it as a reopen of that process rather than a relaunch.  Waiting on the
+  /// original PID gives the single-instance guard and the automation listener an
+  /// unambiguous handoff.  Non-production uses `open -n` after that handoff so the
+  /// harness gets a distinct replacement process even if Launch Services retains an
+  /// activation record for the old test instance.
+  nonisolated static func relaunchCommand(
+    appPath: String,
+    isNonProduction: Bool,
+    automationPort: UInt16,
+    terminatingProcessIdentifier: Int32,
+    automationUIPresentationMode: DesktopAutomationUIPresentationMode = .normal
+  ) -> String {
+    var openCommand = "open \"\(appPath)\""
+    if isNonProduction {
+      let quietFlag =
+        automationUIPresentationMode == .normal
+        ? "" : " \(DesktopAutomationLaunchOptions.uiPresentationPrefix)\(automationUIPresentationMode.rawValue)"
+      let backgroundFlag = automationUIPresentationMode == .quiet ? " -g" : ""
+      openCommand =
+        "open -n\(backgroundFlag) \"\(appPath)\" --args \(DesktopAutomationLaunchOptions.portPrefix)\(automationPort)\(quietFlag)"
+    }
+    return
+      "sleep 0.5 && while kill -0 \(terminatingProcessIdentifier) 2>/dev/null; do sleep 0.1; done && \(openCommand)"
   }
 
   /// Reset onboarding state for the current app only, then restart.
@@ -85,29 +157,26 @@ extension AppState {
   nonisolated func resetOnboardingAndRestart() {
     log("Resetting onboarding state for current app...")
 
-    // Update live @AppStorage state in the current app instance before touching
-    // raw UserDefaults so SwiftUI doesn't write stale onboarding values back.
-    DispatchQueue.main.async {
+    // Update live @AppStorage-backed state on the main thread *before* clearing
+    // UserDefaults. DesktopHomeView handles .resetOnboardingRequested by setting
+    // hasCompletedOnboarding = false; dispatch synchronously so that runs first.
+    let postResetNotification = {
       NotificationCenter.default.post(name: .resetOnboardingRequested, object: nil)
     }
-
-    // Clear onboarding-related UserDefaults keys (thread-safe, do first)
-    let onboardingKeys = [
-      "hasCompletedOnboarding",
-      "onboardingStep",
-      "hasSeenRewindIntro",
-      "hasTriggeredNotification",
-      "hasTriggeredAutomation",
-      "hasTriggeredScreenRecording",
-      "hasTriggeredMicrophone",
-      "hasTriggeredSystemAudio",
-      "hasTriggeredAccessibility",
-      "hasTriggeredBluetooth",
-      "onboardingJustCompleted",
-    ]
-    for key in onboardingKeys {
-      UserDefaults.standard.removeObject(forKey: key)
+    if Thread.isMainThread {
+      postResetNotification()
+    } else {
+      DispatchQueue.main.sync(execute: postResetNotification)
     }
+
+    // Clear onboarding-related UserDefaults keys (thread-safe, after live state).
+    // Shared list with AuthService.signOut so a new onboarding key can't be
+    // forgotten at one site.
+    OnboardingFlow.clearPersistedState()
+    // hasCompletedOnboarding lives on AppState (@AppStorage on an
+    // ObservableObject); the .resetOnboardingRequested handler above set it to
+    // false, this drops the persisted key before the restart.
+    UserDefaults.standard.removeObject(forKey: DefaultsKey.hasCompletedOnboarding)
     UserDefaults.standard.synchronize()
     log("Cleared onboarding UserDefaults keys")
 
@@ -115,27 +184,31 @@ extension AppState {
     OnboardingChatPersistence.clear()
     log("Cleared onboarding chat persistence")
 
-    Task { [self] in
-      // Clear knowledge graph (local + server) so the onboarding chart starts fresh
-      await KnowledgeGraphStorage.shared.clearAll()
-      log("Cleared local knowledge graph storage")
-      do {
-        try await APIClient.shared.deleteKnowledgeGraph()
-        log("Cleared server knowledge graph")
-      } catch {
-        logError("Failed to clear server knowledge graph during onboarding reset", error: error)
-      }
-
-      // Clear persisted backend chat messages so onboarding does not resume old history.
-      // Onboarding currently uses the default chat message stream.
-      do {
-        _ = try await APIClient.shared.deleteMessages()
-        log("Cleared backend chat messages")
-      } catch {
-        logError("Failed to clear backend chat messages during onboarding reset", error: error)
+    Task { @MainActor [self] in
+      // Clear only setup-owned local conversation state. A re-walkthrough must
+      // never mutate the user's normal local or backend chat history.
+      if let chatProvider = ChatProvider.mainInstance {
+        if await chatProvider.clearOnboardingJournal() {
+          log("Cleared onboarding journal")
+        } else {
+          log("Failed to clear onboarding journal")
+        }
+      } else {
+        log("Onboarding journal reset deferred: main chat provider unavailable")
       }
 
       try? await Task.sleep(nanoseconds: 150_000_000)
+
+      // Reset Onboarding is someone deliberately asking to see first run again,
+      // so the cinematic intro replays — the one onboarding key sign-out keeps
+      // and this site clears. It is the last write before the relaunch on
+      // purpose: the onboarding view re-mounted the moment this method dropped
+      // hasCompletedOnboarding, and that doomed session marks the intro played
+      // on appear. See OnboardingFlow.armIntroReplayForOnboardingReset.
+      OnboardingFlow.armIntroReplayForOnboardingReset()
+      UserDefaults.standard.synchronize()
+      log("Armed the cinematic intro to replay on the next launch")
+
       // Keep onboarding reset scoped to the current app instance.
       // It must not mutate production defaults, shared local data, or TCC permissions.
       self.restartApp()
@@ -164,8 +237,7 @@ extension AppState {
     // Clean DMG staging directories
     let tmpDir = "/private/tmp"
     if let contents = try? fileManager.contentsOfDirectory(atPath: tmpDir) {
-      for item in contents where item.hasPrefix("omi-dmg-staging") || item.hasPrefix("omi-dmg-test")
-      {
+      for item in contents where item.hasPrefix("omi-dmg-staging") || item.hasPrefix("omi-dmg-test") {
         let itemPath = "\(tmpDir)/\(item)"
         do {
           try fileManager.removeItem(atPath: itemPath)
@@ -245,20 +317,10 @@ extension AppState {
   nonisolated func resetLaunchServicesDatabase() {
     let lsregisterPath =
       "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: lsregisterPath)
-    process.arguments = ["-kill", "-r", "-domain", "local", "-domain", "user"]
-    process.standardOutput = FileHandle.nullDevice
-    process.standardError = FileHandle.nullDevice
-
-    do {
-      try process.run()
-      process.waitUntilExit()
-      log("Launch Services database reset (exit code: \(process.terminationStatus))")
-    } catch {
-      log("Failed to reset Launch Services: \(error.localizedDescription)")
-    }
+    SystemCommand.runLogging(
+      "Reset Launch Services database",
+      executable: lsregisterPath,
+      arguments: ["-kill", "-r", "-domain", "local", "-domain", "user"])
   }
 
   /// Clean user TCC database entries for Omi apps
@@ -266,43 +328,19 @@ extension AppState {
     let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
     let tccDbPath = "\(homeDir)/Library/Application Support/com.apple.TCC/TCC.db"
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-    process.arguments = [
-      tccDbPath, "DELETE FROM access WHERE client LIKE '%com.omi.computer-macos%';",
-    ]
-    process.standardOutput = FileHandle.nullDevice
-    process.standardError = FileHandle.nullDevice
-
-    do {
-      try process.run()
-      process.waitUntilExit()
-      log("User TCC database cleaned (exit code: \(process.terminationStatus))")
-    } catch {
-      log("Failed to clean user TCC database: \(error.localizedDescription)")
-    }
+    SystemCommand.runLogging(
+      "Clean user TCC database (production bundle)",
+      executable: "/usr/bin/sqlite3",
+      arguments: [tccDbPath, "DELETE FROM access WHERE client LIKE '%com.omi.computer-macos%';"])
 
     // Also clean entries for non-production Omi bundles (for example com.omi.desktop-dev, com.omi.1233).
-    let process2 = Process()
-    process2.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-    process2.arguments = [
-      tccDbPath,
-      "DELETE FROM access WHERE client LIKE 'com.omi.%' AND client != 'com.omi.computer-macos';",
-    ]
-    process2.standardOutput = FileHandle.nullDevice
-    process2.standardError = FileHandle.nullDevice
-
-    do {
-      try process2.run()
-      process2.waitUntilExit()
-      log(
-        "User TCC database cleaned for non-production bundles (exit code: \(process2.terminationStatus))"
-      )
-    } catch {
-      log(
-        "Failed to clean user TCC database for non-production bundles: \(error.localizedDescription)"
-      )
-    }
+    SystemCommand.runLogging(
+      "Clean user TCC database (non-production bundles)",
+      executable: "/usr/bin/sqlite3",
+      arguments: [
+        tccDbPath,
+        "DELETE FROM access WHERE client LIKE 'com.omi.%' AND client != 'com.omi.computer-macos';",
+      ])
   }
 
   /// Reset microphone permission using tccutil (Option 1: Direct)
@@ -312,25 +350,16 @@ extension AppState {
     let bundleId = Bundle.main.bundleIdentifier ?? "com.omi.computer-macos"
     log("Resetting microphone permission for \(bundleId) via tccutil...")
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-    process.arguments = ["reset", "Microphone", bundleId]
+    let success = SystemCommand.runLogging(
+      "tccutil reset Microphone (\(bundleId))",
+      executable: "/usr/bin/tccutil",
+      arguments: ["reset", "Microphone", bundleId])
 
-    do {
-      try process.run()
-      process.waitUntilExit()
-      let success = process.terminationStatus == 0
-      log("tccutil reset completed with exit code: \(process.terminationStatus)")
-
-      if success && shouldRestart {
-        restartApp()
-      }
-
-      return success
-    } catch {
-      log("Failed to run tccutil: \(error)")
-      return false
+    if success && shouldRestart {
+      restartApp()
     }
+
+    return success
   }
 
   /// Reset microphone permission via Terminal (Option 2: Visible to user)
@@ -363,11 +392,50 @@ extension AppState {
     }
   }
 
-  /// Check system audio permission status
-  /// This checks if the test capture was successful (set by triggerSystemAudioPermission)
+  func recordSystemAudioCaptureOutcome(_ status: SystemAudioPermissionStatus) {
+    systemAudioPermissionStatus = status
+    hasSystemAudioPermission = status == .granted
+  }
+
+  /// Prime the same Core Audio tap used by real capture and reconcile its
+  /// observed outcome into the shared permission state.
+  func primeSystemAudioPermission() async -> Bool {
+    guard #available(macOS 14.4, *) else {
+      recordSystemAudioCaptureOutcome(.unsupported)
+      return false
+    }
+
+    return await reconcileSystemAudioPermission {
+      await SystemAudioCaptureService.primePermission()
+    }
+  }
+
+  /// Injectable production seam for reconciling a real tap attempt. Keeping
+  /// this at AppState makes onboarding and normal capture share one owner.
+  func reconcileSystemAudioPermission(
+    testPermission: @escaping @Sendable () async -> Bool
+  ) async -> Bool {
+    let granted = await testPermission()
+    recordSystemAudioCaptureOutcome(granted ? .granted : .denied)
+    return granted
+  }
+
+  /// Check system audio support and retain the last observed tap result.
+  ///
+  /// Core Audio process taps (macOS 14.4+) do not provide a preflight API. Unlike
+  /// Screen Recording, the truthful product state comes from a real tap outcome.
+  /// An idle refresh cannot produce newer evidence, so it must not erase the
+  /// successful prime performed during onboarding. A later real tap failure
+  /// replaces this state through `recordSystemAudioCaptureOutcome`.
   func checkSystemAudioPermission() {
-    // Permission is set by triggerSystemAudioPermission after successful test
-    // No-op here - we rely on the test result
+    guard #available(macOS 14.4, *) else {
+      recordSystemAudioCaptureOutcome(.unsupported)
+      return
+    }
+
+    if let service = systemAudioCaptureService as? SystemAudioCaptureService, service.capturing {
+      recordSystemAudioCaptureOutcome(.granted)
+    }
   }
 
   /// Trigger system audio permission by actually testing capture
@@ -375,11 +443,12 @@ extension AppState {
   func triggerSystemAudioPermission() {
     guard #available(macOS 14.4, *) else {
       log("System audio not supported on this macOS version")
-      hasSystemAudioPermission = false
+      recordSystemAudioCaptureOutcome(.unsupported)
       return
     }
 
     log("System audio: Testing capture...")
+    let shellWasSuspended = ShellSummon.suspendForPermissionPrompt()
 
     // Create a test capture service
     let testService = SystemAudioCaptureService()
@@ -399,21 +468,39 @@ extension AppState {
         log("System audio: Test capture stopped")
 
         // Mark permission as granted
-        hasSystemAudioPermission = true
+        recordSystemAudioCaptureOutcome(.granted)
         log("System audio: Permission verified")
+        if shellWasSuspended { ShellSummon.restoreAfterPermissionPrompt() }
 
       } catch {
         logError("System audio: Test capture failed", error: error)
-        hasSystemAudioPermission = false
+        recordSystemAudioCaptureOutcome(SystemAudioPermissionStatus.classify(captureError: error))
 
         // Open System Settings to Screen Recording section
         if let url = URL(
           string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
         {
+          ShellSummon.suspendForPermissionPrompt()
           NSWorkspace.shared.open(url)
         }
       }
     }
+  }
+
+  /// Stop the active session and wait until its microphone IOProc is physically gone.
+  /// Settings uses this boundary before reopening capture with changed preferences.
+  func prepareTranscriptionRestartAfterSettingsChange() async -> Bool {
+    guard isTranscribing else { return false }
+
+    let stoppedCapture = audioCaptureService
+    let stopCompletion = stopTranscription()
+    let restartGeneration = recordingGeneration
+    await stopCompletion?.value
+    await stoppedCapture?.waitForPhysicalStop()
+
+    // A user may have toggled listening while teardown was in flight. Never let
+    // this older settings change reopen capture over that newer decision.
+    return recordingGeneration == restartGeneration && !isTranscribing
   }
 }
 
@@ -421,4 +508,117 @@ extension AppState {
 
 extension Notification.Name {
   /// Posted when the current app instance should fully clear its own onboarding state.
+}
+
+// MARK: - Privileged system command runner (BL-022)
+
+/// Structured outcome of a system / privileged shell-out (`tccutil`,
+/// `lsregister`, `sqlite3` on `TCC.db`, `xattr`, …).
+///
+/// These call sites previously used `try? process.run()`, which dropped *both*
+/// launch failures and non-zero exits silently — a failed provenance strip broke
+/// future Sparkle updates, and a failed `tccutil`/`sqlite3` reset looked
+/// identical to success (BL-022). Making the outcome explicit lets callers log it
+/// with context and, where a UI surface exists, reflect it — without ever
+/// crashing.
+enum SystemCommandOutcome: Equatable {
+  /// Process ran and exited 0.
+  case succeeded
+  /// Process could not be started (missing binary, sandbox denial, …).
+  case failedToLaunch(String)
+  /// Process ran but exited non-zero; carries a bounded, sanitized stderr snippet.
+  case exitedNonZero(code: Int32, stderr: String)
+
+  var isSuccess: Bool {
+    if case .succeeded = self { return true }
+    return false
+  }
+
+  /// Short, log-safe one-liner describing the outcome.
+  var summary: String {
+    switch self {
+    case .succeeded:
+      return "ok"
+    case .failedToLaunch(let detail):
+      return "failed to launch\(detail.isEmpty ? "" : " — \(detail)")"
+    case .exitedNonZero(let code, let stderr):
+      return "exit \(code)\(stderr.isEmpty ? "" : " — \(stderr)")"
+    }
+  }
+
+  /// Emit a single structured log line. Success is `log`; any failure is
+  /// `logError` so it surfaces in error triage instead of vanishing. Use for
+  /// commands that are expected to succeed (permission resets, provenance strip);
+  /// for best-effort tools whose non-zero exit is benign, log `summary` directly.
+  func logResult(_ label: String) {
+    switch self {
+    case .succeeded:
+      log("\(label): ok")
+    case .failedToLaunch, .exitedNonZero:
+      logError("\(label): \(summary)")
+    }
+  }
+}
+
+/// Runs system/privileged shell-outs and returns a structured outcome instead of
+/// throwing or silently swallowing. stderr is captured (bounded + sanitized) so
+/// failures are diagnosable; stdout is discarded. Blocking — call off the main
+/// thread for slow tools.
+enum SystemCommand {
+  @discardableResult
+  static func run(
+    executable: String,
+    arguments: [String],
+    maxStderrLength: Int = 200
+  ) -> SystemCommandOutcome {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = arguments
+    let stderrPipe = Pipe()
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = stderrPipe
+
+    do {
+      try process.run()
+    } catch {
+      return .failedToLaunch(
+        sanitizedCommandOutput(error.localizedDescription, maxLength: maxStderrLength))
+    }
+
+    // Drain stderr before waitUntilExit so a chatty tool can't deadlock on a full
+    // pipe buffer; readDataToEndOfFile returns once the child closes the pipe.
+    let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+
+    if process.terminationStatus == 0 {
+      return .succeeded
+    }
+    let snippet = sanitizedCommandOutput(
+      String(decoding: stderrData, as: UTF8.self), maxLength: maxStderrLength)
+    return .exitedNonZero(code: process.terminationStatus, stderr: snippet)
+  }
+
+  /// Run a should-succeed command, log its outcome under `label` (failure →
+  /// `logError`), and return whether it succeeded so callers can branch.
+  @discardableResult
+  static func runLogging(_ label: String, executable: String, arguments: [String]) -> Bool {
+    let outcome = run(executable: executable, arguments: arguments)
+    outcome.logResult(label)
+    return outcome.isSuccess
+  }
+}
+
+/// Collapse captured command output to a single, control-char-free, length-
+/// bounded snippet safe to log. The privileged system tools used here don't emit
+/// user secrets, so this bounds noise rather than scrubbing PII.
+func sanitizedCommandOutput(_ raw: String, maxLength: Int = 200) -> String {
+  // Replace every control character (not just \r\n\t) with a space so a tool's
+  // stderr can't inject terminal/log escape sequences into our logs or Sentry.
+  let collapsed =
+    raw.unicodeScalars
+    .map { CharacterSet.controlCharacters.contains($0) ? " " : String($0) }
+    .joined()
+    .trimmingCharacters(in: .whitespacesAndNewlines)
+  if collapsed.count <= maxLength { return collapsed }
+  return String(collapsed.prefix(maxLength)) + "…"
 }

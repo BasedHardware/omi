@@ -100,10 +100,20 @@ for mod_name in [
 
 sys.modules["utils.chat"].initial_message_util = MagicMock()
 sys.modules["utils.llm.clients"].get_llm = MagicMock()
+usage_tracker_stub = _stub_module("utils.llm.usage_tracker")
+
+
+class _Features:
+    CHAT = "chat"
+
+
+usage_tracker_stub.Features = _Features
+usage_tracker_stub.track_usage = MagicMock()
 
 # Stub google.cloud.firestore sentinels
 firestore_stub = sys.modules["google.cloud.firestore"]
 firestore_stub.Increment = lambda x: f"__increment_{x}__"
+firestore_stub.ArrayRemove = lambda values: ("__array_remove__", tuple(values))
 firestore_stub.Query = MagicMock()
 firestore_stub.Query.ASCENDING = "ASCENDING"
 firestore_stub.Query.DESCENDING = "DESCENDING"
@@ -117,6 +127,7 @@ sys.modules["google.cloud.firestore_v1"].transactional = lambda f: f
 
 redis_stub = sys.modules["database.redis_db"]
 redis_stub.r = MagicMock()
+redis_stub.delete_cached_user_geolocation = MagicMock()
 setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
 redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
@@ -129,7 +140,9 @@ _ensure_package_path("database", BACKEND_DIR / "database")
 client_stub = _stub_module("database._client")
 mock_db = MagicMock()
 client_stub.db = mock_db
+client_stub.delete_collection_recursive = MagicMock()
 client_stub.document_id_from_seed = MagicMock(return_value="seed-id")
+client_stub.get_firestore_client = MagicMock(return_value=mock_db)
 
 # Stub database.helpers (used by chat.py)
 helpers_stub = _stub_module("database.helpers")
@@ -138,14 +151,16 @@ helpers_stub.prepare_for_write = lambda **kw: (lambda f: f)
 helpers_stub.prepare_for_read = lambda **kw: (lambda f: f)
 
 # Stub models and utils needed by database.users and database.chat
-_stub_package("models")
+_ensure_package_path("models", BACKEND_DIR / "models")
 models_users_stub = _stub_module("models.users")
 models_users_stub.Subscription = MagicMock()
 models_users_stub.PlanLimits = MagicMock()
 models_users_stub.PlanType = MagicMock()
 models_users_stub.SubscriptionStatus = MagicMock()
-models_chat_stub = _stub_module("models.chat")
-models_chat_stub.Message = MagicMock()
+models_users_stub.LocationContextConsent = MagicMock()
+models_users_stub.LocationContextConsentStatus = MagicMock()
+models_users_stub.LOCATION_CONTEXT_DISCLOSED_PROVIDERS = ()
+models_users_stub.LOCATION_CONTEXT_PURPOSE = "city_context"
 
 _stub_package("utils")
 _stub_package("utils.other")
@@ -160,10 +175,23 @@ endpoints_stub.with_rate_limit = lambda dep, policy: dep
 endpoints_stub.with_rate_limit_context = lambda dep, policy: dep
 endpoints_stub.timeit = lambda f: f
 _stub_module("utils.observability")
+fallback_stub = _stub_module("utils.observability.fallback")
+fallback_stub.record_fallback = MagicMock()
+task_intelligence_stub = _stub_package("utils.task_intelligence")
+candidate_service_stub = _stub_module("utils.task_intelligence.candidate_service")
+candidate_service_stub.create_candidate = MagicMock()
+task_intelligence_stub.candidate_service = candidate_service_stub
+staged_migration_stub = _stub_module("utils.task_intelligence.staged_migration")
+staged_migration_stub.proposal_from_legacy_staged = MagicMock()
+staged_migration_stub.migrate_staged_tasks = MagicMock()
+rollout_stub = _stub_module("utils.task_intelligence.rollout")
+setattr(rollout_stub, "effective_task_workflow_control", lambda control, rollout: control)
+setattr(rollout_stub, "resolve_task_intelligence_for_user", MagicMock())
 request_validation_stub = _stub_module("utils.request_validation")
 request_validation_stub.validate_calendar_date = lambda value, field_name='date': value
 redis_stub = _stub_module("database.redis_db")
 redis_stub.r = MagicMock()
+redis_stub.delete_cached_user_geolocation = MagicMock()
 setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
 redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
@@ -185,6 +213,7 @@ from routers.chat_sessions import SaveMessageRequest, RateMessageRequest  # noqa
 from routers.focus_sessions import CreateFocusSessionRequest  # noqa: E402
 from routers.advice import CreateAdviceRequest  # noqa: E402
 from routers.staged_tasks import BatchUpdateScoresRequest, BatchScoreEntry  # noqa: E402
+import routers.staged_tasks as staged_router  # noqa: E402
 
 _ensure_package_path("models", BACKEND_DIR / "models")
 _ensure_package_path("utils", BACKEND_DIR / "utils")
@@ -578,6 +607,135 @@ class TestSessionScopedQueries:
         assert 'chat_session_id' not in fields, f"chat_session_id should NOT be filtered in app-scoped mode: {fields}"
 
 
+class TestMessageReconcileKeyset:
+    class FakeDocument:
+        def __init__(self, document_id, payload, exists=True):
+            self.id = document_id
+            self._payload = payload
+            self.exists = exists
+
+        def to_dict(self):
+            return dict(self._payload)
+
+        def get(self):
+            return self
+
+    class FakeQuery:
+        def __init__(self, collection, after_id=None, requested_limit=None):
+            self.collection = collection
+            self.after_id = after_id
+            self.requested_limit = requested_limit
+
+        def where(self, **_kwargs):
+            return self
+
+        def order_by(self, *_args, **_kwargs):
+            return self
+
+        def start_after(self, document):
+            return self.__class__(self.collection, after_id=document.id)
+
+        def limit(self, value):
+            return self.__class__(self.collection, after_id=self.after_id, requested_limit=value)
+
+        def stream(self):
+            rows = self.collection.rows
+            start = 0
+            if self.after_id is not None:
+                start = next(index for index, row in enumerate(rows) if row.id == self.after_id) + 1
+            end = start + (self.requested_limit or len(rows))
+            return rows[start:end]
+
+    class FakeCollection:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def where(self, **_kwargs):
+            return TestMessageReconcileKeyset.FakeQuery(self)
+
+        def document(self, document_id):
+            return next(
+                (row for row in self.rows if row.id == document_id),
+                TestMessageReconcileKeyset.FakeDocument(document_id, {}, exists=False),
+            )
+
+    @staticmethod
+    def message(document_id, created_at, *, reported=False, plugin_id=None):
+        return TestMessageReconcileKeyset.FakeDocument(
+            document_id,
+            {
+                'id': document_id,
+                'text': document_id,
+                'sender': 'human',
+                'type': 'text',
+                'created_at': created_at,
+                'plugin_id': plugin_id,
+                'app_id': plugin_id,
+                'reported': reported,
+            },
+        )
+
+    @staticmethod
+    def patched_db(collection):
+        patched_db = MagicMock()
+        patched_db.collection.return_value.document.return_value.collection.return_value = collection
+        return patch.object(chat_db, 'db', patched_db)
+
+    def test_insert_between_pages_does_not_skip_or_duplicate(self):
+        now = datetime.now(timezone.utc)
+        collection = self.FakeCollection(
+            [
+                self.message('remote-4', now),
+                self.message('remote-3', now),
+                self.message('remote-2', now),
+                self.message('remote-1', now),
+            ]
+        )
+        with self.patched_db(collection):
+            first, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
+            collection.rows.insert(0, self.message('remote-new', now))
+            second, next_cursor, _ = chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id=cursor)
+
+        assert [row['id'] for row in first] == ['remote-4', 'remote-3']
+        assert cursor == 'remote-3'
+        assert has_more is True
+        assert [row['id'] for row in second] == ['remote-2', 'remote-1']
+        assert next_cursor == 'remote-1'
+
+    def test_reported_rows_advance_cursor_without_consuming_page_capacity(self):
+        now = datetime.now(timezone.utc)
+        collection = self.FakeCollection(
+            [
+                self.message('visible-2', now),
+                self.message('reported', now, reported=True),
+                self.message('visible-1', now),
+            ]
+        )
+        with self.patched_db(collection):
+            rows, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
+            tail_rows, tail_cursor, tail_has_more = chat_db.get_messages_reconcile_page(
+                'uid', limit=2, cursor_message_id=cursor
+            )
+
+        assert [row['id'] for row in rows] == ['visible-2', 'visible-1']
+        assert cursor == 'visible-1'
+        assert has_more is True
+        assert tail_rows == []
+        assert tail_cursor is None
+        assert tail_has_more is False
+
+    def test_cursor_must_exist_in_authenticated_filter_scope(self):
+        now = datetime.now(timezone.utc)
+        collection = self.FakeCollection(
+            [
+                self.message('other-app', now, plugin_id='other'),
+            ]
+        )
+        with self.patched_db(collection):
+            with pytest.raises(chat_db.MessageReconcileCursorError):
+                chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id='other-app', app_id='requested')
+
+
 class TestGetChatSessionsQuery:
     """Verify get_chat_sessions query construction."""
 
@@ -689,9 +847,10 @@ class TestAcquireChatSession:
         mock_query.limit.return_value = mock_query
         mock_query.stream.return_value = []  # No existing sessions
 
-        with patch.object(chat_db, 'db') as patched_db, patch.object(
-            chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}
-        ) as mock_create:
+        with (
+            patch.object(chat_db, 'db') as patched_db,
+            patch.object(chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}) as mock_create,
+        ):
             patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
                 mock_query
             )
@@ -805,6 +964,335 @@ class TestDeleteChatSessionCascade:
 class TestSaveMessageSessionBehavior:
     """Verify save_message session acquisition and preview behavior."""
 
+    def test_client_message_id_retry_returns_same_row_without_second_write(self):
+        payload_hash = chat_db._message_idempotency_payload_hash(
+            text='hello',
+            sender='human',
+            app_id=None,
+            session_id=None,
+            metadata='{"origin":"typed_chat"}',
+            message_source='desktop_chat',
+        )
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'metadata': '{"origin":"typed_chat"}',
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'client_message_payload_hash': payload_hash,
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='hello',
+                sender='human',
+                metadata='{"origin":"typed_chat"}',
+                client_message_id='turn-1',
+            )
+
+        assert result['id'] == 'turn-1'
+        assert result['created'] is False
+        message_ref.create.assert_not_called()
+        message_ref.set.assert_not_called()
+
+    def test_newer_journal_revision_atomically_enriches_delivered_message(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'Agent started.',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': '{"content_blocks":[{"type":"agent_spawn"}]}',
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 10,
+            'client_message_payload_hash': 'sha256:old',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+        enriched_metadata = (
+            '{"content_blocks":[{"type":"agent_spawn"},{"type":"agent_completion"}],'
+            '"resources":[{"id":"artifact-1","type":"file"}]}'
+        )
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='Agent started.',
+                sender='ai',
+                session_id='session-1',
+                metadata=enriched_metadata,
+                client_message_id='turn-1',
+                journal_revision=11,
+            )
+
+        assert result['created'] is False
+        assert result['updated'] is True
+        assert result['journal_revision'] == 11
+        patched_db.transaction.return_value.update.assert_called_once()
+        update = patched_db.transaction.return_value.update.call_args.args[1]
+        assert update['metadata'] == enriched_metadata
+        assert update['journal_revision'] == 11
+
+    def test_equal_journal_revision_with_different_payload_fails_closed(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'original',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 7,
+            'client_message_payload_hash': 'sha256:original',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='collision',
+                    sender='ai',
+                    session_id='session-1',
+                    client_message_id='turn-1',
+                    journal_revision=7,
+                )
+
+        patched_db.transaction.return_value.update.assert_not_called()
+
+    def test_older_journal_revision_is_ignored_without_rollback(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'newest',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': '{"resources":[{"id":"new"}]}',
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 12,
+            'client_message_payload_hash': 'sha256:newest',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='stale',
+                sender='ai',
+                session_id='session-1',
+                metadata='{"resources":[]}',
+                client_message_id='turn-1',
+                journal_revision=11,
+            )
+
+        assert result['updated'] is False
+        assert result['journal_revision'] == 12
+        patched_db.transaction.return_value.update.assert_not_called()
+
+    def test_lost_ack_then_newer_journal_revision_converges_without_remote_receipt(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'original',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 2,
+            'client_message_payload_hash': 'sha256:original',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='enriched after lost ack',
+                sender='ai',
+                session_id='session-1',
+                metadata='{"content_blocks":[{"type":"agent_completion"}]}',
+                client_message_id='turn-1',
+                journal_revision=3,
+            )
+
+        assert result['updated'] is True
+        assert result['journal_revision'] == 3
+        patched_db.transaction.return_value.update.assert_called_once()
+
+    def test_client_message_id_fingerprint_distinguishes_omitted_from_explicit_session(self):
+        payload_hash = chat_db._message_idempotency_payload_hash(
+            text='hello',
+            sender='human',
+            app_id=None,
+            session_id=None,
+            metadata=None,
+            message_source='desktop_chat',
+        )
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'client_message_payload_hash': payload_hash,
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='hello',
+                    sender='human',
+                    session_id='session-1',
+                    client_message_id='turn-1',
+                )
+
+        message_ref.create.assert_not_called()
+
+    def test_client_message_id_payload_collision_is_rejected(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'original',
+            'sender': 'human',
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='different',
+                    sender='human',
+                    session_id='session-1',
+                    client_message_id='turn-1',
+                )
+
+        message_ref.create.assert_not_called()
+
+    def test_legacy_client_message_id_rejects_different_app_when_retry_omits_app(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'app_id': 'different-app',
+            'plugin_id': 'different-app',
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='hello',
+                    sender='human',
+                    client_message_id='turn-1',
+                )
+
+        message_ref.create.assert_not_called()
+
+    def test_legacy_race_validates_the_requested_session_not_the_locally_acquired_session(self):
+        missing = MagicMock()
+        missing.exists = False
+        winner = MagicMock()
+        winner.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'winner-session',
+            'session_id': 'winner-session',
+        }
+        message_ref = MagicMock()
+        message_ref.get.side_effect = [missing, winner]
+        message_ref.create.side_effect = chat_db.AlreadyExists('concurrent writer won')
+
+        with (
+            patch.object(chat_db, 'acquire_chat_session', return_value='locally-acquired-session'),
+            patch.object(chat_db, 'db') as patched_db,
+        ):
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='hello',
+                sender='human',
+                client_message_id='turn-1',
+            )
+
+        assert result['id'] == 'turn-1'
+        assert result['session_id'] == 'winner-session'
+        assert result['created'] is False
+        message_ref.create.assert_called_once()
+
     def test_explicit_session_id_skips_acquire(self):
         """save_message with explicit session_id doesn't call acquire_chat_session."""
         mock_doc_ref = MagicMock()
@@ -828,9 +1316,10 @@ class TestSaveMessageSessionBehavior:
         mock_session_ref = MagicMock()
         mock_session_ref.get.return_value.exists = True
 
-        with patch.object(chat_db, 'acquire_chat_session', return_value='sess-1'), patch.object(
-            chat_db, 'db'
-        ) as patched_db:
+        with (
+            patch.object(chat_db, 'acquire_chat_session', return_value='sess-1'),
+            patch.object(chat_db, 'db') as patched_db,
+        ):
             # Mock message write
             patched_db.collection.return_value.document.return_value.collection.side_effect = lambda name: (
                 MagicMock(document=MagicMock(return_value=mock_session_ref))
@@ -885,6 +1374,138 @@ class TestDeleteMessagesCount:
 
         assert result == 3
         mock_batch.commit.assert_called_once()
+
+    def test_delete_applies_inverse_session_metadata_in_same_preconditioned_batch(self):
+        """Source deletion and inverse count/ID/preview updates commit together."""
+        mock_msg_col = MagicMock()
+        mock_delete_query = MagicMock()
+        mock_msg_col.where.return_value = mock_delete_query
+        mock_delete_query.limit.return_value = mock_delete_query
+
+        doc1 = MagicMock()
+        doc1.id = 'msg-1'
+        doc1.update_time = object()
+        doc1.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1', 'text': 'older'}
+        doc2 = MagicMock()
+        doc2.id = 'msg-2'
+        doc2.update_time = object()
+        doc2.to_dict.return_value = {'id': 'logical-2', 'chat_session_id': 'sess-1', 'text': 'latest'}
+        mock_delete_query.stream.side_effect = [[doc1, doc2], []]
+
+        mock_session_snapshot = MagicMock()
+        mock_session_snapshot.exists = True
+        mock_session_snapshot.update_time = object()
+        mock_session_snapshot.to_dict.return_value = {
+            'message_count': 5,
+            'message_ids': ['logical-1', 'logical-2', 'older-id'],
+            'preview': 'latest',
+        }
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value = mock_session_snapshot
+        mock_session_col = MagicMock()
+        mock_session_col.document.return_value = mock_session_ref
+
+        mock_user_ref = MagicMock()
+        mock_user_ref.collection.side_effect = lambda name: (
+            mock_session_col if name == 'chat_sessions' else mock_msg_col
+        )
+        mock_batch = MagicMock()
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            patched_db.write_option.side_effect = lambda **kwargs: ('last_update', kwargs['last_update_time'])
+            result = chat_db.delete_messages('uid', app_id=None)
+
+        assert result == 2
+        mock_delete_query.limit.assert_called_with(chat_db.DELETE_MESSAGES_BATCH_LIMIT)
+        mock_batch.update.assert_called_once_with(
+            mock_session_ref,
+            {
+                'message_ids': firestore_stub.ArrayRemove(['logical-1', 'logical-2']),
+                'message_count': firestore_stub.Increment(-2),
+                'preview': None,
+            },
+            option=('last_update', mock_session_snapshot.update_time),
+        )
+        assert mock_batch.delete.call_count == 2
+        assert all(call.kwargs['option'][0] == 'last_update' for call in mock_batch.delete.call_args_list)
+
+    def test_overlapping_clear_requeries_after_precondition_conflict(self):
+        """A losing clear never applies a second decrement to already-deleted docs."""
+        mock_msg_col = MagicMock()
+        mock_delete_query = MagicMock()
+        mock_msg_col.where.return_value = mock_delete_query
+        mock_delete_query.limit.return_value = mock_delete_query
+
+        message = MagicMock()
+        message.id = 'msg-1'
+        message.update_time = object()
+        message.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1'}
+        mock_delete_query.stream.side_effect = [[message], []]
+
+        mock_session_snapshot = MagicMock()
+        mock_session_snapshot.exists = True
+        mock_session_snapshot.update_time = object()
+        mock_session_snapshot.to_dict.return_value = {'message_count': 1}
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value = mock_session_snapshot
+        mock_session_col = MagicMock()
+        mock_session_col.document.return_value = mock_session_ref
+
+        mock_user_ref = MagicMock()
+        mock_user_ref.collection.side_effect = lambda name: (
+            mock_session_col if name == 'chat_sessions' else mock_msg_col
+        )
+        mock_batch = MagicMock()
+        mock_batch.commit.side_effect = chat_db.FailedPrecondition('overlapping clear won')
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            patched_db.write_option.return_value = object()
+            result = chat_db.delete_messages('uid', app_id=None)
+
+        assert result == 0
+        mock_batch.commit.assert_called_once()
+
+    def test_persistent_precondition_conflict_is_bounded(self):
+        """A hot session cannot hold a sync worker in an unbounded retry loop."""
+        mock_msg_col = MagicMock()
+        mock_delete_query = MagicMock()
+        mock_msg_col.where.return_value = mock_delete_query
+        mock_delete_query.limit.return_value = mock_delete_query
+
+        message = MagicMock()
+        message.id = 'msg-1'
+        message.update_time = object()
+        message.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1'}
+        mock_delete_query.stream.side_effect = [[message] for _ in range(chat_db.DELETE_MESSAGES_CONFLICT_RETRIES)]
+
+        mock_session_snapshot = MagicMock()
+        mock_session_snapshot.exists = True
+        mock_session_snapshot.update_time = object()
+        mock_session_snapshot.to_dict.return_value = {'message_count': 1}
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value = mock_session_snapshot
+        mock_session_col = MagicMock()
+        mock_session_col.document.return_value = mock_session_ref
+
+        mock_user_ref = MagicMock()
+        mock_user_ref.collection.side_effect = lambda name: (
+            mock_session_col if name == 'chat_sessions' else mock_msg_col
+        )
+        mock_batch = MagicMock()
+        mock_batch.commit.side_effect = chat_db.FailedPrecondition('persistent conflict')
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            patched_db.write_option.return_value = object()
+            with pytest.raises(chat_db.FailedPrecondition, match='persistent conflict'):
+                chat_db.delete_messages('uid', app_id=None)
+
+        assert mock_batch.commit.call_count == chat_db.DELETE_MESSAGES_CONFLICT_RETRIES
 
 
 class TestLlmUsageBucketParam:
@@ -1019,14 +1640,51 @@ class TestScoreComputation:
 
         mock_col.where = col_where
 
-        with patch.object(action_items_db, 'db') as patched_db, patch.object(
-            action_items_db, 'FieldFilter', side_effect=tracking_filter
+        with (
+            patch.object(action_items_db, 'db') as patched_db,
+            patch.object(action_items_db, 'FieldFilter', side_effect=tracking_filter),
         ):
             patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
             result = action_items_db.get_scores('test-uid', date='2025-01-15')
 
         # Verify created_at was used in filter calls (for weekly query)
         assert 'created_at' in captured_filters, f"Expected created_at in filters, got: {captured_filters}"
+
+    def test_weekly_window_spans_seven_days_ending_on_date(self):
+        """The weekly window is the 7 days ending on `date`, i.e. [date-6, date+1).
+
+        Regression: it was [date-7, date+1) — 8 calendar days — which over-counted
+        every task created on the date-7 day, inconsistent with the docstring and
+        with the one-day daily window [date, date+1).
+        """
+        from datetime import timedelta
+
+        mock_col = MagicMock()
+        empty = MagicMock()
+        empty.where.return_value = empty
+        empty.stream.return_value = []
+        mock_col.where.return_value = empty
+        mock_col.stream.return_value = []
+
+        captured = []  # (field, op, value)
+        original_ff = action_items_db.FieldFilter
+
+        def tracking_filter(field, op, value):
+            captured.append((field, op, value))
+            return original_ff(field, op, value)
+
+        with (
+            patch.object(action_items_db, 'db') as patched_db,
+            patch.object(action_items_db, 'FieldFilter', side_effect=tracking_filter),
+        ):
+            patched_db.collection.return_value.document.return_value.collection.return_value = mock_col
+            action_items_db.get_scores('test-uid', date='2026-07-19')
+
+        day = datetime(2026, 7, 19, tzinfo=timezone.utc)
+        created_at_lower = [v for (f, op, v) in captured if f == 'created_at' and op == '>=']
+        assert created_at_lower, f"no created_at >= filter captured: {captured}"
+        # 7 days ending on 2026-07-19 -> lower bound is 2026-07-13 (day-6), not 2026-07-12 (day-7).
+        assert created_at_lower[0] == day - timedelta(days=6), created_at_lower[0]
 
     def test_default_tab_daily_when_highest(self):
         """default_tab is 'daily' when daily has tasks and highest score."""
@@ -1279,14 +1937,27 @@ class TestPromoteResponseWireCompat:
     """Verify promote endpoint returns PromoteResponse envelope expected by Swift client."""
 
     def test_promote_returns_envelope_when_task_exists(self):
-        """Router wraps promoted action_item in {promoted: true, reason: null, promoted_task: {...}}."""
+        """Router selects the first projection and builds the response envelope."""
         from routers.staged_tasks import promote_staged_task
 
         mock_action_item = {'id': 'ai-1', 'description': 'Test task', 'completed': False}
+        candidate = MagicMock(candidate_id='candidate-1')
 
-        with patch.object(staged_tasks_db, 'promote_staged_task', return_value=mock_action_item):
+        with (
+            patch.object(staged_router, '_merged_staged_projection', return_value=[{'id': 'candidate-1'}]),
+            patch.object(
+                staged_router,
+                '_control',
+                return_value=MagicMock(account_generation=7),
+            ),
+            patch.object(staged_router, '_candidate_for_public_id', return_value=candidate),
+            patch.object(staged_router, '_accept_candidate', return_value=mock_action_item) as accept_candidate,
+            patch.object(staged_router, '_retire_candidate_historical_rows') as retire_rows,
+        ):
             result = promote_staged_task(uid='test-uid')
 
+        accept_candidate.assert_called_once_with('test-uid', candidate, account_generation=7)
+        retire_rows.assert_called_once_with('test-uid', candidate)
         assert result['promoted'] is True
         assert result['reason'] is None
         assert result['promoted_task'] == mock_action_item
@@ -1295,7 +1966,7 @@ class TestPromoteResponseWireCompat:
         """Router wraps None in {promoted: false, reason: '...', promoted_task: null}."""
         from routers.staged_tasks import promote_staged_task
 
-        with patch.object(staged_tasks_db, 'promote_staged_task', return_value=None):
+        with patch.object(staged_router, '_merged_staged_projection', return_value=[]):
             result = promote_staged_task(uid='test-uid')
 
         assert result['promoted'] is False
@@ -1306,22 +1977,27 @@ class TestPromoteResponseWireCompat:
         """migrate endpoint returns {status: str} matching Swift StatusResponse."""
         from routers.staged_tasks import migrate_ai_tasks
 
-        with patch.object(staged_tasks_db, 'migrate_ai_tasks', return_value={'moved': 5, 'kept': 3}):
-            result = migrate_ai_tasks(uid='test-uid')
+        result = migrate_ai_tasks(uid='test-uid')
 
         assert 'status' in result
         assert isinstance(result['status'], str)
+        assert result['status'].startswith('legacy task migration retired')
 
     def test_migrate_conversation_items_returns_status_migrated_deleted(self):
         """migrate-conversation-items returns {status, migrated, deleted} matching Swift MigrateResponse."""
         from routers.staged_tasks import migrate_conversation_items
 
-        with patch.object(staged_tasks_db, 'migrate_conversation_items_to_staged', return_value={'moved': 10}):
-            result = migrate_conversation_items(uid='test-uid')
+        with patch.object(
+            staged_router.staged_tasks_db,
+            'restore_legacy_conversation_items',
+            side_effect=AssertionError('retired compatibility route must not bulk-migrate'),
+        ):
+            result = migrate_conversation_items(uid='test-uid', limit=50, cursor=None)
 
         assert result['status'] == 'ok'
-        assert result['migrated'] == 10
+        assert result['migrated'] == 0
         assert 'deleted' in result
+        assert result['restored'] == 0
 
 
 # ===========================================================================
@@ -1462,49 +2138,312 @@ class TestRatingZeroBoundary:
 # ===========================================================================
 
 
-class TestMigrationBatchIntegration:
-    """Exercise migration functions with enough items to cross batch boundary."""
+class TestLegacyConversationRecovery:
+    """Exercise the recovery path for rows moved by the retired migration."""
 
-    def test_migrate_ai_tasks_commits_at_batch_boundary(self):
-        """migrate_ai_tasks with 260 AI tasks triggers batch commit (260*2=520 ops > 500)."""
+    def test_restore_legacy_conversation_items_recreates_exact_marked_rows(self):
+        """Recovery removes only its marker and atomically recreates the original action item."""
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.update_time = object()
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
+            'description': 'Call supplier',
+            'conversation_id': 'conversation-1',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
+        ordinary_staged_snapshot = MagicMock()
+        ordinary_staged_snapshot.id = 'ordinary-staged-task'
+        ordinary_staged_snapshot.to_dict.return_value = {
+            'id': 'ordinary-staged-task',
+            'description': 'Keep this staged task',
+            'completed': False,
+            'source': 'screenshot',
+        }
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot, ordinary_staged_snapshot]
+        staged_col.where.return_value = recovery_query
+        action_item_ref = MagicMock()
+        action_items_col.document.return_value = action_item_ref
+        staged_ref = MagicMock()
+        staged_col.document.return_value = staged_ref
+        batch = MagicMock()
+        delete_option = object()
 
-        def _make_doc(i, source='screenshot'):
-            doc = MagicMock()
-            doc.id = f'task-{i}'
-            doc.to_dict.return_value = {
-                'id': f'task-{i}',
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        firestore_client.write_option.return_value = delete_option
+        with patch.object(staged_tasks_db, 'get_firestore_client') as get_firestore_client:
+            result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        get_firestore_client.assert_not_called()
+
+        assert result == {
+            'restored': 1,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        batch.create.assert_called_once_with(
+            action_item_ref,
+            {
+                'description': 'Call supplier',
+                'conversation_id': 'conversation-1',
                 'completed': False,
-                'source': source,
-                'relevance_score': i,
+            },
+        )
+        firestore_client.write_option.assert_called_once_with(last_update_time=staged_snapshot.update_time)
+        batch.delete.assert_called_once_with(staged_ref, option=delete_option)
+        batch.commit.assert_called_once()
+
+    @pytest.mark.parametrize('conflict_error', ['already_exists', 'conflict'])
+    def test_restore_legacy_conversation_items_does_not_overwrite_an_existing_task(self, conflict_error):
+        """An identity collision preserves both copies instead of overwriting current task data."""
+        from google.api_core.exceptions import AlreadyExists, Conflict
+
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
+            'description': 'Call supplier',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot]
+        staged_col.where.return_value = recovery_query
+        batch = MagicMock()
+        batch.commit.side_effect = {
+            'already_exists': AlreadyExists('task already exists'),
+            'conflict': Conflict('task already exists'),
+        }[conflict_error]
+
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        assert result == {
+            'restored': 0,
+            'skipped_existing': 1,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        batch.delete.assert_called_once()
+
+    def test_restore_legacy_conversation_items_skips_stale_row_and_continues(self):
+        """A staged-row precondition race refreshes the row and retries the restore."""
+        from google.api_core.exceptions import FailedPrecondition
+
+        snapshots = []
+        for index in range(2):
+            snapshot = MagicMock()
+            snapshot.id = f'legacy-task-{index}'
+            snapshot.update_time = object()
+            snapshot.to_dict.return_value = {
+                'id': snapshot.id,
+                'description': f'Call supplier {index}',
+                'completed': False,
+                'source': 'conversation_migration',
             }
-            return doc
+            snapshots.append(snapshot)
 
-        ai_docs = [_make_doc(i) for i in range(260)]
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = snapshots
+        staged_col.where.return_value = recovery_query
+        batch = MagicMock()
+        batch.commit.side_effect = [FailedPrecondition('staged row changed'), None, None]
+        refreshed_snapshot = MagicMock()
+        refreshed_snapshot.id = snapshots[0].id
+        refreshed_snapshot.update_time = object()
+        refreshed_snapshot.exists = True
+        refreshed_snapshot.to_dict.return_value = {
+            'id': refreshed_snapshot.id,
+            'description': 'Updated supplier call',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
 
-        mock_action_col = MagicMock()
-        mock_query = MagicMock()
-        mock_query.stream.return_value = ai_docs
-        mock_action_col.where.return_value = mock_query
-        mock_action_col.document.return_value = MagicMock()
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
 
-        mock_staged_col = MagicMock()
-        mock_staged_col.document.return_value = MagicMock()
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+        staged_col.document.return_value.get.return_value = refreshed_snapshot
 
-        batch1 = MagicMock()
-        batch2 = MagicMock()
+        result = staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
 
-        def col_side_effect(col_name):
-            if col_name == 'action_items':
-                return mock_action_col
-            return mock_staged_col
+        assert result == {
+            'restored': 2,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+        assert batch.commit.call_count == 3
+        assert batch.create.call_count == 3
+        assert batch.delete.call_count == 3
+        assert staged_col.document.return_value.get.call_count == 1
 
-        with patch.object(staged_tasks_db, 'db') as patched_db:
-            patched_db.batch.side_effect = [batch1, batch2]
-            patched_db.collection.return_value.document.return_value.collection.side_effect = col_side_effect
-            result = staged_tasks_db.migrate_ai_tasks('test-uid')
+    def test_restore_legacy_conversation_items_does_not_acknowledge_repeated_stale_rows(self):
+        """Repeated contention fails the sweep instead of marking the row recovered."""
+        from google.api_core.exceptions import FailedPrecondition
 
-        assert result['moved'] == 257  # 260 - 3 kept
-        batch1.commit.assert_called()  # intermediate commit at 500 ops
+        staged_snapshot = MagicMock()
+        staged_snapshot.id = 'legacy-task'
+        staged_snapshot.update_time = object()
+        staged_snapshot.to_dict.return_value = {
+            'id': 'legacy-task',
+            'description': 'Call supplier',
+            'completed': False,
+            'source': 'conversation_migration',
+        }
+        refreshed_snapshots = []
+        for index in range(staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES):
+            refreshed = MagicMock()
+            refreshed.id = staged_snapshot.id
+            refreshed.update_time = object()
+            refreshed.exists = True
+            refreshed.to_dict.return_value = {
+                'id': staged_snapshot.id,
+                'description': f'Call supplier {index}',
+                'completed': False,
+                'source': 'conversation_migration',
+            }
+            refreshed_snapshots.append(refreshed)
+
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = [staged_snapshot]
+        staged_col.where.return_value = recovery_query
+        staged_ref = staged_col.document.return_value
+        staged_ref.get.side_effect = refreshed_snapshots
+        batch = MagicMock()
+        batch.commit.side_effect = [
+            FailedPrecondition(f'staged row changed {index}')
+            for index in range(staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES + 1)
+        ]
+
+        def col_side_effect(collection_name):
+            return action_items_col if collection_name == 'action_items' else staged_col
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = col_side_effect
+        firestore_client.batch.return_value = batch
+
+        with pytest.raises(FailedPrecondition):
+            staged_tasks_db.restore_legacy_conversation_items('test-uid', firestore_client=firestore_client)
+
+        assert batch.commit.call_count == staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES + 1
+        assert staged_ref.get.call_count == staged_tasks_db.LEGACY_CONVERSATION_RECOVERY_MAX_CONTENTION_RETRIES
+
+    def test_restore_legacy_conversation_items_pages_by_document_id(self):
+        """Recovery bounds each request and returns an exclusive continuation cursor."""
+        snapshots = []
+        for index in range(3):
+            snapshot = MagicMock()
+            snapshot.id = f'legacy-{index}'
+            snapshot.to_dict.return_value = {
+                'id': f'legacy-{index}',
+                'description': f'Call supplier {index}',
+                'completed': False,
+                'source': 'conversation_migration',
+            }
+            snapshots.append(snapshot)
+
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = snapshots
+        staged_col.where.return_value = recovery_query
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = (
+            lambda collection_name: (action_items_col if collection_name == 'action_items' else staged_col)
+        )
+        result = staged_tasks_db.restore_legacy_conversation_items(
+            'test-uid', limit=2, firestore_client=firestore_client
+        )
+
+        recovery_query.order_by.assert_called_once_with('__name__')
+        recovery_query.limit.assert_called_once_with(3)
+        assert result == {
+            'restored': 2,
+            'skipped_existing': 0,
+            'has_more': True,
+            'next_cursor': 'legacy-1',
+        }
+
+    def test_restore_legacy_conversation_items_applies_exclusive_cursor(self):
+        """A continuation skips already-scanned collisions instead of retrying them forever."""
+        action_items_col = MagicMock()
+        staged_col = MagicMock()
+        recovery_query = MagicMock()
+        recovery_query.order_by.return_value = recovery_query
+        recovery_query.start_after.return_value = recovery_query
+        recovery_query.limit.return_value = recovery_query
+        recovery_query.stream.return_value = []
+        staged_col.where.return_value = recovery_query
+        cursor_ref = MagicMock()
+        staged_col.document.return_value = cursor_ref
+
+        firestore_client = MagicMock()
+        firestore_client.collection.return_value.document.return_value.collection.side_effect = (
+            lambda collection_name: (action_items_col if collection_name == 'action_items' else staged_col)
+        )
+        result = staged_tasks_db.restore_legacy_conversation_items(
+            'test-uid', cursor='legacy-1', firestore_client=firestore_client
+        )
+
+        recovery_query.start_after.assert_called_once_with({'__name__': cursor_ref})
+        assert result == {
+            'restored': 0,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
+
+    def test_released_recovery_route_is_inert_under_universal_candidate_authority(self):
+        """Released shape stays decodable without moving historical rows to action items."""
+        with patch.object(
+            staged_router.staged_tasks_db,
+            'restore_legacy_conversation_items',
+            side_effect=AssertionError('retired recovery must not bypass Candidate authority'),
+        ):
+            result = staged_router.restore_legacy_conversation_items(uid='test-uid', limit=50, cursor=None)
+
+        assert result == {
+            'status': 'ok',
+            'restored': 0,
+            'skipped_existing': 0,
+            'has_more': False,
+            'next_cursor': None,
+        }
 
 
 # ============================================================================

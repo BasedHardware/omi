@@ -3,7 +3,7 @@ import logging
 import os
 import struct
 import wave
-from typing import Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 import httpx
@@ -43,7 +43,7 @@ def _get_api_url() -> str:
     return url
 
 
-def extract_embedding(audio_path: str) -> np.ndarray:
+def extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
     """
     Extract speaker embedding from an audio file using hosted API.
 
@@ -75,7 +75,7 @@ def extract_embedding(audio_path: str) -> np.ndarray:
     return embedding
 
 
-def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav") -> np.ndarray:
+def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav") -> np.ndarray[Any, Any]:
     """
     Extract speaker embedding from audio bytes using hosted API.
 
@@ -119,7 +119,7 @@ def _read_file(path: str) -> bytes:
         return f.read()
 
 
-async def async_extract_embedding(audio_path: str) -> np.ndarray:
+async def async_extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
     """Async version of extract_embedding using httpx.AsyncClient."""
     api_url = _get_api_url()
     client = get_stt_client()
@@ -145,7 +145,7 @@ async def async_extract_embedding(audio_path: str) -> np.ndarray:
     return embedding
 
 
-async def async_extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav") -> np.ndarray:
+async def async_extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav") -> np.ndarray[Any, Any]:
     """Async version of extract_embedding_from_bytes using httpx.AsyncClient."""
     duration = _get_wav_duration(audio_data)
     if duration < MIN_EMBEDDING_AUDIO_DURATION:
@@ -173,7 +173,7 @@ async def async_extract_embedding_from_bytes(audio_data: bytes, filename: str = 
     return embedding
 
 
-def compare_embeddings(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+def compare_embeddings(embedding1: np.ndarray[Any, Any], embedding2: np.ndarray[Any, Any]) -> float:
     """
     Compare two speaker embeddings using cosine distance.
 
@@ -193,7 +193,7 @@ def compare_embeddings(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
 
 
 def is_same_speaker(
-    embedding1: np.ndarray, embedding2: np.ndarray, threshold: float = SPEAKER_MATCH_THRESHOLD
+    embedding1: np.ndarray[Any, Any], embedding2: np.ndarray[Any, Any], threshold: float = SPEAKER_MATCH_THRESHOLD
 ) -> Tuple[bool, float]:
     """
     Determine if two embeddings belong to the same speaker.
@@ -210,7 +210,7 @@ def is_same_speaker(
     return distance < threshold, distance
 
 
-def embedding_to_bytes(embedding: np.ndarray) -> bytes:
+def embedding_to_bytes(embedding: np.ndarray[Any, Any]) -> bytes:
     """
     Serialize embedding to bytes for storage.
 
@@ -223,7 +223,7 @@ def embedding_to_bytes(embedding: np.ndarray) -> bytes:
     return embedding.astype(np.float32).tobytes()
 
 
-def bytes_to_embedding(data: bytes, dim: int = 512) -> np.ndarray:
+def bytes_to_embedding(data: bytes, dim: int = 512) -> np.ndarray[Any, Any]:
     """
     Deserialize embedding from bytes.
 
@@ -239,7 +239,9 @@ def bytes_to_embedding(data: bytes, dim: int = 512) -> np.ndarray:
 
 
 def find_best_match(
-    query_embedding: np.ndarray, candidate_embeddings: list[np.ndarray], threshold: float = SPEAKER_MATCH_THRESHOLD
+    query_embedding: np.ndarray[Any, Any],
+    candidate_embeddings: List[np.ndarray[Any, Any]],
+    threshold: float = SPEAKER_MATCH_THRESHOLD,
 ) -> Optional[Tuple[int, float]]:
     """
     Find the best matching speaker from a list of candidates.

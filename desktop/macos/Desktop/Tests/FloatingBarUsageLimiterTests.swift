@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 @testable import Omi_Computer
@@ -65,6 +66,28 @@ final class FloatingBarUsageLimiterTests: XCTestCase {
     limiter.recordQuery()
     XCTAssertTrue(limiter.isLimitReached)
     XCTAssertEqual(limiter.remainingQueries, 0)
+  }
+
+  func testQuotaAndOptimisticMutationsPublishObjectWillChange() throws {
+    let limiter = FloatingBarUsageLimiter()
+    var notificationCount = 0
+    let cancellable = limiter.objectWillChange.sink { _ in notificationCount += 1 }
+    defer { cancellable.cancel() }
+
+    limiter.applyQuota(try makeQuota(plan: "Free", used: 29, limit: 30, percent: 96, allowed: true))
+    XCTAssertGreaterThan(
+      notificationCount,
+      0,
+      "a server quota update must invalidate already-rendered observers")
+    let quotaNotificationCount = notificationCount
+
+    limiter.recordQuery()
+
+    XCTAssertEqual(
+      notificationCount,
+      quotaNotificationCount + 1,
+      "an optimistic query mutation must invalidate observers immediately")
+    XCTAssertTrue(limiter.isLimitReached)
   }
 
   func testServerDeniedBlocks() throws {
@@ -180,5 +203,22 @@ final class FloatingBarUsageLimiterTests: XCTestCase {
     let limiter = FloatingBarUsageLimiter()
     limiter.applyPlan(plan: .operator, status: .inactive)
     XCTAssertFalse(limiter.hasPaidPlan)
+  }
+
+  // MARK: - Reset (CHAT-05: dev-resettable)
+
+  func testResetClearsLimitReachedState() throws {
+    // CHAT-05's second half: a dev bundle can reset the counter. Driving to the
+    // limit then resetting must return to the unblocked baseline — the behavior the
+    // non-prod `reset_usage_limiter` bridge action exposes so a harness can prove it
+    // without spending real LLM calls.
+    let limiter = FloatingBarUsageLimiter()
+    limiter.applyQuota(try makeQuota(plan: "Free", used: 30, limit: 30, percent: 100, allowed: true))
+    XCTAssertTrue(limiter.isLimitReached, "an at-limit quota blocks")
+
+    limiter.reset()
+
+    XCTAssertFalse(limiter.isLimitReached, "reset clears the reached limit (dev-resettable)")
+    XCTAssertEqual(limiter.remainingQueries, .max, "reset returns to the no-quota baseline")
   }
 }

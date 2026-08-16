@@ -102,7 +102,13 @@ def get_or_fetch(policy: CachePolicy, entity_id: str, fetch_fn: Callable[[], Any
     if raw:
         try:
             raw_str = raw.decode('utf-8') if isinstance(raw, bytes) else cast(str, raw)
-            envelope = json.loads(raw_str, object_hook=_json_object_hook)
+            loaded = json.loads(raw_str, object_hook=_json_object_hook)
+            if not isinstance(loaded, dict):
+                record_request(policy.namespace, 'decode_error')
+                payload = _fetch(policy, fetch_fn)
+                _set(policy, key, payload, time.time())
+                return payload
+            envelope: dict[str, Any] = cast(dict[str, Any], loaded)
             if envelope.get('v') == policy.version and envelope.get('fresh_until', 0) >= now:
                 record_request(policy.namespace, 'hit')
                 return envelope.get('payload')
@@ -166,7 +172,7 @@ def _json_default(value: Any) -> Any:
     raise TypeError(f'Object of type {type(value).__name__} is not JSON serializable')
 
 
-def _json_object_hook(value: dict) -> Any:
+def _json_object_hook(value: dict[str, Any]) -> Any:
     if value.get('__firestore_cache_type__') == 'datetime':
         return datetime.fromisoformat(value['iso'])
     return value

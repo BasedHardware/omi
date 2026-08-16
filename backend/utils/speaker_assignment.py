@@ -44,9 +44,9 @@ def process_speaker_assigned_segments(
 
 
 def update_speaker_assignment_maps(
-    speaker_id: int,
-    person_id: str,
-    person_name: str,
+    speaker_id: Optional[int],
+    person_id: Optional[str],
+    person_name: Optional[str],
     segment_ids: List[str],
     speaker_to_person_map: Dict[int, Tuple[str, str]],
     segment_person_assignment_map: Dict[str, str],

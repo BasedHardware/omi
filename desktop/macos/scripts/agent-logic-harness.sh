@@ -5,6 +5,7 @@
 #   cd desktop/macos && ./scripts/agent-logic-harness.sh
 #   ./scripts/agent-logic-harness.sh --swift-only
 #   ./scripts/agent-logic-harness.sh --node-only
+#   ./scripts/agent-logic-harness.sh --cross-surface-smoke
 #   ./scripts/agent-logic-harness.sh --skip-install
 #   ./scripts/agent-logic-harness.sh --verbose
 set -euo pipefail
@@ -15,6 +16,8 @@ REPO_ROOT="$(cd "$DESKTOP_DIR/../.." && pwd)"
 
 RUN_SWIFT=1
 RUN_NODE=1
+RUN_GAUNTLET=0
+RUN_CROSS_SURFACE_SMOKE=0
 SKIP_INSTALL=0
 VERBOSE=0
 INTERNAL_FAILURE_PROBE=0
@@ -33,10 +36,17 @@ Runs:
   3. pi-mono-extension package tests:
      npm ci if needed, then node --experimental-strip-types --test index.test.ts
 
+  --cross-surface-smoke runs only the compact deterministic contract suite:
+    cross-surface Swift projections, the matching agent-runtime protocol and
+    provider tests, and Rust retrieval-policy tests. It does not launch the app,
+    audio capture, or a live provider.
+
 Options:
   --swift-only    Run only Swift focused tests
   --node-only     Run only Node/package focused tests
+  --cross-surface-smoke  Run the compact cross-surface contract smoke suite only
   --skip-install  Do not run npm ci for pi-mono-extension if deps are missing
+  --with-gauntlet   After unit tests, run agent-continuity-gauntlet.sh (requires live app)
   --verbose       Stream command output instead of saving it quietly
   --help          Show this help
 USAGE
@@ -52,8 +62,16 @@ while [[ $# -gt 0 ]]; do
       RUN_SWIFT=0
       RUN_NODE=1
       ;;
+    --cross-surface-smoke)
+      RUN_SWIFT=0
+      RUN_NODE=0
+      RUN_CROSS_SURFACE_SMOKE=1
+      ;;
     --skip-install)
       SKIP_INSTALL=1
+      ;;
+    --with-gauntlet)
+      RUN_GAUNTLET=1
       ;;
     --verbose)
       VERBOSE=1
@@ -76,7 +94,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ "$INTERNAL_FAILURE_PROBE" -eq 0 && "$RUN_SWIFT" -eq 0 && "$RUN_NODE" -eq 0 ]]; then
+if [[ "$INTERNAL_FAILURE_PROBE" -eq 0 && "$RUN_SWIFT" -eq 0 && "$RUN_NODE" -eq 0 && "$RUN_CROSS_SURFACE_SMOKE" -eq 0 ]]; then
   echo "Nothing selected." >&2
   exit 2
 fi
@@ -164,7 +182,15 @@ run_swift_focus() {
   (
     cd "$DESKTOP_DIR"
     xcrun swift test --package-path Desktop \
-      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|RealtimeHubSpawnAgentTests'
+      --filter 'AgentPillLifecycleTests|PushToTalkStateMachineTests|PushToTalkButtonTriggerTests|RealtimeScreenEvidenceTests|VoiceTurnReducerTests|VoiceTurnReducerFuzzTests|VoiceTurnCoordinatorTests|VoiceTurnOutputOwnershipTests|VoiceTurnUIProjectionCopyTests|LegacyVoiceJournalImporterTests|RealtimeHubBargeInContinuityTests|RealtimeHubReconnectContractTests|RealtimeHubSessionInputLifecycleTests|RealtimeHubSpawnAgentTests|RealtimeProviderToolResultPolicyTests|AgentContinuityGauntletTests|KernelTurnRecordedProjectionTests|ChatTimelineContinuityTests|FloatingControlBarStateTests|RuntimeOwnerIdentityTests|TaskThreadProjectionTests|AgentRuntimeBridgeLifecycleTests|AgentRuntimeContractFixtureTests|PiMonoWiringTests'
+  )
+}
+
+run_cross_surface_swift_smoke() {
+  (
+    cd "$DESKTOP_DIR"
+    xcrun swift test --package-path Desktop \
+      --filter 'CrossSurfaceContractSmokeTests|AgentRuntimeStatusStoreTests|AgentRuntimeBridgeLifecycleTests|AgentRuntimeContractFixtureTests|RealtimeHubSpawnAgentTests|PiMonoWiringTests|DesktopAutomationBridgeRouteTests/testUnauthenticatedHealthReportsBackendAndRuntimeProtocolIdentity'
   )
 }
 
@@ -173,12 +199,40 @@ run_agent_runtime_focus() {
     cd "$DESKTOP_DIR"
     scripts/test-tool-surfaces.sh
   )
+}
+
+ensure_agent_runtime_deps() {
+  if [[ -d "$DESKTOP_DIR/agent/node_modules" ]]; then
+    return
+  fi
+  if [[ "$SKIP_INSTALL" -eq 1 ]]; then
+    echo "agent/node_modules missing and --skip-install was set" >&2
+    return 1
+  fi
   (
     cd "$DESKTOP_DIR/agent"
-    npm test -- --run \
-      tests/codemagic-pi-mono-extension-ci.test.ts \
+    npm ci --no-fund --no-audit
+  )
+}
+
+run_cross_surface_agent_smoke() {
+  ensure_agent_runtime_deps
+  (
+    cd "$DESKTOP_DIR/agent"
+    npm run build
+    node node_modules/vitest/vitest.mjs run \
+      tests/cross-surface-contract-smoke.test.ts \
+      tests/runtime-stdio-contract.test.ts \
+      tests/protocol-v2.test.ts \
+      tests/conversation-journal.test.ts \
+      tests/control-tools.test.ts \
       tests/runtime-adapter.test.ts \
-      tests/pi-mono-adapter.test.ts
+      tests/pi-mono-adapter.test.ts \
+      tests/context-snapshot.test.ts \
+      tests/agent-runtime-contract-fixtures.test.ts \
+      tests/runtime-adapter-contract-conformance.test.ts \
+      tests/relay-tool-result.test.ts \
+      tests/spawn-receipt-fixtures.test.ts
   )
 }
 
@@ -196,11 +250,54 @@ ensure_pi_mono_extension_deps() {
   )
 }
 
+node_supports_strip_types() {
+  "$1" --experimental-strip-types -e '0' >/dev/null 2>&1
+}
+
+select_node22() {
+  local node_bin
+  local -a candidates=(
+    "$DESKTOP_DIR/Desktop/Sources/Resources/node"
+    "/opt/homebrew/opt/node@22/bin/node"
+    "/usr/local/opt/node@22/bin/node"
+  )
+
+  if command -v brew >/dev/null 2>&1; then
+    node_bin="$(brew --prefix node@22 2>/dev/null || true)"
+    if [[ -n "$node_bin" ]]; then
+      candidates+=("$node_bin/bin/node")
+    fi
+  fi
+
+  node_bin="$(command -v node 2>/dev/null || true)"
+  [[ -n "$node_bin" ]] && candidates+=("$node_bin")
+
+  for node_bin in "${candidates[@]}"; do
+    if [[ -x "$node_bin" ]] && node_supports_strip_types "$node_bin"; then
+      printf '%s\n' "$node_bin"
+      return
+    fi
+  done
+
+  echo "ERROR: Node.js 22.6+ with --experimental-strip-types is required for desktop agent package tests." >&2
+  echo "Install Node 22 or run desktop/macos/scripts/prepare-agent-runtime.sh first." >&2
+  return 1
+}
+
 run_pi_mono_extension_exact() {
   ensure_pi_mono_extension_deps
   (
     cd "$DESKTOP_DIR/pi-mono-extension"
-    node --experimental-strip-types --test index.test.ts
+    local node22
+    node22="$(select_node22)"
+    PATH="$(dirname "$node22"):$PATH" npx --yes tsx --test index.test.ts
+  )
+}
+
+run_continuity_gauntlet() {
+  (
+    cd "$DESKTOP_DIR"
+    ./scripts/agent-continuity-gauntlet.sh
   )
 }
 
@@ -227,6 +324,15 @@ fi
 if [[ "$RUN_NODE" -eq 1 ]]; then
   run_step "agent runtime focused tests" run_agent_runtime_focus
   run_step "pi-mono-extension exact package tests" run_pi_mono_extension_exact
+fi
+
+if [[ "$RUN_CROSS_SURFACE_SMOKE" -eq 1 ]]; then
+  run_step "cross-surface Swift contract smoke" run_cross_surface_swift_smoke
+  run_step "cross-surface agent contract smoke" run_cross_surface_agent_smoke
+fi
+
+if [[ "$RUN_GAUNTLET" -eq 1 ]]; then
+  run_step "agent continuity gauntlet (INV-6)" run_continuity_gauntlet
 fi
 
 total_elapsed="$(elapsed_seconds "$total_start")"

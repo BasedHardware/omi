@@ -1,9 +1,12 @@
+from typing import Set
+
+
 def _normalize_text(text: str) -> str:
     """Normalize text: lowercase and collapse whitespace."""
     return ' '.join(text.lower().split())
 
 
-def _get_trigrams(text: str) -> set:
+def _get_trigrams(text: str) -> Set[str]:
     """Get character trigrams from normalized text."""
     text = _normalize_text(text)
     if len(text) < 3:

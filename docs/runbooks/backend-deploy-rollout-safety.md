@@ -1,19 +1,19 @@
 # Backend Deploy Rollout Safety
 
+## Production backend deployment
+
+Dispatch `gcp_backend.yml` once with `environment=prod`, `mode=deploy`,
+`deploy_targets=all`, and the exact admitted `release_sha`. The selected prod
+environment provides the single production approval. The workflow checks
+Firestore readiness before mutation, creates and validates no-traffic Cloud Run
+candidates, reconciles backend secrets using the script-derived service-account
+default, updates the GKE backend surfaces, snapshots Cloud Run traffic before
+promotion, restores it after a failed promotion or serving-vector check, and
+hard-gates the final serving release vector. There is no release-record bucket,
+separate deployer identity, or backend beta ring. This does not change desktop
+Beta or Stable update-channel pointers.
+
 Use this runbook when a backend deploy may have produced stale runtime, partial traffic shifts, or GKE pods serving an old ReplicaSet. All commands below are read-only unless explicitly marked as a template for a future deploy workflow.
-
-## Read GKE rollout state
-
-```bash
-python3 backend/scripts/deploy_status_report.py \
-  --env prod \
-  --include-gke \
-  --gke-service backend-listen \
-  --gke-service pusher \
-  --gke-service llm-gateway \
-  --gke-service parakeet \
-  --gke-service diarizer \
-  --gke-service vad
 ```
 
 Interpretation:
@@ -55,6 +55,21 @@ python3 backend/scripts/deploy_status_report.py \
 ```
 
 The command fails if the expected revision is not both latest ready and serving 100% traffic.
+
+## Development post-deploy acceptance
+
+After a successful Auto Deploy Backend to Development run, Verify Development
+Backend Deployment runs read-only acceptance against the exact deployment run.
+It derives the expected Cloud Run revision names and image tag from the source
+commit, Actions run ID, and attempt; it then verifies the four Cloud Run
+services and the backend-listen GKE Deployment, Service, and ready
+EndpointSlice. The evidence artifact contains only revision, image, timeout,
+traffic, and rollout metadata—never environment values or secret contents.
+
+To rerun it after a transient GitHub or GCP failure, dispatch the workflow with
+the source deployment's full commit SHA, run ID, and attempt number. Do not use
+it as a broad health probe: a newer deployment serving in place of that exact
+revision is intentionally a failure.
 
 ## Secret-first GKE rollout gate
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Mapping, Optional, cast
 
 IMPORT_WRITE_BLOCK_MODE_ENV = "MEMORY_IMPORT_WRITE_BLOCK_MODE"
 
@@ -67,30 +67,32 @@ def is_per_file_local_import_tags(tags: Any) -> bool:
     """
     if not isinstance(tags, list):
         return False
-    normalized = {normalized_import_marker(tag) for tag in tags} - {None}
+    normalized = {normalized_import_marker(tag) for tag in cast('list[Any]', tags)} - {None}
     if not {"local_files", "onboarding"} <= normalized:
         return False
     return bool(normalized & PER_FILE_LOCAL_IMPORT_TAGS)
 
 
-def import_write_violation(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def import_write_violation(payload: Mapping[str, Any]) -> Optional[dict[str, Any]]:
     source = normalized_import_marker(payload.get("source") or payload.get("source_type"))
     if source in IMPORT_MEMORY_SOURCES:
         return {"source": source}
-    metadata = payload.get("metadata") or {}
-    has_import_metadata = isinstance(metadata, dict) and any(key in metadata for key in IMPORT_METADATA_KEYS)
+    raw_metadata = payload.get("metadata")
+    metadata: Mapping[str, Any] = cast(Mapping[str, Any], raw_metadata) if isinstance(raw_metadata, dict) else {}
+    has_import_metadata = any(key in metadata for key in IMPORT_METADATA_KEYS)
     if not has_import_metadata:
         return None
-    tags = payload.get("tags") or []
-    if isinstance(tags, list):
-        normalized_tags = {normalized_import_marker(tag) for tag in tags}
-        matched = sorted((normalized_tags - {None}).intersection(IMPORT_MEMORY_TAGS))
+    raw_tags = payload.get("tags")
+    if isinstance(raw_tags, list):
+        tags = cast(list[Any], raw_tags)
+        normalized_tags = {marker for tag in tags if (marker := normalized_import_marker(tag)) is not None}
+        matched = sorted(normalized_tags.intersection(IMPORT_MEMORY_TAGS))
         if matched:
             return {"tags": matched}
     return None
 
 
-def import_write_violation_for_guard(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def import_write_violation_for_guard(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
     """`import_write_violation`, except per-file local-file items are exempt.
 
     The memory endpoints acknowledge-and-drop per-file items without

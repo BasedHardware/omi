@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "contextSnapshot": {"contextPlan": {"version": 1, "planId": "sha256:plan", "semanticGuidanceVersion": "kernel-semantic-guidance@1", "semanticGuidance": "Kernel guidance", "retainedTurnStartSeq": 2, "retainedTurnEndSeq": 65, "retainedTurnCount": 64, "totalTurnCount": 65, "omittedTurnCount": 0, "olderHistoryStrategy": "truncated", "stableCacheIdentity": "sha256:stable", "dynamicContextIdentity": "sha256:dynamic"}},
+  "expectedError": "omitted turn count must equal total minus retained"
+}

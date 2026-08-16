@@ -25,21 +25,21 @@ import Foundation
 /// Tested in `ReentrancyGateTests`.
 @MainActor
 final class ReentrancyGate {
-    private var isInFlight = false
+  private var isInFlight = false
 
-    /// Attempts to enter the critical section.
-    /// - Returns: `true` if the caller acquired the gate (must call `exit()` when done),
-    ///   `false` if another operation is already in-flight (caller must **not** call `exit()`).
-    func tryEnter() -> Bool {
-        guard !isInFlight else { return false }
-        isInFlight = true
-        return true
-    }
+  /// Attempts to enter the critical section.
+  /// - Returns: `true` if the caller acquired the gate (must call `exit()` when done),
+  ///   `false` if another operation is already in-flight (caller must **not** call `exit()`).
+  func tryEnter() -> Bool {
+    guard !isInFlight else { return false }
+    isInFlight = true
+    return true
+  }
 
-    /// Releases the gate. **Caller contract:** only call this after a matching
-    /// `tryEnter()` returned `true`. Calling `exit()` without ownership will
-    /// reopen the gate while another caller is still inside the critical section.
-    func exit() {
-        isInFlight = false
-    }
+  /// Releases the gate. **Caller contract:** only call this after a matching
+  /// `tryEnter()` returned `true`. Calling `exit()` without ownership will
+  /// reopen the gate while another caller is still inside the critical section.
+  func exit() {
+    isInFlight = false
+  }
 }

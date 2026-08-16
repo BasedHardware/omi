@@ -1,7 +1,29 @@
+from __future__ import annotations
+
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional, Protocol
 
 from pydantic import BaseModel, Field
+
+
+class _CategorySummarySource(Protocol):
+    value: str
+
+
+class _StructuredSummarySource(Protocol):
+    title: str
+    overview: str
+    category: _CategorySummarySource
+
+
+class _ConversationSummarySource(Protocol):
+    id: str
+    structured: _StructuredSummarySource
+    created_at: Optional[datetime]
+
+    def get_transcript(self, include_timestamps: bool = False) -> str: ...
+
+    def get_person_ids(self) -> List[str]: ...
 
 
 class ConversationSummary(BaseModel):
@@ -20,9 +42,7 @@ class ConversationSummary(BaseModel):
     person_ids: List[str] = Field(default_factory=list)
 
     @classmethod
-    def from_conversation(cls, c: 'Conversation', **kwargs) -> 'ConversationSummary':
-        from models.conversation import Conversation
-
+    def from_conversation(cls, c: _ConversationSummarySource, **kwargs: Any) -> ConversationSummary:
         return cls(
             id=c.id,
             title=c.structured.title,

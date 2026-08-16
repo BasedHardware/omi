@@ -63,7 +63,7 @@ export interface UserUsageResponse {
 
 // Subscription details
 export interface Subscription {
-  plan: 'basic' | 'unlimited';
+  plan: 'basic' | 'unlimited' | 'plus' | 'unlimited_v2' | 'operator' | 'architect';
   status: 'active' | 'inactive';
   current_period_end?: number;
   stripe_subscription_id?: string;
@@ -128,6 +128,7 @@ export interface UserSubscription {
   status: string;
   is_unlimited: boolean;
   current_period_end?: number;
+  stripe_subscription_id?: string;
   cancel_at_period_end?: boolean;
   current_price_id?: string;
   features?: string[];
@@ -136,8 +137,11 @@ export interface UserSubscription {
 // Pricing option for a plan (matches backend PricingOption)
 export interface PricingOption {
   id: string;
+  plan_id?: string;
   title: string;
   description?: string;
+  subtitle?: string;
+  eyebrow?: string;
   price_string: string;
   interval?: string;
   unit_amount?: number;
@@ -146,7 +150,7 @@ export interface PricingOption {
 
 // Response from available-plans endpoint (matches backend AvailablePlansResponse)
 export interface AvailablePlansResponse {
-  plans: PricingOption[];  // Backend returns flat list of PricingOption, not nested SubscriptionPlan
+  plans: PricingOption[]; // Backend returns flat list of PricingOption, not nested SubscriptionPlan
 }
 
 // Response from checkout-session endpoint
@@ -199,8 +203,8 @@ export interface Integration {
 
 export interface DeveloperApiKey {
   id: string;
-  key_prefix: string;  // For existing keys, only prefix is returned
-  key?: string;        // Full key only returned when creating
+  key_prefix: string; // For existing keys, only prefix is returned
+  key?: string; // Full key only returned when creating
   name: string;
   created_at: string;
   last_used_at?: string;
@@ -217,13 +221,13 @@ export const API_KEY_SCOPES = [
   { id: 'action_items:write', label: 'Action Items', type: 'write' },
 ] as const;
 
-export type ApiKeyScope = typeof API_KEY_SCOPES[number]['id'];
+export type ApiKeyScope = (typeof API_KEY_SCOPES)[number]['id'];
 
 // MCP API Key types
 export interface McpApiKey {
   id: string;
   key_prefix: string;
-  key?: string;  // Full key only returned when creating
+  key?: string; // Full key only returned when creating
   name: string;
   created_at: string;
   last_used_at?: string;
@@ -246,6 +250,10 @@ export const SUPPORTED_LANGUAGES: Language[] = [
   { code: 'de', name: 'German' },
   { code: 'it', name: 'Italian' },
   { code: 'pt', name: 'Portuguese' },
+  // Regional variants, matching the mobile app and desktop lists, so an account
+  // set to Brazilian Portuguese elsewhere still renders here (#7461).
+  { code: 'pt-BR', name: 'Portuguese (Brazil)' },
+  { code: 'pt-PT', name: 'Portuguese (Portugal)' },
   { code: 'nl', name: 'Dutch' },
   { code: 'pl', name: 'Polish' },
   { code: 'ru', name: 'Russian' },

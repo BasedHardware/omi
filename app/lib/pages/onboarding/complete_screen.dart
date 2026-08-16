@@ -129,8 +129,11 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
                             children: [
                               Text(
                                 context.l10n.startUsingOmi,
-                                style:
-                                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  fontFamily: 'Manrope',
+                                ),
                               ),
                               const SizedBox(width: 8),
                               const Icon(Icons.arrow_forward_rounded, size: 20),

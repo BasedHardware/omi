@@ -1,10 +1,9 @@
-from typing import List, Optional, Any
+from typing import Any, List, Optional
 
 from pydantic import BaseModel
 
 from models.chat import Message
 from models.conversation import Conversation
-from models.conversation_photo import ConversationPhoto
 
 # Freemium action constants
 FREEMIUM_ACTION_SETUP_ON_DEVICE_STT = "setup_on_device_stt"
@@ -24,6 +23,16 @@ class MessageEvent(BaseModel):
 class ConversationEvent(MessageEvent):
     memory: Conversation
     messages: Optional[List[Message]] = []
+    # The recording identity that caused this lifecycle event.  It is optional
+    # for older producers, but identified listen sessions must propagate it so
+    # clients never infer ownership from the WebSocket that delivered the event.
+    recording_session_id: Optional[str] = None
+    # Versioned recording-session envelope. These are additive so older
+    # producers and clients retain their existing compatibility path.
+    conversation_id: Optional[str] = None
+    lifecycle_version: Optional[int] = None
+    lifecycle_phase: Optional[str] = None
+    lifecycle_sequence: Optional[int] = None
 
     def to_json(self):
         j = self.model_dump(mode="json")
@@ -83,9 +92,15 @@ class MessageServiceStatusEvent(MessageEvent):
     event_type: str = "service_status"
     status: str
     status_text: Optional[str] = None
+    outcome: Optional[str] = None
+    provider: Optional[str] = None
+    retryable: Optional[bool] = None
+    reason: Optional[str] = None
 
     def to_json(self):
-        j = self.model_dump(mode="json")
+        # The outcome fields are an additive terminal-failure contract, not
+        # nullable noise on legacy ready and initiating status events.
+        j = self.model_dump(mode="json", exclude_none=True)
         j["type"] = self.event_type
         del j["event_type"]
         return j
@@ -95,6 +110,10 @@ class ConversationSessionEvent(MessageEvent):
     event_type: str = "conversation_session"
     conversation_id: str
     status: str = "in_progress"
+    recording_session_id: Optional[str] = None
+    lifecycle_version: Optional[int] = None
+    lifecycle_phase: Optional[str] = None
+    lifecycle_sequence: Optional[int] = None
 
     def to_json(self):
         j = self.model_dump(mode="json")
@@ -126,7 +145,7 @@ class LastConversationEvent(MessageEvent):
 
 class TranslationEvent(MessageEvent):
     event_type: str = "translating"
-    segments: List = []
+    segments: List[dict[str, Any]] = []
 
     def to_json(self):
         j = self.model_dump(mode="json")

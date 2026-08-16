@@ -92,7 +92,7 @@ def _apply_merge(state: Dict[str, Dict[str, Any]], item: Dict[str, Any]):
 
 def _apply_split(state: Dict[str, Dict[str, Any]], item: Dict[str, Any]):
     entity_id = item.get('entity_id')
-    into = item.get('into') or []
+    into: List[Dict[str, Any]] = item.get('into') or []
     if entity_id in state:
         state.pop(entity_id)
     for entity in into:
@@ -113,7 +113,7 @@ def merge_entities(
     entity_a_ref = nodes_ref.document(entity_a)
     entity_b_ref = nodes_ref.document(entity_b)
 
-    def write_projection(transaction):
+    def write_projection(transaction: Any) -> None:
         a_snapshot = entity_a_ref.get(transaction=transaction)
         b_snapshot = entity_b_ref.get(transaction=transaction)
         if not a_snapshot.exists or not b_snapshot.exists:
@@ -140,7 +140,7 @@ def split_entity(uid: str, entity_id: str, into: List[Dict[str, Any]], *, reason
     nodes_ref = user_ref.collection(kg_db.knowledge_nodes_collection)
     entity_ref = nodes_ref.document(entity_id)
 
-    def write_projection(transaction):
+    def write_projection(transaction: Any) -> None:
         transaction.delete(entity_ref)
         for entity in into:
             if entity.get('id'):
@@ -164,7 +164,7 @@ def reassign_fact_subject(uid: str, fact_id: str, old: Optional[str], new: Optio
     else:
         attribution = SubjectAttribution.unknown
 
-    def write_projection(transaction):
+    def write_projection(transaction: Any) -> None:
         transaction.update(
             memory_ref,
             {

@@ -12,13 +12,14 @@ import wave as _wave
 import soundfile as sf
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Any, Dict, List, Optional, cast
 
 gc.disable()
 
 from fastapi import FastAPI, Form, UploadFile, File, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import JSONResponse
-from prometheus_client import Counter, Gauge, Histogram, make_asgi_app
+from prometheus_client import Counter, Gauge, Histogram
+from prometheus_client import make_asgi_app  # type: ignore[reportUnknownVariableType]  # prometheus_client partially typed
 
 from gpu_worker import GPUWorker, AudioDurationExceededError
 from batch_engine import BatchEngine, QueueFullError
@@ -27,9 +28,10 @@ from transcribe import (
     transcribe_file_v2,
     set_gpu_worker,
     INFERENCE_MODE,
-    _transcribe_from_gpu_result,
+    _transcribe_from_gpu_result,  # type: ignore[reportPrivateUsage,reportUnknownVariableType]  # upstream transcribe partially typed
 )
 from stream_handler import StreamSession, warmup_rnnt_decoder
+from admission import StreamAdmissionController
 
 logging.basicConfig(level=logging.INFO)
 # httpx logs every outbound request at INFO; the per-segment diarizer embedding
@@ -77,10 +79,15 @@ INFERENCE_DURATION = Histogram(
     buckets=_ASR_BUCKETS,
 )
 GPU_OOM_TOTAL = Counter('parakeet_gpu_oom_total', 'CUDA out-of-memory events')
+GPU_FATAL_ERRORS_TOTAL = Counter(
+    'parakeet_gpu_fatal_errors_total',
+    'Fatal CUDA errors that make a Parakeet GPU worker unavailable',
+)
 REQUESTS_TOTAL = Counter('parakeet_requests_total', 'Total requests by status', ['endpoint', 'status'])
 
 gpu_worker: Optional[GPUWorker] = None
 batch_engine: Optional[BatchEngine] = None
+stream_admission: Optional[StreamAdmissionController] = None
 start_time: float = 0
 _diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
 _io_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="file-io")
@@ -89,7 +96,7 @@ _max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
 
 def _get_audio_duration_from_bytes(data: bytes) -> float:
     try:
-        info = sf.info(_io.BytesIO(data))
+        info = cast(Any, sf.info(_io.BytesIO(data)))  # type: ignore[reportUnknownMemberType]  # soundfile partially typed
         return info.duration
     except Exception:
         pass
@@ -108,26 +115,31 @@ def _duration_limit_detail(audio_dur: float) -> str:
     return f"Audio duration {audio_dur:.0f}s exceeds limit ({_max_file_duration_sec:.0f}s)"
 
 
-def _on_batch_complete(queue_durations, inference_seconds, batch_size):
+def _on_batch_complete(queue_durations: List[float], inference_seconds: float, batch_size: int) -> None:
     for qd in queue_durations:
         QUEUE_DURATION.observe(qd)
     INFERENCE_DURATION.observe(inference_seconds)
     BATCH_SIZE_HIST.observe(batch_size)
 
 
-def _on_gpu_oom():
+def _on_gpu_oom() -> None:
     GPU_OOM_TOTAL.inc()
+
+
+def _on_fatal_cuda_error(_reason: str) -> None:
+    GPU_FATAL_ERRORS_TOTAL.inc()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global gpu_worker, batch_engine, start_time
+    global gpu_worker, batch_engine, stream_admission, start_time
     start_time = time.monotonic()
+    stream_admission = StreamAdmissionController.from_env(os.environ)
 
     os.makedirs("_temp", exist_ok=True)
 
     if INFERENCE_MODE != "nim":
-        gpu_worker = GPUWorker()
+        gpu_worker = GPUWorker(on_fatal_cuda_error=_on_fatal_cuda_error)
         gpu_worker.start()
         set_gpu_worker(gpu_worker)
 
@@ -159,7 +171,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-app.mount("/metrics", make_asgi_app())
+app.mount("/metrics", cast(Any, make_asgi_app()))
 
 
 def _write_file(path: str, data: bytes) -> None:
@@ -174,8 +186,8 @@ def _remove_file(path: str) -> None:
         pass
 
 
-@app.post("/v1/transcribe")
-async def transcribe(file: UploadFile = File(...)):
+@app.post("/v1/transcribe", response_model=None)
+async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
     if gpu_worker is not None and not gpu_worker.is_ready:
         REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="error").inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
@@ -200,9 +212,9 @@ async def transcribe(file: UploadFile = File(...)):
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
-            PENDING_REQUESTS.set(len(batch_engine._pending))
-            result = await batch_engine.submit(file_path, timestamps=True, owns_file=True)
-            PENDING_REQUESTS.set(len(batch_engine._pending))
+            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
+            result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=True))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
+            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
             return JSONResponse(content=_transcribe_from_gpu_result(result))
         else:
             result = await loop.run_in_executor(_diarize_pool, transcribe_file, file_path)
@@ -227,11 +239,11 @@ async def transcribe(file: UploadFile = File(...)):
             await loop.run_in_executor(_io_pool, _remove_file, file_path)
 
 
-@app.post("/v2/transcribe")
+@app.post("/v2/transcribe", response_model=None)
 async def transcribe_v2(
     file: UploadFile = File(...),
     diarize: bool = Form(True),
-):
+) -> JSONResponse | Dict[str, Any]:
     if gpu_worker is not None and not gpu_worker.is_ready:
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
@@ -256,15 +268,22 @@ async def transcribe_v2(
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
-            PENDING_REQUESTS.set(len(batch_engine._pending))
-            gpu_result = await batch_engine.submit(file_path, timestamps=True, owns_file=False)
-            PENDING_REQUESTS.set(len(batch_engine._pending))
-            result = await loop.run_in_executor(
-                _diarize_pool, functools.partial(transcribe_file_v2, file_path, gpu_result=gpu_result, diarize=diarize)
+            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
+            gpu_result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=False))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
+            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
+            result = cast(
+                Dict[str, Any],
+                await loop.run_in_executor(
+                    _diarize_pool,
+                    cast(Any, functools.partial(transcribe_file_v2, file_path, gpu_result=gpu_result, diarize=diarize)),
+                ),
             )
         else:
-            result = await loop.run_in_executor(
-                _diarize_pool, functools.partial(transcribe_file_v2, file_path, diarize=diarize)
+            result = cast(
+                Dict[str, Any],
+                await loop.run_in_executor(
+                    _diarize_pool, cast(Any, functools.partial(transcribe_file_v2, file_path, diarize=diarize))
+                ),
             )
         return result
     except QueueFullError:
@@ -297,11 +316,28 @@ async def stream_transcribe(
     hangover_s: float = Query(None),
 ):
     await websocket.accept()
-    session = StreamSession(sample_rate=sample_rate, vad_threshold=vad_threshold, hangover_s=hangover_s)
+    if gpu_worker is not None and not gpu_worker.is_ready:
+        REQUESTS_TOTAL.labels(endpoint='v3_stream', status='error').inc()
+        await websocket.close(code=1013, reason='service_not_ready')
+        return
+    if stream_admission is None:
+        logger.error('v3/stream admission unavailable')
+        await websocket.close(code=1011, reason='service_not_ready')
+        return
+    decision = stream_admission.try_acquire()
+    if decision.lease is None:
+        REQUESTS_TOTAL.labels(endpoint='v3_stream', status=decision.reason).inc()
+        await websocket.close(code=1013, reason=decision.reason)
+        return
 
-    ACTIVE_STREAMS.inc()
+    session: Optional[StreamSession] = None
+    active_gauge_owned = False
     t0 = time.monotonic()
     try:
+        session = StreamSession(sample_rate=sample_rate, vad_threshold=vad_threshold, hangover_s=hangover_s)
+        ACTIVE_STREAMS.inc()
+        active_gauge_owned = True
+        await websocket.send_json({'type': 'ready'})
         while True:
             try:
                 msg = await asyncio.wait_for(websocket.receive(), timeout=_WS_RECEIVE_TIMEOUT)
@@ -309,7 +345,7 @@ async def stream_transcribe(
                 continue
 
             if "bytes" in msg:
-                segments = await session.feed(msg["bytes"])
+                segments = cast(List[Any], await session.feed(msg["bytes"]))
                 for seg in segments:
                     await websocket.send_json(seg)
             elif "text" in msg:
@@ -319,30 +355,46 @@ async def stream_transcribe(
         pass
     except Exception as e:
         logger.error(f"v3/stream error: {e}")
+        try:
+            await websocket.close(code=1011, reason='stream_initialization_failed')
+        except Exception:
+            pass
     finally:
         try:
-            final_segments = await session.flush()
-            for seg in final_segments:
-                try:
-                    await websocket.send_json(seg)
-                except Exception:
-                    break
+            if session is not None:
+                final_segments = cast(List[Any], await session.flush())
+                for seg in final_segments:
+                    try:
+                        await websocket.send_json(seg)
+                    except Exception:
+                        break
         except Exception as e:
             logger.error(f"v3/stream flush error: {e}")
-        ACTIVE_STREAMS.dec()
-        STREAM_DURATION.observe(time.monotonic() - t0)
-        session.cleanup()
+        finally:
+            try:
+                if session is not None:
+                    session.cleanup()
+            except Exception as e:
+                logger.error(f"v3/stream cleanup error: {e}")
+            finally:
+                if active_gauge_owned:
+                    ACTIVE_STREAMS.dec()
+                    STREAM_DURATION.observe(time.monotonic() - t0)
+                decision.lease.release()
 
 
-@app.get("/health")
-async def health_check():
+@app.get("/health", response_model=None)
+async def health_check() -> JSONResponse | Dict[str, Any]:
     if gpu_worker is not None:
         ready = gpu_worker.is_ready
+        fatal_cuda_reason = gpu_worker.fatal_cuda_reason
         body = {
-            "status": "healthy" if ready else "loading",
+            "status": "healthy" if ready else "unhealthy" if fatal_cuda_reason is not None else "loading",
             "ready": ready,
             "uptime_seconds": round(time.monotonic() - start_time, 1),
         }
+        if fatal_cuda_reason is not None:
+            body["reason"] = fatal_cuda_reason
         if not ready:
             return JSONResponse(status_code=503, content=body)
         return body
@@ -350,8 +402,8 @@ async def health_check():
 
 
 @app.get("/batch/metrics")
-async def batch_metrics():
+async def batch_metrics() -> Dict[str, Any]:
     if batch_engine is not None:
-        PENDING_REQUESTS.set(len(batch_engine._pending))
-        return batch_engine.metrics
+        PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
+        return cast(Dict[str, Any], batch_engine.metrics)  # type: ignore[reportUnknownMemberType]  # batch_engine.metrics partially typed
     return {}

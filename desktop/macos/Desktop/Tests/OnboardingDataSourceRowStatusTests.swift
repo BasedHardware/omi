@@ -38,4 +38,16 @@ final class OnboardingDataSourceRowStatusTests: XCTestCase {
       )
     )
   }
+
+  func testDeferredSourceExplainsExplicitAppsImport() {
+    XCTAssertEqual(
+      OnboardingDataSourceRowStatus.resolve(
+        metrics: "0 emails - 0 memories",
+        scanFinished: true,
+        scanDeferred: true,
+        scanFailed: false
+      ),
+      OnboardingDataSourceRowStatus(text: "Connect in Apps to import", isError: false)
+    )
+  }
 }

@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart';
+import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
 import 'package:uuid/uuid.dart';
 
 enum MessageSender { ai, human }
@@ -23,12 +24,18 @@ class MessageConversationStructured {
   MessageConversationStructured(this.title, this.emoji);
 
   static MessageConversationStructured fromJson(Map<String, dynamic> json) {
-    return MessageConversationStructured(json['title'], json['emoji']);
+    return MessageConversationStructured.fromGenerated(wire.GeneratedMessageConversationStructured.fromJson(json));
   }
 
-  Map<String, dynamic> toJson() {
-    return {'title': title, 'emoji': emoji};
+  factory MessageConversationStructured.fromGenerated(wire.GeneratedMessageConversationStructured generated) {
+    return MessageConversationStructured(generated.title, generated.emoji);
   }
+
+  wire.GeneratedMessageConversationStructured toGenerated() {
+    return wire.GeneratedMessageConversationStructured(emoji: emoji, title: title);
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
 class MessageConversation {
@@ -39,16 +46,22 @@ class MessageConversation {
   MessageConversation(this.id, this.createdAt, this.structured);
 
   static MessageConversation fromJson(Map<String, dynamic> json) {
+    return MessageConversation.fromGenerated(wire.GeneratedMessageConversation.fromJson(json));
+  }
+
+  factory MessageConversation.fromGenerated(wire.GeneratedMessageConversation generated) {
     return MessageConversation(
-      json['id'],
-      DateTime.parse(json['created_at']).toLocal(),
-      MessageConversationStructured.fromJson(json['structured']),
+      generated.id,
+      generated.createdAt,
+      MessageConversationStructured.fromGenerated(generated.structured),
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {'id': id, 'created_at': createdAt.toUtc().toIso8601String(), 'structured': structured.toJson()};
+  wire.GeneratedMessageConversation toGenerated() {
+    return wire.GeneratedMessageConversation(createdAt: createdAt, id: id, structured: structured.toGenerated());
   }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
 class MessageFile {
@@ -63,32 +76,34 @@ class MessageFile {
   MessageFile(this.openaiFileId, this.thumbnail, this.name, this.mimeType, this.id, this.createdAt, this.thumbnailName);
 
   static MessageFile fromJson(Map<String, dynamic> json) {
+    return MessageFile.fromGenerated(wire.GeneratedFileChat.fromJson(json));
+  }
+
+  factory MessageFile.fromGenerated(wire.GeneratedFileChat generated) {
     return MessageFile(
-      json['openai_file_id'],
-      json['thumbnail'],
-      json['name'],
-      json['mime_type'],
-      json['id'],
-      DateTime.parse(json['created_at']).toLocal(),
-      json['thumb_name'],
+      generated.openaiFileId,
+      generated.thumbnail,
+      generated.name,
+      generated.mimeType,
+      generated.id,
+      generated.createdAt,
+      generated.thumbName,
     );
   }
 
-  static List<MessageFile> fromJsonList(List<dynamic> json) {
-    return json.map((e) => MessageFile.fromJson(e)).toList();
+  wire.GeneratedFileChat toGenerated() {
+    return wire.GeneratedFileChat(
+      createdAt: createdAt,
+      id: id,
+      mimeType: mimeType,
+      name: name,
+      openaiFileId: openaiFileId,
+      thumbName: thumbnailName,
+      thumbnail: thumbnail,
+    );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'openai_file_id': openaiFileId,
-      'thumbnail': thumbnail,
-      'name': name,
-      'mime_type': mimeType,
-      'id': id,
-      'created_at': createdAt.toUtc().toIso8601String(),
-      'thumb_name': thumbnailName,
-    };
-  }
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 
   String mimeTypeToFileType() {
     if (mimeType.contains('image')) {
@@ -106,12 +121,18 @@ class ChartDataPoint {
   ChartDataPoint(this.label, this.value);
 
   static ChartDataPoint fromJson(Map<String, dynamic> json) {
-    return ChartDataPoint(json['label'] ?? '', (json['value'] as num).toDouble());
+    return ChartDataPoint.fromGenerated(wire.GeneratedChartDataPoint.fromJson(json));
   }
 
-  Map<String, dynamic> toJson() {
-    return {'label': label, 'value': value};
+  factory ChartDataPoint.fromGenerated(wire.GeneratedChartDataPoint generated) {
+    return ChartDataPoint(generated.label, generated.value);
   }
+
+  wire.GeneratedChartDataPoint toGenerated() {
+    return wire.GeneratedChartDataPoint(label: label, value: value);
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
 class ChartDataset {
@@ -122,16 +143,26 @@ class ChartDataset {
   ChartDataset(this.label, this.dataPoints, {this.color});
 
   static ChartDataset fromJson(Map<String, dynamic> json) {
+    return ChartDataset.fromGenerated(wire.GeneratedChartDataset.fromJson(json));
+  }
+
+  factory ChartDataset.fromGenerated(wire.GeneratedChartDataset generated) {
     return ChartDataset(
-      json['label'] ?? 'Data',
-      ((json['data_points'] ?? []) as List).map((p) => ChartDataPoint.fromJson(p)).toList(),
-      color: json['color'],
+      generated.label,
+      generated.dataPoints.map(ChartDataPoint.fromGenerated).toList(),
+      color: generated.color,
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {'label': label, 'data_points': dataPoints.map((p) => p.toJson()).toList(), 'color': color};
+  wire.GeneratedChartDataset toGenerated() {
+    return wire.GeneratedChartDataset(
+      color: color,
+      dataPoints: dataPoints.map((p) => p.toGenerated()).toList(),
+      label: label,
+    );
   }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
 class ChartData {
@@ -145,24 +176,48 @@ class ChartData {
 
   static ChartData? fromJson(Map<String, dynamic>? json) {
     if (json == null) return null;
+    return ChartData.fromGenerated(wire.GeneratedChartData.fromJson(json));
+  }
+
+  static ChartData? tryFromJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    if (!_hasTypedChartDataShape(json)) return null;
+    try {
+      return ChartData.fromJson(json);
+    } on FormatException {
+      return null;
+    } on TypeError {
+      return null;
+    }
+  }
+
+  static bool _hasTypedChartDataShape(Map<String, dynamic> json) {
+    const requiredKeys = {'chart_type', 'title', 'datasets'};
+    final chartType = json['chart_type'];
+    return (chartType == 'line' || chartType == 'bar') && requiredKeys.every(json.containsKey);
+  }
+
+  factory ChartData.fromGenerated(wire.GeneratedChartData generated) {
     return ChartData(
-      json['chart_type'] ?? 'line',
-      json['title'] ?? '',
-      ((json['datasets'] ?? []) as List).map((d) => ChartDataset.fromJson(d)).toList(),
-      xLabel: json['x_label'],
-      yLabel: json['y_label'],
+      generated.chartType,
+      generated.title,
+      generated.datasets.map(ChartDataset.fromGenerated).toList(),
+      xLabel: generated.xLabel,
+      yLabel: generated.yLabel,
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'chart_type': chartType,
-      'title': title,
-      'x_label': xLabel,
-      'y_label': yLabel,
-      'datasets': datasets.map((d) => d.toJson()).toList(),
-    };
+  wire.GeneratedChartData toGenerated() {
+    return wire.GeneratedChartData(
+      chartType: chartType,
+      datasets: datasets.map((d) => d.toGenerated()).toList(),
+      title: title,
+      xLabel: xLabel,
+      yLabel: yLabel,
+    );
   }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
 class ServerMessage {
@@ -186,6 +241,7 @@ class ServerMessage {
 
   List<String> thinkings = [];
   ChartData? chartData;
+  Map<String, dynamic>? rawChartData;
 
   ServerMessage(
     this.id,
@@ -201,27 +257,82 @@ class ServerMessage {
     this.askForNps = true,
     this.rating,
     this.chartData,
+    this.rawChartData,
   });
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
+    return ServerMessage.fromGeneratedWireJson(json);
+  }
+
+  static ServerMessage fromGeneratedWireJson(Map<String, dynamic> json) {
+    final generated = wire.GeneratedMessage.fromJson(json);
+    final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
+    return ServerMessage.fromGenerated(generated, fromIntegration: fromIntegration);
+  }
+
+  static ServerMessage fromResponseJson(Map<String, dynamic> json) {
+    final generated = wire.GeneratedResponseMessage.fromJson(json);
+    final fromIntegration = (json['from_integration'] as bool?) ?? generated.fromExternalIntegration;
+    return ServerMessage.fromGeneratedResponse(generated, fromIntegration: fromIntegration);
+  }
+
+  factory ServerMessage.fromGenerated(
+    wire.GeneratedMessage generated, {
+    bool? fromIntegration,
+    bool askForNps = true,
+    ChartData? chartData,
+  }) {
+    final rawChartData = generated.chartData;
+    final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);
     return ServerMessage(
-      json['id'],
-      DateTime.parse(json['created_at']).toLocal(),
-      json['text'] ?? "",
-      MessageSender.values.firstWhere((e) => e.toString().split('.').last == json['sender']),
-      MessageType.valuesFromString(json['type']),
-      json['plugin_id'],
-      json['from_integration'] ?? false,
-      ((json['files'] ?? []) as List<dynamic>).map((m) => MessageFile.fromJson(m)).toList(),
-      (json['files_id'] ?? []).map((m) => m.toString()).toList(),
-      ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageConversation.fromJson(m)).toList(),
-      askForNps: json['ask_for_nps'] ?? true,
-      rating: json['rating'],
-      chartData: json['chart_data'] != null ? ChartData.fromJson(json['chart_data']) : null,
+      generated.id,
+      generated.createdAt,
+      generated.text,
+      MessageSender.values.firstWhere((e) => e.toString().split('.').last == generated.sender),
+      MessageType.valuesFromString(generated.type),
+      generated.pluginId ?? generated.appId,
+      fromIntegration ?? generated.fromExternalIntegration,
+      generated.files.map(MessageFile.fromGenerated).toList(),
+      generated.filesId,
+      generated.memories.map(MessageConversation.fromGenerated).toList(),
+      askForNps: askForNps,
+      rating: generated.rating,
+      chartData: parsedChartData,
+      rawChartData: rawChartData,
     );
   }
 
+  factory ServerMessage.fromGeneratedResponse(
+    wire.GeneratedResponseMessage generated, {
+    bool? fromIntegration,
+    ChartData? chartData,
+  }) {
+    final rawChartData = generated.chartData;
+    final parsedChartData = chartData ?? ChartData.tryFromJson(rawChartData);
+    return ServerMessage(
+      generated.id,
+      generated.createdAt,
+      generated.text,
+      MessageSender.values.firstWhere((e) => e.toString().split('.').last == generated.sender),
+      MessageType.valuesFromString(generated.type),
+      generated.pluginId ?? generated.appId,
+      fromIntegration ?? generated.fromExternalIntegration,
+      generated.files.map(MessageFile.fromGenerated).toList(),
+      generated.filesId,
+      generated.memories.map(MessageConversation.fromGenerated).toList(),
+      askForNps: generated.askForNps ?? false,
+      rating: generated.rating,
+      chartData: parsedChartData,
+      rawChartData: rawChartData,
+    );
+  }
+
+  /// Kept hand-written: emits legacy `from_integration` key (generated uses
+  /// `from_external_integration`) and preserves `rawChartData` fallback for
+  /// `chart_data` when `chartData` parsing failed.
+
   Map<String, dynamic> toJson() {
+    final chartJson = rawChartData ?? chartData?.toJson();
     return {
       'id': id,
       'created_at': createdAt.toUtc().toIso8601String(),
@@ -234,7 +345,7 @@ class ServerMessage {
       'files': files.map((m) => m.toJson()).toList(),
       'ask_for_nps': askForNps,
       'rating': rating,
-      'chart_data': chartData?.toJson(),
+      'chart_data': chartJson,
     };
   }
 

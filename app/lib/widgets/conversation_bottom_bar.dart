@@ -20,6 +20,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
+import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/utils/logger.dart';
 
 enum ConversationBottomBarMode {
@@ -37,7 +38,7 @@ class ConversationBottomBar extends StatefulWidget {
   final bool hasSegments;
   final bool hasActionItems;
   final ServerConversation? conversation;
-  final Function(Future<void> Function(double))? onSeekFunctionReady;
+  final Function(Future<void> Function(double start, double end))? onSeekFunctionReady;
 
   const ConversationBottomBar({
     super.key,
@@ -63,6 +64,17 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   Completer<void>? _initCompleter;
   Duration _totalDuration = Duration.zero;
   List<Duration> _trackStartOffsets = [];
+
+  // Single conversation-level artifact mode: one dense MP3 (gaps collapsed),
+  // wall-clock timeline mapped through the spans manifest. Fallback stays on
+  // the per-part ConcatenatingAudioSource playlist.
+  bool _singleArtifact = false;
+  AudioTimelineMapper? _timelineMapper;
+  StreamSubscription<Duration>? _segmentStopSubscription;
+
+  /// Bumped on every segment seek / scrub so a stale end-handler cannot pause
+  /// a newer tap's playback (#4471 cubic).
+  int _segmentSeekGeneration = 0;
 
   List<AudioFile> _getSortedAudioFiles() {
     if (widget.conversation == null) return [];
@@ -93,12 +105,22 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   @override
   void dispose() {
+    _segmentStopSubscription?.cancel();
     _audioPlayer?.dispose();
     super.dispose();
   }
 
   void _calculateTotalDuration() {
     if (widget.conversation == null) return;
+    final stamp = widget.conversation!.conversationAudio;
+    if (stamp != null && stamp.spans.isNotEmpty) {
+      // Dense-artifact timeline: the total is the actual captured audio length
+      // (the MP3 has inter-part gaps and lead-in silence collapsed out), so the
+      // scrubber matches what the user can hear. Transcript-segment taps still
+      // map their wall timestamp to the MP3 position via the spans manifest.
+      _totalDuration = Duration(milliseconds: (stamp.capturedDuration * 1000).toInt());
+      return;
+    }
     double totalSeconds = 0;
     _trackStartOffsets = [];
     for (final audioFile in _getSortedAudioFiles()) {
@@ -109,87 +131,53 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   }
 
   Duration _getCombinedPosition(int? currentIndex, Duration trackPosition) {
+    if (_singleArtifact) {
+      // The dense MP3 plays linearly; position is the raw artifact time so it
+      // advances 1:1 with playback against the captured-duration total.
+      return trackPosition;
+    }
     if (currentIndex == null || currentIndex >= _trackStartOffsets.length) {
       return trackPosition;
     }
     return _trackStartOffsets[currentIndex] + trackPosition;
   }
 
-  int _findRelevantAudioFileIndex() {
-    final sortedFiles = _getSortedAudioFiles();
-    if (sortedFiles.isEmpty) {
-      return 0;
-    }
-
-    if (sortedFiles.length == 1) {
-      return 0;
-    }
-
-    final conversationStartTs = widget.conversation?.startedAt?.millisecondsSinceEpoch ?? 0;
-    var bestAudioIdx = 0;
-    var minDiff = double.infinity;
-
-    for (int i = 0; i < sortedFiles.length; i++) {
-      final audioStartTs = sortedFiles[i].startedAt?.millisecondsSinceEpoch ?? 0;
-      final diff = (audioStartTs - conversationStartTs).abs().toDouble();
-      if (diff < minDiff) {
-        minDiff = diff;
-        bestAudioIdx = i;
-      }
-    }
-
-    return bestAudioIdx;
-  }
-
-  /// Calculate the correct file position for a transcript timestamp.
+  /// Seek to a transcript segment and play until [segmentEndSeconds].
   ///
-  /// Transcript segment timestamps are relative to conversation.startedAt.
-  /// The merged audio file starts at the first chunk timestamp.
-  ///
-  /// Formula: filePosition = segment.start - chunkOffset
-  /// Where: chunkOffset = firstChunkTimestamp - conversationStartedAt
-  double _calculateFilePositionForTimestamp(double transcriptTimestamp) {
-    final conversation = widget.conversation;
-    final sortedFiles = _getSortedAudioFiles();
-    if (conversation == null || sortedFiles.isEmpty || conversation.startedAt == null) {
-      return transcriptTimestamp;
-    }
-
-    final audioFile = sortedFiles[_findRelevantAudioFileIndex()];
-
-    final double firstChunkTs;
-    if (audioFile.startedAt != null) {
-      firstChunkTs = audioFile.startedAt!.millisecondsSinceEpoch / 1000.0;
-    } else if (audioFile.chunkTimestamps.isNotEmpty) {
-      firstChunkTs = audioFile.chunkTimestamps.first;
-    } else {
-      return transcriptTimestamp;
-    }
-
-    final conversationStartTs = conversation.startedAt!.millisecondsSinceEpoch / 1000.0;
-
-    // chunkOffset = firstChunkTimestamp - conversationStartedAt
-    final chunkOffset = firstChunkTs - conversationStartTs;
-
-    // filePosition = segment.start - chunkOffset
-    return transcriptTimestamp - chunkOffset;
-  }
-
-  /// Seek to a transcript segment's timestamp and start playing.
-  /// Calculates the correct position in the merged audio file.
-  Future<void> seekToTranscriptSegment(double segmentStartSeconds) async {
+  /// Uses strict wall→artifact mapping (no gap-snap) so a segment whose start
+  /// falls in a collapsed inter-part gap does not jump into a later span
+  /// (#4471). Requires the dense conversation artifact + spans; the per-part
+  /// playlist fallback is not used for segment taps.
+  Future<void> seekToTranscriptSegment(double segmentStartSeconds, double segmentEndSeconds) async {
     if (!_isAudioInitialized) {
       await _initAudioIfNeeded();
     }
     if (!mounted || _audioPlayer == null) return;
 
-    // Calculate the correct file position
-    final filePosition = _calculateFilePositionForTimestamp(segmentStartSeconds);
+    await _segmentStopSubscription?.cancel();
+    _segmentStopSubscription = null;
 
-    // Ensure position is not negative
+    if (!_singleArtifact || _timelineMapper == null) {
+      if (mounted) {
+        AppSnackbar.showSnackbarError(context.l10n.audioPlaybackUnavailable);
+      }
+      return;
+    }
+
+    final filePosition = _timelineMapper!.wallToArtifactStrict(segmentStartSeconds);
+    if (filePosition == null) {
+      if (mounted) {
+        AppSnackbar.showSnackbarError(context.l10n.audioPlaybackUnavailable);
+      }
+      return;
+    }
+
+    final stopAt = _timelineMapper!.wallToArtifactStrictInclusive(segmentEndSeconds);
+    final stopSeconds = (stopAt != null && stopAt > filePosition) ? stopAt : filePosition;
+
     final targetPosition = Duration(milliseconds: (filePosition * 1000).clamp(0, double.infinity).toInt());
+    final stopPosition = Duration(milliseconds: (stopSeconds * 1000).clamp(0, double.infinity).toInt());
 
-    // Track transcript segment tap
     final conversationId = widget.conversation?.id ?? '';
     PlatformManager.instance.analytics.transcriptSegmentTapped(
       conversationId: conversationId,
@@ -197,15 +185,32 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       seekPositionSeconds: filePosition,
     );
 
-    await _seekToCombinedPosition(targetPosition);
+    // Seek without bumping generation — we own the token for this segment stop.
+    await _seekToCombinedPosition(targetPosition, invalidateSegmentStop: false);
+    if (!mounted || _audioPlayer == null) return;
+    final seekGeneration = ++_segmentSeekGeneration;
 
-    // Auto-play after seeking to segment
-    if (_audioPlayer != null && !_audioPlayer!.playing) {
+    _segmentStopSubscription = _audioPlayer!.positionStream.listen((position) async {
+      if (seekGeneration != _segmentSeekGeneration) return;
+      if (position < stopPosition) return;
+      if (seekGeneration != _segmentSeekGeneration) return;
+      await _segmentStopSubscription?.cancel();
+      _segmentStopSubscription = null;
+      if (seekGeneration != _segmentSeekGeneration) return;
+      if (_audioPlayer != null && _audioPlayer!.playing) {
+        await _audioPlayer!.pause();
+        if (seekGeneration != _segmentSeekGeneration) return;
+        if (mounted) setState(() {});
+      }
+    });
+
+    if (!_audioPlayer!.playing) {
       PlatformManager.instance.analytics.audioPlaybackStarted(
         conversationId: conversationId,
         durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
       );
       await _audioPlayer!.play();
+      if (seekGeneration != _segmentSeekGeneration) return;
       if (mounted) setState(() {});
     }
   }
@@ -240,7 +245,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       // endpoint that used to time out on long conversations.
       final deadline = DateTime.now().add(const Duration(seconds: 90));
       var urlsResponse = await getConversationAudioSignedUrls(widget.conversation!.id);
-      while (urlsResponse.files.isEmpty || urlsResponse.hasPending) {
+      while (urlsResponse.files.isEmpty || !urlsResponse.playbackReady) {
         if (!mounted) return;
         if (DateTime.now().isAfter(deadline)) {
           Logger.debug('Audio still pending after poll budget for ${widget.conversation!.id}');
@@ -256,6 +261,18 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         await Future.delayed(Duration(milliseconds: urlsResponse.pollAfterMs ?? 3000));
         if (!mounted) return;
         urlsResponse = await getConversationAudioSignedUrls(widget.conversation!.id);
+      }
+
+      final conversationAudio = urlsResponse.conversationAudio;
+      if (conversationAudio != null && conversationAudio.isCached && conversationAudio.spans.isNotEmpty) {
+        // One dense MP3 for the whole conversation: no playlist, no track
+        // offsets — position and seeks go through the spans mapper.
+        _timelineMapper = AudioTimelineMapper(conversationAudio.spans);
+        _singleArtifact = true;
+        _totalDuration = Duration(milliseconds: (_timelineMapper!.capturedDuration * 1000).toInt());
+        await _audioPlayer!.setAudioSource(AudioSource.uri(Uri.parse(conversationAudio.signedUrl!)), preload: true);
+        _isAudioInitialized = true;
+        return;
       }
 
       final sortedAudioFiles = _getSortedAudioFiles();
@@ -488,7 +505,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  Widget _buildCircularButtonContent({required IconData icon, required bool isSelected, required VoidCallback onTap}) {
+  Widget _buildCircularButtonContent({
+    required FaIconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
     return Container(
       height: 56,
       width: 56,
@@ -760,8 +781,29 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  Future<void> _seekToCombinedPosition(Duration targetPosition) async {
+  Future<void> _seekToCombinedPosition(
+    Duration targetPosition, {
+    bool invalidateSegmentStop = true,
+  }) async {
     if (_audioPlayer == null) return;
+
+    // Scrubber seeks invalidate any in-flight segment end-handler.
+    if (invalidateSegmentStop) {
+      _segmentSeekGeneration++;
+      await _segmentStopSubscription?.cancel();
+      _segmentStopSubscription = null;
+    }
+
+    if (_singleArtifact) {
+      // targetPosition is already artifact time (the scrubber runs on the dense
+      // MP3; segment taps are mapped wall->artifact before they get here).
+      PlatformManager.instance.analytics.audioPlaybackSeeked(
+        conversationId: widget.conversation?.id ?? '',
+        toPositionSeconds: targetPosition.inSeconds,
+      );
+      await _audioPlayer!.seek(targetPosition);
+      return;
+    }
 
     int targetIndex = 0;
     Duration positionInTrack = targetPosition;
@@ -795,7 +837,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   Widget _buildCircularButton({
     Key? key,
-    required IconData icon,
+    required FaIconData icon,
     required bool isSelected,
     required VoidCallback onTap,
   }) {

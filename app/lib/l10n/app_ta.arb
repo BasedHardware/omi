@@ -1,5 +1,6 @@
 {
     "@@locale": "ta",
+    "sessionExpiredSignInAgain": "அமர்வு காலாவதியானது — மீண்டும் உள்நுழையவும்.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -965,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "உங்கள் திட்டம் {date} இல் புதுப்பிக்கப்படும்.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "இலவச திட்டம்",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1482,7 +1473,7 @@
     "exportConfiguration": "உள்ளமைப்பை ஏற்றுமதி செய்யவும்",
     "bringYourOwn": "உங்களையே கொண்டு வாருங்கள்",
     "payYourSttProvider": "Omi ஐ சுதந்திரமாகப் பயன்படுத்தவும். நீங்கள் உங்கள் STT வழங்குநரிடம் நேரடியாக பணம் செலுத்துங்கள்.",
-    "freeMinutesMonth": "மாதத்திற்கு 600 இலவச நிமிடங்கள் அடங்கியுள்ளது. ",
+    "freeMinutesMonth": "மாதத்திற்கு 300 இலவச நிமிடங்கள் அடங்கியுள்ளது. ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "ஹோஸ்ட் தேவை",
     "validPortRequired": "சரியான போர்ட் தேவை",
@@ -1697,22 +1688,6 @@
     "lovingOmi": "Omi ஐ விரும்புகிறீர்களா?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "App Store இல் ஒரு மதிப்பாய்வு விட்டு மேலும் நபர்களை அடைய எங்களுக்கு உதவவும். உங்கள் பதிப்பு எங்களுக்கு உலகத்தைக் குறிக்கிறது!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Google Play Store இல் ஒரு மதிப்பாய்வு விட்டு மேலும் நபர்களை அடைய எங்களுக்கு உதவவும். உங்கள் பதிப்பு எங்களுக்கு உலகத்தைக் குறிக்கிறது!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "App Store இல் மதிப்பிடவும்",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play இல் மதிப்பிடவும்",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "ஒருவேளை பிறகு",
     "@maybeLater": {
@@ -5505,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "600 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை",
+    "basicPlanDescription": "300 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7280,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
+    "premiumMinutesInfo": "மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7391,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
+    "premiumMinutesMonth": "மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10520,7 +10495,7 @@
     "upgradePlan": "திட்டத்தை மேம்படுத்து",
     "billingMonthly": "மாதாந்திர",
     "billingYearly": "ஆண்டு",
-    "savePercent": "~17% சேமிக்கவும்",
+    "savePercent": "~{percent}% சேமிக்கவும்",
     "popular": "பிரபலம்",
     "currentPlan": "தற்போதைய",
     "neoSubtitle": "மாதத்திற்கு {count} கேள்விகள்",
@@ -10582,6 +10557,7 @@
     "syncStatusWaiting": "ஒத்திசைவுக்காக காத்திருக்கிறது",
     "syncStatusRetrying": "செயலாக்க முடியவில்லை — மீண்டும் முயற்சிக்கிறது",
     "syncStatusFailed": "தோல்வி — Retry-ஐ அழுத்தவும்",
+    "syncStatusTooOld": "ஒத்திசைக்க மிகவும் பழையது — Omi இதை ஏற்க முடியாது",
     "syncStatusFileUnavailable": "கோப்பு கிடைக்கவில்லை",
     "syncStatusUploaded": "பதிவேற்றப்பட்டது · Omi-இல் செயலாக்கப்படுகிறது",
     "noRecordingsYet": "இன்னும் பதிவுகள் இல்லை",
@@ -10632,7 +10608,7 @@
     "syncCustomSttWarningMessage": "நீங்கள் உங்கள் சொந்த படியெடுப்பு வழங்குநரைப் பயன்படுத்துகிறீர்கள். இந்தப் பதிவுகளை ஒத்திசைத்தால் அவை Omi சேவையகங்களில் படியெடுக்கப்படும், மேலும் உங்கள் திட்டத்தின் படியெடுப்பு வரம்பில் கணக்கிடப்படும்.",
     "transcribeLaterTitle": "பின்னர் எழுத்தாக்கு",
     "transcribeLaterDescription": "இப்போது ஆடியோவைப் பதிவுசெய்து, நேரலையாக அல்லாமல் தேவைப்படும்போது எழுத்தாக்கம் செய்யுங்கள். பதிவுகள் உங்கள் தொலைபேசியில் சேமிக்கப்படும்; பிறகு அவற்றைப் பதிவேற்றி உரையாடல்களை உருவாக்கலாம்.",
-    "transcribeLaterNote": "தற்போது Omi மற்றும் Limitless சாதனங்களுடன் இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.",
+    "transcribeLaterNote": "தொலைபேசி மைக்ரோஃபோன், Omi மற்றும் Limitless சாதனங்களுடன் இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.",
     "transcribeLaterStorageFull": "உங்கள் தொலைபேசியில் இடவசதி குறைவாக உள்ளதால் பதிவு இடைநிறுத்தப்பட்டுள்ளது. இடத்தைக் காலியாக்குங்கள் அல்லது உங்கள் பதிவுகளைப் பதிவேற்றுங்கள்; பிறகு தானாகவே தொடரும்.",
     "unmute": "ஒலியை இயக்கு",
     "newRecording": "புதிய பதிவு",
@@ -10694,5 +10670,115 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "பெண்டன்ட்டின் சேமிப்பகம் கிட்டத்தட்ட நிரம்பிவிட்டது — ஒத்திசைக்க ஆப்ஸைத் திறந்து வைத்திருங்கள்."
+    "pendantStorageAlmostFull": "பெண்டன்ட்டின் சேமிப்பகம் கிட்டத்தட்ட நிரம்பிவிட்டது — ஒத்திசைக்க ஆப்ஸைத் திறந்து வைத்திருங்கள்.",
+    "connectRayBanMeta": "Ray-Ban Meta ஐ இணைக்கவும்",
+    "raybanMetaSetupDescription": "உரையாடல்கள் மற்றும் காட்சி சூழலுக்கான உங்கள் Omi பதிவு சாதனமாக உங்கள் Ray-Ban Meta கண்ணாடியைப் பயன்படுத்தவும். உங்கள் கண்ணாடியை இணைக்க Omi, Meta AI செயலியைத் திறக்கும்.",
+    "raybanMetaOpenMetaAI": "Meta AI மூலம் இணைக்கவும்",
+    "raybanMetaWaitingForMetaAI": "Meta AI செயலியில் இணைப்பை முடித்து, பிறகு இங்கே திரும்பி வாருங்கள்.",
+    "raybanMetaCheckAgain": "மீண்டும் சரிபார்க்கவும்",
+    "raybanMetaAllowCamera": "கண்ணாடியில் கேமராவை அனுமதிக்கவும்",
+    "raybanMetaCameraExplanation": "உங்கள் உரையாடல்களில் புகைப்படங்களைச் சேர்க்க Omi உங்கள் கண்ணாடியின் கேமராவைப் பயன்படுத்துகிறது. இதைத் தவிர்த்து, ஆடியோவை மட்டும் பயன்படுத்தலாம்.",
+    "raybanMetaSkipForNow": "இப்போதைக்கு தவிர்க்கவும்",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta ஆடியோ-மட்டும் பயன்முறை",
+    "raybanMetaAudioOnlyExplanation": "Omi இன் இந்தப் பதிப்பு Bluetooth வழியாக உங்கள் கண்ணாடியின் மைக்ரோபோனைப் பயன்படுத்த முடியும். புகைப்படம் எடுக்க Omi இன் Meta டெவலப்பர் பதிப்பு தேவை.",
+    "raybanMetaMusicPauseNote": "கண்ணாடியின் மைக்ரோபோன் பயன்பாட்டில் இருக்கும்போது உங்கள் தொலைபேசியில் இசை இடைநிறுத்தப்படும்.",
+    "raybanMetaContinue": "தொடரவும்",
+    "raybanMetaCapturePhoto": "புகைப்படம் எடுக்கவும்",
+    "raybanMetaPhotoRequested": "புகைப்படம் கோரப்பட்டது — அது உங்கள் உரையாடலில் தோன்றும்.",
+    "raybanMetaMicrophoneReady": "மைக்ரோபோன் தயார்",
+    "raybanMetaImageCaptureReady": "படம் எடுத்தல் தயார்",
+    "raybanMetaImageCaptureUnavailable": "ஆடியோ-மட்டும் பயன்முறையில் கிடைக்காது",
+    "raybanMetaCamera": "கேமரா",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta உடன் இணைப்பதில் பிழை: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "சாதன சேமிப்பு",
+    "deviceStoragePercentFull": "{percent}% நிரம்பியது",
+    "deviceStorageUsedOfTotal": "{total} இல் {used} பயன்படுத்தப்பட்டது",
+    "deviceStorageFree": "{free} காலி",
+    "deviceStorageNearlyFull": "சாதனம் கிட்டத்தட்ட நிரம்பிவிட்டது — இடத்தைக் காலி செய்ய ஒத்திசைக்கவும்.",
+    "phoneMicOfflineFallbackMessage": "இணைப்பு இல்லை — உள்ளூரில் பதிவு செய்யப்படுகிறது. நீங்கள் மீண்டும் ஆன்லைனுக்கு வரும்போது படியெடுக்கப்படும்.",
+    "dataEncryptedBanner": "உங்கள் தரவு இயல்பாகவே வலுவான குறியாக்கத்துடன் பாதுகாக்கப்படுகிறது, மேலும் அது எவ்வாறு சேமிக்கப்படுகிறது மற்றும் பயன்படுத்தப்படுகிறது என்பதை நீங்கள் கட்டுப்படுத்துகிறீர்கள்.",
+    "rayBanMetaMicPickerTitle": "உங்கள் Ray-Ban Meta மைக்ரோஃபோனைத் தேர்வுசெய்யவும்",
+    "rayBanMetaMicPickerDescription": "உங்கள் கண்ணாடியின் Bluetooth மைக்ரோஃபோனைத் தேர்வுசெய்யவும். Omi அதைப் பயன்படுத்தும்போது இசை இடைநிறுத்தப்படும்.",
+    "rayBanMetaMicPickerEmpty": "Bluetooth மைக்ரோஃபோன்கள் எதுவும் கிடைக்கவில்லை. iPhone அமைப்புகளில் கண்ணாடியை இணைத்து மீண்டும் முயலவும்.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth மைக்ரோஃபோன்களை ஏற்ற முடியவில்லை. Bluetooth இயக்கத்தில் உள்ளதா எனச் சரிபார்த்து மீண்டும் முயலவும்.",
+    "rayBanMetaMicPickerConnectError": "அந்த மைக்ரோஃபோனுடன் இணைக்க முடியவில்லை. அது iPhone அமைப்புகளில் இணைக்கப்பட்டுள்ளதா என உறுதிசெய்யவும்.",
+    "cloudTranscription": "கிளவுட் உரையாக்கம்",
+    "copyMessage": "செய்தியை நகலெடு",
+    "deleteOnDeviceModel": "மாதிரியை நீக்கு",
+    "deleteOnDeviceModelConfirm": "இந்த மாதிரியை நீக்க விரும்புகிறீர்களா?",
+    "downgradeAnyway": "எப்படியும் தரமிறக்கு",
+    "downgradeLimitBattery": "7 மடங்கு அதிக பேட்டரி பயன்பாடு",
+    "downgradeLimitDelay": "5-7 வினாடிகள் தாமதம்",
+    "downgradeLimitQuality": "30% குறைவான உரையாக்கத் தரம்",
+    "downgradeLimitSpeakers": "பேசுபவர்களை அடையாளம் காண முடியாது",
+    "downgradeLimitationsHeading": "இந்த வரம்புகளை நீங்கள் சந்திப்பீர்கள்:",
+    "downgradeToFreemiumTitle": "இலவசத் திட்டத்திற்கு மாறவா?",
+    "errorLoadingAudio": "ஆடியோவை ஏற்றுவதில் பிழை",
+    "failedToLinkCalendarEvent": "நாட்காட்டி நிகழ்வை இணைக்க முடியவில்லை",
+    "googleCalendarConnectPrompt": "உரையாடல்களை நாட்காட்டி நிகழ்வுகளுடன் இணைக்க உங்கள் Google நாட்காட்டியை இணைக்கவும்.",
+    "googleCalendarNotConnected": "Google நாட்காட்டி இணைக்கப்படவில்லை",
+    "linkedToEvent": "“{title}” உடன் இணைக்கப்பட்டது",
+    "onDeviceModelDeleted": "மாதிரி நீக்கப்பட்டது",
+    "onDeviceModelDownloadFailed": "மாதிரி பதிவிறக்கம் தோல்வியடைந்தது",
+    "onDeviceModelDownloadFailedDesc": "Whisper மாதிரியைப் பதிவிறக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
+    "onDeviceModelDownloadSuccess": "மாதிரி பதிவிறக்கப்பட்டது",
+    "onDeviceModelDownloadSuccessDesc": "Whisper மாதிரி வெற்றிகரமாகப் பதிவிறக்கப்பட்டது",
+    "onDeviceModelDownloaded": "பதிவிறக்கப்பட்டது",
+    "onDeviceModelSize": "மாதிரி அளவு",
+    "onDeviceTranscription": "சாதனத்தில் உரையாக்கம்",
+    "onDeviceTranscriptionDesc": "உரையாக்கம் உங்கள் சாதனத்திலேயே செயலாக்கப்படுகிறது",
+    "searchSettings": "அமைப்புகளில் தேடு…",
+    "speechToTextProvider": "பேச்சு-உரை வழங்குநர்",
+    "speechToTextProviderDesc": "உரையாக்கத்திற்குப் பயன்படுத்தப்படும் சேவையைத் தேர்ந்தெடுக்கவும்",
+    "sttFilterAuto": "தானியங்கு",
+    "sttModelAccuracy": "துல்லியம்",
+    "sttModelFaster": "வேகமானது",
+    "sttModelHigher": "அதிகம்",
+    "sttModelLower": "குறைவு",
+    "sttModelSlower": "மெதுவானது",
+    "sttModelSpeed": "வேகம்",
+    "sttNone": "எதுவும் இல்லை",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "உங்கள் கருத்துக்கு நன்றி!",
+    "transcriptionLanguage": "உரையாக்க மொழி",
+    "transcriptionLanguageDesc": "பேச்சு உரையாக்கத்திற்கான மொழியைத் தேர்ந்தெடுக்கவும்",
+    "whisperModel": "Whisper மாதிரி",
+    "whisperModelDesc": "சாதனத்தில் உரையாக்கத்திற்கான மாதிரியைத் தேர்ந்தெடுக்கவும்",
+    "whisperModelSizeBase": "அடிப்படை",
+    "whisperModelSizeLarge": "பெரியது",
+    "whisperModelSizeMedium": "நடுத்தரம்",
+    "whisperModelSizeSmall": "சிறியது",
+    "whisperModelSizeTiny": "மிகச் சிறியது",
+    "planSheetChooseYourPlan": "வரம்பற்ற Omi-ஐ திறக்க உங்கள் திட்டத்தைத் தேர்ந்தெடுக்கவும்.",
+    "availableOnMacMobileWeb": "Mac, மொபைல் மற்றும் வலையில் கிடைக்கிறது",
+    "popularBadge": "பிரபலம்",
+    "worksOnDesktop": "டெஸ்க்டாப்பில் இயங்கும்",
+    "noDesktopAccess": "டெஸ்க்டாப்பில் இயங்காது",
+    "annualBillingSummary": "{months} மாதங்கள் / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 மாதம் இலவசம்} other{{count} மாதங்கள் இலவசம்}}",
+    "freemiumLimitsIntro": "Omi இலவசம், ஆனால் இலவச பதிப்பில் உங்கள் அனுபவத்தைப் பாதிக்கும் வரம்புகள் உள்ளன:",
+    "downgradeLimitDelayNotRealTime": "5-7 வினாடி தாமதம் (நிகழ்நேரம் அல்ல)",
+    "downgradeToFreemiumAction": "இலவச பதிப்புக்கு மாறவும்",
+    "getFreeUnlimitedAccess": "இலவச வரம்பற்ற அணுகலைப் பெறுங்கள்",
+    "shareDataForTraining": "பயிற்சிக்காக தரவைப் பகிரவும்",
+    "yourRequestUnderReview": "உங்கள் கோரிக்கை பரிசீலனையில் உள்ளது",
+    "pinAsBaseline": "அடிப்படையாகப் பின் செய்",
+    "unpinAsBaseline": "அடிப்படையிலிருந்து அகற்று",
+    "baselineMemory": "அடிப்படை நினைவு",
+    "alwaysInContext": "எப்போதும் சூழலில்",
+    "accountCutoverUpdateRequiredTitle": "अपडेट आवश्यक",
+    "accountCutoverUpdateRequiredMessage": "खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।",
+    "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
+    "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
+    "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
+    "accountCutoverOpenStore": "स्टोर खोलें"
 }

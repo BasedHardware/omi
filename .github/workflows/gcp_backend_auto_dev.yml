@@ -1,194 +1,308 @@
 name: Auto Deploy Backend to Development
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - 'backend/**'
+  workflow_run:
+    workflows: ["Release Eligibility"]
+    branches: [main]
+    types: [completed]
+
+# Share the development backend mutation domain with manual deploys, traffic
+# repair, backend-listen, and LLM Gateway's shared backend-secrets updates.
+concurrency:
+  group: deploy-backend-stack-development
+  cancel-in-progress: false
 
 env:
   SERVICE: backend
   REGION: us-central1
+  # Cloud Run tags are service-scoped. Reusing this tag atomically moves each
+  # service's candidate URL without accumulating stale no-traffic routes.
+  CANDIDATE_TAG: candidate
+  CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+  CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+  CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+  GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+  LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}
+  MCP_AUTHORIZATION_SERVER_URL: ${{ vars.MCP_AUTHORIZATION_SERVER_URL }}
+  MCP_OAUTH_CHATGPT_CLIENT_ID: ${{ vars.MCP_OAUTH_CHATGPT_CLIENT_ID }}
+  MCP_OAUTH_CHATGPT_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CHATGPT_REDIRECT_URIS }}
+  MCP_OAUTH_CLAUDE_CLIENT_ID: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_ID }}
+  MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_NAME }}
+  MCP_OAUTH_CLAUDE_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CLAUDE_REDIRECT_URIS }}
+  MCP_OAUTH_PUBLIC_CLIENT_ID: ${{ vars.MCP_OAUTH_PUBLIC_CLIENT_ID }}
+  MCP_OAUTH_PUBLIC_REDIRECT_URIS: ${{ vars.MCP_OAUTH_PUBLIC_REDIRECT_URIS }}
+  MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
+  PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE }}
+  PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA: ${{ vars.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA }}
+  RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
+  REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
+  STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
+  STT_SERVICE_MODELS: ${{ vars.STT_SERVICE_MODELS }}
+  SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
+  TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
+  TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
+  TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
+  TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
+  X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
+  X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
 
 jobs:
+  scope:
+    name: Decide backend deployment scope
+    # This unprivileged decision runs before source admission, Firestore
+    # readiness, image work, or any cloud mutation. workflow_run does not
+    # support a safe workflow-level paths filter, so inspect its immutable SHA.
+    permissions:
+      contents: 'read'
+    runs-on: ubuntu-latest
+    outputs:
+      applies: ${{ steps.scope.outputs.applies }}
+    steps:
+      - name: Checkout triggering main commit for scope decision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          # The parent diff is the only local scope proof required here. Current
+          # main/supersession proof below is bounded to read-only GitHub API calls.
+          fetch-depth: 2
+
+      - name: Decide whether the triggering commit can affect the backend deployment
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if ! git cat-file -e "${RELEASE_SHA}^{commit}"; then
+            echo "Cannot resolve triggering Release Eligibility SHA: $RELEASE_SHA" >&2
+            exit 1
+          fi
+
+          # The scope checkout is intentionally shallow. A stale Release
+          # Eligibility result may be a green no-op only after two bounded,
+          # read-only GitHub API proofs bind the current main and comparison
+          # identities. Any API, JSON, or identity ambiguity falls through to
+          # the privileged current-main source-admission guard below.
+          api_base="${GITHUB_API_URL:-https://api.github.com}"
+          ref_path="$(mktemp)"
+          compare_path="$(mktemp)"
+          trap 'rm -f "$ref_path" "$compare_path"' EXIT
+          api_headers=(
+            -H "Authorization: Bearer $GH_TOKEN"
+            -H "Accept: application/vnd.github+json"
+            -H "X-GitHub-Api-Version: 2022-11-28"
+          )
+          ref_status="$(curl --silent --show-error --output "$ref_path" --write-out '%{http_code}' \
+            "${api_headers[@]}" \
+            "$api_base/repos/$GITHUB_REPOSITORY/git/ref/heads/main" || true)"
+          if [[ "$ref_status" != "200" ]] || ! main_sha="$(jq -er '
+            if .ref == "refs/heads/main" and .object.type == "commit" and (.object.sha | test("^[0-9a-f]{40}$"))
+            then .object.sha else error("unexpected main ref identity") end
+          ' "$ref_path" 2>/dev/null)"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: supersession API proof was unavailable or ambiguous; preserving fail-closed source admission."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          compare_status="$(curl --silent --show-error --output "$compare_path" --write-out '%{http_code}' \
+            "${api_headers[@]}" \
+            "$api_base/repos/$GITHUB_REPOSITORY/compare/$RELEASE_SHA...$main_sha" || true)"
+          if [[ "$compare_status" != "200" ]] || ! comparison="$(jq -er \
+            --arg release_sha "$RELEASE_SHA" \
+            --arg main_sha "$main_sha" '
+              if .base_commit.sha == $release_sha and .head_commit.sha == $main_sha and
+                (.status == "behind" or .status == "ahead" or .status == "identical" or .status == "diverged")
+              then .status else error("unexpected comparison identity") end
+            ' "$compare_path" 2>/dev/null)"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: supersession API proof was unavailable or ambiguous; preserving fail-closed source admission."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [[ "$comparison" == "behind" ]]; then
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy superseded no-op"
+              echo "Green no-op: GitHub compare confirmed triggering SHA $RELEASE_SHA is behind current main $main_sha."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if ! parent_sha="$(git rev-parse "${RELEASE_SHA}^" 2>/dev/null)"; then
+            # An unavailable parent is uncertain scope: retain the existing
+            # exact-SHA admission and deployment path rather than skip.
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: could not resolve the triggering commit parent."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "$parent_sha" "$RELEASE_SHA")"
+          printf 'Changed files for %s:\n%s\n' "$RELEASE_SHA" "$changed_files"
+          if grep -Eq '^(backend/|\.github/workflows/(gcp_backend_auto_dev|gcp_llm_gateway|release-eligibility)\.yml$|\.github/actions/(release-eligibility|sync-backfill-lifecycle|deploy-backend-stack)/|\.github/scripts/(verify_auto_backend_release_admission|desktop_release_manifest)\.py$)' <<<"$changed_files"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy scope"
+              echo "In scope: the triggering commit can affect backend runtime or deployment inputs."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Backend development deploy no-op"
+              echo "Green no-op: the triggering commit cannot affect backend runtime or deployment inputs."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  firestore_readiness:
+    # A workflow_run can access deployment credentials, so never run source
+    # code until the first completed proof identifies the exact current commit
+    # on this repository's main branch. Every later checkout and release vector
+    # uses that admitted SHA rather than a mutable default branch ref.
+    needs: scope
+    if: >-
+      needs.scope.outputs.applies == 'true' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.run_attempt == 1 &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    environment: development
+    permissions:
+      contents: 'read'
+    runs-on: ubuntu-latest
+    outputs:
+      admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
+    steps:
+      # This checks out current main solely to run the guard script. Source
+      # selected by the workflow_run is not checked out or executed until the
+      # guard establishes it is still this exact main commit.
+      - name: Checkout current main for automatic source admission
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify Release Eligibility proof is current main
+        id: admitted_source
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          RELEASE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          checkout_sha="$(git rev-parse --verify HEAD)"
+          python3 .github/scripts/verify_auto_backend_release_admission.py \
+            --sha "$RELEASE_SHA" \
+            --main-sha "$main_sha" \
+            --checkout-sha "$checkout_sha" \
+            --run-attempt "$RELEASE_RUN_ATTEMPT"
+          printf 'admitted_sha=%s\n' "$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Require read-only Firestore credentials
+        env:
+          GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+        run: |
+          if [ -z "$GCP_FIRESTORE_READONLY_CREDENTIALS" ]; then
+            echo "::error title=Missing Firestore read-only credentials::Set GCP_FIRESTORE_READONLY_CREDENTIALS in the development environment before deploying."
+            exit 1
+          fi
+
+      - name: Checkout admitted Firestore source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.admitted_source.outputs.admitted_sha }}
+
+      - name: Google Auth for read-only Firestore inventory
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Verify read-only Firestore credentials target the development runtime project
+        env:
+          RUNTIME_GCP_PROJECT_ID: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          credential_project="$(gcloud config get-value project 2>/dev/null)"
+          if [[ -z "$credential_project" || "$credential_project" == "(unset)" ]]; then
+            echo "::error title=Missing Firestore credential project::The read-only Firestore credentials do not select a GCP project."
+            exit 1
+          fi
+          if [[ "$credential_project" != "$RUNTIME_GCP_PROJECT_ID" ]]; then
+            echo "::error title=Firestore project mismatch::Read-only Firestore credentials target $credential_project, but RUNTIME_GCP_PROJECT_ID is $RUNTIME_GCP_PROJECT_ID."
+            exit 1
+          fi
+
+      - name: Verify serving Firestore indexes
+        id: firestore_readiness
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --check-only \
+            --proposal-output "$FIRESTORE_PROPOSAL_PATH" \
+            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
+            --proposal-ttl-seconds 3600
+
+      - name: Validate blocked Firestore schema proposal
+        id: validate_firestore_proposal
+        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' }}
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --validate-proposal "$FIRESTORE_PROPOSAL_PATH" \
+            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
+            --proposal-ttl-seconds 3600
+
+      - name: Preserve blocked Firestore schema proposal
+        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' && steps.validate_firestore_proposal.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+        with:
+          name: firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.FIRESTORE_PROPOSAL_PATH }}
+          if-no-files-found: error
+          retention-days: 1
+
   deploy:
+    needs: firestore_readiness
     environment: development
     permissions:
       contents: 'read'
       id-token: 'write'
 
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     steps:
-      # To workaround "no space left on device" issue of GitHub-hosted runner
-      - name: Delete huge unnecessary tools folder
-        run: rm -rf /opt/hostedtoolcache
+      - name: Checkout workflow dispatch surface for composite action
+        uses: actions/checkout@v7
 
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Google Auth
-        id: auth
-        uses: 'google-github-actions/auth@v2'
+      - name: Deploy backend stack
+        uses: ./.github/actions/deploy-backend-stack
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Login to GCR
-        run: gcloud auth configure-docker
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Compute short SHA
-        id: image-tag
-        run: |
-          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          echo "revision_suffix=${GITHUB_SHA::7}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
-
-      - name: Build and Push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./backend/Dockerfile
-          push: true
-          tags: |
-            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
-            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
-          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
-          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
-
-      - name: Render backend runtime env
-        id: runtime-env
-        run: |
-          python3 -m pip install -q pyyaml
-          python3 backend/scripts/render-backend-runtime-env.py --env dev >> "$GITHUB_OUTPUT"
-
-      - name: Deploy ${{ env.SERVICE }} to Cloud Run
-        id: deploy-backend
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
+          deploy_profile: auto-dev
+          admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          environment: development
+          deploy_targets: all
+          gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          runtime_gcp_project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          runtime_env: ${{ vars.ENV }}
+          region: ${{ env.REGION }}
           service: ${{ env.SERVICE }}
-          region: ${{ env.REGION }}
-          project_id: ${{ vars.GCP_PROJECT_ID }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
-          no_traffic: true
-          flags: >-
-            --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            ${{ steps.runtime-env.outputs.cloud_run_flags }}
-          env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
-          secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
-
-      - name: Capture ${{ env.SERVICE }} revision
-        id: capture-backend-revision
-        run: |
-          echo "revision=backend-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
-        id: deploy-backend-sync
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}-sync
-          region: ${{ env.REGION }}
-          project_id: ${{ vars.GCP_PROJECT_ID }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
-          no_traffic: true
-          flags: >-
-            --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            ${{ steps.runtime-env.outputs.cloud_run_flags }}
-          env_vars: ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
-          secrets: ${{ steps.runtime-env.outputs.backend_sync_secrets }}
-
-      - name: Capture ${{ env.SERVICE }}-sync revision
-        id: capture-backend-sync-revision
-        run: |
-          echo "revision=backend-sync-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
-
-      - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v2
-        with:
-          cluster_name: ${{ vars.GKE_CLUSTER }}
-          location: ${{ env.REGION }}
-          project_id: ${{ vars.GCP_PROJECT_ID }}
-
-      - name: Install Helm
-        uses: azure/setup-helm@v3
-
-      - name: Deploy backend-secrets to GKE
-        env:
-          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
-          ENVIRONMENT: ${{ vars.ENV }}
-          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
-          REGION: ${{ env.REGION }}
-        run: |
-          python3 -m pip install -q pyyaml
-          backend/scripts/deploy-backend-secrets.sh
-
-      - name: Deploy ${{ env.SERVICE }}-listen to GKE
-        run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install \
-            ${{ vars.ENV }}-omi-backend-listen \
-            ./backend/charts/backend-listen \
-            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
-            --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
-            --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
-            --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
-            --set image.tag=${{ steps.image-tag.outputs.short_sha }}
-          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s; then
-            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
-            exit 1
-          fi
-          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
-
-      - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
-        id: deploy-backend-integration
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}-integration
-          region: ${{ env.REGION }}
-          project_id: ${{ vars.GCP_PROJECT_ID }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
-          no_traffic: true
-          flags: >-
-            --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            ${{ steps.runtime-env.outputs.cloud_run_flags }}
-          env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
-          secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
-
-      - name: Capture ${{ env.SERVICE }}-integration revision
-        id: capture-backend-integration-revision
-        run: |
-          echo "revision=backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
-
-      - name: Validate backend runtime env
-        run: |
-          python3 -m pip install -q pyyaml
-          python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-live-cloud-run
-
-      - name: Verify validated revisions are still current
-        run: |
-          test "$(gcloud run services describe backend --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
-          test "$(gcloud run services describe backend-sync --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
-          test "$(gcloud run services describe backend-integration --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
-
-      - name: Shift Cloud Run traffic to validated revisions
-        run: |
-          gcloud run services update-traffic backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
-          gcloud run services update-traffic backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
-          gcloud run services update-traffic backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
-          python3 backend/scripts/deploy_status_report.py \
-            --env dev \
-            --project ${{ vars.GCP_PROJECT_ID }} \
-            --region ${{ env.REGION }} \
-            --include-cloud-run \
-            --cloud-run-service backend \
-            --cloud-run-service backend-sync \
-            --cloud-run-service backend-integration \
-            --expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }} \
-            --expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
-            --expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
-
-      - name: Show Output
-        run: echo "Backend deployed to development environment"
+          candidate_tag: ${{ env.CANDIDATE_TAG }}

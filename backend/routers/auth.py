@@ -6,12 +6,12 @@ import json
 import hashlib
 import time
 import jwt
-from typing import Optional
-from urllib.parse import quote, urlparse
+from typing import Any, Dict, Optional, cast
+from urllib.parse import quote, urlencode, urlparse, urlsplit, urlunsplit
 from cryptography.hazmat.primitives import serialization
 from jwt.algorithms import RSAAlgorithm
 from fastapi import APIRouter, Request, HTTPException, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 import pathlib
 import firebase_admin.auth
@@ -185,11 +185,11 @@ def _verify_pkce_code_verifier(
         raise HTTPException(status_code=400, detail="code_challenge_method must be S256")
 
     actual_code_challenge = _code_challenge_for_verifier(code_verifier)
-    if not hmac.compare_digest(actual_code_challenge, expected_code_challenge):
+    if not hmac.compare_digest(actual_code_challenge, cast(str, expected_code_challenge)):
         raise HTTPException(status_code=400, detail="invalid code_verifier")
 
 
-def _auth_code_data_from_session(oauth_credentials: str, redirect_uri: str, session_data: dict) -> str:
+def _auth_code_data_from_session(oauth_credentials: str, redirect_uri: str, session_data: Dict[str, Any]) -> str:
     code_challenge = session_data.get('code_challenge')
     code_challenge_method = session_data.get('code_challenge_method')
     _validate_pkce_challenge(code_challenge, code_challenge_method)
@@ -219,6 +219,20 @@ def _redirect_scheme(redirect_uri: Optional[str]) -> str:
     return (urlparse(redirect_uri).scheme or "missing").lower()[:64]
 
 
+def _build_callback_redirect_url(redirect_uri: str, code: str, state: Optional[str]) -> str:
+    """Append the one-time callback parameters without losing a URI fragment.
+
+    The value is rendered into the callback page's native link as well as used
+    by its automatic navigation. Rendering it in the HTML keeps the manual
+    fallback usable when a mobile browser blocks inline JavaScript or automatic
+    custom-scheme navigation.
+    """
+    parsed = urlsplit(redirect_uri)
+    callback_query = urlencode({"code": code, **({"state": state} if state else {})})
+    query = f"{parsed.query}&{callback_query}" if parsed.query else callback_query
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, query, parsed.fragment))
+
+
 def _failure_class(error: Optional[object]) -> str:
     if error is None:
         return "none"
@@ -226,6 +240,26 @@ def _failure_class(error: Optional[object]) -> str:
         return f"http_{error.status_code}"
     value = str(error).strip().lower().replace(" ", "_")
     return value[:80] or error.__class__.__name__.lower()
+
+
+# RFC 6749 §4.1.2.1 error codes a provider may echo on the callback. The raw
+# `error` param is attacker-controlled free text and must never become a
+# Prometheus label value directly — that is unbounded cardinality on a
+# module-level (process-lifetime) metric registry.
+_OAUTH_ERROR_CODES = {
+    "access_denied",
+    "invalid_request",
+    "invalid_scope",
+    "unauthorized_client",
+    "unsupported_response_type",
+    "server_error",
+    "temporarily_unavailable",
+}
+
+
+def _bounded_provider_error(error: str) -> str:
+    normalized = error.strip().lower().replace(" ", "_")[:64]
+    return normalized if normalized in _OAUTH_ERROR_CODES else "provider_error_other"
 
 
 def _log_auth_event(
@@ -338,7 +372,8 @@ async def auth_authorize(
     # Redirect to provider OAuth
     if provider == 'google':
         response = await _google_auth_redirect(session_id)
-    elif provider == 'apple':
+    else:
+        # provider == 'apple' — only 'google'/'apple' reach here (validated above).
         response = await _apple_auth_redirect(session_id)
     _log_auth_event(
         provider=provider,
@@ -368,7 +403,7 @@ async def auth_callback_google(
             stage="provider_callback_received",
             outcome="failed",
             auth_flow_id=auth_flow_id,
-            failure_class=error,
+            failure_class=_bounded_provider_error(error),
             status_code=400,
         )
         raise HTTPException(status_code=400, detail=f"Auth error: {error}")
@@ -391,7 +426,7 @@ async def auth_callback_google(
     )
 
     # Exchange code for OAuth credentials
-    oauth_credentials = await _exchange_provider_code_for_oauth_credentials('google', code, session_data)
+    oauth_credentials = await _exchange_provider_code_for_oauth_credentials('google', cast(str, code), session_data)
 
     # Create temporary auth code bound to the original redirect_uri
     auth_code = str(uuid.uuid4())
@@ -410,14 +445,30 @@ async def auth_callback_google(
     # The original ``redirect_uri`` was validated by ``_validate_redirect_uri`` at
     # ``/authorize`` time and cannot be overridden by the caller here.
     return templates.TemplateResponse(
+        request,
         "auth_callback.html",
         {
-            "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
             "redirect_uri": app_redirect_uri,
+            "redirect_url": _build_callback_redirect_url(app_redirect_uri, auth_code, session_data['state']),
         },
     )
+
+
+def _parse_apple_user_name(user_json: Optional[str]) -> Optional[str]:
+    """Apple includes the user's name in the ``user`` form field ONLY on the very
+    first authorization (JSON: ``{"name": {"firstName", "lastName"}, ...}``).
+    Parse it into a display name; return None when absent or unparseable."""
+    if not user_json:
+        return None
+    try:
+        name = (json.loads(user_json) or {}).get('name') or {}
+        parts = [str(name.get('firstName', '')).strip(), str(name.get('lastName', '')).strip()]
+        full = ' '.join(p for p in parts if p)
+        return full or None
+    except (json.JSONDecodeError, TypeError, AttributeError):
+        return None
 
 
 @router.post("/callback/apple")
@@ -426,10 +477,13 @@ async def auth_callback_apple_post(
     code: str = Form(...),
     state: str = Form(...),
     error: Optional[str] = Form(None),
+    user: Optional[str] = Form(None),
 ):
     """
     Apple authentication callback handler (POST method)
-    Apple uses form_post response_mode, so we need a separate POST endpoint
+    Apple uses form_post response_mode, so we need a separate POST endpoint.
+    Apple's id_token carries no name, so the ``user`` form field (sent only on the
+    first authorization) is the sole source of the user's name — capture it here.
     """
     auth_flow_id = _auth_flow_id_from_state(state)
     _log_auth_event(provider="apple", stage="provider_callback_received", outcome="started", auth_flow_id=auth_flow_id)
@@ -439,7 +493,7 @@ async def auth_callback_apple_post(
             stage="provider_callback_received",
             outcome="failed",
             auth_flow_id=auth_flow_id,
-            failure_class=error,
+            failure_class=_bounded_provider_error(error),
             status_code=400,
         )
         raise HTTPException(status_code=400, detail=f"Auth error: {error}")
@@ -464,6 +518,18 @@ async def auth_callback_apple_post(
     # Exchange code for OAuth credentials
     oauth_credentials = await _exchange_provider_code_for_oauth_credentials('apple', code, session_data)
 
+    # Apple sends the name in the `user` form field only on first auth; carry it
+    # through the auth-code blob so `/token` can persist it (it never rides the
+    # id_token). Absent on every later sign-in — expected, not an error.
+    full_name = _parse_apple_user_name(user)
+    if full_name:
+        try:
+            creds = json.loads(oauth_credentials)
+            creds['full_name'] = full_name
+            oauth_credentials = json.dumps(creds)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     # Create temporary auth code bound to the original redirect_uri
     auth_code = str(uuid.uuid4())
     app_redirect_uri = session_data.get('redirect_uri', _DEFAULT_MOBILE_REDIRECT)
@@ -481,12 +547,13 @@ async def auth_callback_apple_post(
     # The original ``redirect_uri`` was validated by ``_validate_redirect_uri`` at
     # ``/authorize`` time and cannot be overridden by the caller here.
     return templates.TemplateResponse(
+        request,
         "auth_callback.html",
         {
-            "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
             "redirect_uri": app_redirect_uri,
+            "redirect_url": _build_callback_redirect_url(app_redirect_uri, auth_code, session_data['state']),
         },
     )
 
@@ -622,6 +689,7 @@ async def auth_token(
         provider = oauth_credentials.get('provider')
         id_token = oauth_credentials.get('id_token')
         access_token = oauth_credentials.get('access_token')
+        full_name = oauth_credentials.get('full_name')
 
         response = {
             "provider": provider,
@@ -642,7 +710,7 @@ async def auth_token(
                     auth_flow_id=auth_flow_id,
                     redirect_scheme=redirect_scheme,
                 )
-                custom_token = await _generate_custom_token(provider, id_token, access_token)
+                custom_token = await _generate_custom_token(provider, id_token, access_token, display_name=full_name)
                 response["custom_token"] = custom_token
                 _log_auth_event(
                     provider=provider,
@@ -753,7 +821,7 @@ async def _apple_auth_redirect(session_id: str):
     return RedirectResponse(url=apple_auth_url)
 
 
-async def _exchange_provider_code_for_oauth_credentials(provider: str, code: str, session_data: dict) -> str:
+async def _exchange_provider_code_for_oauth_credentials(provider: str, code: str, session_data: Dict[str, Any]) -> str:
     """
     Exchange provider-specific code for OAuth credentials
     """
@@ -765,7 +833,7 @@ async def _exchange_provider_code_for_oauth_credentials(provider: str, code: str
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
 
-async def _exchange_google_code_for_oauth_credentials(code: str, session_data: dict) -> str:
+async def _exchange_google_code_for_oauth_credentials(code: str, session_data: Dict[str, Any]) -> str:
     """
     Exchange Google authorization code for Google OAuth tokens
     """
@@ -843,7 +911,7 @@ async def _exchange_google_code_for_oauth_credentials(code: str, session_data: d
     return json.dumps(oauth_credentials)
 
 
-async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: dict) -> str:
+async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: Dict[str, Any]) -> str:
     """
     Exchange Apple authorization code for Apple OAuth tokens
     """
@@ -870,7 +938,9 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
             )
 
         # Generate client secret JWT
-        client_secret = _generate_apple_client_secret(client_id, team_id, key_id, private_key_content)
+        client_secret = _generate_apple_client_secret(
+            cast(str, client_id), cast(str, team_id), cast(str, key_id), cast(str, private_key_content)
+        )
 
         # Exchange authorization code for Apple tokens
         api_base_url = os.getenv('BASE_API_URL')
@@ -956,7 +1026,9 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
         raise HTTPException(status_code=500, detail="Failed to exchange Apple code for tokens")
 
 
-async def _generate_custom_token(provider: str, id_token: str, access_token: str = None) -> str:
+async def _generate_custom_token(
+    provider: str, id_token: str, access_token: Optional[str] = None, display_name: Optional[str] = None
+) -> str:
     """
     Generate Firebase custom token by signing in with OAuth credentials
     This ensures we get the same Firebase UID that client-side auth would create
@@ -1006,10 +1078,24 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: str
 
         logger.info(f"Firebase sign-in successful for {provider}, UID: {firebase_uid}")
 
-        # Create custom token for this UID
-        custom_token = firebase_admin.auth.create_custom_token(firebase_uid)
+        # Apple's id_token has no name and Firebase can't auto-populate it (unlike
+        # Google), so persist the first-auth name onto the Firebase user. Only set
+        # it when missing — Apple sends the name once, so later sign-ins pass None
+        # and an already-named account is never overwritten.
+        if display_name and not result.get('displayName'):
+            try:
+                await run_blocking(
+                    critical_executor,
+                    lambda: firebase_admin.auth.update_user(firebase_uid, display_name=display_name),
+                )
+                logger.info(f"Set Firebase display_name for {provider} UID {firebase_uid}")
+            except Exception as e:
+                logger.error(f"Failed to set Firebase display_name (non-fatal): {sanitize(str(e))}")
 
-        return custom_token.decode('utf-8') if isinstance(custom_token, bytes) else custom_token
+        # Create custom token for this UID
+        custom_token: object = firebase_admin.auth.create_custom_token(firebase_uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+
+        return custom_token.decode('utf-8') if isinstance(custom_token, bytes) else cast(str, custom_token)
 
     except Exception as e:
         logger.error(f"Error in _generate_custom_token: {sanitize(str(e))}")
@@ -1045,7 +1131,7 @@ def _generate_apple_client_secret(client_id: str, team_id: str, key_id: str, pri
         }
 
         # Generate the client secret
-        client_secret = jwt.encode(payload, private_key, algorithm='ES256', headers=headers)
+        client_secret = jwt.encode(payload, cast(Any, private_key), algorithm='ES256', headers=headers)
 
         return client_secret
 
@@ -1054,7 +1140,7 @@ def _generate_apple_client_secret(client_id: str, team_id: str, key_id: str, pri
         raise HTTPException(status_code=500, detail="Failed to generate Apple client secret")
 
 
-async def _verify_apple_id_token(id_token: str, client_id: str) -> dict:
+async def _verify_apple_id_token(id_token: str, client_id: str) -> Dict[str, Any]:  # type: ignore[reportUnusedFunction]  # public verification helper, reserved for Apple ID token validation
     """
     Verify Apple ID token and extract user information
     """
@@ -1075,7 +1161,7 @@ async def _verify_apple_id_token(id_token: str, client_id: str) -> dict:
             raise Exception("No key ID found in token header")
 
         # Find the matching public key
-        public_key = None
+        public_key: Any = None
         for key in apple_keys['keys']:
             if key['kid'] == key_id:
                 public_key = RSAAlgorithm.from_jwk(key)

@@ -14,7 +14,7 @@ import hashlib
 import json
 import secrets
 import time
-from typing import Optional
+from typing import Any, Optional, cast
 from urllib.parse import urlencode, urljoin, urlparse
 
 import httpx
@@ -35,7 +35,7 @@ MCP_PROTOCOL_VERSION = "2025-03-26"
 # ---------------------------------------------------------------------------
 
 
-async def discover_oauth_metadata(server_url: str) -> Optional[dict]:
+async def discover_oauth_metadata(server_url: str) -> Optional[dict[str, Any]]:
     """Discover OAuth authorization server metadata from an MCP server.
 
     Checks /.well-known/oauth-authorization-server relative to the server origin.
@@ -61,7 +61,9 @@ async def discover_oauth_metadata(server_url: str) -> Optional[dict]:
     return None
 
 
-async def register_oauth_client(registration_endpoint: str, redirect_uri: str, scopes: Optional[list] = None) -> dict:
+async def register_oauth_client(
+    registration_endpoint: str, redirect_uri: str, scopes: Optional[list[str]] = None
+) -> dict[str, Any]:
     """Dynamically register an OAuth client (RFC 7591).
 
     Returns dict with client_id and optionally client_secret.
@@ -103,7 +105,7 @@ def build_authorization_url(
     client_id: str,
     redirect_uri: str,
     state: str,
-    scopes: Optional[list] = None,
+    scopes: Optional[list[str]] = None,
     code_challenge: Optional[str] = None,
 ) -> str:
     """Build the authorization URL for the OAuth flow."""
@@ -128,7 +130,7 @@ async def exchange_oauth_code(
     client_id: str,
     client_secret: Optional[str] = None,
     code_verifier: Optional[str] = None,
-) -> dict:
+) -> dict[str, Any]:
     """Exchange an authorization code for access + refresh tokens."""
     payload = {
         "grant_type": "authorization_code",
@@ -165,7 +167,7 @@ async def refresh_oauth_token(
     refresh_token: str,
     client_id: str,
     client_secret: Optional[str] = None,
-) -> dict:
+) -> dict[str, Any]:
     """Refresh an expired access token."""
     payload = {
         "grant_type": "refresh_token",
@@ -192,8 +194,10 @@ async def refresh_oauth_token(
 # ---------------------------------------------------------------------------
 
 
-def _jsonrpc_request(method: str, params: Optional[dict] = None, req_id: Optional[int] = None) -> dict:
-    msg = {
+def _jsonrpc_request(
+    method: str, params: Optional[dict[str, Any]] = None, req_id: Optional[int] = None
+) -> dict[str, Any]:
+    msg: dict[str, Any] = {
         "jsonrpc": "2.0",
         "method": method,
     }
@@ -223,10 +227,10 @@ def _resolve_mcp_url(server_url: str) -> list[str]:
 
 async def _mcp_post(
     server_url: str,
-    payload: dict,
+    payload: dict[str, Any],
     access_token: Optional[str] = None,
     session_id: Optional[str] = None,
-) -> tuple[dict, Optional[str]]:
+) -> tuple[dict[str, Any], Optional[str]]:
     """Send a JSON-RPC request to an MCP server via Streamable HTTP.
 
     Returns (response_dict, session_id). The session_id may be updated from the
@@ -266,7 +270,7 @@ async def _mcp_post(
         return resp.json(), new_session_id
 
 
-def _parse_sse_response(text: str) -> dict:
+def _parse_sse_response(text: str) -> dict[str, Any]:
     """Parse an SSE response and extract the last JSON-RPC result."""
     last_data = None
     for line in text.split("\n"):
@@ -290,10 +294,10 @@ def _parse_sse_response(text: str) -> dict:
 
 async def _sse_send_and_receive(
     sse_url: str,
-    payloads: list[dict],
+    payloads: list[dict[str, Any]],
     access_token: Optional[str] = None,
     timeout_seconds: float = 30.0,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Send JSON-RPC requests via the MCP SSE transport and collect responses.
 
     Opens a GET connection to the SSE endpoint, waits for the endpoint event,
@@ -310,9 +314,9 @@ async def _sse_send_and_receive(
 
 async def _sse_send_and_receive_inner(
     sse_url: str,
-    payloads: list[dict],
+    payloads: list[dict[str, Any]],
     access_token: Optional[str] = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Inner SSE implementation wrapped by _sse_send_and_receive with a timeout."""
     parsed = urlparse(sse_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
@@ -322,8 +326,8 @@ async def _sse_send_and_receive_inner(
         headers["Authorization"] = f"Bearer {access_token}"
 
     expected_responses = sum(1 for p in payloads if "id" in p)
-    responses: list[dict] = []
-    post_endpoint = None
+    responses: list[dict[str, Any]] = []
+    post_endpoint: Optional[str] = None
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
         async with client.stream("GET", sse_url, headers=headers, follow_redirects=True) as stream:
@@ -333,7 +337,7 @@ async def _sse_send_and_receive_inner(
                 await stream.aread()
                 raise httpx.HTTPStatusError(
                     f"SSE connection failed with {stream.status_code}",
-                    request=stream._request,
+                    request=stream.request,
                     response=httpx.Response(stream.status_code),
                 )
 
@@ -379,9 +383,9 @@ async def _sse_send_and_receive_inner(
 
                         elif event_type == "message" and data_str:
                             try:
-                                msg = json.loads(data_str)
-                                if isinstance(msg, dict) and ("result" in msg or "error" in msg):
-                                    responses.append(msg)
+                                loaded: object = json.loads(data_str)
+                                if isinstance(loaded, dict) and ("result" in loaded or "error" in loaded):
+                                    responses.append(cast(dict[str, Any], loaded))
                                     logger.info(f"[MCP SSE] Got response {len(responses)}/{expected_responses}")
                             except (json.JSONDecodeError, ValueError):
                                 pass
@@ -396,7 +400,7 @@ async def _sse_send_and_receive_inner(
     return responses
 
 
-async def _discover_tools_via_sse(sse_url: str, access_token: Optional[str] = None) -> list[dict]:
+async def _discover_tools_via_sse(sse_url: str, access_token: Optional[str] = None) -> list[dict[str, Any]]:
     """Discover MCP tools using SSE transport.
 
     Sends initialize + notifications/initialized + tools/list via SSE and returns
@@ -434,9 +438,9 @@ async def _discover_tools_via_sse(sse_url: str, access_token: Optional[str] = No
 async def _call_tool_via_sse(
     sse_url: str,
     tool_name: str,
-    arguments: dict,
+    arguments: dict[str, Any],
     access_token: Optional[str] = None,
-) -> dict:
+) -> dict[str, Any]:
     """Call an MCP tool using SSE transport. Returns the JSON-RPC response dict."""
     init_req = _jsonrpc_request(
         "initialize",
@@ -532,12 +536,14 @@ def _resolve_sse_url(server_url: str) -> list[str]:
     return [server_url, f"{base}/sse"]
 
 
-def _build_chat_tools(mcp_tools: list[dict], endpoint_url: str, transport: str = "streamable_http") -> list[ChatTool]:
+def _build_chat_tools(
+    mcp_tools: list[dict[str, Any]], endpoint_url: str, transport: str = "streamable_http"
+) -> list[ChatTool]:
     """Convert raw MCP tool dicts to ChatTool objects."""
-    chat_tools = []
+    chat_tools: list[ChatTool] = []
     for tool in mcp_tools:
-        input_schema = tool.get("inputSchema", {})
-        parameters = None
+        input_schema: Any = tool.get("inputSchema", {})
+        parameters: Optional[dict[str, Any]] = None
         if input_schema and input_schema.get("properties"):
             parameters = {
                 "properties": input_schema.get("properties", {}),
@@ -587,9 +593,9 @@ async def _initialize_session(server_url: str, access_token: Optional[str] = Non
 async def call_mcp_tool(
     server_url: str,
     tool_name: str,
-    arguments: dict,
+    arguments: dict[str, Any],
     access_token: Optional[str] = None,
-    oauth_tokens: Optional[dict] = None,
+    oauth_tokens: Optional[dict[str, Any]] = None,
     transport: str = "streamable_http",
 ) -> str:
     """Call an MCP tool and return the text result.
@@ -606,9 +612,9 @@ async def call_mcp_tool(
 async def _call_mcp_tool_http(
     server_url: str,
     tool_name: str,
-    arguments: dict,
+    arguments: dict[str, Any],
     access_token: Optional[str] = None,
-    oauth_tokens: Optional[dict] = None,
+    oauth_tokens: Optional[dict[str, Any]] = None,
 ) -> str:
     """Call an MCP tool via Streamable HTTP transport."""
     req = _jsonrpc_request(
@@ -658,9 +664,9 @@ async def _call_mcp_tool_http(
 async def _call_mcp_tool_sse(
     server_url: str,
     tool_name: str,
-    arguments: dict,
+    arguments: dict[str, Any],
     access_token: Optional[str] = None,
-    oauth_tokens: Optional[dict] = None,
+    oauth_tokens: Optional[dict[str, Any]] = None,
 ) -> str:
     """Call an MCP tool via SSE transport."""
     try:
@@ -688,7 +694,7 @@ async def _call_mcp_tool_sse(
     return _extract_tool_result(resp)
 
 
-def _extract_tool_result(resp: dict) -> str:
+def _extract_tool_result(resp: dict[str, Any]) -> str:
     """Extract text result from a JSON-RPC tool call response.
 
     Tool execution failures are reported in-band as result.isError=true (MCP
@@ -697,14 +703,19 @@ def _extract_tool_result(resp: dict) -> str:
     prefix to drive circuit-breaker/webhook-health tracking, and the LLM needs
     an explicit failure marker to avoid claiming the action succeeded.
     """
-    result = resp.get("result", {})
-    is_error = isinstance(result, dict) and result.get("isError") is True
+    result: Any = resp.get("result", {})
+    is_result_dict = isinstance(result, dict)
+    result_dict: dict[str, Any] = cast(dict[str, Any], result) if is_result_dict else {}
+    is_error = result_dict.get("isError") is True
 
-    content = result.get("content", []) if isinstance(result, dict) else []
-    texts = []
+    content: list[Any] = result_dict.get("content", [])
+    texts: list[str] = []
     for item in content:
-        if isinstance(item, dict) and item.get("type") == "text":
-            texts.append(item.get("text", ""))
+        if not isinstance(item, dict):
+            continue
+        item_dict = cast(dict[str, Any], item)
+        if item_dict.get("type") == "text":
+            texts.append(item_dict.get("text", ""))
     if texts:
         text = "\n".join(texts)
         return f"Error: MCP tool failed: {text}" if is_error else text

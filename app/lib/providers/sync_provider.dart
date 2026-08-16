@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -14,13 +16,39 @@ import 'package:omi/utils/audio_player_utils.dart';
 import 'package:omi/utils/conversation_sync_utils.dart';
 import 'package:omi/utils/waveform_utils.dart';
 
-enum WalStatusFilter { pending, synced }
+enum WalStatusFilter { pending, synced, corrupted }
 
 enum WalDisplayFilter { all, pending, synced }
 
+List<SyncedConversationPointer> sortSyncedConversationPointers(Iterable<SyncedConversationPointer> pointers) {
+  final sorted = List<SyncedConversationPointer>.from(pointers);
+  sorted.sort((a, b) {
+    final aDate = a.conversation.startedAt ?? a.conversation.createdAt;
+    final bDate = b.conversation.startedAt ?? b.conversation.createdAt;
+    return bDate.compareTo(aDate);
+  });
+  return sorted;
+}
+
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
+  /// Machine-readable error state consumed by sync surfaces, which own the
+  /// localized copy. Providers must not embed user-facing English in state.
+  static const pendingUploadErrorCode = 'sync_pending_upload';
+
+  static bool isPendingUploadError(String? message) => message == pendingUploadErrorCode;
+
   // Services
   final AudioPlayerUtils _audioPlayerUtils = AudioPlayerUtils.instance;
+  final IWalService? _walServiceOverride;
+  final SyncUploadGate _uploadGate;
+  final bool _startBackgroundSync;
+  final Future<void> Function(LocalWalSyncImpl phone) _waitForWalReady;
+  final Future<void> Function() _startRecovery;
+  final Future<void> Function(WakeTrigger trigger) _wakeTransfer;
+
+  /// Completes after WAL loading and startup fair-use reconciliation finish.
+  @visibleForTesting
+  late final Future<void> initialized;
 
   // WAL management
   List<Wal> _allWals = [];
@@ -47,9 +75,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   // `uploaded` is not yet backed up (the server job is still processing), so
   // it counts as pending — keeps it visible in the legacy SyncPage and in
-  // pending counts until the reconciler confirms it `synced`.
+  // pending counts until the reconciler confirms it `synced`. `corrupted` is
+  // terminal: retain it in All and Needs Attention, never present it as work
+  // that sync can still complete.
   bool _isPending(Wal w) =>
-      w.status == WalStatus.miss || w.status == WalStatus.uploaded || w.status == WalStatus.corrupted || w.isSyncing;
+      w.status != WalStatus.corrupted && (w.status == WalStatus.miss || w.status == WalStatus.uploaded || w.isSyncing);
 
   // Memoized status-filtered partitions of _allWals. Returning a stable
   // List<Wal> reference between rebuilds is load-bearing — downstream the
@@ -67,10 +97,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // — but there are none today; if any are added, route them through
   // refreshWals or bump a version counter here.
   //
-  // Both partitions are computed in a single pass to avoid two iterations
-  // over a potentially 50k-item list. Both caches share the same stamp.
+  // All three partitions are computed in a single pass to avoid three iterations
+  // over a potentially 50k-item list. All caches share the same stamp.
   List<Wal>? _pendingWalsCache;
   List<Wal>? _syncedWalsCache;
+  List<Wal>? _corruptedWalsCache;
   int _filteredWalsCacheStamp = 0;
 
   void _ensureFilteredCaches() {
@@ -78,15 +109,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     if (_pendingWalsCache != null && _filteredWalsCacheStamp == stamp) return;
     final pending = <Wal>[];
     final synced = <Wal>[];
+    final corrupted = <Wal>[];
     for (final w in _allWals) {
       if (w.status == WalStatus.synced) {
         synced.add(w);
+      } else if (w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow) {
+        corrupted.add(w);
       } else if (_isPending(w)) {
         pending.add(w);
       }
     }
     _pendingWalsCache = pending;
     _syncedWalsCache = synced;
+    _corruptedWalsCache = corrupted;
     _filteredWalsCacheStamp = stamp;
   }
 
@@ -100,10 +135,16 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     return _syncedWalsCache!;
   }
 
+  /// Terminally unavailable recordings. They remain reachable for review or
+  /// deletion, but never count as retryable pending work.
+  List<Wal> get corruptedWals {
+    _ensureFilteredCaches();
+    return _corruptedWalsCache!;
+  }
+
   List<Wal> get uploadedWals => _allWals.where((w) => w.status == WalStatus.uploaded).toList();
 
-  List<Wal> get pendingDeletableWals =>
-      _allWals.where((w) => !w.isSyncing && (w.status == WalStatus.miss || w.status == WalStatus.corrupted)).toList();
+  List<Wal> get pendingDeletableWals => _allWals.where((w) => !w.isSyncing && w.status == WalStatus.miss).toList();
 
   // Count-only accessors for status-chip badges. Read length from the
   // shared cached partitions so the chips don't trigger an extra iteration
@@ -120,16 +161,27 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     return _syncedWalsCache!.length;
   }
 
-  /// True while a fair-use (429) cooldown is active — uploads are paused.
+  int get corruptedStatusCount {
+    _ensureFilteredCaches();
+    return _corruptedWalsCache!.length;
+  }
+
+  /// Recordings that the storage sheet's Clear All action can remove.
+  int get clearableWalsCount => syncedWals.length + pendingDeletableWals.length + corruptedWals.length;
+
   bool get isRateLimited => SyncRateLimiter.instance.isLimited;
   DateTime? get rateLimitedUntil => SyncRateLimiter.instance.until;
   RateLimitReason? get rateLimitReason => SyncRateLimiter.instance.reason;
 
   List<Wal> get filteredByStatusWals {
-    if (_statusFilter == WalStatusFilter.pending) {
-      return pendingWals;
+    switch (_statusFilter) {
+      case WalStatusFilter.pending:
+        return pendingWals;
+      case WalStatusFilter.synced:
+        return syncedWals;
+      case WalStatusFilter.corrupted:
+        return corruptedWals;
     }
-    return syncedWals;
   }
 
   // ─────────────────────────────────────────
@@ -164,10 +216,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   int get waitingWalsCount => _countWhere((s) => s == WalSyncDisplayState.waiting || s == WalSyncDisplayState.syncing);
 
   /// Recordings that need the user's attention: a sync failed (auto-retries
-  /// exhausted) or the file is unreadable. Surfaced explicitly so a failure is
-  /// never mistaken for a recording that simply hasn't synced yet.
-  int get needsAttentionWalsCount =>
-      _countWhere((s) => s == WalSyncDisplayState.failed || s == WalSyncDisplayState.corrupted);
+  /// exhausted), the file is unreadable, or the server permanently refused it
+  /// for being too old. Surfaced explicitly so a failure is never mistaken for
+  /// a recording that simply hasn't synced yet.
+  int get needsAttentionWalsCount => _countWhere(
+        (s) =>
+            s == WalSyncDisplayState.failed ||
+            s == WalSyncDisplayState.corrupted ||
+            s == WalSyncDisplayState.outsideRecoveryWindow,
+      );
 
   int get retryingWalsCount => _countWhere((s) => s == WalSyncDisplayState.retrying);
 
@@ -178,7 +235,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         case WalDisplayFilter.all:
           return true;
         case WalDisplayFilter.pending:
-          return w.syncDisplayState != WalSyncDisplayState.synced;
+          return w.status != WalStatus.corrupted &&
+              w.status != WalStatus.outsideRecoveryWindow &&
+              w.syncDisplayState != WalSyncDisplayState.synced;
         case WalDisplayFilter.synced:
           return w.syncDisplayState == WalSyncDisplayState.synced;
       }
@@ -229,8 +288,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // Track WAL processing progress
   int _totalWalsToProcess = 0;
   int _walsProcessedCount = 0;
-  Timer? _autoUploadTimer;
   bool _isDisposed = false;
+  late bool _rateLimitWasActive;
 
   // Computed properties for backward compatibility
   List<Wal> get missingWals => _allWals.where((w) => w.status == WalStatus.miss).toList();
@@ -250,9 +309,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   double get walsSyncedProgress => _syncState.progress;
   double? get syncSpeedKBps => _syncState.speedKBps;
   List<SyncedConversationPointer> get syncedConversationsPointers {
-    final sorted = List<SyncedConversationPointer>.from(_syncState.syncedConversations);
-    sorted.sort((a, b) => (b.conversation.createdAt).compareTo(a.conversation.createdAt));
-    return sorted;
+    return sortSyncedConversationPointers(_syncState.syncedConversations);
   }
 
   String? get syncError => _syncState.errorMessage;
@@ -278,32 +335,74 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   Duration get totalDuration => _audioPlayerUtils.totalDuration;
   double get playbackProgress => _audioPlayerUtils.playbackProgress;
 
-  IWalService get _walService => ServiceManager.instance().wal;
+  IWalService get _walService => _walServiceOverride ?? ServiceManager.instance().wal;
 
-  SyncProvider() {
+  SyncProvider({
+    IWalService? walService,
+    SyncUploadGate? uploadGate,
+    @visibleForTesting bool startBackgroundSync = true,
+    @visibleForTesting Future<void> Function(LocalWalSyncImpl phone)? waitForWalReady,
+    @visibleForTesting Future<void> Function()? startRecovery,
+    @visibleForTesting Future<void> Function(WakeTrigger trigger)? wakeTransfer,
+  })  : _walServiceOverride = walService,
+        _uploadGate = uploadGate ?? SyncUploadGate.instance,
+        _startBackgroundSync = startBackgroundSync,
+        _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
+        _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
+        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
-    SyncRateLimiter.instance.addListener(notifyListeners);
-    _initializeProvider();
+    _rateLimitWasActive = SyncRateLimiter.instance.isLimited;
+    SyncRateLimiter.instance.addListener(_onRateLimiterChanged);
+    initialized = _initializeProvider();
   }
 
-  void _initializeProvider() async {
-    await refreshWals();
+  Future<void> _initializeProvider() async {
+    try {
+      await refreshWals();
+      if (_isDisposed) return;
+      await _uploadGate.reconcileFairUseStatus();
+      if (_isDisposed) return;
+      if (_startBackgroundSync) {
+        await _attachTransferCoordinator();
+      }
+    } catch (error, stackTrace) {
+      Logger.error('SyncProvider: initialization failed: $error\n$stackTrace');
+    }
+  }
+
+  void _onRateLimiterChanged() {
     if (_isDisposed) return;
-    _attachReconciler();
-    _scheduleAutoUploadPendingPhoneFiles();
+    final active = SyncRateLimiter.instance.isLimited;
+    final cooldownEnded = _rateLimitWasActive && !active;
+    _rateLimitWasActive = active;
+    notifyListeners();
+    if (cooldownEnded && _startBackgroundSync) {
+      unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
+    }
   }
 
-  /// Wire the background reconciler to the phone sync + our conversation
-  /// surfacing, then poke once to resume any recordings left `uploaded` by a
-  /// previous session (app-kill recovery).
-  void _attachReconciler() {
+  /// Wait for persisted WALs before attaching the single recovery owner, so
+  /// its sole startup wake cannot race an empty in-memory inventory.
+  Future<void> _attachTransferCoordinator() async {
     try {
       final phone = _walService.getSyncs().phone;
+      await _waitForWalReady(phone);
+      if (_isDisposed) return;
       SyncReconciler.instance.attach(phone, _onReconciledConversations);
-      SyncReconciler.instance.poke();
+      RecordingTransferCoordinator.instance.configure(
+        reconcile: SyncReconciler.instance.poke,
+        discover: _discoverPendingWals,
+        refreshPending: refreshWals,
+        drain: _drainEligibleWals,
+        autoUploadEnabled: () =>
+            !SharedPreferencesUtil().useCustomStt && SharedPreferencesUtil().autoSyncOfflineRecordings,
+        connectivityChanges: ConnectivityService().onConnectionChange,
+        initiallyConnected: ConnectivityService().isConnected,
+      );
+      unawaited(_startRecovery());
     } catch (e) {
-      Logger.debug('SyncProvider: attach reconciler failed: $e');
+      Logger.debug('SyncProvider: attach recording transfer coordinator failed: $e');
     }
   }
 
@@ -316,54 +415,53 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       updatedConversationIds: result.updatedConversationIds,
     );
     if (_isDisposed) return;
+    // Refresh WALs *before* updating the "synced" conversation UI so we don't
+    // label recordings as synced while the reconciler is still leaving some
+    // WALs in an uploaded/pending state (issue #7240).
+    await refreshWals();
     if (conversations.isNotEmpty && !_syncState.isProcessing) {
       // Append to whatever is already shown — jobs reconcile incrementally.
       final merged = [..._syncState.syncedConversations, ...conversations];
-      _updateSyncState(_syncState.toCompleted(conversations: merged));
+      final filtered = filterFullySyncedConversations(conversations: merged, wals: _allWals);
+      _updateSyncState(_syncState.toCompleted(conversations: filtered));
     }
-    await refreshWals();
   }
 
-  bool _isAutoUploading = false;
-
-  /// Auto-upload phone WALs to cloud on app open when device is not connected
-  /// and no sync is already in progress.
-  void _scheduleAutoUploadPendingPhoneFiles() {
-    _autoUploadTimer?.cancel();
-    _autoUploadTimer = Timer(const Duration(seconds: 3), () {
-      _autoUploadTimer = null;
-      _autoUploadPendingPhoneFiles();
-    });
-  }
-
-  void _autoUploadPendingPhoneFiles() async {
+  Future<void> _discoverPendingWals() async {
     if (_isDisposed) return;
-    // Custom STT users sync manually (with confirmation) — never auto-upload.
-    if (SharedPreferencesUtil().useCustomStt) return;
-    // Respect the user's auto-sync opt-out (device settings). Defaults to on.
-    if (!SharedPreferencesUtil().autoSyncOfflineRecordings) return;
-    if (_syncState.isProcessing) return;
-    if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) return;
-    final phoneWals = _allWals
-        .where((w) => w.status == WalStatus.miss && (w.storage == WalStorage.disk || w.storage == WalStorage.mem))
-        .toList();
-    if (phoneWals.isEmpty) return;
-    Logger.debug('SyncProvider: Auto-uploading ${phoneWals.length} pending phone files to cloud');
-    _isAutoUploading = true;
-    await _performSync(
-      operation: () => _walService.getSyncs().phone.syncAll(progress: this),
-      context: 'auto-upload phone files',
-    );
-    _isAutoUploading = false;
+    await _walService.getSyncs().refreshWalsFromDevice();
   }
 
-  /// Cancel auto-upload if running. Called before device-triggered sync.
-  void _cancelAutoUploadIfNeeded() {
-    if (_isAutoUploading) {
-      Logger.debug('SyncProvider: Cancelling auto-upload for device sync');
-      _walService.getSyncs().phone.cancelSync();
-      _isAutoUploading = false;
+  Future<RecordingTransferDrainResult> _drainEligibleWals() async {
+    if (_isDisposed || _syncState.isProcessing) return const RecordingTransferDrainResult.contended();
+    if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) {
+      return const RecordingTransferDrainResult.contended();
     }
+
+    final hadEligibleWals = missingWals.isNotEmpty;
+    if (!hadEligibleWals) return const RecordingTransferDrainResult.skipped();
+
+    // Reconciles a persisted fair-use cooldown the server may already have
+    // lifted; without it a stale local deadline outlives the restriction.
+    // Deliberately does not gate the drain: pulling audio off the device
+    // consumes no upload quota, and the upload phases carry their own guard.
+    await _uploadGate.prepareToUpload();
+    if (_isDisposed) return const RecordingTransferDrainResult.contended();
+
+    _updateSyncState(_syncState.toIdle());
+    _totalWalsToProcess = missingWals.length;
+    _walsProcessedCount = 0;
+    final result = await _performSync(
+      operation: () => _walService.getSyncs().syncAll(progress: this),
+      context: 'coordinated recording transfer',
+      rethrowOnError: true,
+    );
+    await refreshWals();
+    return RecordingTransferDrainResult(
+      attempted: true,
+      failed: (result?.localUploadFailures ?? 0) > 0,
+      needsReconciliation: uploadedWals.isNotEmpty,
+    );
   }
 
   void _onAudioPlayerStateChanged() {
@@ -386,6 +484,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     notifyListeners();
   }
 
+  /// Enumerate offline recordings directly from the device, then refresh the
+  /// list. Lets the Auto Sync page show device recordings (with a manual Sync
+  /// option) even when auto-sync is turned off — device discovery otherwise only
+  /// happens as the first step of a full sync. Best-effort: swallows BLE errors.
+  Future<void> discoverDeviceWals({String? firmwareVersion}) async {
+    try {
+      await _walService.getSyncs().refreshWalsFromDevice(firmwareVersion: firmwareVersion);
+    } catch (e) {
+      Logger.debug('SyncProvider: device WAL discovery failed: $e');
+    }
+    await refreshWals();
+  }
+
   Future<WalStats> getWalStats() async {
     return await _walService.getSyncs().getWalStats();
   }
@@ -405,12 +516,27 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await refreshWals();
   }
 
-  Future<void> syncWals() async {
-    if (SyncRateLimiter.instance.isLimited) {
-      notifyListeners();
+  /// Clears every local recording category. Unlike the retryable Pending
+  /// action, this deliberately includes terminally corrupted phone WALs.
+  Future<void> deleteAllClearableWals() async {
+    final syncs = _walService.getSyncs();
+    await syncs.deleteAllSyncedWals();
+    await syncs.deleteAllPendingWals();
+    await syncs.deleteAllCorruptedWals();
+    await refreshWals();
+  }
+
+  Future<void> syncWals({WakeTrigger trigger = WakeTrigger.userRetry}) async {
+    if (_startBackgroundSync) {
+      await _wakeTransfer(trigger);
       return;
     }
-    _cancelAutoUploadIfNeeded();
+    await _syncWalsDirect();
+  }
+
+  Future<void> _syncWalsDirect() async {
+    await _uploadGate.prepareToUpload();
+    if (_isDisposed) return;
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
     _walsProcessedCount = 0;
@@ -421,23 +547,42 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWal(Wal wal) async {
-    if (SyncRateLimiter.instance.isLimited) {
-      notifyListeners();
+    // UI Sync/Auto Sync still call syncWal for a single row, but must not
+    // race a coordinator drain (or device download) on the same WAL stack.
+    if (_startBackgroundSync && _isTransferSeamBusy()) {
+      await _wakeTransfer(WakeTrigger.userRetry);
       return;
     }
-    _cancelAutoUploadIfNeeded();
+    await _uploadGate.prepareToUpload();
+    if (_isDisposed) return;
     _updateSyncState(_syncState.toIdle());
-    await _performSync(
+    final result = await _performSync(
       operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this),
       context: 'sync WAL ${wal.id}',
       failedWal: wal,
     );
+    // A 202 leaves the WAL `uploaded` — wake the single owner so reconcile
+    // is scheduled (do not poke SyncReconciler here). Soft-retry failures wake
+    // from _performSync itself; do not double-wake here.
+    if (result != null &&
+        result.localUploadFailures == 0 &&
+        result.localUploadPermanentFailures == 0 &&
+        _startBackgroundSync) {
+      unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
+    }
   }
 
-  Future<void> _performSync({
+  bool _isTransferSeamBusy() {
+    if (_syncState.isProcessing) return true;
+    final syncs = _walService.getSyncs();
+    return syncs.isStorageSyncing == true || syncs.isSdCardSyncing == true;
+  }
+
+  Future<SyncLocalFilesResponse?> _performSync({
     required Future<SyncLocalFilesResponse?> Function() operation,
     required String context,
     Wal? failedWal,
+    bool rethrowOnError = false,
   }) async {
     try {
       _updateSyncState(_syncState.toSyncing());
@@ -459,9 +604,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       // If sync was cancelled while awaiting, don't override the cancel state.
       // cancelSync() already processed any partial conversation results.
       if (!_syncState.isSyncing && _syncState.status != SyncStatus.fetchingConversations) {
-        return;
+        return result;
       }
 
+      // Process successful conversation IDs even when other batches failed —
+      // localUploadFailures must not discard completed results.
       if (result != null && _hasConversationResults(result)) {
         Logger.debug(
           'SyncProvider: $context returned ${result.newConversationIds.length} new, ${result.updatedConversationIds.length} updated conversations',
@@ -471,14 +618,47 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           'updatedConversations': result.updatedConversationIds.length,
         });
         await _processConversationResults(result);
-      } else {
+      } else if ((result?.localUploadFailures ?? 0) == 0) {
         DebugLogManager.logInfo('SyncProvider: $context completed with no new conversations');
         _updateSyncState(_syncState.toCompleted(conversations: []));
       }
-      // Uploads just finished — recordings are now `uploaded`. Kick the
-      // reconciler so their conversations stream in without the user waiting.
-      SyncReconciler.instance.poke();
+
+      // Client-side upload aborts (leave/background mid-multipart, #4587) leave
+      // WALs as `miss`. Soft-retry only when failures are transient; permanent
+      // server refusals (400/413) still surface SyncStatus.error.
+      final permanentFailures = result?.localUploadPermanentFailures ?? 0;
+      final localFailures = result?.localUploadFailures ?? 0;
+      if (permanentFailures > 0) {
+        final hint = result?.localUploadPermanentError;
+        final errorMessage = _formatSyncError(
+          hint != null ? Exception(hint) : Exception('Upload failed unexpectedly'),
+          failedWal,
+        );
+        DebugLogManager.logWarning('SyncProvider: $context had $permanentFailures permanent local upload failure(s)');
+        _updateSyncState(_syncState.toError(message: errorMessage, failedWal: failedWal));
+      } else if (localFailures > 0) {
+        DebugLogManager.logWarning(
+          'SyncProvider: $context had $localFailures transient local upload failure(s); re-arming recovery',
+        );
+        _updateSyncState(_syncState.toIdle());
+        // Coordinator drains use rethrowOnError and schedule their own cooldown
+        // via RecordingTransferCoordinator._runPass — do not double-wake here.
+        if (_startBackgroundSync && !rethrowOnError) {
+          unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
+        }
+      }
+      return result;
     } catch (e) {
+      if (isTransientNetworkError(e)) {
+        DebugLogManager.logWarning('SyncProvider: $context hit transient network error; re-arming recovery: $e');
+        _updateSyncState(_syncState.toIdle());
+        // Wake only for direct/manual calls; coordinator owns retry scheduling.
+        if (_startBackgroundSync && !rethrowOnError) {
+          unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
+        }
+        if (rethrowOnError) rethrow;
+        return null;
+      }
       final errorMessage = _formatSyncError(e, failedWal);
       Logger.debug('SyncProvider: Error in $context: $errorMessage');
       DebugLogManager.logError(e, null, 'SyncProvider: $context failed: $errorMessage', {
@@ -486,6 +666,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         if (failedWal != null) 'walStorage': failedWal.storage.toString(),
       });
       _updateSyncState(_syncState.toError(message: errorMessage, failedWal: failedWal));
+      if (rethrowOnError) rethrow;
+      return null;
     }
   }
 
@@ -505,7 +687,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } else if (baseMessage.toLowerCase().contains('temporarily unavailable')) {
       baseMessage = 'Server is temporarily unavailable. Try again later';
     } else if (baseMessage.toLowerCase().contains('upload failed')) {
-      baseMessage = 'Upload failed. Check your connection and try again';
+      // Keep state locale-neutral; the sync pages resolve this code through
+      // AppLocalizations at render time.
+      return pendingUploadErrorCode;
     }
 
     if (wal != null) {
@@ -518,11 +702,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> retrySync() async {
+    if (_startBackgroundSync) {
+      await _wakeTransfer(WakeTrigger.userRetry);
+      return;
+    }
     final failedWal = _syncState.failedWal;
     if (failedWal != null) {
       await syncWal(failedWal);
     } else {
-      await syncWals();
+      await _syncWalsDirect();
     }
   }
 
@@ -546,9 +734,37 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       newConversationIds: result.newConversationIds,
       updatedConversationIds: result.updatedConversationIds,
     );
-    _updateSyncState(_syncState.toCompleted(conversations: conversations));
-    // Refresh WAL list so home screen cloud icon updates (clears synced WALs)
+    // Refresh WAL list so we can filter "synced" conversations to only those
+    // whose WALs have been reconciled to WalStatus.synced.
     await refreshWals();
+    final filtered = filterFullySyncedConversations(conversations: conversations, wals: _allWals);
+    _updateSyncState(_syncState.toCompleted(conversations: filtered));
+  }
+
+  /// Filters "synced" conversation pointers down to only those conversations
+  /// whose associated WALs have been fully reconciled (`WalStatus.synced`).
+  ///
+  /// This prevents UI states like "synced OK" from showing up while some
+  /// recordings are still left in an uploaded/pending state (issue #7240).
+  @visibleForTesting
+  static List<SyncedConversationPointer> filterFullySyncedConversations({
+    required List<SyncedConversationPointer> conversations,
+    required List<Wal> wals,
+  }) {
+    final byConversationId = <String, List<Wal>>{};
+    for (final wal in wals) {
+      final id = wal.conversationId;
+      if (id == null) continue;
+      (byConversationId[id] ??= <Wal>[]).add(wal);
+    }
+
+    bool isFullySynced(SyncedConversationPointer pointer) {
+      final walsForConversation = byConversationId[pointer.conversation.id] ?? const <Wal>[];
+      if (walsForConversation.isEmpty) return true; // No local WALs → nothing pending.
+      return walsForConversation.every((w) => w.status == WalStatus.synced);
+    }
+
+    return conversations.where(isFullySynced).toList();
   }
 
   // Audio playback delegate methods
@@ -666,8 +882,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       _updateSyncState(_syncState.toIdle());
     }
     // Cancel only stops further uploads. Recordings already `uploaded` are
-    // safe on the server — keep reconciling them.
-    SyncReconciler.instance.poke();
+    // safe on the server — keep reconciling them through the single owner.
+    unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
   }
 
   /// Transfer a single WAL from device storage (SD card or flash page) to phone storage
@@ -707,9 +923,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   @override
   void dispose() {
     _isDisposed = true;
-    _autoUploadTimer?.cancel();
-    _autoUploadTimer = null;
     _audioPlayerUtils.removeListener(_onAudioPlayerStateChanged);
+    SyncRateLimiter.instance.removeListener(_onRateLimiterChanged);
     WaveformUtils.clearCache();
     _walService.unsubscribe(this);
     super.dispose();

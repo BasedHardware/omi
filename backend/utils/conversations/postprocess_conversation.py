@@ -12,6 +12,7 @@ from database.users import get_user_store_recording_permission
 from models.conversation import Conversation
 from models.conversation_enums import PostProcessingStatus
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations import lifecycle as lifecycle_service
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation, process_user_emotion
 from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio, upload_conversation_recording
@@ -21,6 +22,13 @@ from utils.stt.vad import vad_is_empty
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _minimum_audio_duration(transcript_segments: List[TranscriptSegment]) -> float:
+    if not transcript_segments:
+        return 10.0
+    transcript_duration = transcript_segments[-1].end - transcript_segments[0].start
+    return max(10.0, transcript_duration - 10.0)
 
 
 # TODO: this pipeline vs groq+pyannote diarization 3.1, probably the latter is better.
@@ -47,9 +55,8 @@ def postprocess_conversation(
         return 400, "Conversation can't be post-processed again"
 
     aseg = AudioSegment.from_wav(file_path)
-    if (
-        aseg.duration_seconds < 10
-    ):  # TODO: validate duration more accurately, segment.last.end - segment.first.start - 10
+
+    if aseg.duration_seconds < _minimum_audio_duration(conversation.transcript_segments):
         # TODO: fix app, sometimes audio uploaded is wrong, is too short.
         logger.info('postprocess_conversation: Audio duration is too short, seems wrong.')
         conversations_db.set_postprocessing_status(uid, conversation.id, PostProcessingStatus.canceled)
@@ -103,8 +110,8 @@ def postprocess_conversation(
         if not fal_failed:
             conversation.transcript_segments = fal_segments
 
-        conversations_db.upsert_conversation(
-            uid, conversation.dict()
+        lifecycle_service.persist_processed_conversation(
+            uid, conversation.model_dump()
         )  # Store transcript segments at least if smth fails later
         if fal_failed:
             # TODO: FAL fails too much and is fucking expensive. Remove it.
@@ -162,7 +169,7 @@ async def _process_user_emotion(uid: str, language_code: str, conversation: Conv
 
 def _handle_segment_embedding_matching(uid: str, file_path: str, segments: List[TranscriptSegment], aseg: AudioSegment):
     if aseg.frame_rate == 16000:
-        matches = get_speech_profile_matching_predictions(uid, file_path, [s.dict() for s in segments])
+        matches = get_speech_profile_matching_predictions(uid, file_path, [s.model_dump() for s in segments])
         for i, segment in enumerate(segments):
             segment.is_user = matches[i]['is_user']
             segment.person_id = matches[i].get('person_id')

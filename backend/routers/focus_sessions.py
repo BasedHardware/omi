@@ -5,6 +5,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
+from models.focus_session import FocusSession, FocusStats
+from models.shared import StatusResponse
 import database.focus_sessions as focus_sessions_db
 import database.screen_activity as screen_activity_db
 from utils.other import endpoints as auth
@@ -31,7 +33,7 @@ class CreateFocusSessionRequest(BaseModel):
 # ============================================================================
 
 
-@router.post('/v1/focus-sessions', tags=['focus-sessions'])
+@router.post('/v1/focus-sessions', tags=['focus-sessions'], response_model=FocusSession)
 def create_focus_session(
     request: CreateFocusSessionRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -46,7 +48,7 @@ def create_focus_session(
     )
 
 
-@router.get('/v1/focus-sessions', tags=['focus-sessions'])
+@router.get('/v1/focus-sessions', tags=['focus-sessions'], response_model=list[FocusSession])
 def get_focus_sessions(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
@@ -57,7 +59,7 @@ def get_focus_sessions(
     return focus_sessions_db.get_focus_sessions(uid, limit=limit, offset=offset, date=date)
 
 
-@router.delete('/v1/focus-sessions/{session_id}', tags=['focus-sessions'])
+@router.delete('/v1/focus-sessions/{session_id}', tags=['focus-sessions'], response_model=StatusResponse)
 def delete_focus_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
@@ -66,7 +68,7 @@ def delete_focus_session(
     return {'status': 'ok'}
 
 
-@router.get('/v1/focus-stats', tags=['focus-sessions'])
+@router.get('/v1/focus-stats', tags=['focus-sessions'], response_model=FocusStats)
 def get_focus_stats(
     date: str | None = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
     uid: str = Depends(auth.get_current_user_uid),

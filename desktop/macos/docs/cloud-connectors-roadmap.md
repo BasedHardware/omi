@@ -6,9 +6,12 @@ and no API** — ChatGPT (custom connector / developer mode) and Claude
 [integrations-philosophy.md](./integrations-philosophy.md) §1 and is not covered
 here.
 
-**Status (July 2026):** assisted-first. Autonomous setup for these two is
-**parked**, not abandoned — this doc is the plan for bringing it back on a
-sounder foundation, and for making it unnecessary altogether.
+**Status (July 2026):** ChatGPT is directory-first: Desktop opens Omi’s
+approved ChatGPT listing and reads the user’s existing OAuth grant on return.
+The developer-mode custom-app fields remain an advanced fallback. Claude is
+still assisted-first. Autonomous setup remains **parked**, not abandoned — this
+doc is the plan for bringing it back on a sounder foundation where a directory
+is not available.
 
 ---
 
@@ -31,9 +34,9 @@ and they failed differently:
 Conclusion per the philosophy doc: stop tuning heuristics on surfaces we don't
 own. Make the deterministic 90% ours, hand the user the last click.
 
-## Phase 1 — Assisted-first (SHIPPED with this doc)
+## Phase 1 — Assisted-first (Claude, and ChatGPT fallback)
 
-"Do it for me" for ChatGPT/Claude now:
+"Do it for me" for Claude — and the optional ChatGPT developer-mode fallback — now:
 
 1. opens the provider deep link in the default browser,
 2. shows an on-screen card with **one copy button per field**
@@ -72,21 +75,20 @@ data (§6), every run captures a sanitized trace for the eval corpus (§7), and
 completion is gated on the functional probe. When this lands, delete
 `CloudConnectorFormAutomation` rather than extending it.
 
-## Phase 3 — Get out of category 3 entirely (STRATEGIC)
+## Phase 3 — Get out of category 3 entirely
 
 The real fix is distribution, not automation:
 
 - **Anthropic connector directory**: get Omi Memory listed so Claude users
   click "Connect" in the directory and do a standard OAuth consent. No form,
   no automation.
-- **OpenAI Apps SDK**: ship Omi Memory as a ChatGPT app for the same one-click
-  flow — also removes the developer-mode/plan gate for end users.
+- **OpenAI Apps SDK (SHIPPED):** Omi is listed as a ChatGPT app. Desktop opens
+  the directory listing directly and verifies the resulting OAuth grant after
+  the user returns.
 
 The backend is already shaped for this (`backend/routers/mcp_sse.py` supports
-public PKCE clients and per-provider callback allowlisting); the remaining work
-is mostly the submission/review process. Start the applications early — the
-timeline is the providers', not ours. Once listed, Phases 1–2 become the
-fallback for users outside the directories.
+public PKCE clients and per-provider callback allowlisting). Once listed,
+Phases 1–2 become the fallback for users outside the directories.
 
 ## How to pick up this work
 

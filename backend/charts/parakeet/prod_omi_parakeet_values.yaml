@@ -100,10 +100,14 @@ env:
     value: "nemo"
   - name: PARAKEET_MAX_SPEECH_S
     value: "5"
+  - name: PARAKEET_STREAM_CAPACITY
+    value: "25"
+  - name: PARAKEET_STREAM_ALLOCATION_PERCENT
+    value: "100"
   - name: PARAKEET_TORCH_COMPILE
     value: "true"
   - name: PARAKEET_CUDA_GRAPHS
-    value: "true"
+    value: "false"
   - name: PARAKEET_ATTENTION_MODE
     value: "auto"
   - name: PARAKEET_AUTO_ATTN_THRESHOLD
@@ -141,16 +145,17 @@ resources:
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
-  tcpSocket:
+  httpGet:
+    path: /health
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 3
   periodSeconds: 10
 
 readinessProbe:
   httpGet:
     path: /health
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 1
   periodSeconds: 10
 
 startupProbe:
@@ -193,7 +198,7 @@ autoscaling:
       - type: Pods
         value: 1
         periodSeconds: 600
-  requestsPerPod: 25
+  requestsPerPod: 20
   targetGPUUtilization: 70
 
 # Additional volumes on the output Deployment definition.

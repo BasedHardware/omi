@@ -70,6 +70,9 @@ class TestShouldDeferDesktopProcessing:
     def _sub_with_plan(self, plan):
         s = MagicMock()
         s.plan = plan
+        # Model an ordinary post-policy Neo renewal. A missing period-start is
+        # intentionally grandfathered by production code for webhook safety.
+        s.current_period_start = self._sub.NEO_DESKTOP_GRANDFATHER_CUTOFF + 1
         return s
 
     def test_basic_plan_is_deferred(self):

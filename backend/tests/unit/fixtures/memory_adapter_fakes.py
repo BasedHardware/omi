@@ -4,11 +4,24 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
+from models import memory_search_gateway
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_search_gateway import SearchVectorHit
-from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState
+from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState, is_default_access_eligible
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
+
+MEMORY_ADAPTER_FIXTURE_NOW = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+
+
+def freeze_default_vector_eligibility_clock(monkeypatch, *, now: datetime = MEMORY_ADAPTER_FIXTURE_NOW) -> None:
+    """Keep vector hydration's default eligibility check on the fixture clock."""
+    fixture_now = now
+
+    def _fixture_default_access_eligible(item, policy, *, now: datetime | None = None):
+        evaluation_now = fixture_now if now is None else now
+        return is_default_access_eligible(item, policy, now=evaluation_now)
+
+    monkeypatch.setattr(memory_search_gateway, "is_default_access_eligible", _fixture_default_access_eligible)
 
 
 class Snapshot:
@@ -93,7 +106,7 @@ def memory_item(
     quote_text: str,
     **overrides,
 ) -> MemoryItem:
-    now = now or datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = now or MEMORY_ADAPTER_FIXTURE_NOW
     captured_at = captured_at or (now - timedelta(days=1))
     data = {
         "memory_id": memory_id,
@@ -101,7 +114,7 @@ def memory_item(
         "version": 1,
         "tier": tier,
         "status": MemoryItemStatus.active,
-        "processing_state": ProcessingState.pending if tier == MemoryTier.short_term else ProcessingState.processed,
+        "processing_state": ProcessingState.processed,
         "content": content or f"{memory_id} coffee preference",
         "evidence": [evidence(f"{memory_id}-source", quote_text=quote_text)],
         "source_state": SourceState.active,
@@ -128,11 +141,14 @@ def stored_item(item: MemoryItem) -> dict:
     return item.model_dump(mode="json")
 
 
-def vector_hit(item: MemoryItem, *, score, projection_commit_id="projection-1") -> SearchVectorHit:
+def vector_hit(item: MemoryItem, *, score, projection_commit_id=None) -> SearchVectorHit:
+    authoritative_projection_commit_id = projection_commit_id
+    if authoritative_projection_commit_id is None:
+        authoritative_projection_commit_id = item.ledger_commit_id or "projection-1"
     return SearchVectorHit(
         memory_id=item.memory_id,
         score=score,
-        projection_commit_id=projection_commit_id,
+        projection_commit_id=authoritative_projection_commit_id,
         vector_updated_at=item.updated_at + timedelta(minutes=1),
         uid=item.uid,
         account_generation=item.account_generation,
@@ -146,19 +162,8 @@ def enabled_rollout_doc(uid: str = "u1", *, grant_consumer: str) -> dict:
     return {
         "schema_version": 1,
         "uid": uid,
-        "mode": MemoryRolloutMode.read.value,
-        "mode_epoch": 7,
-        "cutover_epoch": 7,
         "account_generation": 3,
         "vector_projection_commit_id": "projection-1",
-        "fallback_projection_ready": True,
-        "persistent_memory_writes_started": True,
-        "writes_blocked": False,
-        "stage_gates": {
-            MemoryRolloutStageGate.shadow.value: PASSED,
-            MemoryRolloutStageGate.write.value: PASSED,
-            MemoryRolloutStageGate.read.value: PASSED,
-        },
         "grants": {
             grant_consumer: {
                 "default_memory": True,

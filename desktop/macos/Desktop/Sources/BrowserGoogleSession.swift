@@ -1,14 +1,18 @@
 import Darwin
 import Foundation
+import LocalAuthentication
+import Security
 
 struct BrowserGoogleSession: Equatable {
   let browserName: String
   let keychainService: String
+  let keychainAccount: String
   let cookiePath: String
 
   static let chromiumCookiePythonSupport = """
     import sys, json, os, sqlite3, hashlib, time
     from http.cookiejar import MozillaCookieJar, Cookie
+    from urllib.request import Request
 
     try:
         from Crypto.Cipher import AES
@@ -51,6 +55,11 @@ struct BrowserGoogleSession: Equatable {
                 continue
             enc = bytes(enc) if not isinstance(enc, bytes) else enc
             value = None
+            # Cookie values are octet strings and are sent back verbatim in the
+            # Latin-1 HTTP Cookie header. Decode them as Latin-1 (a 1:1 byte<->char
+            # map, so value.encode('latin-1') reproduces the exact bytes). Using
+            # utf-8 with errors='replace' corrupted non-utf-8 values into U+FFFD,
+            # which then failed to encode into the Latin-1 request header.
             if enc[:3] in (b'v10', b'v11'):
                 ciphertext = enc[3:]
                 try:
@@ -64,12 +73,21 @@ struct BrowserGoogleSession: Equatable {
                         decrypted = decrypted[:-pad_len]
                     if db_version >= 24 and len(decrypted) > 32:
                         decrypted = decrypted[32:]
-                    value = decrypted.decode('utf-8', errors='replace')
+                    value = decrypted.decode('latin-1')
                 except Exception:
                     continue
+            elif enc[:1] == b'v' and enc[1:3].isdigit():
+                # Versioned but not v10/v11 (e.g. v20 app-bound, or a newer macOS
+                # scheme whose key lives in iCloud Keychain). We can't decrypt it, so
+                # skip it — never fall through to the plaintext branch below, which
+                # would emit the raw ciphertext as a garbage "cookie" value.
+                # ponytail: deliberately no v20/app-bound decoder (YAGNI on macOS
+                # today). Ceiling: these browsers silently contribute no cookies;
+                # upgrade path is Google OAuth, not a per-version scraper.
+                continue
             elif enc:
                 try:
-                    value = enc.decode('utf-8', errors='replace')
+                    value = enc.decode('latin-1')
                 except Exception:
                     continue
             if value:
@@ -98,6 +116,24 @@ struct BrowserGoogleSession: Equatable {
             jar.set_cookie(cookie)
         return jar
 
+    def cookie_value_for_request(jar, url, names):
+        # A Chromium profile can keep same-named Google cookies with different
+        # host scopes. Derive the value from the exact Cookie header this jar
+        # would send to `url`; querying the decrypted SQLite rows directly is
+        # unordered and can select a cookie Google will not receive.
+        request = Request(url)
+        jar.add_cookie_header(request)
+        cookie_header = request.get_header('Cookie') or ''
+        values = {}
+        for item in cookie_header.split(';'):
+            name, separator, value = item.strip().partition('=')
+            if separator and name not in values:
+                values[name] = value
+        for name in names:
+            if name in values:
+                return values[name]
+        return None
+
     def write_json_result(prefix, payload):
         import tempfile
         fd, outfile = tempfile.mkstemp(suffix='.json', prefix=prefix)
@@ -109,7 +145,7 @@ struct BrowserGoogleSession: Equatable {
   static func all() -> [BrowserGoogleSession] {
     let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
     return BrowserAutomationTargetResolver.knownTargets.flatMap { target in
-      guard let keychainService = keychainService(for: target) else {
+      guard let keychainIdentity = keychainIdentity(for: target) else {
         return [BrowserGoogleSession]()
       }
       let userDataPath = target.profileRoot(homeDirectory: homeDirectory).path
@@ -123,17 +159,32 @@ struct BrowserGoogleSession: Equatable {
         let browserName = profileName == "Default" ? target.name : "\(target.name) (\(profileName))"
         return BrowserGoogleSession(
           browserName: browserName,
-          keychainService: keychainService,
+          keychainService: keychainIdentity.service,
+          keychainAccount: keychainIdentity.account,
           cookiePath: cookiePath
         )
       }
     }
   }
 
-  static func configsForPython(logPrefix: String) -> [[String: String]] {
+  /// Resolve browser cookie stores for a connector operation.
+  ///
+  /// Browser Safe Storage is another app's Keychain item. Background work must
+  /// never turn a missing ACL into a macOS password sheet, so callers must
+  /// explicitly opt in when the user just requested a Gmail/Calendar read.
+  static func configsForPython(
+    logPrefix: String,
+    userInitiated: Bool = false
+  ) -> [[String: String]] {
     all().compactMap { session in
       guard FileManager.default.fileExists(atPath: session.cookiePath) else { return nil }
-      guard let password = BrowserKeychainCache.shared.password(for: session.keychainService) else {
+      guard
+        let password = BrowserKeychainCache.shared.password(
+          for: session.keychainService,
+          account: session.keychainAccount,
+          userInitiated: userInitiated
+        )
+      else {
         log("\(logPrefix): No keychain password for \(session.browserName)")
         return nil
       }
@@ -154,7 +205,8 @@ struct BrowserGoogleSession: Equatable {
       .compactMap { entry -> (name: String, path: String)? in
         var isDirectory: ObjCBool = false
         let profilePath = "\(userDataPath)/\(entry)"
-        guard fm.fileExists(atPath: profilePath, isDirectory: &isDirectory), isDirectory.boolValue else {
+        guard fm.fileExists(atPath: profilePath, isDirectory: &isDirectory), isDirectory.boolValue
+        else {
           return nil
         }
         let networkCookies = "\(profilePath)/Network/Cookies"
@@ -179,37 +231,51 @@ struct BrowserGoogleSession: Equatable {
       .filter { fm.fileExists(atPath: $0) }
   }
 
-  private static func keychainService(for target: BrowserAutomationTarget) -> String? {
+  static func keychainIdentity(for target: BrowserAutomationTarget) -> (
+    service: String, account: String
+  )? {
     switch target.bundleIdentifier {
     case "company.thebrowser.Browser":
-      return "Arc Safe Storage"
+      return ("Arc Safe Storage", "Arc")
     case "com.google.Chrome", "com.google.Chrome.beta", "com.google.Chrome.canary",
       "com.openai.atlas":
-      return "Chrome Safe Storage"
+      return ("Chrome Safe Storage", "Chrome")
     case "com.brave.Browser", "com.brave.Browser.beta", "com.brave.Browser.nightly":
-      return "Brave Safe Storage"
+      return ("Brave Safe Storage", "Brave")
     case "com.microsoft.edgemac", "com.microsoft.edgemac.Beta", "com.microsoft.edgemac.Dev",
       "com.microsoft.edgemac.Canary":
-      return "Microsoft Edge Safe Storage"
+      return ("Microsoft Edge Safe Storage", "Microsoft Edge")
     case "com.operasoftware.Opera", "com.operasoftware.OperaGX":
-      return "Opera Safe Storage"
+      return ("Opera Safe Storage", "Opera")
     case "org.chromium.Chromium":
-      return "Chromium Safe Storage"
+      return ("Chromium Safe Storage", "Chromium")
     case "com.vivaldi.Vivaldi":
-      return "Vivaldi Safe Storage"
+      return ("Vivaldi Safe Storage", "Vivaldi")
     default:
       return nil
     }
   }
 }
 
-/// Settled browser Safe Storage strategy for Chromium cookie scraping.
+/// Browser Safe Storage strategy for Chromium cookie scraping.
 ///
-/// We use `/usr/bin/security find-generic-password -w` instead of
-/// `SecItemCopyMatching` because the CLI path matches the browser-created
-/// generic-password item and lets macOS remember the user's "Always Allow"
-/// decision. The in-memory cache coalesces concurrent reads during this app run;
-/// we do not duplicate browser Safe Storage secrets into app preferences.
+/// Primary path: read the browser-created generic-password item in-process via
+/// `SecItemCopyMatching`. macOS attributes the keychain prompt to the *requesting
+/// process*, so the in-process read shows "<this app> wants to access …" — the app
+/// identity the user must recognize before granting — instead of "security wants to
+/// access …" (which is what shelling out to `/usr/bin/security` produced).
+///
+/// An explicit user-requested read may require approval. For a stably signed app,
+/// choosing "Always Allow" lets macOS add this app's code-signing identity and
+/// partition ID to the item's ACL, so later reads can proceed without another prompt.
+/// Background probes use a non-interactive authentication context and fail closed;
+/// they never turn a missing grant into a password sheet. We intentionally do not
+/// retry through `/usr/bin/security`: that would attribute any second prompt to the
+/// CLI and persist access for the wrong requester.
+///
+/// The in-memory cache below coalesces concurrent explicit reads within a single app
+/// run; passive callers cannot consume either a cached secret or the Keychain item.
+/// We do not duplicate browser Safe Storage secrets into app preferences.
 final class BrowserKeychainCache: @unchecked Sendable {
   static let shared = BrowserKeychainCache()
 
@@ -226,33 +292,99 @@ final class BrowserKeychainCache: @unchecked Sendable {
     UserDefaults.standard.removeObject(forKey: "cachedBrowserKeychainPasswords")
   }
 
-  func password(for service: String) -> String? {
-    password(for: service) {
-      let process = Process()
-      process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-      process.arguments = ["find-generic-password", "-s", service, "-w"]
-      let pipe = Pipe()
-      let errPipe = Pipe()
-      process.standardOutput = pipe
-      process.standardError = errPipe
-      do {
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { return nil }
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-          .trimmingCharacters(in: .whitespacesAndNewlines)
-        return output?.isEmpty == false ? output : nil
-      } catch {
-        return nil
-      }
+  /// Start a new explicit connector operation. A denied Safe Storage read is
+  /// sticky for the operation so scanning several browser profiles cannot
+  /// produce one password sheet per profile, but a later user action may try
+  /// again once.
+  func beginUserInitiatedOperation() {
+    lock.lock()
+    cache = cache.filter { _, entry in
+      if case .missing = entry { return false }
+      return true
+    }
+    lock.unlock()
+  }
+
+  func password(for service: String, account: String, userInitiated: Bool = false) -> String? {
+    password(for: "\(service)\u{0}\(account)", userInitiated: userInitiated) {
+      Self.nativeSafeStoragePassword(
+        for: service,
+        account: account,
+        userInitiated: userInitiated
+      )
     }
   }
 
-  func password(for service: String, loader: () -> String?) -> String? {
+  static func safeStorageQuery(
+    service: String,
+    account: String,
+    userInitiated: Bool = false
+  ) -> [String: Any] {
+    var query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account,
+      kSecReturnData as String: true,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+    ]
+    if !userInitiated {
+      let context = LAContext()
+      context.interactionNotAllowed = true
+      query[kSecUseAuthenticationContext as String] = context
+      // Browser Safe Storage is a foreign app's file-based Keychain item. The
+      // LAContext is the preferred silent-auth mechanism, but macOS can still
+      // consult a TrustedApplication ACL and show the login-keychain sheet for
+      // these items. Skip authentication UI explicitly for background probes.
+      query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUISkip
+    }
+    return query
+  }
+
+  /// Reads the browser Safe Storage key in-process so the prompt and any durable
+  /// "Always Allow" grant belong to this app rather than `/usr/bin/security`.
+  private static func nativeSafeStoragePassword(
+    for service: String,
+    account: String,
+    userInitiated: Bool
+  ) -> String? {
+    // A background connector probe may discover a browser profile, but it must
+    // fail closed rather than ask for the login keychain password. An explicit
+    // import/read passes userInitiated=true and may show the normal one-time
+    // consent sheet.
+    let query = safeStorageQuery(
+      service: service,
+      account: account,
+      userInitiated: userInitiated
+    )
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(
+      query as CFDictionary,
+      &item
+    )
+    guard status == errSecSuccess,
+      let data = item as? Data,
+      let password = String(data: data, encoding: .utf8),
+      !password.isEmpty
+    else {
+      return nil
+    }
+    return password
+  }
+
+  func password(
+    for cacheKey: String,
+    userInitiated: Bool = false,
+    loader: () -> String?
+  ) -> String? {
+    // A previous explicit grant is not consent for a later background browser
+    // scrape. Keep the purpose boundary at the cache itself so every caller,
+    // including Gmail and Calendar verification, fails closed consistently.
+    guard userInitiated else { return nil }
+
     loop: while true {
       lock.lock()
 
-      if let cached = cache[service] {
+      if let cached = cache[cacheKey] {
         lock.unlock()
         switch cached {
         case .found(let password): return password
@@ -260,7 +392,7 @@ final class BrowserKeychainCache: @unchecked Sendable {
         }
       }
 
-      if let group = inFlight[service] {
+      if let group = inFlight[cacheKey] {
         lock.unlock()
         group.wait()
         continue loop
@@ -268,18 +400,20 @@ final class BrowserKeychainCache: @unchecked Sendable {
 
       let group = DispatchGroup()
       group.enter()
-      inFlight[service] = group
+      inFlight[cacheKey] = group
       lock.unlock()
 
       let password = loader()
 
       lock.lock()
       if let password {
-        cache[service] = .found(password)
-      } else {
-        cache[service] = .missing
+        cache[cacheKey] = .found(password)
+      } else if userInitiated {
+        // Cache an explicit denial for this run, but never cache a background
+        // non-interactive miss: a later user action must still be able to ask.
+        cache[cacheKey] = .missing
       }
-      let completedGroup = inFlight.removeValue(forKey: service)
+      let completedGroup = inFlight.removeValue(forKey: cacheKey)
       lock.unlock()
 
       completedGroup?.leave()
@@ -287,9 +421,9 @@ final class BrowserKeychainCache: @unchecked Sendable {
     }
   }
 
-  func invalidate(service: String) {
+  func invalidate(cacheKey: String) {
     lock.lock()
-    cache.removeValue(forKey: service)
+    cache.removeValue(forKey: cacheKey)
     lock.unlock()
   }
 }

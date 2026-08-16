@@ -1,0 +1,11 @@
+{
+  "version": "0.12.32",
+  "date": "2026-07-06",
+  "changes": [
+    "Screen capture now starts within seconds of launch instead of staying paused for 30-60 seconds",
+    "Fixed the macOS app repeatedly requesting Screen Recording permission on launch when it has not been granted",
+    "Improved desktop credential protection by storing production sign-in tokens and local agent tokens in Keychain and requiring authentication for local automation controls",
+    "Made opening settings from the floating bar and focusing the follow-up input more reliable",
+    "Fixed chat sign-in recovery so expired desktop sessions refresh or reopen the real Google sign-in flow instead of only visiting the Omi home page."
+  ]
+}

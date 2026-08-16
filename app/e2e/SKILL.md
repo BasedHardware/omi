@@ -39,6 +39,36 @@ agent-flutter snapshot -i --json    # see what's on screen
 - **App must be authenticated and connected to the correct backend** (local, dev, or prod — depends on the task)
 - Marionette already integrated: `marionette_flutter: ^0.3.0` in pubspec.yaml
 
+### Setup (iOS physical device)
+
+Full iOS physical-device playbook (setup, driving, verification, troubleshooting): [`IOS_DEVICE_TESTING.md`](./IOS_DEVICE_TESTING.md).
+
+Verified 2026-07-11 on an iPhone XR (iOS 18.7.9), app 1.0.543, prod-flavor debug build, agent-flutter CLI + marionette MCP. iOS Simulator has no BLE — use a physical device for anything beyond onboarding/UI checks (see also iOS Simulator Known Limitations below).
+
+```bash
+# 1. Get the physical device id
+flutter devices
+
+# 2. Run in debug mode with stdout captured — prod flavor (dev flavor can fail codesigning on a
+#    fresh worktree: "provisioning profile doesn't support the App Groups capability")
+cd app && flutter run -d <device-id> --flavor prod > /tmp/omi-flutter.log 2>&1 &
+# Wait for "A Dart VM Service ... is available" in the log
+
+# 3. Connect agent-flutter — auto-detects the ws URI from the log
+AGENT_FLUTTER_LOG=/tmp/omi-flutter.log agent-flutter connect
+agent-flutter snapshot -i --json
+```
+
+**Gotchas:**
+- **Fresh git worktrees need real prod config seeded from the primary checkout** before building the `prod` flavor: copy `app/.env`, `app/lib/firebase_options_prod.dart`, `app/ios/Config/Prod/GoogleService-Info.plist`, `app/lib/env/prod_env.g.dart`. The `test.sh` bootstrap seeds dev-placeholder versions that point at the wrong Firebase project.
+- **adb-backed commands do NOT work on iOS**: `back`, `press x y`, `dismiss`, `text --press`, `text --fill`. Use in-app back buttons (find the top-left `IconButton` ref) and marionette ref presses only.
+- **`fill @ref` can silently no-op on keyless `TextField`s on iOS** — it reports success but the controller stays empty. Verify via the marionette MCP `get_interactive_elements` (shows the `TextEditingController` contents). Durable fix: add a `ValueKey` to the field, hot reload (sheet state survives), then enter text by key.
+- **`snapshot` labels are empty with `marionette_flutter` 0.3.0** on iOS. Primary orientation/assertion tool is `agent-flutter text` (semantic text dump) — assert outcomes by text presence (e.g. the copy snackbar text). Target elements by type + bounds from `snapshot -i`.
+- `agent-flutter screenshot` output path must be under `/tmp`.
+- Check behavior via the run log: `grep -iE 'exception|error' /tmp/omi-flutter.log` after each flow. A `PlatformException` 4001 (Intercom push token, notifications not granted) is benign.
+- iOS terminates the debug connection if the app is backgrounded/locked too long ("The OS has terminated the Flutter debug connection for being inactive") — keep the device unlocked; reconnecting requires relaunching `flutter run`.
+- General key guidance (same as Android): prefer `find key "name"`; when a control can't be targeted, add a `ValueKey` in source + hot reload rather than fighting coordinates.
+
 ### Commands
 
 | Command | Purpose | Example |
@@ -62,6 +92,7 @@ agent-flutter snapshot -i --json    # see what's on screen
 - `AGENT_FLUTTER_LOG` must point to `flutter run` stdout (not logcat).
 - After hot restart: `disconnect` → wait 3s → `connect`.
 - Widget text labels are often null — use `type`, `flutterType`, or `bounds` to identify.
+- `back`, `press x y`, `dismiss`, and the `--adb`/`--press`/`--fill` text flags are ADB-backed — Android only. On a physical iOS device use marionette ref-based commands instead (see Setup (iOS physical device) above).
 
 ### Recovery
 ```bash
@@ -78,95 +109,115 @@ sleep 3 && agent-flutter disconnect && agent-flutter connect
 
 ### Screen Map
 ```
-Onboarding (wrapper.dart) — 11-step wizard
+Onboarding (wrapper.dart) — step wizard
 ├── 0: Auth (auth.dart) — Google/Apple sign-in
-├── 1: Name (name_widget.dart)
-├── 2: Primary Language (primary_language_widget.dart)
-├── 3: Found Omi (found_omi_widget.dart)
-├── 4: Permissions (permissions_widget.dart)
-├── 5: User Review (user_review_page.dart)
-├── 6-7: Welcome / Find Devices (placeholders)
-├── 8: Speech Profile (speech_profile_widget.dart)
-├── 9: Knowledge Graph (knowledge_graph_step.dart)
-└── 10: Complete (complete_screen.dart)
+├── 1: AI Consent
+├── 2: Name (name_widget.dart)
+├── 3: Primary Language (primary_language_widget.dart)
+├── 4: Found Omi (found_omi_widget.dart)
+├── 5: Permissions (permissions_widget.dart)
+├── 6: User Review (user_review_page.dart)
+├── 9: Speech Profile (speech_profile_widget.dart)
+├── 10: Knowledge Graph (knowledge_graph_step.dart)
+└── 11: Complete (complete_screen.dart) → Home
 
-Home (page.dart) — main app after auth
-├── [top bar] Connect Device | Search | History | Settings gear
-├── [center] Daily Score card → Add Goal
-├── [Ask Omi button] → Chat (chat/page.dart)
-│   └── Text input, voice recorder, AI responses, message actions
-├── [record button] → Conversation Capturing (conversation_capturing/page.dart)
-│   └── Live transcript, waveform, stop button
+Home (home/page.dart) — main app after auth, 4-slot bottom nav
+├── ["Ask Omi anything…" input bar] → Chat (chat/page.dart) — full-width bar above bottom nav, not a tab
+│   ├── Message history, "Ask anything" field, AI responses
+│   └── AI-message action row: Copy ("✨ Message copied to clipboard" snackbar), thumbs up, thumbs down, Share
+├── [mic in the bar] → Chat with voice auto-start
+├── [battery/record widget, top left] (battery_info_widget.dart)
+│   ├── Device connected → battery pill → Connected Device (home/device.dart); phone icon → Phone Calls
+│   └── No device → Connect → Connect Device page; Record pill → Conversation Capturing (conversation_capturing/page.dart)
+│       └── Chevron → record options sheet (Phone Mic record / Phone Call)
+├── [settings gear, top right] → Settings sheet (settings_drawer.dart) — present on every slot
 │
-├── [tab 0] Conversations (conversations_page.dart)
+├── [slot 0] Home (home/home_content.dart)
+│   ├── Conversation capture widget, today's tasks widget
+│   ├── Daily Recaps → Daily Summary Detail; "View All" → Conversations
+│   ├── Mind Map → Memory Graph (memory_graph_page.dart) (only with ≥3 conversations)
+│   └── Get-started tiles (only with <3 conversations)
+│
+├── [slot 1] Conversations (conversations_page.dart)
 │   ├── Folder tabs (All, Starred, custom folders)
-│   ├── Daily summaries toggle
-│   ├── Today's tasks widget
-│   └── Conversation item → Detail (conversation_detail/page.dart)
-│       └── Transcript, Summary, Action Items tabs, share, audio
+│   ├── Top-bar extras on this slot: sync icon (when paired/pending), search, calendar date filter
+│   └── Conversation item (GestureDetector row) → Detail (conversation_detail/page.dart)
+│       ├── Transcript, Summary, Action Items tabs, share, audio (search hidden on Action Items tab)
+│       ├── Pull-down menu: Copy Transcript / Copy Summary / Copy ID / Share Audio (if audio) / Link Event / Test Prompt
+│       └── Back via in-app top-left IconButton — not the OS/adb back gesture
 │
-├── [tab 1] Action Items (action_items_page.dart)
+├── [slot 2] Tasks (action_items_page.dart)
 │   ├── Categories: Today, Tomorrow, Later, No Deadline, Overdue
 │   ├── FAB → Create task sheet (action_item_form_sheet.dart)
-│   ├── Task checkboxes, drag-drop reorder
-│   └── Task → Goal linking
+│   ├── Task checkboxes, drag-drop reorder, task → goal linking
+│   └── Top-bar extras on this slot: export → Task Integrations, completed toggle
 │
-├── [tab 2] Memories (memories/page.dart)
-│   ├── Search bar, graph button, management button
-│   ├── FAB → Add memory dialog
-│   ├── Category chips filter
+└── [slot 3] Apps (apps/page.dart) — "Search 1500+ Apps" / "Featured" (explore_install_page.dart)
+    ├── Popular apps (horizontal scroll)
+    ├── Category sections → Category apps page
+    ├── App item → App Detail (app_detail/app_detail.dart)
+    │   └── Reviews, capabilities, install/enable, Chat button → Chat
+    └── Top-bar "+" on this slot → Add App / Add MCP Server
+
+Settings sheet (settings_drawer.dart) — rows in order
+├── Profile (profile.dart)
+│   ├── Name → Change name dialog
+│   ├── Email (read-only)
+│   ├── Language → Language Settings (language_settings_page.dart)
+│   ├── Custom Vocabulary (custom_vocabulary_page.dart)
+│   ├── Speech Profile (speech_profile/page.dart)
+│   ├── Identifying Others (people.dart)
+│   ├── Payment Methods (payments/payments_page.dart)
+│   ├── Conversation Display (conversation_display_settings.dart)
+│   ├── Data Privacy (data_privacy_page.dart)
+│   └── Delete Account (delete_account.dart)
+├── Notifications (notifications_settings_page.dart)
+│   ├── Frequency slider (0-5)
+│   ├── Daily Summary toggle + time picker
+│   └── Daily Reflection toggle
+├── Plan & Usage (usage_page.dart) (only in some subscription states)
+├── Offline Sync (sync_page.dart)
+│   ├── Local storage, recordings list
+│   ├── Fast transfer settings
+│   └── Private cloud sync
+├── Device Settings (device_settings.dart) (only when a device is connected)
+│   ├── Device info (name, ID, firmware, SD card)
+│   ├── LED brightness slider, mic gain slider
+│   └── Double tap action picker
+├── Integrations (integrations_page.dart) — BETA; also opens from conversation detail
+│   └── Google Calendar, Gmail, Apple Health
+├── Permissions (permissions_page.dart) — Microphone, Bluetooth, Location, Background Activity
+├── Memories (memories/page.dart) — not a bottom-nav tab; reached here or via /memories, /facts deep links
+│   ├── Search bar, "This device" filter chip
+│   ├── FAB (bottom-right) → New Memory sheet (memory_dialog.dart) — the "Create new memory" text row
+│   │   is NOT tappable, only the FAB is; field/button ValueKeys `memory_content_field` / `memory_save_button` (PR #9484)
 │   ├── Memory item → Quick edit sheet (memory_edit_sheet.dart)
 │   ├── Graph → Memory Graph (memory_graph_page.dart)
 │   └── Management → Category management sheet
-│
-├── [tab 3] Apps (apps/page.dart)
-│   ├── Search, filter, create buttons
-│   ├── Popular apps (horizontal scroll)
-│   ├── Category sections → Category apps page
-│   ├── App item → App Detail (app_detail/app_detail.dart)
-│   │   └── Reviews, capabilities, install/enable
-│   └── Create → Custom app or MCP server
-│
-└── [settings gear] → Settings Drawer (settings_drawer.dart)
-    ├── Profile (profile.dart)
-    │   ├── Name → Change name dialog
-    │   ├── Email (read-only)
-    │   ├── Language → Language Settings (language_settings_page.dart)
-    │   ├── Custom Vocabulary (custom_vocabulary_page.dart)
-    │   ├── Speech Profile (speech_profile/page.dart)
-    │   ├── Identifying Others (people.dart)
-    │   ├── Payment Methods (payments/payments_page.dart)
-    │   ├── Conversation Display (conversation_display_settings.dart)
-    │   ├── Data Privacy (data_privacy_page.dart)
-    │   └── Delete Account (delete_account.dart)
-    ├── Notifications (notifications_settings_page.dart)
-    │   ├── Frequency slider (0-5)
-    │   ├── Daily Summary toggle + time picker
-    │   └── Daily Reflection toggle
-    ├── Plan & Usage (usage_page.dart)
-    ├── Offline Sync (sync_page.dart)
-    │   ├── Local storage, recordings list
-    │   ├── Fast transfer settings
-    │   └── Private cloud sync
-    ├── Device Settings (device_settings.dart) — requires BLE device
-    │   ├── Device info (name, ID, firmware, SD card)
-    │   ├── LED brightness slider, mic gain slider
-    │   └── Double tap action picker
-    ├── Integrations (integrations_page.dart) — BETA
-    │   └── Google Calendar, Gmail, Apple Health
-    ├── Phone Calls (phone_call_settings_page.dart)
-    │   └── Verified numbers list, delete button
-    ├── Transcription Settings (transcription_settings_page.dart)
-    │   ├── Source toggle: Omi Cloud vs Custom STT
-    │   ├── Provider selector, API key, model config
-    │   └── Advanced JSON editors, logs viewer
-    ├── Developer Settings (developer.dart)
-    │   ├── Custom STT provider config
-    │   ├── API key management
-    │   └── MCP API keys
-    ├── What's New → Changelog sheet
-    ├── Referral Program (referral_page.dart) — NEW
-    └── Sign Out → Confirmation dialog
+├── Feedback/Bug → feedback.omi.me (Intercom platforms only)
+├── Help Center → help.omi.me (Intercom platforms only)
+├── Developer Settings (developer.dart)
+│   ├── Custom STT provider config
+│   ├── API key management
+│   └── MCP API keys
+├── What's New → Changelog sheet
+├── Get Omi for Mac → App Store link
+├── Referral Program (referral_page.dart) — NEW
+└── Sign Out → Confirmation dialog
+(Settings search reaches a few extra destinations not in the visible list, e.g. Background Mode on Android.)
+
+Transcription Settings (transcription_settings_page.dart) — not in settings drawer; reached from
+Plan & Usage, Developer Settings, or the Plans sheet
+├── Source toggle: Omi Cloud vs Custom STT
+├── Provider selector, API key, model config
+└── Advanced JSON editors, logs viewer
+
+Phone Calls (phone_calls_page.dart) — from battery-widget phone icon, record options, or get-started tile
+├── Phone Setup Intro when no verified numbers
+├── Contacts / Keypad tabs; call → Active Call page
+└── Gear → Phone Call Settings (phone_call_settings_page.dart) — verified numbers list, delete button
+
+Plans sheet (plans_sheet.dart) — from Plan & Usage, chat quota-exceeded, phone-calls upsell
 
 Persona Profile (persona_profile.dart) — AI clone management
 ├── Avatar (100x100), name with verified badge
@@ -190,13 +241,21 @@ Speech Profile (speech_profile/page.dart)
 ### Widget Patterns
 
 **Bottom navigation bar:**
-- 4 `InkWell` widgets at `bounds.y > 780`, sorted left-to-right by `bounds.x`
+- Android: 4 `InkWell` widgets at `bounds.y > 780`, sorted left-to-right by `bounds.x`
 - Detect with: `snapshot -i --json` → filter `flutterType == 'InkWell'` and `bounds.y > 780`
 - Navigate home: press the leftmost one
+- iOS (verified 2026-07-11, iPhone XR, 414pt-wide screen): 4 slots at y≈816, x=20/114/207/300, each w=94.
+  Left to right: slot 0 = Home, slot 1 = Conversations (folder tabs All/Starred/…), slot 2 = Tasks,
+  slot 3 = Apps marketplace ("Search 1500+ Apps" / "Featured")
+
+**Chat entry point (not a bottom-nav tab):**
+- Open chat by tapping the "Ask Omi anything…" input bar on the home screen — a full-width gesture
+  element directly above the bottom nav (~y=756, w≈382 on a 414pt-wide screen; verified iOS 2026-07-11)
 
 **Settings gear:**
-- Rightmost `button` widget in the top bar
-- Detect with: sort buttons by `bounds.x` descending, take first
+- Android: rightmost `button` widget in the top bar; detect by sorting buttons by `bounds.x` descending, take first
+- iOS (verified 2026-07-11): single top-right icon on home at ~x=362, y=58 → Settings sheet (Profile,
+  Notifications, Offline Sync, Permissions, Memories, Developer Settings, …, Sign Out)
 
 **Settings rows:**
 - `gesture` widgets with `bounds.width > 300`
@@ -210,6 +269,14 @@ Speech Profile (speech_profile/page.dart)
 - Open when you press a settings row
 - Language items appear as `gesture` rows with `bounds.y > 380`
 - Many items — use scroll if needed
+
+**Conversation feed rows (iOS, verified 2026-07-11):**
+- `GestureDetector` widgets, h≈84–96; detail opens on tap
+- Go back with the in-app top-left `IconButton` (x=8, y=56, w=40) — not the OS/adb back gesture
+
+**Chat AI-message actions (iOS, verified 2026-07-11):**
+- Four small `InkWell`s (w≈12–14) under each AI message at x≈22/54/88/122; the first is copy —
+  pressing it shows the "✨ Message copied to clipboard" snackbar
 
 ### Changing Locale
 ```bash
@@ -307,6 +374,8 @@ Supported `expect` kinds:
 ## Navigation Graph (flow-walker verified)
 
 Real navigation edges verified by flow-walker run11 on Pixel 7a (26 screens, 44 edges, depth 3). Screen names mapped from fingerprint IDs to semantic names.
+
+Note: run11 predates the current bottom nav — its tab labels below reflect the old layout (Conversations/Action Items/Memories/Apps as tabs). Today slot 0 is Home, Tasks is slot 2, Apps is slot 3, and Memories lives under Settings — see Screen Map above. The per-screen element counts and edges remain useful.
 
 ```
 Home (24 elements: 17 gesture, 3 icon, 4 inkwell)
@@ -417,6 +486,8 @@ After making changes, verify them in the live app:
 | Non-English IME breaks text input | Set system locale to English: `adb shell "settings put system system_locales en-US"` |
 
 ## iOS Simulator Known Limitations
+
+For a physical iOS device (has BLE, avoids most limitations below), see **Setup (iOS physical device)** under How to Explore the App.
 
 | Issue | Workaround |
 |-------|-----------|

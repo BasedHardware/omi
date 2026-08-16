@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildToolAvailabilitySnapshot,
+  chatFirstToolManifest,
   mcpToolDefinitionsForAdapter,
   normalizeOmiToolName,
   omiToolManifest,
@@ -9,6 +10,61 @@ import {
 } from "../src/runtime/omi-tool-manifest.js";
 
 describe("omi tool manifest", () => {
+  it("registers canonical goal creation for Chat-first main Chat", () => {
+    const tool = chatFirstToolManifest.find((entry) => entry.name === "create_canonical_goal");
+
+    expect(tool).toMatchObject({
+      executor: { kind: "swiftTool" },
+      surfaces: ["desktop_chat"],
+      annotations: expect.objectContaining({ readOnlyHint: false }),
+    });
+    expect(tool?.inputSchema.required).toEqual(["title", "desired_outcome"]);
+  });
+
+  it("projects create_memory only to the coordinator's typed chat surfaces", () => {
+    const mainChat = toolsForAdapter("omi-tools-stdio", {
+      surfaceKind: "main_chat",
+      executionRole: "coordinator",
+    });
+    const tool = mainChat.find((entry) => entry.name === "create_memory");
+
+    expect(tool).toMatchObject({
+      surfaces: ["desktop_chat"],
+      executor: { kind: "swiftTool", executorName: "chatToolExecutor" },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    });
+    expect(tool?.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        content: {
+          type: "string",
+          description:
+            "A clean standalone fact to save as a short-term memory. Strip the remember/save command; light rewrite is OK. Do not invent facts.",
+        },
+      },
+      required: ["content"],
+      additionalProperties: false,
+    });
+    expect(tool?.voice).toBeUndefined();
+    expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "floating_chat", executionRole: "coordinator" }))
+      .toContain("create_memory");
+    expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "realtime_voice", executionRole: "coordinator" }))
+      .not.toContain("create_memory");
+    expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "task_chat", executionRole: "coordinator" }))
+      .not.toContain("create_memory");
+    expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "main_chat", executionRole: "leaf" }))
+      .not.toContain("create_memory");
+  });
+  it("projects agent-management tools out of leaf worker contexts", () => {
+    for (const adapterId of ["pi-mono", "omi-tools-stdio"] as const) {
+      const names = toolNamesForAdapter(adapterId, { executionRole: "leaf", screenContext: true });
+      expect(names).not.toContain("spawn_agent");
+      expect(names).not.toContain("spawn_background_agent");
+      expect(names).not.toContain("run_agent_and_wait");
+      expect(names).not.toContain("send_agent_message");
+    }
+  });
+
   it("has unique canonical names", () => {
     const names = omiToolManifest.map((tool) => tool.name);
     expect(new Set(names).size).toBe(names.length);
@@ -19,7 +75,7 @@ describe("omi tool manifest", () => {
       "execute_sql",
       "semantic_search",
       "get_daily_recap",
-      "get_task_agent_status",
+      "fill_cloud_connector_form",
       "list_agent_sessions",
       "get_agent_run",
       "build_desktop_awareness_snapshot",
@@ -31,17 +87,18 @@ describe("omi tool manifest", () => {
       "create_desktop_dispatch",
       "cancel_agent_run",
       "inspect_agent_artifacts",
+      "read_tool_output",
+      "search_tool_output",
       "update_agent_artifact_lifecycle",
       "send_agent_message",
-      "spawn_background_agent",
-      "delegate_agent",
-      "fill_cloud_connector_form",
       "spawn_agent",
-      "manage_agent_pills",
+      "run_agent_and_wait",
+      "set_desktop_attention_override",
       "search_tasks",
       "complete_task",
       "delete_task",
       "load_skill",
+      "search_skills",
       "save_knowledge_graph",
       "get_conversations",
       "search_conversations",
@@ -51,13 +108,44 @@ describe("omi tool manifest", () => {
       "create_action_item",
       "update_action_item",
       "capture_screen",
+      "check_permission_status",
+      "request_permission",
+      "screenshot",
+      "get_work_context",
     ]);
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
+  });
+
+  it("keeps the realtime screenshot executor capability-registered", () => {
+    const screenshot = toolsForAdapter("pi-mono").find((tool) => tool.name === "screenshot");
+
+    expect(screenshot?.surfaces).toEqual(["realtime_voice"]);
+    expect(screenshot?.executor).toEqual({ kind: "swiftTool", executorName: "realtimeHub" });
+  });
+
+  it("keeps current-screen evidence live and work context historical", () => {
+    const workContext = toolsForAdapter("pi-mono").find((tool) => tool.name === "get_work_context");
+    const captureScreen = toolsForAdapter("pi-mono").find((tool) => tool.name === "capture_screen");
+    const requestPermission = toolsForAdapter("pi-mono").find((tool) => tool.name === "request_permission");
+
+    expect(workContext?.promptGuidelines?.join("\n")).toContain("not for direct current-screen questions");
+    expect(workContext?.promptGuidelines?.join("\n")).toContain("historical unless this turn separately attached a live image");
+    expect(captureScreen?.promptGuidelines?.join("\n")).toContain("capture a live image");
+    expect(captureScreen?.promptGuidelines?.join("\n")).not.toContain("get_work_context first");
+    expect(captureScreen?.promptGuidelines?.join("\n")).toContain("requires explicit approval");
+    expect(requestPermission?.promptGuidelines?.join("\n")).toContain("current user message explicitly requests one named permission");
+  });
+
+  it("keeps spawn_background_agent internal to coordinator RPC only", () => {
+    expect(toolNamesForAdapter("pi-mono")).not.toContain("spawn_background_agent");
+    expect(toolsForAdapter("pi-mono").find((tool) => tool.name === "spawn_agent")).toBeDefined();
   });
 
   it("keeps directed provider routing on the canonical spawn_agent schema", () => {
     const spawnAgent = toolsForAdapter("pi-mono").find((tool) => tool.name === "spawn_agent");
 
+    expect(spawnAgent?.inputSchema.required).toEqual(["objective"]);
+    expect(spawnAgent?.inputSchema.properties).not.toHaveProperty("originSurfaceKind");
     expect(spawnAgent?.inputSchema.properties.provider).toMatchObject({
       enum: ["openclaw", "hermes"],
     });
@@ -65,22 +153,119 @@ describe("omi tool manifest", () => {
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='hermes'");
   });
 
-  it("projects stdio onboarding-only tools only in onboarding context", () => {
+  it("leaves explicit provider delegation to the primary model loop", () => {
+    const primarySpawn = toolsForAdapter("pi-mono", { executionRole: "coordinator" })
+      .find((tool) => tool.name === "spawn_agent");
+    const leafTools = toolNamesForAdapter("pi-mono", { executionRole: "leaf" });
+
+    expect(primarySpawn?.promptGuidelines?.join("\n")).toContain(
+      "The primary coordinator decides in its model loop whether to call spawn_agent.",
+    );
+    expect(primarySpawn?.promptGuidelines?.join("\n")).toContain(
+      "do not delegate that instruction to another agent",
+    );
+    expect(leafTools).not.toContain("spawn_agent");
+  });
+
+  it("guides realtime child-result retrieval without exposing internal ids", () => {
+    const list = omiToolManifest.find((tool) => tool.name === "list_agent_sessions");
+    const run = omiToolManifest.find((tool) => tool.name === "get_agent_run");
+
+    expect(list?.promptGuidelines?.join("\n")).toContain("do not infer run completion from session status");
+    expect(list?.voice?.realtimeDescription).toContain("omit status filters");
+    expect(list?.voice?.realtimeDescription).toContain("latestRun.finalText");
+    expect(run?.promptGuidelines?.join("\n")).toContain("run.finalText");
+    expect(run?.voice?.realtimeDescription).toContain("run.finalText");
+    expect(run?.voice?.realtimeDescription).toContain("do not expose the internal id");
+  });
+
+  it("keeps permission tools available to main stdio while onboarding-only tools remain scoped", () => {
     const regular = new Set(toolNamesForAdapter("omi-tools-stdio"));
     const onboarding = new Set(toolNamesForAdapter("omi-tools-stdio", { onboarding: true }));
+    const screenContext = new Set(toolNamesForAdapter("omi-tools-stdio", { screenContext: true }));
 
-    expect(regular.has("request_permission")).toBe(false);
+    expect(regular.has("request_permission")).toBe(true);
+    expect(regular.has("check_permission_status")).toBe(true);
     expect(regular.has("get_email_insights")).toBe(false);
     expect(regular.has("capture_screen")).toBe(false);
     expect(regular.has("get_work_context")).toBe(false);
     expect(onboarding.has("request_permission")).toBe(true);
+    expect(onboarding.has("check_permission_status")).toBe(true);
     expect(onboarding.has("get_email_insights")).toBe(true);
     expect(onboarding.has("capture_screen")).toBe(false);
+    expect(screenContext.has("request_permission")).toBe(true);
+    expect(screenContext.has("check_permission_status")).toBe(true);
+    expect(screenContext.has("get_work_context")).toBe(true);
+    expect(screenContext.has("capture_screen")).toBe(true);
   });
 
   it("emits MCP tool definitions from the same projection", () => {
     expect(mcpToolDefinitionsForAdapter("omi-tools-stdio").map((tool) => tool.name)).toEqual(
       toolNamesForAdapter("omi-tools-stdio"),
+    );
+  });
+
+  it("documents exact conversation IDs and share links as search inputs", () => {
+    const tool = omiToolManifest.find((entry) => entry.name === "search_conversations");
+
+    expect(tool?.capabilityDoc.summary).toContain("exact canonical ID/share link");
+    expect(tool?.capabilityDoc.bullets.join(" ")).toContain("canonical conversation UUID");
+    expect(tool?.inputSchema.properties.query.description).toContain("canonical UUID");
+  });
+
+  it("advertises optional positional parameters for execute_sql", () => {
+    const executeSql = mcpToolDefinitionsForAdapter("omi-tools-stdio").find(
+      (tool) => tool.name === "execute_sql",
+    );
+
+    expect(executeSql?.inputSchema.properties.parameters).toEqual({
+      type: "array",
+      items: { type: "string" },
+      description: "Optional positional values bound to ? placeholders in query. Use this instead of interpolating values into SQL literals.",
+    });
+    expect(executeSql?.inputSchema.required).toEqual(["query"]);
+  });
+
+  it("keeps the capability-off stdio manifest byte-stable and never leaks the chat-first tool", () => {
+    const legacyBytes = JSON.stringify(mcpToolDefinitionsForAdapter("omi-tools-stdio"));
+    const capabilityOffBytes = JSON.stringify(mcpToolDefinitionsForAdapter("omi-tools-stdio", {
+      surfaceKind: "main_chat", chatFirstUi: false, controlGeneration: 7,
+    }));
+    const nonMainBytes = JSON.stringify(mcpToolDefinitionsForAdapter("omi-tools-stdio", {
+      surfaceKind: "floating_chat", chatFirstUi: true, controlGeneration: 7,
+    }));
+
+    expect(capabilityOffBytes).toBe(legacyBytes);
+    expect(nonMainBytes).toBe(legacyBytes);
+    expect(capabilityOffBytes).not.toContain("render_chat_blocks");
+    expect(capabilityOffBytes).not.toContain("get_canonical_goals");
+    expect(capabilityOffBytes).not.toContain("search_chat_history");
+  });
+
+  it("exposes chat-first tools only to the authorized main-chat stdio projection", () => {
+    const enabled = mcpToolDefinitionsForAdapter("omi-tools-stdio", {
+      surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
+    });
+    const snapshot = buildToolAvailabilitySnapshot("omi-tools-stdio", {
+      surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
+    });
+
+    expect(enabled.map((tool) => tool.name)).toContain("render_chat_blocks");
+    expect(enabled.map((tool) => tool.name)).toContain("get_canonical_goals");
+    expect(enabled.map((tool) => tool.name)).toContain("search_chat_history");
+    expect(snapshot.advertisedToolNames).toContain("render_chat_blocks");
+    expect(snapshot.advertisedToolNames).toContain("get_canonical_goals");
+    expect(snapshot.advertisedToolNames).toContain("search_chat_history");
+    expect(snapshot.advertisedToolNames).toContain("show_rewind_evidence");
+    expect(snapshot.manifestDigest).not.toBe(buildToolAvailabilitySnapshot("omi-tools-stdio").manifestDigest);
+    expect(toolNamesForAdapter("pi-mono", {
+      surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
+    })).toEqual(expect.arrayContaining(["get_canonical_goals", "render_chat_blocks", "search_chat_history", "show_rewind_evidence"]));
+    expect(enabled.find((tool) => tool.name === "render_chat_blocks")?.description).toContain(
+      "call this in the same turn whenever you retrieve, create, or summarize tasks",
+    );
+    expect(enabled.find((tool) => tool.name === "render_chat_blocks")?.description).toContain(
+      "never use a local SQLite/execute_sql numeric row ID",
     );
   });
 
@@ -100,27 +285,21 @@ describe("omi tool manifest", () => {
     expect(askFollowup?.inputSchema.properties.options).toMatchObject({ type: "array" });
     expect(askFollowup?.inputSchema.required).toEqual(["question", "options"]);
     expect(requestPermission?.inputSchema.properties.type).toMatchObject({
-      enum: ["screen_recording", "microphone", "accessibility", "automation", "full_disk_access"],
+      enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access"],
     });
   });
 
-  it("preserves control-tool schema preconditions in MCP projections", () => {
+  it("keeps control-tool cross-field preconditions in runtime validation instead of MCP schemas", () => {
     const tools = mcpToolDefinitionsForAdapter("omi-tools-stdio");
     const inspectArtifacts = tools.find((tool) => tool.name === "inspect_agent_artifacts");
-    const delegateAgent = tools.find((tool) => tool.name === "delegate_agent");
 
-    expect(inspectArtifacts?.inputSchema.anyOf).toEqual([
-      { required: ["artifactId"] },
-      { required: ["sessionId"] },
-      { required: ["runId"] },
-      { required: ["attemptId"] },
-    ]);
-    expect(delegateAgent?.inputSchema.allOf).toEqual([
-      {
-        if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
-        then: { required: ["childSessionId"] },
-      },
-    ]);
+    expect(inspectArtifacts?.inputSchema).toMatchObject({
+      type: "object",
+      required: [],
+    });
+    expect(inspectArtifacts?.inputSchema).not.toHaveProperty("anyOf");
+    expect(inspectArtifacts?.inputSchema).not.toHaveProperty("oneOf");
+    expect(inspectArtifacts?.inputSchema).not.toHaveProperty("allOf");
   });
 
   it("keeps MCP-only schema options from overriding base tool schema fields", () => {
@@ -155,6 +334,20 @@ describe("omi tool manifest", () => {
     expect(snapshot.advertisedToolCount).toBe(toolNamesForAdapter("pi-mono").length);
     expect(snapshot.advertisedToolNames).toEqual(toolNamesForAdapter("pi-mono"));
     expect(snapshot.aliases["mcp__omi-tools__execute_sql"]).toBe("execute_sql");
-    expect(snapshot.disabled.some((tool) => tool.name === "request_permission")).toBe(true);
+    expect(snapshot.disabled.some((tool) => tool.name === "get_email_insights")).toBe(true);
+  });
+
+  it("requires surfaces and capabilityDoc on every manifest entry", () => {
+    // spawn_background_agent is the coordinator-RPC-only entrypoint and is
+    // deliberately advertised on no agent-facing surface (see sibling test).
+    const internalOnlyTools = new Set(["spawn_background_agent"]);
+    for (const tool of omiToolManifest) {
+      if (!internalOnlyTools.has(tool.name)) {
+        expect(tool.surfaces.length, `${tool.name} surfaces`).toBeGreaterThan(0);
+      }
+      expect(tool.capabilityDoc.title, `${tool.name} capabilityDoc.title`).toBeTruthy();
+      expect(tool.capabilityDoc.summary, `${tool.name} capabilityDoc.summary`).toBeTruthy();
+      expect(tool.capabilityDoc.bullets.length, `${tool.name} capabilityDoc.bullets`).toBeGreaterThan(0);
+    }
   });
 });

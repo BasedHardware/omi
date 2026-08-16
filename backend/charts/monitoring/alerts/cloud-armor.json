@@ -131,19 +131,31 @@
       }
     ],
     "updated": "2026-06-20T02:27:44Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "57",
-      "threshold": "1"
+      "threshold": "1",
+      "summary": "Omi API alert: Cloud Armor denied requests per second is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi API production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "api",
+      "alert_identity": "dew9b4o7boa2oe",
+      "component": "api",
+      "impact": "product"
+    }
   }
 ]

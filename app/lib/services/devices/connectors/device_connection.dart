@@ -14,8 +14,10 @@ import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/connectors/omiglass_connection.dart';
 import 'package:omi/services/devices/connectors/plaud_connection.dart';
+import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
+import 'package:omi/services/devices/transports/rayban_meta_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -106,7 +108,7 @@ class DeviceConnectionFactory {
     switch (locator.kind) {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
-        if (deviceId == null) return null;
+        if (deviceId == null || deviceId.trim().isEmpty) return null;
         final needsBond = device.type == DeviceType.limitless;
         transport = NativeBleTransport(deviceId, requiresBond: needsBond);
         break;
@@ -115,8 +117,9 @@ class DeviceConnectionFactory {
         transport = WatchTransport();
         break;
 
-      default:
-        return null;
+      case TransportKind.metaDat:
+        transport = RayBanMetaTransport(device.id);
+        break;
     }
 
     switch (device.type) {
@@ -141,6 +144,8 @@ class DeviceConnectionFactory {
         return FriendPendantDeviceConnection(device, transport);
       case DeviceType.limitless:
         return LimitlessDeviceConnection(device, transport);
+      case DeviceType.raybanMeta:
+        return RayBanMetaDeviceConnection(device, transport);
     }
   }
 }

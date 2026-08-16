@@ -1,4 +1,5 @@
 import AppKit
+import OmiTheme
 import SwiftUI
 
 struct SearchableDropdownOption: Identifiable, Hashable {
@@ -13,6 +14,26 @@ struct SearchableDropdownOption: Identifiable, Hashable {
   }
 }
 
+enum SearchableDropdownFiltering {
+  static func filteredOptions(
+    _ options: [SearchableDropdownOption],
+    query: String
+  ) -> [SearchableDropdownOption] {
+    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return options }
+
+    return options.filter { option in
+      option.title.localizedCaseInsensitiveContains(trimmed)
+        || option.id.localizedCaseInsensitiveContains(trimmed)
+        || (option.subtitle?.localizedCaseInsensitiveContains(trimmed) ?? false)
+    }
+  }
+
+  static func usesSearchablePopover(optionCount: Int, threshold: Int = 8) -> Bool {
+    optionCount > threshold
+  }
+}
+
 struct SearchableDropdown: View {
   let title: String
   var label: String? = nil
@@ -22,6 +43,8 @@ struct SearchableDropdown: View {
   var minWidth: CGFloat = 0
   var maxWidth: CGFloat = 320
   var maxHeight: CGFloat = 300
+  var controlHeight: CGFloat? = nil
+  var usesHeaderChrome = false
   let onSelect: (SearchableDropdownOption) -> Void
 
   @State private var isPresented = false
@@ -55,65 +78,71 @@ struct SearchableDropdown: View {
   }
 
   var body: some View {
-    if options.count > threshold {
-      Button {
-        isPresented.toggle()
-      } label: {
-        dropdownLabel
-      }
-      .buttonStyle(.plain)
-      .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-        SearchableDropdownPopover(
-          title: title,
-          options: options,
-          selectedId: selectedId,
-          query: $query,
-          maxHeight: maxHeight
-        ) { option in
-          onSelect(option)
-          query = ""
-          isPresented = false
+    Group {
+      if options.count > threshold {
+        Button {
+          isPresented.toggle()
+        } label: {
+          dropdownLabel
         }
-        .frame(width: popoverWidth)
-      }
-      .onChange(of: isPresented) { _, presented in
-        if !presented {
-          query = ""
-        }
-      }
-    } else {
-      Menu {
-        ForEach(options) { option in
-          Button(option.title) {
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+          SearchableDropdownPopover(
+            title: title,
+            options: options,
+            selectedId: selectedId,
+            query: $query,
+            maxHeight: maxHeight
+          ) { option in
             onSelect(option)
+            query = ""
+            isPresented = false
+          }
+          .frame(width: popoverWidth)
+        }
+        .onChange(of: isPresented) { _, presented in
+          if !presented {
+            query = ""
           }
         }
-      } label: {
-        dropdownLabel
+      } else {
+        Menu {
+          ForEach(options) { option in
+            Button(option.title) {
+              onSelect(option)
+            }
+          }
+        } label: {
+          dropdownLabel
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
       }
-      .menuStyle(.borderlessButton)
-      .fixedSize()
     }
+    .frame(height: controlHeight)
   }
 
   private var dropdownLabel: some View {
-    HStack(spacing: 6) {
+    HStack(spacing: OmiSpacing.xs) {
       Text(selectedTitle)
-        .scaledFont(size: 12, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .scaledFont(size: usesHeaderChrome ? OmiType.body : OmiType.caption, weight: .medium)
+        .foregroundColor(Ink.secondary)
         .lineLimit(1)
 
       Image(systemName: "chevron.down")
-        .scaledFont(size: 10, weight: .semibold)
-        .foregroundColor(OmiColors.textTertiary)
+        .scaledFont(size: OmiType.micro, weight: .semibold)
+        .foregroundColor(Ink.secondary)
     }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 6)
-    .frame(minWidth: minWidth)
+    .padding(.horizontal, usesHeaderChrome ? OmiSpacing.md : OmiSpacing.sm)
+    .padding(.vertical, usesHeaderChrome ? 0 : OmiSpacing.xs)
+    .frame(minWidth: minWidth, minHeight: controlHeight)
     .background(
-      Capsule()
-        .fill(OmiColors.backgroundSecondary.opacity(0.7))
-        .overlay(Capsule().stroke(OmiColors.border.opacity(0.8), lineWidth: 1))
+      Capsule(style: .continuous)
+        .fill(usesHeaderChrome ? Ink.rowFill : Ink.wash)
+        .overlay(
+          Capsule(style: .continuous)
+            .stroke(usesHeaderChrome ? Ink.separator : Ink.separator.opacity(0.8), lineWidth: 1)
+        )
     )
   }
 
@@ -134,14 +163,7 @@ private struct SearchableDropdownPopover: View {
   @FocusState private var searchIsFocused: Bool
 
   private var filteredOptions: [SearchableDropdownOption] {
-    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return options }
-
-    return options.filter { option in
-      option.title.localizedCaseInsensitiveContains(trimmed)
-        || option.id.localizedCaseInsensitiveContains(trimmed)
-        || (option.subtitle?.localizedCaseInsensitiveContains(trimmed) ?? false)
-    }
+    SearchableDropdownFiltering.filteredOptions(options, query: query)
   }
 
   private var listHeight: CGFloat {
@@ -156,20 +178,20 @@ private struct SearchableDropdownPopover: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Text(title)
-        .scaledFont(size: 12, weight: .semibold)
-        .foregroundColor(OmiColors.textTertiary)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .foregroundColor(Ink.secondary)
 
-      HStack(spacing: 7) {
+      HStack(spacing: OmiSpacing.xs) {
         Image(systemName: "magnifyingglass")
-          .scaledFont(size: 11, weight: .medium)
-          .foregroundColor(OmiColors.textTertiary)
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(Ink.secondary)
 
         TextField("Search", text: $query)
           .textFieldStyle(.plain)
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textPrimary)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.primary)
           .focused($searchIsFocused)
           .onSubmit {
             let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -183,32 +205,32 @@ private struct SearchableDropdownPopover: View {
             query = ""
           } label: {
             Image(systemName: "xmark.circle.fill")
-              .scaledFont(size: 11, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(Ink.secondary)
           }
           .buttonStyle(.plain)
           .help("Clear search")
         }
       }
-      .padding(.horizontal, 9)
-      .padding(.vertical, 7)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xs)
       .background(
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-          .fill(OmiColors.backgroundTertiary)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+          .fill(Ink.rowFill)
           .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-              .stroke(OmiColors.border.opacity(0.7), lineWidth: 1)
+            RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+              .stroke(Ink.separator.opacity(0.7), lineWidth: 1)
           )
       )
 
       if filteredOptions.isEmpty {
         Text("No matches")
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textTertiary)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
           .frame(maxWidth: .infinity, minHeight: listHeight)
       } else {
         ScrollView {
-          LazyVStack(alignment: .leading, spacing: 2) {
+          LazyVStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             ForEach(filteredOptions) { option in
               SearchableDropdownRow(
                 option: option,
@@ -217,13 +239,13 @@ private struct SearchableDropdownPopover: View {
               )
             }
           }
-          .padding(.vertical, 2)
+          .padding(.vertical, OmiSpacing.hairline)
         }
         .frame(height: listHeight)
       }
     }
-    .padding(12)
-    .background(OmiColors.backgroundSecondary)
+    .padding(OmiSpacing.md)
+    .background(Ink.wash)
     .onAppear {
       DispatchQueue.main.async {
         searchIsFocused = true
@@ -243,17 +265,17 @@ private struct SearchableDropdownRow: View {
     Button {
       onSelect(option)
     } label: {
-      HStack(spacing: 8) {
-        VStack(alignment: .leading, spacing: 1) {
+      HStack(spacing: OmiSpacing.sm) {
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(option.title)
-            .scaledFont(size: 12, weight: isSelected ? .semibold : .regular)
-            .foregroundColor(OmiColors.textPrimary)
+            .scaledFont(size: OmiType.caption, weight: isSelected ? .semibold : .regular)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
 
           if let subtitle = option.subtitle {
             Text(subtitle)
-              .scaledFont(size: 10)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.micro)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
           }
         }
@@ -262,15 +284,15 @@ private struct SearchableDropdownRow: View {
 
         if isSelected {
           Image(systemName: "checkmark")
-            .scaledFont(size: 11, weight: .semibold)
-            .foregroundColor(OmiColors.textSecondary)
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(Ink.secondary)
         }
       }
-      .padding(.horizontal, 8)
+      .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, option.subtitle == nil ? 7 : 6)
       .background(
         RoundedRectangle(cornerRadius: 7, style: .continuous)
-          .fill(isHovered || isSelected ? OmiColors.backgroundTertiary : Color.clear)
+          .fill(isHovered || isSelected ? Ink.rowFill : Color.clear)
       )
     }
     .buttonStyle(.plain)

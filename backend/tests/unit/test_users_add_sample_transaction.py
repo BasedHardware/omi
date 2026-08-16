@@ -24,7 +24,12 @@ def users_db():
     """Load a fresh database.users against stubbed database._client + firestore chain."""
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
+    client_stub.delete_collection_recursive = MagicMock(name="delete_collection_recursive")
     client_stub.document_id_from_seed = MagicMock(name="document_id_from_seed")
+    client_stub.get_firestore_client = MagicMock(name="get_firestore_client", return_value=client_stub.db)
+    client_stub.get_customer_firestore_client = MagicMock(
+        name="get_customer_firestore_client", return_value=client_stub.db
+    )
 
     firestore_stub = ModuleType("google.cloud.firestore")
     google_pkg = ModuleType("google")
@@ -38,6 +43,8 @@ def users_db():
         pass
 
     google_exceptions_stub.NotFound = NotFound
+
+    firestore_stub.transactional = lambda func: func
 
     fv1_stub = ModuleType("google.cloud.firestore_v1")
     fv1_stub.FieldFilter = MagicMock()

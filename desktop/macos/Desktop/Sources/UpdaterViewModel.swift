@@ -21,14 +21,13 @@ enum UpdateChannel: String, CaseIterable {
     }
   }
 
-  /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta.
+  /// App display name from bundle identity: "Omi Beta" only for the sidecar app.
   /// Local hot-swap builds (self-beta.sh) stamp `OMISelfBuild=true` into Info.plist, so
-  /// they show "Omi Beta (dev)" — a clear signal you're on a locally-rebuilt bundle, not a
+  /// they show a "(dev)" suffix — a clear signal you're on a locally-rebuilt bundle, not a
   /// Codemagic-distributed one. A real Codemagic build never sets the key, and when it later
   /// replaces the hot-swap bundle via Sparkle the suffix disappears.
   static var appDisplayName: String {
-    let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
-    let base = (channel == "beta" || channel == "staging") ? "Omi Beta" : "omi"
+    let base = AppBuild.isBetaProductionBundle ? "Omi Beta" : "omi"
     let isSelfBuild = (Bundle.main.object(forInfoDictionaryKey: "OMISelfBuild") as? Bool) ?? false
     return isSelfBuild ? "\(base) (dev)" : base
   }
@@ -36,7 +35,7 @@ enum UpdateChannel: String, CaseIterable {
 
 private let kUpdateChannelKey = "update_channel"
 
-enum UpdateFailureReason: String {
+enum UpdateFailureReason: String, Sendable {
   case appcastRetrieval = "appcast_retrieval"
   case download = "download"
   case signature = "signature"
@@ -49,7 +48,7 @@ enum UpdateFailureReason: String {
   case unknown = "unknown"
 }
 
-struct UpdateFailureDiagnostics: Equatable {
+struct UpdateFailureDiagnostics: Equatable, Sendable {
   let reason: UpdateFailureReason
   let message: String
   let domain: String
@@ -111,6 +110,11 @@ struct UpdateFailureDiagnostics: Equatable {
 
   var analyticsProperties: [String: Any] {
     var properties: [String: Any] = [
+      // Keep the legacy report column populated with the closed reason. Raw
+      // Sparkle/URL error messages stay in the private local log.
+      "error": reason.rawValue,
+      "phase": reason.rawValue,
+      "update_failure_phase": reason.rawValue,
       "update_failure_reason": reason.rawValue,
       "update_failure_domain": domain,
       "update_failure_code": code,
@@ -118,8 +122,6 @@ struct UpdateFailureDiagnostics: Equatable {
       "launch_location_bucket": launchLocationBucket,
       "source_app_version": sourceAppVersion,
       "source_app_build": sourceAppBuild,
-      "error_chain_domains": errorChainDomains,
-      "error_chain_codes": errorChainCodes,
     ]
 
     if let underlyingDomain {
@@ -133,9 +135,6 @@ struct UpdateFailureDiagnostics: Equatable {
     }
     if let failingURLHost {
       properties["failing_url_host"] = failingURLHost
-    }
-    if let failingURLPath {
-      properties["failing_url_path"] = failingURLPath
     }
     if let appcastURLHost {
       properties["appcast_url_host"] = appcastURLHost
@@ -350,14 +349,96 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   /// Back-reference to the view model (set after init)
   weak var viewModel: UpdaterViewModel?
   private var deferredInstall: DeferredUpdateInstall?
+  private let checkAttemptTracker = UpdateCheckAttemptTracker()
 
   // NOTE: All delegate methods use logSync() to write synchronously to disk.
   // Sparkle may terminate the app immediately after willInstallUpdate / didAbortWithError,
   // so async logging (Task + logQueue.async) would be lost.
 
+  @discardableResult
+  func beginCheck(trigger: UpdateCheckTrigger) -> UpdateCheckAttempt {
+    let context = UpdateAnalyticsContext.current(
+      updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+    )
+    let begun = checkAttemptTracker.begin(trigger: trigger, context: context)
+    if let abandoned = begun.abandoned {
+      UpdaterCheckTelemetry.recordCompleted(abandoned)
+      logSync("Sparkle: Closed update check with missing terminal callback \(abandoned.attempt.id)")
+    }
+    UpdaterCheckTelemetry.recordStarted(begun.attempt)
+    logSync(
+      "Sparkle: Starting update check attempt \(begun.attempt.id) trigger=\(trigger.rawValue)"
+    )
+    return begun.attempt
+  }
+
+  @discardableResult
+  private func finishCheck(
+    result: UpdateCheckResult,
+    diagnostics: UpdateFailureDiagnostics? = nil
+  ) -> UpdateCheckTerminal? {
+    guard let terminal = checkAttemptTracker.finish(result: result, diagnostics: diagnostics) else {
+      logSync("Sparkle: Ignoring duplicate update check terminal callback result=\(result.rawValue)")
+      return nil
+    }
+    UpdaterCheckTelemetry.recordCompleted(terminal)
+    return terminal
+  }
+
+  @discardableResult
+  private func finishFailedCheck(
+    diagnostics: UpdateFailureDiagnostics
+  ) -> UpdateCheckTerminal? {
+    guard let terminal = checkAttemptTracker.finishFailure(diagnostics: diagnostics) else {
+      logSync("Sparkle: Ignoring duplicate update check failure callback")
+      return nil
+    }
+    UpdaterCheckTelemetry.recordCompleted(terminal)
+    return terminal
+  }
+
+  /// Sparkle's cycle-finish callback covers paths that intentionally omit
+  /// `didAbortWithError` (for example authorization deferred). Normal found,
+  /// no-update, and abort callbacks have already consumed the attempt, so this
+  /// is a quiet fallback rather than a second terminal.
+  private func finishCheckCycleFallback(error: Error?) {
+    let terminal: UpdateCheckTerminal?
+    if let error {
+      let diagnostics = UpdateFailureDiagnostics.classify(
+        error: error as NSError,
+        updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+      )
+      terminal =
+        diagnostics.reason == .noUpdate
+        ? checkAttemptTracker.finish(result: .noUpdate)
+        : checkAttemptTracker.finishFailure(diagnostics: diagnostics)
+    } else {
+      // Sparkle's cycle-finish callback does not identify whether the cycle
+      // was scheduled, dismissed, or skipped. Keep the nil-error fallback
+      // unknown rather than claiming a no-update result.
+      terminal = checkAttemptTracker.finish(result: .callbackMissing)
+    }
+    if let terminal {
+      UpdaterCheckTelemetry.recordCompleted(terminal)
+      logSync(
+        "Sparkle: Closed update check from cycle-finish fallback result=\(terminal.result.rawValue)"
+      )
+    }
+  }
+
   /// Called when Sparkle is about to check for updates (permission gate)
   func updater(_ updater: SPUUpdater, mayPerform check: SPUUpdateCheck) throws {
-    logSync("Sparkle: Starting update check")
+    // This is the admitted execution boundary. Registering requests earlier
+    // would create phantom attempts when Sparkle rejects an overlapping call.
+    beginCheck(trigger: check == .updates ? .manual : .automatic)
+  }
+
+  func updater(
+    _ updater: SPUUpdater,
+    didFinishUpdateCycleFor updateCheck: SPUUpdateCheck,
+    error: Error?
+  ) {
+    finishCheckCycleFallback(error: error)
   }
 
   /// Called when Sparkle finishes loading the appcast
@@ -385,12 +466,14 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
 
   /// Called when Sparkle finds a valid update
   func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+    finishCheck(result: .updateAvailable)
     let version = item.displayVersionString
     let context = UpdateAnalyticsContext.current(
       updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
     )
     let itemAnalytics = UpdateItemAnalytics.from(item: item)
     logSync("Sparkle: Found update v\(version)")
+    discardDeferredInstall()
     Task { @MainActor in
       AnalyticsManager.shared.updateAvailable(
         version: version,
@@ -399,15 +482,21 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       )
       self.viewModel?.updateAvailable = true
       self.viewModel?.availableVersion = version
+      self.viewModel?.updateRestartImminent = false
+      self.viewModel?.updateDeferredForActiveRecording = false
       self.viewModel?.lastUpdateFailure = nil
     }
   }
 
   /// Called when no update is available
   func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+    finishCheck(result: .noUpdate)
     logSync("Sparkle: No update available")
+    discardDeferredInstall()
     Task { @MainActor in
       self.viewModel?.updateAvailable = false
+      self.viewModel?.updateRestartImminent = false
+      self.viewModel?.updateDeferredForActiveRecording = false
       self.viewModel?.lastUpdateFailure = nil
     }
   }
@@ -422,10 +511,30 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       error: nsError,
       updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
     )
+    let terminal =
+      diagnostics.reason == .noUpdate
+      ? finishCheck(result: .noUpdate)
+      : finishFailedCheck(diagnostics: diagnostics)
+    let isExpectedAutomaticOffline =
+      terminal?.result == .networkUnavailable
+      || (terminal == nil
+        && checkAttemptTracker.lastCompletedWasExpectedAutomaticOffline(for: diagnostics))
+    // Always drop a quiet-moment wait on abort so the deferred install cannot
+    // fire after we clear progress flags (stale "Update waiting…" / surprise relaunch).
+    discardDeferredInstall()
     if diagnostics.reason == .noUpdate {
       logSync("Sparkle: Already up to date")
       Task { @MainActor in
         self.viewModel?.lastUpdateFailure = nil
+        self.viewModel?.updateRestartImminent = false
+        self.viewModel?.updateDeferredForActiveRecording = false
+      }
+    } else if isExpectedAutomaticOffline {
+      logSync("Sparkle: Automatic update check deferred while offline")
+      Task { @MainActor in
+        self.viewModel?.lastUpdateFailure = nil
+        self.viewModel?.updateRestartImminent = false
+        self.viewModel?.updateDeferredForActiveRecording = false
       }
     } else {
       logSync(
@@ -446,18 +555,24 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         logSync("Sparkle: Installation failed (error 4005), will retry on next check")
       }
 
+      // Keep the legacy diagnostic event for existing dashboards. The new
+      // `Update Check Completed` event is the authoritative denominator and is
+      // emitted at most once by the tracker above.
       Task { @MainActor in
         AnalyticsManager.shared.updateCheckFailed(diagnostics: diagnostics)
         self.viewModel?.lastUpdateFailure = diagnostics
+        self.viewModel?.updateRestartImminent = false
+        self.viewModel?.updateDeferredForActiveRecording = false
       }
     }
   }
 
   /// Tells Sparkle which non-default channels this client wants to see.
   /// Channels are additive: the default (stable) channel is always included.
+  /// Reads `AppBuild.currentUpdateChannel` so the Omi Beta identity stays pinned
+  /// to the beta channel no matter what the defaults key says.
   func allowedChannels(for updater: SPUUpdater) -> Set<String> {
-    let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-    if raw == "beta" || raw == "staging" {
+    if AppBuild.currentUpdateChannel == "beta" {
       return Set(["beta"])
     }
     return Set()  // empty = default (stable) channel only
@@ -515,17 +630,26 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     let itemAnalytics = UpdateItemAnalytics.from(item: item)
     logSync("Sparkle: Installing update v\(version)")
     let restoreMainWindow = AppDelegate.shouldRestoreMainWindowAfterUpdateRelaunch()
-    UpdateRelaunchWindowPolicy.markPendingRelaunch(restoreMainWindow: restoreMainWindow)
+    let attempt = UpdateRelaunchWindowPolicy.markPendingRelaunch(
+      restoreMainWindow: restoreMainWindow,
+      sourceVersion: context.sourceAppVersion,
+      sourceBuild: context.sourceAppBuild,
+      targetVersion: itemAnalytics.targetVersion,
+      targetBuild: itemAnalytics.targetBuild,
+      channel: context.updateChannel
+    )
     logSync(
       "Sparkle: Next launch will \(restoreMainWindow ? "restore" : "suppress") the main window after update"
     )
+    discardDeferredInstall()
     Task { @MainActor in
-      AnalyticsManager.shared.updateInstalled(
-        version: version,
-        context: context,
-        item: itemAnalytics
-      )
-      self.viewModel?.updateAvailable = false
+      AnalyticsManager.shared.updateInstallStarted(attempt: attempt)
+      // Keep restart-imminent visible through the install/relaunch handoff so
+      // chat-first / Settings do not go idle right before the app terminates.
+      self.viewModel?.availableVersion = version
+      self.viewModel?.updateAvailable = true
+      self.viewModel?.updateRestartImminent = true
+      self.viewModel?.updateDeferredForActiveRecording = false
     }
   }
 
@@ -551,11 +675,26 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         logSync(
           "Sparkle: Deferring update v\(version) — speech detected \(Int(secondsSinceSpeech))s ago (active recording)"
         )
+        // Replace any prior quiet-moment wait so only one deferred install owns the flags.
+        discardDeferredInstall()
+        Task { @MainActor in
+          self.viewModel?.availableVersion = version
+          self.viewModel?.updateAvailable = true
+          self.viewModel?.updateDeferredForActiveRecording = true
+          self.viewModel?.updateRestartImminent = false
+        }
         deferredInstall = DeferredUpdateInstall(
           version: version,
           silenceWindow: UpdaterDelegate.activeCallSilenceWindow,
           lastSpeechProvider: { VADGateService.lastSpeechAt },
-          install: installationBlock
+          install: { [weak self] in
+            self?.deferredInstall = nil
+            Task { @MainActor in
+              self?.viewModel?.updateDeferredForActiveRecording = false
+              self?.viewModel?.updateRestartImminent = true
+            }
+            installationBlock()
+          }
         )
         deferredInstall?.start()
         return true
@@ -563,6 +702,13 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     }
 
     logSync("Sparkle: Triggering immediate installation for v\(version)")
+    discardDeferredInstall()
+    Task { @MainActor in
+      self.viewModel?.availableVersion = version
+      self.viewModel?.updateAvailable = true
+      self.viewModel?.updateDeferredForActiveRecording = false
+      self.viewModel?.updateRestartImminent = true
+    }
     installationBlock()
     return true
   }
@@ -570,6 +716,13 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   /// Minimum seconds of VAD silence required before an auto-install is allowed.
   /// Matches the typical pause threshold at which a real conversation has wound down.
   fileprivate static let activeCallSilenceWindow: TimeInterval = 120
+
+  /// Drop any quiet-moment wait so a later abort / superseding update / install
+  /// cannot leave `updateDeferredForActiveRecording` stuck or fire after cancel.
+  private func discardDeferredInstall() {
+    deferredInstall?.cancel()
+    deferredInstall = nil
+  }
 }
 
 final class DeferredUpdateInstall {
@@ -601,6 +754,13 @@ final class DeferredUpdateInstall {
   func start(now: Date = Date()) {
     pendingWorkItem?.cancel()
     scheduleNextCheck(now: now)
+  }
+
+  /// Cancel a pending quiet-moment wait. After cancel, ``install`` will not run.
+  func cancel() {
+    pendingWorkItem?.cancel()
+    pendingWorkItem = nil
+    didInstall = true
   }
 
   private func scheduleNextCheck(now: Date) {
@@ -655,7 +815,7 @@ final class UpdaterViewModel: ObservableObject {
   private var isInitialized = false
 
   var usesManagedUpdatePolicy: Bool {
-    !AnalyticsManager.isDevBuild
+    AppBuild.allowsSparkleUpdates && !AnalyticsManager.isDevBuild
   }
 
   /// Whether automatic update checks are enabled
@@ -685,7 +845,25 @@ final class UpdaterViewModel: ObservableObject {
 
   /// Whether Sparkle has an active update session (downloading, installing, etc.)
   @Published private(set) var updateSessionInProgress: Bool = false {
-    didSet { UpdaterViewModel._isUpdateInProgress = updateSessionInProgress }
+    didSet {
+      UpdaterViewModel._isUpdateInProgress = updateSessionInProgress
+      if !updateSessionInProgress {
+        userInitiatedCheckInProgress = false
+      }
+    }
+  }
+
+  /// True while a user-triggered `checkForUpdates()` session is active.
+  /// Background Sparkle polls also set `updateSessionInProgress`; this flag
+  /// keeps the chat-first "Checking…" chip from flashing on every auto-poll.
+  @Published private(set) var userInitiatedCheckInProgress: Bool = false
+
+  /// Whether a user can start a new manual update check from Settings.
+  var canManuallyCheckForUpdates: Bool {
+    Self.allowsManualCheck(
+      canCheckForUpdates: canCheckForUpdates,
+      updateSessionInProgress: updateSessionInProgress
+    )
   }
 
   /// Nonisolated snapshot for cross-actor reads
@@ -714,6 +892,12 @@ final class UpdaterViewModel: ObservableObject {
   /// Version string of the available update
   @Published var availableVersion: String = ""
 
+  /// Sparkle is about to invoke the install/relaunch block (user should see a restart warning).
+  @Published var updateRestartImminent: Bool = false
+
+  /// Auto-install is waiting for VAD silence so an active recording is not interrupted.
+  @Published var updateDeferredForActiveRecording: Bool = false
+
   /// Last non-successful Sparkle update failure, if one needs user recovery.
   @Published var lastUpdateFailure: UpdateFailureDiagnostics?
 
@@ -729,16 +913,10 @@ final class UpdaterViewModel: ObservableObject {
   }
 
   private init() {
-    // Restore beta for users whose preference was overwritten by the March 27 bug
-    AppBuild.migrateBetaChannelOverwrite()
-
-    if UserDefaults.standard.string(forKey: kUpdateChannelKey) == nil {
-      AppBuild.syncUpdateChannelOnFirstLaunch()
-    }
-
-    // Initialize the updater controller with our delegate
+    // Preview builds must not use the shared update feed. Do not start Sparkle for those
+    // artifacts; its manual and background entry points are guarded below as well.
     updaterController = SPUStandardUpdaterController(
-      startingUpdater: true,
+      startingUpdater: AppBuild.allowsSparkleUpdates,
       updaterDelegate: updaterDelegate,
       userDriverDelegate: nil
     )
@@ -747,11 +925,9 @@ final class UpdaterViewModel: ObservableObject {
     automaticallyChecksForUpdates = updaterController.updater.automaticallyChecksForUpdates
     automaticallyDownloadsUpdates = updaterController.updater.automaticallyDownloadsUpdates
 
-    // Initialize update channel from UserDefaults
-    // Normalize legacy "staging" → "beta" and "better" → "beta"
-    var storedChannel = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-    if storedChannel == "staging" || storedChannel == "better" { storedChannel = "beta" }
-    updateChannel = UpdateChannel(rawValue: storedChannel) ?? .stable
+    // Identity pins the Sparkle channel. Leftover UserDefaults from the retired
+    // Stable channel picker must not opt Stable.app into beta-channel zips.
+    updateChannel = AppBuild.isBetaProductionBundle ? .beta : .stable
 
     // Wire up delegate back-reference
     updaterDelegate.viewModel = self
@@ -762,16 +938,22 @@ final class UpdaterViewModel: ObservableObject {
     // the only lever left for delivery latency after a build publishes.)
     updaterController.updater.updateCheckInterval = (updateChannel == .beta) ? 120 : 600
 
-    // Observe updater state changes
-    updaterController.updater.publisher(for: \.canCheckForUpdates)
-      .receive(on: DispatchQueue.main)
-      .assign(to: &$canCheckForUpdates)
+    if AppBuild.allowsSparkleUpdates {
+      // Observe updater state changes only when Sparkle is active. In particular, do not let
+      // its initial KVO value re-enable the update UI for a published preview app.
+      updaterController.updater.publisher(for: \.canCheckForUpdates)
+        .receive(on: DispatchQueue.main)
+        .assign(to: &$canCheckForUpdates)
 
-    updaterController.updater.publisher(for: \.sessionInProgress)
-      .receive(on: DispatchQueue.main)
-      .assign(to: &$updateSessionInProgress)
+      updaterController.updater.publisher(for: \.sessionInProgress)
+        .receive(on: DispatchQueue.main)
+        .assign(to: &$updateSessionInProgress)
+    }
 
     applyManagedUpdatePolicy()
+    if !AppBuild.allowsSparkleUpdates {
+      canCheckForUpdates = false
+    }
     isInitialized = true
   }
 
@@ -780,13 +962,25 @@ final class UpdaterViewModel: ObservableObject {
     _isUpdateInProgress
   }
 
+  nonisolated static func allowsManualCheck(
+    canCheckForUpdates: Bool,
+    updateSessionInProgress: Bool
+  ) -> Bool {
+    canCheckForUpdates && !updateSessionInProgress
+  }
+
   /// Manually check for updates
   func checkForUpdates() {
+    guard AppBuild.allowsSparkleUpdates else { return }
+    userInitiatedCheckInProgress = true
     updaterController.checkForUpdates(nil)
   }
 
   /// Background update check (no UI). Used after channel changes.
   func checkForUpdatesInBackground() {
+    guard AppBuild.allowsSparkleUpdates else { return }
+    // Background polls must not inherit a stale user-initiated "Checking…" chip.
+    userInitiatedCheckInProgress = false
     updaterController.updater.checkForUpdatesInBackground()
   }
 
@@ -794,7 +988,7 @@ final class UpdaterViewModel: ObservableObject {
   /// - release builds: always auto-check + auto-install
   /// - dev builds: keep both disabled to avoid replacing the local app
   func applyManagedUpdatePolicy() {
-    let shouldAutoUpdate = !AnalyticsManager.isDevBuild
+    let shouldAutoUpdate = AppBuild.allowsSparkleUpdates && !AnalyticsManager.isDevBuild
     automaticallyChecksForUpdates = shouldAutoUpdate
     automaticallyDownloadsUpdates = shouldAutoUpdate
     updaterController.updater.automaticallyChecksForUpdates = shouldAutoUpdate
@@ -807,6 +1001,7 @@ final class UpdaterViewModel: ObservableObject {
   /// Trigger one immediate silent update check right after launch.
   /// Sparkle recommends calling this only immediately after starting the updater.
   func checkForUpdatesImmediatelyAfterLaunchIfNeeded() {
+    guard AppBuild.allowsSparkleUpdates else { return }
     guard usesManagedUpdatePolicy else { return }
     guard automaticallyChecksForUpdates else { return }
     guard canCheckForUpdates else { return }
@@ -824,18 +1019,5 @@ final class UpdaterViewModel: ObservableObject {
   }
 
   /// The active channel label
-  @Published var activeChannelLabel: String = {
-    let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-    return (raw == "beta" || raw == "staging") ? "Beta" : ""
-  }()
-
-  /// Returns true if switching to stable would be a downgrade (current build > latest stable build)
-  var isDowngradeToStable: Bool {
-    guard let currentBuild = Int(buildNumber),
-      let stableBuild = latestStableBuildNumber
-    else {
-      return false
-    }
-    return currentBuild > stableBuild
-  }
+  @Published var activeChannelLabel: String = AppBuild.isBetaProductionBundle ? "Beta" : ""
 }

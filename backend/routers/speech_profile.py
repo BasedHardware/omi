@@ -1,9 +1,10 @@
 import os
-from typing import Optional
+from typing import List, Optional
 
 import av
 
 from fastapi import APIRouter, UploadFile, Depends, HTTPException
+from pydantic import BaseModel
 from pydub import AudioSegment
 
 from database.redis_db import set_speech_profile_duration
@@ -18,21 +19,38 @@ from utils.other.storage import (
     get_user_person_speech_samples,
     get_user_has_speech_profile,
 )
+from utils.multipart import MultipartMaxPartSizeRoute, SPEECH_PROFILE_MAX_PART_SIZE, max_part_size
 from utils.stt.speaker_embedding import extract_embedding
-from utils.stt.vad import apply_vad_for_speech_profile
+from utils.stt.vad import apply_vad_for_speech_profile, VADEmptyError
 import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 
-@router.get('/v3/speech-profile', tags=['v3'])
+class HasSpeechProfileResponse(BaseModel):
+    has_profile: bool
+
+
+class SpeechProfileResponse(BaseModel):
+    url: Optional[str] = None
+
+
+class SpeechProfileUploadResponse(BaseModel):
+    url: str
+
+
+class SpeechProfileMutationResponse(BaseModel):
+    status: str
+
+
+@router.get('/v3/speech-profile', tags=['v3'], response_model=HasSpeechProfileResponse)
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'has_profile': get_user_has_speech_profile(uid)}
 
 
-@router.get('/v4/speech-profile', tags=['v3'])
+@router.get('/v4/speech-profile', tags=['v3'], response_model=SpeechProfileResponse)
 def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'url': get_profile_audio_if_exists(uid, download=False)}
 
@@ -45,7 +63,8 @@ def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 # and audio itself, which we use on post-processing to use speechbrain model
 
 
-@router.post('/v3/upload-audio', tags=['v3'])
+@router.post('/v3/upload-audio', tags=['v3'], response_model=SpeechProfileUploadResponse)
+@max_part_size(SPEECH_PROFILE_MAX_PART_SIZE)
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
     file_path = f"_temp/{uid}/{file.filename}"
@@ -62,7 +81,10 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     if aseg.duration_seconds < 5 or aseg.duration_seconds > 120:
         raise HTTPException(status_code=400, detail="Audio duration is invalid (must be 5-120 seconds)")
 
-    apply_vad_for_speech_profile(file_path)
+    try:
+        apply_vad_for_speech_profile(file_path)
+    except VADEmptyError:
+        raise HTTPException(status_code=400, detail="Audio is empty")
 
     # Write-ahead: Cache exact duration after VAD processing (use av for fast header-only read)
     with av.open(file_path) as container:
@@ -87,7 +109,7 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
 # ******************************************************
 
 
-@router.delete('/v3/speech-profile/expand', tags=['v3'])
+@router.delete('/v3/speech-profile/expand', tags=['v3'], response_model=SpeechProfileMutationResponse)
 def delete_extra_speech_profile_sample(
     memory_id: str, segment_idx: int, person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -104,7 +126,7 @@ def delete_extra_speech_profile_sample(
     return {'status': 'ok'}
 
 
-@router.get('/v3/speech-profile/expand', tags=['v3'])
+@router.get('/v3/speech-profile/expand', tags=['v3'], response_model=List[str])
 def get_extra_speech_profile_samples(person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
     if person_id:
         return get_user_person_speech_samples(uid, person_id)

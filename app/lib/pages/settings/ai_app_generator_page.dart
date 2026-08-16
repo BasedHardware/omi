@@ -922,7 +922,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
     );
   }
 
-  Widget _buildFeatureRow({required IconData icon, required String description}) {
+  Widget _buildFeatureRow({required FaIconData icon, required String description}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -1018,7 +1018,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
   }
 
   Widget _buildSettingRow({
-    required IconData icon,
+    required FaIconData icon,
     required String title,
     required String subtitle,
     required bool value,

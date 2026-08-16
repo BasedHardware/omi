@@ -1,5 +1,8 @@
+import AppKit
 import FirebaseAuth
 import FirebaseCore
+import OmiSupport
+import OmiTheme
 import Sentry
 import Sparkle
 import SwiftUI
@@ -38,11 +41,13 @@ class AuthState: ObservableObject {
   private static let kAuthUserEmail = "auth_userEmail"
   private static let kAuthUserId = "auth_userId"
 
-  @Published var isSignedIn: Bool
+  @Published private(set) var sessionPhase: AuthSessionPhase
   @Published var isLoading: Bool = false
-  @Published var isRestoringAuth: Bool = true
   @Published var error: String?
   @Published var userEmail: String?
+
+  var isSignedIn: Bool { sessionPhase == .authenticated }
+  var isRestoringAuth: Bool { sessionPhase == .restoring }
 
   private init() {
     BundleEnvironment.loadIfNeeded()
@@ -53,13 +58,13 @@ class AuthState: ObservableObject {
 
     if DesktopLocalProfile.isEnabled {
       // Harness-owned emulator auth replaces any persisted cloud session.
-      self.isSignedIn = false
+      self.sessionPhase = .restoring
       self.userEmail = nil
-      self.isRestoringAuth = true
     } else {
-      self.isSignedIn = savedSignedIn
+      // `auth_isSignedIn` is only a restore hint. Never expose authenticated UI
+      // until AuthService has validated a usable credential for this launch.
+      self.sessionPhase = savedSignedIn ? .restoring : .signedOut
       self.userEmail = savedEmail
-      self.isRestoringAuth = savedSignedIn
     }
     NSLog(
       "OMI AuthState: Initialized localProfile=%@ savedSignedIn=%@ email=%@ isRestoringAuth=%@",
@@ -69,8 +74,14 @@ class AuthState: ObservableObject {
   }
 
   func update(isSignedIn: Bool, userEmail: String? = nil) {
-    self.isSignedIn = isSignedIn
+    transition(to: isSignedIn ? .authenticated : .signedOut)
     self.userEmail = userEmail
+  }
+
+  func transition(to phase: AuthSessionPhase) {
+    guard sessionPhase != phase else { return }
+    sessionPhase = phase
+    NSLog("OMI AUTH: session phase -> %@", String(describing: phase))
   }
 
   /// Get the user's Firebase UID from UserDefaults (fallback when Firebase SDK auth fails)
@@ -86,41 +97,47 @@ struct OMIApp: App {
   @StateObject private var authState = AuthState.shared
   @Environment(\.openWindow) private var openWindow
 
-  /// Launch mode determined at startup from command-line arguments
   static let launchMode = LaunchMode.fromCommandLine()
 
-  /// Window title with version number (different for rewind mode)
-  private var windowTitle: String {
-    // Keep a distinct title in non-production builds so custom test apps are easy to identify.
-    if AppBuild.isNonProduction {
-      let baseName = AppBuild.displayName
-      return Self.launchMode == .rewind ? "\(baseName) Rewind" : baseName
-    }
-
-    let version =
-      Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-    let baseName = Self.launchMode == .rewind ? "omi Rewind" : UpdateChannel.appDisplayName
-    return version.isEmpty ? baseName : "\(baseName) v\(version)"
+  /// The shell window's title for *this* build. Static because `ShellSummon` identifies the shell by
+  /// exact title — several auxiliary windows also begin with "Omi", and dressing one of those as the
+  /// summonable shell would float and auto-hide it.
+  static var currentWindowTitle: String {
+    windowTitle(
+      displayName: AppBuild.displayName,
+      version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+      launchMode: launchMode,
+      isNonProduction: AppBuild.isNonProduction)
   }
 
-  /// Window size based on launch mode
+  static func windowTitle(displayName: String, version: String, launchMode: LaunchMode, isNonProduction: Bool) -> String
+  {
+    let baseName = isNonProduction ? displayName : launchMode == .rewind ? "omi Rewind" : UpdateChannel.appDisplayName
+    let title = isNonProduction && launchMode == .rewind ? "\(baseName) Rewind" : baseName
+    return version.isEmpty ? title : "\(title) v\(version)"
+  }
+
+  /// Size the shell first comes up at. The summoned shell is a panel you call over your work, not an
+  /// app you switch to, so it matches `ShellSummonPlacement.defaultSize` rather than the old
+  /// managed-window 1200×800. Rewind mode is still a window and keeps its own.
   private var defaultWindowSize: CGSize {
-    Self.launchMode == .rewind ? CGSize(width: 1000, height: 700) : CGSize(width: 1200, height: 800)
+    Self.launchMode == .rewind ? CGSize(width: 1000, height: 700) : ShellSummonPlacement.defaultSize
   }
 
   var body: some Scene {
     let _ = Self.registerOpenMainWindowHandler(openWindow)
 
     // Main desktop window - same view for both modes, sidebar hidden in rewind mode
-    return Window(windowTitle, id: "main") {
+    return Window(Self.currentWindowTitle, id: "main") {
       DesktopHomeView()
+        .environmentObject(appState)
         .withFontScaling()
         .overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }
         .onAppear {
           log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
         }
     }
-    .windowStyle(.titleBar)
+    .windowStyle(.hiddenTitleBar)  // fullSizeContentView: the top bar occupies the title-bar band.
     .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
     .commands {
       CommandGroup(after: .textFormatting) {
@@ -219,11 +236,25 @@ struct OMIApp: App {
   }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-  static var openMainWindow: (() -> Void)?
-  private static var appIsActive = false
-  private static var mainWindowIsKey = false
-  private static var lastMainWindowForegroundAt: Date?
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked Sendable {
+  /// The live AppDelegate instance. SwiftUI's `@NSApplicationDelegateAdaptor` does
+  /// NOT make `NSApp.delegate` our `AppDelegate` — on macOS 14+ it installs an
+  /// internal forwarding delegate, so `NSApp.delegate as? AppDelegate` is `nil`.
+  /// Callers that need to reach the delegate (e.g. the global summon shortcut, the
+  /// floating bar) must go through this reference instead of casting `NSApp.delegate`.
+  nonisolated(unsafe) static weak var shared: AppDelegate?
+
+  /// The delegate that the summon call sites (global Open-Omi shortcut, floating bar
+  /// "Continue in Omi") route through to bring the main window forward. This exists as
+  /// a single chokepoint precisely because `NSApp.delegate as? AppDelegate` returns
+  /// `nil` under SwiftUI's `@NSApplicationDelegateAdaptor` — that cast silently
+  /// no-oped every summon, so the app's window never came to the foreground.
+  static func summonWindowTarget() -> AppDelegate? { shared }
+
+  nonisolated(unsafe) static var openMainWindow: (() -> Void)?
+  private nonisolated(unsafe) static var appIsActive = false
+  private nonisolated(unsafe) static var mainWindowIsKey = false
+  private nonisolated(unsafe) static var lastMainWindowForegroundAt: Date?
 
   private var sentryHeartbeatTimer: Timer?
   private var globalHotkeyMonitor: Any?
@@ -239,10 +270,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var appLifecycleMaintenanceTask: Task<Void, Never>?
   private var didScheduleInitialSettingsSync = false
   private var initialSettingsSyncTask: Task<Void, Never>?
+  func applicationWillFinishLaunching(_ notification: Notification) {
+    // Publish the live delegate instance for callers that can't rely on
+    // `NSApp.delegate as? AppDelegate` (nil under SwiftUI's delegate adaptor).
+    AppDelegate.shared = self
+    if AuthStorageCanary.isRequested || UserNotificationCallbackBridge.isSignedSmokeRequested() { return }
+    OmiFontRegistration.registerAll()
+    // Single-instance guard: a second live copy of the same bundle id + launch mode
+    // would race the first against the shared Rewind SQLite DB
+    // (~/Library/Application Support/Omi/…) and the bundle-id UserDefaults domain,
+    // corrupting state. Enforce here — the earliest delegate callback — so a duplicate
+    // exits before any DB open or UserDefaults write in applicationDidFinishLaunching.
+    SingleInstanceGuard.enforceSingleInstanceOrExit(
+      launchMode: OMIApp.launchMode,
+      isExporting: ViewExporter.shouldExport())
+  }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     if ViewExporter.shouldExport() {
       ViewExporter.run()
+      return
+    }
+
+    // The release pipeline launches the exact signed artifact in this isolated
+    // mode before publication. Run before installer, database, defaults, or
+    // background-service startup so the probe has no product side effects.
+    if AuthStorageCanary.runIfRequested() { return }
+    if UserNotificationCallbackBridge.runSignedSmokeIfRequested() { return }
+    // Running from the mounted DMG / a translocated mount breaks TCC permissions
+    // and Sparkle updates — install to /Applications and relaunch before any
+    // services start. Returns true when this process is being replaced.
+    if AppInstaller.moveToApplicationsIfNeeded() {
       return
     }
 
@@ -254,16 +312,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     BundleEnvironment.loadIfNeeded()
 
     DesktopAutomationBridge.shared.startIfNeeded()
+    DesktopAutomationWindowPresentation.installIfNeeded()
     LocalAgentAPIServer.shared.startIfNeeded()
+    publishNamedBundleRuntimeManifest()
 
-    // Strip com.apple.provenance xattrs that macOS adds when Sparkle extracts updates.
-    // These break the code signature seal, causing the NEXT update to fail with
-    // "An error occurred while running the updater."
-    stripProvenanceXattrs()
+    runStartupSystemMaintenance()
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
-    let restoreMainWindowAfterUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    let pendingUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    let restoreMainWindowAfterUpdateRelaunch = pendingUpdateRelaunch?.restoreMainWindow
     if let restoreMainWindowAfterUpdateRelaunch {
       log(
         "AppDelegate: Sparkle update relaunch detected; restoreMainWindow=\(restoreMainWindowAfterUpdateRelaunch)"
@@ -281,10 +339,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       }
     }
 
-    // Proactive notifications are now OFF by default for everyone. Run the one-time
-    // migration before any assistant can fire, so existing users are flipped to Off
-    // once (they can re-enable in Settings).
-    NotificationService.migrateToOffByDefaultIfNeeded()
+    // Proactive notifications are back ON by default at Balanced (focus/insight
+    // categories only). Run the one-time migration before any assistant can fire;
+    // turning notifications off again in Settings sticks.
+    NotificationService.migrateToBalancedDefaultIfNeeded()
 
     // Force macOS to use the correct app icon (bypasses icon cache).
     // Apply squircle mask with proper margins because NSApp.applicationIconImage
@@ -311,21 +369,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       icon.draw(in: contentRect)
       maskedIcon.unlockFocus()
       NSApp.applicationIconImage = maskedIcon
-      if let cfURL = Bundle.main.bundleURL as CFURL? {
-        LSRegisterURL(cfURL, true)
-      }
       log("AppDelegate: Set application icon with squircle mask")
     }
-
-    // One-time icon cache reset: forces macOS to pick up the new squircle icon.
-    // Without this, users who had the old square icon see it cached indefinitely
-    // in the Dock, notifications, and Sparkle updater.
-    resetIconCacheIfNeeded()
 
     // Initialize NotificationService early to set up UNUserNotificationCenterDelegate
     // This ensures notifications display properly when app is in foreground
     _ = NotificationService.shared
-    NotificationRegistrationRepair.repairOnceForCurrentVersion(reason: "startup_version_registration")
+    // Observe meeting completions app-wide so the action-item banner also fires
+    // while the main window is closed or backgrounded.
+    MeetingActionItemBannerService.shared.activate()
+    NotificationSettingsSyncCoordinator.shared.start()
+    // Notification registration repair is deliberately user-triggered from
+    // Settings. Launch must not restart usernoted/NotificationCenter or alter
+    // notification registration as a passive side effect.
 
     // Initialize Sparkle auto-updater early so the 10-minute check timer starts at launch
     // Without this, the updater only starts when the user opens Settings or clicks "Check for Updates"
@@ -346,6 +402,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       options.enableAppHangTracking = !isDev
       options.enableWatchdogTerminationTracking = !isDev
       options.environment = isDev ? "development" : "production"
+      // Build-attributable native events (#10425): bind every native crash / app-hang /
+      // watchdog event to the exact version+build (`v{version}+{build}-macos`, the same
+      // tag Codemagic publishes) and the release channel (`stable`/`beta`). Without these,
+      // Sentry's Release/Build filters return nothing for native events and beta+stable
+      // are indistinguishable (both report environment="production").
+      if let releaseTag = AppBuild.releaseTag {
+        options.releaseName = releaseTag
+      }
+      options.dist = AppBuild.currentUpdateChannel
       // Disable automatic HTTP client error capture — the SDK creates noisy events
       // for every 4xx/5xx response (e.g. Cloud Run 503 cold starts on /v1/crisp/unread).
       // App code already handles HTTP errors and reports meaningful ones explicitly.
@@ -357,77 +422,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       // sustained freezes — the ones users actually feel — are reported.
       options.appHangTimeoutInterval = isDev ? 0 : 3.0
       options.beforeSend = { event in
-        // Allow user feedback through from all builds (dev + prod)
-        if event.message?.formatted.hasPrefix("User Report") == true { return event }
-        // Never send other events from dev builds — they pollute production Sentry data
-        if isDev { return nil }
-        // Filter out HTTP errors targeting dev/local URLs — noise when tunnels or local backends are down
-        if let urlTag = event.tags?["url"],
-          urlTag.contains("localhost") || urlTag.contains("127.0.0.1")
-            || urlTag.contains("trycloudflare.com")
-        {
-          return nil
-        }
-        // Filter out transient network/socket errors captured as exceptions —
-        // offline, timeouts, dropped connections, cancellations. These are not
-        // actionable app bugs and dominate event volume. (logError filters the
-        // message-event path; this covers SDK-auto and legacy exception captures.)
-        // NSURLErrorDomain: -999 cancelled, -1001 timeout, -1003/-1004 host/connect,
-        // -1005 lost, -1009 offline, -1011 bad response, -1020 not allowed.
-        // NSPOSIXErrorDomain: 54 reset, 57 not connected, 89 cancelled.
-        let transientNetworkCodes: [(domain: String, codes: [String])] = [
-          (
-            "NSURLErrorDomain",
-            ["-999", "-1001", "-1003", "-1004", "-1005", "-1009", "-1011", "-1020"]
-          ),
-          ("NSPOSIXErrorDomain", ["54", "57", "89"]),
-        ]
-        if let exceptions = event.exceptions,
-          exceptions.contains(where: { exc in
-            let value = exc.value
-            return transientNetworkCodes.contains { entry in
-              exc.type == entry.domain
-                && entry.codes.contains { value.contains("Code=\($0)") || value.contains("Code: \($0)") }
-            }
-          })
-        {
-          return nil
-        }
-        // Filter out backend Gemini key-expiry/auth failures. These mean the
-        // server-side API key needs rotation — a backend config issue, not a
-        // per-client bug. A single expired key otherwise floods Sentry with one
-        // event per request across every user.
-        if let message = event.message?.formatted {
-          let lower = message.lowercased()
-          if lower.contains("api key expired") || lower.contains("renew the api key")
-            || lower.contains("api_key_invalid")
-            // GeminiClient maps raw backend auth failures (unauthorized / permission denied /
-            // api key / forbidden) to this user-facing string before it reaches Sentry, so the
-            // raw-message checks above miss it. Same root cause (server-side key needs rotation),
-            // same flood (one bad key emits one event per task-extraction frame for every user).
-            || lower.contains("ai service authentication error")
-            // Backend rejects the auth header on batch (PTT) transcription with a 401
-            // INVALID_AUTH / "Invalid credentials." body — a transient stale-token or BYOK
-            // misconfig, not a per-client app bug. The 30s refresh timer recovers it; left
-            // unfiltered it floods Sentry (one event per failed batch). Same class as the
-            // AuthError.notSignedIn filter below.
-            || lower.contains("invalid_auth")
-          {
-            return nil
-          }
-        }
-        // Filter out AuthError.notSignedIn — this is thrown when token refresh transiently
-        // fails (network blip, expired token mid-refresh). The user is still signed in per
-        // UserDefaults; the 30s refresh timer will retry. Not actionable as a Sentry error.
-        if let exceptions = event.exceptions,
-          exceptions.contains(where: { exc in
-            exc.type == "Omi_Computer.AuthError" && exc.value.contains("notSignedIn")
-          })
-        {
-          return nil
-        }
-        return event
+        // The drop decision is extracted to the pure `shouldDropSentryEvent` so the
+        // filter list is unit-testable without constructing Sentry events (SET-05).
+        let drop = Self.shouldDropSentryEvent(
+          isUserReport: event.message?.formatted.hasPrefix("User Report") == true,
+          isDev: isDev,
+          urlTag: event.tags?["url"],
+          messageFormatted: event.message?.formatted,
+          exceptions: (event.exceptions ?? []).map { (type: $0.type, value: $0.value) })
+        return drop ? nil : event
       }
+    }
+    // Tag every Sentry event (including native crashes, which bypass app code) with
+    // the release channel and bundle identity so a release cohort can be sliced without
+    // relying on `dist` alone (#10425).
+    SentrySDK.configureScope { scope in
+      scope.setTag(value: AppBuild.currentUpdateChannel, key: "update_channel")
+      scope.setTag(value: AppBuild.bundleIdentifier, key: "bundle_id")
     }
     log(
       "Sentry initialized (environment: \(isDev ? "development" : "production"), nativeHandlers=\(!isDev))"
@@ -439,28 +450,55 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     if DesktopLocalProfile.isEnabled {
       log("Local harness: skipping Firebase SDK configure; bootstrapping Auth emulator via REST")
-      AuthState.shared.isRestoringAuth = true
+      AuthState.shared.transition(to: .restoring)
       Task { @MainActor in
         await AuthService.shared.bootstrapLocalHarnessAuthIfNeeded()
       }
       DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
         if AuthState.shared.isRestoringAuth {
           log("Local harness auth watchdog: clearing stuck restoring_auth splash")
-          AuthState.shared.isRestoringAuth = false
+          AuthState.shared.transition(to: .recoveryRequired)
         }
       }
     } else if let path = plistPath,
       let options = FirebaseOptions(contentsOfFile: path)
     {
       FirebaseApp.configure(options: options)
-      AuthService.shared.configure()
+      Task { @MainActor in await AuthService.shared.configure() }
     } else {
-      log("Firebase configure skipped (plistPath=\(plistPath ?? "nil"))")
+      // REST-backed token restoration does not require the Firebase SDK.
+      log("Firebase configure skipped (plistPath=\(plistPath ?? "nil")); using REST-backed auth")
+      Task { @MainActor in await AuthService.shared.configure() }
     }
 
     // Initialize analytics (PostHog)
     AnalyticsManager.shared.initialize()
     AnalyticsManager.shared.detectAndReportCrash()
+    if let attempt = pendingUpdateRelaunch?.attempt {
+      let installedVersion =
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+        as? String ?? "unknown"
+      let installedBuild =
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        ?? "unknown"
+      if installedBuild == attempt.targetBuild {
+        AnalyticsManager.shared.updateInstalled(
+          attempt: attempt,
+          installedVersion: installedVersion,
+          installedBuild: installedBuild
+        )
+        log("Sparkle: Verified installed update attempt \(attempt.id) at build \(installedBuild)")
+      } else {
+        AnalyticsManager.shared.updateInstallVerificationFailed(
+          attempt: attempt,
+          installedVersion: installedVersion,
+          installedBuild: installedBuild
+        )
+        log(
+          "Sparkle: Update attempt \(attempt.id) expected build \(attempt.targetBuild), relaunched build \(installedBuild)"
+        )
+      }
+    }
     AnalyticsManager.shared.appLaunched()
 
     // Tier gating: migrate old boolean key to new 6-tier system
@@ -478,26 +516,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     AnalyticsManager.shared.trackFirstLaunchIfNeeded()
 
-    // Set per-user database path before any async tasks can trigger DB initialization.
-    // This is synchronous and must happen before ViewModelContainer initializes SQLite.
-    let userId = UserDefaults.standard.string(forKey: "auth_userId")
-    RewindDatabase.currentUserId = (userId?.isEmpty == false) ? userId : "anonymous"
-
     // Start resource monitoring (memory, CPU, disk)
     ResourceMonitor.shared.start()
+
+    // Route completed background-agent results into live voice sessions.
+    AgentCompletionVoiceDelivery.shared.start()
+
+    Task { await ContextWorkstreamReconciler.shared.start() }
 
     scheduleAppLifecycleMaintenance()
 
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
       AnalyticsManager.shared.identify()
-      // Set Sentry user context (now enabled for dev builds too)
-      if let email = AuthState.shared.userEmail {
-        let sentryUser = Sentry.User()
-        sentryUser.email = email
-        sentryUser.username =
-          AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.displayName
-        SentrySDK.setUser(sentryUser)
+      // Set an opaque Sentry user identifier for incident correlation. Do not
+      // attach email or display name to crash/error reports.
+      if let userID = AuthState.shared.userId {
+        SentrySDK.setUser(Sentry.User(userId: userID))
       }
       // Fetch API keys after first-window warmup settles. First-use paths call waitForKeys().
       scheduleAPIKeyFetch()
@@ -516,9 +551,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         await TierManager.shared.checkTierIfNeeded()
       }
 
-      // Report comprehensive settings state (at most once per day)
-      AnalyticsManager.shared.reportAllSettingsIfNeeded()
-
       // File indexing now runs through FileIndexingView UI (user consent required)
       // No background scan — prevents race condition where scan finishes before UI listens
     }
@@ -530,12 +562,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     migrateAppName()
 
     updateOnboardingLifecyclePolicy(reason: "launch")
+    // `queue: nil` + explicit hop, never `queue: .main`: synchronous main-queue delivery makes
+    // every background `UserDefaults.set` wait on the main thread, which deadlocked the app when
+    // an auth commit held the session fence while posting and the main thread wanted that fence
+    // (frozen sign-in screen, #11374).
     userDefaultsObserver = NotificationCenter.default.addObserver(
       forName: UserDefaults.didChangeNotification,
       object: nil,
-      queue: .main
+      queue: nil
     ) { [weak self] _ in
-      self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated {
+          self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+        }
+      }
     }
 
     // Register for Apple Events to handle URL scheme
@@ -565,7 +605,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Safety net for any edge case (macOS Sequoia bugs, activation policy races) that
     // causes the status bar item to vanish while the process keeps running.
     Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-      DispatchQueue.main.async {
+      MainActor.assumeIsolated {
         guard let self = self else { return }
         let item = self.statusBarItem
         let button = item?.button
@@ -582,49 +622,39 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     startSentryHeartbeat()
     startForegroundTracking()
 
-    // Apply initial main-window policy after SwiftUI has created the window.
+    // Dress and place the shell once SwiftUI has created it. `ShellSummon` owns both from here on:
+    // transparent, buttonless, summoned or anchored, and remembered per display.
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-      log("AppDelegate: Checking windows after 0.2s delay, count=\(NSApp.windows.count)")
-      let shouldSuppressMainWindow = restoreMainWindowAfterUpdateRelaunch == false
-      if !shouldSuppressMainWindow {
+      guard let window = ShellSummon.shellWindow() else {
+        log("AppDelegate: WARNING - shell window not found after launch")
+        return
+      }
+      ShellSummon.applyPresentation(to: window)
+      if restoreMainWindowAfterUpdateRelaunch == false {
+        window.orderOut(nil)
+        log("AppDelegate: Shell suppressed after background update relaunch")
+      } else if DesktopAutomationWindowPresentation.currentMode != .normal {
+        DesktopAutomationWindowPresentation.applyLaunchMode(to: window)
+        log(
+          "AppDelegate: Shell launched in \(DesktopAutomationWindowPresentation.currentMode.rawValue) automation presentation"
+        )
+      } else {
         NSApp.activate()
-      }
-      var foundOmiWindow = false
-      for window in NSApp.windows {
-        log("AppDelegate: Window title='\(window.title)', isVisible=\(window.isVisible)")
-        if Self.isMainOmiWindow(window) {
-          foundOmiWindow = true
-          window.appearance = NSAppearance(named: .darkAqua)
-          // Ensure fullscreen always creates a dedicated Space
-          window.collectionBehavior.insert(.fullScreenPrimary)
-          if shouldSuppressMainWindow {
-            window.orderOut(nil)
-            log("AppDelegate: Main window suppressed after background update relaunch")
-          } else {
-            window.makeKeyAndOrderFront(nil)
-            log("AppDelegate: Main window shown on launch")
-          }
-        }
-      }
-      if !foundOmiWindow {
-        log("AppDelegate: WARNING - 'Omi' window not found!")
+        ShellSummon.summon(alwaysPlace: true)
+        log("AppDelegate: Shell summoned on launch")
       }
     }
 
     log("AppDelegate: applicationDidFinishLaunching completed")
   }
 
-  /// Start a timer that sends Sentry session snapshots every 5 minutes
-  /// This ensures we have breadcrumbs captured even without errors
+  /// Start a timer that records Sentry session breadcrumbs every 5 minutes.
+  /// Breadcrumbs preserve observability without creating unresolved Sentry issues (#9191).
   private func startSentryHeartbeat() {
     guard !AnalyticsManager.isDevBuild else { return }
     sentryHeartbeatTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
-      // Capture a session heartbeat event with current breadcrumbs
-      SentrySDK.capture(message: "Session Heartbeat") { scope in
-        scope.setLevel(.info)
-        scope.setTag(value: "heartbeat", key: "event_type")
-      }
-      log("Sentry: Session heartbeat captured")
+      SentryHeartbeatTelemetry.recordSessionHeartbeat()
+      log("Sentry: Session heartbeat breadcrumb recorded")
     }
   }
 
@@ -637,6 +667,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
       ) { _ in
         Self.recordForegroundState()
+        Task { @MainActor in
+          await AuthSessionCoordinator.shared.ensureValidSessionDebounced(
+            trigger: .appBecameActive,
+            auth: AuthService.shared
+          )
+        }
       })
     windowObservers.append(
       center.addObserver(
@@ -677,17 +713,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private static func recordForegroundState(now: Date = Date()) {
-    appIsActive = NSApp.isActive
-    mainWindowIsKey = NSApp.keyWindow.map(isMainOmiWindow) ?? false
+    MainActor.assumeIsolated {
+      appIsActive = NSApp.isActive
+      mainWindowIsKey = NSApp.keyWindow.map(isMainOmiWindow) ?? false
 
-    if UpdateRelaunchWindowPolicy.shouldRestoreMainWindow(
-      appIsActive: appIsActive,
-      frontmostBundleMatches: frontmostApplicationMatchesBundle(),
-      mainWindowIsKey: mainWindowIsKey,
-      lastMainWindowForegroundAt: nil,
-      now: now
-    ) {
-      lastMainWindowForegroundAt = now
+      if UpdateRelaunchWindowPolicy.shouldRestoreMainWindow(
+        appIsActive: appIsActive,
+        frontmostBundleMatches: frontmostApplicationMatchesBundle(),
+        mainWindowIsKey: mainWindowIsKey,
+        lastMainWindowForegroundAt: nil,
+        now: now
+      ) {
+        lastMainWindowForegroundAt = now
+      }
     }
   }
 
@@ -696,93 +734,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private static func isMainOmiWindow(_ window: NSWindow) -> Bool {
-    window.title.lowercased().hasPrefix("omi")
+    MainActor.assumeIsolated { window.title.lowercased().hasPrefix("omi") }
   }
 
-  /// Strip com.apple.provenance extended attributes from our own bundle.
-  /// macOS adds these when Sparkle extracts the update ZIP, which breaks the code
-  /// signature seal and causes subsequent updates to fail.
-  private func stripProvenanceXattrs() {
+  /// Run the narrow, bundle-local maintenance required for update integrity.
+  /// Startup must never restart shared macOS services or mutate global caches.
+  private func runStartupSystemMaintenance() {
     let bundlePath = Bundle.main.bundlePath
+    let commands = StartupSystemMaintenancePolicy.commands(bundlePath: bundlePath)
     DispatchQueue.global(qos: .utility).async {
-      let process = Process()
-      process.launchPath = "/usr/bin/xattr"
-      process.arguments = ["-cr", bundlePath]
-      process.standardOutput = nil
-      process.standardError = nil
-      try? process.run()
-      process.waitUntilExit()
-      if process.terminationStatus == 0 {
-        log("AppDelegate: Stripped provenance xattrs from bundle")
+      for command in commands {
+        // A silent failure here can break future update integrity, so surface it
+        // instead of dropping it.
+        SystemCommand.runLogging(
+          command.label,
+          executable: command.executable,
+          arguments: command.arguments
+        )
       }
-    }
-  }
-
-  /// One-time icon cache reset to force macOS to pick up the new squircle icon.
-  /// Runs lsregister unregister/register + kills iconservicesagent (auto-restarts).
-  /// Includes a safety net to restart the Dock if it crashes during the reset.
-  private func resetIconCacheIfNeeded() {
-    let key = "hasResetIconCache_v2"
-    guard !UserDefaults.standard.bool(forKey: key) else { return }
-    UserDefaults.standard.set(true, forKey: key)
-    log("AppDelegate: Running one-time icon cache reset")
-
-    let appPath = Bundle.main.bundlePath
-    let lsregister =
-      "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-
-    DispatchQueue.global(qos: .utility).async {
-      // Unregister to clear stale icon entries
-      let unregister = Process()
-      unregister.executableURL = URL(fileURLWithPath: lsregister)
-      unregister.arguments = ["-u", appPath]
-      unregister.standardOutput = FileHandle.nullDevice
-      unregister.standardError = FileHandle.nullDevice
-      try? unregister.run()
-      unregister.waitUntilExit()
-
-      // Force re-register with updated icon
-      let register = Process()
-      register.executableURL = URL(fileURLWithPath: lsregister)
-      register.arguments = ["-f", appPath]
-      register.standardOutput = FileHandle.nullDevice
-      register.standardError = FileHandle.nullDevice
-      try? register.run()
-      register.waitUntilExit()
-
-      // Kill iconservicesagent to flush the icon cache (auto-restarts in <1s)
-      let killIcons = Process()
-      killIcons.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-      killIcons.arguments = ["iconservicesagent"]
-      killIcons.standardOutput = FileHandle.nullDevice
-      killIcons.standardError = FileHandle.nullDevice
-      try? killIcons.run()
-      killIcons.waitUntilExit()
-
-      // Safety net: verify the Dock is still running after 2 seconds.
-      // iconservicesagent restart can occasionally crash the Dock.
-      Thread.sleep(forTimeInterval: 2.0)
-      let dockCheck = Process()
-      dockCheck.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-      dockCheck.arguments = ["-x", "Dock"]
-      dockCheck.standardOutput = FileHandle.nullDevice
-      dockCheck.standardError = FileHandle.nullDevice
-      try? dockCheck.run()
-      dockCheck.waitUntilExit()
-
-      if dockCheck.terminationStatus != 0 {
-        // Dock is not running — restart it
-        log("AppDelegate: Dock not running after icon cache reset, restarting")
-        let restartDock = Process()
-        restartDock.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        restartDock.arguments = ["-a", "Dock"]
-        restartDock.standardOutput = FileHandle.nullDevice
-        restartDock.standardError = FileHandle.nullDevice
-        try? restartDock.run()
-        restartDock.waitUntilExit()
-      }
-
-      log("AppDelegate: Icon cache reset complete")
     }
   }
 
@@ -808,15 +777,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log("AppDelegate: [HOTKEY] Rewind hotkey MATCHED (Ctrl+Option+R)")
         DispatchQueue.main.async {
           log("AppDelegate: [HOTKEY] Activating app and posting notification")
-          // Bring app to front
+          // Bring app to front and summon the shell onto the display the cursor is on.
+          DesktopAutomationWindowPresentation.revealForUser()
           NSApp.activate()
-          // Find and show main window
-          for window in NSApp.windows {
-            if window.title.hasPrefix("Omi") {
-              window.makeKeyAndOrderFront(nil)
-              break
-            }
-          }
+          ShellSummon.summon()
           // Post notification to navigate to Rewind
           NotificationCenter.default.post(name: .navigateToRewind, object: nil)
           log("AppDelegate: [HOTKEY] Posted navigateToRewind notification")
@@ -867,13 +831,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           icon.isTemplate = true
           button.image = icon
         }
-      } else if let iconURL = Bundle.resourceBundle.url(
-        forResource: "omi_menu_bar_icon", withExtension: "png"),
-        let icon = NSImage(contentsOf: iconURL)
-      {
-        icon.isTemplate = true
-        icon.size = NSSize(width: 18, height: 18)
-        button.image = icon
+      } else {
+        button.image = omiMenuBarIcon()
       }
     }
     // Safety net: verify again after a short delay
@@ -935,22 +894,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           button.image = icon
           log("AppDelegate: [MENUBAR] Rewind icon set successfully")
         }
-      } else if let iconURL = Bundle.resourceBundle.url(
-        forResource: "omi_menu_bar_icon", withExtension: "png"),
-        let icon = NSImage(contentsOf: iconURL)
-      {
-        icon.isTemplate = true
-        icon.size = NSSize(width: 18, height: 18)
-        button.image = icon
-        button.imagePosition = .imageOnly
-        log("AppDelegate: [MENUBAR] Omi circle logo set successfully (size: \(icon.size))")
       } else {
-        // Fallback to SF Symbol
-        if let icon = NSImage(systemSymbolName: "waveform", accessibilityDescription: "omi") {
-          icon.isTemplate = true
-          button.image = icon
-        }
-        log("AppDelegate: [MENUBAR] WARNING - Failed to load omi_menu_bar_icon, using fallback")
+        button.image = omiMenuBarIcon()
+        button.imagePosition = .imageOnly
+        log("AppDelegate: [MENUBAR] Omi brand mark set successfully")
       }
       button.toolTip = OMIApp.launchMode == .rewind ? "omi Rewind" : displayName
     } else {
@@ -979,7 +926,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let audioRecordingView = makeToggleItemView(
       title: "Audio Recording",
       iconName: "mic.fill",
-      isOn: !paywalled && AssistantSettings.shared.transcriptionEnabled,
+      isOn: !paywalled && AssistantSettings.shared.audioRecordingMode != .off,
       action: #selector(audioRecordingToggled(_:))
     )
     audioRecordingItem.view = audioRecordingView
@@ -1056,32 +1003,117 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
+  /// Use the packaged menu asset when available, then the shared eight-dot
+  /// mark, then the application's own branded icon. These are identity
+  /// fallbacks; waveform remains reserved for active listening UI only.
+  @MainActor private func omiMenuBarIcon() -> NSImage {
+    let icon =
+      OmiBrandMarkAsset.templateImage(named: "omi_menu_bar_icon")
+      ?? OmiBrandMarkAsset.templateImage()
+      ?? NSApp.applicationIconImage
+      ?? generatedOmiMenuBarFallback()
+    icon.isTemplate = true
+    icon.size = NSSize(width: 18, height: 18)
+    return icon
+  }
+
+  @MainActor private func generatedOmiMenuBarFallback() -> NSImage {
+    let iconSize = NSSize(width: 18, height: 18)
+    let image = NSImage(size: iconSize)
+    image.lockFocus()
+    NSColor.black.setFill()
+    let dotDiameter: CGFloat = 4.2
+    let orbitRadius: CGFloat = 5.6
+    for index in 0..<8 {
+      let angle = CGFloat(index) * .pi / 4 - .pi / 2
+      let center = NSPoint(
+        x: iconSize.width / 2 + cos(angle) * orbitRadius,
+        y: iconSize.height / 2 + sin(angle) * orbitRadius
+      )
+      NSBezierPath(
+        ovalIn: NSRect(
+          x: center.x - dotDiameter / 2,
+          y: center.y - dotDiameter / 2,
+          width: dotDiameter,
+          height: dotDiameter
+        )
+      ).fill()
+    }
+    image.unlockFocus()
+    return image
+  }
+
   @MainActor @objc private func openOmiFromMenu() {
     AnalyticsManager.shared.menuBarActionClicked(action: "open_omi")
-    NSApp.activate()
+    openMainAppWindow()
+  }
+
+  /// "Continue in Omi": bring the main window forward *and* land on the chat
+  /// timeline, wherever the window was last resting. The pending request
+  /// survives window creation, so a freshly created window also lands on chat.
+  @MainActor func openMainAppChat() {
+    MainChatNavigationRequestStore.shared.request()
+    openMainAppWindow()
+  }
+
+  /// Bring the main Omi window to the front, creating it if needed. Shared by
+  /// the menu-bar "Open Omi" item, the auth callback, and the floating bar's
+  /// "Continue in Omi" affordance. The Dock callback summons directly, while
+  /// the global Open Omi shortcut uses `toggleMainAppWindow()` so it can also
+  /// dismiss the shell.
+  @MainActor func openMainAppWindow() {
+    DesktopAutomationWindowPresentation.revealForUser()
+    // Capture this BEFORE any activate call mutates AppKit's notion of frontmost.
+    let alreadyFrontmost = NSWorkspace.shared.frontmostApplication == NSRunningApplication.current
+    NSApp.activate(ignoringOtherApps: true)
     var foundWindow = revealMainWindowIfAvailable()
     if !foundWindow {
       Self.openMainWindow?()
       foundWindow = revealMainWindowIfAvailable()
     }
-    // Dock icon is always visible; just activate the app
-    NSApp.activate()
+    NSApp.activate(ignoringOtherApps: true)
+    // Bring Omi itself frontmost. On recent macOS an app can't reliably activate
+    // ITSELF from a background global-hotkey handler — `NSApp.activate` /
+    // `NSWorkspace.openApplication(on self)` are ignored, so the window orders
+    // front but the app never becomes active and keyboard focus stays with the
+    // previous app (you can't type in the chat). Asking the system via a separate
+    // `open` process — exactly as if the user re-launched us — reliably activates.
+    // Only needed when we're coming from another app; skip if already frontmost.
+    if !alreadyFrontmost {
+      let opener = Process()
+      opener.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+      opener.arguments = ["-a", Bundle.main.bundlePath]
+      try? opener.run()
+    }
     if !foundWindow {
-      log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening from menu bar")
+      log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening main window")
     }
   }
 
-  @MainActor private func revealMainWindowIfAvailable() -> Bool {
-    for window in NSApp.windows {
-      let isRealAppWindow = window.frame.width > 300 && window.frame.height > 200
-      let isMenuBarPopover = window.title.hasPrefix("Item-")
-      if isRealAppWindow && !isMenuBarPopover {
-        window.makeKeyAndOrderFront(nil)
-        window.appearance = NSAppearance(named: .darkAqua)
-        return true
-      }
+  /// Toggle the main shell for the global Open Omi shortcut. Other entry points intentionally use
+  /// `openMainAppWindow()` (or direct summon for the Dock) because menu-bar, Dock, Continue-in-Omi,
+  /// and auth flows are open/focus actions even when the shell is already visible.
+  @MainActor func toggleMainAppWindow() -> ShellSummon.ToggleAction {
+    if DesktopAutomationWindowPresentation.revealForUser() {
+      openMainAppWindow()
+      return .summon
     }
-    return false
+    let action = ShellSummon.toggleAction(for: ShellSummon.shellWindow(), presentation: ShellSummon.presentation())
+    switch action {
+    case .summon:
+      openMainAppWindow()
+    case .dismiss:
+      ShellSummon.dismiss()
+    }
+    return action
+  }
+
+  /// A summon can come from any Space and any display, and can outlive the launch pass that dressed
+  /// the window, so `ShellSummon` re-dresses it, pulls it to the active Space, un-minimises it, and
+  /// lands it on the display under the cursor. `false` means SwiftUI has not built the window yet —
+  /// the caller's signal to ask the scene for one and try again.
+  @MainActor private func revealMainWindowIfAvailable() -> Bool {
+    ShellSummon.summon()
   }
 
   @MainActor @objc private func checkForUpdates() {
@@ -1091,7 +1123,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   @MainActor @objc private func resetOnboarding() {
     AnalyticsManager.shared.menuBarActionClicked(action: "reset_onboarding")
-    AppState().resetOnboardingAndRestart()
+    (AppState.current ?? AppState()).resetOnboardingAndRestart()
   }
 
   @MainActor @objc private func reportIssue() {
@@ -1102,7 +1134,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   @MainActor @objc private func signOut() {
     AnalyticsManager.shared.menuBarActionClicked(action: "sign_out")
     ProactiveAssistantsPlugin.shared.stopMonitoring()
-    try? AuthService.shared.signOut()
+    Task { @MainActor in
+      try? await AuthService.shared.signOut()
+    }
   }
 
   @MainActor @objc private func quitApp() {
@@ -1113,7 +1147,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   // MARK: - Menu Bar Toggle Items
 
   /// Create a custom NSView for a menu item with an icon, label, and toggle switch
-  private func makeToggleItemView(title: String, iconName: String, isOn: Bool, action: Selector)
+  @MainActor private func makeToggleItemView(title: String, iconName: String, isOn: Bool, action: Selector)
     -> NSView
   {
     let height: CGFloat = 36
@@ -1170,35 +1204,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       action: enabled ? "screen_capture_on" : "screen_capture_off")
     AnalyticsManager.shared.settingToggled(setting: "monitoring", enabled: enabled)
 
-    if enabled {
-      // Paywall gate: trial expired / usage limit hit. Refuse to enable,
-      // revert the toggle, and surface the same upgrade popup as everywhere else.
-      if AppState.isPaywalledEffective {
-        sender.state = .off
-        NotificationCenter.default.post(
-          name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
-        return
-      }
-      if !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
-        // No permission — revert toggle and open preferences
-        sender.state = .off
-        ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
-        return
-      }
-      AssistantSettings.shared.screenAnalysisEnabled = true
-      ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
-        DispatchQueue.main.async {
-          if !success {
-            log("AppDelegate: [MENUBAR] Screen capture failed to start: \(error ?? "unknown")")
-            sender.state = .off
-            AssistantSettings.shared.screenAnalysisEnabled = false
-          }
-        }
-      }
-    } else {
-      AssistantSettings.shared.screenAnalysisEnabled = false
-      ProactiveAssistantsPlugin.shared.stopMonitoring()
+    // Paywall gate, permission gate, and start/rollback all live in
+    // SystemCaptureControls so the notch cluster cannot drift from this menu.
+    let outcome = SystemCaptureControls.setScreenCapture(enabled) { started in
+      if !started { sender.state = .off }
     }
+    sender.state = outcome.resultingIsOn ? .on : .off
   }
 
   @MainActor @objc private func audioRecordingToggled(_ sender: NSSwitch) {
@@ -1208,22 +1219,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       action: enabled ? "audio_recording_on" : "audio_recording_off")
     AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
 
-    // Paywall gate: trial expired / usage limit hit. Refuse to enable,
-    // revert the toggle, and surface the same upgrade popup as everywhere else.
-    if enabled && AppState.isPaywalledEffective {
-      sender.state = .off
-      NotificationCenter.default.post(
-        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
-      return
-    }
-
-    AssistantSettings.shared.transcriptionEnabled = enabled
-    // Request the main view to start/stop transcription (needs AppState)
-    NotificationCenter.default.post(
-      name: .toggleTranscriptionRequested,
-      object: nil,
-      userInfo: ["enabled": enabled]
-    )
+    let outcome = SystemCaptureControls.setAudioRecording(enabled)
+    sender.state = outcome.resultingIsOn ? .on : .off
   }
 
   // MARK: - NSMenuDelegate
@@ -1236,21 +1233,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     screenCaptureSwitch?.state =
       (!paywalled && ProactiveAssistantsPlugin.shared.isMonitoring) ? .on : .off
     audioRecordingSwitch?.state =
-      (!paywalled && AssistantSettings.shared.transcriptionEnabled) ? .on : .off
+      (!paywalled && AssistantSettings.shared.audioRecordingMode != .off) ? .on : .off
   }
 
   func menuDidClose(_ menu: NSMenu) {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-      for window in NSApp.windows where self.isMenuPopupWindow(window) && window.isVisible {
-        log("AppDelegate: [MENUBAR] Cleaning up lingering menu popup window: \(window.frame)")
-        window.orderOut(nil)
+      MainActor.assumeIsolated {
+        for window in NSApp.windows where self.isMenuPopupWindow(window) && window.isVisible {
+          log("AppDelegate: [MENUBAR] Cleaning up lingering menu popup window: \(window.frame)")
+          window.orderOut(nil)
+        }
       }
     }
   }
 
   private func isMenuPopupWindow(_ window: NSWindow) -> Bool {
     // AppKit menu popup windows use private classes/titles like "NSPopupMenuWindow" and "Item-0".
-    window.title.hasPrefix("Item-") && window.className.contains("PopupMenuWindow")
+    MainActor.assumeIsolated {
+      window.title.hasPrefix("Item-") && window.className.contains("PopupMenuWindow")
+    }
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -1263,19 +1264,40 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     return shouldTerminate
   }
 
-  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
-  {
-    // Always try to show the main Omi window when dock icon is clicked
-    for window in sender.windows where window.title.hasPrefix("Omi") {
-      if window.isMiniaturized {
-        window.deminiaturize(nil)
-      }
-      window.makeKeyAndOrderFront(nil)
-      sender.activate(ignoringOtherApps: true)
-      log("AppDelegate: Restored Omi window from dock click (wasVisible=\(flag))")
-      return false
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    // The Dock icon is the guaranteed way back to a shell that puts itself away whenever you click
+    // off it — the reason `LSUIElement` stays false. Route it through the same summon as the hotkey.
+    DesktopAutomationWindowPresentation.revealForUser()
+    guard MainActor.assumeIsolated({ ShellSummon.summon() }) else { return true }
+    sender.activate(ignoringOtherApps: true)
+    log("AppDelegate: Summoned the shell from a dock click (wasVisible=\(flag))")
+    return false
+  }
+
+  /// Publish only token-free local diagnostics for a running named dev bundle.
+  /// The agent-facing doctor reads endpoint URLs from the loopback health route,
+  /// not from this durable file.
+  private func publishNamedBundleRuntimeManifest() {
+    guard DesktopLocalProfile.isNamedDevelopmentBundle,
+      let bundleID = Bundle.main.bundleIdentifier
+    else { return }
+
+    let manifest = DesktopDevRuntimeManifest(
+      bundleIdentifier: bundleID,
+      processID: ProcessInfo.processInfo.processIdentifier,
+      startedAt: Date(),
+      appPath: Bundle.main.bundleURL.path,
+      profileRoot: DesktopLocalProfile.applicationSupportURL().path,
+      logPath: omiLogFilePath(),
+      automationPort: Int(DesktopAutomationLaunchOptions.port))
+    do {
+      try DesktopDevRuntimeManifestStore.write(
+        manifest,
+        in: DesktopLocalProfile.applicationSupportURL())
+      log("AppDelegate: Published named-bundle runtime manifest")
+    } catch {
+      logError("AppDelegate: Failed to publish named-bundle runtime manifest", error: error)
     }
-    return true
   }
 
   func applicationWillTerminate(_ notification: Notification) {
@@ -1324,6 +1346,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Stop recurring task scheduler
     RecurringTaskScheduler.shared.stop()
+    Task { await ContextWorkstreamReconciler.shared.stop() }
 
     // Finalize the active Rewind MP4 chunk while the app is still alive.
     // AVAssetWriter files are not readable until finishWriting writes the trailer.
@@ -1339,10 +1362,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ResourceMonitor.shared.stop()
 
     if !AnalyticsManager.isDevBuild {
-      SentrySDK.capture(message: "App Terminating") { scope in
-        scope.setLevel(.info)
-        scope.setTag(value: "lifecycle", key: "event_type")
-      }
+      let breadcrumb = Breadcrumb(level: .info, category: "lifecycle")
+      breadcrumb.message = "App Terminating"
+      SentrySDK.addBreadcrumb(breadcrumb)
     }
   }
 
@@ -1413,28 +1435,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Only the production/beta bundle (com.omi.computer-macos) should relaunch on login.
     // Dev and named test bundles must always opt out — otherwise every local build that was
     // open at shutdown gets relaunched on the next restart, swarming the screen with dev apps.
-    guard AppBuild.isProductionBundle else {
+    MainActor.assumeIsolated {
+      guard AppBuild.isProductionBundle else {
+        guard !relaunchOnLoginSuppressedForOnboarding else { return }
+        NSApp.disableRelaunchOnLogin()
+        relaunchOnLoginSuppressedForOnboarding = true
+        log("AppDelegate: Disabled relaunch on login for non-production bundle (\(reason))")
+        return
+      }
+
+      let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
+
+      if hasCompletedOnboarding {
+        guard relaunchOnLoginSuppressedForOnboarding else { return }
+        NSApp.enableRelaunchOnLogin()
+        relaunchOnLoginSuppressedForOnboarding = false
+        log("AppDelegate: Re-enabled relaunch on login after onboarding completed (\(reason))")
+        return
+      }
+
       guard !relaunchOnLoginSuppressedForOnboarding else { return }
       NSApp.disableRelaunchOnLogin()
       relaunchOnLoginSuppressedForOnboarding = true
-      log("AppDelegate: Disabled relaunch on login for non-production bundle (\(reason))")
-      return
+      log("AppDelegate: Disabled relaunch on login while onboarding is incomplete (\(reason))")
     }
-
-    let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-
-    if hasCompletedOnboarding {
-      guard relaunchOnLoginSuppressedForOnboarding else { return }
-      NSApp.enableRelaunchOnLogin()
-      relaunchOnLoginSuppressedForOnboarding = false
-      log("AppDelegate: Re-enabled relaunch on login after onboarding completed (\(reason))")
-      return
-    }
-
-    guard !relaunchOnLoginSuppressedForOnboarding else { return }
-    NSApp.disableRelaunchOnLogin()
-    relaunchOnLoginSuppressedForOnboarding = true
-    log("AppDelegate: Disabled relaunch on login while onboarding is incomplete (\(reason))")
   }
 
   private func migrateAppName() {
@@ -1448,6 +1472,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func cleanupLegacyAppBundles() {
+    // Stable-only: this takeover kills running com.omi.computer-macos processes
+    // and deletes the legacy bundle. From Omi Beta or a dev bundle it would
+    // terminate the user's running stable app instead of a stale duplicate.
+    guard AppBuild.mayRunLegacyStableAppCleanup else {
+      log("Skipping legacy app cleanup: not the stable production identity")
+      return
+    }
     let currentPath = Bundle.main.bundlePath
     let oldAppPaths = [
       "/Applications/Omi Computer.app",
@@ -1533,23 +1564,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
       }
 
-      let schedulerDelay = max(
-        0,
-        StartupWarmupPolicy.recurringTaskSchedulerInitialDelay
-          - StartupWarmupPolicy.transcriptionRetryRecoveryDelay
-      )
-      if schedulerDelay > 0 {
-        try? await Task.sleep(nanoseconds: UInt64(schedulerDelay * 1_000_000_000))
-      }
-      guard !Task.isCancelled else { return }
-
-      await MainActor.run {
-        RecurringTaskScheduler.shared.start()
-      }
+      // Legacy recurring-task investigations silently started agent work and
+      // could create durable continuity without an explicit user action. Keep
+      // the compatibility service stopped; contextual resurfacing owns future
+      // proactive entry points without silently launching work.
     }
   }
 
   func applicationDidBecomeActive(_ notification: Notification) {
+    MainActor.assumeIsolated { ShellSummon.restoreOnActivationIfNeeded() }
     guard didScheduleInitialSettingsSync else {
       scheduleInitialSettingsSync()
       return

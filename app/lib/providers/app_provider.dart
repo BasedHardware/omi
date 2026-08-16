@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:collection/collection.dart';
 
@@ -13,7 +14,42 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
+/// The shape of the apps-search request, named once so the test seam can refer to it.
+typedef AppsSearchRequest = Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? filters})>
+    Function({
+  String? query,
+  String? category,
+  double? minRating,
+  String? capability,
+  String? sort,
+  bool? myApps,
+  bool? installedApps,
+  int offset,
+  int limit,
+});
+
 class AppProvider extends BaseProvider {
+  /// Test seam — overrides [retrieveAppsSearch] in [performServerSearch].
+  @visibleForTesting
+  AppsSearchRequest? searchAppsOverride;
+
+  /// Test seam — overrides [enableAppServer] in [toggleApp].
+  @visibleForTesting
+  Future<bool> Function(String appId)? enableAppOverride;
+
+  /// Test seam — overrides [disableAppServer] in [toggleApp].
+  @visibleForTesting
+  Future<void> Function(String appId)? disableAppOverride;
+
+  @visibleForTesting
+  Future<List<Map<String, dynamic>>> Function()? retrieveAppsGroupedOverride;
+
+  @visibleForTesting
+  Future<List<String>> Function()? getEnabledAppsOverride;
+
+  @visibleForTesting
+  Future<List<App>> Function()? retrievePopularAppsOverride;
+
   List<App> apps = [];
   List<App> popularApps = [];
   // v2 grouped apps: [{ category: {id,title}, data: List<App>, pagination: {...} }]
@@ -34,6 +70,13 @@ class AppProvider extends BaseProvider {
 
   bool isLoading = false;
   bool isSearching = false;
+
+  // Share an in-flight load with callers that arrive while the Apps tab is
+  // being initialized. This prevents a rebuild or deep link from starting a
+  // second catalog request while preserving explicit later refreshes.
+  Future<void>? _appsLoad;
+  Future<void>? _popularAppsLoad;
+  int _activeCatalogLoads = 0;
 
   List<Category> categories = [];
   List<AppCapability> capabilities = [];
@@ -204,6 +247,10 @@ class AppProvider extends BaseProvider {
     searchQuery = query.toLowerCase();
 
     if (query.trim().isEmpty && !_hasServerSideFilters()) {
+      // Emptying the box is a search change like any other. Without its own
+      // revision, a request already in flight would still count as current and
+      // would land its results on top of the cleared list.
+      _latestSearchRevision++;
       searchResults = [];
       isSearching = false;
       filterApps();
@@ -221,86 +268,115 @@ class AppProvider extends BaseProvider {
         filters.containsKey('Apps');
   }
 
-  String _pendingSearchQuery = '';
+  /// Identifies the newest search the user has asked for.
+  ///
+  /// A revision rather than the query text, because the text is not what makes a
+  /// search unique: narrowing by category while the same word is still loading
+  /// changes the results completely and changes the text not at all. Anything
+  /// keyed on the text alone cannot tell those two requests apart, and answers
+  /// the second with the first one's unfiltered results.
+  int _latestSearchRevision = 0;
+
+  bool _isDrainingSearchQueue = false;
 
   Future<void> performServerSearch() async {
-    // Always update pending query to the latest
-    _pendingSearchQuery = searchQuery;
+    // Every call is a fresh statement of what the user wants, whether the text or
+    // the filters moved.
+    final revision = ++_latestSearchRevision;
 
-    if (isSearching) {
+    // A run already under way will pick this revision up when its current request
+    // returns. Starting a second one would race it for the results.
+    if (_isDrainingSearchQueue) {
       return;
     }
 
-    final queryBeingSearched = searchQuery;
+    _isDrainingSearchQueue = true;
+    isSearching = true;
+    notifyListeners();
 
     try {
-      isSearching = true;
+      // Drain the queue inside one run rather than ending and restarting per
+      // request. Ending in between would publish "not searching" with the results
+      // of a search the user has already moved past — which the apps screen
+      // renders as "No apps found" for a search that is still outstanding.
+      var revisionBeingSearched = revision;
+      while (true) {
+        await _runOneSearch(revisionBeingSearched);
+        if (_latestSearchRevision == revisionBeingSearched) {
+          break;
+        }
+        revisionBeingSearched = _latestSearchRevision;
+      }
+    } finally {
+      _isDrainingSearchQueue = false;
+      isSearching = false;
       notifyListeners();
+    }
+  }
 
-      String? categoryFilter;
-      if (filters.containsKey('Category') && filters['Category'] is Category) {
-        categoryFilter = (filters['Category'] as Category).id;
-      }
+  /// Runs one search request and publishes it only if it is still the current one.
+  Future<void> _runOneSearch(int revisionBeingSearched) async {
+    // Read the query and filters this request is for before awaiting, so a change
+    // made while it is in flight cannot be mistaken for what it asked the server.
+    final queryBeingSearched = searchQuery;
 
-      // Get rating filter if active
-      double? minRating;
-      if (filters.containsKey('Rating') && filters['Rating'] is String) {
-        String ratingStr = (filters['Rating'] as String).replaceAll('+ Stars', '');
-        minRating = double.tryParse(ratingStr);
-      }
+    // Nothing to ask the server: an empty box with no filter narrowing it. Reached
+    // when clearing the box supersedes a request that was already in flight;
+    // searchApps has cleared the results for that case already.
+    if (queryBeingSearched.trim().isEmpty && !_hasServerSideFilters()) {
+      return;
+    }
 
-      // Get capability filter if active
-      String? capabilityFilter;
-      if (filters.containsKey('Capabilities') && filters['Capabilities'] is AppCapability) {
-        capabilityFilter = (filters['Capabilities'] as AppCapability).id;
-      }
-
-      // Get "My Apps" filter
-      bool? myAppsFilter;
-      if (filters.containsKey('Apps') && filters['Apps'] == 'My Apps') {
-        myAppsFilter = true;
-      }
-
-      // Get "Installed Apps" filter
-      bool? installedAppsFilter;
-      if (filters.containsKey('Apps') && filters['Apps'] == 'Installed Apps') {
-        installedAppsFilter = true;
-      }
-
-      final result = await retrieveAppsSearch(
+    try {
+      final result = await (searchAppsOverride ?? retrieveAppsSearch)(
         query: queryBeingSearched.isEmpty ? null : queryBeingSearched,
-        category: categoryFilter,
-        minRating: minRating,
-        capability: capabilityFilter,
-        myApps: myAppsFilter,
-        installedApps: installedAppsFilter,
+        category: _selectedCategoryId(),
+        minRating: _selectedMinRating(),
+        capability: _selectedCapabilityId(),
+        myApps: _isAppsFilter('My Apps'),
+        installedApps: _isAppsFilter('Installed Apps'),
         offset: 0,
         limit: 100,
       );
 
-      if (queryBeingSearched == _pendingSearchQuery) {
-        searchResults = result.apps;
-        filteredApps = result.apps;
+      // The user changed the search while this was in flight; these results are stale.
+      if (revisionBeingSearched != _latestSearchRevision) {
+        return;
+      }
 
-        // Track search if there was a query
-        if (queryBeingSearched.isNotEmpty) {
-          PlatformManager.instance.analytics.appsSearched(
-            searchTerm: queryBeingSearched,
-            resultCount: result.apps.length,
-          );
-        }
+      searchResults = result.apps;
+      filteredApps = result.apps;
+
+      // Track search if there was a query
+      if (queryBeingSearched.isNotEmpty) {
+        PlatformManager.instance.analytics.appsSearched(
+          searchTerm: queryBeingSearched,
+          resultCount: result.apps.length,
+        );
       }
     } catch (e) {
       filterApps();
-    } finally {
-      isSearching = false;
-      notifyListeners();
-
-      if (_pendingSearchQuery != queryBeingSearched) {
-        performServerSearch();
-      }
     }
   }
+
+  String? _selectedCategoryId() {
+    final category = filters['Category'];
+    return category is Category ? category.id : null;
+  }
+
+  double? _selectedMinRating() {
+    final rating = filters['Rating'];
+    return rating is String ? double.tryParse(rating.replaceAll('+ Stars', '')) : null;
+  }
+
+  String? _selectedCapabilityId() {
+    final capability = filters['Capabilities'];
+    return capability is AppCapability ? capability.id : null;
+  }
+
+  /// True only when the Apps filter is set to [value], matching the server's
+  /// mutually exclusive `my_apps` / `installed_apps` flags.
+  bool? _isAppsFilter(String value) => filters['Apps'] == value ? true : null;
 
   Future<void> applyFilters() async {
     if (isSearchActive() || _hasServerSideFilters()) {
@@ -387,6 +463,16 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
+  void _beginCatalogLoad() {
+    _activeCatalogLoads++;
+    if (!isLoading) setIsLoading(true);
+  }
+
+  void _endCatalogLoad() {
+    _activeCatalogLoads--;
+    if (_activeCatalogLoads == 0 && isLoading) setIsLoading(false);
+  }
+
   void setSelectedChatAppId(String? appId) {
     final newAppId = appId ?? "";
     if (selectedChatAppId != newAppId) {
@@ -419,9 +505,28 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
-  Future getApps() async {
-    if (isLoading) return;
-    setIsLoading(true);
+  Future<void> getApps() {
+    final inFlight = _appsLoad;
+    if (inFlight != null) return inFlight;
+
+    final completer = Completer<void>();
+    final sharedLoad = completer.future;
+    _appsLoad = sharedLoad;
+    unawaited(() async {
+      try {
+        await _loadApps();
+        completer.complete();
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      } finally {
+        if (identical(_appsLoad, sharedLoad)) _appsLoad = null;
+      }
+    }());
+    return sharedLoad;
+  }
+
+  Future<void> _loadApps() async {
+    _beginCatalogLoad();
 
     try {
       // Performance optimization: Load from cache first for immediate UI
@@ -431,8 +536,8 @@ class AppProvider extends BaseProvider {
 
       // Fetch grouped apps and user's enabled app IDs in parallel
       final results = await Future.wait([
-        retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true),
-        getEnabledAppsServer(),
+        retrieveAppsGroupedOverride?.call() ?? retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true),
+        getEnabledAppsOverride?.call() ?? getEnabledAppsServer(),
       ]);
       final groups = results[0] as List<Map<String, dynamic>>;
       final enabledAppIds = (results[1] as List<String>).toSet();
@@ -463,22 +568,40 @@ class AppProvider extends BaseProvider {
       // Fallback to cached data
       setAppsFromCache();
     } finally {
-      setIsLoading(false);
+      _endCatalogLoad();
     }
   }
 
-  Future getPopularApps() async {
-    if (isLoading) return; // Prevent concurrent operations
+  Future<void> getPopularApps() {
+    final inFlight = _popularAppsLoad;
+    if (inFlight != null) return inFlight;
 
+    final completer = Completer<void>();
+    final sharedLoad = completer.future;
+    _popularAppsLoad = sharedLoad;
+    unawaited(() async {
+      try {
+        await _loadPopularApps();
+        completer.complete();
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      } finally {
+        if (identical(_popularAppsLoad, sharedLoad)) _popularAppsLoad = null;
+      }
+    }());
+    return sharedLoad;
+  }
+
+  Future<void> _loadPopularApps() async {
+    _beginCatalogLoad();
     try {
-      setIsLoading(true);
-      popularApps = await retrievePopularApps();
+      popularApps = await (retrievePopularAppsOverride?.call() ?? retrievePopularApps());
     } catch (e) {
       Logger.debug('Error loading popular apps: $e');
       // Fallback to cached data or empty list
       popularApps = [];
     } finally {
-      setIsLoading(false);
+      _endCatalogLoad();
     }
   }
 
@@ -549,7 +672,7 @@ class AppProvider extends BaseProvider {
         updatePrefApps();
         final context = globalNavigatorKey.currentState?.context;
         AppSnackbar.showSnackbarSuccess(
-          context != null ? context.l10n.appDeletedSuccessfully : 'App deleted successfully',
+          context != null && context.mounted ? context.l10n.appDeletedSuccessfully : 'App deleted successfully',
         );
         notifyListeners();
       } else {
@@ -558,7 +681,9 @@ class AppProvider extends BaseProvider {
     } else {
       final context = globalNavigatorKey.currentState?.context;
       AppSnackbar.showSnackbarError(
-        context != null ? context.l10n.appDeleteFailed : 'Failed to delete app. Please try again later.',
+        context != null && context.mounted
+            ? context.l10n.appDeleteFailed
+            : 'Failed to delete app. Please try again later.',
       );
     }
   }
@@ -781,11 +906,13 @@ class AppProvider extends BaseProvider {
     }
   }
 
-  Future<void> toggleApp(String appId, bool isEnabled, int? idx) async {
+  /// Enable/disable [appId] server-side, keeping prefs, local app state, and
+  /// failure UX (error dialog) in one owner. Returns whether the toggle stuck.
+  Future<bool> toggleApp(String appId, bool isEnabled, int? idx) async {
     int loadingIndex = -1;
     if (idx != null && idx >= 0 && idx < appLoading.length) {
       loadingIndex = idx;
-      if (appLoading[loadingIndex]) return;
+      if (appLoading[loadingIndex]) return false;
       appLoading[loadingIndex] = true;
       notifyListeners();
     } else if (idx != null) {
@@ -796,32 +923,38 @@ class AppProvider extends BaseProvider {
     bool success = false;
     String? errorMessage;
 
-    final context = globalNavigatorKey.currentState?.context;
-
     try {
       if (isEnabled) {
-        success = await enableAppServer(appId);
+        success = await (enableAppOverride ?? enableAppServer)(appId);
         if (!success) {
-          errorMessage = context != null
+          final context = globalNavigatorKey.currentState?.context;
+          errorMessage = context != null && context.mounted
               ? context.l10n.errorActivatingAppIntegration
               : 'Error activating the app. If this is an integration app, make sure the setup is completed.';
         } else {
           PlatformManager.instance.analytics.appEnabled(appId);
         }
       } else {
-        await disableAppServer(appId);
+        await (disableAppOverride ?? disableAppServer)(appId);
         success = true;
         PlatformManager.instance.analytics.appDisabled(appId);
       }
     } catch (e) {
       print('Error toggling app $appId: $e');
       success = false;
-      errorMessage =
-          context != null ? context.l10n.errorUpdatingAppStatus : 'An error occurred while updating the app status.';
+      final context = globalNavigatorKey.currentState?.context;
+      errorMessage = context != null && context.mounted
+          ? context.l10n.errorUpdatingAppStatus
+          : 'An error occurred while updating the app status.';
     }
 
     if (!success && errorMessage != null) {
-      AppDialog.show(title: context != null ? context.l10n.error : 'Error', content: errorMessage, singleButton: true);
+      final context = globalNavigatorKey.currentState?.context;
+      AppDialog.show(
+        title: context != null && context.mounted ? context.l10n.error : 'Error',
+        content: errorMessage,
+        singleButton: true,
+      );
     }
 
     if (success) {
@@ -858,6 +991,7 @@ class AppProvider extends BaseProvider {
     }
 
     notifyListeners();
+    return success;
   }
 
   // Performance optimization: Dispose method to clean up resources

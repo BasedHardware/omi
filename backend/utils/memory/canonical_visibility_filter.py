@@ -30,7 +30,9 @@ def filter_canonical_default_visible_items(
 ) -> List[MemoryItem]:
     """Return default-visible canonical items, including §1.3 processed short_term."""
     report = filter_default_product_memory_items(items, policy=policy, now=now)
-    visible_by_id = {item.memory_id: item for item in report.visible_items}
+    visible_by_id = {
+        item.memory_id: item for item in report.visible_items if item.processing_state == ProcessingState.processed
+    }
 
     for item in items:
         if item.memory_id in visible_by_id:

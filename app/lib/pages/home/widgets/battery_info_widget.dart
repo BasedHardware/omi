@@ -15,6 +15,7 @@ import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -34,7 +35,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (sheetContext) => _RecordOptionsSheet(
+      builder: (sheetContext) => RecordOptionsSheet(
         onPickPhoneMic: () {
           Navigator.pop(sheetContext);
           _startRecording(context);
@@ -53,13 +54,24 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
     final captureProvider = context.read<CaptureProvider>();
     if (captureProvider.recordingState == RecordingState.initialising) return;
     if (captureProvider.recordingState == RecordingState.record) {
+      // Batch reports RecordingState.record too, but has no in-progress conversation
+      // to force-process — stopStreamRecording finalizes the local .bin on its own.
+      final wasBatch = captureProvider.isPhoneMicBatchRecording;
       await captureProvider.stopStreamRecording();
-      captureProvider.forceProcessingCurrentConversation();
+      if (!wasBatch) captureProvider.forceProcessingCurrentConversation();
       PlatformManager.instance.analytics.phoneMicRecordingStopped();
       return;
     }
     await captureProvider.streamRecording();
     PlatformManager.instance.analytics.phoneMicRecordingStarted();
+    // Phone-mic Transcribe Later (batch) has no live transcript — its surface is the
+    // conversations-list batch card, so skip the capturing page (same as BLE batch).
+    if (captureProvider.isPhoneMicBatchRecording) {
+      if (SharedPreferencesUtil().phoneBatchAuto && context.mounted) {
+        AppSnackbar.showSnackbar(context.l10n.phoneMicOfflineFallbackMessage);
+      }
+      return;
+    }
     if (context.mounted) {
       Navigator.push(
         context,
@@ -280,7 +292,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                           )
                                         else
-                                          const Icon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
+                                          const FaIcon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
                                         const SizedBox(width: 6),
                                         Text(
                                           isRecording
@@ -364,11 +376,11 @@ class SlashLinePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class _RecordOptionsSheet extends StatelessWidget {
+class RecordOptionsSheet extends StatelessWidget {
   final VoidCallback onPickPhoneMic;
   final VoidCallback onPickPhoneCall;
 
-  const _RecordOptionsSheet({required this.onPickPhoneMic, required this.onPickPhoneCall});
+  const RecordOptionsSheet({super.key, required this.onPickPhoneMic, required this.onPickPhoneCall});
 
   @override
   Widget build(BuildContext context) {
@@ -398,7 +410,7 @@ class _RecordOptionsSheet extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _RecordOption(
-            icon: Icons.phone_in_talk_rounded,
+            icon: FontAwesomeIcons.phone,
             title: context.l10n.phoneCall,
             subtitle: context.l10n.phoneCallSubtitle,
             onTap: onPickPhoneCall,
@@ -410,7 +422,7 @@ class _RecordOptionsSheet extends StatelessWidget {
 }
 
 class _RecordOption extends StatelessWidget {
-  final IconData icon;
+  final FaIconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -432,6 +444,7 @@ class _RecordOption extends StatelessWidget {
             Container(
               width: 44,
               height: 44,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const LinearGradient(
@@ -447,7 +460,7 @@ class _RecordOption extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Icon(icon, color: Colors.white, size: 18),
+              child: FaIcon(icon, color: Colors.white, size: 18),
             ),
             const SizedBox(width: 14),
             Expanded(

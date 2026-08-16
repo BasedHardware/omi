@@ -182,7 +182,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           hintText: context.l10n.searchMemories,
                                           leading: const Padding(
                                             padding: EdgeInsets.only(left: 6.0),
-                                            child: Icon(
+                                            child: FaIcon(
                                               FontAwesomeIcons.magnifyingGlass,
                                               color: Colors.white70,
                                               size: 14,
@@ -207,8 +207,6 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
-                                    SizedBox(width: 44, height: 44, child: _buildShimmerButton()),
                                     const SizedBox(width: 8),
                                     SizedBox(width: 44, height: 44, child: _buildShimmerButton()),
                                     const SizedBox(width: 8),
@@ -238,7 +236,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                               hintText: context.l10n.searchMemories,
                                               leading: const Padding(
                                                 padding: EdgeInsets.only(left: 6.0),
-                                                child: Icon(
+                                                child: FaIcon(
                                                   FontAwesomeIcons.magnifyingGlass,
                                                   color: Colors.white70,
                                                   size: 14,
@@ -293,14 +291,6 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                       },
                                     ),
                                     const SizedBox(width: 8),
-                                    FilterChip(
-                                      label: Text(context.l10n.memoryThisDevice, style: const TextStyle(fontSize: 12)),
-                                      selected: provider.filterThisDeviceOnly,
-                                      onSelected: provider.setFilterThisDeviceOnly,
-                                      visualDensity: VisualDensity.compact,
-                                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                    const SizedBox(width: 8),
                                     SizedBox(
                                       width: 44,
                                       height: 44,
@@ -316,7 +306,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           padding: EdgeInsets.zero,
                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                         ),
-                                        child: const Icon(FontAwesomeIcons.brain, size: 16),
+                                        child: const FaIcon(FontAwesomeIcons.brain, size: 16),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -333,7 +323,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           padding: EdgeInsets.zero,
                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                         ),
-                                        child: const Icon(FontAwesomeIcons.sliders, size: 16),
+                                        child: const FaIcon(FontAwesomeIcons.sliders, size: 16),
                                       ),
                                     ),
                                   ],

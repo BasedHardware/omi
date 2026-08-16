@@ -8,9 +8,11 @@ export type DesktopCoordinatorBundle =
   | "desktop.context.screen_summary"
   | "desktop.context.screenshot_image"
   | "desktop.tasks.readwrite"
+  | "desktop.memories.write"
   | "desktop.artifacts.manage"
   | "desktop.automation.read"
   | "desktop.automation.act_dev_only"
+  | "desktop.permissions.request"
   | "external.write_prepare"
   | "external.write_send";
 
@@ -72,16 +74,19 @@ const TASK_WRITE_TOOLS = new Set([
   "set_user_preferences",
   "complete_onboarding",
 ]);
+const MEMORY_WRITE_TOOLS = new Set(["create_memory"]);
 const SCREEN_IMAGE_TOOLS = new Set(["get_screenshot", "capture_screen"]);
 const SCREEN_SUMMARY_TOOLS = new Set(["semantic_search", "get_work_context"]);
-const AUTOMATION_ACT_TOOLS = new Set(["request_permission"]);
+// Coordinator policy classifies this as a production user-approved operation;
+// ChatToolExecutor independently enforces the current-turn consent at execution.
+const PERMISSION_REQUEST_TOOLS = new Set(["request_permission"]);
 const AUTOMATION_READ_TOOLS = new Set(["check_permission_status"]);
 const LOCAL_READ_TOOLS = new Set([
   "execute_sql",
   "get_daily_recap",
-  "get_task_agent_status",
   "search_tasks",
   "load_skill",
+  "search_skills",
   "get_conversations",
   "search_conversations",
   "get_memories",
@@ -124,8 +129,9 @@ function bundlesForOmiTool(tool: OmiToolManifestEntry): DesktopCoordinatorBundle
   if (SCREEN_SUMMARY_TOOLS.has(tool.name)) bundles.add("desktop.context.screen_summary");
   if (SCREEN_IMAGE_TOOLS.has(tool.name)) bundles.add("desktop.context.screenshot_image");
   if (TASK_WRITE_TOOLS.has(tool.name)) bundles.add("desktop.tasks.readwrite");
+  if (MEMORY_WRITE_TOOLS.has(tool.name)) bundles.add("desktop.memories.write");
   if (AUTOMATION_READ_TOOLS.has(tool.name)) bundles.add("desktop.automation.read");
-  if (AUTOMATION_ACT_TOOLS.has(tool.name)) bundles.add("desktop.automation.act_dev_only");
+  if (PERMISSION_REQUEST_TOOLS.has(tool.name)) bundles.add("desktop.permissions.request");
   if (EXTERNAL_SEND_TOOLS.has(tool.name)) bundles.add("external.write_send");
   if (tool.executor.kind === "runtimeControl") {
     const control = controlDescriptor(tool.name);
@@ -146,7 +152,8 @@ function descriptorFromToolName(toolName: string): DesktopToolDescriptor | undef
   const sensitive =
     bundles.includes("desktop.context.screenshot_image") ||
     bundles.includes("external.write_send") ||
-    bundles.includes("desktop.automation.act_dev_only");
+    bundles.includes("desktop.automation.act_dev_only") ||
+    bundles.includes("desktop.permissions.request");
   return {
     name: tool.name,
     bundles,
@@ -160,16 +167,18 @@ function descriptorFromToolName(toolName: string): DesktopToolDescriptor | undef
 
 function descriptorFromBundles(bundles: readonly DesktopCoordinatorBundle[]): DesktopToolDescriptor {
   const sensitive = bundles.some((bundle) =>
-    ["desktop.context.screenshot_image", "external.write_send", "desktop.automation.act_dev_only"].includes(bundle),
+    ["desktop.context.screenshot_image", "external.write_send", "desktop.automation.act_dev_only", "desktop.permissions.request"].includes(bundle),
   );
   const write = bundles.some((bundle) =>
     [
       "desktop.agent_control.manage",
       "desktop.tasks.readwrite",
+      "desktop.memories.write",
       "desktop.artifacts.manage",
       "external.write_prepare",
       "external.write_send",
       "desktop.automation.act_dev_only",
+      "desktop.permissions.request",
     ].includes(bundle),
   );
   return {
@@ -232,14 +241,25 @@ export function evaluateDesktopToolPolicy(request: DesktopToolPolicyRequest): De
     requiredBundles.includes("desktop.context.screenshot_image") ||
     requiredBundles.includes("external.write_send") ||
     requiredBundles.includes("desktop.automation.act_dev_only") ||
+    requiredBundles.includes("desktop.permissions.request") ||
     descriptor.approvalPolicy === "user_approval" ||
     descriptor.approvalPolicy === "policy_grant";
 
   if (requiresDispatch) {
     const granted = requiredBundles.every((bundle) => hasAllowGrant(request, bundle));
     if (granted) return { decision: "allow", descriptor, requiredBundles, reason: "Scoped allow grant covers the request." };
-    if (requiredBundles.includes("desktop.tasks.readwrite") && request.userExplicitMutation === true) {
-      return { decision: "dispatch_required", descriptor, requiredBundles, reason: "Task mutation still needs a durable approval record." };
+    if (
+      (requiredBundles.includes("desktop.tasks.readwrite") || requiredBundles.includes("desktop.memories.write"))
+      && request.userExplicitMutation === true
+    ) {
+      return {
+        decision: "dispatch_required",
+        descriptor,
+        requiredBundles,
+        reason: requiredBundles.includes("desktop.memories.write")
+          ? "Memory mutation still needs a durable approval record."
+          : "Task mutation still needs a durable approval record.",
+      };
     }
     return { decision: "dispatch_required", descriptor, requiredBundles, reason: "Sensitive action requires dispatch or scoped grant." };
   }
@@ -254,3 +274,122 @@ export const desktopToolPolicyInternals = {
   isSqlWrite,
   descriptorFromToolName,
 };
+
+export interface AcpPermissionOption {
+  kind: string;
+  optionId: string;
+}
+
+export interface AcpPermissionDecision {
+  optionId: string;
+  optionKind: string;
+  acpResult: {
+    outcome: {
+      outcome: "selected";
+      optionId: string;
+    };
+  };
+  auditEvent: {
+    type: "approval.resolved";
+    policy: "desktop_high_trust" | "external_constrained";
+    adapterId: string;
+    requestId?: number | string;
+    optionId: string;
+    optionKind: string;
+    automatic: true;
+  };
+}
+
+export interface AcpPermissionRejection {
+  acpError: {
+    code: number;
+    message: string;
+  };
+  auditEvent: {
+    type: "approval.rejected";
+    policy: "external_constrained";
+    adapterId: string;
+    requestId?: number | string;
+    automatic: true;
+    reason: string;
+  };
+}
+
+export function resolveAcpPermission(input: {
+  requestId?: number | string;
+  options: AcpPermissionOption[];
+}): AcpPermissionDecision {
+  const selected =
+    input.options.find((option) => option.kind === "allow_always") ??
+    input.options.find((option) => option.kind === "allow_once") ??
+    input.options[0] ??
+    { kind: "fallback", optionId: "allow" };
+
+  return {
+    optionId: selected.optionId,
+    optionKind: selected.kind,
+    acpResult: {
+      outcome: {
+        outcome: "selected",
+        optionId: selected.optionId,
+      },
+    },
+    auditEvent: {
+      type: "approval.resolved",
+      policy: "desktop_high_trust",
+      adapterId: "acp",
+      requestId: input.requestId,
+      optionId: selected.optionId,
+      optionKind: selected.kind,
+      automatic: true,
+    },
+  };
+}
+
+export function resolveExternalAcpPermission(input: {
+  adapterId: string;
+  requestId?: number | string;
+  options: AcpPermissionOption[];
+}): AcpPermissionDecision | AcpPermissionRejection {
+  const selected =
+    input.options.find((option) => option.kind === "allow_once") ??
+    input.options.find((option) => /deny|reject|disallow/i.test(option.kind)) ??
+    input.options.find((option) => option.kind !== "allow_always");
+
+  if (!selected) {
+    return {
+      acpError: {
+        code: -32001,
+        message: "External adapter permission requires explicit user approval",
+      },
+      auditEvent: {
+        type: "approval.rejected",
+        policy: "external_constrained",
+        adapterId: input.adapterId,
+        requestId: input.requestId,
+        automatic: true,
+        reason: "no_non_permanent_option",
+      },
+    };
+  }
+
+  return {
+    optionId: selected.optionId,
+    optionKind: selected.kind,
+    acpResult: {
+      outcome: {
+        outcome: "selected",
+        optionId: selected.optionId,
+      },
+    },
+    auditEvent: {
+      type: "approval.resolved",
+      policy: "external_constrained",
+      adapterId: input.adapterId,
+      requestId: input.requestId,
+      optionId: selected.optionId,
+      optionKind: selected.kind,
+      automatic: true,
+    },
+  };
+}

@@ -1,0 +1,9 @@
+{
+  "lifecycle": {
+    "session": ["open", "archived", "closed"],
+    "run": ["queued", "starting", "stalled", "waiting_input", "waiting_approval", "cancelling", "succeeded", "failed", "cancelled", "timed_out", "orphaned"],
+    "attempt": ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling", "succeeded", "failed", "cancelled", "timed_out", "orphaned"],
+    "turn": ["pending", "streaming", "completed", "failed"]
+  },
+  "expectedError": "$.lifecycle.run[2]: value is outside enum"
+}

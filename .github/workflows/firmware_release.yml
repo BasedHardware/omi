@@ -76,7 +76,7 @@ jobs:
       CI_IMAGE: ghcr.io/zephyrproject-rtos/ci:v0.26.13@sha256:b0ac6334d1926cd0971a0a444f7adc6dd020e88ee3ce865aa070b6475a3ac4eb
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Resolve version and tag
         id: meta
@@ -99,7 +99,7 @@ jobs:
           echo "CV1 version $VER -> tag Omi_CV1_v$VER"
 
       - name: Cache nRF Connect SDK workspace (v2.9.0)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: omi/firmware/v2.9.0
           key: ncs-v2.9.0-${{ runner.os }}
@@ -168,7 +168,7 @@ jobs:
           echo "file=$OUT" >> "$GITHUB_OUTPUT"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Omi_CV1_v${{ steps.meta.outputs.ver }}
           path: ${{ steps.stage.outputs.out }}/*
@@ -188,7 +188,7 @@ jobs:
       - name: Generate Omi Bot token
         id: app-token
         if: ${{ github.event.inputs.publish == 'publish' }}
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}

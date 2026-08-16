@@ -29,7 +29,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, Optional, Union, cast
 
 import websockets
 
@@ -52,14 +52,14 @@ def normalize_for_wer(text: str) -> str:
     return PUNCT_RE.sub('', text).lower().strip()
 
 
-def build_audio_playlist(target_seconds: float = TARGET_DURATION_S) -> List[dict]:
+def build_audio_playlist(target_seconds: float = TARGET_DURATION_S) -> List[Dict[str, Any]]:
     if not LIBRISPEECH_DIR.exists():
         print(f'ERROR: LibriSpeech not found at {LIBRISPEECH_DIR}')
         print('  curl -L -o /tmp/test-clean.tar.gz https://www.openslr.org/resources/12/test-clean.tar.gz')
         print('  cd /tmp && mkdir -p librispeech && tar xzf test-clean.tar.gz -C librispeech')
         sys.exit(1)
 
-    playlist = []
+    playlist: List[Dict[str, Any]] = []
     total = 0.0
     speakers = sorted(LIBRISPEECH_DIR.iterdir())
 
@@ -75,7 +75,7 @@ def build_audio_playlist(target_seconds: float = TARGET_DURATION_S) -> List[dict
                 continue
 
             trans_files = list(chapter_dir.glob('*.trans.txt'))
-            transcripts = {}
+            transcripts: Dict[str, str] = {}
             for tf in trans_files:
                 for line in tf.read_text().strip().split('\n'):
                     parts = line.split(' ', 1)
@@ -118,7 +118,7 @@ def convert_to_pcm16(flac_path: str) -> bytes:
     return r.stdout
 
 
-def capture_service_logs(service: str, output_path: Path, duration: int = 5):
+def capture_service_logs(service: str, output_path: Path, duration: int = 5) -> None:
     try:
         r = subprocess.run(
             ['timeout', str(duration), 'beast', 'omi', 'dev', 'logs', service],
@@ -133,10 +133,11 @@ def capture_service_logs(service: str, output_path: Path, duration: int = 5):
 
 async def run_listen_test(
     provider: str,
-    playlist: List[dict],
+    playlist: List[Dict[str, Any]],
     stt_service_models: str,
-) -> dict:
-    results = {
+    listen_url: str,
+) -> Dict[str, Any]:
+    results: Dict[str, Any] = {
         'provider': provider,
         'stt_service_models': stt_service_models,
         'start_time': datetime.now(tz=None).isoformat(),
@@ -155,7 +156,7 @@ async def run_listen_test(
         f'Audio: {total_audio_s:.1f}s ({total_audio_s / 60:.1f} min), {len(playlist)} utterances, {total_words} words'
     )
     print(f'STT_SERVICE_MODELS={stt_service_models}')
-    print(f'Endpoint: {LISTEN_URL}')
+    print(f'Endpoint: {listen_url}')
     print()
 
     params = {
@@ -166,13 +167,13 @@ async def run_listen_test(
         'include_speech_profile': 'false',
         'conversation_timeout': '30',
     }
-    url = f'{LISTEN_URL}?{"&".join(f"{k}={v}" for k, v in params.items())}'
+    url = f'{listen_url}?{"&".join(f"{k}={v}" for k, v in params.items())}'
 
-    segments_received = []
-    segments_by_id = {}
-    events_received = []
-    first_segment_time = [None]
-    ready_time = [None]
+    segments_received: List[Dict[str, Any]] = []
+    segments_by_id: Dict[str, Dict[str, Any]] = {}
+    events_received: List[Dict[str, Any]] = []
+    first_segment_time: List[Optional[float]] = [None]
+    ready_time: List[Optional[float]] = [None]
     connect_start = time.monotonic()
 
     try:
@@ -197,10 +198,9 @@ async def run_listen_test(
     connect_time = time.monotonic() - connect_start
     print(f'  Connected in {connect_time:.2f}s')
 
-    msg_count = [0]
+    msg_count: List[int] = [0]
 
-    async def recv_messages():
-        nonlocal segments_received, events_received
+    async def recv_messages() -> None:
         try:
             async for raw in ws:
                 msg_count[0] += 1
@@ -215,16 +215,17 @@ async def run_listen_test(
                 ts = time.monotonic() - connect_start
 
                 try:
-                    msg = json.loads(raw)
+                    msg = cast(Union[List[Dict[str, Any]], Dict[str, Any]], json.loads(raw))
                 except json.JSONDecodeError:
                     print(f'  [{ts:.1f}s] non-JSON msg: {raw[:200]}')
                     continue
 
                 try:
                     # Server sends segments as bare JSON array [...] or as {"segments": [...]}
+                    segs: List[Dict[str, Any]]
                     if isinstance(msg, list):
                         segs = msg
-                    elif isinstance(msg, dict):
+                    else:
                         msg['_recv_ts'] = round(ts, 3)
 
                         if msg.get('status') == 'ready':
@@ -234,37 +235,34 @@ async def run_listen_test(
                             continue
 
                         if 'segments' in msg:
-                            segs = msg['segments']
+                            segs = cast(List[Dict[str, Any]], msg['segments'])
                         else:
                             msg_type = str(msg.get('type', msg.get('status', 'unknown')))
                             if msg_count[0] <= 30 or msg_type not in ('ping', 'pong'):
                                 print(f'  [{ts:.1f}s] event: {msg_type} — {json.dumps(msg)[:300]}')
                             events_received.append(msg)
                             continue
-                    else:
-                        continue
 
-                    if not isinstance(segs, list):
-                        continue
-                    seg_texts = []
-                    for seg in segs:
+                    seg_texts: List[str] = []
+                    for seg in cast(List[Any], segs):
                         if not isinstance(seg, dict):
                             continue
-                        text = seg.get('text', '').strip()
+                        typed_seg: Dict[str, Any] = cast(Dict[str, Any], seg)
+                        text = str(typed_seg.get('text', '') or '').strip()
                         if text:
                             if first_segment_time[0] is None:
                                 first_segment_time[0] = ts
-                            entry = {
-                                'id': seg.get('id', ''),
+                            entry: Dict[str, Any] = {
+                                'id': str(typed_seg.get('id', '') or ''),
                                 'text': text,
-                                'speaker': seg.get('speaker', ''),
-                                'start': seg.get('start', 0),
-                                'end': seg.get('end', 0),
+                                'speaker': str(typed_seg.get('speaker', '') or ''),
+                                'start': typed_seg.get('start', 0),
+                                'end': typed_seg.get('end', 0),
                                 'recv_ts': round(ts, 3),
-                                'is_user': seg.get('is_user', False),
+                                'is_user': typed_seg.get('is_user', False),
                             }
                             segments_received.append(entry)
-                            seg_id = seg.get('id', '')
+                            seg_id = str(typed_seg.get('id', '') or '')
                             if seg_id:
                                 segments_by_id[seg_id] = entry
                             seg_texts.append(text[:60])
@@ -374,7 +372,7 @@ async def run_listen_test(
     all_ref_text = ' '.join(s['text'] for s in playlist[:samples_sent])
     received_words = len(all_received_text.split()) if all_received_text else 0
 
-    wer = None
+    wer: Optional[float] = None
     try:
         from jiwer import wer as compute_wer
 
@@ -387,7 +385,7 @@ async def run_listen_test(
 
     punct_marks = re.findall(r'[^\w\s]', all_received_text)
 
-    stats = {
+    stats: Dict[str, Any] = {
         'connect_time_s': round(connect_time, 3),
         'ready_time_s': round(ready_time[0], 3) if ready_time[0] else None,
         'first_segment_time_s': round(first_segment_time[0], 3) if first_segment_time[0] else None,
@@ -477,17 +475,17 @@ async def run_listen_test(
         print(f'\n  No flaws detected.')
 
     # Save per-sample transcript comparison
-    results['transcript_sample'] = []
+    transcript_sample: List[Dict[str, Any]] = []
     seg_idx = 0
     for sample in playlist[: min(samples_sent, 20)]:
-        matching = []
+        matching: List[str] = []
         while seg_idx < len(segments_received):
             s = segments_received[seg_idx]
             matching.append(s['text'])
             seg_idx += 1
             if len(' '.join(matching).split()) >= sample['word_count']:
                 break
-        results['transcript_sample'].append(
+        transcript_sample.append(
             {
                 'uid': sample['uid'],
                 'ref': sample['text'],
@@ -495,13 +493,12 @@ async def run_listen_test(
                 'ref_words': sample['word_count'],
             }
         )
+    results['transcript_sample'] = transcript_sample
 
     return results
 
 
-async def main():
-    global BACKEND_PORT, LISTEN_URL
-
+async def main() -> None:
     parser = argparse.ArgumentParser(description='Listen API Walkthrough — L2 Integration Test')
     parser.add_argument('--provider', choices=['deepgram', 'modulate', 'both'], default='both')
     parser.add_argument('--duration', type=int, default=TARGET_DURATION_S, help='Target audio duration in seconds')
@@ -511,16 +508,16 @@ async def main():
     )
     args = parser.parse_args()
 
-    BACKEND_PORT = args.port
-    LISTEN_URL = f'ws://{BACKEND_HOST}:{BACKEND_PORT}/v4/listen'
+    backend_port = args.port
+    listen_url = f'ws://{BACKEND_HOST}:{backend_port}/v4/listen'
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
-        sock = socket.create_connection((BACKEND_HOST, BACKEND_PORT), timeout=3)
+        sock = socket.create_connection((BACKEND_HOST, backend_port), timeout=3)
         sock.close()
     except (socket.timeout, ConnectionRefusedError, OSError):
-        print(f'ERROR: Backend not running on {BACKEND_HOST}:{BACKEND_PORT}')
+        print(f'ERROR: Backend not running on {BACKEND_HOST}:{backend_port}')
         print('  Run: beast omi dev start backend')
         sys.exit(1)
 
@@ -529,19 +526,19 @@ async def main():
     total_s = sum(s['duration_s'] for s in playlist)
     print(f'  {len(playlist)} utterances, {total_s:.1f}s ({total_s / 60:.1f} min)')
 
-    providers = []
+    providers: List[Any] = []
     if args.provider in ('deepgram', 'both'):
         providers.append(('deepgram', 'dg-nova-3'))
     if args.provider in ('modulate', 'both'):
         providers.append(('modulate', 'modulate-velma-2'))
 
-    all_results = []
+    all_results: List[Dict[str, Any]] = []
 
     for provider_name, stt_models in providers:
         print(f'\n--- Configuring backend for {provider_name} (STT_SERVICE_MODELS={stt_models}) ---')
 
         if args.skip_restart:
-            print(f'  --skip-restart: using currently running backend on port {BACKEND_PORT}')
+            print(f'  --skip-restart: using currently running backend on port {backend_port}')
         else:
             subprocess.run(['beast', 'omi', 'dev', 'stop', 'backend'], capture_output=True)
             await asyncio.sleep(2)
@@ -555,9 +552,9 @@ async def main():
                 stderr=subprocess.PIPE,
             ).wait(timeout=30)
 
-            for attempt in range(30):
+            for _ in range(30):
                 try:
-                    sock = socket.create_connection((BACKEND_HOST, BACKEND_PORT), timeout=2)
+                    sock = socket.create_connection((BACKEND_HOST, backend_port), timeout=2)
                     sock.close()
                     break
                 except (socket.timeout, ConnectionRefusedError, OSError):
@@ -568,12 +565,12 @@ async def main():
 
             await asyncio.sleep(3)
 
-        print(f'  Backend ready on port {BACKEND_PORT}')
+        print(f'  Backend ready on port {backend_port}')
 
         pre_log_path = RESULTS_DIR / f'{provider_name}_pre_logs.txt'
         capture_service_logs('backend', pre_log_path, duration=3)
 
-        result = await run_listen_test(provider_name, playlist, stt_models)
+        result = await run_listen_test(provider_name, playlist, stt_models, listen_url)
         all_results.append(result)
 
         post_log_path = RESULTS_DIR / f'{provider_name}_post_logs.txt'
@@ -628,15 +625,17 @@ async def main():
 
         print(f'\nTRANSCRIPT COMPARISON (first 5 samples):')
         for i in range(min(5, len(dg.get('transcript_sample', [])))):
-            dg_t = dg['transcript_sample'][i] if i < len(dg.get('transcript_sample', [])) else {}
-            mod_t = mod['transcript_sample'][i] if i < len(mod.get('transcript_sample', [])) else {}
+            dg_t = dg['transcript_sample'][i] if i < len(dg.get('transcript_sample', [])) else cast(Dict[str, Any], {})
+            mod_t = (
+                mod['transcript_sample'][i] if i < len(mod.get('transcript_sample', [])) else cast(Dict[str, Any], {})
+            )
             print(f'\n  [{dg_t.get("uid", "?")}]')
             print(f'    REF:      {dg_t.get("ref", "N/A")}')
             print(f'    DEEPGRAM: {dg_t.get("hyp", "N/A")}')
             print(f'    MODULATE: {mod_t.get("hyp", "N/A")}')
 
     print(f'\nALL FLAWS FOUND:')
-    all_flaws = []
+    all_flaws: List[Dict[str, Any]] = []
     for r in all_results:
         for f in r['flaws']:
             f['provider'] = r['provider']

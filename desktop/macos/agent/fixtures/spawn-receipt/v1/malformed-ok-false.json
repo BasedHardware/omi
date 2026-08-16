@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "error": {
+    "code": "spawn_failed",
+    "message": "no"
+  },
+  "providerResult": {
+    "schemaVersion": 1,
+    "ok": false,
+    "code": "spawn_failed",
+    "message": "no"
+  }
+}

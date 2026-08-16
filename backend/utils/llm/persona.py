@@ -1,8 +1,8 @@
-from typing import Optional, List
+from typing import Any, List, Optional, cast
 
 from models.app import App
 from models.chat import Message, MessageSender
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage
 from .clients import get_llm
 from .usage_tracker import track_usage, Features
 import logging
@@ -10,9 +10,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _content_str(response: Any) -> str:
+    """Extract string content from an LLM response (langchain content is typed as a union)."""
+    return cast(str, response.content)
+
+
 def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: List[Message] = []) -> str:
     logger.info("initial_persona_chat_message")
-    chat_messages = [SystemMessage(content=app.persona_prompt)]
+    the_app = cast(App, app)
+    chat_messages: List[BaseMessage] = [SystemMessage(content=the_app.persona_prompt)]
     for msg in messages:
         if msg.sender == MessageSender.ai:
             chat_messages.append(AIMessage(content=msg.text))
@@ -23,14 +29,14 @@ def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: 
             content='lets begin. you write the first message, one short provocative question relevant to your identity. never respond with **. while continuing the convo, always respond w short msgs, lowercase.'
         )
     )
-    feature = 'persona_chat_premium' if app.is_influencer else 'persona_chat'
+    feature = 'persona_chat_premium' if the_app.is_influencer else 'persona_chat'
     with track_usage(uid, Features.PERSONA):
-        return get_llm(feature, streaming=True).invoke(chat_messages).content
+        return _content_str(get_llm(feature, streaming=True).invoke(chat_messages))
 
 
-def answer_persona_question_stream(uid: str, app: App, messages: List[Message], callbacks: []) -> str:
+def answer_persona_question_stream(uid: str, app: App, messages: List[Message], callbacks: List[Any]) -> str:
     logger.info("answer_persona_question_stream")
-    chat_messages = [SystemMessage(content=app.persona_prompt)]
+    chat_messages: List[BaseMessage] = [SystemMessage(content=app.persona_prompt)]
     for msg in messages:
         if msg.sender == MessageSender.ai:
             chat_messages.append(AIMessage(content=msg.text))
@@ -38,10 +44,10 @@ def answer_persona_question_stream(uid: str, app: App, messages: List[Message], 
             chat_messages.append(HumanMessage(content=msg.text))
     feature = 'persona_chat_premium' if app.is_influencer else 'persona_chat'
     with track_usage(uid, Features.PERSONA):
-        return get_llm(feature, streaming=True).invoke(chat_messages, {'callbacks': callbacks}).content
+        return _content_str(get_llm(feature, streaming=True).invoke(chat_messages, {'callbacks': callbacks}))
 
 
-def condense_memories(memories, name):
+def condense_memories(memories: List[str], name: str) -> str:
     combined_memories = "\n".join(memories)
     prompt = f"""
 You are an AI tasked with condensing a detailed profile of hundreds facts about {name} to accurately replicate their personality, communication style, decision-making patterns, and contextual knowledge for 1:1 cloning.  
@@ -69,10 +75,10 @@ Facts:
 {combined_memories}
     """
     response = get_llm('persona_clone', cache_key='omi-persona-clone').invoke(prompt)
-    return response.content
+    return _content_str(response)
 
 
-def generate_persona_description(memories, name):
+def generate_persona_description(memories: Any, name: str) -> str:
     prompt = f"""Based on these facts about a person, create a concise, engaging description that captures their unique personality and characteristics (max 250 characters).
 
     They chose to be known as {name}.
@@ -83,11 +89,11 @@ Facts:
 Create a natural, memorable description that captures this person's essence. Focus on the most unique and interesting aspects. Make it conversational and engaging."""
 
     response = get_llm('persona_clone', cache_key='omi-persona-clone').invoke(prompt)
-    description = response.content
+    description = _content_str(response)
     return description
 
 
-def condense_conversations(conversations):
+def condense_conversations(conversations: List[str]) -> str:
     combined_conversations = "\n".join(conversations)
     prompt = f"""
 You are an AI tasked with condensing context from the recent {len(conversations)} conversations of a user to accurately replicate their communication style, personality, decision-making patterns, and contextual knowledge for 1:1 cloning. Each conversation includes a summary and a full transcript.  
@@ -118,10 +124,10 @@ Conversations:
 {combined_conversations}
     """
     response = get_llm('persona_clone', cache_key='omi-persona-clone').invoke(prompt)
-    return response.content
+    return _content_str(response)
 
 
-def condense_tweets(tweets, name):
+def condense_tweets(tweets: Any, name: str) -> str:
     prompt = f"""
 You are tasked with generating context to enable 1:1 cloning of {name} based on their tweets. The objective is to extract and condense the most relevant information while preserving {name}'s core identity, personality, communication style, and thought patterns.  
 
@@ -155,10 +161,10 @@ Tweets:
 {tweets}
     """
     response = get_llm('persona_clone', cache_key='omi-persona-clone').invoke(prompt)
-    return response.content
+    return _content_str(response)
 
 
-def generate_twitter_persona_prompt(tweets, name):
+def generate_twitter_persona_prompt(tweets: Any, name: str) -> str:
     prompt = f"""
 You are {name} AI. Your objective is to personify {name} as accurately as possible for 1:1 cloning based on their tweets.  
 
@@ -193,7 +199,7 @@ Tweets:
     return prompt
 
 
-def generate_persona_intro_message(prompt: str, name: str):
+def generate_persona_intro_message(prompt: str, name: str) -> str:
     messages = [
         {"role": "system", "content": prompt},
         {
@@ -203,4 +209,4 @@ def generate_persona_intro_message(prompt: str, name: str):
     ]
 
     response = get_llm('persona_clone', cache_key='omi-persona-clone').invoke(messages)
-    return response.content.strip('"').strip()
+    return _content_str(response).strip('"').strip()

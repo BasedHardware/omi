@@ -1,5 +1,18 @@
+import OmiTheme
 import Sentry
 import SwiftUI
+import UniformTypeIdentifiers
+
+/// The Sentry event title used when a user submits feedback. Shared by the real
+/// `submitFeedback()` path and the non-prod dry-run bridge action so the dry-run
+/// can never drift from the title that actually ships to Sentry (SET-02).
+func feedbackReportTitle(for _: String) -> String {
+  "User Report"
+}
+
+/// Filename of the JSON diagnostics attachment on the feedback Sentry event.
+/// Shared so the dry-run reports the same attachment name the real submit uses.
+let feedbackDiagnosticsAttachmentFilename = "desktop_diagnostics.json"
 
 /// Window controller for the feedback dialog
 @MainActor
@@ -22,8 +35,12 @@ class FeedbackWindow {
 
     let newWindow = NSWindow(contentViewController: hostingController)
     newWindow.title = "Report Issue"
-    newWindow.styleMask = [.titled, .closable]
-    newWindow.setContentSize(NSSize(width: 400, height: 300))
+    newWindow.styleMask = [.titled, .closable, .fullSizeContentView]
+    // Transparent, light-pinned, and shadowed by its own frame. Without the pin an `NSTextField`
+    // inside this sheet resolves `labelColor` against the machine's appearance and renders near-white
+    // type on the near-white panel.
+    WindowGlass.wear(newWindow, as: .titled)
+    newWindow.setContentSize(NSSize(width: 400, height: 340))
     newWindow.center()
     newWindow.makeKeyAndOrderFront(nil)
     newWindow.level = .floating
@@ -55,19 +72,19 @@ struct FeedbackView: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       if showSuccess {
         // Success state
-        VStack(spacing: 12) {
+        VStack(spacing: OmiSpacing.md) {
           Image(systemName: "checkmark.circle.fill")
             .scaledFont(size: 48)
-            .foregroundColor(.green)
+            .foregroundColor(Ink.listeningGreen)
 
-          Text("Report sent!")
-            .font(.headline)
+          Text("Report sent")
+            .inkStyle(.firstTitle, color: Ink.primary)
 
           Text("We'll look into this issue.")
-            .foregroundColor(.secondary)
+            .inkStyle(.prose, color: Ink.secondary)
 
           Button("Close") {
             onDismiss()
@@ -78,30 +95,29 @@ struct FeedbackView: View {
       } else {
         // Form state
         Text("Report an Issue")
-          .font(.headline)
+          .inkStyle(.rowCopy, color: Ink.primary)
 
-        Text("App logs will be included automatically. Optionally describe what went wrong.")
-          .font(.caption)
-          .foregroundColor(.secondary)
+        Text(
+          "Redacted diagnostics will be included automatically. Notes, name, and email stay on this device for privacy; save a diagnostics file to share them manually."
+        )
+        .inkStyle(.statusLabel, color: Ink.secondary)
 
         TextEditor(text: $feedbackText)
           .font(.body)
           .frame(minHeight: 100)
-          .border(Color.gray.opacity(0.3), width: 1)
+          .border(Ink.hairline, width: 1)
 
         HStack {
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Name (optional)")
-              .font(.caption)
-              .foregroundColor(.secondary)
+              .inkStyle(.statusLabel, color: Ink.secondary)
             TextField("Your name", text: $name)
               .textFieldStyle(.roundedBorder)
           }
 
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Email")
-              .font(.caption)
-              .foregroundColor(.secondary)
+              .inkStyle(.statusLabel, color: Ink.secondary)
             TextField("your@email.com", text: $email)
               .textFieldStyle(.roundedBorder)
           }
@@ -113,6 +129,11 @@ struct FeedbackView: View {
           }
           .keyboardShortcut(.cancelAction)
 
+          Button("Save Diagnostics…") {
+            saveDiagnosticsLocally()
+          }
+          .help("Save a redacted diagnostics report locally — works offline, nothing is uploaded.")
+
           Spacer()
 
           Button("Send Report") {
@@ -123,8 +144,13 @@ struct FeedbackView: View {
         }
       }
     }
-    .padding(20)
-    .frame(width: 400, height: 300)
+    .padding(OmiSpacing.xl)
+    // Clear of the traffic lights, which `.fullSizeContentView` puts over the content.
+    .padding(.top, OmiSpacing.lg)
+    .frame(width: 400, height: 340)
+    // The sheet paints no ground of its own; the glass owns it, full bleed because the window frame
+    // already carries the corner and the shadow.
+    .inkGlassPanel(cornerRadius: 0, shadow: nil)
   }
 
   private func submitFeedback() {
@@ -136,45 +162,70 @@ struct FeedbackView: View {
     AnalyticsManager.shared.feedbackSubmitted(feedbackLength: message.count)
 
     // Submit to Sentry with log file attachment (dev + prod — user explicitly chose to report)
-    let sentryMessage = message.isEmpty ? "User Report (logs only)" : "User Report: \(message)"
+    let sentryMessage = feedbackReportTitle(for: message)
 
-    // Capture event with log file attached via scope
-    let eventId = SentrySDK.capture(message: sentryMessage) { scope in
-      let isDev = AppBuild.isNonProduction
-      let logPath = isDev ? "/tmp/omi-dev.log" : "/tmp/omi.log"
-      let logFilename = isDev ? "omi-dev.log" : "omi.log"
-      if FileManager.default.fileExists(atPath: logPath) {
-        let attachment = Attachment(path: logPath, filename: logFilename, contentType: "text/plain")
-        scope.addAttachment(attachment)
-      }
-      if let diagnosticsURL = DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment() {
+    // Attach bounded, redacted diagnostics rather than the raw local log or
+    // user-entered feedback text.
+    let diagnosticsURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+      area: "other",
+      failureClass: "user_report",
+      phase: "other")
+    SentrySDK.capture(message: sentryMessage) { scope in
+      if let diagnosticsURL {
         let attachment = Attachment(
           path: diagnosticsURL.path,
-          filename: "desktop_diagnostics.json",
+          filename: feedbackDiagnosticsAttachmentFilename,
           contentType: "application/json")
         scope.addAttachment(attachment)
       }
     }
-
-    // Also send as Sentry feedback if there's a message
-    if !message.isEmpty {
-      let feedback = SentryFeedback(
-        message: message,
-        name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-        email: email.trimmingCharacters(in: .whitespacesAndNewlines),
-        associatedEventId: eventId
-      )
-      SentrySDK.capture(feedback: feedback)
+    if let diagnosticsURL {
+      try? FileManager.default.removeItem(at: diagnosticsURL)
     }
 
-    log(
-      "User report submitted to Sentry (logs attached, message: \(message.isEmpty ? "none" : "yes"))"
-    )
+    // The user-entered text, name, and email are intentionally not sent to Sentry.
+    // The report's diagnostic attachment is the privacy-safe cloud evidence path.
+    log("User report diagnostics submitted to Sentry")
 
     // Show success
-    withAnimation {
+    OmiMotion.withGated {
       showSuccess = true
       isSubmitting = false
     }
+  }
+
+  /// Save a redacted diagnostics bundle to a user-chosen location and reveal it
+  /// in Finder. Fully offline — no Sentry, no network — so users on named/dev
+  /// bundles or without connectivity can still capture a report (BL-023 / SET-03).
+  private func saveDiagnosticsLocally() {
+    let panel = NSSavePanel()
+    panel.title = "Save Diagnostics"
+    panel.message = "Save a redacted diagnostics report you can share manually."
+    panel.nameFieldStringValue = "omi-diagnostics-\(Self.exportTimestamp()).txt"
+    panel.allowedContentTypes = [.plainText]
+    panel.canCreateDirectories = true
+
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+
+    // Building the bundle reads the log, serializes snapshots, and writes the
+    // file — keep it off the main thread so a large log can't hang the UI. The
+    // panel already returned; reveal in Finder back on main.
+    DispatchQueue.global(qos: .userInitiated).async {
+      let saved = DesktopDiagnosticsManager.shared.writeLocalDiagnosticsBundle(to: url)
+      DispatchQueue.main.async {
+        if saved {
+          NSWorkspace.shared.activateFileViewerSelecting([url])
+          log("Saved local diagnostics bundle to a user-chosen location")
+        } else {
+          log("Failed to save local diagnostics bundle")
+        }
+      }
+    }
+  }
+
+  private static func exportTimestamp() -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyyMMdd-HHmmss"
+    return formatter.string(from: Date())
   }
 }

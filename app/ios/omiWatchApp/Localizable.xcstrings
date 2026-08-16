@@ -1,0 +1,74 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "watch.accessibility.elapsedRecordingTime" : {
+      "comment" : "VoiceOver label for the elapsed recording timer.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elapsed recording time"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音経過時間"
+          }
+        }
+      }
+    },
+    "watch.accessibility.recordingInProgress" : {
+      "comment" : "VoiceOver label while the initial recording animation is visible.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording in progress"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音中"
+          }
+        }
+      }
+    },
+    "watch.accessibility.startRecording" : {
+      "comment" : "VoiceOver label for the button that starts an Apple Watch recording.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start recording"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音を開始"
+          }
+        }
+      }
+    },
+    "watch.accessibility.stopRecording" : {
+      "comment" : "VoiceOver label for the button that stops an Apple Watch recording.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop recording"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音を停止"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

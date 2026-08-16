@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Omi_Computer
 
-final class AgentArtifactProjectionTests: XCTestCase {
+@MainActor final class AgentArtifactProjectionTests: XCTestCase {
   func testParsesArtifactMetadataProjection() throws {
     let result = """
       {
@@ -10,7 +10,7 @@ final class AgentArtifactProjectionTests: XCTestCase {
         "artifacts": [
           {
             "artifactId": "artifact-1",
-            "omiSessionId": "session-1",
+            "sessionId": "session-1",
             "runId": "run-1",
             "attemptId": "attempt-1",
             "kind": "json",
@@ -36,7 +36,7 @@ final class AgentArtifactProjectionTests: XCTestCase {
 
     XCTAssertEqual(artifacts.count, 1)
     XCTAssertEqual(artifacts[0].artifactId, "artifact-1")
-    XCTAssertEqual(artifacts[0].omiSessionId, "session-1")
+    XCTAssertEqual(artifacts[0].sessionId, "session-1")
     XCTAssertEqual(artifacts[0].runId, "run-1")
     XCTAssertEqual(artifacts[0].attemptId, "attempt-1")
     XCTAssertEqual(artifacts[0].title, "summary.json")
@@ -119,8 +119,8 @@ private final class DelayedArtifactProjectionLoader: AgentArtifactProjectionLoad
     staleReleaseContinuation = nil
   }
 
-  func controlTool(name: String, input: [String: Any]) async throws -> String {
-    let sessionId = input["sessionId"] as? String ?? ""
+  func controlTool(name: String, input: RuntimeJSONPayloadBox) async throws -> String {
+    let sessionId = input.value["sessionId"] as? String ?? ""
     if sessionId == "session-stale" {
       staleRequestStarted = true
       staleStartedContinuation?.resume()
@@ -135,7 +135,7 @@ private final class DelayedArtifactProjectionLoader: AgentArtifactProjectionLoad
         "artifacts": [
           {
             "artifactId": "\(sessionId == "session-current" ? "artifact-current" : "artifact-stale")",
-            "omiSessionId": "\(sessionId)",
+            "sessionId": "\(sessionId)",
             "kind": "json",
             "role": "result",
             "uri": "omi-artifact://\(sessionId)"

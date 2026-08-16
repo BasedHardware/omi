@@ -1,3 +1,4 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
@@ -5,23 +6,17 @@ import WebKit
 
 extension SettingsContentView {
   var notificationsSection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       // Notifications
       settingsCard(settingId: "notifications.settings") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
-            Image(systemName: "bell.badge.fill")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
-
-            Text("Notifications")
-              .scaledFont(size: 15, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+            settingsCardHeader(icon: "bell.badge.fill", title: "Notifications")
 
             Spacer()
 
             Toggle("", isOn: $notificationsEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .labelsHidden()
               .onChange(of: notificationsEnabled) { _, newValue in
                 updateNotificationSettings(enabled: newValue)
@@ -29,36 +24,41 @@ extension SettingsContentView {
           }
 
           Text("Control how often you receive notifications")
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
 
           if notificationsEnabled {
-            Divider()
-              .background(OmiColors.backgroundQuaternary)
+            GlassSeparator()
 
             notificationFrequencySlider(settingId: "notifications.frequency")
 
+            GlassSeparator()
+
+            // Sits under the master toggle and the frequency slider because both gate it:
+            // frequency caps how often any proactive card is delivered, and this decides
+            // whether live suggestions are generated at all.
             settingRow(
-              title: "Focus Notifications", subtitle: "Show notification on focus changes",
-              settingId: "notifications.focus"
+              title: "Live Suggestions",
+              subtitle: "Suggest things in the notch, using what Omi already knows",
+              settingId: "notifications.livesuggestions"
             ) {
-              Toggle("", isOn: $focusNotificationsEnabled)
-                .toggleStyle(.switch)
+              Toggle("", isOn: $liveSuggestionsEnabled)
+                .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
-                .onChange(of: focusNotificationsEnabled) { _, newValue in
-                  FocusAssistantSettings.shared.notificationsEnabled = newValue
-                  SettingsSyncManager.shared.pushPartialUpdate(
-                    AssistantSettingsResponse(
-                      focus: FocusSettingsResponse(notificationsEnabled: newValue)))
+                .onChange(of: liveSuggestionsEnabled) { _, newValue in
+                  SuggestionAssistantSettings.shared.applyUserEnabledChange(newValue)
                 }
             }
 
+            GlassSeparator()
+
             settingRow(
-              title: "Task Notifications", subtitle: "Show notification when a task is extracted",
+              title: "Task Notifications",
+              subtitle: "Allow interruptions when a task needs attention",
               settingId: "notifications.task"
             ) {
               Toggle("", isOn: $taskNotificationsEnabled)
-                .toggleStyle(.switch)
+                .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .onChange(of: taskNotificationsEnabled) { _, newValue in
                   TaskAssistantSettings.shared.notificationsEnabled = newValue
@@ -68,13 +68,15 @@ extension SettingsContentView {
                 }
             }
 
+            GlassSeparator()
+
             settingRow(
               title: "Insight Notifications",
               subtitle: "Show notification when an insight is generated",
               settingId: "notifications.insight"
             ) {
               Toggle("", isOn: $insightNotificationsEnabled)
-                .toggleStyle(.switch)
+                .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .onChange(of: insightNotificationsEnabled) { _, newValue in
                   InsightAssistantSettings.shared.notificationsEnabled = newValue
@@ -84,16 +86,18 @@ extension SettingsContentView {
                 }
             }
 
+            GlassSeparator()
+
             settingRow(
               title: "Memory Notifications",
               subtitle: "Show notification when a memory is extracted",
               settingId: "notifications.memory"
             ) {
               Toggle("", isOn: $memoryNotificationsEnabled)
-                .toggleStyle(.switch)
+                .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
                 .onChange(of: memoryNotificationsEnabled) { _, newValue in
-                  MemoryAssistantSettings.shared.notificationsEnabled = newValue
+                  MemoryAssistantSettings.shared.applyUserSettingChange(.notificationsEnabled, value: newValue)
                   SettingsSyncManager.shared.pushPartialUpdate(
                     AssistantSettingsResponse(
                       memory: MemorySettingsResponse(notificationsEnabled: newValue)))
@@ -105,20 +109,14 @@ extension SettingsContentView {
 
       // Daily Summary
       settingsCard(settingId: "notifications.dailysummary") {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
-            Image(systemName: "text.badge.checkmark")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
-
-            Text("Daily Summary")
-              .scaledFont(size: 15, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+            settingsCardHeader(icon: "text.badge.checkmark", title: "Daily Summary")
 
             Spacer()
 
             Toggle("", isOn: $dailySummaryEnabled)
-              .toggleStyle(.switch)
+              .toggleStyle(OmiToggleStyle())
               .labelsHidden()
               .onChange(of: dailySummaryEnabled) { _, newValue in
                 updateDailySummarySettings(enabled: newValue)
@@ -126,26 +124,35 @@ extension SettingsContentView {
           }
 
           Text("Receive a daily summary of your conversations and activities")
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
 
           if dailySummaryEnabled {
-            Divider()
-              .background(OmiColors.backgroundQuaternary)
+            GlassSeparator()
 
             settingRow(
-              title: "Summary Time", subtitle: "When to send your daily summary",
+              title: "Summary Time", subtitle: "When to send your daily summary (hour only)",
               settingId: "notifications.summarytime"
             ) {
-              Picker("", selection: $dailySummaryHour) {
-                ForEach(hourOptions, id: \.self) { hour in
-                  Text(formatHour(hour)).tag(hour)
+              DatePicker(
+                "",
+                selection: $dailySummaryTime,
+                displayedComponents: .hourAndMinute
+              )
+              .datePickerStyle(.stepperField)
+              .labelsHidden()
+              .fixedSize()
+              .onChange(of: dailySummaryTime) { _, selectedTime in
+                // Storage is hour-only; snap minutes to :00 in the control so 20:45 never
+                // appears as a saved value that reopens as 20:00.
+                let canonical = SettingsControlMetrics.canonicalizeDailySummaryTime(selectedTime)
+                if canonical != selectedTime {
+                  dailySummaryTime = canonical
                 }
-              }
-              .pickerStyle(.menu)
-              .frame(width: 100)
-              .onChange(of: dailySummaryHour) { _, newValue in
-                updateDailySummarySettings(hour: newValue)
+                let hour = SettingsControlMetrics.dailySummaryHour(from: canonical)
+                guard hour != dailySummaryHour else { return }
+                dailySummaryHour = hour
+                updateDailySummarySettings(hour: hour)
               }
             }
           }
@@ -153,18 +160,35 @@ extension SettingsContentView {
       }
 
     }
+    // These three toggles are seeded from their local singletons when the pane is constructed,
+    // but `loadBackendSettings()` then runs `SettingsSyncManager.syncFromServer()`, which is
+    // server-authoritative and rewrites those same singletons underneath us. Without this the
+    // switches kept painting the pre-sync values — a per-device answer to a per-account
+    // question — until the next relaunch. The sync manager already announces itself; this is
+    // the pane agreeing to listen.
+    .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
+      syncNotificationTogglesFromAssistantSettings()
+    }
+  }
+
+  /// Re-reads the assistant notification toggles from their stores. A sync that agrees with the
+  /// pane assigns nothing, so the common case does not re-enter the `onChange` handlers above; a
+  /// sync that corrects the pane does, and the resulting partial update restates the value the
+  /// server just supplied, which is idempotent.
+  func syncNotificationTogglesFromAssistantSettings() {
+    taskNotificationsEnabled = TaskAssistantSettings.shared.notificationsEnabled
+    insightNotificationsEnabled = InsightAssistantSettings.shared.notificationsEnabled
+    memoryNotificationsEnabled = MemoryAssistantSettings.shared.notificationsEnabled
   }
 
   // MARK: - Privacy Section
 
   var privacySection: some View {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
       // Data Controls
       settingsCard(settingId: "privacy.storerecordings") {
-        VStack(alignment: .leading, spacing: 16) {
-          Text("Data Controls")
-            .scaledFont(size: 15, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          settingsCardHeader(icon: "shield", title: "Data Controls")
 
           privacyToggleRow(
             icon: "mic.fill",
@@ -175,7 +199,7 @@ extension SettingsContentView {
             updateRecordingPermission(newValue)
           }
 
-          Divider()
+          GlassSeparator()
 
           privacyToggleRow(
             icon: "cloud.fill",
@@ -190,73 +214,64 @@ extension SettingsContentView {
 
       // Encryption
       settingsCard(settingId: "privacy.encryption") {
-        VStack(alignment: .leading, spacing: 14) {
-          HStack(spacing: 10) {
-            Image(systemName: "shield.lefthalf.filled")
-              .scaledFont(size: 14)
-              .foregroundColor(OmiColors.purplePrimary)
-              .frame(width: 20)
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          settingsCardHeader(icon: "shield.lefthalf.filled", title: "Encryption")
 
-            Text("Encryption")
-              .scaledFont(size: 14, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
-          }
-
-          HStack(spacing: 10) {
+          HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "checkmark.circle.fill")
-              .scaledFont(size: 12)
-              .foregroundColor(.green)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.listeningGreen)
               .frame(width: 20, alignment: .leading)
 
             Text("Server-side encryption")
-              .scaledFont(size: 13)
-              .foregroundColor(OmiColors.textSecondary)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
 
             Text("Active")
-              .scaledFont(size: 10, weight: .semibold)
-              .foregroundColor(.green)
-              .padding(.horizontal, 5)
-              .padding(.vertical, 1)
-              .background(Color.green.opacity(0.15))
-              .cornerRadius(3)
+              .scaledFont(size: OmiType.micro, weight: .semibold)
+              .foregroundColor(Ink.listeningGreen)
+              .padding(.horizontal, OmiSpacing.xxs)
+              .padding(.vertical, OmiSpacing.hairline)
+              .background(Ink.listeningGreen.opacity(0.15))
+              .cornerRadius(OmiChrome.stripRadius)
           }
 
           Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
         }
       }
 
       // What We Track
       settingsCard(settingId: "privacy.tracking") {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
           Button(action: {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            OmiMotion.withGated(.easeInOut(duration: 0.2)) {
               isTrackingExpanded.toggle()
             }
           }) {
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "list.bullet")
-                .scaledFont(size: 14)
-                .foregroundColor(OmiColors.purplePrimary)
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(Ink.secondary)
                 .frame(width: 20)
 
               Text("What We Track")
-                .scaledFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .scaledFont(size: OmiType.body, weight: .medium)
+                .foregroundColor(Ink.primary)
 
               Spacer()
 
               Image(systemName: "chevron.right")
-                .scaledFont(size: 11, weight: .semibold)
-                .foregroundColor(OmiColors.textTertiary)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+                .foregroundColor(Ink.secondary)
                 .rotationEffect(.degrees(isTrackingExpanded ? 90 : 0))
             }
           }
           .buttonStyle(.plain)
 
           if isTrackingExpanded {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xs) {
               trackingItem("Onboarding steps completed")
               trackingItem("Settings changes")
               trackingItem("App installations and usage")
@@ -275,19 +290,19 @@ extension SettingsContentView {
 
       // Privacy Guarantees
       settingsCard(settingId: "privacy.privacy") {
-        VStack(alignment: .leading, spacing: 10) {
-          HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "hand.raised.fill")
-              .scaledFont(size: 14)
-              .foregroundColor(OmiColors.purplePrimary)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
               .frame(width: 20)
 
             Text("Privacy Guarantees")
-              .scaledFont(size: 14, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(Ink.primary)
           }
 
-          VStack(alignment: .leading, spacing: 6) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xs) {
             privacyBullet("Anonymous tracking with randomly generated IDs")
             privacyBullet("No personal info stored in analytics")
             privacyBullet("Data is never sold or shared with third parties")

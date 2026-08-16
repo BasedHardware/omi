@@ -2,61 +2,58 @@ import XCTest
 
 @testable import Omi_Computer
 
-final class TaskChatLegacyAcpMigrationTests: XCTestCase {
-  func testTaskChatRecordStoresOnlyExplicitLegacyAcpSessionId() {
+final class TaskChatKernelIdentityTests: XCTestCase {
+  func testTaskChatRecordDoesNotPersistSessionIdentity() {
     let message = ChatMessage(id: "message-1", text: "hello", sender: .user)
-
-    let legacyRecord = TaskChatMessageRecord.from(
-      message,
-      taskId: "task-1",
-      acpSessionId: "acp-native-session-1"
-    )
-    let canonicalRecord = TaskChatMessageRecord.from(
-      message,
-      taskId: "task-1",
-      acpSessionId: nil
-    )
-
-    XCTAssertEqual(legacyRecord.acpSessionId, "acp-native-session-1")
-    XCTAssertNil(canonicalRecord.acpSessionId)
+    let record = TaskChatMessageRecord.from(message, taskId: "task-1")
+    XCTAssertEqual(record.taskId, "task-1")
+    XCTAssertEqual(record.messageId, "message-1")
   }
 
-  func testTaskChatStateSeparatesCanonicalOmiAndLegacyAcpSessionSources() throws {
+  func testTaskChatStateUsesSharedRuntimeNotPerTaskBridge() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+    XCTAssertTrue(source.contains("TaskChatRuntime.query("))
+    XCTAssertTrue(source.contains("producingTurnId: aiMessageId"))
+    XCTAssertFalse(source.contains("private var agentBridge"))
+    XCTAssertFalse(source.contains("ensureBridgeStarted"))
+  }
+
+  func testTaskChatStateUsesKernelSurfaceRef() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
-    XCTAssertTrue(source.contains("@Published var legacyAcpSessionId: String?"))
-    XCTAssertTrue(source.contains("@Published var currentOmiSessionId: String?"))
-    XCTAssertFalse(source.contains("@Published var currentSessionId: String?"))
-    XCTAssertTrue(source.contains("omiSessionId: currentOmiSessionId ?? AgentRuntimeStatusStore.shared.knownSessionId(for: .taskChat(taskId: taskId))"))
-    XCTAssertTrue(source.contains("resume: legacyAcpSessionId"))
-    XCTAssertTrue(source.contains("legacyAcpSessionId = adapterSessionId"))
-    XCTAssertFalse(source.contains("legacyAcpSessionId = queryResult.omiSessionId"))
-
-    // Adapter-namespacing guard: adapterSessionId must only be stored into
-    // legacyAcpSessionId when the active harness supports legacy resume
-    // (ACP/pi-mono), preventing cross-adapter resume ID pollution.
-    XCTAssertTrue(source.contains("private var currentHarness: String?"))
-    XCTAssertTrue(source.contains("currentHarness = harness"))
-    XCTAssertTrue(source.contains("let supportsLegacyResume = (currentHarness == \"acp\" || currentHarness == \"piMono\")"))
+    XCTAssertTrue(source.contains("AgentSurfaceReference.workstream(workstreamId: workstreamId)"))
+    XCTAssertFalse(source.contains("AgentSurfaceReference.taskChat(taskId:"))
+    XCTAssertFalse(source.contains("legacyAcpSessionId"))
+    XCTAssertFalse(source.contains("currentOmiSessionId"))
+    XCTAssertFalse(source.contains("getACPSessionId"))
+    XCTAssertFalse(source.contains("acpSessionId"))
   }
 
   func testTaskChatFailureKeepsVisibleAssistantMessage() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
-    XCTAssertTrue(source.contains("Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)"))
-    XCTAssertTrue(source.contains("persistMessage(messages[index])"))
+    XCTAssertTrue(
+      source.contains(
+        "Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)"))
+    XCTAssertTrue(source.contains("try await terminalizeJournalMessage("))
+    XCTAssertFalse(source.contains("persistMessage("))
     XCTAssertTrue(source.contains("observeRuntimeProjectionFailures()"))
     XCTAssertTrue(source.contains("surfaceRuntimeFailure(projection)"))
   }
 
-  func testTaskChatUsesContextPacketsWhilePreservingVisibleTaskContext() throws {
+  func testTaskChatSendsRawPromptAndSurfaceContextToKernel() throws {
+    // omi-test-quality: source-inspection -- static contract: task chat cannot reintroduce deprecated query authority fields
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+    let runtime = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatRuntime.swift")
 
-    XCTAssertTrue(source.contains("buildContextPacketSummary("))
-    XCTAssertTrue(source.contains("build_desktop_context_packet"))
-    XCTAssertTrue(source.contains("DesktopContextPacket"))
-    XCTAssertTrue(source.contains("# Task Context\\n\\n\\(taskContext)\\n\\n---\\n\\n# User Message"))
-    XCTAssertTrue(source.contains("The full task context is included below in the prompt."))
+    XCTAssertTrue(source.contains("prompt: trimmedText"))
+    XCTAssertTrue(source.contains("taskContext: taskContext"))
+    XCTAssertTrue(runtime.contains("source: source"))
+    XCTAssertTrue(runtime.contains("expectedContext: snapshot.freshness"))
+    XCTAssertFalse(runtime.contains("surfaceContextJson"))
+    XCTAssertFalse(runtime.contains("systemPrompt:"))
+    XCTAssertFalse(source.contains("buildContextPacketSummary("))
+    XCTAssertFalse(source.contains("build_desktop_context_packet"))
   }
 
   @MainActor
@@ -74,7 +71,81 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
     TaskChatState.applyFailureTextIfNeeded(to: &message, errorDescription: "OpenClaw failed")
 
     XCTAssertEqual(message.text, "Failed: OpenClaw failed")
-    XCTAssertFalse(message.contentBlocks.isEmpty)
+    XCTAssertEqual(message.contentBlocks.count, 2)
+    guard case .text(_, "Failed: OpenClaw failed") = message.contentBlocks[1] else {
+      return XCTFail("Expected failure text to be visible in structured chat blocks")
+    }
+  }
+
+  @MainActor
+  func testTaskChatFailureKeepsPlainPartialTextVisible() {
+    var message = ChatMessage(
+      id: "assistant-1",
+      text: "Partial answer",
+      sender: .ai,
+      isStreaming: true
+    )
+
+    TaskChatState.applyFailureTextIfNeeded(to: &message, errorDescription: "OpenClaw failed")
+
+    XCTAssertEqual(message.text, "Partial answer\n\nFailed: OpenClaw failed")
+    XCTAssertTrue(message.contentBlocks.isEmpty)
+  }
+
+  @MainActor
+  func testTaskChatFailureDoesNotDuplicateSplitPartialTextBlocks() {
+    var message = ChatMessage(
+      id: "assistant-1",
+      text: "Partial answer",
+      sender: .ai,
+      isStreaming: true,
+      contentBlocks: [
+        .text(id: "text-1", text: "Partial "),
+        .thinking(id: "thinking-1", text: "Looking up context"),
+        .text(id: "text-2", text: "answer"),
+      ]
+    )
+
+    TaskChatState.applyFailureTextIfNeeded(to: &message, errorDescription: "OpenClaw failed")
+
+    XCTAssertEqual(message.text, "Partial answer\n\nFailed: OpenClaw failed")
+    XCTAssertEqual(message.contentBlocks.count, 4)
+    guard case .text(_, "Partial ") = message.contentBlocks[0],
+      case .thinking(_, "Looking up context") = message.contentBlocks[1],
+      case .text(_, "answer") = message.contentBlocks[2],
+      case .text(_, "Failed: OpenClaw failed") = message.contentBlocks[3]
+    else {
+      return XCTFail("Expected split partial text to stay in place with only failure text appended")
+    }
+  }
+
+  func testTaskChatUserStopDoesNotAppendFailureText() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
+    XCTAssertTrue(source.contains("if !failedByUserStop {\n            Self.applyFailureTextIfNeeded"))
+    XCTAssertTrue(source.contains("terminalStatus: .failed"))
+    XCTAssertFalse(source.contains("failedByUserStop ? .completed : .failed"))
+  }
+
+  func testTaskChatPreAdmissionFailureUsesKernelGuardedUnboundFallback() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
+    XCTAssertTrue(source.contains("await failUnboundJournalMessage(messageId: aiMessageId, lease: lease)"))
+    XCTAssertTrue(source.contains("status: .failed"))
+    XCTAssertTrue(source.contains("once query admission links a producer"))
+  }
+
+  func testTaskChatSendSignalsLocalSendOnlyAfterAtomicExchangeAcceptance() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
+    XCTAssertFalse(source.contains("isFollowUp"))
+    XCTAssertFalse(source.contains("sendFollowUp"))
+    guard let tokenRange = source.range(of: "localSendToken = LocalSendToken"),
+      let recordRange = source.range(of: "recordJournalExchangeOperation(")
+    else {
+      return XCTFail("Expected task chat sends to atomically admit both canonical rows")
+    }
+    XCTAssertLessThan(recordRange.lowerBound, tokenRange.lowerBound)
   }
 
   func testFailureTranscriptFormatterUsesStructuredProjectionFailure() {
@@ -108,7 +179,8 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
       "OpenClaw failed: OpenAI API error: upstream unavailable"
     )
     XCTAssertEqual(
-      AgentFailureTranscriptFormatter.transcriptText(for: AgentFailureTranscriptFormatter.errorText(for: projection) ?? ""),
+      AgentFailureTranscriptFormatter.transcriptText(
+        for: AgentFailureTranscriptFormatter.errorText(for: projection) ?? ""),
       "Failed: OpenClaw failed: OpenAI API error: upstream unavailable"
     )
   }
@@ -130,50 +202,181 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
       return XCTFail("surfaceRuntimeFailure function missing")
     }
     let rest = source[functionRange.lowerBound...]
-    let nextFunction = rest.range(of: "\n    private func observeRuntimeProjectionFailures()")
+    let nextFunction = rest.range(of: "\n  private func observeRuntimeProjectionFailures()")
     let body = nextFunction.map { String(rest[..<$0.lowerBound]) } ?? String(rest)
 
     XCTAssertFalse(body.contains("TaskAgentStatusRegistry.shared.markFailed"))
-    XCTAssertTrue(body.contains("appendFailureTranscriptMessage(errorText"))
+    XCTAssertTrue(body.contains("producingRunProjection.terminalMessageID(for: projection)"))
+    XCTAssertTrue(body.contains("requestJournalRefreshForRuntimeFailure("))
+    XCTAssertFalse(body.contains("scheduleJournalUpdate("))
+    XCTAssertFalse(source.contains("bindActive("), "surface-only projections must not bind run authority")
+    XCTAssertFalse(
+      source.contains("TaskChatRuntime.recordJournalMessage(\n                    workstreamId: self.workstreamId"))
   }
 
   func testTerminalFailureFinalizeDoesNotPersistFailureTranscriptTwice() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
-    guard let branchRange = source.range(of: "if terminalStatus == .failed || terminalStatus == .timedOut || terminalStatus == .orphaned {") else {
+    guard let branchRange = source.range(of: "if terminalDisposition != .succeeded {") else {
       return XCTFail("terminal failure branch missing")
     }
     let rest = source[branchRange.lowerBound...]
-    guard let elseRange = rest.range(of: "\n                } else {") else {
+    guard let elseRange = rest.range(of: "\n        } else {") else {
       return XCTFail("terminal failure branch end missing")
     }
     let branch = String(rest[..<elseRange.lowerBound])
 
-    XCTAssertTrue(branch.contains("surfaceCurrentRuntimeFailureIfNeeded(fallbackMessage: \"Agent failed\")"))
-    XCTAssertTrue(branch.contains("let shouldPersistPartial"))
-    XCTAssertTrue(branch.contains("if shouldPersistPartial"))
-    XCTAssertFalse(branch.contains("persistMessage(messages[index])"))
+    XCTAssertTrue(
+      source.contains("try await terminalizeJournalMessage(")
+    )
+    XCTAssertFalse(branch.contains("status: .failed"))
+    XCTAssertFalse(branch.contains("persistMessage("))
   }
 
   func testTerminalFailureMarksRemainingToolCallsFailed() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
     XCTAssertTrue(
-      source.contains("private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed)")
+      source.contains(
+        "private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed)")
     )
     XCTAssertTrue(
-      source.contains("ToolCallBlockUpdater.completeRemainingToolCalls(\n            in: &messages[index].contentBlocks,\n            terminalStatus: terminalStatus\n        )")
+      source.contains("streamingBuffer.completeRemainingToolCalls(")
     )
     XCTAssertTrue(source.contains("completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)"))
-    XCTAssertTrue(source.contains("terminalStatus: failedByUserStop ? .completed : .failed"))
-    XCTAssertTrue(source.contains("completeRemainingToolCalls(messageId: activeAssistantMessageId, terminalStatus: .failed)"))
+    XCTAssertTrue(source.contains("terminalStatus: .failed"))
+    XCTAssertFalse(
+      source.contains("completeRemainingToolCalls(messageId: producingMessageID"),
+      "ambient runtime projections must never terminalize transcript tool blocks")
   }
 
-  func testActionItemChatSessionIdLegacyMarkerStillUsesTaskId() throws {
+  func testDelayedEarlierRunFailureCannotTerminalizeCurrentProducingTurn() {
+    var producing = TaskChatProducingRunProjection()
+    producing.begin(assistantMessageID: "assistant-r2")
+    XCTAssertTrue(
+      producing.bindResult(
+        assistantMessageID: "assistant-r2",
+        runID: "run-r2",
+        attemptID: "attempt-r2"))
+
+    XCTAssertNil(
+      producing.terminalMessageID(
+        for: projection(
+          runID: "run-r1",
+          attemptID: "attempt-r1",
+          status: .failed)),
+      "a delayed R1 terminal projection on the same surface must leave R2 untouched")
+    XCTAssertEqual(
+      producing.terminalMessageID(
+        for: projection(
+          runID: "run-r2",
+          attemptID: "attempt-r2",
+          status: .failed)),
+      "assistant-r2")
+  }
+
+  func testTaskChatTerminalDispositionFailsClosedForUnknownAndCancelled() {
+    XCTAssertEqual(TaskChatTerminalDisposition.classify(.succeeded), .succeeded)
+    XCTAssertEqual(TaskChatTerminalDisposition.classify(.cancelled), .cancelled)
+    XCTAssertEqual(TaskChatTerminalDisposition.classify(.invalid("future_terminal")), .invalid)
+    XCTAssertEqual(TaskChatTerminalDisposition.classify(.invalid("running")), .invalid)
+  }
+
+  func testTaskChatTerminalizationCarriesExactAttemptAndMaterialPayload() {
+    let terminalization = KernelJournalTurnTerminalization(
+      turnId: "assistant-r2",
+      producingRunId: "run-r2",
+      producingAttemptId: "attempt-r2",
+      disposition: .accept,
+      content: "final answer",
+      contentBlocksJSON: #"[{"id":"text-1","type":"text","text":"final answer"}]"#,
+      resourcesJSON: "[]")
+
+    XCTAssertEqual(terminalization.dictionary["turnId"] as? String, "assistant-r2")
+    XCTAssertEqual(terminalization.dictionary["producingRunId"] as? String, "run-r2")
+    XCTAssertEqual(terminalization.dictionary["producingAttemptId"] as? String, "attempt-r2")
+    XCTAssertEqual(terminalization.dictionary["disposition"] as? String, "accept")
+    XCTAssertEqual(terminalization.dictionary["content"] as? String, "final answer")
+    XCTAssertNotNil(terminalization.dictionary["replaceContentBlocks"] as? [Any])
+    XCTAssertNotNil(terminalization.dictionary["replaceResources"] as? [Any])
+    XCTAssertNil(terminalization.dictionary["status"], "Swift must not choose canonical terminal state")
+  }
+
+  private func projection(
+    runID: String,
+    attemptID: String,
+    status: AgentRunProjectionStatus
+  ) -> AgentRunProjection {
+    AgentRunProjection(
+      surface: .workstream(workstreamId: "workstream-1"),
+      sessionId: "session-1",
+      runId: runID,
+      attemptId: attemptID,
+      adapterSessionId: nil,
+      status: status,
+      statusText: nil,
+      errorMessage: status == .failed ? "failed" : nil,
+      failure: nil,
+      updatedAt: Date(),
+      completedAt: status.isTerminal ? Date() : nil,
+      costUsd: nil,
+      inputTokens: nil,
+      outputTokens: nil)
+  }
+
+  func testCoordinatorStopsWritingLegacyTaskSessionIdentity() throws {
     let coordinator = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift")
 
-    XCTAssertTrue(coordinator.contains("updateChatSessionId(taskId: task.id, sessionId: task.id)"))
+    XCTAssertFalse(coordinator.contains("updateChatSessionId"))
+    XCTAssertFalse(coordinator.contains("TaskAgentStatusRegistry"))
+    XCTAssertFalse(coordinator.contains("TaskAgentManager"))
     XCTAssertFalse(coordinator.contains("chatSessionId = state.currentOmiSessionId"))
     XCTAssertFalse(coordinator.contains("chatSessionId = state.legacyAcpSessionId"))
+  }
+
+  func testCoordinatorUsesTicketSixContinuityAndKernelStatusProjection() throws {
+    let coordinator = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift")
+
+    XCTAssertTrue(coordinator.contains("TaskWorkstreamContinuity.prepare("))
+    XCTAssertTrue(coordinator.contains("TaskWorkstreamContinuity.persist("))
+    XCTAssertTrue(coordinator.contains("deliverContinuity(receipt.deliveries"))
+    XCTAssertTrue(coordinator.contains("TaskWorkstreamContinuity.resolveDelivery("))
+    XCTAssertTrue(coordinator.contains("AgentRuntimeStatusStore.shared.$projectionsBySurface"))
+    XCTAssertTrue(coordinator.contains("func ingestTaskMappings(_ tasks: [TaskActionItem])"))
+    XCTAssertFalse(coordinator.contains("state.$isSending"))
+    XCTAssertFalse(coordinator.contains("deriveStreamingStatus"))
+  }
+
+  func testScenarioAutomationUsesRunningAppKernelInsteadOfFrozenArtifacts() throws {
+    let coordinator = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift")
+    let projection = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskThreadProjection.swift")
+    XCTAssertTrue(coordinator.contains("buildScenario13RuntimeProjection("))
+    XCTAssertTrue(coordinator.contains("TaskWorkstreamContinuity.project("))
+    XCTAssertTrue(coordinator.contains("TaskChatRuntime.debugAutomationControlTool"))
+    XCTAssertTrue(coordinator.contains("\"runtime_bridge\": \"live_app_kernel\""))
+    XCTAssertFalse(projection.contains("\"artifact_id\": \"artifact-email-v1\""))
+  }
+
+  func testCanonicalTasksPageCannotLaunchLegacyTmuxAgent() throws {
+    let tasksPage = try sourceFile("MainWindow/Pages/TasksPage.swift")
+    XCTAssertFalse(tasksPage.contains("AgentStatusIndicator(task: task)"))
+    XCTAssertFalse(tasksPage.contains("TaskAgentManager.shared.startAgent"))
+    XCTAssertFalse(tasksPage.contains("AgentPillsManager.shared.spawn(query: task.description"))
+    XCTAssertTrue(tasksPage.contains("_ = await chatCoordinator.openExistingThread(for: task)"))
+    XCTAssertTrue(tasksPage.contains("Task { await coordinator.openChat(for: task) }"))
+  }
+
+  func testAppStartupDoesNotSilentlyLaunchLegacyRecurringTaskAgents() throws {
+    let app = try sourceFile("OmiApp.swift")
+    XCTAssertFalse(app.contains("RecurringTaskScheduler.shared.start()"))
+  }
+
+  func testAppStartupDoesNotMutateSharedLaunchServicesOrSystemProcesses() throws {
+    // omi-test-quality: source-inspection -- static startup boundary prevents
+    // direct macOS-global mutations from bypassing the command policy.
+    let app = try sourceFile("OmiApp.swift")
+    XCTAssertFalse(app.contains("LSRegisterURL("))
+    XCTAssertFalse(app.contains("iconservicesagent"))
+    XCTAssertFalse(app.contains("\"/usr/bin/killall\""))
   }
 
   private func sourceFile(_ relativePath: String) throws -> String {

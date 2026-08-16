@@ -18,16 +18,27 @@ class WavCombiner {
       throw Exception('No WAV files to combine');
     }
 
-    if (wavFiles.length == 1) {
-      final outputFile = File(outputPath);
-      await wavFiles.first.copy(outputPath);
-      return outputFile;
-    }
-
+    // Skip parts that aren't valid WAV so one corrupt artifact doesn't fail the
+    // whole export; combine the parts that do parse.
+    final validFiles = <File>[];
     final metadataList = <WavMetadata>[];
     for (final file in wavFiles) {
-      final metadata = await getMetadata(file);
-      metadataList.add(metadata);
+      try {
+        metadataList.add(await getMetadata(file));
+        validFiles.add(file);
+      } catch (e) {
+        Logger.debug('Skipping unreadable WAV part ${file.path}: $e');
+      }
+    }
+
+    if (validFiles.isEmpty) {
+      throw Exception('No valid WAV files to combine');
+    }
+
+    if (validFiles.length == 1) {
+      final outputFile = File(outputPath);
+      await validFiles.first.copy(outputPath);
+      return outputFile;
     }
 
     final isCompatible = await validateCompatibility(metadataList);
@@ -50,7 +61,7 @@ class WavCombiner {
       );
       sink.add(header);
 
-      for (final file in wavFiles) {
+      for (final file in validFiles) {
         final stream = file.openRead(44);
         await sink.addStream(stream);
       }

@@ -1,4 +1,5 @@
 import AppKit
+import OmiTheme
 import SwiftUI
 
 enum ConnectorBrand: String, Sendable {
@@ -39,7 +40,31 @@ enum ConnectorBrand: String, Sendable {
     }
   }
 
+  fileprivate var appBundleIdentifier: String? {
+    switch self {
+    case .appleNotes:
+      return "com.apple.Notes"
+    case .notion:
+      return "notion.id"
+    case .obsidian:
+      return "md.obsidian"
+    case .chatgpt, .codex:
+      return "com.openai.chat"
+    case .claude, .claudeCode:
+      return "com.anthropic.claudefordesktop"
+    case .calendar, .gmail, .localFiles, .gemini, .agents, .openclaw, .hermes, .x:
+      return nil
+    }
+  }
+
   var installedApplicationURL: URL? {
+    // LaunchServices finds the app wherever it lives (~/Applications, Setapp, renamed);
+    // the fixed /Applications path stays as a fallback for unregistered copies.
+    if let appBundleIdentifier,
+      let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: appBundleIdentifier)
+    {
+      return url
+    }
     guard let appPath, FileManager.default.fileExists(atPath: appPath) else {
       return nil
     }
@@ -52,8 +77,14 @@ enum ConnectorBrand: String, Sendable {
       return "google_calendar_logo"
     case .gmail:
       return "gmail_logo"
+    case .notion:
+      return "notion_logo"
     case .obsidian:
       return "obsidian_logo"
+    case .chatgpt, .codex:
+      return "chatgpt_logo"
+    case .claude, .claudeCode:
+      return "claude_logo"
     case .gemini:
       return "gemini_logo"
     case .hermes:
@@ -102,34 +133,67 @@ enum ConnectorBrand: String, Sendable {
   }
 }
 
-private enum ConnectorBrandImageLoader {
-  private static var cache: [ConnectorBrand: NSImage] = [:]
-  private static var resourceBundle: Bundle? = {
+enum ConnectorBrandImageLoader {
+  private nonisolated(unsafe) static var cache: [ConnectorBrand: NSImage] = [:]
+  private nonisolated(unsafe) static var resourceBundle: Bundle? = {
     let candidates = Bundle.allBundles + Bundle.allFrameworks + [Bundle.main]
 
     for bundle in candidates {
-      if bundle.url(forResource: "gmail_logo", withExtension: "png") != nil {
+      if resourceURL(forResource: "gmail_logo", withExtension: "png", in: bundle) != nil {
         return bundle
       }
     }
 
-    if let resourcesURL = Bundle.main.resourceURL,
-      let bundleURLs = try? FileManager.default.contentsOfDirectory(
-        at: resourcesURL,
-        includingPropertiesForKeys: nil
-      )
-    {
-      for url in bundleURLs where url.pathExtension == "bundle" {
-        if let bundle = Bundle(url: url),
-          bundle.url(forResource: "gmail_logo", withExtension: "png") != nil
-        {
-          return bundle
+    // SwiftPM copies the target's resources into "<pkg>_<target>.bundle", placed
+    // inside the enclosing bundle's Resources (app in production) or next to the
+    // build products (.xctest in `swift test`), so scan one level of nested
+    // bundles under both locations for every candidate.
+    for parent in candidates {
+      var scanRoots = [parent.bundleURL.deletingLastPathComponent()]
+      if let resourcesURL = parent.resourceURL {
+        scanRoots.insert(resourcesURL, at: 0)
+      }
+      for root in scanRoots {
+        guard
+          let bundleURLs = try? FileManager.default.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: nil
+          )
+        else { continue }
+        for url in bundleURLs where url.pathExtension == "bundle" {
+          if let bundle = Bundle(url: url),
+            resourceURL(forResource: "gmail_logo", withExtension: "png", in: bundle) != nil
+          {
+            return bundle
+          }
         }
       }
     }
 
     return nil
   }()
+
+  static func bundledImageURL(for brand: ConnectorBrand) -> URL? {
+    guard let resourceName = brand.bundledResourceName, let bundle = resourceBundle else {
+      return nil
+    }
+    return resourceURL(forResource: resourceName, withExtension: "png", in: bundle)
+  }
+
+  private static func resourceURL(
+    forResource resourceName: String,
+    withExtension fileExtension: String,
+    in bundle: Bundle
+  ) -> URL? {
+    let fileName = "\(resourceName).\(fileExtension)"
+    let candidates = [
+      bundle.url(forResource: resourceName, withExtension: fileExtension),
+      bundle.resourceURL?.appendingPathComponent(fileName),
+      bundle.bundleURL.appendingPathComponent(fileName),
+    ].compactMap { $0 }
+
+    return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
+  }
 
   static func image(for brand: ConnectorBrand) -> NSImage? {
     if let cached = cache[brand] {
@@ -150,17 +214,14 @@ private enum ConnectorBrandImageLoader {
   }
 
   private static func appImage(for brand: ConnectorBrand) -> NSImage? {
-    guard let appPath = brand.appPath, FileManager.default.fileExists(atPath: appPath) else {
+    guard let appURL = brand.installedApplicationURL else {
       return nil
     }
-    return NSWorkspace.shared.icon(forFile: appPath)
+    return NSWorkspace.shared.icon(forFile: appURL.path)
   }
 
   private static func bundledImage(for brand: ConnectorBrand) -> NSImage? {
-    guard let resourceName = brand.bundledResourceName,
-      let bundle = resourceBundle,
-      let url = bundle.url(forResource: resourceName, withExtension: "png")
-    else {
+    guard let url = bundledImageURL(for: brand) else {
       return nil
     }
     return NSImage(contentsOf: url)
@@ -186,10 +247,10 @@ struct ConnectorBrandIcon: View {
   var body: some View {
     ZStack {
       RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
+        .fill(Ink.wash)
         .overlay(
           RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .stroke(Color.white.opacity(0.06), lineWidth: 1)
+            .stroke(Ink.separator, lineWidth: 1)
         )
 
       if brand == .agents {
@@ -199,7 +260,7 @@ struct ConnectorBrandIcon: View {
         // X's wordmark glyph — no SF Symbol or app icon exists for it.
         Text("𝕏")
           .font(.system(size: size * 0.5, weight: .bold))
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
       } else if let image = ConnectorBrandImageLoader.image(for: brand) {
         Image(nsImage: image)
           .resizable()
@@ -209,7 +270,7 @@ struct ConnectorBrandIcon: View {
       } else {
         Image(systemName: brand.fallbackSymbol)
           .font(.system(size: size * 0.38, weight: .semibold))
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
     }
     .frame(width: size, height: size)

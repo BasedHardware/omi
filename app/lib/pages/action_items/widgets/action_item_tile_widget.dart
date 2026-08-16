@@ -273,7 +273,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                       borderRadius: BorderRadius.circular(6),
                       color: displayApp.iconColor.withValues(alpha: 0.2),
                     ),
-                    child: Icon(displayApp.icon, color: displayApp.iconColor, size: 16),
+                    child: FaIcon(displayApp.icon, color: displayApp.iconColor, size: 16),
                   ),
             // Status indicator at bottom right
             Positioned(
@@ -905,7 +905,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       color: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.transparent, width: 0),
+        side: const BorderSide(color: Colors.transparent, width: 0),
       ),
       clipBehavior: Clip.hardEdge,
       child: InkWell(

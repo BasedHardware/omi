@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -19,7 +17,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   static const int pagesPerChunk = 25;
   static const Duration _persistBatchDuration = Duration(seconds: 90);
 
-  List<Wal> _wals = const [];
+  List<Wal> _wals = [];
   BtDevice? _device;
   LocalWalSync? _localSync;
 
@@ -31,7 +29,6 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   bool _isSyncing = false;
   bool _cancelRequested = false;
-  String? _currentDeviceId;
 
   @override
   bool get isSyncing => _isSyncing;
@@ -291,7 +288,6 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     if (_device == null) return false;
 
     String deviceId = _device!.id;
-    _currentDeviceId = deviceId;
 
     try {
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);

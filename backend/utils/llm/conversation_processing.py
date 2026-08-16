@@ -1,12 +1,15 @@
 import hashlib
+import logging
 import os
+import time
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
@@ -17,11 +20,24 @@ from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event, Structured
 from models.structured_extraction import ActionItemsExtraction, StructuredExtraction
 from .clients import get_llm, get_llm_gateway_chat_structured, parser
+from .discard_parser import DiscardConversation, LenientDiscardParser
+from .gateway_error_contract import is_byok_rate_limit_gateway_error
 from utils.byok import has_byok_keys
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
-from utils.llm.conversation_folder import FolderAssignment, assign_conversation_to_folder, build_folders_context
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
-import logging
+from utils.llm.prompt_cache import (
+    EXPLICIT_CACHE_MINIMUM_TOKENS,
+    EXPLICIT_CACHE_OPTIONS,
+    has_cacheable_prefix,
+)
+
+try:
+    from utils.llm.gateway_client import should_route_features_through_gateway
+except ImportError:  # pragma: no cover - isolated legacy tests provide only the shadow seam
+
+    def should_route_features_through_gateway() -> bool:
+        return False
+
 
 logger = logging.getLogger(__name__)
 CONVERSATION_STRUCTURE_SHADOW_FEATURE = 'conversation_structure.extract.shadow'
@@ -30,6 +46,39 @@ CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ST
 CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE = 'conversation_action_items.extract.shadow'
 CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED'
 CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE'
+GPT56_EXPLICIT_CACHE_OPTIONS = EXPLICIT_CACHE_OPTIONS
+CONVERSATION_CACHE_BUCKET_COUNT = 4
+CONVERSATION_CACHE_BUCKET_SECONDS = 15
+GPT56_CACHE_MINIMUM_TOKENS = EXPLICIT_CACHE_MINIMUM_TOKENS
+
+
+def _cache_bucket_key(prefix: str, *, now: float | None = None) -> str:
+    """Return a fixed, opaque cache-routing bucket without user-derived input."""
+    slot = int(time.time() if now is None else now) // CONVERSATION_CACHE_BUCKET_SECONDS
+    return f'{prefix}-v1-b{slot % CONVERSATION_CACHE_BUCKET_COUNT}'
+
+
+def _gpt56_cacheable_system_message(content: str, *, cache_enabled: bool) -> Any:
+    """Mark a static system prefix only when the request uses the GPT-5.6 gateway."""
+    if not cache_enabled:
+        return ('system', content)
+    # A concrete message prevents ChatPromptTemplate from treating literal JSON
+    # braces in parser instructions as template variables.
+    return SystemMessage(
+        content=[
+            {
+                'type': 'text',
+                'text': content,
+                'prompt_cache_breakpoint': {'mode': 'explicit'},
+            }
+        ]
+    )
+
+
+def _has_gpt56_cacheable_static_prefix(content: str) -> bool:
+    """Use the model-family tokenizer as a conservative preflight for a cache write."""
+    return has_cacheable_prefix(content)
+
 
 # =============================================
 #            FOLDER ASSIGNMENT
@@ -38,15 +87,11 @@ CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION
 # get_llm('conv_folder') as the production model/provider plug-in seam.
 
 
-class DiscardConversation(BaseModel):
-    discard: bool = Field(description="If the conversation should be discarded or not")
-
-
 class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
-def _invoke_gateway_shadow_chain(chain, values: dict, *, feature: str) -> BaseModel | None:
+def _invoke_gateway_shadow_chain(chain: Any, values: dict[str, Any], *, feature: str) -> BaseModel | None:
     if has_byok_keys():
         record_chat_extraction_gateway_result(feature=feature, outcome='skipped', reason='byok')
         return None
@@ -72,6 +117,11 @@ def _coerce_action_items(response: ActionItemsExtraction) -> List[ActionItem]:
     return response.to_action_items()
 
 
+def _content_str(response: Any) -> str:
+    content = response.content
+    return content if isinstance(content, str) else str(content)
+
+
 def _coerce_structured(response: Structured | StructuredExtraction) -> Structured:
     if isinstance(response, StructuredExtraction):
         return response.to_structured()
@@ -81,7 +131,7 @@ def _coerce_structured(response: Structured | StructuredExtraction) -> Structure
 def _normalize_action_item_due_dates(
     action_items: List[ActionItem],
     *,
-    user_tz,
+    user_tz: Any,
     now: datetime,
     log_past_due_clears: bool,
 ) -> List[ActionItem]:
@@ -339,7 +389,7 @@ def _record_conversation_action_items_shadow_comparison(
     gateway_response: ActionItemsExtraction | None,
     legacy_response: List[ActionItem],
     *,
-    user_tz,
+    user_tz: Any,
     now: datetime,
 ) -> None:
     if gateway_response is None:
@@ -369,43 +419,61 @@ def _record_conversation_action_items_shadow_comparison(
     )
 
 
-def _run_conversation_structure_shadow(prompt, prompt_values: dict, legacy_response: Structured) -> None:
-    gateway_chain = prompt | get_llm_gateway_chat_structured(cache_key='omi-transcript-structure') | parser
+def _run_conversation_structure_shadow(
+    prompt: ChatPromptTemplate, prompt_values: dict[str, Any], legacy_response: Structured
+) -> None:
+    gateway_chain = cast(
+        Any,
+        prompt | get_llm_gateway_chat_structured(cache_key='omi-transcript-structure') | parser,
+    )
     gateway_response = _invoke_gateway_shadow_chain(
         gateway_chain,
         prompt_values,
         feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
     )
-    _record_conversation_structure_shadow_comparison(_coerce_structured(gateway_response), legacy_response)
+    if gateway_response is not None:
+        _record_conversation_structure_shadow_comparison(
+            _coerce_structured(cast(Structured | StructuredExtraction, gateway_response)), legacy_response
+        )
 
 
 def _run_conversation_action_items_shadow(
-    prompt, prompt_values: dict, legacy_response: List[ActionItem], user_tz, now: datetime
+    prompt: ChatPromptTemplate,
+    prompt_values: dict[str, Any],
+    legacy_response: List[ActionItem],
+    user_tz: Any,
+    now: datetime,
 ) -> None:
-    gateway_chain = (
+    gateway_chain = cast(
+        Any,
         prompt
         | get_llm_gateway_chat_structured(cache_key='omi-extract-actions')
-        | PydanticOutputParser(pydantic_object=ActionItemsExtraction)
+        | PydanticOutputParser(pydantic_object=ActionItemsExtraction),
     )
     gateway_response = _invoke_gateway_shadow_chain(
         gateway_chain,
         prompt_values,
         feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
     )
-    _record_conversation_action_items_shadow_comparison(gateway_response, legacy_response, user_tz=user_tz, now=now)
+    _record_conversation_action_items_shadow_comparison(
+        cast(Optional[ActionItemsExtraction], gateway_response),
+        legacy_response,
+        user_tz=user_tz,
+        now=now,
+    )
 
 
-def _submit_llm_background(fn, *args):
+def _submit_llm_background(fn: Any, *args: Any) -> Any:
     from utils.executors import llm_executor, submit_with_context
 
     return submit_with_context(llm_executor, fn, *args)
 
 
 def _submit_gateway_shadow(
-    worker_fn,
+    worker_fn: Any,
     feature: str,
     log_label: str,
-    *args,
+    *args: Any,
 ) -> None:
     try:
         future = _submit_llm_background(worker_fn, *args)
@@ -417,7 +485,7 @@ def _submit_gateway_shadow(
         )
         return
 
-    def _log_shadow_failure(completed_future):
+    def _log_shadow_failure(completed_future: Any) -> None:
         try:
             completed_future.result()
         except Exception:
@@ -426,7 +494,9 @@ def _submit_gateway_shadow(
     future.add_done_callback(_log_shadow_failure)
 
 
-def _submit_conversation_structure_shadow(prompt, prompt_values: dict, legacy_response: Structured) -> None:
+def _submit_conversation_structure_shadow(
+    prompt: ChatPromptTemplate, prompt_values: dict[str, Any], legacy_response: Structured
+) -> None:
     _submit_gateway_shadow(
         _run_conversation_structure_shadow,
         CONVERSATION_STRUCTURE_SHADOW_FEATURE,
@@ -438,7 +508,11 @@ def _submit_conversation_structure_shadow(prompt, prompt_values: dict, legacy_re
 
 
 def _submit_conversation_action_items_shadow(
-    prompt, prompt_values: dict, legacy_response: List[ActionItem], user_tz, now: datetime
+    prompt: ChatPromptTemplate,
+    prompt_values: dict[str, Any],
+    legacy_response: List[ActionItem],
+    user_tz: Any,
+    now: datetime,
 ) -> None:
     _submit_gateway_shadow(
         _run_conversation_action_items_shadow,
@@ -453,7 +527,7 @@ def _submit_conversation_action_items_shadow(
 
 
 def should_discard_conversation(
-    transcript: str, photos: List[ConversationPhoto] = None, duration_seconds: Optional[float] = None
+    transcript: str, photos: Optional[List[ConversationPhoto]] = None, duration_seconds: Optional[float] = None
 ) -> bool:
     # If there's a long transcript, it's very unlikely we want to discard it.
     # This is a performance optimization to avoid unnecessary LLM calls.
@@ -462,12 +536,12 @@ def should_discard_conversation(
         return False
     has_photos = photos and ConversationPhoto.photos_as_string(photos) != 'None'
 
-    context_parts = []
+    context_parts: List[str] = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
 
     if has_photos:
-        photo_descriptions = ConversationPhoto.photos_as_string(photos)
+        photo_descriptions = ConversationPhoto.photos_as_string(photos) if photos else 'None'
         context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
 
     # If there is no content to process (e.g., empty transcript and no photo descriptions), discard.
@@ -519,14 +593,14 @@ Content:
 {format_instructions}'''.replace(
         '    ', ''
     ).strip()
-    custom_parser = PydanticOutputParser(pydantic_object=DiscardConversation)
+    custom_parser = LenientDiscardParser(pydantic_object=DiscardConversation)
     prompt_values = {
         'full_context': full_context,
         'duration_context': duration_context,
         'format_instructions': custom_parser.get_format_instructions(),
     }
 
-    prompt = ChatPromptTemplate.from_messages([prompt_template])
+    prompt = cast(Any, ChatPromptTemplate).from_messages([prompt_template])
     chain = prompt | get_llm('conv_discard') | custom_parser
     try:
         response: DiscardConversation = chain.invoke(prompt_values)
@@ -556,7 +630,7 @@ def _build_conversation_context(
     Returns:
         Formatted context string, or empty string if no content provided.
     """
-    context_parts = []
+    context_parts: List[str] = []
 
     if calendar_meeting_context:
         participants_str = ", ".join(
@@ -593,10 +667,11 @@ def extract_action_items(
     started_at: datetime,
     language_code: str,
     tz: str,
-    photos: List[ConversationPhoto] = None,
-    existing_action_items: List[dict] = None,
-    calendar_meeting_context: 'CalendarMeetingContext' = None,
-    output_language_code: str = None,
+    photos: Optional[List[ConversationPhoto]] = None,
+    existing_action_items: Optional[List[Dict[str, Any]]] = None,
+    calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
+    output_language_code: Optional[str] = None,
+    task_intelligence_capture: bool = False,
 ) -> List[ActionItem]:
     """
     Dedicated function to extract action items from conversation content.
@@ -621,7 +696,7 @@ def extract_action_items(
 
     existing_items_context = ""
     if existing_action_items:
-        items_list = []
+        items_list: List[str] = []
         for item in existing_action_items:
             # Defensive: the rendered section is "OPEN TASKS"; a completed item
             # leaking through (e.g. a future caller that doesn't pre-filter)
@@ -631,13 +706,97 @@ def extract_action_items(
             desc = item.get('description', '')
             due = item.get('due_at')
             due_str = due.strftime('%Y-%m-%d %H:%M UTC') if due else 'No due date'
-            items_list.append(f"  • {desc} (Due: {due_str})")
+            task_id = item.get('id')
+            id_prefix = f"ID {task_id}: " if task_id else ''
+            items_list.append(f"  • {id_prefix}{desc} (Due: {due_str})")
 
         if items_list:
             existing_items_context = (
                 f"\n\nPOTENTIALLY RELATED OPEN TASKS — recently active, semantically similar ({len(items_list)} items):\n"
                 + "\n".join(items_list)
             )
+
+    commitment_capture_rules = (
+        '''COMMITMENT CAPTURE (canonical task-intelligence mode):
+    • Extract a concrete future commitment even when phrased as "I will" or "I'll do it".
+    • Skip only work demonstrably completed in the current moment; an immediate but still-open commitment is capturable.
+    • For every item set capture_kind to exactly one of explicit_command, clear_commitment, direct_request, inferred_next_step.
+    • Set capture_owner to user, other, or unknown and emit capture_confidence and ownership_confidence from 0 to 1.
+    • A concrete request addressed directly to the primary user has capture_kind=direct_request,
+      capture_owner=user, and high ownership_confidence. Use unknown only when the addressee is genuinely unclear.
+    • A request addressed to someone else or broadcast without a direct mention is not owned by the primary user.
+    • Set concrete_deliverable true only when the commitment names a specific deliverable or outcome; vague "I'll handle it" is false.'''
+        if task_intelligence_capture
+        else '''LEGACY COMMITMENT FILTER:
+    • Skip if the user is currently doing it, about to do it, or handling it in this conversation.
+    • "I'm going to X", "I'll do X for you", and "Let me X" are immediate responses and should be skipped.
+    • "Today I will X" is skipped unless there is a specific time or deadline.'''
+    )
+    workflow_filter_rules = (
+        '''3. THIRD: Select only concrete, useful actions:
+       - Extract explicit commands, direct requests, and clear future commitments even when work is about to start.
+       - Do not skip solely because the user says "I'll", "let me", or is beginning the work now.
+       - Skip work only when the transcript demonstrates it is already complete.
+       - NEVER extract multiple items about the same topic from a single conversation.'''
+        if task_intelligence_capture
+        else '''3. THIRD: Default to extracting NOTHING. Filter aggressively:
+       - Is the user ALREADY doing this or about to do it? SKIP IT
+       - Is this being handled in real-time between the participants? SKIP IT
+       - Would a busy person genuinely forget this without a reminder? If not OBVIOUS, SKIP IT
+       - NEVER extract multiple items about the same topic from a single conversation
+       - When in doubt, extract 0 items. One missed marginal task is far better than multiple garbage tasks.'''
+    )
+    live_work_exclusion_rules = (
+        '''• Work demonstrably completed in the transcript (ongoing or about-to-start work remains eligible)
+    • Past actions being discussed without an open follow-up'''
+        if task_intelligence_capture
+        else '''• Things user is ALREADY doing or actively working on
+    • Past actions being discussed
+    • Conversations where the action is being completed in real-time between the participants
+    • Back-and-forth clarification or decision-making about something happening right now
+    • Requests and responses between people who are together and handling the matter on the spot
+    • If the entire conversation is a brief in-person exchange that will be resolved within minutes, extract 0 items'''
+    )
+    completion_targeting_rule = (
+        '''• If the user says an existing supplied task is done, emit candidate_action=complete with that exact
+      target_task_id. Do not create a new item for completed work.'''
+        if task_intelligence_capture
+        else '''• If user says "I did X" / "I just X'd" / "X is done" / "X is taken care of": DO NOT extract a
+      new item AND do not modify the existing one — just leave it.'''
+    )
+    quality_threshold_rules = (
+        '''• Always extract concrete explicit commands, direct requests, and clear commitments; Candidate policy
+      decides whether they become tasks or quiet suggestions.
+    • Be conservative only with model-inferred next steps.'''
+        if task_intelligence_capture
+        else '''• Only extract action items that are truly important and need tracking
+    • When in doubt, DON'T extract - be conservative and selective'''
+    )
+    strict_filter_intro = (
+        'STRICT FILTERING RULES - ownership and a concrete action are required; timing and importance are signals:'
+        if task_intelligence_capture
+        else 'STRICT FILTERING RULES - Include ONLY tasks that meet ALL these criteria:'
+    )
+    timing_importance_rules = (
+        '''3. **Timing Signal**: Capture timing when present, but do not require a deadline for a concrete explicit
+       command, direct request, or clear commitment.
+
+    4. **Importance Signal**: Consequences increase confidence, but a concrete direct request remains eligible
+       without high stakes. Use importance to filter only inferred or vague next steps.'''
+        if task_intelligence_capture
+        else '''3. **Timing Signal**: The task includes a timing cue:
+       - Explicit dates or times
+       - Relative timing ("tomorrow", "next week", "by Friday", "this month")
+       - Urgency markers ("urgent", "ASAP", "high priority")
+
+    4. **Real Importance**: The task has genuine consequences if missed:
+       - Financial impact (bills, payments, purchases, invoices)
+       - Health/safety concerns (appointments, medications, safety checks)
+       - Hard deadlines (submissions, filings, registrations)
+       - Explicit stress if missed (stated by speakers)
+       - Critical dependencies (primary user blocked without it)
+       - Commitments to other people (meetings, deliverables, promises)'''
+    )
 
     # First system message: task-specific instructions (static prefix enables cross-conversation caching)
     # NOTE: {language_code} is in the context message, not here, to keep this prefix fully static across all languages.
@@ -659,7 +818,7 @@ def extract_action_items(
       - Re-occurrence cues: "again", "another", "still need to", "I forgot to", "more", "one more"
       - Different person, scope, or deadline ("Submit report by March 1" vs "Submit report by April 15" — different deadlines, both valid)
       - Existing item describes a one-off task that's already in progress; user is starting a new instance
-    • If user says "I did X" / "I just X'd" / "X is done" / "X is taken care of": DO NOT extract a new item AND do not modify the existing one — just leave it (auto-completion of existing tasks is out of scope here).
+    {completion_targeting_rule}
     • Examples of true DUPLICATES (suppress):
       - "Call John" said today, existing open "Call John" from this morning, no new context → DUPLICATE
       - "Email Sarah about meeting" said today, existing "Email Sarah about meeting" still open → DUPLICATE (same intent re-mentioned)
@@ -673,12 +832,7 @@ def extract_action_items(
     WORKFLOW:
     1. FIRST: Read the ENTIRE conversation carefully to understand the full context
     2. SECOND: Identify all topics, people, places, or things being discussed
-    3. THIRD: Default to extracting NOTHING. Filter aggressively:
-       - Is the user ALREADY doing this or about to do it? SKIP IT
-       - Is this being handled in real-time between the participants? SKIP IT
-       - Would a busy person genuinely forget this without a reminder? If not OBVIOUS, SKIP IT
-       - NEVER extract multiple items about the same topic from a single conversation
-       - When in doubt, extract 0 items. One missed marginal task is far better than multiple garbage tasks.
+    {workflow_filter_rules}
     4. FOURTH: Extract ONLY action items that passed step 3, using specific names/details
     5. FIFTH: Extract timing information separately and put it in the due_at field
     6. SIXTH: Clean the description - remove ALL time references and vague words
@@ -695,11 +849,10 @@ def extract_action_items(
 
     QUALITY OVER QUANTITY:
     • Better to have 0 action items than to flood the user with unnecessary ones
-    • Only extract action items that are truly important and need tracking
-    • When in doubt, DON'T extract - be conservative and selective
+    {quality_threshold_rules}
     • Think: "Would a busy person want to be reminded of this?"
 
-    STRICT FILTERING RULES - Include ONLY tasks that meet ALL these criteria:
+    {strict_filter_intro}
 
     1. **Clear Ownership & Relevance to Primary User**:
        - Identify which speaker is the primary user based on conversational context
@@ -716,53 +869,31 @@ def extract_action_items(
 
     2. **Concrete Action**: The task describes a specific, actionable next step (not vague intentions)
 
-    3. **Timing Signal**: The task includes a timing cue:
-       - Explicit dates or times
-       - Relative timing ("tomorrow", "next week", "by Friday", "this month")
-       - Urgency markers ("urgent", "ASAP", "high priority")
+    {timing_importance_rules}
 
-    4. **Real Importance**: The task has genuine consequences if missed:
-       - Financial impact (bills, payments, purchases, invoices)
-       - Health/safety concerns (appointments, medications, safety checks)
-       - Hard deadlines (submissions, filings, registrations)
-       - Explicit stress if missed (stated by speakers)
-       - Critical dependencies (primary user blocked without it)
-       - Commitments to other people (meetings, deliverables, promises)
-
-    5. **NOT Already Being Done or About to Do Immediately**:
-       - Skip if user is currently doing it, about to do it, or handling it in this conversation
-       - "I'm going to X" → SKIP (about to do it right now)
-       - "I'll do X for you" → SKIP (immediate response to a request)
-       - "Let me X" → SKIP (taking action now)
-       - "Today I will X" → SKIP unless there's a specific time/deadline attached
+    5. **Commitment state**:
+       {commitment_capture_rules}
        - "I want to X" → SKIP unless paired with a concrete deadline
-       - Only EXTRACT if there's a real future deadline that could be forgotten:
-         * "I need to submit the report by Friday" → EXTRACT (forgettable deadline)
-         * "Call the dentist tomorrow" → EXTRACT (future deadline)
-         * "Don't forget to pay rent by the 1st" → EXTRACT (financial deadline)
+       - Always extract a real future deadline that could be forgotten.
 
     EXCLUDE these types of items (be aggressive about exclusion):
-    • Things user is ALREADY doing or actively working on
+    {live_work_exclusion_rules}
     • Casual mentions or updates ("I'm working on X", "currently doing Y")
     • Vague suggestions without commitment ("we should grab coffee sometime", "let's meet up soon")
     • Casual mentions without commitment ("maybe I'll check that out")
     • General goals without specific next steps ("I need to exercise more")
-    • Past actions being discussed
     • Hypothetical scenarios ("if we do X, then Y")
     • Trivial tasks with no real consequences
     • Tasks assigned to others that don't impact the primary user
     • Routine daily activities the user already knows about
     • Things that are obvious or don't need a reminder
     • Updates or status reports about ongoing work
-    • Conversations where the action is being completed in real-time between the participants
-    • Back-and-forth clarification or decision-making about something happening right now
-    • Requests and responses between people who are together and handling the matter on the spot
-    • If the entire conversation is a brief in-person exchange that will be resolved within minutes, extract 0 items
 
     FORMAT REQUIREMENTS:
     • Keep each action item SHORT and concise (maximum 15 words, strict limit)
     • Use clear, direct language
     • Start with a verb when possible (e.g., "Call", "Send", "Review", "Pay", "Open", "Submit", "Finish", "Complete")
+    • When transcript lines begin with [segment:ID start-end], include the smallest sufficient set of exact supporting IDs in source_segment_ids; never invent an ID, and leave it empty when the content has no segment markers.
     • Include only essential details
 
     • CRITICAL - Resolve ALL vague references:
@@ -798,21 +929,13 @@ def extract_action_items(
     • Merge duplicates
     • Order by: due date → urgency → alphabetical
 
+    CANONICAL TARGETING (only when canonical task-intelligence mode is active):
+    • Set candidate_action to create, update, or complete.
+    • For update/complete, target_task_id MUST exactly match an ID shown in POTENTIALLY RELATED OPEN TASKS.
+    • Never invent a task ID. If no supplied ID is an exact target, use candidate_action=create and omit target_task_id.
+
     DUE DATE EXTRACTION:
     Resolve each due date in the user's LOCAL time. NEVER produce a past date.
-
-    REFERENCE_TIME (user's local time): If {started_at_local} is >7 days before {current_time_local}, use {current_time_local} (historical reprocessing). Otherwise use {started_at_local}.
-
-    Date resolution: "today" → REFERENCE_TIME date, "tomorrow" → next day, weekday names → next occurrence, "next week" → +7 days.
-    Time resolution: "morning" → 9AM, "afternoon" → 2PM, "evening" → 6PM, "noon" → 12PM, "end of day"/"midnight" → 11:59PM, no time → 11:59PM. "urgent"/"ASAP" → 2h from REFERENCE_TIME.
-    Output the resolved value as the user's LOCAL wall-clock time in ISO 8601 with NO timezone suffix or offset (no 'Z', no '+05:30') — the server converts it to UTC. Verify it is in the future relative to REFERENCE_TIME; if past, omit due_at.
-
-    Example: REFERENCE_TIME "2025-10-03T13:25:00", "tomorrow before 10am" → "2025-10-04T10:00:00"
-    Format: naive local ISO 8601, no suffix (e.g., "2025-10-04T10:00:00").
-
-    Conversation started at (local): {started_at_local}
-    Current time (local): {current_time_local}
-    User timezone: {tz}
 
     {format_instructions}'''.replace(
         '    ', ''
@@ -821,9 +944,49 @@ def extract_action_items(
     response_language = output_language_code or language_code
     action_items_parser = PydanticOutputParser(pydantic_object=ActionItemsExtraction)
     # Second system message: conversation context + existing items (dynamic, per-conversation)
-    context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}{existing_items_context}'
-    prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
-    chain = prompt | get_llm('conv_action_items', cache_key='omi-extract-actions') | action_items_parser
+    context_message = '''The content language is {language_code}. You MUST respond entirely in {response_language}.
+
+    DUE DATE EXTRACTION:
+    REFERENCE_TIME (user's local time): If {started_at_local} is >7 days before {current_time_local}, use {current_time_local} (historical reprocessing). Otherwise use {started_at_local}.
+    Date resolution: "today" → REFERENCE_TIME date, "tomorrow" → next day, weekday names → next occurrence, "next week" → +7 days.
+    Time resolution: "morning" → 9AM, "afternoon" → 2PM, "evening" → 6PM, "noon" → 12PM, "end of day"/"midnight" → 11:59PM, no time → 11:59PM. "urgent"/"ASAP" → 2h from REFERENCE_TIME.
+    Output the resolved value as the user's LOCAL wall-clock time in ISO 8601 with NO timezone suffix or offset (no 'Z', no '+05:30') — the server converts it to UTC. Verify it is in the future relative to REFERENCE_TIME; if past, omit due_at.
+    Example: REFERENCE_TIME "2025-10-03T13:25:00", "tomorrow before 10am" → "2025-10-04T10:00:00"
+    Format: naive local ISO 8601, no suffix (e.g., "2025-10-04T10:00:00").
+    Conversation started at (local): {started_at_local}
+    Current time (local): {current_time_local}
+    User timezone: {tz}
+
+    Content:
+    {conversation_context}{existing_items_context}'''
+    gateway_mode_enabled = should_route_features_through_gateway()
+    if gateway_mode_enabled:
+        instructions_text = instructions_text.format(
+            format_instructions=action_items_parser.get_format_instructions(),
+            commitment_capture_rules=commitment_capture_rules,
+            workflow_filter_rules=workflow_filter_rules,
+            live_work_exclusion_rules=live_work_exclusion_rules,
+            completion_targeting_rule=completion_targeting_rule,
+            quality_threshold_rules=quality_threshold_rules,
+            strict_filter_intro=strict_filter_intro,
+            timing_importance_rules=timing_importance_rules,
+        )
+    gateway_cache_enabled = gateway_mode_enabled and _has_gpt56_cacheable_static_prefix(instructions_text)
+    prompt = cast(Any, ChatPromptTemplate).from_messages(
+        [
+            _gpt56_cacheable_system_message(instructions_text, cache_enabled=gateway_cache_enabled),
+            ('system', context_message),
+        ]
+    )
+    if gateway_cache_enabled:
+        cache_key = _cache_bucket_key('omi-extract-actions')
+    elif gateway_mode_enabled:
+        cache_key = None
+    else:
+        cache_key = 'omi-extract-actions'
+    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if gateway_cache_enabled else None
+    action_items_llm = get_llm('conv_action_items', cache_key=cache_key, prompt_cache_options=cache_options)
+    chain = prompt | action_items_llm | action_items_parser
 
     current_time = datetime.now(timezone.utc)
 
@@ -842,7 +1005,6 @@ def extract_action_items(
     current_time_local = current_time.astimezone(user_tz)
     prompt_values = {
         'conversation_context': conversation_context,
-        'format_instructions': action_items_parser.get_format_instructions(),
         'language_code': language_code,
         'response_language': response_language,
         'started_at_local': started_at_local.replace(tzinfo=None).isoformat(),
@@ -850,6 +1012,19 @@ def extract_action_items(
         'tz': tz or 'UTC',
         'existing_items_context': existing_items_context,
     }
+    if not gateway_cache_enabled:
+        prompt_values.update(
+            {
+                'format_instructions': action_items_parser.get_format_instructions(),
+                'commitment_capture_rules': commitment_capture_rules,
+                'workflow_filter_rules': workflow_filter_rules,
+                'live_work_exclusion_rules': live_work_exclusion_rules,
+                'completion_targeting_rule': completion_targeting_rule,
+                'quality_threshold_rules': quality_threshold_rules,
+                'strict_filter_intro': strict_filter_intro,
+                'timing_importance_rules': timing_importance_rules,
+            }
+        )
 
     try:
         response = chain.invoke(prompt_values)
@@ -870,6 +1045,11 @@ def extract_action_items(
         return action_items
 
     except Exception as e:
+        # BYOK rate-limit failures are actionable and must reach the composition
+        # boundary (process_conversation._get_structured) so the user gets the
+        # typed 429/retry contract instead of a silently incomplete conversation.
+        if is_byok_rate_limit_gateway_error(e):
+            raise
         logger.error(f'Error extracting action items: {e}')
         return []
 
@@ -895,10 +1075,14 @@ def get_transcript_structure(
     language_code: str,
     tz: str,
     uid: str,
-    photos: List[ConversationPhoto] = None,
-    calendar_meeting_context: 'CalendarMeetingContext' = None,
-    output_language_code: str = None,
+    photos: Optional[List[ConversationPhoto]] = None,
+    calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
+    output_language_code: Optional[str] = None,
 ) -> Structured:
+    # Keep this import at the invocation boundary: selected unit tests load
+    # this pure processing module in isolation without the full LLM package.
+    from utils.llm.usage_tracker import Features, track_usage
+
     conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context)
     if not conversation_context:
         return Structured()  # Should be caught by discard logic, but as a safeguard.
@@ -945,26 +1129,48 @@ def get_transcript_structure(
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
 
-    For date context, this content was captured at {started_at}, which is already the user's local time ({tz}). Interpret it as-is and describe times of day in the title and overview accordingly; do not re-interpret this timestamp as UTC.
-
     {format_instructions}'''.replace(
         '    ', ''
     ).strip()
 
-    # Second system message: conversation context (dynamic, per-conversation)
-    context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}'
-    prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
-    chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
+    # Second system message contains every per-conversation value, including timestamp.
+    context_message = (
+        'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\n'
+        'For date context, this content was captured at {started_at}, which is already the user\'s local time ({tz}). '
+        'Interpret it as-is and describe times of day in the title and overview accordingly; do not re-interpret this '
+        'timestamp as UTC.\n\nContent:\n{conversation_context}'
+    )
+    gateway_mode_enabled = should_route_features_through_gateway()
+    if gateway_mode_enabled:
+        instructions_text = instructions_text.format(format_instructions=parser.get_format_instructions())
+    gateway_cache_enabled = gateway_mode_enabled and _has_gpt56_cacheable_static_prefix(instructions_text)
+    prompt = cast(Any, ChatPromptTemplate).from_messages(
+        [
+            _gpt56_cacheable_system_message(instructions_text, cache_enabled=gateway_cache_enabled),
+            ('system', context_message),
+        ]
+    )
     legacy_prompt_values = {
         'conversation_context': conversation_context,
-        'format_instructions': parser.get_format_instructions(),
         'language_code': language_code,
         'response_language': response_language,
         'started_at': _local_started_at_iso(started_at, tz),
         'tz': tz or 'UTC',
     }
+    if not gateway_cache_enabled:
+        legacy_prompt_values['format_instructions'] = parser.get_format_instructions()
 
-    response = _coerce_structured(chain.invoke(legacy_prompt_values))
+    with track_usage(uid, Features.CONVERSATION_STRUCTURE):
+        if gateway_cache_enabled:
+            cache_key = _cache_bucket_key('omi-transcript-structure')
+        elif gateway_mode_enabled:
+            cache_key = None
+        else:
+            cache_key = 'omi-transcript-structure'
+        cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if gateway_cache_enabled else None
+        structure_llm = get_llm('conv_structure', cache_key=cache_key, prompt_cache_options=cache_options)
+        chain = prompt | structure_llm | parser
+        response = _coerce_structured(chain.invoke(legacy_prompt_values))
     if _should_run_conversation_structure_shadow(uid, started_at, conversation_context):
         _submit_conversation_structure_shadow(
             prompt,
@@ -985,11 +1191,10 @@ def get_reprocess_transcript_structure(
     started_at: datetime,
     language_code: str,
     tz: str,
-    title: str,
-    photos: List[ConversationPhoto] = None,
-    output_language_code: str = None,
+    photos: Optional[List[ConversationPhoto]] = None,
+    output_language_code: Optional[str] = None,
 ) -> Structured:
-    context_parts = []
+    context_parts: List[str] = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
 
@@ -1007,7 +1212,7 @@ def get_reprocess_transcript_structure(
     prompt_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
     The content language is {language_code}. You MUST respond entirely in {response_language}.
 
-    For the title, use ```{title}```, if it is empty, use the main topic of the content.
+    For the title, generate a concise title from the current content. Do not reuse a previous title.
     For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details.
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
@@ -1042,14 +1247,19 @@ def get_reprocess_transcript_structure(
         '    ', ''
     ).strip()
 
-    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
+    prompt = cast(Any, ChatPromptTemplate).from_messages([('system', prompt_text)])
+    gateway_cache_enabled = should_route_features_through_gateway()
+    # Reprocessing has no eligible static prefix, so explicit mode avoids both
+    # cache reads and billable cache writes on the GPT-5.6 route.
+    cache_key = None if gateway_cache_enabled else 'omi-transcript-structure'
+    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if gateway_cache_enabled else None
+    structure_llm = get_llm('conv_structure', cache_key=cache_key, prompt_cache_options=cache_options)
+    chain = prompt | structure_llm | parser
 
     response = _coerce_structured(
         chain.invoke(
             {
                 'full_context': full_context,
-                'title': title,
                 'format_instructions': parser.get_format_instructions(),
                 'language_code': language_code,
                 'response_language': response_language,
@@ -1068,7 +1278,7 @@ def get_reprocess_transcript_structure(
 
 
 def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, language_code: str = 'en') -> str:
-    context_parts = []
+    context_parts: List[str] = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
 
@@ -1094,8 +1304,14 @@ def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, l
     {full_context}
     '''
 
-    response = get_llm('conv_app_result', cache_key='omi-app-result').invoke(prompt)
-    content = response.content.replace('```json', '').replace('```', '')
+    gateway_cache_enabled = should_route_features_through_gateway()
+    # App-specific instructions vary at the start of the prompt. Explicit mode
+    # without a breakpoint keeps this route out of GPT-5.6's billable cache.
+    cache_key = None if gateway_cache_enabled else 'omi-app-result'
+    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if gateway_cache_enabled else None
+    app_result_llm = get_llm('conv_app_result', cache_key=cache_key, prompt_cache_options=cache_options)
+    response = app_result_llm.invoke(prompt)
+    content = _content_str(response).replace('```json', '').replace('```', '')
     return content
 
 
@@ -1179,7 +1395,7 @@ def get_suggested_apps_for_conversation(conversation: Conversation, apps: List[A
 
     try:
         with_parser = get_llm('conv_app_select').with_structured_output(SuggestedAppsSelection)
-        response: SuggestedAppsSelection = with_parser.invoke(prompt)
+        response: SuggestedAppsSelection = cast(SuggestedAppsSelection, with_parser.invoke(prompt))
 
         # Validate that suggested app IDs exist in the available apps
         valid_app_ids = {app.id for app in apps}
@@ -1250,7 +1466,7 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
 
     try:
         with_parser = get_llm('conv_app_select').with_structured_output(BestAppSelection)
-        response: BestAppSelection = with_parser.invoke(prompt)
+        response: BestAppSelection = cast(BestAppSelection, with_parser.invoke(prompt))
         selected_app_id = response.app_id
 
         if not selected_app_id or selected_app_id.strip() == "":
@@ -1279,4 +1495,4 @@ def generate_summary_with_prompt(conversation_text: str, prompt: str, language_c
     {conversation_text}
     """
     response = get_llm('daily_summary', cache_key='omi-daily-summary').invoke(full_prompt)
-    return response.content
+    return _content_str(response)

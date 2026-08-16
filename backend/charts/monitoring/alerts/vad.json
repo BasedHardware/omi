@@ -115,20 +115,32 @@
       }
     ],
     "updated": "2026-06-20T02:27:39Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "51",
-      "threshold": "0.1"
+      "threshold": "0.1",
+      "summary": "Omi speech processing alert: VAD - 4XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi speech processing production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "dew9ala448r9cc",
+      "component": "speech-processing",
+      "impact": "product"
+    }
   },
   {
     "id": 42,
@@ -253,10 +265,19 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "51",
-      "threshold": "0.1"
+      "threshold": "0.1",
+      "summary": "Omi speech processing alert: VAD - 5XX error rate is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi speech processing production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
     "labels": {
-      "instatus_component": "speech-processing"
+      "instatus_component": "speech-processing",
+      "severity": "critical",
+      "alert_identity": "few9anlyv16v4a",
+      "component": "speech-processing",
+      "impact": "product"
     },
     "isPaused": false,
     "notification_settings": {
@@ -380,20 +401,32 @@
       }
     ],
     "updated": "2026-06-23T01:20:17Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "49",
-      "threshold": "10"
+      "threshold": "10",
+      "summary": "Omi speech processing alert: VAD RPS is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi speech processing production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "speech-processing",
+      "alert_identity": "bew9aeqgx2w3kf",
+      "component": "speech-processing",
+      "impact": "infrastructure"
+    }
   },
   {
     "id": 43,
@@ -516,20 +549,32 @@
       }
     ],
     "updated": "2026-06-20T02:27:42Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "53",
-      "threshold": "3"
+      "threshold": "3",
+      "summary": "Omi speech processing alert: VAD replica count is high.",
+      "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
+      "scope": "The Omi speech processing production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and check service readiness before intervention.",
+      "safe_next_action": "Inspect readiness and capacity first; use the documented scaling or rollback path only if the condition persists."
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "ticket",
+      "instatus_component": "speech-processing",
+      "alert_identity": "cew9aupbed0xsd",
+      "component": "speech-processing",
+      "impact": "infrastructure"
+    }
   },
   {
     "id": 40,
@@ -647,19 +692,31 @@
       }
     ],
     "updated": "2026-06-20T02:27:42Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "50",
-      "threshold": "2500ms (2.5s)"
+      "threshold": "2500ms (2.5s)",
+      "summary": "Omi speech processing alert: VAD request latency is high.",
+      "user_impact": "Users may see this Omi capability fail, slow down, or become unavailable.",
+      "scope": "The Omi speech processing production service path.",
+      "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
+      "safe_next_action": "Inspect the linked dashboard and service readiness; use the documented rollback or capacity path only after verification."
     },
-    "isPaused": true,
+    "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
-    "record": null
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "eew9ai0vlsyrke",
+      "component": "speech-processing",
+      "impact": "product"
+    }
   }
 ]

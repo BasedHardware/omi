@@ -30,6 +30,7 @@ export function HowDidYouHearStep({
   stepIndex,
   totalSteps,
   onContinue,
+  onBack,
   aside
 }: HowDidYouHearStepProps): React.JSX.Element {
   const [selected, setSelected] = useState<string | null>(null)
@@ -48,6 +49,7 @@ export function HowDidYouHearStep({
       eyebrow="QUICK QUESTION"
       title="How did you hear about Omi?"
       align="left"
+      onBack={onBack}
       aside={aside}
     >
       <div className="flex flex-wrap gap-2.5">

@@ -172,6 +172,15 @@ describe("env-command local subprocess adapters", () => {
         writeResponse(proc, request, {
           type: "event",
           event: {
+            type: "tool_activity",
+            name: "omi_tool",
+            status: "interrupted",
+            toolUseId: "tool-1",
+          },
+        });
+        writeResponse(proc, request, {
+          type: "event",
+          event: {
             type: "tool_result_display",
             name: "omi_tool",
             toolUseId: "tool-1",
@@ -251,8 +260,10 @@ describe("env-command local subprocess adapters", () => {
       "text_delta",
       "thinking_delta",
       "tool_activity",
+      "tool_activity",
       "tool_result_display",
     ]);
+    expect(events[3]).toMatchObject({ type: "tool_activity", status: "interrupted" });
     expect(requests.map((request) => request.type)).toEqual(["open", "resume", "execute"]);
     await adapter.stop();
   });
@@ -527,16 +538,11 @@ describe("env-command local subprocess adapters", () => {
     await adapter.stop();
   });
 
-  it("does not import legacy permission policy from new adapter modules", () => {
-    for (const file of [
-      "src/adapters/local-subprocess.ts",
-      "src/adapters/hermes.ts",
-      "src/adapters/openclaw.ts",
-    ]) {
-      const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
-      expect(source).not.toContain("legacyPermissionPolicy");
-      expect(source).not.toContain("legacy-permission-policy");
-    }
+  it("routes ACP permission handling through desktop tool policy", () => {
+    const source = readFileSync(new URL("../src/adapters/acp.ts", import.meta.url), "utf8");
+    expect(source).toContain("resolveAcpPermission");
+    expect(source).toContain("resolveExternalAcpPermission");
+    expect(source).not.toContain("legacy-permission-policy");
   });
 
   it("tracks local ACP adapters for bridge shutdown", () => {

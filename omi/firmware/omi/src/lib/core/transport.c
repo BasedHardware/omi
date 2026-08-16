@@ -561,11 +561,11 @@ void broadcast_battery_level(struct k_work *work_item)
         LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
         if (is_connected && current_connection != NULL) {
-            if (storage_transfer_active()) {
-                k_work_reschedule(&battery_work, K_MSEC(next_refresh_interval));
-                return;
-            }
-
+            /* Report battery even during an SD sync. It's 1 byte at most every few
+             * seconds and AUDIO_TX_RESERVED_SLOTS keeps TX buffers free for
+             * non-audio notifications, so it can't starve the sync/audio stream.
+             * The old storage_transfer_active() early-return meant the app never
+             * got a battery update for the whole (often long) duration of a sync. */
             (void) notify_charging_status(current_connection, false);
 
             // Use the Zephyr BAS function to set (and notify) the battery level
@@ -609,6 +609,12 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     uint16_t mtu = bt_gatt_get_mtu(conn);
     current_mtu = mtu;
 
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    /* Kick the SD remount immediately (it may be off from offline AAD sleep) so
+     * it is mounted well before the app fires its one-shot sync command. */
+    sd_request_power(true);
+#endif
+
     LOG_INF("Transport connected");
 
     // Log initial connection parameters
@@ -645,6 +651,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     // Notify SD module about BLE connection (flush current file)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     sd_notify_ble_state(true);
+    /* SD power-on was already requested at the top of this handler. */
 #endif
 }
 
@@ -674,6 +681,11 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     sd_notify_ble_state(false);
     storage_is_on = false;
+    /* No phone left to sync: if the mic is idle in AAD sleep, drop SD power again
+     * (it was kept on for the connection). */
+    if (mic_in_aad_sleep()) {
+        sd_request_power(false);
+    }
 #endif
 
     LOG_INF("Transport disconnected");
@@ -1024,6 +1036,21 @@ static void on_audio_tx_done(struct bt_conn *conn, void *user_data)
 {
     ARG_UNUSED(conn);
     ARG_UNUSED(user_data);
+    k_sem_give(&audio_tx_sem);
+}
+
+// Shared TX-slot reservation. The storage-sync path takes/releases the same
+// semaphore as the audio pusher, so audio + sync together never consume the
+// last AUDIO_TX_RESERVED_SLOTS buffers -> they stay free for short control
+// notifications (battery/charging/status), which were otherwise starved (-ENOMEM)
+// during a sync.
+int transport_bulk_tx_acquire(k_timeout_t timeout)
+{
+    return k_sem_take(&audio_tx_sem, timeout);
+}
+
+void transport_bulk_tx_release(void)
+{
     k_sem_give(&audio_tx_sem);
 }
 

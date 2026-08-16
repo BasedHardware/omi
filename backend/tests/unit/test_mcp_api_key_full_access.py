@@ -1,8 +1,10 @@
 from datetime import datetime
 
 from google.cloud import firestore
+import pytest
 
 import database.mcp_api_key as mcp_api_key_db
+from database.api_key_metadata import ApiKeyCacheReadMode, ApiKeyCacheReadResult, ApiKeyValidationError
 import scripts.backfill_mcp_key_full_access as backfill_mcp_keys
 
 
@@ -116,22 +118,35 @@ class _Redis:
         self.auth_context = None
         self.cached = []
 
-    def get_cached_mcp_api_key_auth_context(self, _hashed_key):
-        return self.auth_context
+    def read_cached_mcp_api_key_auth_context(self, _hashed_key):
+        if self.auth_context is None:
+            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.MISS)
+        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.HIT, data=self.auth_context)
 
-    def cache_mcp_api_key_auth_context(self, hashed_key, user_id, scopes, key_id=None, app_id=None):
+    def cache_mcp_api_key_auth_context(
+        self,
+        hashed_key,
+        user_id,
+        scopes,
+        key_id=None,
+        app_id=None,
+        memory_grant_seeded=True,
+        auth_context_version=mcp_api_key_db.MCP_API_KEY_AUTH_CONTEXT_VERSION,
+    ):
         self.auth_context = {
             "user_id": user_id,
             "scopes": scopes,
             "key_id": key_id,
             "app_id": app_id,
-            "memory_grant_seeded": True,
-            "auth_context_version": mcp_api_key_db.MCP_API_KEY_AUTH_CONTEXT_VERSION,
+            "memory_grant_seeded": memory_grant_seeded,
+            "auth_context_version": auth_context_version,
         }
         self.cached.append({"hashed_key": hashed_key, **self.auth_context})
+        return True
 
-    def delete_cached_mcp_api_key(self, _hashed_key):
+    def delete_cached_mcp_api_key_strict(self, _hashed_key):
         self.auth_context = None
+        return True
 
 
 def _grant_for(db, uid, key_id, app_id=mcp_api_key_db.MCP_DEFAULT_APP_ID):
@@ -151,6 +166,10 @@ def test_create_mcp_key_persists_full_access_identity_and_memory_grant(monkeypat
     monkeypatch.setattr(mcp_api_key_db, "get_firestore_client", lambda: db)
     monkeypatch.setattr(mcp_api_key_db, "generate_api_key", lambda: ("omi_mcp_secret", "hashed", "omi_mcp"))
     monkeypatch.setattr(mcp_api_key_db.uuid, "uuid4", lambda: "key-1")
+
+    with pytest.raises(ApiKeyValidationError, match="Invalid MCP API key app_id"):
+        mcp_api_key_db.create_mcp_key("user-1", "Agent", app_id="../invalid app")
+    assert db.collection("mcp_api_keys")._docs == {}
 
     raw_key, key = mcp_api_key_db.create_mcp_key("user-1", "Agent")
 
@@ -269,7 +288,7 @@ def test_delete_mcp_key_removes_memory_grant(monkeypatch):
         {
             "id": "key-1",
             "user_id": "user-1",
-            "hashed_key": "hashed",
+            "hashed_key": "a" * 64,
             "app_id": mcp_api_key_db.MCP_DEFAULT_APP_ID,
         }
     )

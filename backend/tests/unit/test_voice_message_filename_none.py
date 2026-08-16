@@ -16,6 +16,7 @@ import types
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi.routing import APIRoute
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -66,7 +67,24 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         return _AutoMock(spec.name)
 
     def exec_module(self, module):
+        if module.__name__ == 'utils.multipart':
+            module.CHAT_FILE_MAX_PART_SIZE = 50 * 1024 * 1024
+            module.VOICE_MESSAGE_MAX_PART_SIZE = 200 * 1024 * 1024
+            module.MultipartMaxPartSizeRoute = APIRoute
+            module.max_part_size = _identity_max_part_size
+            module.parse_multipart_form = _parse_stub_form
         pass
+
+
+def _identity_max_part_size(_bytes_size):
+    def decorator(endpoint):
+        return endpoint
+
+    return decorator
+
+
+async def _parse_stub_form(request, *, max_part_size):
+    return await request.form()
 
 
 _f = _Finder()
@@ -120,7 +138,11 @@ class _StubRequest:
 
 def _call(upload_file):
     request = _StubRequest(_StubForm([upload_file]))
-    with patch.object(mod, 'is_trial_paywalled', return_value=False):
+
+    async def run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    with patch.object(mod, 'is_trial_paywalled', return_value=False), patch.object(mod, 'run_blocking', run_blocking):
         return asyncio.run(mod.transcribe_voice_message(request=request, uid='u1', x_app_platform='ios'))
 
 

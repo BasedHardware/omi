@@ -23,9 +23,25 @@ const EMPTY: KnowledgeGraph = { nodes: [], edges: [] }
 export function useMemoryGraph(memories: Memory[]): {
   graph: KnowledgeGraph
   centerNodeId?: string
+  // Passthrough of the underlying server-KG hook so a consumer (the full-screen
+  // brain-map viewer) can offer a rebuild without a second useKnowledgeGraph
+  // instance — a separate instance would rebuild into the shared module cache but
+  // never update THIS hook's scoped graph. Because the rebuild runs on the same
+  // instance whose `kg` we scope, the rebuilt graph flows straight back into the
+  // map. The Memories inline card ignores these fields, so its behavior is
+  // unchanged.
+  rebuild: () => Promise<void>
+  rebuilding: boolean
+  // True until BOTH graph sources this hook merges have resolved: the persisted
+  // onboarding floor (localGraphLoad) AND the initial server-KG fetch. The inline
+  // preview gates its loading indicator on this (plus useMemories' own loading) so
+  // it reveals the FINAL merged graph once, instead of revealing the floor-only
+  // intermediate and then visibly gaining the server nodes a moment later.
+  loading: boolean
 } {
-  const { graph: kg, refetch } = useKnowledgeGraph()
+  const { graph: kg, loading: kgLoading, refetch, rebuild, rebuilding } = useKnowledgeGraph()
   const [floor, setFloor] = useState<KnowledgeGraph>(EMPTY)
+  const [floorLoaded, setFloorLoaded] = useState(false)
   const memoryCount = memories.length
 
   // Load the persisted onboarding graph once. useOnboardingGraph only holds the
@@ -40,6 +56,9 @@ export function useMemoryGraph(memories: Memory[]): {
       })
       .catch(() => {
         /* no floor available — fall back to the server graph alone */
+      })
+      .finally(() => {
+        if (!cancelled) setFloorLoaded(true)
       })
     return () => {
       cancelled = true
@@ -73,5 +92,5 @@ export function useMemoryGraph(memories: Memory[]): {
     ? USER_NODE_ID
     : graph.nodes.find((n) => n.nodeType === 'person')?.id
 
-  return { graph, centerNodeId }
+  return { graph, centerNodeId, rebuild, rebuilding, loading: kgLoading || !floorLoaded }
 }

@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
-import type { RewindSettings } from '../../shared/types'
+import type { RewindCaptureQuality, RewindSettings } from '../../shared/types'
 
 // Rewind capture is ON by default — screen history is a core feature, so a fresh
 // install (no settings file yet) starts capturing. Once the user changes a
@@ -12,11 +12,25 @@ const DEFAULTS: RewindSettings = {
   captureEnabled: true,
   intervalMs: 1000,
   retentionDays: 14,
-  excludedApps: []
+  excludedApps: [],
+  // 720p — the resolution the capture path was tuned at. Sharper tiers cost CPU
+  // and disk continuously, so they are opt-in.
+  captureQuality: 'standard'
 }
+
+const QUALITIES: RewindCaptureQuality[] = ['standard', 'high', 'max']
 
 function file(): string {
   return join(app.getPath('userData'), 'rewind-settings.json')
+}
+
+// On a Wayland session, continuous capture would re-trigger the desktop portal's
+// "Share screen?" prompt on every frame (Electron exposes no persisted-consent
+// path), so a fresh install defaults capture OFF there. On-demand "what's on my
+// screen" is unaffected, and the user can still enable continuous capture
+// explicitly (one prompt per session). X11 sessions keep the default-on behavior.
+export function defaultCaptureEnabled(): boolean {
+  return process.env.XDG_SESSION_TYPE !== 'wayland'
 }
 
 // Coerce a partial/untrusted settings object into a fully-valid one.
@@ -42,7 +56,12 @@ function sanitize(raw: Partial<RewindSettings>): RewindSettings {
     captureEnabled: raw.captureEnabled !== false,
     intervalMs,
     retentionDays,
-    excludedApps
+    excludedApps,
+    // An unknown tier (older settings file, hand-edited value) falls back to the
+    // default rather than reaching the capture host as an undefined constraint.
+    captureQuality: QUALITIES.includes(raw.captureQuality as RewindCaptureQuality)
+      ? (raw.captureQuality as RewindCaptureQuality)
+      : DEFAULTS.captureQuality
   }
 }
 
@@ -52,7 +71,7 @@ export function getPersistedRewindSettings(): RewindSettings {
   try {
     return sanitize(JSON.parse(readFileSync(file(), 'utf-8')) as Partial<RewindSettings>)
   } catch {
-    return { ...DEFAULTS }
+    return { ...DEFAULTS, captureEnabled: DEFAULTS.captureEnabled && defaultCaptureEnabled() }
   }
 }
 

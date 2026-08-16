@@ -10,11 +10,14 @@ import 'package:omi/services/capture/capture_controller.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class CaptureModeChip extends StatelessWidget {
-  final DeviceType deviceType;
+  /// The connected device's type, or null for the phone-mic (no-device) context.
+  final DeviceType? deviceType;
 
   const CaptureModeChip({super.key, required this.deviceType});
 
-  static bool supportsDevice(DeviceType? type) => CaptureController.supportsTranscribeLater(type);
+  static bool supportsDevice(DeviceType? type) => type != null
+      ? CaptureController.supportsTranscribeLater(type)
+      : CaptureController.phoneMicSupportsTranscribeLater;
 
   @override
   Widget build(BuildContext context) {
@@ -145,10 +148,7 @@ class _ModeOption extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF2A2A33),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? Colors.white.withValues(alpha: 0.55) : Colors.transparent,
-            width: 1.5,
-          ),
+          border: Border.all(color: selected ? Colors.white.withValues(alpha: 0.55) : Colors.transparent, width: 1.5),
         ),
         child: Row(
           children: [

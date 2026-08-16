@@ -11,7 +11,7 @@ import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Callable, Dict, Iterator, Mapping, Optional, cast
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
@@ -26,6 +26,8 @@ _usage_context: contextvars.ContextVar[Optional["UsageContext"]] = contextvars.C
 # Thread-safe buffer for batching writes
 _buffer_lock = threading.Lock()
 _usage_buffer: Dict[str, Dict[str, int]] = {}
+
+UsageContextToken = contextvars.Token[Optional["UsageContext"]]
 
 
 @dataclass(frozen=True)
@@ -51,7 +53,7 @@ class UsageRecord:
 class LLMUsageCallback(BaseCallbackHandler):
     """LangChain callback handler for tracking LLM token usage by feature."""
 
-    def __init__(self, flush_fn: Optional[Callable[[str, str, str, int, int], None]] = None):
+    def __init__(self, flush_fn: Optional[Callable[[str, str, str, int, int], None]] = None) -> None:
         """
         Initialize the callback.
 
@@ -68,21 +70,23 @@ class LLMUsageCallback(BaseCallbackHandler):
             ctx = UsageContext(uid="unknown", feature=Features.OTHER)
 
         # Extract token usage from response
-        token_usage = {}
+        token_usage: Mapping[str, object] = {}
         model = "unknown"
-        if response.llm_output:
-            token_usage = response.llm_output.get("token_usage", {})
-            model = response.llm_output.get("model_name") or token_usage.get("model_name", model)
+        llm_output = _mapping_or_empty(getattr(response, "llm_output", None))
+        if llm_output:
+            token_usage = _mapping_or_empty(llm_output.get("token_usage"))
+            model = _string_or_default(llm_output.get("model_name") or token_usage.get("model_name"), model)
 
-        input_tokens = token_usage.get("prompt_tokens", 0)
-        output_tokens = token_usage.get("completion_tokens", 0)
+        input_tokens = _int_or_zero(token_usage.get("prompt_tokens"))
+        output_tokens = _int_or_zero(token_usage.get("completion_tokens"))
 
         # Also try to get model from response metadata
         if model == "unknown" and response.generations:
             for gen_list in response.generations:
                 for gen in gen_list:
                     if hasattr(gen, "generation_info") and gen.generation_info:
-                        model = gen.generation_info.get("model_name", model)
+                        generation_info = cast(Mapping[str, object], gen.generation_info)
+                        model = _string_or_default(generation_info.get("model_name"), model)
                         break
 
         if input_tokens > 0 or output_tokens > 0:
@@ -94,7 +98,27 @@ class LLMUsageCallback(BaseCallbackHandler):
                 _buffer_usage(ctx.uid, ctx.feature, model, input_tokens, output_tokens)
 
 
-def _buffer_usage(uid: str, feature: str, model: str, input_tokens: int, output_tokens: int):
+def _mapping_or_empty(value: object) -> Mapping[str, object]:
+    if isinstance(value, Mapping):
+        return cast(Mapping[str, object], value)
+    return {}
+
+
+def _string_or_default(value: object, default: str) -> str:
+    if isinstance(value, str) and value:
+        return value
+    return default
+
+
+def _int_or_zero(value: object) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    return 0
+
+
+def _buffer_usage(uid: str, feature: str, model: str, input_tokens: int, output_tokens: int) -> None:
     """Buffer usage data for batch writing."""
     key = f"{uid}:{feature}:{model}"
     with _buffer_lock:
@@ -113,7 +137,7 @@ def get_and_clear_buffer() -> Dict[str, Dict[str, int]]:
 
 
 @contextmanager
-def track_usage(uid: str, feature: str):
+def track_usage(uid: str, feature: str) -> Iterator[UsageContext]:
     """
     Context manager to track LLM usage for a specific feature.
 
@@ -133,7 +157,7 @@ def track_usage(uid: str, feature: str):
         _usage_context.reset(token)
 
 
-def set_usage_context(uid: str, feature: str) -> contextvars.Token:
+def set_usage_context(uid: str, feature: str) -> UsageContextToken:
     """
     Set the usage context manually (for cases where context manager isn't suitable).
 
@@ -143,7 +167,7 @@ def set_usage_context(uid: str, feature: str) -> contextvars.Token:
     return _usage_context.set(ctx)
 
 
-def reset_usage_context(token: contextvars.Token):
+def reset_usage_context(token: UsageContextToken) -> None:
     """Reset the usage context using the token from set_usage_context()."""
     _usage_context.reset(token)
 

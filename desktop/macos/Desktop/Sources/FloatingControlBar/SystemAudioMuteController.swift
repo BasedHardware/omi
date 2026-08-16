@@ -1,4 +1,4 @@
-import CoreAudio
+@preconcurrency import CoreAudio
 import Foundation
 
 /// Mutes the system's default audio-output device while push-to-talk is active,

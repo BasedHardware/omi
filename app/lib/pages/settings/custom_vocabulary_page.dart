@@ -214,7 +214,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
     _vocabularyController.clear();
 
     final success = await userProvider.addVocabularyWords(words);
-    if (success && context.mounted) {
+    if (success && mounted) {
       context.read<CaptureProvider>().onTranscriptionSettingsChanged();
     }
   }

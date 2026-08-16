@@ -1,3 +1,4 @@
+import OmiTheme
 import SwiftUI
 
 // MARK: - ChatErrorCard
@@ -15,20 +16,20 @@ struct ChatErrorCard: View {
   @State private var showDetails: Bool = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack(alignment: .top, spacing: 10) {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      HStack(alignment: .top, spacing: OmiSpacing.sm) {
         Image(systemName: iconName)
-          .scaledFont(size: 14)
+          .scaledFont(size: OmiType.body)
           .foregroundColor(accentColor)
           .frame(width: 16, alignment: .center)
 
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(headline)
-            .scaledFont(size: 13, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .scaledFont(size: OmiType.body, weight: .semibold)
+            .foregroundColor(Ink.primary)
           Text(detail)
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textSecondary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
 
@@ -37,35 +38,36 @@ struct ChatErrorCard: View {
         if let onDismiss = onDismiss {
           Button(action: onDismiss) {
             Image(systemName: "xmark")
-              .scaledFont(size: 10)
-              .foregroundColor(OmiColors.textTertiary)
+              .scaledFont(size: OmiType.micro)
+              .foregroundColor(Ink.secondary)
           }
           .buttonStyle(.plain)
           .help("Dismiss")
         }
       }
 
-      HStack(spacing: 8) {
+      HStack(spacing: OmiSpacing.sm) {
         Button(action: onRecover) {
           Text(primaryCTATitle)
-            .scaledFont(size: 11, weight: .medium)
-            .foregroundColor(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .background(accentColor.opacity(0.9))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            // The label ladder inverted on the filled pill, and a full stadium.
+            .foregroundColor(Ink.surface)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.xxs)
+            .background(accentColor)
+            .clipShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
 
         if !detailsBody.isEmpty {
           Button(action: { showDetails.toggle() }) {
-            HStack(spacing: 3) {
+            HStack(spacing: OmiSpacing.hairline) {
               Text(showDetails ? "Hide details" : "Show details")
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
               Image(systemName: showDetails ? "chevron.up" : "chevron.down")
-                .scaledFont(size: 9)
+                .scaledFont(size: OmiType.micro)
             }
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           }
           .buttonStyle(.plain)
         }
@@ -75,20 +77,22 @@ struct ChatErrorCard: View {
 
       if showDetails, !detailsBody.isEmpty {
         Text(detailsBody)
-          .scaledFont(size: 11)
-          .foregroundColor(OmiColors.textTertiary)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
-          .padding(.top, 2)
+          .padding(.top, OmiSpacing.hairline)
       }
     }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 10)
-    .background(accentColor.opacity(0.08))
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    // A wash on the panel, tinted only enough to name the state. A saturated fill
+    // here is a second ground, and on glass it is the loudest thing on screen.
+    .background(Ink.rowFill)
     .overlay(
-      RoundedRectangle(cornerRadius: 12)
+      RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
         .strokeBorder(accentColor.opacity(0.35), lineWidth: 1)
     )
-    .clipShape(RoundedRectangle(cornerRadius: 12))
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
   }
 
   // MARK: - State-specific copy
@@ -108,16 +112,19 @@ struct ChatErrorCard: View {
     }
   }
 
+  /// The state's voice. Named system colours off the shared palette: `Ink.accent` for the one thing
+  /// that is actionable and is not already a button, `PageGlass.warning` for a state with something
+  /// to do about it, and `Ink.errorRed` — the only place this app raises its voice — for a failure.
   private var accentColor: Color {
     switch state {
     case .authRequired:
-      return .blue
+      return Ink.accent
     case .timeout, .interrupted:
-      return .orange
+      return PageGlass.warning
     case .bridgeUnavailable:
-      return .red
+      return Ink.errorRed
     case .noDataFound:
-      return OmiColors.textTertiary
+      return Ink.secondary
     }
   }
 
@@ -138,6 +145,8 @@ struct ChatErrorCard: View {
         return "AI components missing"
       case .crashed:
         return "AI stopped unexpectedly"
+      case .failedToStart:
+        return "AI couldn't start"
       case .unknown:
         return "AI isn't running"
       }
@@ -162,11 +171,20 @@ struct ChatErrorCard: View {
         return "The AI components aren't installed. Install them to keep chatting."
       case .crashed:
         return "The AI stopped mid-turn. Try again to start a fresh response."
+      case .failedToStart(let failure):
+        switch failure {
+        case .handshakeTimedOut:
+          return "The AI took too long to start. Try again to start a fresh response."
+        case .incompatibleHandshake:
+          return "The AI needs to restart before it can respond. Try again."
+        case .exitedDuringStartup, .launchFailed:
+          return "The AI couldn't start. Try again to start a fresh response."
+        }
       case .unknown:
         return "The AI is not responding. Try again to start a fresh response."
       }
     case .interrupted:
-      return "Resume the response or discard it and ask something new."
+      return "Ask something new when you're ready."
     case .noDataFound:
       return "Try a different question, or be more specific."
     }
@@ -175,9 +193,6 @@ struct ChatErrorCard: View {
   private var primaryCTATitle: String {
     switch state.primaryRecovery {
     case .retry:
-      if case .interrupted = state {
-        return "Resume"
-      }
       return "Retry"
     case .signIn:
       return "Sign in"
@@ -203,9 +218,13 @@ struct ChatErrorCard: View {
       case .nodeMissing:
         return "Cause: node binary not found on PATH."
       case .runtimeMissing:
-        return "Cause: bridge script missing on disk."
+        // Covers both a missing bridge script and a bundle whose agent runtime
+        // payload (e.g. pi-mono-extension) never made it into the install.
+        return "Cause: the local AI runtime is missing files on disk."
       case .crashed:
         return "Cause: bridge process exited."
+      case .failedToStart(let failure):
+        return "Cause: bridge start failed (\(failure.rawValue))."
       case .unknown:
         return ""
       }

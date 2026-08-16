@@ -1,0 +1,9 @@
+{
+  "version": "0.12.58",
+  "date": "2026-07-09",
+  "changes": [
+    "Fixed Claude MCP connector setup to use the registered production OAuth client instead of a stale fallback",
+    "Removed the optional API keys step from onboarding and cleaned up the 2nd brain graph label",
+    "Improved the sign-in browser page and automatically brings Omi to the front when authentication finishes"
+  ]
+}

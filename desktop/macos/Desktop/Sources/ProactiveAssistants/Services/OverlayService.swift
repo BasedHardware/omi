@@ -1,4 +1,5 @@
 import AppKit
+import OmiTheme
 import SwiftUI
 
 /// Controller that manages the glow overlay using edge windows positioned around the target

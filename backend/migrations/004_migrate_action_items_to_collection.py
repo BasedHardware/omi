@@ -374,7 +374,7 @@ def migrate_action_items():
                     completed_futures = []
                     for future in as_completed(list(future_to_batch.keys())):
                         try:
-                            result = future.result()
+                            future.result()
                             completed_futures.append(future)
                         except Exception as e:
                             batch_id = future_to_batch[future]
@@ -389,7 +389,7 @@ def migrate_action_items():
 
             for future in as_completed(future_to_batch.keys()):
                 try:
-                    result = future.result()
+                    future.result()
                 except Exception as e:
                     batch_id = future_to_batch[future]
                     log_progress(f"Error in batch {batch_id}: {str(e)}")

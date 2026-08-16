@@ -1,8 +1,28 @@
 import logging
 import os
-from typing import Optional
+from typing import Any, Dict, List, Optional, cast
 
 from twilio.rest import Client
+
+TwilioRestException: type[BaseException]
+try:
+    from twilio.base.exceptions import TwilioRestException as _TwilioRestException
+
+    TwilioRestException = _TwilioRestException
+except ImportError:
+
+    class _FallbackTwilioRestException(Exception):
+        status: int | None
+        code: int | None
+
+        def __init__(self, *args: object, status: int | None = None, code: int | None = None) -> None:
+            super().__init__(*args)
+            self.status = status
+            self.code = code
+
+    TwilioRestException = _FallbackTwilioRestException
+
+
 from twilio.jwt.access_token import AccessToken
 from twilio.jwt.access_token.grants import VoiceGrant
 from twilio.request_validator import RequestValidator
@@ -18,6 +38,7 @@ api_key_secret = os.getenv('TWILIO_API_KEY_SECRET')
 twiml_app_sid = os.getenv('TWILIO_TWIML_APP_SID')
 
 _client = None
+_TWILIO_NOT_FOUND_CODES = {20404}
 
 
 def _get_client() -> Client:
@@ -29,7 +50,7 @@ def _get_client() -> Client:
     return _client
 
 
-def generate_access_token(uid: str, ttl: int = 3600) -> dict:
+def generate_access_token(uid: str, ttl: int = 3600) -> Dict[str, Any]:
     """
     Generate a Twilio Access Token with Voice grant for the given user.
 
@@ -57,16 +78,16 @@ def generate_access_token(uid: str, ttl: int = 3600) -> dict:
         outgoing_application_sid=twiml_app_sid,
         incoming_allow=False,
     )
-    token.add_grant(voice_grant)
+    token.add_grant(voice_grant)  # type: ignore[reportUnknownMemberType]  # twilio add_grant untyped
 
     return {
-        'access_token': token.to_jwt(),
+        'access_token': token.to_jwt(),  # type: ignore[reportUnknownMemberType]  # twilio to_jwt untyped
         'ttl': ttl,
         'identity': uid,
     }
 
 
-def start_caller_id_verification(phone_number: str) -> dict:
+def start_caller_id_verification(phone_number: str) -> Dict[str, Any]:
     """
     Start the caller ID verification process via Twilio.
     Twilio will call the user's phone with a verification code.
@@ -105,7 +126,7 @@ def check_caller_id_verified(phone_number: str) -> bool:
     return len(outgoing_caller_ids) > 0
 
 
-def get_caller_id(phone_number: str) -> Optional[dict]:
+def get_caller_id(phone_number: str) -> Optional[Dict[str, Any]]:
     """
     Get the caller ID record for a verified phone number.
 
@@ -127,6 +148,24 @@ def get_caller_id(phone_number: str) -> Optional[dict]:
     }
 
 
+def _delete_caller_id_status(sid: str) -> str:
+    try:
+        client = _get_client()
+        client.outgoing_caller_ids(sid).delete()
+        return 'deleted'
+    except TwilioRestException as e:
+        twilio_error = cast(Any, e)
+        status = getattr(twilio_error, 'status', None)
+        code = getattr(twilio_error, 'code', None)
+        if status == 404 or code in _TWILIO_NOT_FOUND_CODES:
+            return 'already_deleted'
+        logger.warning(f'delete_caller_id: twilio error sid={sid} status={status} code={code}')
+        return 'failed'
+    except Exception as e:
+        logger.warning(f'delete_caller_id: unexpected error sid={sid}: {e}')
+        return 'failed'
+
+
 def delete_caller_id(sid: str) -> bool:
     """
     Delete a verified caller ID.
@@ -137,48 +176,53 @@ def delete_caller_id(sid: str) -> bool:
     Returns:
         True if deleted successfully
     """
-    client = _get_client()
-    try:
-        client.outgoing_caller_ids(sid).delete()
-        return True
-    except Exception:
-        return False
+    return _delete_caller_id_status(sid) in ('deleted', 'already_deleted')
 
 
-def delete_user_caller_ids(uid: str) -> int:
-    # Delete every verified Twilio caller ID owned by `uid`.
-    #
-    # Returns the number of caller IDs successfully deleted. Best-effort by
-    # design — Twilio API errors are absorbed by delete_caller_id() itself
-    # (returns False), and the only way an exception reaches the outer guard
-    # is if _get_client() raises (e.g. missing TWILIO_* env vars). Both paths
-    # are logged but never propagate, so callers (account-deletion background
-    # wipe) can safely run this before a Firestore wipe without risking a
-    # half-deleted user if Twilio is misconfigured or momentarily down.
+def _delete_user_caller_ids(uid: str, *, strict: bool) -> int:
     try:
         numbers = phone_calls_db.get_phone_numbers(uid)
     except Exception as e:
         logger.error(f'delete_user_caller_ids: list phone_numbers failed: {e}')
+        if strict:
+            raise
         return 0
 
-    deleted = 0
+    cleaned = 0
+    failures = []
     for number in numbers:
         sid = number.get('twilio_sid')
         if not sid:
             continue
-        try:
-            if delete_caller_id(sid):
-                deleted += 1
-            else:
-                logger.warning(f'delete_user_caller_ids: twilio reported failure for sid={sid}')
-        except Exception as e:
-            # Reachable only if _get_client() itself raises before delete_caller_id's
-            # internal try/except — Twilio API errors are already swallowed there.
-            logger.error(f'delete_user_caller_ids: twilio client unavailable for sid={sid}: {e}')
-    return deleted
+        status = _delete_caller_id_status(sid)
+        if status in ('deleted', 'already_deleted'):
+            cleaned += 1
+            continue
+        failures.append(sid)
+        logger.warning(f'delete_user_caller_ids: twilio delete failed for sid={sid}')
+
+    if failures and strict:
+        raise RuntimeError(f'twilio caller-id delete failed for {len(failures)} caller id(s)')
+    return cleaned
 
 
-def list_caller_ids() -> list:
+def delete_user_caller_ids(uid: str) -> int:
+    # Best-effort caller-ID cleanup for non-compliance paths.
+    return _delete_user_caller_ids(uid, strict=False)
+
+
+def delete_user_caller_ids_strict(uid: str) -> int:
+    """Delete every verified Twilio caller ID owned by ``uid``.
+
+    Unlike ``delete_user_caller_ids``, this account-deletion variant raises if
+    listing or deleting any caller ID fails. The account deletion worker must
+    keep Firestore metadata until Twilio cleanup has either succeeded or can be
+    retried with the phone-number documents still present.
+    """
+    return _delete_user_caller_ids(uid, strict=True)
+
+
+def list_caller_ids() -> List[Dict[str, Any]]:
     """
     List all verified outgoing caller IDs for the account.
 
@@ -197,7 +241,7 @@ def list_caller_ids() -> list:
     ]
 
 
-def validate_twilio_signature(url: str, params: dict, signature: str) -> bool:
+def validate_twilio_signature(url: str, params: Dict[str, Any], signature: str) -> bool:
     """
     Validate that a request originated from Twilio using the X-Twilio-Signature header.
 
@@ -212,4 +256,4 @@ def validate_twilio_signature(url: str, params: dict, signature: str) -> bool:
     if not auth_token:
         return False
     validator = RequestValidator(auth_token)
-    return validator.validate(url, params, signature)
+    return validator.validate(url, params, signature)  # type: ignore[reportUnknownMemberType, reportUnknownVariableType]  # twilio RequestValidator.validate untyped

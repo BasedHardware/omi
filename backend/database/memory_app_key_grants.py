@@ -1,7 +1,12 @@
 """Canonical app/key memory grant Firestore reader (WS-G7)."""
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional, cast
+
+import database._client as db_client_module
+from google.cloud import firestore
+
+StatePayload = dict[str, Any]
 
 APP_KEY_MEMORY_GRANTS_COLLECTION = "memory_control"
 APP_KEY_MEMORY_GRANT_DOC_ID = "app_key_memory_grants"
@@ -12,7 +17,7 @@ APP_KEY_MEMORY_GRANT_SUBPATH = f"{APP_KEY_MEMORY_GRANTS_COLLECTION}/{APP_KEY_MEM
 class AppKeyMemoryGrantStateRead:
     present: bool
     malformed: bool
-    state: dict[str, Any]
+    state: StatePayload
     source_path: str
     reason: str
 
@@ -21,11 +26,18 @@ def app_key_memory_grants_document_path(uid: str) -> str:
     return f"users/{uid}/{APP_KEY_MEMORY_GRANT_SUBPATH}"
 
 
-def _looks_like_grants_contract(state: Any) -> bool:
-    return isinstance(state, dict) and isinstance(state.get("grants"), dict)
+def _looks_like_grants_contract(state: object) -> bool:
+    if not isinstance(state, dict):
+        return False
+    state_payload = cast(StatePayload, state)
+    return isinstance(state_payload.get("grants"), dict)
 
 
-def read_app_key_memory_grants_state(uid: str, db_client) -> AppKeyMemoryGrantStateRead:
+def _default_db_client(db_client: Optional[Any]) -> Any:
+    return db_client if db_client is not None else getattr(db_client_module, "db", None)
+
+
+def read_app_key_memory_grants_state(uid: str, db_client: Any) -> AppKeyMemoryGrantStateRead:
     """Read the server-owned persisted memory app/key memory grant document.
 
     Firestore path:
@@ -42,10 +54,9 @@ def read_app_key_memory_grants_state(uid: str, db_client) -> AppKeyMemoryGrantSt
     """
 
     source_path = app_key_memory_grants_document_path(uid)
+    client: Any = db_client
     snapshot = (
-        db_client.collection(f"users/{uid}/{APP_KEY_MEMORY_GRANTS_COLLECTION}")
-        .document(APP_KEY_MEMORY_GRANT_DOC_ID)
-        .get()
+        client.collection(f"users/{uid}/{APP_KEY_MEMORY_GRANTS_COLLECTION}").document(APP_KEY_MEMORY_GRANT_DOC_ID).get()
     )
     if not getattr(snapshot, "exists", False):
         return AppKeyMemoryGrantStateRead(
@@ -56,12 +67,12 @@ def read_app_key_memory_grants_state(uid: str, db_client) -> AppKeyMemoryGrantSt
             reason="missing_app_key_memory_grants_state",
         )
 
-    state = snapshot.to_dict()
+    state: object = snapshot.to_dict()
     if not _looks_like_grants_contract(state):
         return AppKeyMemoryGrantStateRead(
             present=True,
             malformed=True,
-            state=state if isinstance(state, dict) else {},
+            state=cast(StatePayload, state) if isinstance(state, dict) else {},
             source_path=source_path,
             reason="malformed_app_key_memory_grants_state",
         )
@@ -69,7 +80,7 @@ def read_app_key_memory_grants_state(uid: str, db_client) -> AppKeyMemoryGrantSt
     return AppKeyMemoryGrantStateRead(
         present=True,
         malformed=False,
-        state=state,
+        state=cast(StatePayload, state),
         source_path=source_path,
         reason="ok",
     )
@@ -85,7 +96,7 @@ def build_app_key_scope_grant_contract_state(
     archive_read: bool = False,
     write: bool = False,
     enabled: bool = True,
-) -> dict[str, Any]:
+) -> StatePayload:
     """Build the persisted nested grant contract used by tests/admin tooling.
 
     This is a pure shape helper, not a client-write API. Server admin tooling may
@@ -126,7 +137,7 @@ def seed_developer_api_key_memory_grant(
     *,
     default_read: bool = False,
     write: bool = False,
-    db_client=None,
+    db_client: Optional[Any] = None,
 ) -> str:
     """Seed the server-owned app/key memory grant for a Developer API key.
 
@@ -139,8 +150,7 @@ def seed_developer_api_key_memory_grant(
     This performs a merge write so existing grants for other keys are preserved.
     Returns the Firestore document path written.
     """
-    if db_client is None:
-        from database._client import db as db_client
+    client = _default_db_client(db_client)
 
     scopes: list[str] = []
     if default_read:
@@ -159,7 +169,7 @@ def seed_developer_api_key_memory_grant(
         enabled=True,
     )
     document_path = app_key_memory_grants_document_path(uid)
-    db_client.document(document_path).set(contract, merge=True)
+    client.document(document_path).set(contract, merge=True)
     return document_path
 
 
@@ -169,11 +179,10 @@ def seed_mcp_api_key_memory_grant(
     *,
     default_read: bool = False,
     write: bool = False,
-    db_client=None,
+    db_client: Optional[Any] = None,
 ) -> str:
     """Seed the server-owned app/key memory grant for a hosted MCP key."""
-    if db_client is None:
-        from database._client import db as db_client
+    client = _default_db_client(db_client)
 
     scopes: list[str] = []
     if default_read:
@@ -192,7 +201,7 @@ def seed_mcp_api_key_memory_grant(
         enabled=True,
     )
     document_path = app_key_memory_grants_document_path(uid)
-    db_client.document(document_path).set(contract, merge=True)
+    client.document(document_path).set(contract, merge=True)
     return document_path
 
 
@@ -200,20 +209,17 @@ def remove_developer_api_key_memory_grant(
     uid: str,
     key_id: str,
     *,
-    db_client=None,
+    db_client: Optional[Any] = None,
 ) -> None:
     """Remove the persisted app/key memory grant for a deleted Developer API key.
 
     Deletes only the nested key entry via field-path deletion, preserving grants
     for other keys under the same document.
     """
-    if db_client is None:
-        from database._client import db as db_client
-
-    from google.cloud import firestore
+    client = _default_db_client(db_client)
 
     document_path = app_key_memory_grants_document_path(uid)
-    doc_ref = db_client.document(document_path)
+    doc_ref: Any = client.document(document_path)
 
     # Guard against legacy keys that were created without memory scopes or
     # predate grant seeding: Firestore ``update()`` raises ``NotFound`` on a
@@ -222,16 +228,21 @@ def remove_developer_api_key_memory_grant(
     if not doc_ref.get().exists:
         return
 
-    # UUID key ids contain hyphens; dotted field paths must use FieldPath so Firestore
-    # does not treat hyphen segments as invalid path components.
-    field_path = firestore.FieldPath(
+    # Imported here, not at module scope: several suites stub google.cloud.firestore_v1
+    # with a plain module, which makes a top-level submodule import fail at collection.
+    from google.cloud.firestore_v1.field_path import FieldPath
+
+    # UUID key ids contain hyphens, so the nested path is escaped through FieldPath
+    # before being passed as an update key. ``update()`` only accepts string keys —
+    # a FieldPath instance raises — so the escaped API representation is used.
+    field_path = FieldPath(
         "grants",
         DEVELOPER_API_CONSUMER,
         "apps",
         DEVELOPER_API_DEFAULT_APP_ID,
         "keys",
         key_id,
-    )
+    ).to_api_repr()
     doc_ref.update({field_path: firestore.DELETE_FIELD})
 
 

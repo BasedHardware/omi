@@ -1,0 +1,4 @@
+{
+  "toolInvocation": {"invocationId": "invocation-1", "runId": "other-run", "attemptId": "attempt-1", "toolName": "list_agent_sessions", "status": "succeeded"},
+  "expectedError": "$.toolInvocation.runId: does not match envelope provenance"
+}

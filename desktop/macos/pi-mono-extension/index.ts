@@ -26,20 +26,64 @@ import {
   type ToolCallEvent,
   type ToolCallEventResult,
   type ToolResultEvent,
-} from "@mariozechner/pi-coding-agent";
-import { Type } from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-coding-agent";
+import { Type } from "@earendil-works/pi-ai";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
-import { isSafeSkillName, loadSkillInstructions } from "../agent/src/runtime/node-tools.ts";
+import { isSafeSkillName, loadSkillInstructions, searchSkills } from "../agent/dist/runtime/node-tools.js";
 import {
   buildToolAvailabilitySnapshot,
   toolNamesForAdapter,
   toolsForAdapter,
   type OmiToolInputSchema,
   type OmiToolManifestEntry,
-} from "../agent/src/runtime/omi-tool-manifest.ts";
+  type OmiToolProjectionContext,
+} from "../agent/dist/runtime/omi-tool-manifest.js";
+
+/**
+ * Opaque, request-scoped correlation ids are the only context forwarded to
+ * the desktop backend. Keep the header bounded and printable so it is safe to
+ * log, and never relay prompt text, account ids, or tool arguments.
+ */
+const OMI_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+export function omiRequestIdFromRelayContext(raw: string): string | undefined {
+  try {
+    const parsed = JSON.parse(raw) as { requestId?: unknown };
+    return typeof parsed.requestId === "string" && OMI_REQUEST_ID_PATTERN.test(parsed.requestId)
+      ? parsed.requestId
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Per-turn effort lane. Strict allowlist — the header must never carry
+ *  anything but one of these two opaque tokens. */
+export function omiReasoningEffortFromRelayContext(raw: string): string | undefined {
+  try {
+    const parsed = JSON.parse(raw) as { reasoningEffort?: unknown };
+    return parsed.reasoningEffort === "adaptive" || parsed.reasoningEffort === "fast"
+      ? parsed.reasoningEffort
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function omiRelayContextRaw(): Promise<string | undefined> {
+  const contextFile = process.env.OMI_CONTEXT_FILE;
+  if (!contextFile) return undefined;
+  try {
+    return await readFile(contextFile, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+
 
 // ---------------------------------------------------------------------------
 // Denylist patterns
@@ -484,10 +528,8 @@ async function callSwiftTool(name: string, input: Record<string, unknown>, signa
   if (!connection) return Promise.resolve("Error: not connected to Omi bridge");
   if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
   const callId = `omi-ext-${++omiCallIdCounter}-${Date.now()}`;
-  const correlation = await omiRelayCorrelation();
-  if (correlation.disableSwiftBackedTools === true) {
-    return Promise.resolve("Error: Swift-backed Omi tools are disabled for this control-created run");
-  }
+  const capabilityRef = await omiRelayCapabilityRef();
+  if (!capabilityRef) return Promise.resolve("Error: missing active Omi run capability for tool relay");
   if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
   if (omiPipeConnection !== connection) return Promise.resolve("Error: Omi bridge disconnected");
   return new Promise<string>((resolve) => {
@@ -512,61 +554,43 @@ async function callSwiftTool(name: string, input: Record<string, unknown>, signa
     connection.write(JSON.stringify({
       type: "tool_use",
       callId,
+      invocationId: callId,
       name,
       input,
-      ...correlation,
+      protocolVersion: 2,
+      capabilityRef,
     }) + "\n");
   });
 }
 
-async function omiRelayCorrelation(): Promise<Record<string, string | number | boolean>> {
-  const correlation: Record<string, string | number | boolean> = {};
-  if (process.env.OMI_ADAPTER_ID) correlation.adapterId = process.env.OMI_ADAPTER_ID;
-  if (process.env.OMI_REQUEST_ID) correlation.requestId = process.env.OMI_REQUEST_ID;
-  if (process.env.OMI_CLIENT_ID) correlation.clientId = process.env.OMI_CLIENT_ID;
-  if (process.env.OMI_SESSION_ID) correlation.sessionId = process.env.OMI_SESSION_ID;
-  if (process.env.OMI_RUN_ID) correlation.runId = process.env.OMI_RUN_ID;
-  if (process.env.OMI_ATTEMPT_ID) correlation.attemptId = process.env.OMI_ATTEMPT_ID;
-  if (process.env.OMI_ADAPTER_SESSION_ID) correlation.adapterSessionId = process.env.OMI_ADAPTER_SESSION_ID;
-  if (process.env.OMI_LEGACY_ADAPTER_SESSION_ID) {
-    correlation.legacyAdapterSessionId = process.env.OMI_LEGACY_ADAPTER_SESSION_ID;
-  }
-  const protocolVersion = Number(process.env.OMI_PROTOCOL_VERSION);
-  if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
-  Object.assign(correlation, await omiContextFileCorrelation());
-  return correlation;
-}
-
-async function omiContextFileCorrelation(): Promise<Record<string, string | number | boolean>> {
+async function omiRelayCapabilityRef(): Promise<string | undefined> {
   const path = process.env.OMI_CONTEXT_FILE;
-  if (!path) return {};
+  if (!path) return undefined;
   try {
     const parsed = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-    const correlation: Record<string, string | number | boolean> = {};
-    for (const key of [
-      "adapterId",
-      "requestId",
-      "clientId",
-      "sessionId",
-      "runId",
-      "attemptId",
-      "adapterSessionId",
-      "legacyAdapterSessionId",
-    ]) {
-      const value = parsed[key];
-      if (typeof value === "string" && value.length > 0) correlation[key] = value;
-    }
-    const protocolVersion = parsed.protocolVersion;
-    if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
-    if (parsed.disableSwiftBackedTools === true) correlation.disableSwiftBackedTools = true;
-    return correlation;
+    return typeof parsed.capabilityRef === "string" && parsed.capabilityRef.length > 0
+      ? parsed.capabilityRef
+      : undefined;
   } catch {
-    return {};
+    return undefined;
   }
 }
 
 export const OMI_TOOL_TIMEOUT_MS = 30_000;
 export const OMI_LONG_CONTROL_TOOL_TIMEOUT_MS = 10 * 60_000;
+export const OMI_CHAT_CONTRACT_VERSION = "1";
+
+export function applyOmiProviderHeaders(
+  headers: Record<string, string>,
+  relayContextRaw: string | undefined,
+): void {
+  headers["x-omi-chat-contract-version"] = OMI_CHAT_CONTRACT_VERSION;
+  if (relayContextRaw === undefined) return;
+  const requestId = omiRequestIdFromRelayContext(relayContextRaw);
+  if (requestId) headers["x-omi-request-id"] = requestId;
+  const reasoningEffort = omiReasoningEffortFromRelayContext(relayContextRaw);
+  if (reasoningEffort) headers["x-omi-reasoning-effort"] = reasoningEffort;
+}
 
 export { isSafeSkillName };
 
@@ -669,10 +693,10 @@ function loadSkillTool() {
   return defineTool({
     name: "load_skill",
     label: "Load Skill",
-    description: "Load the full instructions for a named skill listed in available_skills.",
-    promptSnippet: "load_skill - Load the full SKILL.md instructions for an available skill",
+    description: "Load the full instructions for a relevant skill returned by the compact catalog or search_skills.",
+    promptSnippet: "load_skill - Load a relevant skill returned by the catalog or search_skills",
     parameters: Type.Object({
-      name: Type.String({ description: "Skill name exactly as listed in available_skills" }),
+      name: Type.String({ description: "Skill name returned by the compact catalog or search_skills" }),
     }, { additionalProperties: false }),
     async execute(_toolCallId, params) {
       const name = String((params as { name?: unknown }).name ?? "").trim();
@@ -680,7 +704,7 @@ function loadSkillTool() {
         return {
           content: [{
             type: "text" as const,
-            text: "Invalid skill name. Use the exact skill name listed in available_skills.",
+            text: "Invalid skill name. Use a skill returned by the catalog or search_skills.",
           }],
           details: undefined,
         };
@@ -696,9 +720,56 @@ function loadSkillTool() {
   });
 }
 
-export const OMI_TOOLS = toolsForAdapter("pi-mono").map((tool) => (
-  tool.executor.kind === "nodeTool" ? loadSkillTool() : omiManifestTool(tool)
-));
+function searchSkillsTool() {
+  return defineTool({
+    name: "search_skills",
+    label: "Search Skills",
+    description: "Search installed skill names and compact descriptions for a workflow relevant to the user's request.",
+    promptSnippet: "search_skills - Find a relevant specialized workflow before loading it",
+    promptGuidelines: [
+      "Use only when the current user request plausibly needs a specialized workflow.",
+      "Do not browse skills merely to explore options or because a related term appears in conversation context.",
+    ],
+    parameters: Type.Object({
+      query: Type.String({ description: "Short description of the user's request" }),
+    }, { additionalProperties: false }),
+    async execute(_toolCallId, params) {
+      const query = String((params as { query?: unknown }).query ?? "").trim();
+      return {
+        content: [{
+          type: "text" as const,
+          text: await searchSkills(query),
+        }],
+        details: undefined,
+      };
+    },
+  });
+}
+
+const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
+const chatFirstControlGeneration = Number(process.env.OMI_CHAT_FIRST_CONTROL_GENERATION);
+const projectionContext = {
+  executionRole,
+  surfaceKind: process.env.OMI_SURFACE_KIND,
+  chatFirstUi: process.env.OMI_CHAT_FIRST_UI === "true" && process.env.OMI_SURFACE_KIND === "main_chat",
+  controlGeneration: Number.isSafeInteger(chatFirstControlGeneration) && chatFirstControlGeneration >= 0
+    ? chatFirstControlGeneration
+    : null,
+} as const;
+
+export function omiToolsForExecutionRole(role: "coordinator" | "leaf") {
+  return omiToolsForProjectionContext({ executionRole: role });
+}
+
+export function omiToolsForProjectionContext(context: OmiToolProjectionContext) {
+  return toolsForAdapter("pi-mono", context).map((tool) => {
+    if (tool.name === "load_skill") return loadSkillTool();
+    if (tool.name === "search_skills") return searchSkillsTool();
+    return omiManifestTool(tool);
+  });
+}
+
+export const OMI_TOOLS = omiToolsForProjectionContext(projectionContext);
 
 async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
   const pipePath = process.env.OMI_BRIDGE_PIPE;
@@ -715,7 +786,7 @@ async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
   for (const tool of OMI_TOOLS) {
     pi.registerTool(tool);
   }
-  const snapshot = buildToolAvailabilitySnapshot("pi-mono");
+  const snapshot = buildToolAvailabilitySnapshot("pi-mono", projectionContext);
   if (process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH) {
     try {
       await writeFile(process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH, `${JSON.stringify(snapshot, null, 2)}\n`);
@@ -792,6 +863,16 @@ export default function omiProvider(pi: ExtensionAPI): void {
     ],
   });
 
+  // Pi asks for headers once per provider request and keeps them for retries,
+  // which preserves one safe correlation id across an upstream retry chain.
+  pi.on("before_provider_headers", async (event) => {
+    const raw = await omiRelayContextRaw();
+    // Per-turn effort lane: typed chat runs "adaptive" (the model decides its
+    // own thinking depth), PTT runs "fast" (thinking off, low effort). The
+    // gateway translates this into Anthropic thinking/effort parameters.
+    applyOmiProviderHeaders(event.headers, raw);
+  });
+
   pi.on("tool_call", async (event): Promise<ToolCallEventResult | void> => {
     let decision: DenyDecision | null = null;
     try {
@@ -855,7 +936,7 @@ export const __connectOmiPipeForTest = connectOmiPipe;
 
 /** Test-only: call a Swift tool through the pipe relay. */
 export const __callSwiftToolForTest = callSwiftTool;
-export const __omiRelayCorrelationForTest = omiRelayCorrelation;
+export const __omiRelayCapabilityRefForTest = omiRelayCapabilityRef;
 
 /** Test-only: access to pending calls map for assertions. */
 export const __omiPendingCallsForTest = omiPendingCalls;

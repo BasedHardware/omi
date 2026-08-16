@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
 
 WORKER_ENABLED_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED"
 DEFAULT_SERVICE = "memory-vector-repair-outbox-worker"
@@ -217,7 +218,9 @@ def evaluate_results(config: ProofConfig, command_results: Mapping[str, Mapping[
 
 def json_result(command_results: Mapping[str, Mapping[str, Any]], name: str) -> Optional[Mapping[str, Any]]:
     value = command_results.get(name, {}).get("json")
-    return value if isinstance(value, Mapping) else None
+    if isinstance(value, Mapping):
+        return cast(Mapping[str, Any], value)
+    return None
 
 
 def evaluate_run_service(config: ProofConfig, service: Mapping[str, Any]) -> List[Dict[str, str]]:
@@ -258,10 +261,22 @@ def extract_container_env(containers: Any) -> Dict[str, str]:
     env_values: Dict[str, str] = {}
     if not isinstance(containers, list):
         return env_values
-    for container in containers:
-        for env in container.get("env", []) if isinstance(container, Mapping) else []:
-            if isinstance(env, Mapping) and isinstance(env.get("name"), str) and "value" in env:
-                env_values[env["name"]] = str(env.get("value"))
+    items: List[Any] = cast(List[Any], containers)
+    for container in items:
+        if not isinstance(container, Mapping):
+            continue
+        container_mapping: Mapping[str, Any] = cast(Mapping[str, Any], container)
+        env_list_raw = container_mapping.get("env", [])
+        if not isinstance(env_list_raw, list):
+            continue
+        env_list: List[Any] = cast(List[Any], env_list_raw)
+        for env in env_list:
+            if not isinstance(env, Mapping):
+                continue
+            env_mapping: Mapping[str, Any] = cast(Mapping[str, Any], env)
+            name = env_mapping.get("name")
+            if isinstance(name, str) and "value" in env_mapping:
+                env_values[name] = str(env_mapping.get("value"))
     return env_values
 
 
@@ -428,11 +443,10 @@ def apply_env_defaults(args: argparse.Namespace, env: Mapping[str, str]) -> argp
 
 
 def main(argv: Optional[Sequence[str]] = None, env: Optional[Mapping[str, str]] = None) -> int:
-    effective_env = {} if env is None else env
     if env is None:
-        import os
-
-        effective_env = os.environ
+        effective_env: Mapping[str, str] = os.environ
+    else:
+        effective_env = env
     args = apply_env_defaults(parse_args(argv), effective_env)
     config = build_config(args)
     commands = build_read_only_gcloud_commands(config)

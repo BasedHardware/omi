@@ -5,8 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 
-/// Tests the 401→refresh→retry→signout logic pattern used in
-/// makeMultipartApiCall() and makeMultipartStreamingApiCall().
+/// Tests multipart request rebuilding around a 401 replay. Typed auth policy
+/// itself is covered against production code in authenticated_request_401_test.
 ///
 /// The production code in shared.dart uses singletons (HttpPoolManager,
 /// SharedPreferencesUtil, AuthService) that aren't injectable, so this
@@ -46,7 +46,7 @@ Future<http.MultipartRequest> buildMultipartRequest({
   return request;
 }
 
-/// Mirrors the exact 401 retry logic from makeMultipartApiCall() in shared.dart.
+/// Models the multipart request-rebuild portion of makeMultipartApiCall().
 /// Returns the final http.Response and whether signOut was called.
 Future<http.Response> makeMultipartApiCallWithRetry({
   required String url,
@@ -88,8 +88,6 @@ Future<http.Response> makeMultipartApiCallWithRetry({
       if (response.statusCode == 401) {
         await deps.signOut();
       }
-    } else {
-      await deps.signOut();
     }
   }
 
@@ -225,7 +223,7 @@ void main() {
       expect(signOutCalled, true);
     });
 
-    test('401 → refresh fails (empty token) → signs out immediately without retry', () async {
+    test('401 → one transient empty refresh → does not sign out or replay', () async {
       int sendCount = 0;
       bool refreshCalled = false;
       bool signOutCalled = false;
@@ -258,7 +256,7 @@ void main() {
       expect(response.statusCode, 401);
       expect(sendCount, 1); // no retry when refresh fails
       expect(refreshCalled, true);
-      expect(signOutCalled, true);
+      expect(signOutCalled, false, reason: 'a single unavailable refresh is not terminal');
     });
 
     test('401 with requireAuthCheck=false returns 401 without retry', () async {

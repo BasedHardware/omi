@@ -29,6 +29,7 @@ const SUCCESS_URL = "https://console.anthropic.com/oauth/code/success?app=claude
 const SCOPES = "user:inference";
 const KEYCHAIN_SERVICE = "Claude Code-credentials";
 const TOKEN_EXPIRY_SECONDS = 31536000; // 1 year
+const CALLBACK_TIMEOUT_MS = 2 * 60 * 1000;
 
 // --- PKCE Helpers ---
 
@@ -155,9 +156,9 @@ function waitForCallback(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
-      reject(new Error("OAuth callback timed out (10 minutes)"));
+      reject(new Error("OAuth callback timed out (2 minutes)"));
       server.close();
-    }, 10 * 60 * 1000);
+    }, CALLBACK_TIMEOUT_MS);
 
     server.on("request", (req: IncomingMessage, res: ServerResponse) => {
       const parsed = new URL(req.url || "", `http://localhost`);

@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from collections.abc import Mapping
 from copy import deepcopy
-from typing import TypeVar
+from typing import Any, TypeVar, cast
 
 import httpx
 from jsonschema import ValidationError as JsonSchemaValidationError
 from jsonschema import validate as validate_json_schema
-from pydantic import BaseModel, ValidationError
+from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, PrivateAttr, ValidationError
 
-from utils.llm.gateway_observability import record_gateway_request_result
+from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
+from utils.llm.gateway_observability import record_direct_exception_surface, record_gateway_request_result
+from utils.llm.gateway_resilience import gateway_circuit, gateway_transport_timeout, observe_gateway_first_byte
+from utils.llm.usage_tracker import get_current_context
 
 LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'OMI_LLM_GATEWAY_SERVICE_TOKEN'
 LEGACY_LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'LLM_GATEWAY_SERVICE_TOKEN'
@@ -19,14 +24,91 @@ LLM_GATEWAY_URL_ENV_VAR = 'OMI_LLM_GATEWAY_URL'
 DEFAULT_LLM_GATEWAY_URL = 'http://127.0.0.1:9080'
 LLM_GATEWAY_AUTO_LANE_PREFIX = 'omi:auto:'
 CHAT_STRUCTURED_AUTO_LANE_ID = 'omi:auto:chat-structured'
+CHAT_AGENT_AUTO_LANE_ID = 'omi:auto:chat-agent'
+PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE = 'public_shared_conversation_chat'
+PUBLIC_SHARED_CONVERSATION_CHAT_AUTO_LANE_ID = 'omi:auto:public-shared-conversation-chat'
 LLM_GATEWAY_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_FEATURE_MODE'
 LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE'
 LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION'
+# Narrow agentic-chat route pin. Independent of FEATURE_MODE so gateway can stay
+# on for non-chat features while chat stays on direct Anthropic (or the reverse).
+LLM_CHAT_AGENT_ROUTE_ENV_VAR = 'OMI_LLM_CHAT_AGENT_ROUTE'
+CHAT_AGENT_ROUTE_DIRECT = 'direct'
+CHAT_AGENT_ROUTE_GATEWAY = 'gateway'
+_CHAT_AGENT_ROUTE_DIRECT_VALUES = frozenset({'direct', 'off', '0', 'false', 'no'})
+_CHAT_AGENT_ROUTE_GATEWAY_VALUES = frozenset({'gateway', '1', 'true', 'yes', 'luna', 'on'})
 LLM_GATEWAY_CALLER = 'backend'
+LLM_GATEWAY_USER_UID_HEADER = 'X-Omi-User-Uid'
+LLM_GATEWAY_USAGE_FEATURE_HEADER = 'X-Omi-LLM-Feature'
 CHAT_EXTRACTION_TIMEOUT_SECONDS = 10.0
 BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
+GATEWAY_TRANSPORT_STATUS_CODES = frozenset({502, 504})
 
 StructuredOutput = TypeVar('StructuredOutput', bound=BaseModel)
+JsonDict = dict[str, Any]
+JsonList = list[Any]
+
+
+class PublicSharedConversationChatGatewayUnavailable(Exception):
+    """The gateway-only public shared-chat lane could not produce an answer."""
+
+    pass
+
+
+class GatewayDirectModelSurfaceBlocked(RuntimeError):
+    """A direct-provider LLM surface ran while feature mode requires the gateway.
+
+    Callers should treat this as a typed, user-safe failure for that surface — not as an
+    unexpected crash that falls through to the generic chat canned reply.
+    """
+
+    def __init__(self, surface: str) -> None:
+        self.surface = surface
+        self.error_code = f'{surface.split(".", 1)[0]}_gateway_blocked'
+        super().__init__(
+            f'{surface} is a direct provider LLM surface and is blocked while '
+            f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway. Route it through the LLM gateway or set '
+            f'{LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR}=true for an explicitly acknowledged exception.'
+        )
+
+
+class GatewayContextChatOpenAI(ChatOpenAI):
+    """A shared client that adds user attribution at invocation time."""
+
+    _omi_gateway_feature: str | None = PrivateAttr(default=None)
+
+    def __init__(self, *args: Any, omi_gateway_feature: str | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._omi_gateway_feature = omi_gateway_feature
+
+    def _get_request_payload(self, input_: Any, *, stop: list[str] | None = None, **kwargs: Any) -> dict:
+        payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+        raw_headers = payload.get('extra_headers')
+        headers = dict(raw_headers) if isinstance(raw_headers, Mapping) else {}
+        headers.update(_gateway_usage_headers(feature=self._omi_gateway_feature))
+        if headers:
+            payload['extra_headers'] = headers
+
+        raw_metadata = payload.get('metadata')
+        metadata = dict(raw_metadata) if isinstance(raw_metadata, Mapping) else {}
+        feature = _gateway_feature_for_current_request(self._omi_gateway_feature)
+        if feature:
+            metadata.setdefault('omi_feature', feature)
+        if metadata:
+            payload['metadata'] = metadata
+        return payload
+
+
+def is_gateway_transport_status_code(status_code: object) -> bool:
+    return isinstance(status_code, int) and status_code in GATEWAY_TRANSPORT_STATUS_CODES
+
+
+def _as_json_dict(value: object) -> JsonDict | None:
+    return cast(JsonDict, value) if isinstance(value, dict) else None
+
+
+def _as_json_list(value: object) -> JsonList | None:
+    return cast(JsonList, value) if isinstance(value, list) else None
 
 
 def get_llm_gateway_base_url() -> str:
@@ -68,16 +150,44 @@ def should_route_features_through_gateway() -> bool:
     return True
 
 
+def get_chat_agent_route() -> str:
+    """Return the effective agentic-chat route: ``direct`` or ``gateway``.
+
+    Explicit ``OMI_LLM_CHAT_AGENT_ROUTE`` wins. When unset, inherit the global
+    feature-mode switch so existing deployments keep prior behavior.
+    """
+    raw = os.getenv(LLM_CHAT_AGENT_ROUTE_ENV_VAR, '').strip().lower()
+    if raw in _CHAT_AGENT_ROUTE_DIRECT_VALUES:
+        return CHAT_AGENT_ROUTE_DIRECT
+    if raw in _CHAT_AGENT_ROUTE_GATEWAY_VALUES:
+        return CHAT_AGENT_ROUTE_GATEWAY
+    if raw:
+        raise RuntimeError(
+            f'{LLM_CHAT_AGENT_ROUTE_ENV_VAR}={raw!r} is invalid; '
+            f'expected one of {sorted(_CHAT_AGENT_ROUTE_DIRECT_VALUES | _CHAT_AGENT_ROUTE_GATEWAY_VALUES)}'
+        )
+    return CHAT_AGENT_ROUTE_GATEWAY if should_route_features_through_gateway() else CHAT_AGENT_ROUTE_DIRECT
+
+
+def should_route_chat_agent_through_gateway() -> bool:
+    """Whether managed agentic chat should use the gateway OpenAI-compatible lane.
+
+    Requires both the chat-agent route pin and global feature mode. This keeps
+    ``OMI_LLM_CHAT_AGENT_ROUTE=direct`` safe while ``FEATURE_MODE=gateway`` for
+    other features (the 2026-08 chat outage footgun class).
+    """
+    if get_chat_agent_route() != CHAT_AGENT_ROUTE_GATEWAY:
+        return False
+    return should_route_features_through_gateway()
+
+
 def raise_if_gateway_feature_mode_blocks_direct_model_surface(surface: str) -> None:
     if not should_route_features_through_gateway():
         return
     if os.getenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes'}:
+        record_direct_exception_surface(surface=surface, reason='acknowledged')
         return
-    raise RuntimeError(
-        f'{surface} is a direct provider LLM surface and is blocked while '
-        f'{LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway. Route it through the LLM gateway or set '
-        f'{LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR}=true for an explicitly acknowledged exception.'
-    )
+    raise GatewayDirectModelSurfaceBlocked(surface)
 
 
 def _is_local_or_dev_runtime() -> bool:
@@ -104,11 +214,16 @@ def invoke_chat_structured_gateway(
     call does not stall the event loop. Do **not** call this from ``async def``
     code without first offloading via ``run_blocking(llm_executor, ...)``.
     """
+    if not gateway_circuit.allow_request():
+        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='circuit_open')
+        return None
+
+    gateway_started_at = time.monotonic()
     try:
-        with httpx.Client(timeout=timeout_seconds) as client:
+        with httpx.Client(timeout=_gateway_timeout(timeout_seconds)) as client:
             response = client.post(
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
-                headers=_gateway_headers(),
+                headers=_gateway_headers(feature=feature),
                 json=_chat_structured_payload(prompt, output_model, feature=feature),
             )
             response.raise_for_status()
@@ -125,17 +240,28 @@ def invoke_chat_structured_gateway(
         if not isinstance(decoded, Mapping):
             record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='invalid_json_shape')
             return None
-        result = _validate_output_model(output_model, decoded)
+        result = _validate_output_model(output_model, cast(Mapping[str, object], decoded))
+        gateway_circuit.record_transport_success()
+        observe_gateway_first_byte(feature=feature, started_at=gateway_started_at, outcome='success')
         record_chat_extraction_gateway_result(feature=feature, outcome='success', reason='ok')
         return result
     except httpx.HTTPStatusError as exc:
-        reason = f'http_{exc.response.status_code}' if exc.response is not None else 'http_status'
-        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason=reason)
-        return None
+        reason = f'http_{exc.response.status_code}'
+        if is_gateway_transport_status_code(exc.response.status_code):
+            gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(feature=feature, started_at=gateway_started_at, outcome='transport_failure')
+            record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason=reason)
+            return None
+        record_chat_extraction_gateway_result(feature=feature, outcome='error', reason=reason)
+        raise
     except httpx.TimeoutException:
+        gateway_circuit.record_transport_failure()
+        observe_gateway_first_byte(feature=feature, started_at=gateway_started_at, outcome='transport_failure')
         record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='timeout')
         return None
     except httpx.RequestError:
+        gateway_circuit.record_transport_failure()
+        observe_gateway_first_byte(feature=feature, started_at=gateway_started_at, outcome='transport_failure')
         record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='request_error')
         return None
     except (ValidationError, JsonSchemaValidationError):
@@ -146,11 +272,85 @@ def invoke_chat_structured_gateway(
         return None
 
 
-def record_chat_extraction_gateway_result(*, feature: str, outcome: str, reason: str) -> None:
-    record_gateway_request_result(feature=feature, outcome=outcome, reason=reason)
+async def invoke_public_shared_conversation_chat_gateway(messages: list[dict[str, str]]) -> str:
+    """Invoke the dedicated non-streaming public shared-conversation lane.
+
+    This surface is deliberately gateway-only. Every transport, status, or
+    response-shape fault becomes a typed unavailable result for the public API;
+    it never constructs or invokes a direct provider client.
+    """
+
+    started_at = time.monotonic()
+    if not gateway_circuit.allow_request():
+        record_gateway_request_result(
+            feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+            outcome='error',
+            reason='circuit_open',
+            mode='gateway',
+        )
+        raise PublicSharedConversationChatGatewayUnavailable()
+
+    try:
+        async with get_llm_gateway_semaphore():
+            response = await get_llm_gateway_client().post(
+                f'{get_llm_gateway_base_url()}/v1/chat/completions',
+                headers=_gateway_headers(feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE),
+                json={
+                    'model': PUBLIC_SHARED_CONVERSATION_CHAT_AUTO_LANE_ID,
+                    'messages': messages,
+                    'stream': False,
+                    'max_completion_tokens': 600,
+                    'metadata': {
+                        'omi_feature': PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+                        'prompt_version': 'public_shared_conversation_chat.v1',
+                        'parser_version': 'plain_text.v1',
+                    },
+                },
+            )
+        response.raise_for_status()
+        content = _extract_choice_content(response.json())
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError('gateway returned empty public shared-chat content')
+    except PublicSharedConversationChatGatewayUnavailable:
+        raise
+    except Exception as exc:
+        if isinstance(exc, (httpx.RequestError, httpx.TimeoutException)) or (
+            isinstance(exc, httpx.HTTPStatusError) and is_gateway_transport_status_code(exc.response.status_code)
+        ):
+            gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(
+                feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+                started_at=started_at,
+                outcome='transport_failure',
+            )
+        record_gateway_request_result(
+            feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+            outcome='error',
+            reason='gateway_unavailable',
+            mode='gateway',
+        )
+        raise PublicSharedConversationChatGatewayUnavailable() from exc
+
+    gateway_circuit.record_transport_success()
+    observe_gateway_first_byte(
+        feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+        started_at=started_at,
+        outcome='success',
+    )
+    record_gateway_request_result(
+        feature=PUBLIC_SHARED_CONVERSATION_CHAT_FEATURE,
+        outcome='success',
+        reason='ok',
+        mode='gateway',
+    )
+    return content.strip()
 
 
-def _gateway_headers() -> dict[str, str]:
+def record_chat_extraction_gateway_result(*, feature: str, outcome: str, reason: str, mode: str | None = None) -> None:
+    record_gateway_request_result(feature=feature, outcome=outcome, reason=reason, mode=mode)
+
+
+def _gateway_headers(*, feature: str | None = None) -> dict[str, str]:
     headers = {
         'Content-Type': 'application/json',
         'X-Omi-Service-Caller': LLM_GATEWAY_CALLER,
@@ -158,14 +358,15 @@ def _gateway_headers() -> dict[str, str]:
     service_token = get_llm_gateway_service_token()
     if service_token is not None:
         headers['Authorization'] = f'Bearer {service_token}'
+    headers.update(_gateway_usage_headers(feature=feature))
     return headers
 
 
-def llm_gateway_headers() -> dict[str, str]:
-    return _gateway_headers()
+def llm_gateway_headers(*, feature: str | None = None) -> dict[str, str]:
+    return _gateway_headers(feature=feature)
 
 
-def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feature: str) -> dict:
+def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feature: str) -> JsonDict:
     return {
         'model': CHAT_STRUCTURED_AUTO_LANE_ID,
         'messages': [{'role': 'user', 'content': prompt}],
@@ -185,7 +386,7 @@ def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feat
     }
 
 
-def _strict_model_json_schema(output_model: type[BaseModel]) -> dict:
+def _strict_model_json_schema(output_model: type[BaseModel]) -> JsonDict:
     """Generate a strict-compatible JSON Schema for OpenAI Structured Outputs.
 
     OpenAI strict structured outputs require every object schema to disallow
@@ -199,35 +400,39 @@ def _strict_model_json_schema(output_model: type[BaseModel]) -> dict:
     return schema
 
 
-def _normalize_strict_schema(schema: dict) -> None:
+def _normalize_strict_schema(schema: JsonDict) -> None:
     """Recursively normalize a Pydantic JSON schema for strict provider output."""
-    if not isinstance(schema, dict):
-        return
     schema.pop('default', None)
     if schema.get('type') == 'object':
         schema['additionalProperties'] = False
-    properties = schema.get('properties')
-    if isinstance(properties, dict):
+    properties = _as_json_dict(schema.get('properties'))
+    if properties is not None:
         schema['required'] = list(properties.keys())
         for prop_schema in properties.values():
-            _normalize_strict_schema(prop_schema)
+            prop_schema_dict = _as_json_dict(prop_schema)
+            if prop_schema_dict is not None:
+                _normalize_strict_schema(prop_schema_dict)
     # Recurse into nested schemas under $defs, properties, items, etc.
     for key in ('$defs', 'definitions'):
-        defs = schema.get(key)
-        if isinstance(defs, dict):
+        defs = _as_json_dict(schema.get(key))
+        if defs is not None:
             for def_schema in defs.values():
-                _normalize_strict_schema(def_schema)
-    items = schema.get('items')
-    if isinstance(items, dict):
+                def_schema_dict = _as_json_dict(def_schema)
+                if def_schema_dict is not None:
+                    _normalize_strict_schema(def_schema_dict)
+    items = _as_json_dict(schema.get('items'))
+    if items is not None:
         _normalize_strict_schema(items)
     for ref_key in ('anyOf', 'oneOf', 'allOf'):
-        alternatives = schema.get(ref_key)
-        if isinstance(alternatives, list):
+        alternatives = _as_json_list(schema.get(ref_key))
+        if alternatives is not None:
             for alt_schema in alternatives:
-                _normalize_strict_schema(alt_schema)
+                alt_schema_dict = _as_json_dict(alt_schema)
+                if alt_schema_dict is not None:
+                    _normalize_strict_schema(alt_schema_dict)
 
 
-def _inline_ref_siblings(schema: dict) -> None:
+def _inline_ref_siblings(schema: JsonDict) -> None:
     """Inline local ``$ref`` schemas that carry sibling metadata.
 
     Pydantic emits enum fields as ``{"$ref": "#/$defs/Enum", "description": ...}``.
@@ -236,31 +441,32 @@ def _inline_ref_siblings(schema: dict) -> None:
     nested object refs are accepted and keep large schemas compact.
     """
 
-    definitions = schema.get('$defs') or schema.get('definitions') or {}
-    if not isinstance(definitions, dict):
-        definitions = {}
+    definitions = _as_json_dict(schema.get('$defs')) or _as_json_dict(schema.get('definitions')) or {}
 
-    def resolve_ref(ref: str) -> dict | None:
+    def resolve_ref(ref: str) -> JsonDict | None:
         prefix = '#/$defs/'
         if not ref.startswith(prefix):
             return None
-        target = definitions.get(ref.removeprefix(prefix))
-        return deepcopy(target) if isinstance(target, dict) else None
+        target = _as_json_dict(definitions.get(ref.removeprefix(prefix)))
+        return deepcopy(target) if target is not None else None
 
     def walk(node: object) -> None:
-        if isinstance(node, dict):
-            ref = node.get('$ref')
-            if isinstance(ref, str) and len(node) > 1:
+        node_dict = _as_json_dict(node)
+        if node_dict is not None:
+            ref = node_dict.get('$ref')
+            if isinstance(ref, str) and len(node_dict) > 1:
                 resolved = resolve_ref(ref)
                 if resolved is not None:
-                    siblings = {key: value for key, value in node.items() if key != '$ref'}
-                    node.clear()
-                    node.update(resolved)
-                    node.update(siblings)
-            for value in list(node.values()):
+                    siblings: JsonDict = {key: value for key, value in node_dict.items() if key != '$ref'}
+                    node_dict.clear()
+                    node_dict.update(resolved)
+                    node_dict.update(siblings)
+            for value in list(node_dict.values()):
                 walk(value)
-        elif isinstance(node, list):
-            for value in node:
+            return
+        node_list = _as_json_list(node)
+        if node_list is not None:
+            for value in node_list:
                 walk(value)
 
     walk(schema)
@@ -269,16 +475,19 @@ def _inline_ref_siblings(schema: dict) -> None:
 def _extract_choice_content(response_body: object) -> object:
     if not isinstance(response_body, Mapping):
         return None
-    choices = response_body.get('choices')
-    if not isinstance(choices, list) or not choices:
+    response_mapping = cast(Mapping[str, object], response_body)
+    choices = _as_json_list(response_mapping.get('choices'))
+    if choices is None or not choices:
         return None
     first_choice = choices[0]
     if not isinstance(first_choice, Mapping):
         return None
-    message = first_choice.get('message')
+    choice_mapping = cast(Mapping[str, object], first_choice)
+    message = choice_mapping.get('message')
     if not isinstance(message, Mapping):
         return None
-    return message.get('content')
+    message_mapping = cast(Mapping[str, object], message)
+    return message_mapping.get('content')
 
 
 def _validate_output_model(
@@ -287,6 +496,19 @@ def _validate_output_model(
 ) -> StructuredOutput:
     validate_json_schema(instance=decoded, schema=_strict_model_json_schema(output_model))
     return output_model.model_validate(decoded)
+
+
+def _gateway_timeout(timeout_seconds: float) -> httpx.Timeout:
+    """Keep feature-specific total budgets while bounding the gateway connect/read hop."""
+
+    shared = gateway_transport_timeout()
+    bounded = min(timeout_seconds, shared.read or timeout_seconds)
+    return httpx.Timeout(
+        connect=shared.connect,
+        read=bounded,
+        write=bounded,
+        pool=shared.pool,
+    )
 
 
 def generate_image_via_gateway(
@@ -304,7 +526,7 @@ def generate_image_via_gateway(
     with httpx.Client(timeout=timeout_seconds) as client:
         response = client.post(
             f'{get_llm_gateway_base_url()}/v1/images/generations',
-            headers=_gateway_headers(),
+            headers=_gateway_headers(feature='app_generator'),
             json={
                 'model': model,
                 'prompt': prompt,
@@ -318,4 +540,22 @@ def generate_image_via_gateway(
         body = response.json()
     if not isinstance(body, Mapping):
         raise ValueError('gateway image response must be an object')
-    return body
+    return cast('Mapping[str, object]', body)
+
+
+def _gateway_usage_headers(*, feature: str | None) -> dict[str, str]:
+    context = get_current_context()
+    headers: dict[str, str] = {}
+    if context is not None and context.uid:
+        headers[LLM_GATEWAY_USER_UID_HEADER] = context.uid
+    resolved_feature = context.feature if context is not None and context.feature else feature
+    if resolved_feature:
+        headers[LLM_GATEWAY_USAGE_FEATURE_HEADER] = resolved_feature
+    return headers
+
+
+def _gateway_feature_for_current_request(default: str | None) -> str | None:
+    context = get_current_context()
+    if context is not None and context.feature:
+        return context.feature
+    return default

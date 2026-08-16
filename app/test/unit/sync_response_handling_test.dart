@@ -9,6 +9,24 @@ import 'package:omi/backend/schema/conversation.dart';
 /// and a minimal abstraction that mirrors the production sync flow.
 
 void main() {
+  test('sync job status preserves backfill pacing metadata', () {
+    final status = SyncJobStatusResponse.fromJson({
+      'job_id': 'job-backfill',
+      'status': 'failed',
+      'total_segments': 4,
+      'processed_segments': 0,
+      'successful_segments': 0,
+      'failed_segments': 0,
+      'lane': 'backfill',
+      'reason_code': 'backfill_paced',
+      'retry_after': 3600,
+    });
+
+    expect(status.lane, 'backfill');
+    expect(status.reasonCode, 'backfill_paced');
+    expect(status.retryAfter, 3600);
+  });
+
   group('SyncLocalFilesResponse parsing', () {
     test('parses HTTP 200 success response (no partial failure fields)', () {
       final json = {
@@ -60,10 +78,7 @@ void main() {
     });
 
     test('handles missing optional fields gracefully', () {
-      final json = {
-        'new_memories': [],
-        'updated_memories': [],
-      };
+      final json = {'new_memories': [], 'updated_memories': []};
 
       final response = SyncLocalFilesResponse.fromJson(json);
       expect(response.failedSegments, 0);
@@ -99,7 +114,7 @@ void main() {
     test('HTTP 200 parses response and returns success', () {
       // Simulates: response.statusCode == 200
       const statusCode = 200;
-      final body = '{"new_memories":["conv-1"],"updated_memories":[]}';
+      const body = '{"new_memories":["conv-1"],"updated_memories":[]}';
 
       final result = _simulateSyncResponse(statusCode, body);
 
@@ -112,7 +127,7 @@ void main() {
     test('HTTP 207 parses response with partial failure info', () {
       // Simulates: response.statusCode == 207
       const statusCode = 207;
-      final body =
+      const body =
           '{"new_memories":["conv-1"],"updated_memories":[],"failed_segments":1,"total_segments":2,"errors":["segment failed"]}';
 
       final result = _simulateSyncResponse(statusCode, body);
@@ -127,7 +142,7 @@ void main() {
 
     test('HTTP 500 throws server error exception', () {
       const statusCode = 500;
-      final body = '{"detail":"All 1 segment(s) failed processing: Deepgram failure"}';
+      const body = '{"detail":"All 1 segment(s) failed processing: Deepgram failure"}';
 
       final result = _simulateSyncResponse(statusCode, body);
 
@@ -138,7 +153,7 @@ void main() {
 
     test('HTTP 400 throws audio processing exception', () {
       const statusCode = 400;
-      final body = '{"detail":"Invalid audio format"}';
+      const body = '{"detail":"Invalid audio format"}';
 
       final result = _simulateSyncResponse(statusCode, body);
 
@@ -148,7 +163,7 @@ void main() {
 
     test('HTTP 413 throws file too large exception', () {
       const statusCode = 413;
-      final body = '{"detail":"Request too large"}';
+      const body = '{"detail":"Request too large"}';
 
       final result = _simulateSyncResponse(statusCode, body);
 
@@ -264,7 +279,7 @@ void main() {
 
     test('HTTP 200 with old response format treated as full success', () {
       const statusCode = 200;
-      final body = '{"new_memories":["conv-1"],"updated_memories":[]}';
+      const body = '{"new_memories":["conv-1"],"updated_memories":[]}';
 
       final result = _simulateSyncResponse(statusCode, body);
       expect(result.isSuccess, true);
@@ -311,7 +326,7 @@ Map<String, dynamic> _simpleJsonDecode(String body) {
 
 Map<String, dynamic> _jsonDecode(String body) {
   // Proper JSON decode
-  final codec = const JsonCodec();
+  const codec = JsonCodec();
   return Map<String, dynamic>.from(codec.decode(body));
 }
 

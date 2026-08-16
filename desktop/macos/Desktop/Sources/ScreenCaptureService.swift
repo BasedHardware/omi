@@ -5,7 +5,7 @@ import ImageIO
 import ScreenCaptureKit
 
 final class ScreenCaptureService: Sendable {
-  private let maxSize: CGFloat = 3000
+  private static let maxSize: CGFloat = 3000
   private let jpegQuality: CGFloat = 0.8
   private static let activeWindowResolveTimeoutNs: UInt64 = 500_000_000  // 500ms
   private static let activeWindowCacheTTL: TimeInterval = 2
@@ -25,9 +25,11 @@ final class ScreenCaptureService: Sendable {
   /// Must be accessed only while holding axStateLock.
   nonisolated(unsafe) private static var axSystemwideDisabled = false
 
-  /// Cache the last successfully resolved active window to avoid losing capture
-  /// when the resolver times out or transiently fails.
-  private struct ActiveWindowSnapshot {
+  /// Cache the last successfully resolved active window (with a non-nil window ID).
+  /// A frontmost helper, secure surface, or transient WindowServer lookup can resolve
+  /// an app name without a capture target. That result must never replace a known-good
+  /// target, or recording drops during the transition.
+  internal struct ActiveWindowSnapshot: Equatable {
     let appName: String?
     let windowTitle: String?
     let windowID: CGWindowID?
@@ -35,6 +37,12 @@ final class ScreenCaptureService: Sendable {
   }
   nonisolated(unsafe) private static var lastActiveWindowSnapshot: ActiveWindowSnapshot?
   nonisolated(unsafe) private static var isActiveWindowResolutionInFlight = false
+  /// Limits the transition fallback message to once per no-window streak.
+  nonisolated(unsafe) private static var isInNilWindowFallbackStreak = false
+
+  /// Test seam for deterministic resolver behavior without querying WindowServer.
+  nonisolated(unsafe) internal static var _resolverOverrideForTests:
+    (@Sendable () async -> (appName: String?, windowTitle: String?, windowID: CGWindowID?)?)?
 
   /// Cache for SCShareableContent to avoid hammering the WindowServer every capture tick.
   /// SCShareableContent.excludingDesktopWindows enumerates every on-screen window through
@@ -43,14 +51,21 @@ final class ScreenCaptureService: Sendable {
   /// for up to `sharedContentTTL` seconds; refresh on demand when a target window isn't
   /// present in the cache.
   private static let sharedContentLock = NSLock()
-  nonisolated(unsafe) private static var cachedSharedContent: Any?  // SCShareableContent, typed Any so this decl predates macOS 14 gate
+  // SCShareableContent, typed Any so this decl predates the macOS 14 gate.
+  nonisolated(unsafe) private static var cachedSharedContent: Any?
   nonisolated(unsafe) private static var sharedContentCachedAt: Date?
   private static let sharedContentTTL: TimeInterval = 5.0
 
   @available(macOS 14.0, *)
   private static func sharedContent(forceRefresh: Bool = false) async throws -> SCShareableContent {
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      throw ScreenCaptureKitUnavailable.grantNotLiveInThisProcess
+    }
     if !forceRefresh,
-      !UserDefaults.standard.bool(forKey: "rewindDisableContentCache")
+      !UserDefaults.standard.bool(forKey: .rewindDisableContentCache)
     {
       let cached: SCShareableContent? = sharedContentLock.withLock {
         guard let ts = sharedContentCachedAt,
@@ -75,6 +90,16 @@ final class ScreenCaptureService: Sendable {
 
   init() {}
 
+  /// TCC as observed the first time this snapshot is read. AppState init is the
+  /// first production caller (`checkPermission()`), which is before any
+  /// onboarding grant. Later `CGPreflightScreenCaptureAccess` can flip to true
+  /// without the window-server connection picking up the grant.
+  static let grantedAtProcessStart: Bool = CGPreflightScreenCaptureAccess()
+
+  private enum ScreenCaptureKitUnavailable: Error {
+    case grantNotLiveInThisProcess
+  }
+
   /// Check whether macOS TCC says this app has Screen Recording permission.
   ///
   /// Do not spawn `/usr/sbin/screencapture` here. That helper process can fail
@@ -82,6 +107,7 @@ final class ScreenCaptureService: Sendable {
   /// "Screen Recording disabled" state while System Settings correctly showed
   /// the app as allowed.
   static func checkPermission(forceActualTestIfPreflightDenied: Bool = false) -> Bool {
+    _ = grantedAtProcessStart
     let preflightGranted = CGPreflightScreenCaptureAccess()
 
     if !preflightGranted {
@@ -94,6 +120,17 @@ final class ScreenCaptureService: Sendable {
     }
 
     return true
+  }
+
+  enum ScreenRecordingRequestDestination: Equatable {
+    case alreadyGranted
+    case systemSettings
+  }
+
+  static func screenRecordingRequestDestination(
+    hasPermissionNow: Bool
+  ) -> ScreenRecordingRequestDestination {
+    hasPermissionNow ? .alreadyGranted : .systemSettings
   }
 
   /// Legacy synchronous permission probe. Keep this as a TCC preflight wrapper
@@ -110,24 +147,25 @@ final class ScreenCaptureService: Sendable {
   }
 
   /// Open System Preferences to Screen Recording settings
+  @MainActor
   static func openScreenRecordingPreferences() {
-    if let url = URL(
-      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-    {
-      let opened = NSWorkspace.shared.open(url)
-      if opened {
+    // System Settings must own the screen while the user drags the Omi row or toggles access.
+    // Returning to Omi is handled by ShellSummon on app activation, using the frame captured here.
+    ShellSummon.suspendForPermissionPrompt()
+    guard
+      let url = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+    else { return }
+
+    Task { @MainActor in
+      do {
+        let settingsApp = try await NSWorkspace.shared.open(url, configuration: .init())
         log("Opened Screen Recording preferences via URL scheme")
-        // Bring System Settings to front after a brief moment to ensure it's visible
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-          if let settingsApp = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systempreferences").first
-            ?? NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Preferences").first
-          {
-            settingsApp.activate()
-          }
-        }
-      } else {
+        settingsApp.activate()
+        await PermissionDragGuidance.presentDragToGrantHelper(
+          settingsPID: settingsApp.processIdentifier)
+      } catch {
         log("Failed to open Screen Recording preferences via URL scheme — trying fallback")
-        // Fallback: open System Settings directly
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:")!)
       }
     }
@@ -147,6 +185,22 @@ final class ScreenCaptureService: Sendable {
       logError("ScreenCaptureKit: Permission request failed", error: error)
       return false
     }
+  }
+
+  /// ScreenCaptureKit talks to the window-server connection opened at launch.
+  /// A first-in-session TCC grant is visible to preflight and dead to SCK;
+  /// calling SCK in that window aborts on some Macs instead of throwing.
+  @available(macOS 14.0, *)
+  static func requestScreenCaptureKitPermissionIfUsableInThisProcess() async -> Bool {
+    _ = grantedAtProcessStart
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      log("ScreenCaptureKit: this process launched before the grant; skipping until relaunch")
+      return false
+    }
+    return await requestScreenCaptureKitPermission()
   }
 
   /// Force re-register this app with Launch Services to ensure it's the authoritative version
@@ -203,19 +257,29 @@ final class ScreenCaptureService: Sendable {
   }
 
   /// Request all screen capture permissions (both traditional TCC and ScreenCaptureKit)
+  @MainActor
   static func requestAllScreenCapturePermissions() {
     // 0. Ensure this app is the authoritative version in Launch Services
     // This fixes issues where stale registrations from old builds, DMGs, or Trash
     // cause macOS to grant permissions to the wrong app
     ensureLaunchServicesRegistration()
 
-    // 1. Request traditional Screen Recording TCC permission
+    // 1. Request traditional Screen Recording TCC permission.
+    // Activate first so the request fires while Omi is frontmost. A
+    // screen-capture access request from a backgrounded app does not reliably
+    // register the kTCCServiceScreenCapture row, so the app never appears in the
+    // Screen Recording list (PERM-02). This mirrors requestMicrophonePermission,
+    // which activates before requesting and reliably creates its TCC row.
+    NSApp.activate()
+    _ = grantedAtProcessStart
     CGRequestScreenCaptureAccess()
 
-    // 2. Request ScreenCaptureKit permission (macOS 14+)
+    // 2. Request ScreenCaptureKit permission (macOS 14+) only when this
+    // process's window-server connection already carries the grant. Calling
+    // SCK immediately after the first TCC dialog returns aborts on some Macs.
     if #available(macOS 14.0, *) {
       Task {
-        _ = await requestScreenCaptureKitPermission()
+        _ = await requestScreenCaptureKitPermissionIfUsableInThisProcess()
       }
     }
 
@@ -223,10 +287,84 @@ final class ScreenCaptureService: Sendable {
     // (removed duplicate open that conflicted with caller's own open call)
   }
 
+  /// Structured variant for owner-bound tool execution. It keeps the
+  /// ScreenCaptureKit request attached to the permission request lifetime so
+  /// the caller can fence every state or Settings publication after the await.
+  @MainActor
+  static func requestAllScreenCapturePermissionsAwaitingScreenCaptureKit() async -> Bool {
+    ensureLaunchServicesRegistration()
+    NSApp.activate()
+    _ = grantedAtProcessStart
+    let tccGranted = CGRequestScreenCaptureAccess()
+    if #available(macOS 14.0, *) {
+      _ = await requestScreenCaptureKitPermissionIfUsableInThisProcess()
+    }
+    return tccGranted || checkPermission()
+  }
+
+  /// Guided grant flow (PERM-02 / BL-050): register the screen-recording TCC row
+  /// **while Omi is frontmost**, then open System Settings so the user lands on a
+  /// list that already contains Omi. Opening Settings first backgrounded the app
+  /// before the registering call, so a screen-capture request from the
+  /// backgrounded app never created the `kTCCServiceScreenCapture` row and Omi
+  /// never appeared in the list. Mirrors MemoryExportExecutor.requestScreenRecordingApprovalForCloudSetup, the existing register-while-frontmost path.
+  @MainActor
+  static func requestScreenRecordingAccessAndOpenSettings() {
+    switch screenRecordingRequestDestination(hasPermissionNow: checkPermission()) {
+    case .alreadyGranted:
+      NSApp.activate()
+    case .systemSettings:
+      ShellSummon.suspendForPermissionPrompt()
+      requestAllScreenCapturePermissions()
+      openScreenRecordingPreferences()
+    }
+  }
+
+  /// Perform one throwaway ScreenCaptureKit *capture* so macOS surfaces the
+  /// "…is requesting to bypass the system private window picker and directly
+  /// access your screen and audio" consent NOW, in-context on the permissions
+  /// step, instead of the first time a real capture runs (e.g. the onboarding
+  /// voice/screen demo, which is where users hit it).
+  ///
+  /// Enumerating shareable content (`SCShareableContent`) does NOT trigger this
+  /// consent — only an actual `SCScreenshotManager.captureImage` with an
+  /// app-built `SCContentFilter` does. So we do a minimal 2×2 display capture.
+  /// Best-effort: requires Screen Recording TCC already granted, and on some
+  /// macOS versions the consent recurs periodically regardless; errors are
+  /// swallowed so this never blocks or disrupts onboarding.
+  @available(macOS 14.0, *)
+  static func primeCaptureConsent() async {
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      log("primeCaptureConsent skipped: Screen Recording is not live in this process until relaunch")
+      return
+    }
+    do {
+      let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+      guard let display = content.displays.first else { return }
+      let filter = SCContentFilter(display: display, excludingWindows: [])
+      let config = SCStreamConfiguration()
+      config.width = 2
+      config.height = 2
+      _ = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+      log("Primed ScreenCaptureKit capture consent")
+    } catch {
+      log("primeCaptureConsent skipped: \(error.localizedDescription)")
+    }
+  }
+
   /// Test if ScreenCaptureKit specifically works (macOS 14+)
   /// Returns true if ScreenCaptureKit consent is granted, false if declined
   @available(macOS 14.0, *)
   static func testScreenCaptureKitPermission() async -> Bool {
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      return false
+    }
     do {
       _ = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
       return true
@@ -244,6 +382,12 @@ final class ScreenCaptureService: Sendable {
     let tccGranted = CGPreflightScreenCaptureAccess()
     if !tccGranted {
       return false  // Not broken, just not granted
+    }
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      return false  // Grant isn't live in this process; relaunch, don't probe SCK
     }
 
     let sckGranted = await testScreenCaptureKitPermission()
@@ -263,6 +407,13 @@ final class ScreenCaptureService: Sendable {
     // 2. Re-request ScreenCaptureKit consent (macOS 14+)
     //    This can fix the "TCC says yes but SCK says no" broken state
     if #available(macOS 14.0, *) {
+      guard
+        ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+          grantedAtLaunch: grantedAtProcessStart)
+      else {
+        log("Screen capture: Soft recovery skipped SCK; grant is not live until relaunch")
+        return false
+      }
       let sckGranted = await requestScreenCaptureKitPermission()
       if sckGranted {
         log("Screen capture: Soft recovery succeeded (SCK re-consent granted)")
@@ -319,7 +470,7 @@ final class ScreenCaptureService: Sendable {
 
       // Re-request ScreenCaptureKit consent
       if #available(macOS 14.0, *) {
-        _ = await requestScreenCaptureKitPermission()
+        _ = await requestScreenCaptureKitPermissionIfUsableInThisProcess()
       }
 
       await MainActor.run {
@@ -328,7 +479,7 @@ final class ScreenCaptureService: Sendable {
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/sh")
-        task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+        task.arguments = ["-c", screenCaptureRelaunchCommand(appPath: bundleURL.path)]
 
         do {
           try task.run()
@@ -371,10 +522,9 @@ final class ScreenCaptureService: Sendable {
         if success {
           log("Screen capture permission reset, restarting app...")
 
-          // Use a shell script to wait briefly, then relaunch the app
           let task = Process()
           task.executableURL = URL(fileURLWithPath: "/bin/sh")
-          task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+          task.arguments = ["-c", screenCaptureRelaunchCommand(appPath: bundleURL.path)]
 
           do {
             try task.run()
@@ -390,6 +540,15 @@ final class ScreenCaptureService: Sendable {
         }
       }
     }
+  }
+
+  nonisolated static func screenCaptureRelaunchCommand(appPath: String) -> String {
+    AppState.relaunchCommand(
+      appPath: appPath,
+      isNonProduction: AppBuild.isNonProduction,
+      automationPort: DesktopAutomationLaunchOptions.port,
+      terminatingProcessIdentifier: ProcessInfo.processInfo.processIdentifier
+    )
   }
 
   /// Get the window ID of the frontmost application's main window
@@ -425,8 +584,16 @@ final class ScreenCaptureService: Sendable {
       }
     }
 
-    let resolved = await resolveActiveWindowInfoWithTimeout()
-    if let resolved {
+    let resolved: (appName: String?, windowTitle: String?, windowID: CGWindowID?)?
+    if let override = _resolverOverrideForTests {
+      resolved = await override()
+    } else {
+      resolved = await resolveActiveWindowInfoWithTimeout()
+    }
+
+    // A nil window ID is a real resolver result, but not a captureable one. Do
+    // not poison the last-known-good cache with it.
+    if let resolved, resolved.windowID != nil {
       let snapshot = ActiveWindowSnapshot(
         appName: resolved.appName,
         windowTitle: resolved.windowTitle,
@@ -435,17 +602,73 @@ final class ScreenCaptureService: Sendable {
       )
       axStateLock.withLock {
         lastActiveWindowSnapshot = snapshot
+        isInNilWindowFallbackStreak = false
       }
       return resolved
     }
 
+    // The capture caller needs to see system-owned no-window targets so it can
+    // pause instead of capturing the previous app from the cache.
+    if let resolved, ScreenCaptureTargetPolicy.shouldWaitForUserWindow(appName: resolved.appName) {
+      return resolved
+    }
+
+    // Preserve capture through a brief helper/system/secure-window transition.
     if let cached = getCachedActiveWindowSnapshot() {
-      log("ScreenCaptureService: Active window lookup timed out, using cached window info")
+      let shouldLog = axStateLock.withLock { () -> Bool in
+        guard !isInNilWindowFallbackStreak else { return false }
+        isInNilWindowFallbackStreak = true
+        return true
+      }
+      if shouldLog {
+        if resolved == nil {
+          log("ScreenCaptureService: Active window lookup timed out, using cached window info")
+        } else {
+          log("ScreenCaptureService: Frontmost app has no captureable window; using last known good window")
+        }
+      }
       return (cached.appName, cached.windowTitle, cached.windowID)
+    }
+
+    // A no-window result is distinct from a timeout. Let the caller pause the
+    // current tick rather than turning a normal secure/system surface into an
+    // engine failure.
+    if let resolved {
+      return resolved
     }
 
     log("ScreenCaptureService: Active window lookup timed out with no cached fallback")
     return (nil, nil, nil)
+  }
+
+  // MARK: - Test-only helpers
+
+  internal static func _resetActiveWindowCacheForTests() {
+    axStateLock.withLock {
+      lastActiveWindowSnapshot = nil
+      isActiveWindowResolutionInFlight = false
+      isInNilWindowFallbackStreak = false
+    }
+  }
+
+  internal static func _seedActiveWindowCacheForTests(
+    appName: String?,
+    windowTitle: String?,
+    windowID: CGWindowID?,
+    resolvedAt: Date
+  ) {
+    axStateLock.withLock {
+      lastActiveWindowSnapshot = ActiveWindowSnapshot(
+        appName: appName,
+        windowTitle: windowTitle,
+        windowID: windowID,
+        resolvedAt: resolvedAt
+      )
+    }
+  }
+
+  internal static func _peekActiveWindowCacheForTests() -> ActiveWindowSnapshot? {
+    axStateLock.withLock { lastActiveWindowSnapshot }
   }
 
   private static func resolveActiveWindowInfoWithTimeout() async -> (
@@ -551,7 +774,8 @@ final class ScreenCaptureService: Sendable {
 
   /// Private API: get CGWindowID directly from an AXUIElement (avoids fragile position/size matching)
   @_silgen_name("_AXUIElementGetWindow")
-  private static func _AXUIElementGetWindow(_ element: AXUIElement, _ windowID: UnsafeMutablePointer<CGWindowID>) -> AXError
+  private static func _AXUIElementGetWindow(_ element: AXUIElement, _ windowID: UnsafeMutablePointer<CGWindowID>)
+    -> AXError
 
   /// Get focused window info using Accessibility API, then match to CGWindowList for windowID
   private static func getWindowInfoViaAccessibility(
@@ -699,6 +923,45 @@ final class ScreenCaptureService: Sendable {
     }
   }
 
+  /// Capture dimensions that preserve the window's aspect ratio, or nil for a
+  /// degenerate frame. `static` so it is synchronously unit-testable.
+  ///
+  /// A zero-width frame makes `aspectRatio` 0, so `configWidth / aspectRatio` is
+  /// NaN (0/0). NaN fails every comparison, so the `> maxSize` clamp does not fire
+  /// and `Int(NaN)` traps — an uncatchable crash, not a thrown error. Refuse to
+  /// capture a zero-area window instead.
+  static func captureDimensions(
+    width: CGFloat, height: CGFloat, maxSize: CGFloat
+  ) -> (width: Int, height: Int)? {
+    guard width > 0, height > 0 else { return nil }
+
+    let aspectRatio = width / height
+    var configWidth = min(width, maxSize)
+    var configHeight = configWidth / aspectRatio
+    if configHeight > maxSize {
+      configHeight = maxSize
+      configWidth = configHeight * aspectRatio
+    }
+    return (Int(configWidth), Int(configHeight))
+  }
+
+  /// Aspect-preserving stream configuration, or nil if the window has no area.
+  private func captureConfiguration(for window: SCWindow, maxSize: CGFloat = ScreenCaptureService.maxSize)
+    -> SCStreamConfiguration?
+  {
+    guard
+      let size = Self.captureDimensions(
+        width: window.frame.width, height: window.frame.height, maxSize: maxSize)
+    else { return nil }
+
+    let config = SCStreamConfiguration()
+    config.scalesToFit = true
+    config.showsCursor = false
+    config.width = size.width
+    config.height = size.height
+    return config
+  }
+
   /// Capture using ScreenCaptureKit (macOS 14.0+)
   @available(macOS 14.0, *)
   private func captureWithScreenCaptureKit(windowID: CGWindowID) async -> Data? {
@@ -713,23 +976,12 @@ final class ScreenCaptureService: Sendable {
         log("Window not found in SCShareableContent")
         return nil
       }
+      guard let config = captureConfiguration(for: window) else {
+        log("Skipping capture of zero-area window frame")
+        return nil
+      }
 
       let filter = SCContentFilter(desktopIndependentWindow: window)
-      let config = SCStreamConfiguration()
-      config.scalesToFit = true
-      config.showsCursor = false
-      // Calculate dimensions maintaining aspect ratio (don't create square canvas)
-      let windowWidth = window.frame.width
-      let windowHeight = window.frame.height
-      let aspectRatio = windowWidth / windowHeight
-      var configWidth = min(windowWidth, maxSize)
-      var configHeight = configWidth / aspectRatio
-      if configHeight > maxSize {
-        configHeight = maxSize
-        configWidth = configHeight * aspectRatio
-      }
-      config.width = Int(configWidth)
-      config.height = Int(configHeight)
 
       let image = try await SCScreenshotManager.captureImage(
         contentFilter: filter,
@@ -770,7 +1022,9 @@ final class ScreenCaptureService: Sendable {
   /// Capture a specific window by ID (avoids re-resolving the active window).
   /// Returns a detailed result so the caller can distinguish transient window
   /// disappearance from real capture failures.
-  func captureWindowCGImage(windowID: CGWindowID) async -> WindowCaptureResult {
+  func captureWindowCGImage(windowID: CGWindowID, maxSize: CGFloat = ScreenCaptureService.maxSize) async
+    -> WindowCaptureResult
+  {
     do {
       var content = try await Self.sharedContent()
       if !content.windows.contains(where: { $0.windowID == windowID }) {
@@ -778,33 +1032,21 @@ final class ScreenCaptureService: Sendable {
       }
 
       let filterAndConfig: (SCContentFilter, SCStreamConfiguration)? = autoreleasepool {
-        guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+        guard let window = content.windows.first(where: { $0.windowID == windowID }),
+          let config = captureConfiguration(for: window, maxSize: maxSize)
+        else {
           return nil
         }
 
-        let filter = SCContentFilter(desktopIndependentWindow: window)
-        let config = SCStreamConfiguration()
-        config.scalesToFit = true
-        config.showsCursor = false
-        let windowWidth = window.frame.width
-        let windowHeight = window.frame.height
-        let aspectRatio = windowWidth / windowHeight
-        var configWidth = min(windowWidth, maxSize)
-        var configHeight = configWidth / aspectRatio
-        if configHeight > maxSize {
-          configHeight = maxSize
-          configWidth = configHeight * aspectRatio
-        }
-        config.width = Int(configWidth)
-        config.height = Int(configHeight)
-        return (filter, config)
+        return (SCContentFilter(desktopIndependentWindow: window), config)
       }
 
       guard let (filter, config) = filterAndConfig else {
-        // Window ID no longer exists — the user closed a tab, dismissed a modal,
-        // or the app destroyed the window between resolution and capture. This is
-        // routine, not a capture failure. Caller should re-resolve and retry.
-        log("Window \(windowID) not found in SCShareableContent (window closed)")
+        // Window ID no longer exists, or it reports a zero-area frame — the user
+        // closed a tab, dismissed a modal, or the app destroyed the window between
+        // resolution and capture. This is routine, not a capture failure. Caller
+        // should re-resolve and retry.
+        log("Window \(windowID) not capturable in SCShareableContent (closed or zero-area)")
         return .windowGone
       }
 
@@ -819,59 +1061,14 @@ final class ScreenCaptureService: Sendable {
     }
   }
 
-  func captureActiveWindowCGImage() async -> CGImage? {
+  /// Resolve and capture the active window while retaining whether the target
+  /// disappeared/unavailable versus the capture engine failing.
+  func captureActiveWindowCGImage() async -> WindowCaptureResult {
     let (_, _, windowID) = await Self.getActiveWindowInfoAsync()
     guard let windowID else {
-      log("No active window ID found")
-      return nil
+      return .windowGone
     }
-
-    do {
-      var content = try await Self.sharedContent()
-      if !content.windows.contains(where: { $0.windowID == windowID }) {
-        content = try await Self.sharedContent(forceRefresh: true)
-      }
-
-      // Wrap synchronous ScreenCaptureKit object processing in autoreleasepool.
-      // SCShareableContent enumerates all windows, creating Obj-C objects that
-      // accumulate in Swift concurrency's cooperative thread pool (which doesn't
-      // drain autorelease pools between tasks).
-      let filterAndConfig: (SCContentFilter, SCStreamConfiguration)? = autoreleasepool {
-        guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
-          return nil
-        }
-
-        let filter = SCContentFilter(desktopIndependentWindow: window)
-        let config = SCStreamConfiguration()
-        config.scalesToFit = true
-        config.showsCursor = false
-        let windowWidth = window.frame.width
-        let windowHeight = window.frame.height
-        let aspectRatio = windowWidth / windowHeight
-        var configWidth = min(windowWidth, maxSize)
-        var configHeight = configWidth / aspectRatio
-        if configHeight > maxSize {
-          configHeight = maxSize
-          configWidth = configHeight * aspectRatio
-        }
-        config.width = Int(configWidth)
-        config.height = Int(configHeight)
-        return (filter, config)
-      }
-
-      guard let (filter, config) = filterAndConfig else {
-        log("Window not found in SCShareableContent")
-        return nil
-      }
-
-      return try await SCScreenshotManager.captureImage(
-        contentFilter: filter,
-        configuration: config
-      )
-    } catch {
-      log("ScreenCaptureKit CGImage error: \(error.localizedDescription)")
-      return nil
-    }
+    return await captureWindowCGImage(windowID: windowID)
   }
 
   /// Encode a CGImage to JPEG data. Public wrapper for use by callers that need JPEG once.
@@ -924,8 +1121,8 @@ final class ScreenCaptureService: Sendable {
 
       var finalImage = nsImage
       let size = nsImage.size
-      if max(size.width, size.height) > maxSize {
-        let ratio = maxSize / max(size.width, size.height)
+      if max(size.width, size.height) > Self.maxSize {
+        let ratio = Self.maxSize / max(size.width, size.height)
         let newSize = NSSize(width: size.width * ratio, height: size.height * ratio)
         finalImage = resizeImage(nsImage, to: newSize)
       }

@@ -294,7 +294,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     required TextEditingController controller,
     required String label,
     required String hint,
-    required IconData icon,
+    required FaIconData icon,
     bool obscureText = false,
     Widget? suffixIcon,
     int maxLines = 1,
@@ -325,7 +325,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
   }
 
   Widget _buildVersionItem({
-    required IconData icon,
+    required FaIconData icon,
     required String label,
     required String version,
     Color? iconColor,
@@ -416,7 +416,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
             padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
             child: Text(
               context.l10n.whatsNew,
-              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
             ),
           ),
           Container(

@@ -1,10 +1,12 @@
 import {
   assertAdapterAttemptResultContract,
   assertAdapterBindingContract,
+  isProductionAdapterId,
   isPlaceholderAdapterId,
 } from "../adapters/interface.js";
 import type { RuntimeAdapter } from "../adapters/interface.js";
 import { AdapterWorkerPool, configuredMaxWorkers } from "./worker-pool.js";
+import { assertProductionAdapterScopeDeclared } from "./execution-policy.js";
 
 export type RuntimeAdapterFactory = () => RuntimeAdapter;
 
@@ -20,6 +22,9 @@ export class AdapterRegistry {
       throw new Error(
         `Adapter ${adapterId} is a placeholder and cannot be registered as a production adapter without an implementation factory`
       );
+    }
+    if (isProductionAdapterId(adapterId)) {
+      assertProductionAdapterScopeDeclared(adapterId);
     }
     if (this.pools.has(adapterId)) {
       throw new Error(`Adapter already registered: ${adapterId}`);

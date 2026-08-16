@@ -1,0 +1,4 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "ignorePatterns": ["lib/services/omi-api/omiApi.generated.ts"]
+}

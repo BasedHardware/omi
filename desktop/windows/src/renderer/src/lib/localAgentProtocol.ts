@@ -113,6 +113,10 @@ export function formatContextBlock(sections: ContextSection[]): string {
 export function raceWithBudget<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
   return new Promise<T>((resolve) => {
     let settled = false
+    // `done` (defined below) closes over `timer`, and `timer`'s initializer
+    // closes over `done` — a mutual reference, so `timer` must be declared
+    // before it can be assigned. `const` here would be a TS use-before-declaration.
+    // eslint-disable-next-line prefer-const
     let timer: ReturnType<typeof setTimeout>
     const done = (v: T): void => {
       if (settled) return

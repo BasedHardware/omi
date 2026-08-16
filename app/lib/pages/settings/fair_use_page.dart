@@ -146,10 +146,7 @@ class _FairUsePageState extends State<FairUsePage> {
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: dotColor.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: BoxDecoration(color: dotColor.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
         child: Row(
           children: [
             Container(
@@ -346,10 +343,7 @@ class _FairUsePageState extends State<FairUsePage> {
             ],
             if (resetLabel.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text(
-                resetLabel,
-                style: const TextStyle(color: Color(0xFF636366), fontSize: 12),
-              ),
+              Text(resetLabel, style: const TextStyle(color: Color(0xFF636366), fontSize: 12)),
             ],
           ],
         ),

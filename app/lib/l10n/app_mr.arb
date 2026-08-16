@@ -1,5 +1,6 @@
 {
     "@@locale": "mr",
+    "sessionExpiredSignInAgain": "सत्राची मुदत संपली — पुन्हा साइन इन करा.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -965,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "आपल्या योजना {date} वर नवीकरण होईल.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "मुक्त योजना",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1482,7 +1473,7 @@
     "exportConfiguration": "कॉन्फिगरेशन निर्यात करा",
     "bringYourOwn": "आपले स्वतःचे आणा",
     "payYourSttProvider": "Omi मुक्तपणे वापरा. आपण केवळ आपल्या STT प्रदाता ला थेट भुगतान करा.",
-    "freeMinutesMonth": "600 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ",
+    "freeMinutesMonth": "300 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ",
     "omiUnlimited": "Omi अमर्यादित",
     "hostRequired": "होस्ट आवश्यक आहे",
     "validPortRequired": "वैध पोर्ट आवश्यक आहे",
@@ -1697,22 +1688,6 @@
     "lovingOmi": "Omi आवडतंय?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "App Store मध्ये पुनरावलोकन सोडून आम्हाला अधिक लोकांपर्यंत पोहोचण्यास मदत करा. आपल्या प्रतिक्रिया आमच्यासाठी खूप महत्वाची आहे!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Google Play Store मध्ये पुनरावलोकन सोडून आम्हाला अधिक लोकांपर्यंत पोहोचण्यास मदत करा. आपल्या प्रतिक्रिया आमच्यासाठी खूप महत्वाची आहे!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "App Store वर रेट करा",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Google Play वर रेट करा",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "कदाचित नंतर",
     "@maybeLater": {
@@ -5505,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "१,२०० प्रीमियम मिनिटे + डिव्हाइसवर अनलिमिटेड",
+    "basicPlanDescription": "३०० प्रीमियम मिनिटे + डिव्हाइसवर अनलिमिटेड",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7280,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "600 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.",
+    "premiumMinutesInfo": "300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7391,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "600 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ",
+    "premiumMinutesMonth": "300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10520,7 +10495,7 @@
     "upgradePlan": "प्लॅन अपग्रेड करा",
     "billingMonthly": "मासिक",
     "billingYearly": "वार्षिक",
-    "savePercent": "~17% बचत करा",
+    "savePercent": "~{percent}% बचत करा",
     "popular": "लोकप्रिय",
     "currentPlan": "सध्याचा",
     "neoSubtitle": "दरमहा {count} प्रश्न",
@@ -10582,6 +10557,7 @@
     "syncStatusWaiting": "सिंक होण्याची प्रतीक्षा",
     "syncStatusRetrying": "प्रक्रिया करता आली नाही — पुन्हा प्रयत्न",
     "syncStatusFailed": "अयशस्वी — Retry दाबा",
+    "syncStatusTooOld": "सिंक करण्यासाठी खूप जुने — Omi ते स्वीकारू शकत नाही",
     "syncStatusFileUnavailable": "फाइल उपलब्ध नाही",
     "syncStatusUploaded": "अपलोड झाले · Omi वर प्रक्रिया सुरू",
     "noRecordingsYet": "अद्याप कोणतीही रेकॉर्डिंग नाही",
@@ -10632,7 +10608,7 @@
     "syncCustomSttWarningMessage": "तुम्ही तुमचा स्वतःचा ट्रान्सक्रिप्शन प्रदाता वापरता. ही रेकॉर्डिंग सिंक केल्यास ती Omi च्या सर्व्हरवर ट्रान्सक्राइब होतील आणि तुमच्या प्लॅनच्या ट्रान्सक्रिप्शन मर्यादेत मोजली जातील.",
     "transcribeLaterTitle": "नंतर ट्रान्सक्राइब करणे",
     "transcribeLaterDescription": "थेट ट्रान्सक्राइब करण्याऐवजी आता ऑडिओ रेकॉर्ड करा आणि गरजेनुसार नंतर ट्रान्सक्राइब करा. रेकॉर्डिंग तुमच्या फोनवर साठवली जातात; नंतर ती अपलोड करून संभाषणे तयार करा.",
-    "transcribeLaterNote": "सध्या Omi आणि Limitless डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.",
+    "transcribeLaterNote": "फोनचा मायक्रोफोन, Omi आणि Limitless डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.",
     "transcribeLaterStorageFull": "तुमच्या फोनवर पुरेशी जागा नसल्याने रेकॉर्डिंग थांबवली आहे. जागा रिकामी करा किंवा तुमच्या रेकॉर्डिंग अपलोड करा, मग ती आपोआप पुन्हा सुरू होईल.",
     "unmute": "आवाज सुरू करा",
     "newRecording": "नवीन रेकॉर्डिंग",
@@ -10694,5 +10670,115 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "पेंडंटचे स्टोरेज जवळजवळ भरले आहे — सिंकसाठी अ‍ॅप उघडे ठेवा."
+    "pendantStorageAlmostFull": "पेंडंटचे स्टोरेज जवळजवळ भरले आहे — सिंकसाठी अ‍ॅप उघडे ठेवा.",
+    "connectRayBanMeta": "Ray-Ban Meta कनेक्ट करा",
+    "raybanMetaSetupDescription": "संभाषणे आणि दृश्य संदर्भासाठी आपले Ray-Ban Meta चष्मे आपले Omi कॅप्चर डिव्हाइस म्हणून वापरा. आपले चष्मे लिंक करण्यासाठी Omi Meta AI अ‍ॅप उघडेल.",
+    "raybanMetaOpenMetaAI": "Meta AI द्वारे कनेक्ट करा",
+    "raybanMetaWaitingForMetaAI": "Meta AI अ‍ॅपमध्ये कनेक्ट करणे पूर्ण करा, नंतर येथे परत या.",
+    "raybanMetaCheckAgain": "पुन्हा तपासा",
+    "raybanMetaAllowCamera": "चष्म्यावरील कॅमेराला परवानगी द्या",
+    "raybanMetaCameraExplanation": "आपल्या संभाषणांमध्ये फोटो जोडण्यासाठी Omi आपल्या चष्म्याचा कॅमेरा वापरतो. आपण हे वगळू शकता आणि फक्त ऑडिओ वापरू शकता.",
+    "raybanMetaSkipForNow": "आत्तासाठी वगळा",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta फक्त-ऑडिओ मोड",
+    "raybanMetaAudioOnlyExplanation": "Omi ची ही आवृत्ती Bluetooth द्वारे आपल्या चष्म्याचा मायक्रोफोन वापरू शकते. फोटो कॅप्चरसाठी Omi ची Meta डेव्हलपर आवृत्ती आवश्यक आहे.",
+    "raybanMetaMusicPauseNote": "चष्म्याचा मायक्रोफोन वापरात असताना आपल्या फोनवरील संगीत थांबते.",
+    "raybanMetaContinue": "पुढे जा",
+    "raybanMetaCapturePhoto": "फोटो काढा",
+    "raybanMetaPhotoRequested": "फोटोची विनंती केली आहे — तो आपल्या संभाषणात दिसेल.",
+    "raybanMetaMicrophoneReady": "मायक्रोफोन तयार आहे",
+    "raybanMetaImageCaptureReady": "प्रतिमा कॅप्चर तयार आहे",
+    "raybanMetaImageCaptureUnavailable": "फक्त-ऑडिओ मोडमध्ये अनुपलब्ध",
+    "raybanMetaCamera": "कॅमेरा",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta शी कनेक्ट करताना त्रुटी: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "डिव्हाइस स्टोरेज",
+    "deviceStoragePercentFull": "{percent}% भरले",
+    "deviceStorageUsedOfTotal": "{total} पैकी {used} वापरले",
+    "deviceStorageFree": "{free} रिकामे",
+    "deviceStorageNearlyFull": "डिव्हाइस जवळजवळ भरले आहे — जागा मोकळी करण्यासाठी सिंक करा.",
+    "phoneMicOfflineFallbackMessage": "कनेक्शन नाही — स्थानिकरित्या रेकॉर्ड होत आहे. तुम्ही पुन्हा ऑनलाइन झाल्यावर याचे ट्रान्सक्रिप्शन केले जाईल.",
+    "dataEncryptedBanner": "तुमचा डेटा डीफॉल्टनुसार मजबूत एन्क्रिप्शनने सुरक्षित आहे आणि तो कसा साठवला व वापरला जातो यावर तुमचे नियंत्रण असते.",
+    "rayBanMetaMicPickerTitle": "तुमचा Ray-Ban Meta मायक्रोफोन निवडा",
+    "rayBanMetaMicPickerDescription": "तुमच्या चष्म्याचा Bluetooth मायक्रोफोन निवडा. Omi तो वापरत असताना संगीत थांबते.",
+    "rayBanMetaMicPickerEmpty": "कोणताही Bluetooth मायक्रोफोन सापडला नाही. iPhone सेटिंग्जमध्ये चष्मा कनेक्ट करा आणि पुन्हा प्रयत्न करा.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth मायक्रोफोन लोड करता आले नाहीत. Bluetooth सुरू असल्याची खात्री करा आणि पुन्हा प्रयत्न करा.",
+    "rayBanMetaMicPickerConnectError": "त्या मायक्रोफोनशी कनेक्ट करता आले नाही. तो iPhone सेटिंग्जमध्ये कनेक्ट असल्याची खात्री करा.",
+    "cloudTranscription": "क्लाउड ट्रान्सक्रिप्शन",
+    "copyMessage": "संदेश कॉपी करा",
+    "deleteOnDeviceModel": "मॉडेल हटवा",
+    "deleteOnDeviceModelConfirm": "तुम्हाला हे मॉडेल हटवायचे आहे याची खात्री आहे का?",
+    "downgradeAnyway": "तरीही डाउनग्रेड करा",
+    "downgradeLimitBattery": "७ पट जास्त बॅटरी वापर",
+    "downgradeLimitDelay": "५-७ सेकंदांचा विलंब",
+    "downgradeLimitQuality": "३०% कमी ट्रान्सक्रिप्शन गुणवत्ता",
+    "downgradeLimitSpeakers": "वक्ते ओळखता येणार नाहीत",
+    "downgradeLimitationsHeading": "तुम्हाला या मर्यादा जाणवतील:",
+    "downgradeToFreemiumTitle": "मोफत प्लॅनवर डाउनग्रेड करायचे?",
+    "errorLoadingAudio": "ऑडिओ लोड करताना त्रुटी",
+    "failedToLinkCalendarEvent": "कॅलेंडर इव्हेंट लिंक करता आले नाही",
+    "googleCalendarConnectPrompt": "संभाषणे कॅलेंडर इव्हेंटशी लिंक करण्यासाठी तुमचे Google कॅलेंडर कनेक्ट करा.",
+    "googleCalendarNotConnected": "Google कॅलेंडर कनेक्ट केलेले नाही",
+    "linkedToEvent": "“{title}” शी लिंक केले",
+    "onDeviceModelDeleted": "मॉडेल हटवले",
+    "onDeviceModelDownloadFailed": "मॉडेल डाउनलोड अयशस्वी",
+    "onDeviceModelDownloadFailedDesc": "Whisper मॉडेल डाउनलोड करता आले नाही. कृपया पुन्हा प्रयत्न करा.",
+    "onDeviceModelDownloadSuccess": "मॉडेल डाउनलोड झाले",
+    "onDeviceModelDownloadSuccessDesc": "Whisper मॉडेल यशस्वीरित्या डाउनलोड झाले",
+    "onDeviceModelDownloaded": "डाउनलोड केले",
+    "onDeviceModelSize": "मॉडेलचा आकार",
+    "onDeviceTranscription": "डिव्हाइसवरील ट्रान्सक्रिप्शन",
+    "onDeviceTranscriptionDesc": "ट्रान्सक्रिप्शन तुमच्या डिव्हाइसवर स्थानिक पातळीवर प्रक्रिया केले जाते",
+    "searchSettings": "सेटिंग्ज शोधा…",
+    "speechToTextProvider": "स्पीच-टू-टेक्स्ट प्रदाता",
+    "speechToTextProviderDesc": "ट्रान्सक्रिप्शनसाठी वापरली जाणारी सेवा निवडा",
+    "sttFilterAuto": "स्वयंचलित",
+    "sttModelAccuracy": "अचूकता",
+    "sttModelFaster": "अधिक जलद",
+    "sttModelHigher": "जास्त",
+    "sttModelLower": "कमी",
+    "sttModelSlower": "अधिक संथ",
+    "sttModelSpeed": "वेग",
+    "sttNone": "काहीही नाही",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "तुमच्या अभिप्रायाबद्दल धन्यवाद!",
+    "transcriptionLanguage": "ट्रान्सक्रिप्शन भाषा",
+    "transcriptionLanguageDesc": "भाषण ट्रान्सक्रिप्शनसाठी भाषा निवडा",
+    "whisperModel": "Whisper मॉडेल",
+    "whisperModelDesc": "डिव्हाइसवरील ट्रान्सक्रिप्शनसाठी मॉडेल निवडा",
+    "whisperModelSizeBase": "बेस",
+    "whisperModelSizeLarge": "मोठे",
+    "whisperModelSizeMedium": "मध्यम",
+    "whisperModelSizeSmall": "लहान",
+    "whisperModelSizeTiny": "अतिशय लहान",
+    "planSheetChooseYourPlan": "अमर्यादित Omi अनलॉक करण्यासाठी तुमची योजना निवडा.",
+    "availableOnMacMobileWeb": "Mac, मोबाइल आणि वेबवर उपलब्ध",
+    "popularBadge": "लोकप्रिय",
+    "worksOnDesktop": "डेस्कटॉपवर चालते",
+    "noDesktopAccess": "डेस्कटॉपवर चालत नाही",
+    "annualBillingSummary": "{months} महिने / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 महिना मोफत} other{{count} महिने मोफत}}",
+    "freemiumLimitsIntro": "Omi मोफत आहे, परंतु मोफत आवृत्तीला मर्यादा आहेत ज्या तुमच्या अनुभवावर परिणाम करतात:",
+    "downgradeLimitDelayNotRealTime": "5-7 सेकंद विलंब (रिअल-टाइम नाही)",
+    "downgradeToFreemiumAction": "मोफत आवृत्तीवर जा",
+    "getFreeUnlimitedAccess": "मोफत अमर्यादित प्रवेश मिळवा",
+    "shareDataForTraining": "प्रशिक्षणासाठी डेटा सामायिक करा",
+    "yourRequestUnderReview": "तुमची विनंती पुनरावलोकनाधीन आहे",
+    "pinAsBaseline": "आधार म्हणून पिन करा",
+    "unpinAsBaseline": "आधारातून अनपिन करा",
+    "baselineMemory": "आधार स्मृती",
+    "alwaysInContext": "नेहमी संदर्भात",
+    "accountCutoverUpdateRequiredTitle": "अपडेट आवश्यक",
+    "accountCutoverUpdateRequiredMessage": "खाता माइग्रेशन के बाद जारी रखने के लिए नवीनतम Omi ऐप इंस्टॉल करें।",
+    "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
+    "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
+    "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
+    "accountCutoverOpenStore": "स्टोर खोलें"
 }

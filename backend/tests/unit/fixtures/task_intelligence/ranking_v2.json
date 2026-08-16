@@ -1,0 +1,165 @@
+{
+  "schema_version": 2,
+  "policy_version": "ranking.v2",
+  "minimum_capture_confidence": 0.8,
+  "cases": [
+    {
+      "id": "deadline_and_blocker_beat_recent_noise",
+      "current_context": {"device_id": "device-1", "authorized": true},
+      "subjects": [
+        {
+          "subject_id": "overdue_payment",
+          "headline": "Submit the quarterly tax payment",
+          "evidence_preview": "Due date has passed.",
+          "evidence_refs": [{"kind": "external", "id": "task-overdue", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "days_to_due": -2, "capture_confidence": 1, "has_concrete_next_action": true}
+        },
+        {
+          "subject_id": "blocked_approval",
+          "subject_kind": "agent_open_loop",
+          "workstream_id": "customer-renewal",
+          "headline": "Approve the prepared customer reply",
+          "evidence_preview": "Progress is waiting on input.",
+          "recent_material_activity": true,
+          "evidence_refs": [{"kind": "external", "id": "approval-1", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "someone_blocked": true, "capture_confidence": 1, "has_concrete_next_action": true}
+        },
+        {
+          "subject_id": "focused_launch_plan",
+          "headline": "Draft the launch plan",
+          "label": "Launch readiness",
+          "evidence_preview": "Linked to one evidence source.",
+          "recent_material_activity": true,
+          "evidence_refs": [{"kind": "external", "id": "task-launch", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "focused_goal_linked": true, "capture_confidence": 1, "has_concrete_next_action": true}
+        },
+        {
+          "subject_id": "recent_routine_noise",
+          "headline": "Review project notes",
+          "evidence_preview": "Linked to one evidence source.",
+          "recent_material_activity": true,
+          "evidence_refs": [{"kind": "external", "id": "task-routine", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "capture_confidence": 1, "has_concrete_next_action": true}
+        }
+      ],
+      "recorded_judgment": ["overdue_payment", "blocked_approval"],
+      "must_select": ["overdue_payment", "blocked_approval"],
+      "must_not_select": ["recent_routine_noise"],
+      "max_selected": 3
+    },
+    {
+      "id": "recent_only_correctly_returns_empty",
+      "current_context": {"device_id": "device-1", "authorized": true},
+      "subjects": [
+        {
+          "subject_id": "recent_only",
+          "headline": "Organize the project folder",
+          "evidence_preview": "Linked to one evidence source.",
+          "recent_material_activity": true,
+          "evidence_refs": [{"kind": "external", "id": "task-recent", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "capture_confidence": 1, "has_concrete_next_action": true}
+        },
+        {
+          "subject_id": "low_confidence",
+          "headline": "Maybe follow up sometime",
+          "evidence_preview": "Linked to one evidence source.",
+          "recent_material_activity": true,
+          "evidence_refs": [{"kind": "external", "id": "task-low", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "capture_confidence": 0.3, "has_concrete_next_action": false}
+        }
+      ],
+      "recorded_judgment": [],
+      "expected_empty": true,
+      "must_not_select": ["recent_only", "low_confidence"],
+      "max_selected": 0
+    },
+    {
+      "id": "contextual_set_avoids_redundant_actions",
+      "current_context": {"device_id": "device-1", "authorized": true},
+      "subjects": [
+        {
+          "subject_id": "atlas_brief_a",
+          "headline": "Review the Atlas launch brief",
+          "evidence_preview": "Relevant document context is active.",
+          "workstream_id": "atlas-launch",
+          "evidence_refs": [{"kind": "external", "id": "atlas-a", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "context_match_signals": ["document"], "capture_confidence": 1, "has_concrete_next_action": true}
+        },
+        {
+          "subject_id": "atlas_brief_b",
+          "headline": "Review Atlas launch plan",
+          "evidence_preview": "Relevant document context is active.",
+          "workstream_id": "atlas-launch",
+          "evidence_refs": [{"kind": "external", "id": "atlas-b", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "context_match_signals": ["document"], "capture_confidence": 1, "has_concrete_next_action": true}
+        },
+        {
+          "subject_id": "vendor_signature",
+          "headline": "Send the signed vendor agreement",
+          "evidence_preview": "Relevant document context is active.",
+          "workstream_id": "vendor-renewal",
+          "evidence_refs": [{"kind": "external", "id": "vendor-1", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "context_match_signals": ["document"], "capture_confidence": 1, "has_concrete_next_action": true}
+        }
+      ],
+      "recorded_judgment": ["atlas_brief_a", "vendor_signature"],
+      "must_select": ["vendor_signature"],
+      "must_select_one_of": [["atlas_brief_a", "atlas_brief_b"]],
+      "duplicate_groups": [["atlas_brief_a", "atlas_brief_b"]],
+      "must_not_select": [],
+      "max_selected": 2
+    },
+    {
+      "id": "missing_evidence_fails_closed",
+      "current_context": {"device_id": "device-1", "authorized": true},
+      "subjects": [
+        {
+          "subject_id": "grounded_due_task",
+          "headline": "Renew the expiring certificate",
+          "evidence_preview": "Due in one day.",
+          "evidence_refs": [{"kind": "external", "id": "certificate-1", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "days_to_due": 1, "capture_confidence": 1, "has_concrete_next_action": true}
+        },
+        {
+          "subject_id": "ungrounded_due_task",
+          "headline": "Review an unsupported reminder",
+          "evidence_refs": [],
+          "facts": {"open": true, "unexpired": true, "days_to_due": 1, "capture_confidence": 1, "has_concrete_next_action": true}
+        }
+      ],
+      "recorded_judgment": ["grounded_due_task"],
+      "must_select": ["grounded_due_task"],
+      "must_not_select": ["ungrounded_due_task"],
+      "max_selected": 1
+    },
+    {
+      "id": "awaiting_review_earns_attention",
+      "current_context": {"device_id": "device-1", "authorized": true},
+      "subjects": [
+        {
+          "subject_id": "draft_review",
+          "subject_kind": "artifact",
+          "workstream_id": "launch-email",
+          "headline": "Review the prepared launch email",
+          "evidence_preview": "A prepared draft is waiting for review.",
+          "recent_material_activity": true,
+          "evidence_refs": [{"kind": "artifact", "id": "launch-email-v2", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "capture_confidence": 1, "has_concrete_next_action": true}
+        },
+        {
+          "subject_id": "fresh_suggestion",
+          "subject_kind": "candidate",
+          "headline": "Consider preparing a recap",
+          "evidence_preview": "Linked to one evidence source.",
+          "recent_material_activity": true,
+          "evidence_refs": [{"kind": "external", "id": "candidate-1", "scope": "canonical"}],
+          "facts": {"open": true, "unexpired": true, "capture_confidence": 0.9, "has_concrete_next_action": true}
+        }
+      ],
+      "recorded_judgment": ["draft_review"],
+      "must_select": ["draft_review"],
+      "must_not_select": ["fresh_suggestion"],
+      "max_selected": 1
+    }
+  ]
+}

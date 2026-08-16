@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, ZoomControl } from 'react-leaflet';
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  Polyline,
+  useMap,
+  ZoomControl,
+} from 'react-leaflet';
 import L from 'leaflet';
 import { MessageSquare, Play, Pause, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,11 +24,17 @@ interface ConversationInfo {
 }
 
 // Create numbered marker for journey sequence
-function createNumberedIcon(num: number, isActive: boolean = false, isVisible: boolean = true) {
+function createNumberedIcon(
+  num: number,
+  isActive: boolean = false,
+  isVisible: boolean = true,
+) {
   const size = isActive ? 32 : 24;
   const fontSize = isActive ? 13 : 11;
   const opacity = isVisible ? 1 : 0.3;
-  const glow = isActive ? 'box-shadow: 0 0 12px 4px rgba(139, 92, 246, 0.5);' : 'box-shadow: 0 2px 4px rgba(0,0,0,0.3);';
+  const glow = isActive
+    ? 'box-shadow: 0 0 12px 4px rgba(139, 92, 246, 0.5);'
+    : 'box-shadow: 0 2px 4px rgba(0,0,0,0.3);';
 
   return L.divIcon({
     className: 'custom-marker',
@@ -76,7 +90,7 @@ function FitBounds({ locations }: { locations: LocationPin[] }) {
       if (!isMountedRef.current) return;
 
       const bounds = L.latLngBounds(
-        locations.map((loc) => [loc.latitude, loc.longitude])
+        locations.map((loc) => [loc.latitude, loc.longitude]),
       );
 
       // More padding at bottom to leave room for playback controls
@@ -110,7 +124,13 @@ function FitBounds({ locations }: { locations: LocationPin[] }) {
 }
 
 // Component to pan to current location during playback
-function PanToLocation({ location, enabled }: { location: LocationPin | null; enabled: boolean }) {
+function PanToLocation({
+  location,
+  enabled,
+}: {
+  location: LocationPin | null;
+  enabled: boolean;
+}) {
   const map = useMap();
   const isMountedRef = useRef(true);
 
@@ -122,7 +142,10 @@ function PanToLocation({ location, enabled }: { location: LocationPin | null; en
     // Use requestAnimationFrame to ensure we're in a valid state
     const frameId = requestAnimationFrame(() => {
       if (isMountedRef.current) {
-        map.panTo([location.latitude, location.longitude], { animate: true, duration: 0.5 });
+        map.panTo([location.latitude, location.longitude], {
+          animate: true,
+          duration: 0.5,
+        });
       }
     });
 
@@ -157,7 +180,9 @@ export default function LocationMap({
   const [internalPlaying, setInternalPlaying] = useState(false);
   const [internalIndex, setInternalIndex] = useState(-1); // -1 means show all
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [conversationCache, setConversationCache] = useState<Record<string, ConversationInfo>>({});
+  const [conversationCache, setConversationCache] = useState<
+    Record<string, ConversationInfo>
+  >({});
   const [showTitleCard, setShowTitleCard] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const playbackRef = useRef<NodeJS.Timeout | null>(null);
@@ -173,14 +198,17 @@ export default function LocationMap({
   }, [isPlaying]);
 
   // State setters that work in both modes
-  const setIsPlaying = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
-    const newValue = typeof value === 'function' ? value(isPlayingRef.current) : value;
-    if (isControlled && onPlayingChange) {
-      onPlayingChange(newValue);
-    } else {
-      setInternalPlaying(newValue);
-    }
-  }, [isControlled, onPlayingChange]);
+  const setIsPlaying = useCallback(
+    (value: boolean | ((prev: boolean) => boolean)) => {
+      const newValue = typeof value === 'function' ? value(isPlayingRef.current) : value;
+      if (isControlled && onPlayingChange) {
+        onPlayingChange(newValue);
+      } else {
+        setInternalPlaying(newValue);
+      }
+    },
+    [isControlled, onPlayingChange],
+  );
 
   // Ref to track latest index for closure safety
   const currentIndexRef = useRef(currentIndex);
@@ -188,14 +216,18 @@ export default function LocationMap({
     currentIndexRef.current = currentIndex;
   }, [currentIndex]);
 
-  const setCurrentIndex = useCallback((value: number | ((prev: number) => number)) => {
-    const newValue = typeof value === 'function' ? value(currentIndexRef.current) : value;
-    if (isControlled && onIndexChange) {
-      onIndexChange(newValue);
-    } else {
-      setInternalIndex(newValue);
-    }
-  }, [isControlled, onIndexChange]);
+  const setCurrentIndex = useCallback(
+    (value: number | ((prev: number) => number)) => {
+      const newValue =
+        typeof value === 'function' ? value(currentIndexRef.current) : value;
+      if (isControlled && onIndexChange) {
+        onIndexChange(newValue);
+      } else {
+        setInternalIndex(newValue);
+      }
+    },
+    [isControlled, onIndexChange],
+  );
 
   // Parse time string to comparable value (handles both full datetime and time-only strings)
   const parseTimeValue = (timeString: string): number => {
@@ -212,7 +244,9 @@ export default function LocationMap({
     if (timeMatch) {
       const [, hours, minutes, seconds = '0'] = timeMatch;
       // Convert to minutes since midnight for comparison
-      return parseInt(hours, 10) * 3600 + parseInt(minutes, 10) * 60 + parseInt(seconds, 10);
+      return (
+        parseInt(hours, 10) * 3600 + parseInt(minutes, 10) * 60 + parseInt(seconds, 10)
+      );
     }
 
     return 0;
@@ -220,9 +254,7 @@ export default function LocationMap({
 
   // Sort locations by time for the route line
   const sortedLocations = useMemo(() => {
-    return [...locations].sort(
-      (a, b) => parseTimeValue(a.time) - parseTimeValue(b.time)
-    );
+    return [...locations].sort((a, b) => parseTimeValue(a.time) - parseTimeValue(b.time));
   }, [locations]);
 
   // Background prefetch conversation titles
@@ -230,11 +262,13 @@ export default function LocationMap({
     if (!showPlayback || sortedLocations.length === 0) return;
 
     const fetchConversations = async () => {
-      const uniqueIds = [...new Set(
-        sortedLocations
-          .map(loc => loc.conversation_id)
-          .filter((id): id is string => !!id)
-      )];
+      const uniqueIds = [
+        ...new Set(
+          sortedLocations
+            .map((loc) => loc.conversation_id)
+            .filter((id): id is string => !!id),
+        ),
+      ];
 
       const results = await Promise.all(
         uniqueIds.map(async (id) => {
@@ -244,12 +278,12 @@ export default function LocationMap({
           } catch {
             return null;
           }
-        })
+        }),
       );
 
       const cache: Record<string, ConversationInfo> = {};
-      results.forEach(r => {
-        if (r) cache[r.id] = { title: r.title, emoji: r.emoji };
+      results.forEach((r) => {
+        if (r) cache[r.id] = { title: r.title ?? '', emoji: r.emoji ?? '' };
       });
       setConversationCache(cache);
     };
@@ -265,7 +299,7 @@ export default function LocationMap({
     }
 
     const advancePlayback = () => {
-      setCurrentIndex(prev => {
+      setCurrentIndex((prev) => {
         const next = prev + 1;
         if (next >= sortedLocations.length) {
           setIsPlaying(false);
@@ -296,7 +330,9 @@ export default function LocationMap({
   // Create polyline coordinates (progressive or full)
   const polylinePositions = useMemo(() => {
     if (currentIndex === -1) {
-      return sortedLocations.map((loc) => [loc.latitude, loc.longitude] as [number, number]);
+      return sortedLocations.map(
+        (loc) => [loc.latitude, loc.longitude] as [number, number],
+      );
     }
     return sortedLocations
       .slice(0, currentIndex + 1)
@@ -339,13 +375,16 @@ export default function LocationMap({
   };
 
   // Get display info for a location
-  const getLocationDisplay = useCallback((loc: LocationPin) => {
-    if (loc.conversation_id && conversationCache[loc.conversation_id]) {
-      const info = conversationCache[loc.conversation_id];
-      return { title: info.title, emoji: info.emoji };
-    }
-    return { title: loc.address, emoji: '📍' };
-  }, [conversationCache]);
+  const getLocationDisplay = useCallback(
+    (loc: LocationPin) => {
+      if (loc.conversation_id && conversationCache[loc.conversation_id]) {
+        const info = conversationCache[loc.conversation_id];
+        return { title: info.title, emoji: info.emoji };
+      }
+      return { title: loc.address, emoji: '📍' };
+    },
+    [conversationCache],
+  );
 
   // Playback controls
   const handlePlay = () => {
@@ -377,7 +416,7 @@ export default function LocationMap({
   };
 
   const cycleSpeed = () => {
-    setPlaybackSpeed(prev => {
+    setPlaybackSpeed((prev) => {
       if (prev === 1) return 2;
       if (prev === 2) return 4;
       return 1;
@@ -481,7 +520,9 @@ export default function LocationMap({
                   <p className="text-sm font-medium text-text-primary">
                     {currentDisplay.title}
                   </p>
-                  <p className="text-xs text-text-tertiary">{formatTime(currentLocation.time)}</p>
+                  <p className="text-xs text-text-tertiary">
+                    {formatTime(currentLocation.time)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -500,56 +541,62 @@ export default function LocationMap({
             className="absolute bottom-3 left-3 right-3 z-10"
           >
             <div className="bg-bg-secondary/90 backdrop-blur-sm rounded-xl p-3 border border-white/[0.08]">
-            <div className="flex items-center gap-3">
-              {/* Play/Pause button */}
-              <button
-                onClick={isPlaying ? handlePause : handlePlay}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-purple-primary hover:bg-purple-primary/90 text-white transition-colors"
-              >
-                {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-              </button>
+              <div className="flex items-center gap-3">
+                {/* Play/Pause button */}
+                <button
+                  onClick={isPlaying ? handlePause : handlePlay}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-purple-primary hover:bg-purple-primary/90 text-white transition-colors"
+                >
+                  {isPlaying ? (
+                    <Pause className="w-4 h-4" />
+                  ) : (
+                    <Play className="w-4 h-4 ml-0.5" />
+                  )}
+                </button>
 
-              {/* Timeline slider */}
-              <div className="flex-1 flex items-center gap-2">
-                <input
-                  type="range"
-                  min="-1"
-                  max={sortedLocations.length - 1}
-                  value={currentIndex}
-                  onChange={handleSliderChange}
-                  className="flex-1 h-1 bg-bg-tertiary rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-purple-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
-                />
-                <span className="text-xs text-text-tertiary w-12 text-right">
-                  {currentIndex >= 0 ? `${currentIndex + 1}/${sortedLocations.length}` : 'All'}
-                </span>
+                {/* Timeline slider */}
+                <div className="flex-1 flex items-center gap-2">
+                  <input
+                    type="range"
+                    min="-1"
+                    max={sortedLocations.length - 1}
+                    value={currentIndex}
+                    onChange={handleSliderChange}
+                    className="flex-1 h-1 bg-bg-tertiary rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-purple-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
+                  />
+                  <span className="text-xs text-text-tertiary w-12 text-right">
+                    {currentIndex >= 0
+                      ? `${currentIndex + 1}/${sortedLocations.length}`
+                      : 'All'}
+                  </span>
+                </div>
+
+                {/* Speed button */}
+                <button
+                  onClick={cycleSpeed}
+                  className="px-2 py-1 text-xs font-medium text-text-secondary hover:text-text-primary bg-bg-tertiary rounded-md transition-colors"
+                >
+                  {playbackSpeed}x
+                </button>
+
+                {/* Reset button */}
+                <button
+                  onClick={handleReset}
+                  className="p-1.5 text-text-tertiary hover:text-text-primary transition-colors"
+                  title="Reset"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
               </div>
 
-              {/* Speed button */}
-              <button
-                onClick={cycleSpeed}
-                className="px-2 py-1 text-xs font-medium text-text-secondary hover:text-text-primary bg-bg-tertiary rounded-md transition-colors"
-              >
-                {playbackSpeed}x
-              </button>
-
-              {/* Reset button */}
-              <button
-                onClick={handleReset}
-                className="p-1.5 text-text-tertiary hover:text-text-primary transition-colors"
-                title="Reset"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Current time display */}
-            {currentLocation && (
-              <div className="mt-2 text-center">
-                <span className="text-xs text-purple-primary font-medium">
-                  {formatTime(currentLocation.time)}
-                </span>
-              </div>
-            )}
+              {/* Current time display */}
+              {currentLocation && (
+                <div className="mt-2 text-center">
+                  <span className="text-xs text-purple-primary font-medium">
+                    {formatTime(currentLocation.time)}
+                  </span>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

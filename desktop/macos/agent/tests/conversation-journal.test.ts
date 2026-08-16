@@ -1,0 +1,4046 @@
+import { createHash } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  ackBackendConversationDeleteOutbox,
+  ackBackendTurnOutbox,
+  ackBackendTurnOutboxWithWakes,
+  applyBackendReconcilePage,
+  appendChatFirstBlocksToProducingTurn,
+  appendChatFirstEvidenceToProducingTurn,
+  acknowledgeChatFirstMaterializationReceipts,
+  beginBackendReconcile,
+  beginBackendReconcilesForOwner,
+  clearJournalConversation,
+  classifyBackendTurnResultDisposition,
+  drainBackendConversationDeleteOutbox,
+  drainBackendTurnOutbox,
+  drainChatFirstDeferralOutbox,
+  failBackendTurnOutbox,
+  failBackendReconcile,
+  getJournalObservability,
+  importRemoteJournalTurn,
+  journalTurnForSurfaceProjection,
+  journalTurnChangedWakes,
+  listJournalTurns,
+  listChatFirstMaterializationReceipts,
+  materializeChatFirstIntent,
+  materializeChatFirstIntents,
+  migrateJournalConversation,
+  OUTBOX_CANONICAL_HASH_MISMATCH_CODE,
+  recordJournalExchange,
+  recordJournalTurn,
+  recordQuestionInteractionReply,
+  searchJournalConversation,
+  repairOrphanedJournalTurns,
+  settleClearedBackendTurnClaim,
+  settleChatFirstDeferralOutbox,
+  assertPublicJournalUpdatePolicy,
+  terminalizeJournalTurn,
+  updateJournalTurn,
+} from "../src/runtime/conversation-journal.js";
+import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
+import type { ConversationContentBlock, ConversationResource } from "../src/runtime/types.js";
+import { assertPublicJournalRecordAuthority } from "../src/protocol.js";
+
+const createdDirs: string[] = [];
+
+afterEach(() => {
+  for (const dir of createdDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+describe("kernel conversation journal", () => {
+  it("materializes each server intent once, persists its receipt, and stops at an unanswered tail question", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-materialization");
+    const first = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-open",
+      continuityKey: "intent-open",
+      source: "daily_opener",
+      blocks: [{ type: "taskCard", task_id: "task-1" }],
+      nowMs: 100,
+    });
+    expect(first).toMatchObject({
+      accepted: true,
+      duplicate: false,
+      turn: { role: "assistant", status: "completed", content: "" },
+      receipt: { intentId: "intent-open" },
+    });
+    expect(first.turn?.contentBlocks).toEqual([{ type: "taskCard", id: expect.any(String), taskId: "task-1" }]);
+
+    const replay = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-open",
+      continuityKey: "intent-open",
+      source: "daily_opener",
+      blocks: [{ type: "taskCard", task_id: "task-1" }],
+      nowMs: 101,
+    });
+    expect(replay).toMatchObject({ accepted: true, duplicate: true, turn: { turnId: first.turn?.turnId } });
+    expect(listChatFirstMaterializationReceipts(fixture.store, {
+      ownerId: fixture.ownerId, controlGeneration: 7,
+    })).toEqual({
+      materializationReceipts: [first.receipt],
+      coldStartSequenceTerminalReceipts: [],
+    });
+
+    recordTerminalQuestion(fixture, "tail-question", [
+      { optionId: "later", label: "Later", preparedAnswer: "Ask me later.", defer: true },
+    ], 102);
+    const suppressed = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-capture",
+      continuityKey: "intent-capture",
+      source: "capture_arrival",
+      blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }],
+      nowMs: 103,
+    });
+    expect(suppressed).toMatchObject({ accepted: false, suppressedByTailQuestion: true, turn: null, receipt: null });
+
+    expect(acknowledgeChatFirstMaterializationReceipts(fixture.store, {
+      ownerId: fixture.ownerId,
+      controlGeneration: 7,
+      receipts: [first.receipt!],
+      coldStartSequenceTerminalReceipts: [],
+    })).toBe(1);
+    expect(listChatFirstMaterializationReceipts(fixture.store, {
+      ownerId: fixture.ownerId, controlGeneration: 7,
+    })).toEqual({ materializationReceipts: [], coldStartSequenceTerminalReceipts: [] });
+    fixture.store.close();
+  });
+
+  it("materializes a meeting receipt with the exact conversation identity", () => {
+    const fixture = newSurface("main_chat", "chat", "meeting-arrival");
+    const result = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-meeting",
+      continuityKey: "capture:conversation-1",
+      source: "capture_arrival",
+      blocks: [{
+        type: "conversationLink",
+        conversation_id: "conversation-1",
+        summary: "Weekly planning",
+      }],
+      nowMs: 100,
+    });
+
+    expect(result.turn?.contentBlocks).toEqual([{
+      type: "conversationLink",
+      id: expect.any(String),
+      conversationId: "conversation-1",
+      summary: "Weekly planning",
+    }]);
+    expect(result.turn?.conversationId).toBe(fixture.conversationId);
+    expect(result).toMatchObject({
+      accepted: true,
+      duplicate: false,
+      receipt: { intentId: "intent-meeting" },
+    });
+    const duplicate = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-meeting",
+      continuityKey: "capture:conversation-1",
+      source: "capture_arrival",
+      blocks: [{
+        type: "conversationLink",
+        conversation_id: "conversation-1",
+        summary: "Weekly planning",
+      }],
+      nowMs: 101,
+    });
+    expect(duplicate).toMatchObject({
+      accepted: true,
+      duplicate: true,
+      turn: { conversationId: fixture.conversationId },
+      receipt: { intentId: "intent-meeting" },
+    });
+    fixture.store.close();
+  });
+
+  it("commits an ordered materialization batch once, stops after its question, and preserves a block-only outbox payload", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-batch");
+    const batch = materializeChatFirstIntents(fixture.store, [
+      {
+        ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 9,
+        intentId: "intent-first", continuityKey: "intent-first", source: "daily_opener",
+        blocks: [{ type: "taskCard", task_id: "task-1" }], nowMs: 100,
+      },
+      {
+        ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 9,
+        intentId: "intent-question", continuityKey: "intent-question", source: "deferral_reraise",
+        blocks: [{
+          type: "questionCard", question_id: "question-1", text: "Continue?",
+          subject: { kind: "goal", id: "goal-1" },
+          options: [{ option_id: "yes", label: "Yes", prepared_answer: "Yes" }],
+        }], nowMs: 101,
+      },
+      {
+        ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 9,
+        intentId: "intent-after-question", continuityKey: "intent-after-question", source: "capture_arrival",
+        blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }], nowMs: 102,
+      },
+    ]);
+
+    expect(batch.stoppedByTail).toBe(true);
+    expect(batch.results).toHaveLength(2);
+    expect(batch.results.map((result) => result.turn?.turnId)).toEqual([
+      expect.stringMatching(/^turn_cfi_/), expect.stringMatching(/^turn_cfi_/),
+    ]);
+    const deliveries = drainBackendTurnOutbox(fixture.store, { ownerId: fixture.ownerId, nowMs: 103 });
+    expect(deliveries).toHaveLength(2);
+    expect(deliveries.map((delivery) => delivery.payload.text)).toEqual(["", ""]);
+    expect(deliveries.every((delivery) => delivery.payload.metadata?.includes("content_blocks"))).toBe(true);
+
+    fixture.store.close();
+  });
+
+  it("suppresses a materialization batch behind a streaming assistant tail", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-streaming-tail");
+    recordStreamingAssistantPlaceholder(fixture, "streaming-tail");
+    const batch = materializeChatFirstIntents(fixture.store, [{
+      ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 4,
+      intentId: "intent-late", continuityKey: "intent-late", source: "capture_arrival",
+      blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }], nowMs: 100,
+    }]);
+    expect(batch).toMatchObject({ stoppedByTail: true, results: [{
+      accepted: false, suppressedByStreamingTail: true, turn: null,
+    }] });
+    fixture.store.close();
+  });
+
+  it("atomically binds the one current main-chat placeholder and replays validated chat-first blocks", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-append");
+    const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-append");
+    recordStreamingAssistantPlaceholder(fixture, "turn-chat-first-placeholder");
+    const blocks: ConversationContentBlock[] = [{
+      type: "taskCard",
+      id: "cfb-task-1",
+      taskId: "task-1",
+    }];
+
+    const appended = appendChatFirstBlocksToProducingTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      blocks,
+    });
+    const replayed = appendChatFirstBlocksToProducingTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      blocks,
+    });
+
+    expect(appended).toMatchObject({
+      turnId: "turn-chat-first-placeholder",
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      contentBlocks: blocks,
+    });
+    expect(replayed).toEqual(appended);
+    expect(listJournalTurns(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+    }).turns.at(-1)).toMatchObject({ contentBlocks: blocks });
+    fixture.store.close();
+  });
+
+  it("attaches only a ready local generated image to the producing Chat-first turn", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-evidence");
+    const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-evidence");
+    recordStreamingAssistantPlaceholder(fixture, "turn-chat-first-evidence");
+    const resource: ConversationResource = {
+      id: "rewind-evidence:abc",
+      origin: "generatedArtifact",
+      title: "Rewind evidence",
+      state: "ready",
+      mimeType: "image/jpeg",
+      uri: "file:///tmp/rewind-evidence.jpg",
+    };
+
+    const appended = appendChatFirstEvidenceToProducingTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      resource,
+    });
+    expect(appended).toMatchObject({
+      turnId: "turn-chat-first-evidence",
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      resources: [{ ...resource, runId: run.runId }],
+    });
+    const before = journalStorageSnapshot(fixture.store);
+    expect(() => appendChatFirstEvidenceToProducingTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      resource: { ...resource, id: "remote", uri: "https://example.com/evidence.jpg" },
+    })).toThrow(/local file URI/i);
+    expect(journalStorageSnapshot(fixture.store)).toEqual(before);
+
+    fixture.store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [run.runId]);
+    fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [attempt.attemptId]);
+    terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: appended.turnId,
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      disposition: "accept",
+      nowMs: 20,
+    });
+    const delivery = drainBackendTurnOutbox(fixture.store, { ownerId: fixture.ownerId, nowMs: 21 })
+      .find((candidate) => candidate.turnId === appended.turnId);
+    const projectedResources = JSON.parse(delivery!.payload.metadata!).resources;
+    expect(projectedResources).toEqual([{ ...resource, uri: undefined, runId: run.runId }]);
+    expect(delivery!.payload.metadata).not.toContain("/tmp/rewind-evidence.jpg");
+    fixture.store.close();
+  });
+
+  it("atomically records a selected question reply and its hidden pre-admitted continuation", () => {
+    const fixture = newSurface("main_chat", "chat", "question-select");
+    recordTerminalQuestion(fixture, "turn-question", [
+      { optionId: "focus", label: "Focus this", preparedAnswer: "Yes, I will focus this goal." },
+      { optionId: "later", label: "Ask me later", preparedAnswer: "Ask me again later.", defer: true },
+    ]);
+
+    const selected = recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "focus",
+      controlGeneration: 7,
+      nowMs: 100,
+    });
+
+    expect(selected).toMatchObject({
+      accepted: true,
+      duplicate: false,
+      userTurn: {
+        role: "user",
+        status: "completed",
+        content: "Yes, I will focus this goal.",
+      },
+      assistantTurn: {
+        role: "assistant",
+        status: "streaming",
+        content: "",
+      },
+    });
+    expect(JSON.parse(selected.assistantTurn!.metadataJson)).toMatchObject({
+      continuityKey: selected.continuityKey,
+      hiddenUntilOutput: true,
+    });
+    expect(selected.parentTurn?.contentBlocks).toContainEqual(expect.objectContaining({
+      type: "questionCard",
+      questionId: "question-1",
+      selectedOptionId: "focus",
+    }));
+    expect(currentJournalTurns(fixture).map((turn) => turn.role)).toEqual(["assistant", "user", "assistant"]);
+
+    // A retry returns the same canonical rows after its placeholder has become
+    // the tail; it cannot append a second ordinary user message.
+    expect(recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "focus",
+      controlGeneration: 7,
+      nowMs: 101,
+    })).toMatchObject({
+      accepted: true,
+      duplicate: true,
+      continuityKey: selected.continuityKey,
+      userTurn: { turnId: selected.userTurn?.turnId },
+      assistantTurn: { turnId: selected.assistantTurn?.turnId },
+    });
+    expect(fixture.store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turns WHERE conversation_id = ?",
+      [fixture.conversationId],
+    ).count).toBe(3);
+    fixture.store.close();
+  });
+
+  it("advances sparse cold start only after the selected normal answer terminalizes and retires on unrelated input", () => {
+    const fixture = newSurface("main_chat", "chat", "cold-start-sequence");
+    const first = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "cold-start-intent",
+      continuityKey: "cold-start:7",
+      source: "cold_start_sparse",
+      blocks: [{
+        type: "questionCard",
+        question_id: "cold-start:7:step:1",
+        text: "What matters now?",
+        subject: { kind: "cold_start", id: "cold-start:7" },
+        cold_start_sequence: { sequence_id: "cold-start:7", step: 1 },
+        options: [{ option_id: "progress", label: "Make progress", prepared_answer: "I want to make progress." }],
+      }],
+      nowMs: 10,
+    });
+    const selected = recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "cold-start:7:step:1",
+      optionId: "progress",
+      controlGeneration: 7,
+      nowMs: 20,
+    });
+    const { run, attempt } = insertActiveRunAttempt(fixture, "cold-start-sequence");
+    updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: selected.assistantTurn!.turnId,
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      nowMs: 21,
+    });
+    fixture.store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [run.runId]);
+    fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [attempt.attemptId]);
+    terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: selected.assistantTurn!.turnId,
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      disposition: "accept",
+      content: "Let us shape that together.",
+      nowMs: 22,
+    });
+    const turns = listJournalTurns(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+    }).turns;
+    expect(turns.at(-1)?.contentBlocks).toContainEqual(expect.objectContaining({
+      type: "questionCard",
+      questionId: "cold-start:7:step:2",
+      coldStartSequence: { sequenceId: "cold-start:7", step: 2 },
+    }));
+
+    const second = recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "cold-start:7:step:2",
+      optionId: "cold-start:7:goal:create",
+      controlGeneration: 7,
+      nowMs: 30,
+    });
+    const secondRunAttempt = insertActiveRunAttempt(fixture, "cold-start-sequence-step-2");
+    updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: second.assistantTurn!.turnId,
+      producingRunId: secondRunAttempt.run.runId,
+      producingAttemptId: secondRunAttempt.attempt.attemptId,
+      nowMs: 31,
+    });
+    fixture.store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [secondRunAttempt.run.runId]);
+    fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [secondRunAttempt.attempt.attemptId]);
+    terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: second.assistantTurn!.turnId,
+      producingRunId: secondRunAttempt.run.runId,
+      producingAttemptId: secondRunAttempt.attempt.attemptId,
+      disposition: "accept",
+      content: "I will turn that into a goal.",
+      nowMs: 32,
+    });
+
+    // Backend acknowledgements are journal revisions, not new conversation
+    // turns. Reproduce the live race by acknowledging the newly appended step
+    // three card first and the older step-two response last. The older response
+    // now has the highest revision sequence, but the step-three card remains
+    // the canonical user-visible tail and must stay actionable.
+    const stepThreeQuestion = currentJournalTurns(fixture).find((turn) => (
+      turn.contentBlocks.some((block) => (
+        block.type === "questionCard" && block.questionId === "cold-start:7:step:3"
+      ))
+    ));
+    expect(stepThreeQuestion).toBeDefined();
+    const claims = drainBackendTurnOutbox(fixture.store, { nowMs: 33 });
+    const stepThreeClaim = claims.find((claim) => claim.turnId === stepThreeQuestion!.turnId);
+    const olderResponseClaim = claims.find((claim) => claim.turnId === second.assistantTurn!.turnId);
+    expect(stepThreeClaim).toBeDefined();
+    expect(olderResponseClaim).toBeDefined();
+    for (const [claim, remoteId, nowMs] of [
+      [stepThreeClaim!, "remote-step-three-question", 34],
+      [olderResponseClaim!, "remote-step-two-response", 35],
+    ] as const) {
+      ackBackendTurnOutbox(fixture.store, {
+        ownerId: fixture.ownerId,
+        turnId: claim.turnId,
+        remoteId,
+        attemptCount: claim.attemptCount,
+        deliveryGeneration: claim.deliveryGeneration,
+        conversationGeneration: claim.conversationGeneration,
+        payloadHash: claim.payloadHash,
+        nowMs,
+      });
+    }
+    expect(fixture.store.getRow(
+      `SELECT turn_id FROM conversation_turns
+       WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
+      [fixture.conversationId],
+    ).turn_id).toBe(second.assistantTurn!.turnId);
+
+    const third = recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "cold-start:7:step:3",
+      optionId: "cold-start:7:tasks:draft",
+      controlGeneration: 7,
+      nowMs: 40,
+    });
+    const thirdRunAttempt = insertActiveRunAttempt(fixture, "cold-start-sequence-step-3");
+    updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: third.assistantTurn!.turnId,
+      producingRunId: thirdRunAttempt.run.runId,
+      producingAttemptId: thirdRunAttempt.attempt.attemptId,
+      nowMs: 41,
+    });
+    fixture.store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [thirdRunAttempt.run.runId]);
+    fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [thirdRunAttempt.attempt.attemptId]);
+    terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: third.assistantTurn!.turnId,
+      producingRunId: thirdRunAttempt.run.runId,
+      producingAttemptId: thirdRunAttempt.attempt.attemptId,
+      disposition: "accept",
+      content: "I will draft those first tasks.",
+      nowMs: 42,
+    });
+    expect(listChatFirstMaterializationReceipts(fixture.store, {
+      ownerId: fixture.ownerId, controlGeneration: 7,
+    }).coldStartSequenceTerminalReceipts).toEqual([
+      expect.objectContaining({ sequenceId: "cold-start:7", terminalState: "completed" }),
+    ]);
+
+    const unrelated = newSurface("main_chat", "chat", "cold-start-unrelated");
+    materializeChatFirstIntent(unrelated.store, {
+      ownerId: unrelated.ownerId,
+      conversationId: unrelated.conversationId,
+      controlGeneration: 7,
+      intentId: "cold-start-unrelated-intent",
+      continuityKey: "cold-start:7",
+      source: "cold_start_sparse",
+      blocks: [{
+        type: "questionCard",
+        question_id: "cold-start:7:step:1",
+        text: "What matters now?",
+        subject: { kind: "cold_start", id: "cold-start:7" },
+        cold_start_sequence: { sequence_id: "cold-start:7", step: 1 },
+        options: [{ option_id: "progress", label: "Make progress", prepared_answer: "I want to make progress." }],
+      }],
+      nowMs: 10,
+    });
+    recordJournalTurn(unrelated.store, {
+      ownerId: unrelated.ownerId,
+      conversationId: unrelated.conversationId,
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "Actually, help me with something else.",
+      contentBlocks: [{ type: "text", id: "unrelated:text", text: "Actually, help me with something else." }],
+      createdAtMs: 20,
+    });
+    const currentUnrelatedTurns = currentJournalTurns(unrelated);
+    expect(currentUnrelatedTurns.map((turn) => turn.role)).toEqual(["assistant", "user"]);
+    const retired = currentUnrelatedTurns[0]!.contentBlocks[0] as Extract<ConversationContentBlock, { type: "questionCard" }>;
+    expect(retired.coldStartSequence?.retired).toBe(true);
+    expect(listChatFirstMaterializationReceipts(unrelated.store, {
+      ownerId: unrelated.ownerId, controlGeneration: 7,
+    }).coldStartSequenceTerminalReceipts).toEqual([
+      expect.objectContaining({ sequenceId: "cold-start:7", terminalState: "abandoned" }),
+    ]);
+    expect(recordQuestionInteractionReply(unrelated.store, {
+      ownerId: unrelated.ownerId,
+      sessionId: unrelated.sessionId,
+      questionId: "cold-start:7:step:1",
+      optionId: "progress",
+      controlGeneration: 7,
+    })).toMatchObject({ accepted: false });
+    fixture.store.close();
+    unrelated.store.close();
+  });
+
+  it("rejects stale or conflicting question selections without mutating the journal", () => {
+    const fixture = newSurface("main_chat", "chat", "question-reject");
+    recordTerminalQuestion(fixture, "turn-question", [
+      { optionId: "one", label: "One", preparedAnswer: "Choose one." },
+      { optionId: "two", label: "Two", preparedAnswer: "Choose two." },
+    ]);
+    const beforeConflict = journalStorageSnapshot(fixture.store);
+    expect(recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "missing",
+      controlGeneration: 1,
+    })).toMatchObject({ accepted: false });
+    expect(journalStorageSnapshot(fixture.store)).toEqual(beforeConflict);
+
+    recordCompletedTextTurn(fixture, "turn-later", "A later assistant bubble", 99);
+    const beforeTailRejection = journalStorageSnapshot(fixture.store);
+    expect(recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "one",
+      controlGeneration: 1,
+    })).toMatchObject({ accepted: false });
+    expect(journalStorageSnapshot(fixture.store)).toEqual(beforeTailRejection);
+    fixture.store.close();
+  });
+
+  it("rolls back the selected parent when recording either continuation half cannot commit", () => {
+    const fixture = newSurface("main_chat", "chat", "question-atomic");
+    recordTerminalQuestion(fixture, "turn-question", [
+      { optionId: "focus", label: "Focus", preparedAnswer: "Focus this goal." },
+    ]);
+    const continuityKey = questionContinuityKey(
+      fixture.ownerId,
+      fixture.conversationId,
+      "question-1",
+      "focus",
+    );
+    const collidingUserTurnID = questionInteractionTurnID(continuityKey, "user");
+    const other = insertSurface(fixture.store, "main_chat", "chat", "question-collision");
+    // `turn_id` lookup is deliberately global for canonical identity. A prior
+    // incompatible row makes the child exchange fail after the parent update
+    // has begun, exercising the outer transaction's rollback boundary.
+    recordJournalTurn(fixture.store, {
+      ownerId: other.ownerId,
+      conversationId: other.conversationId,
+      turnId: collidingUserTurnID,
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "An incompatible historical turn.",
+      contentBlocks: [{ type: "text", id: "collision:text", text: "An incompatible historical turn." }],
+      createdAtMs: 1,
+    });
+    const before = journalStorageSnapshot(fixture.store);
+
+    expect(() => recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "focus",
+      controlGeneration: 1,
+    })).toThrow(/different journal content/i);
+    expect(journalStorageSnapshot(fixture.store)).toEqual(before);
+    fixture.store.close();
+  });
+
+  it("keeps Ask me later delivery in a durable deferral-only outbox across restart", () => {
+    const stateDir = newStateDir();
+    const store = new SqliteAgentStore({ stateDir, reconcileOnOpen: false });
+    const fixture = insertSurface(store, "main_chat", "chat", "question-deferral");
+    recordTerminalQuestion(fixture, "turn-question", [
+      { optionId: "later", label: "Ask me later", preparedAnswer: "Ask me again later.", defer: true },
+    ]);
+    const selected = recordQuestionInteractionReply(store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "later",
+      controlGeneration: 11,
+      nowMs: 200,
+    });
+    const [firstClaim] = drainChatFirstDeferralOutbox(store, { ownerId: fixture.ownerId, nowMs: 201 });
+    expect(firstClaim).toMatchObject({
+      continuityKey: selected.continuityKey,
+      controlGeneration: 11,
+      subject: { kind: "goal", id: "goal-1" },
+      question: expect.objectContaining({ questionId: "question-1" }),
+    });
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM chat_first_deferral_outbox").count).toBe(1);
+    store.close();
+
+    const reopened = new SqliteAgentStore({ stateDir });
+    const [recoveredClaim] = drainChatFirstDeferralOutbox(reopened, {
+      ownerId: fixture.ownerId,
+      nowMs: 202,
+    });
+    expect(recoveredClaim).toMatchObject({
+      continuityKey: firstClaim.continuityKey,
+      attemptCount: 2,
+    });
+    expect(settleChatFirstDeferralOutbox(reopened, {
+      ownerId: fixture.ownerId,
+      continuityKey: recoveredClaim.continuityKey,
+      deliveryGeneration: recoveredClaim.deliveryGeneration,
+      payloadHash: recoveredClaim.payloadHash,
+      ok: true,
+      nowMs: 203,
+    })).toBe(true);
+    expect(reopened.getRow(
+      "SELECT status FROM chat_first_deferral_outbox WHERE continuity_key = ?",
+      [recoveredClaim.continuityKey],
+    )).toEqual({ status: "delivered" });
+    reopened.close();
+  });
+
+  it("reclaims an expired Ask me later delivery lease with a new claim generation", () => {
+    const fixture = newSurface("main_chat", "chat", "question-deferral-expired-lease");
+    recordTerminalQuestion(fixture, "turn-question", [
+      { optionId: "later", label: "Ask me later", preparedAnswer: "Ask me again later.", defer: true },
+    ]);
+    const selected = recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "later",
+      controlGeneration: 11,
+      nowMs: 200,
+    });
+    const [firstClaim] = drainChatFirstDeferralOutbox(fixture.store, { ownerId: fixture.ownerId, nowMs: 201 });
+    const leaseExpiresAtMs = Number(fixture.store.getRow(
+      "SELECT lease_expires_at_ms FROM chat_first_deferral_outbox WHERE continuity_key = ?",
+      [selected.continuityKey],
+    ).lease_expires_at_ms);
+
+    expect(drainChatFirstDeferralOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: leaseExpiresAtMs - 1,
+    })).toEqual([]);
+    const [reclaimedClaim] = drainChatFirstDeferralOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: leaseExpiresAtMs,
+    });
+    expect(reclaimedClaim).toEqual(expect.objectContaining({
+      continuityKey: firstClaim.continuityKey,
+      attemptCount: 2,
+      deliveryGeneration: 2,
+    }));
+    // A late result for the expired claim cannot settle the replacement
+    // delivery. The reclaim preserves both the payload identity and the
+    // monotonic attempt/generation counters.
+    expect(settleChatFirstDeferralOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      continuityKey: firstClaim.continuityKey,
+      deliveryGeneration: firstClaim.deliveryGeneration,
+      payloadHash: firstClaim.payloadHash,
+      ok: true,
+      nowMs: leaseExpiresAtMs + 1,
+    })).toBe(false);
+    expect(settleChatFirstDeferralOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      continuityKey: reclaimedClaim.continuityKey,
+      deliveryGeneration: reclaimedClaim.deliveryGeneration,
+      payloadHash: reclaimedClaim.payloadHash,
+      ok: true,
+      nowMs: leaseExpiresAtMs + 2,
+    })).toBe(true);
+    expect(settleChatFirstDeferralOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      continuityKey: reclaimedClaim.continuityKey,
+      deliveryGeneration: reclaimedClaim.deliveryGeneration,
+      payloadHash: reclaimedClaim.payloadHash,
+      ok: true,
+      nowMs: leaseExpiresAtMs + 3,
+    })).toBe(false);
+    expect(fixture.store.getRow(
+      "SELECT status, attempt_count, delivery_generation FROM chat_first_deferral_outbox WHERE continuity_key = ?",
+      [reclaimedClaim.continuityKey],
+    )).toEqual({ status: "delivered", attempt_count: 2, delivery_generation: 2 });
+    fixture.store.close();
+  });
+
+  it("rejects wrong, non-main, stale, multiple, and missing chat-first targets without mutating journal rows", () => {
+    const block: ConversationContentBlock = { type: "taskCard", id: "cfb-rejected", taskId: "task-1" };
+    const cases: Array<{
+      name: string;
+      arrange: () => { fixture: SurfaceFixture; input: { ownerId: string; sessionId: string; runId: string; attemptId: string } };
+      error: RegExp;
+    }> = [
+      {
+        name: "wrong owner",
+        arrange: () => {
+          const fixture = newSurface("main_chat", "chat", "chat-first-wrong");
+          const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-wrong");
+          recordStreamingAssistantPlaceholder(fixture, "turn-wrong-owner");
+          return { fixture, input: { ownerId: "other-owner", sessionId: fixture.sessionId, runId: run.runId, attemptId: attempt.attemptId } };
+        },
+        error: /current owner-bound run attempt/i,
+      },
+      {
+        name: "non-main surface",
+        arrange: () => {
+          const fixture = newSurface("realtime_voice", "chat", "chat-first-non-main");
+          const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-non-main");
+          recordStreamingAssistantPlaceholder(fixture, "turn-non-main");
+          return { fixture, input: { ownerId: fixture.ownerId, sessionId: fixture.sessionId, runId: run.runId, attemptId: attempt.attemptId } };
+        },
+        error: /exactly one live producing assistant/i,
+      },
+      {
+        name: "superseded attempt",
+        arrange: () => {
+          const fixture = newSurface("main_chat", "chat", "chat-first-stale");
+          const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-stale");
+          fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [attempt.attemptId]);
+          recordStreamingAssistantPlaceholder(fixture, "turn-stale-attempt");
+          return { fixture, input: { ownerId: fixture.ownerId, sessionId: fixture.sessionId, runId: run.runId, attemptId: attempt.attemptId } };
+        },
+        error: /current owner-bound run attempt/i,
+      },
+      {
+        name: "multiple placeholders",
+        arrange: () => {
+          const fixture = newSurface("main_chat", "chat", "chat-first-multiple");
+          const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-multiple");
+          recordStreamingAssistantPlaceholder(fixture, "turn-multiple-one");
+          recordStreamingAssistantPlaceholder(fixture, "turn-multiple-two");
+          return { fixture, input: { ownerId: fixture.ownerId, sessionId: fixture.sessionId, runId: run.runId, attemptId: attempt.attemptId } };
+        },
+        error: /exactly one live producing assistant/i,
+      },
+      {
+        name: "missing placeholder",
+        arrange: () => {
+          const fixture = newSurface("main_chat", "chat", "chat-first-missing");
+          const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-missing");
+          return { fixture, input: { ownerId: fixture.ownerId, sessionId: fixture.sessionId, runId: run.runId, attemptId: attempt.attemptId } };
+        },
+        error: /exactly one live producing assistant/i,
+      },
+    ];
+
+    for (const testCase of cases) {
+      const { fixture, input } = testCase.arrange();
+      const before = journalStorageSnapshot(fixture.store);
+      expect(() => appendChatFirstBlocksToProducingTurn(fixture.store, { ...input, blocks: [block] }))
+        .toThrow(testCase.error);
+      expect(journalStorageSnapshot(fixture.store)).toEqual(before);
+      fixture.store.close();
+    }
+  });
+
+  it("searches the current journal generation with date bounds, excerpts, and a capped result count", () => {
+    const fixture = newSurface("main_chat", "chat", "history-search");
+    recordCompletedTextTurn(fixture, "search-old", "Decision: keep the ambient notes private.", 1_000);
+    recordCompletedTextTurn(fixture, "search-outside-range", "Decision: keep the ambient notes private.", 2_000);
+    for (let index = 0; index < 24; index += 1) {
+      recordCompletedTextTurn(fixture, `search-limit-${index}`, `Decision ${index}: keep the ambient notes private.`, 3_000 + index);
+    }
+
+    const dateFiltered = searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      query: "ambient notes",
+      startDate: new Date(1_000).toISOString(),
+      endDate: new Date(1_000).toISOString(),
+    });
+    expect(dateFiltered).toEqual([{
+      timestamp: new Date(1_000).toISOString(),
+      role: "assistant",
+      excerpt: "Decision: keep the ambient notes private.",
+    }]);
+
+    const capped = searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      query: "ambient notes",
+      limit: 999,
+    });
+    expect(capped).toHaveLength(20);
+    expect(capped[0]?.timestamp).toBe(new Date(3_023).toISOString());
+    expect(capped.every((match) => match.excerpt.length <= 322)).toBe(true);
+    expect(searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      query: "no matching journal text",
+    })).toEqual([]);
+    fixture.store.close();
+  });
+
+  it("keeps search owner-fenced and excludes a cleared journal generation", () => {
+    const fixture = newSurface("main_chat", "chat", "history-generation");
+    recordCompletedTextTurn(fixture, "search-cleared", "A private historic decision.", 1_000);
+    const other = insertSurface(fixture.store, "main_chat", "chat", "history-other", "other-owner");
+    recordJournalTurn(fixture.store, {
+      ownerId: other.ownerId,
+      conversationId: other.conversationId,
+      turnId: "search-other-owner",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "A private historic decision.",
+      contentBlocks: [],
+      createdAtMs: 1_001,
+    });
+
+    expect(() => searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: other.conversationId,
+      query: "private historic",
+    })).toThrow(/outside owner scope/i);
+    const cleared = clearJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      expectedGeneration: 1,
+      nowMs: 2_000,
+    });
+    recordCompletedTextTurn(fixture, "search-current", "A current private decision.", 2_001);
+    expect(searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      query: "historic decision",
+    })).toEqual([]);
+    expect(searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      query: "current private",
+    })).toEqual([{
+      timestamp: new Date(2_001).toISOString(),
+      role: "assistant",
+      excerpt: "A current private decision.",
+    }]);
+    expect(cleared.generation).toBe(2);
+    fixture.store.close();
+  });
+
+  it("never scans past the newest 500 current-generation journal turns", () => {
+    const fixture = newSurface("main_chat", "chat", "history-bounded");
+    recordCompletedTextTurn(fixture, "search-outside-window", "needle only in the oldest turn", 1_000);
+    for (let index = 0; index < 500; index += 1) {
+      recordCompletedTextTurn(fixture, `search-window-${index}`, `Recent non-match ${index}`, 2_000 + index);
+    }
+
+    expect(searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      query: "needle only",
+    })).toEqual([]);
+    fixture.store.close();
+  });
+
+  it("repairs an orphaned turn in its canonical conversation after the UI rebinds", () => {
+    const producingSurface = newSurface("main_chat", "chat", "repair-source");
+    const currentSurface = insertSurface(producingSurface.store, "main_chat", "chat", "repair-current");
+    recordJournalTurn(producingSurface.store, {
+      ownerId: producingSurface.ownerId,
+      conversationId: producingSurface.conversationId,
+      turnId: "turn-orphaned-after-rebind",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "partial",
+      contentBlocks: [{ type: "text", id: "partial", text: "partial" }],
+      createdAtMs: 2,
+    });
+    const activeRun = producingSurface.store.insertRun({
+      sessionId: producingSurface.sessionId,
+      runId: "run-active-during-repair",
+      clientId: "main-chat",
+      requestId: "active-during-repair",
+      status: "running",
+      mode: "act",
+    });
+    const activeAttempt = producingSurface.store.insertAttempt({
+      attemptId: "attempt-active-during-repair",
+      runId: activeRun.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "fake",
+      adapterInstanceId: "fake:repair",
+    });
+    recordJournalTurn(producingSurface.store, {
+      ownerId: producingSurface.ownerId,
+      conversationId: producingSurface.conversationId,
+      turnId: "turn-still-active",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "still running",
+      contentBlocks: [{ type: "text", id: "active", text: "still running" }],
+      producingRunId: activeRun.runId,
+      producingAttemptId: activeAttempt.attemptId,
+      createdAtMs: 2,
+    });
+
+    const repaired = repairOrphanedJournalTurns(producingSurface.store, {
+      ownerId: producingSurface.ownerId,
+      turnIds: [
+        "turn-orphaned-after-rebind",
+        "turn-orphaned-after-rebind",
+        "turn-still-active",
+        "missing",
+      ],
+      nowMs: 3,
+    });
+
+    expect(repaired).toMatchObject([{
+      conversationId: producingSurface.conversationId,
+      turnId: "turn-orphaned-after-rebind",
+      status: "failed",
+    }]);
+    expect(listJournalTurns(producingSurface.store, {
+      ownerId: producingSurface.ownerId,
+      conversationId: producingSurface.conversationId,
+    }).turns.find((turn) => turn.turnId === "turn-still-active")).toMatchObject({
+      status: "streaming",
+    });
+    expect(listJournalTurns(producingSurface.store, {
+      ownerId: producingSurface.ownerId,
+      conversationId: currentSurface.conversationId,
+    }).turns).toEqual([]);
+    producingSurface.store.close();
+  });
+
+  it("projects shared chat revisions through the requesting binding with owner-fenced wakes", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    const realtimeSession = fixture.store.insertSession({
+      ownerId: fixture.ownerId,
+      surfaceKind: "realtime_voice",
+      defaultAdapterId: "acp",
+    });
+    fixture.store.insertSurfaceConversation({
+      ownerId: fixture.ownerId,
+      surfaceKind: "realtime_voice",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      conversationId: fixture.conversationId,
+      agentSessionId: realtimeSession.sessionId,
+      createdAtMs: 2,
+      lastActiveAtMs: 2,
+    });
+    const recorded = recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-voice-spawn",
+      role: "assistant",
+      surfaceKind: "realtime_voice",
+      origin: "realtime_voice",
+      status: "completed",
+      content: "I started a background agent for that.",
+      contentBlocks: [{
+        type: "agentSpawn",
+        id: "spawn-voice",
+        sessionId: "session-child",
+        runId: "run-child",
+        title: "Memory insight",
+        objective: "Find a surprising memory insight",
+      }],
+      createdAtMs: 3,
+    }).turn;
+
+    const listed = listJournalTurns(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+    });
+    expect(listed.turns).toMatchObject([{ surfaceKind: "realtime_voice" }]);
+    expect(journalTurnForSurfaceProjection(listed.turns[0]!, "main_chat")).toMatchObject({
+      turnId: "turn-voice-spawn",
+      surfaceKind: "main_chat",
+      origin: "realtime_voice",
+    });
+    expect(recorded.surfaceKind).toBe("realtime_voice");
+
+    expect(journalTurnChangedWakes(fixture.store, fixture.ownerId, recorded)).toMatchObject([
+      {
+        ownerId: fixture.ownerId,
+        surfaceKind: "main_chat",
+        externalRefKind: "chat",
+        externalRefId: "default",
+        turn: { turnId: "turn-voice-spawn", surfaceKind: "main_chat" },
+      },
+      {
+        ownerId: fixture.ownerId,
+        surfaceKind: "realtime_voice",
+        externalRefKind: "chat",
+        externalRefId: "default",
+        turn: { turnId: "turn-voice-spawn", surfaceKind: "realtime_voice" },
+      },
+    ]);
+    fixture.store.close();
+  });
+
+  it("derives delivery from the canonical conversation and rejects surface spoofing", () => {
+    const store = new SqliteAgentStore({ stateDir: newStateDir(), reconcileOnOpen: false });
+    const main = insertSurface(store, "main_chat", "chat", "canonical-main");
+    const onboarding = insertSurface(store, "onboarding", "session", "canonical-onboarding");
+    const task = insertSurface(store, "task_chat", "task", "canonical-task");
+    const base = {
+      ownerId: main.ownerId,
+      role: "user" as const,
+      origin: "typed_chat" as const,
+      status: "completed" as const,
+      content: "Canonical delivery boundary",
+      contentBlocks: [{ type: "text" as const, id: "canonical:text", text: "Canonical delivery boundary" }],
+      createdAtMs: 1,
+    };
+
+    expect(recordJournalTurn(store, {
+      ...base,
+      conversationId: main.conversationId,
+      turnId: "turn-main",
+      surfaceKind: "main_chat",
+    })).toMatchObject({ created: true, outboxStatus: "pending" });
+    expect(recordJournalTurn(store, {
+      ...base,
+      conversationId: task.conversationId,
+      turnId: "turn-task",
+      surfaceKind: "task_chat",
+      origin: "task_chat",
+    })).toMatchObject({ created: true, outboxStatus: null });
+    expect(recordJournalTurn(store, {
+      ...base,
+      conversationId: onboarding.conversationId,
+      turnId: "turn-onboarding",
+      surfaceKind: "onboarding",
+    })).toMatchObject({ created: true, outboxStatus: null });
+    expect(() => recordJournalTurn(store, {
+      ...base,
+      conversationId: main.conversationId,
+      turnId: "turn-main-surface-spoof",
+      surfaceKind: "task_chat",
+      origin: "task_chat",
+    })).toThrow(/canonical conversation delivery boundary/i);
+
+    expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(3);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_turn_revisions").count).toBe(3);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM backend_turn_outbox").count).toBe(1);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_journal_state").count).toBe(3);
+    store.close();
+  });
+
+  it("rejects forged delivery before mutation and commits a valid backend exchange atomically", () => {
+    const fixture = newSurface("main_chat", "chat", "wire-authority");
+    expect(() => assertPublicJournalRecordAuthority({
+      turnId: "turn-forged",
+      role: "user",
+      delivery: "local",
+    })).toThrow(/delivery is kernel-owned/i);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(0);
+    const turns = [
+      {
+        turnId: "turn-wire-user",
+        role: "user" as const,
+        surfaceKind: "main_chat",
+        origin: "typed_chat" as const,
+        status: "completed" as const,
+        content: "Question",
+        contentBlocks: [] as ConversationContentBlock[],
+        createdAtMs: 1,
+      },
+      {
+        turnId: "turn-wire-assistant",
+        role: "assistant" as const,
+        surfaceKind: "main_chat",
+        origin: "typed_chat" as const,
+        status: "completed" as const,
+        content: "Answer",
+        contentBlocks: [] as ConversationContentBlock[],
+        createdAtMs: 2,
+      },
+    ];
+    turns.forEach(assertPublicJournalRecordAuthority);
+    expect(recordJournalExchange(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turns,
+    }).createdTurns).toHaveLength(2);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(2);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM backend_turn_outbox").count).toBe(2);
+    fixture.store.close();
+  });
+
+  it("rejects mixed exchange surfaces and mixed canonical delivery bindings atomically", () => {
+    const fixture = newSurface("main_chat", "chat", "mixed-delivery");
+    expect(() => recordJournalExchange(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turns: [
+        {
+          turnId: "turn-mixed-user",
+          role: "user",
+          surfaceKind: "main_chat",
+          origin: "typed_chat",
+          status: "completed",
+          content: "User half",
+          contentBlocks: [],
+          createdAtMs: 1,
+        },
+        {
+          turnId: "turn-mixed-assistant",
+          role: "assistant",
+          surfaceKind: "task_chat",
+          origin: "task_chat",
+          status: "completed",
+          content: "Assistant half",
+          contentBlocks: [],
+          createdAtMs: 2,
+        },
+      ],
+    })).toThrow(/canonical conversation delivery boundary/i);
+
+    const localSession = fixture.store.insertSession({
+      ownerId: fixture.ownerId,
+      surfaceKind: "task_chat",
+      defaultAdapterId: "acp",
+    });
+    fixture.store.insertSurfaceConversation({
+      ownerId: fixture.ownerId,
+      surfaceKind: "task_chat",
+      externalRefKind: "task",
+      externalRefId: "mixed-delivery-task",
+      conversationId: fixture.conversationId,
+      agentSessionId: localSession.sessionId,
+      createdAtMs: 3,
+      lastActiveAtMs: 3,
+    });
+    expect(() => recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-mixed-canonical",
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "Must not commit",
+      contentBlocks: [],
+      createdAtMs: 4,
+    })).toThrow(/mixes local-only and backend-backed canonical surfaces/i);
+
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(0);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turn_revisions").count).toBe(0);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM backend_turn_outbox").count).toBe(0);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_journal_state").count).toBe(0);
+    fixture.store.close();
+  });
+
+  it("rejects a late realtime provider projection that collides with a canonical agent-spawn turn", () => {
+    const fixture = newSurface("main_chat", "chat", "voice-collision");
+    const run = fixture.store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_voice_collision",
+      clientId: "realtime",
+      requestId: "voice-collision",
+      status: "running",
+      mode: "act",
+    });
+    const continuityKey = "voice:strict-collision";
+    const turnId = `turn_${createHash("sha256")
+      .update(`${continuityKey}\0assistant`)
+      .digest("hex")
+      .slice(0, 32)}`;
+    const canonical = recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "realtime_voice",
+      status: "completed",
+      content: "I started the background agent.",
+      contentBlocks: [{
+        type: "agentSpawn",
+        id: "voice:spawn",
+        sessionId: fixture.sessionId,
+        runId: run.runId,
+        title: "Voice researcher",
+        objective: "Research the launch",
+      }],
+      resources: [],
+      producingRunId: run.runId,
+      metadataJson: JSON.stringify({ continuityKey }),
+      createdAtMs: 1,
+    });
+
+    expect(() => recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId,
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "realtime_voice",
+      status: "completed",
+      content: "Ordinary provider completion text",
+      contentBlocks: [],
+      resources: [],
+      metadataJson: JSON.stringify({ continuityKey }),
+      createdAtMs: 2,
+    })).toThrow(/identity collision has different journal content/i);
+    expect(fixture.store.getRow(
+      "SELECT content, content_blocks_json FROM conversation_turns WHERE turn_id = ?",
+      [turnId],
+    )).toEqual({
+      content: canonical.turn.content,
+      content_blocks_json: JSON.stringify(canonical.turn.contentBlocks),
+    });
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(1);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turn_revisions").count).toBe(1);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM backend_turn_outbox").count).toBe(1);
+    fixture.store.close();
+  });
+
+  it("terminalizes a producing turn from the exact canonical run attempt and replays idempotently", () => {
+    const fixture = newSurface("task_chat", "task", "terminal-success");
+    const run = fixture.store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_terminal_success",
+      clientId: "task-chat",
+      requestId: "terminal-success",
+      status: "succeeded",
+      mode: "act",
+    });
+    const attempt = fixture.store.insertAttempt({
+      attemptId: "att_terminal_success",
+      runId: run.runId,
+      attemptNo: 1,
+      status: "succeeded",
+      adapterId: "fake",
+      adapterInstanceId: "fake:terminal-success",
+    });
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-terminal-success",
+      role: "assistant",
+      surfaceKind: "task_chat",
+      origin: "task_chat",
+      status: "streaming",
+      content: "Working",
+      contentBlocks: [{ type: "text", id: "terminal:text", text: "Working" }],
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      createdAtMs: 10,
+    });
+    const terminalization = {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-terminal-success",
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      disposition: "accept" as const,
+      content: "Canonical result",
+      replaceContentBlocks: [{ type: "text" as const, id: "terminal:text", text: "Canonical result" }],
+      replaceResources: [{
+        id: "terminal:artifact",
+        origin: "generatedArtifact" as const,
+        title: "Canonical artifact",
+        state: "retained" as const,
+        artifactId: "artifact-terminal",
+        runId: run.runId,
+      }],
+      nowMs: 11,
+    };
+    const completed = terminalizeJournalTurn(fixture.store, terminalization);
+    expect(completed).toMatchObject({
+      status: "completed",
+      content: "Canonical result",
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      completedAtMs: 11,
+    });
+    const revisionCount = fixture.store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turn_revisions WHERE turn_id = ?",
+      [completed.turnId],
+    ).count;
+    expect(terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: completed.turnId,
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      disposition: "accept",
+      nowMs: 12,
+    })).toEqual(completed);
+    expect(terminalizeJournalTurn(fixture.store, { ...terminalization, nowMs: 13 })).toEqual(completed);
+    expect(fixture.store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turn_revisions WHERE turn_id = ?",
+      [completed.turnId],
+    ).count).toBe(revisionCount);
+    expect(() => terminalizeJournalTurn(fixture.store, {
+      ...terminalization,
+      content: "Conflicting replay",
+      nowMs: 14,
+    })).toThrow(/already terminalized with different canonical material/i);
+    fixture.store.close();
+  });
+
+  it("keeps one logical exchange durable across a lost terminal acknowledgement and relaunch", () => {
+    const stateDir = newStateDir();
+    const store = new SqliteAgentStore({ stateDir, reconcileOnOpen: false });
+    const fixture = insertSurface(store, "main_chat", "chat", "lost-terminal-ack");
+    // Keep these identical to ChatProvider.messageIds(forAttemptId:): the
+    // attempt is the user identity and its `-assistant` suffix is the peer.
+    const attemptId = "RELAUNCH-PERSIST-1784573311";
+    const userTurnId = attemptId;
+    const assistantTurnId = `${attemptId}-assistant`;
+    const fullText = "RELAUNCH-PERSIST-1784573311";
+    const preservedSpawn = {
+      type: "agentSpawn" as const,
+      id: "lost-ack:spawn",
+      sessionId: fixture.sessionId,
+      runId: "run_lost_terminal_ack",
+      title: "Durable child",
+      objective: "Preserve the child card across terminal replay",
+    };
+    const terminalResource = {
+      id: "artifact:lost-terminal-ack",
+      origin: "generatedArtifact" as const,
+      title: "durable-result.txt",
+      state: "retained" as const,
+      artifactId: "artifact-lost-terminal-ack",
+      sessionId: fixture.sessionId,
+      runId: "run_lost_terminal_ack",
+    };
+    const run = store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_lost_terminal_ack",
+      clientId: "main-chat",
+      requestId: attemptId,
+      status: "succeeded",
+      mode: "act",
+    });
+    const attempt = store.insertAttempt({
+      attemptId: "att_lost_terminal_ack",
+      runId: run.runId,
+      attemptNo: 1,
+      status: "succeeded",
+      adapterId: "fake",
+      adapterInstanceId: "fake:lost-terminal-ack",
+    });
+    const exchange = {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turns: [
+        {
+          turnId: userTurnId,
+          role: "user" as const,
+          surfaceKind: "main_chat",
+          origin: "typed_chat" as const,
+          status: "completed" as const,
+          content: "Echo the durable nonce.",
+          contentBlocks: [{ type: "text" as const, id: "lost-ack:user", text: "Echo the durable nonce." }],
+          createdAtMs: 10,
+        },
+        {
+          turnId: assistantTurnId,
+          role: "assistant" as const,
+          surfaceKind: "main_chat",
+          origin: "typed_chat" as const,
+          status: "streaming" as const,
+          content: "RELAUNCH-PERSIST-1",
+          contentBlocks: [
+            { type: "text" as const, id: "lost-ack:stream", text: "RELAUNCH-PERSIST-1" },
+            preservedSpawn,
+          ],
+          producingRunId: run.runId,
+          producingAttemptId: attempt.attemptId,
+          createdAtMs: 11,
+        },
+      ],
+    };
+
+    expect(recordJournalExchange(store, exchange).createdTurns).toHaveLength(2);
+    // The kernel committed before the caller lost its terminal RPC response.
+    // Replaying the same stable logical IDs is the bounded retry, not another write.
+    expect(recordJournalExchange(store, exchange).createdTurns).toHaveLength(0);
+    const terminalization = {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: assistantTurnId,
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      disposition: "accept" as const,
+      content: fullText,
+      replaceContentBlocks: [{
+        type: "text" as const,
+        id: "lost-ack:assistant",
+        text: fullText,
+      }],
+      replaceResources: [terminalResource],
+      nowMs: 12,
+    };
+    void terminalizeJournalTurn(store, terminalization); // terminal response lost after durable commit
+    expect(terminalizeJournalTurn(store, { ...terminalization, nowMs: 13 })).toMatchObject({
+      turnId: assistantTurnId,
+      status: "completed",
+    });
+    store.close();
+
+    const relaunched = new SqliteAgentStore({ stateDir, reconcileOnOpen: false });
+    // Durable logical rows own canonical identity; revisions are deliberately
+    // append-only and must replay in sequence rather than through an ad hoc Map.
+    expect(relaunched.allRows(
+      "SELECT turn_id, role, status FROM conversation_turns WHERE conversation_id = ? ORDER BY turn_id",
+      [fixture.conversationId],
+    )).toEqual([
+      { turn_id: userTurnId, role: "user", status: "completed" },
+      { turn_id: assistantTurnId, role: "assistant", status: "completed" },
+    ]);
+    const replay = listJournalTurns(relaunched, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+    }).turns;
+    expect(replay.map((turn) => [turn.turnId, turn.status])).toEqual([
+      [userTurnId, "completed"],
+      [assistantTurnId, "streaming"],
+      [assistantTurnId, "completed"],
+    ]);
+    const canonicalUser = relaunched.getRow(
+      "SELECT turn_id, role, status, content FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?",
+      [fixture.conversationId, userTurnId],
+    );
+    const canonicalAssistant = relaunched.getRow(
+      `SELECT turn_id, role, status, content, content_blocks_json, resources_json
+       FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?`,
+      [fixture.conversationId, assistantTurnId],
+    );
+    expect(canonicalUser).toMatchObject({
+      turn_id: userTurnId,
+      role: "user",
+      status: "completed",
+    });
+    expect(canonicalAssistant).toMatchObject({
+      turn_id: assistantTurnId,
+      role: "assistant",
+      status: "completed",
+      content: fullText,
+    });
+    expect(JSON.parse(String(canonicalAssistant.content_blocks_json))).toEqual([
+      { type: "text", id: "lost-ack:assistant", text: fullText },
+      preservedSpawn,
+    ]);
+    expect(JSON.parse(String(canonicalAssistant.resources_json))).toEqual([terminalResource]);
+    expect(String(canonicalAssistant.content)).not.toBe("RELAUNCH-PERSIST-1");
+    relaunched.close();
+  });
+
+  it("rejects stale, unknown, and nonterminal attempt proofs without mutating the turn", () => {
+    const fixture = newSurface("task_chat", "task", "terminal-authority");
+    const run = fixture.store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_terminal_authority",
+      clientId: "task-chat",
+      requestId: "terminal-authority",
+      status: "succeeded",
+      mode: "act",
+    });
+    const stale = fixture.store.insertAttempt({
+      attemptId: "att_terminal_stale",
+      runId: run.runId,
+      attemptNo: 1,
+      status: "failed",
+      adapterId: "fake",
+      adapterInstanceId: "fake:stale",
+    });
+    const latest = fixture.store.insertAttempt({
+      attemptId: "att_terminal_latest",
+      runId: run.runId,
+      attemptNo: 2,
+      status: "succeeded",
+      adapterId: "fake",
+      adapterInstanceId: "fake:latest",
+    });
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-terminal-authority",
+      role: "assistant",
+      surfaceKind: "task_chat",
+      origin: "task_chat",
+      status: "streaming",
+      content: "Unchanged",
+      contentBlocks: [],
+      producingRunId: run.runId,
+      producingAttemptId: latest.attemptId,
+      createdAtMs: 20,
+    });
+    const input = {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-terminal-authority",
+      producingRunId: run.runId,
+      producingAttemptId: stale.attemptId,
+      disposition: "accept" as const,
+      content: "Must not land",
+      replaceContentBlocks: [] as ConversationContentBlock[],
+      replaceResources: [] as ConversationResource[],
+      nowMs: 21,
+    };
+    const before = journalStorageSnapshot(fixture.store);
+    expect(() => terminalizeJournalTurn(fixture.store, input)).toThrow(/latest canonical run attempt/i);
+    expect(() => terminalizeJournalTurn(fixture.store, {
+      ...input,
+      producingAttemptId: "att_unknown",
+    })).toThrow(/unknown or outside owner scope/i);
+    expect(journalStorageSnapshot(fixture.store)).toEqual(before);
+
+    const completed = terminalizeJournalTurn(fixture.store, {
+      ...input,
+      producingAttemptId: latest.attemptId,
+      content: "Latest wins",
+      nowMs: 22,
+    });
+    expect(completed).toMatchObject({ status: "completed", producingAttemptId: latest.attemptId });
+    const after = journalStorageSnapshot(fixture.store);
+    expect(() => terminalizeJournalTurn(fixture.store, input)).toThrow(/latest canonical run attempt/i);
+    expect(journalStorageSnapshot(fixture.store)).toEqual(after);
+
+    const activeRun = fixture.store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_terminal_active",
+      clientId: "task-chat",
+      requestId: "terminal-active",
+      status: "running",
+      mode: "act",
+    });
+    const activeAttempt = fixture.store.insertAttempt({
+      attemptId: "att_terminal_active",
+      runId: activeRun.runId,
+      attemptNo: 1,
+      status: "running",
+      adapterId: "fake",
+      adapterInstanceId: "fake:active",
+    });
+    expect(() => terminalizeJournalTurn(fixture.store, {
+      ...input,
+      producingRunId: activeRun.runId,
+      producingAttemptId: activeAttempt.attemptId,
+    })).toThrow(/requires a terminal canonical run and attempt/i);
+    fixture.store.close();
+  });
+
+  it("maps a canonical cancelled run to a failed journal terminal state atomically", () => {
+    const fixture = newSurface("task_chat", "task", "terminal-cancelled");
+    const run = fixture.store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_terminal_cancelled",
+      clientId: "task-chat",
+      requestId: "terminal-cancelled",
+      status: "cancelled",
+      mode: "act",
+    });
+    const attempt = fixture.store.insertAttempt({
+      attemptId: "att_terminal_cancelled",
+      runId: run.runId,
+      attemptNo: 1,
+      status: "cancelled",
+      adapterId: "fake",
+      adapterInstanceId: "fake:cancelled",
+    });
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-terminal-cancelled",
+      role: "assistant",
+      surfaceKind: "task_chat",
+      origin: "task_chat",
+      status: "pending",
+      content: "",
+      contentBlocks: [],
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      createdAtMs: 30,
+    });
+    const failed = terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-terminal-cancelled",
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      disposition: "accept",
+      content: "Cancelled",
+      replaceContentBlocks: [{ type: "text", id: "cancelled:text", text: "Cancelled" }],
+      replaceResources: [],
+      nowMs: 31,
+    });
+    expect(failed).toMatchObject({
+      status: "failed",
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      content: "Cancelled",
+    });
+    fixture.store.close();
+  });
+
+  it("preserves kernel-owned agent blocks and resources across stale final accept replacement", () => {
+    const fixture = newSurface("main_chat", "chat", "monotonic-accept");
+    const run = fixture.store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_monotonic_accept",
+      clientId: "main-chat",
+      requestId: "monotonic-accept",
+      status: "succeeded",
+      mode: "act",
+    });
+    const attempt = fixture.store.insertAttempt({
+      attemptId: "att_monotonic_accept",
+      runId: run.runId,
+      attemptNo: 1,
+      status: "succeeded",
+      adapterId: "fake",
+      adapterInstanceId: "fake:monotonic",
+    });
+    const spawn: ConversationContentBlock = {
+      type: "agentSpawn",
+      id: "monotonic:spawn",
+      pillId: "pill-monotonic",
+      sessionId: "ses-child-monotonic",
+      runId: "run-child-monotonic",
+      title: "Child agent",
+      objective: "Preserve durable child state",
+    };
+    const completion: ConversationContentBlock = {
+      type: "agentCompletion",
+      id: "monotonic:completion",
+      pillId: "pill-monotonic",
+      sessionId: "ses-child-monotonic",
+      runId: "run-child-monotonic",
+      title: "Child agent",
+      promptSnippet: "Preserve durable child state",
+      output: "Child finished",
+      status: "completed",
+    };
+    const resource: ConversationResource = {
+      id: "monotonic:resource",
+      origin: "generatedArtifact",
+      title: "Child artifact",
+      state: "retained",
+      artifactId: "artifact-monotonic",
+      runId: "run-child-monotonic",
+    };
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-monotonic-accept",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "Early text",
+      contentBlocks: [{ type: "text", id: "monotonic:text", text: "Early text" }, spawn],
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      createdAtMs: 40,
+    });
+    updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-monotonic-accept",
+      appendContentBlocks: [completion],
+      appendResources: [resource],
+      nowMs: 41,
+    });
+
+    const terminal = terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-monotonic-accept",
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      disposition: "accept",
+      content: "Final text",
+      replaceContentBlocks: [{ type: "text", id: "monotonic:text", text: "Final text" }],
+      replaceResources: [],
+      nowMs: 42,
+    });
+    expect(terminal).toMatchObject({
+      status: "completed",
+      content: "Final text",
+      contentBlocks: [
+        { type: "text", id: "monotonic:text", text: "Final text" },
+        spawn,
+        completion,
+      ],
+      resources: [resource],
+    });
+
+    const lateCompletion: ConversationContentBlock = {
+      ...completion,
+      id: "monotonic:completion-late",
+      output: "Late durable completion",
+    };
+    const lateResource: ConversationResource = {
+      ...resource,
+      id: "monotonic:resource-late",
+      artifactId: "artifact-monotonic-late",
+    };
+    const append = {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: terminal.turnId,
+      appendContentBlocks: [lateCompletion],
+      appendResources: [lateResource],
+      nowMs: 43,
+    };
+    expect(() => assertPublicJournalUpdatePolicy(fixture.store, append)).not.toThrow();
+    expect(updateJournalTurn(fixture.store, append)).toMatchObject({
+      contentBlocks: expect.arrayContaining([lateCompletion]),
+      resources: expect.arrayContaining([lateResource]),
+    });
+    const beforeRejected = journalStorageSnapshot(fixture.store);
+    const replacement = {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: terminal.turnId,
+      content: "Late replacement",
+      replaceContentBlocks: [] as ConversationContentBlock[],
+      nowMs: 44,
+    };
+    expect(() => assertPublicJournalUpdatePolicy(fixture.store, replacement)).toThrow(
+      /only typed completion\/resource appends/i,
+    );
+    expect(journalStorageSnapshot(fixture.store)).toEqual(beforeRejected);
+    fixture.store.close();
+  });
+
+  it("rejects every queued public mutation after an exact discard without changing journal state", () => {
+    const fixture = newSurface("main_chat", "chat", "discard-guard");
+    const run = fixture.store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_discard_guard",
+      clientId: "main-chat",
+      requestId: "discard-guard",
+      status: "cancelled",
+      mode: "act",
+    });
+    const attempt = fixture.store.insertAttempt({
+      attemptId: "att_discard_guard",
+      runId: run.runId,
+      attemptNo: 1,
+      status: "cancelled",
+      adapterId: "fake",
+      adapterInstanceId: "fake:discard",
+    });
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-discard-guard",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "Do not resurrect",
+      contentBlocks: [{ type: "text", id: "discard:text", text: "Do not resurrect" }],
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      createdAtMs: 50,
+    });
+    terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-discard-guard",
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      disposition: "discard",
+      nowMs: 51,
+    });
+    const before = journalStorageSnapshot(fixture.store);
+    for (const update of [
+      { content: "Late delta" },
+      { status: "streaming" as const },
+      { replaceContentBlocks: [] as ConversationContentBlock[] },
+      { appendResources: [{
+        id: "discard:late-resource",
+        origin: "generatedArtifact" as const,
+        title: "Late",
+        state: "retained" as const,
+        runId: run.runId,
+      }] },
+    ]) {
+      expect(() => assertPublicJournalUpdatePolicy(fixture.store, {
+        ownerId: fixture.ownerId,
+        conversationId: fixture.conversationId,
+        turnId: "turn-discard-guard",
+        ...update,
+      })).toThrow(/rejects every public update/i);
+    }
+    expect(journalStorageSnapshot(fixture.store)).toEqual(before);
+    expect(fixture.store.getRow(
+      "SELECT status, last_error_code FROM backend_turn_outbox WHERE turn_id = ?",
+      ["turn-discard-guard"],
+    )).toEqual({ status: "failed", last_error_code: "discarded_terminal_projection" });
+    fixture.store.close();
+  });
+
+  it("rolls back the first visible turn when the second exchange turn is rejected", () => {
+    const fixture = newSurface("main_chat", "chat", "atomic-exchange");
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-assistant-collision",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "Original canonical answer",
+      contentBlocks: [],
+      createdAtMs: 1,
+    });
+
+    expect(() => recordJournalExchange(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turns: [
+        {
+          turnId: "turn-user-must-rollback",
+          role: "user",
+          surfaceKind: "main_chat",
+          origin: "typed_chat",
+          status: "completed",
+          content: "This must not survive alone",
+          contentBlocks: [],
+          createdAtMs: 2,
+        },
+        {
+          turnId: "turn-assistant-collision",
+          role: "assistant",
+          surfaceKind: "main_chat",
+          origin: "typed_chat",
+          status: "completed",
+          content: "Conflicting answer",
+          contentBlocks: [],
+          createdAtMs: 3,
+        },
+      ],
+    })).toThrow(/identity collision/i);
+
+    const visible = listJournalTurns(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      afterTurnSeq: 0,
+      limit: 100,
+    });
+    expect(visible.turns.map((turn) => turn.turnId)).toEqual(["turn-assistant-collision"]);
+    expect(drainBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      limit: 100,
+      nowMs: 10,
+    }).map((delivery) => delivery.turnId)).toEqual(["turn-assistant-collision"]);
+    fixture.store.close();
+  });
+
+  it("atomically migrates the complete typed revision graph, outbox identity, and runtime visibility", () => {
+    const databasePath = newDatabasePath();
+    let store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    const source = insertSurface(store, "main_chat", "chat", "legacy-task");
+    const destination = insertSurface(store, "main_chat", "chat", "canonical-workstream");
+    recordCompletedTextTurn(destination, "turn-existing", "Existing canonical turn", 10);
+    recordJournalTurn(store, {
+      ownerId: source.ownerId,
+      conversationId: source.conversationId,
+      turnId: "turn-migrated",
+      producerId: "producer:migrated",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "Drafting",
+      contentBlocks: [
+        { type: "text", id: "migrated:text", text: "Drafting" },
+        {
+          type: "agentSpawn",
+          id: "migrated:spawn",
+          sessionId: "ses-child",
+          runId: "run-child",
+          title: "Researcher",
+          objective: "Inspect the evidence",
+        },
+      ],
+      resources: [{
+        id: "resource:migrated",
+        origin: "generatedArtifact",
+        title: "Draft report",
+        state: "retained",
+        mimeType: "text/markdown",
+        uri: "file:///tmp/draft.md",
+        artifactId: "artifact-draft",
+        runId: "run-child",
+      }],
+      metadataJson: JSON.stringify({ marker: "preserve-me" }),
+      createdAtMs: 20,
+    });
+    updateJournalTurn(store, {
+      ownerId: source.ownerId,
+      conversationId: source.conversationId,
+      turnId: "turn-migrated",
+      status: "completed",
+      content: "Draft complete",
+      appendContentBlocks: [{ type: "text", id: "migrated:final", text: "Draft complete" }],
+      appendResources: [{
+        id: "resource:final",
+        origin: "generatedArtifact",
+        title: "Final report",
+        state: "retained",
+        mimeType: "text/markdown",
+        uri: "file:///tmp/final.md",
+        artifactId: "artifact-final",
+        runId: "run-child",
+      }],
+      nowMs: 21,
+    });
+    store.execute(
+      `UPDATE backend_turn_outbox
+       SET status = 'retrying', attempt_count = 2, delivery_generation = 3,
+           available_at_ms = 99, last_error_code = 'transient'
+       WHERE turn_id = 'turn-migrated'`,
+    );
+
+    const result = migrateJournalConversation(store, {
+      ownerId: source.ownerId,
+      sourceConversationId: source.conversationId,
+      destinationConversationId: destination.conversationId,
+      nowMs: 30,
+    });
+
+    expect(result).toMatchObject({ movedTurnCount: 1, movedRevisionCount: 2, movedOutboxCount: 1 });
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turns WHERE conversation_id = ?",
+      [source.conversationId],
+    ).count).toBe(0);
+    const current = store.getRow(
+      `SELECT status, content, content_blocks_json, resources_json, metadata_json, turn_seq
+       FROM conversation_turns WHERE conversation_id = ? AND turn_id = 'turn-migrated'`,
+      [destination.conversationId],
+    );
+    expect(current).toMatchObject({ status: "completed", content: "Draft complete" });
+    expect(JSON.parse(String(current.content_blocks_json))).toHaveLength(3);
+    expect(JSON.parse(String(current.resources_json))).toHaveLength(2);
+    expect(JSON.parse(String(current.metadata_json))).toMatchObject({ marker: "preserve-me" });
+    expect(store.getRow(
+      `SELECT conversation_id, status, attempt_count, delivery_generation,
+              conversation_generation, available_at_ms, last_error_code
+       FROM backend_turn_outbox WHERE turn_id = 'turn-migrated'`,
+    )).toMatchObject({
+      conversation_id: destination.conversationId,
+      status: "retrying",
+      attempt_count: 2,
+      delivery_generation: 3,
+      conversation_generation: result.destinationGeneration,
+      available_at_ms: 99,
+      last_error_code: "transient",
+    });
+    const visible = listJournalTurns(store, {
+      ownerId: source.ownerId,
+      conversationId: destination.conversationId,
+      limit: 20,
+    });
+    expect(visible.turns.map((turn) => turn.turnId)).toEqual([
+      "turn-existing",
+      "turn-migrated",
+      "turn-migrated",
+    ]);
+    expect(visible.turns.at(-1)).toMatchObject({
+      conversationId: destination.conversationId,
+      turnId: "turn-migrated",
+      status: "completed",
+      contentBlocks: expect.arrayContaining([{ type: "text", id: "migrated:final", text: "Draft complete" }]),
+      resources: expect.arrayContaining([expect.objectContaining({ id: "resource:final" })]),
+    });
+
+    store.close();
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    const afterRestart = listJournalTurns(store, {
+      ownerId: source.ownerId,
+      conversationId: destination.conversationId,
+      limit: 20,
+    });
+    expect(afterRestart.turns).toEqual(visible.turns);
+    expect(store.getRow(
+      "SELECT conversation_id FROM conversation_turns WHERE turn_id = 'turn-migrated'",
+    ).conversation_id).toBe(destination.conversationId);
+    store.close();
+  });
+
+  it("rolls back a destination identity collision without changing either journal byte-for-byte", () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+    const source = insertSurface(store, "main_chat", "chat", "collision-source");
+    const destination = insertSurface(store, "main_chat", "chat", "collision-destination");
+    recordJournalTurn(store, {
+      ownerId: source.ownerId,
+      conversationId: source.conversationId,
+      turnId: "turn-collision-source",
+      producerId: "producer:destination-collision",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "Source draft",
+      contentBlocks: [{ type: "text", id: "source:draft", text: "Source draft" }],
+      resources: [{
+        id: "source:resource",
+        origin: "generatedArtifact",
+        title: "Source artifact",
+        state: "retained",
+        mimeType: "text/plain",
+        uri: "file:///tmp/source-artifact.txt",
+        artifactId: "artifact-source",
+      }],
+      createdAtMs: 10,
+    });
+    updateJournalTurn(store, {
+      ownerId: source.ownerId,
+      conversationId: source.conversationId,
+      turnId: "turn-collision-source",
+      status: "completed",
+      content: "Source complete",
+      appendContentBlocks: [{ type: "text", id: "source:complete", text: "Source complete" }],
+      nowMs: 11,
+    });
+    recordJournalTurn(store, {
+      ownerId: destination.ownerId,
+      conversationId: destination.conversationId,
+      turnId: "turn-collision-destination",
+      producerId: "producer:destination-collision",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "Destination canonical turn",
+      contentBlocks: [{ type: "text", id: "destination:text", text: "Destination canonical turn" }],
+      createdAtMs: 12,
+    });
+    store.execute(
+      `UPDATE backend_turn_outbox
+       SET status = 'retrying', attempt_count = 4, delivery_generation = 2,
+           available_at_ms = 44, last_error_code = 'preserve_on_rollback'
+       WHERE turn_id = 'turn-collision-source'`,
+    );
+    const before = journalStorageSnapshot(store);
+
+    expect(() => migrateJournalConversation(store, {
+      ownerId: source.ownerId,
+      sourceConversationId: source.conversationId,
+      destinationConversationId: destination.conversationId,
+      nowMs: 100,
+    })).toThrow(/producer identity collision/i);
+
+    expect(journalStorageSnapshot(store)).toEqual(before);
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turn_revisions WHERE conversation_id = ?",
+      [source.conversationId],
+    ).count).toBe(2);
+    expect(store.getRow(
+      "SELECT status FROM backend_turn_outbox WHERE turn_id = 'turn-collision-source'",
+    ).status).toBe("retrying");
+    expect(store.getRow(
+      "SELECT content FROM conversation_turns WHERE conversation_id = ? AND turn_id = 'turn-collision-destination'",
+      [destination.conversationId],
+    ).content).toBe("Destination canonical turn");
+    store.close();
+  });
+
+  it("deduplicates retries by stable producer identity even when turn IDs differ", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    const input = {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      producerId: "producer:stable",
+      role: "assistant" as const,
+      surfaceKind: "main_chat",
+      origin: "agent_runtime" as const,
+      status: "completed" as const,
+      content: "Stable result",
+      contentBlocks: [{ type: "text" as const, id: "stable:text", text: "Stable result" }],
+      createdAtMs: 10,
+    };
+    const first = recordJournalTurn(fixture.store, { ...input, turnId: "turn-first" });
+    const retry = recordJournalTurn(fixture.store, { ...input, turnId: "turn-regenerated" });
+
+    expect(first).toMatchObject({ created: true, turn: { turnId: "turn-first" } });
+    expect(retry).toMatchObject({
+      created: false,
+      duplicate: true,
+      turn: { turnId: "turn-first", producerId: "producer:stable" },
+    });
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(1);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM backend_turn_outbox").count).toBe(1);
+    expect(() => recordJournalTurn(fixture.store, {
+      ...input,
+      turnId: "turn-collision",
+      content: "Conflicting result",
+      contentBlocks: [{ type: "text", id: "stable:text", text: "Conflicting result" }],
+    })).toThrow(/producer identity collision/);
+    fixture.store.close();
+  });
+
+  it("projects a typed pending turn immediately and leases it only after completion", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    const blocks: ConversationContentBlock[] = [
+      { type: "text", id: "block-text", text: "Working on it" },
+      {
+        type: "agentSpawn",
+        id: "block-spawn",
+        sessionId: "ses-child",
+        runId: "run-child",
+        title: "Researcher",
+        objective: "Inspect today's memories",
+      },
+    ];
+    const resources: ConversationResource[] = [{
+      id: "artifact:report",
+      origin: "generatedArtifact",
+      title: "Memory report",
+      state: "retained",
+      mimeType: "text/markdown",
+      uri: "file:///tmp/report.md",
+      artifactId: "art-report",
+      runId: "run-child",
+    }];
+
+    const recorded = recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-pending",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "pending",
+      content: "Working on it",
+      contentBlocks: blocks,
+      resources,
+      createdAtMs: 100,
+    });
+
+    expect(recorded).toMatchObject({ created: true, duplicate: false, outboxStatus: "pending" });
+    expect(listJournalTurns(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+    }).turns).toEqual([
+      expect.objectContaining({
+        turnId: "turn-pending",
+        status: "pending",
+        origin: "agent_runtime",
+        contentBlocks: blocks,
+        resources,
+      }),
+    ]);
+    expect(drainBackendTurnOutbox(fixture.store, { nowMs: 101 })).toEqual([]);
+
+    updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-pending",
+      status: "completed",
+      nowMs: 102,
+    });
+    const [delivery] = drainBackendTurnOutbox(fixture.store, { nowMs: 103 });
+    expect(delivery).toMatchObject({
+      turnId: "turn-pending",
+      clientMessageId: "turn-pending",
+      status: "delivering",
+      attemptCount: 1,
+      turn: { turnId: "turn-pending", status: "completed", contentBlocks: blocks, resources },
+    });
+    fixture.store.close();
+  });
+
+  it("quarantines a canonical-hash-mismatched outbox row instead of wedging the pump", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    // Two completed turns → two pending outbox rows.
+    recordCompletedTextTurn(fixture, "turn-poisoned", "First answer", 10);
+    recordCompletedTextTurn(fixture, "turn-healthy", "Second answer", 20);
+
+    // Simulate the durable corruption seen in the field: the stored outbox
+    // payload hash diverges from the canonical journal turn. Previously this
+    // threw out of the batch transaction, so the 1s pump re-selected the same
+    // row forever and never delivered any turn.
+    fixture.store.execute(
+      "UPDATE backend_turn_outbox SET payload_hash = ? WHERE turn_id = ?",
+      ["stale-divergent-hash", "turn-poisoned"],
+    );
+
+    const quarantined: string[] = [];
+    const deliveries = drainBackendTurnOutbox(fixture.store, {
+      nowMs: 30,
+      onQuarantine: (turnId) => quarantined.push(turnId),
+    });
+
+    // The healthy turn still delivers; the poisoned row is parked, not thrown.
+    expect(deliveries.map((d) => d.turnId)).toEqual(["turn-healthy"]);
+    expect(quarantined).toEqual(["turn-poisoned"]);
+    const parked = fixture.store.getRow(
+      "SELECT status, last_error_code FROM backend_turn_outbox WHERE turn_id = ?",
+      ["turn-poisoned"],
+    );
+    expect(parked).toMatchObject({
+      status: "failed",
+      last_error_code: OUTBOX_CANONICAL_HASH_MISMATCH_CODE,
+    });
+
+    // Re-draining does not re-select the parked row: the pump makes progress and
+    // stops hot-looping (no second quarantine, no throw).
+    const secondQuarantine: string[] = [];
+    const secondPass = drainBackendTurnOutbox(fixture.store, {
+      nowMs: 60,
+      onQuarantine: (turnId) => secondQuarantine.push(turnId),
+    });
+    expect(secondPass).toEqual([]);
+    expect(secondQuarantine).toEqual([]);
+
+    // A later legitimate mutation re-stamps the hash and re-arms delivery.
+    updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-poisoned",
+      content: "First answer, revised",
+      contentBlocks: [{ type: "text", id: "turn-poisoned:text", text: "First answer, revised" }],
+      status: "completed",
+      nowMs: 70,
+    });
+    const rearmed = drainBackendTurnOutbox(fixture.store, { nowMs: 80 });
+    expect(rearmed.map((d) => d.turnId)).toEqual(["turn-poisoned"]);
+    fixture.store.close();
+  });
+
+  it("acknowledges and reconciles a local canonical ID without a duplicate turn", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    const floatingSession = fixture.store.insertSession({
+      ownerId: fixture.ownerId,
+      surfaceKind: "floating_chat",
+      defaultAdapterId: "acp",
+    });
+    fixture.store.insertSurfaceConversation({
+      ownerId: fixture.ownerId,
+      surfaceKind: "floating_chat",
+      externalRefKind: "chat",
+      externalRefId: "notch",
+      conversationId: fixture.conversationId,
+      agentSessionId: floatingSession.sessionId,
+      createdAtMs: 2,
+      lastActiveAtMs: 2,
+    });
+    recordCompletedTextTurn(fixture, "turn-local", "One answer", 10);
+    const [claim] = drainBackendTurnOutbox(fixture.store, { nowMs: 11 });
+
+    const acknowledged = ackBackendTurnOutboxWithWakes(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: "turn-local",
+      remoteId: "remote-1",
+      attemptCount: claim.attemptCount,
+      deliveryGeneration: claim.deliveryGeneration,
+      conversationGeneration: claim.conversationGeneration,
+      payloadHash: claim.payloadHash,
+      nowMs: 12,
+    });
+    expect(acknowledged.outbox).toMatchObject({ status: "delivered", remoteId: "remote-1" });
+    expect(acknowledged.wakes).toMatchObject([
+      {
+        conversationGeneration: 1,
+        generationBaseTurnSeq: 0,
+        surfaceKind: "floating_chat",
+        externalRefKind: "chat",
+        externalRefId: "notch",
+        turn: { turnId: "turn-local", turnSeq: 2, remoteId: "remote-1", surfaceKind: "floating_chat" },
+      },
+      {
+        conversationGeneration: 1,
+        generationBaseTurnSeq: 0,
+        surfaceKind: "main_chat",
+        externalRefKind: "chat",
+        externalRefId: "default",
+        turn: { turnId: "turn-local", turnSeq: 2, remoteId: "remote-1", surfaceKind: "main_chat" },
+      },
+    ]);
+    expect(() => ackBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: "turn-local",
+      remoteId: "remote-1",
+      attemptCount: claim.attemptCount,
+      deliveryGeneration: claim.deliveryGeneration,
+      conversationGeneration: claim.conversationGeneration,
+      payloadHash: claim.payloadHash,
+      nowMs: 13,
+    })).toThrow(/active claimed generation/);
+
+    const reconciled = importRemoteJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      remoteId: "remote-1",
+      canonicalTurnId: "turn-local",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      content: "One answer",
+      contentBlocks: [{ type: "text", id: "ignored-remote-block", text: "One answer" }],
+      createdAtMs: 10,
+      nowMs: 14,
+      source: "backend_reconcile",
+    });
+    expect(reconciled).toMatchObject({ imported: false, reconciledLocal: true });
+    expect(reconciled.turn.turnId).toBe("turn-local");
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(1);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM backend_turn_outbox").count).toBe(1);
+    expect(drainBackendTurnOutbox(fixture.store, { nowMs: 15 })).toEqual([]);
+    fixture.store.close();
+  });
+
+  it("absorbs only a proven superseded backend turn claim after a journal revision", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    recordCompletedTextTurn(fixture, "turn-superseded", "revision one", 20);
+    const [revisionOneClaim] = drainBackendTurnOutbox(fixture.store, { nowMs: 21 });
+    updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-superseded",
+      content: "revision two",
+      nowMs: 22,
+    });
+    expect(fixture.store.getRow(
+      `SELECT status, attempt_count, delivery_generation, payload_hash
+       FROM backend_turn_outbox WHERE turn_id = ?`,
+      ["turn-superseded"],
+    )).toMatchObject({
+      status: "pending",
+      attempt_count: 0,
+      delivery_generation: revisionOneClaim.deliveryGeneration,
+    });
+    expect(classifyBackendTurnResultDisposition(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: revisionOneClaim.turnId,
+      conversationId: revisionOneClaim.conversationId,
+      attemptCount: revisionOneClaim.attemptCount,
+      deliveryGeneration: revisionOneClaim.deliveryGeneration,
+      conversationGeneration: revisionOneClaim.conversationGeneration,
+      payloadHash: revisionOneClaim.payloadHash,
+      ok: true,
+      remoteId: "remote-revision-one",
+    })).toBe("superseded");
+    expect(() => ackBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: revisionOneClaim.turnId,
+      remoteId: "remote-revision-one",
+      attemptCount: revisionOneClaim.attemptCount,
+      deliveryGeneration: revisionOneClaim.deliveryGeneration,
+      conversationGeneration: revisionOneClaim.conversationGeneration,
+      payloadHash: revisionOneClaim.payloadHash,
+    })).toThrow(/active claimed generation/);
+
+    const [revisionTwoClaim] = drainBackendTurnOutbox(fixture.store, { nowMs: 23 });
+    expect(revisionTwoClaim.deliveryGeneration).toBeGreaterThan(revisionOneClaim.deliveryGeneration);
+    expect(classifyBackendTurnResultDisposition(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: revisionOneClaim.turnId,
+      conversationId: revisionOneClaim.conversationId,
+      attemptCount: revisionOneClaim.attemptCount,
+      deliveryGeneration: revisionOneClaim.deliveryGeneration,
+      conversationGeneration: revisionOneClaim.conversationGeneration,
+      payloadHash: revisionOneClaim.payloadHash,
+      ok: true,
+      remoteId: "remote-revision-one",
+    })).toBe("superseded");
+    expect(classifyBackendTurnResultDisposition(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: revisionTwoClaim.turnId,
+      conversationId: revisionTwoClaim.conversationId,
+      attemptCount: revisionTwoClaim.attemptCount,
+      deliveryGeneration: revisionTwoClaim.deliveryGeneration,
+      conversationGeneration: revisionTwoClaim.conversationGeneration,
+      payloadHash: revisionTwoClaim.payloadHash,
+      ok: true,
+      remoteId: "remote-revision-two",
+    })).toBe("active");
+    expect(() => classifyBackendTurnResultDisposition(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: revisionOneClaim.turnId,
+      conversationId: revisionOneClaim.conversationId,
+      attemptCount: revisionOneClaim.attemptCount,
+      deliveryGeneration: revisionTwoClaim.deliveryGeneration,
+      conversationGeneration: revisionOneClaim.conversationGeneration,
+      payloadHash: revisionOneClaim.payloadHash,
+      ok: true,
+      remoteId: "forged-same-generation",
+    })).toThrow(/does not match the active claimed generation/i);
+
+    ackBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: revisionTwoClaim.turnId,
+      remoteId: "remote-revision-two",
+      attemptCount: revisionTwoClaim.attemptCount,
+      deliveryGeneration: revisionTwoClaim.deliveryGeneration,
+      conversationGeneration: revisionTwoClaim.conversationGeneration,
+      payloadHash: revisionTwoClaim.payloadHash,
+      nowMs: 24,
+    });
+    expect(classifyBackendTurnResultDisposition(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: revisionOneClaim.turnId,
+      conversationId: revisionOneClaim.conversationId,
+      attemptCount: revisionOneClaim.attemptCount,
+      deliveryGeneration: revisionOneClaim.deliveryGeneration,
+      conversationGeneration: revisionOneClaim.conversationGeneration,
+      payloadHash: revisionOneClaim.payloadHash,
+      ok: true,
+      remoteId: "remote-revision-one",
+    })).toBe("superseded");
+
+    const activeResult = {
+      ownerId: fixture.ownerId,
+      turnId: revisionTwoClaim.turnId,
+      conversationId: revisionTwoClaim.conversationId,
+      attemptCount: revisionTwoClaim.attemptCount,
+      deliveryGeneration: revisionTwoClaim.deliveryGeneration,
+      conversationGeneration: revisionTwoClaim.conversationGeneration,
+      payloadHash: revisionTwoClaim.payloadHash,
+      ok: true,
+      remoteId: "remote-revision-two",
+    } as const;
+    expect(() => classifyBackendTurnResultDisposition(fixture.store, {
+      ...activeResult,
+      ownerId: "other-owner",
+    })).toThrow(/owner does not match/i);
+    expect(() => classifyBackendTurnResultDisposition(fixture.store, {
+      ...activeResult,
+      conversationId: "other-conversation",
+    })).toThrow(/conversation does not match/i);
+    expect(() => classifyBackendTurnResultDisposition(fixture.store, {
+      ...activeResult,
+      deliveryGeneration: revisionTwoClaim.deliveryGeneration + 1,
+    })).toThrow(/future delivery generation/i);
+    expect(() => classifyBackendTurnResultDisposition(fixture.store, {
+      ...activeResult,
+      payloadHash: "sha256:forged-same-generation",
+    })).toThrow(/never a canonical journal revision/i);
+    fixture.store.close();
+  });
+
+  it("recognizes exact duplicate backend results but rejects conflicting replays", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    recordCompletedTextTurn(fixture, "turn-duplicate-success", "success", 30);
+    const [successClaim] = drainBackendTurnOutbox(fixture.store, { nowMs: 31 });
+    ackBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: successClaim.turnId,
+      remoteId: "remote-success",
+      attemptCount: successClaim.attemptCount,
+      deliveryGeneration: successClaim.deliveryGeneration,
+      conversationGeneration: successClaim.conversationGeneration,
+      payloadHash: successClaim.payloadHash,
+      nowMs: 32,
+    });
+    const successResult = {
+      ownerId: fixture.ownerId,
+      turnId: successClaim.turnId,
+      conversationId: successClaim.conversationId,
+      attemptCount: successClaim.attemptCount,
+      deliveryGeneration: successClaim.deliveryGeneration,
+      conversationGeneration: successClaim.conversationGeneration,
+      payloadHash: successClaim.payloadHash,
+      ok: true,
+      remoteId: "remote-success",
+    } as const;
+    expect(classifyBackendTurnResultDisposition(fixture.store, successResult)).toBe("duplicate");
+    expect(() => classifyBackendTurnResultDisposition(fixture.store, {
+      ...successResult,
+      remoteId: "conflicting-remote",
+    })).toThrow(/conflicts with the delivered result/i);
+
+    recordCompletedTextTurn(fixture, "turn-duplicate-failure", "failure", 33);
+    const [failureClaim] = drainBackendTurnOutbox(fixture.store, { nowMs: 34 });
+    failBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: failureClaim.turnId,
+      attemptCount: failureClaim.attemptCount,
+      deliveryGeneration: failureClaim.deliveryGeneration,
+      conversationGeneration: failureClaim.conversationGeneration,
+      payloadHash: failureClaim.payloadHash,
+      errorCode: "backend_sync_http_retryable",
+      nowMs: 35,
+    });
+    const failureResult = {
+      ownerId: fixture.ownerId,
+      turnId: failureClaim.turnId,
+      conversationId: failureClaim.conversationId,
+      attemptCount: failureClaim.attemptCount,
+      deliveryGeneration: failureClaim.deliveryGeneration,
+      conversationGeneration: failureClaim.conversationGeneration,
+      payloadHash: failureClaim.payloadHash,
+      ok: false,
+      errorCode: "backend_sync_http_retryable",
+    } as const;
+    expect(classifyBackendTurnResultDisposition(fixture.store, failureResult)).toBe("duplicate");
+    expect(() => classifyBackendTurnResultDisposition(fixture.store, {
+      ...failureResult,
+      errorCode: "different_failure",
+    })).toThrow(/conflicts with the settled result/i);
+    fixture.store.close();
+  });
+
+  it("requeues each newer canonical revision once and rejects stale delivery claims", () => {
+    const fixture = newSurface("main_chat", "chat", "revision-aware");
+    recordCompletedTextTurn(fixture, "turn-revision-aware", "Version one", 10);
+
+    const [firstClaim] = drainBackendTurnOutbox(fixture.store, { nowMs: 11 });
+    expect(firstClaim).toMatchObject({
+      attemptCount: 1,
+      deliveryGeneration: 1,
+      payload: { journalRevision: 1, text: "Version one" },
+    });
+    ackBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: firstClaim.turnId,
+      remoteId: "remote-revision-aware",
+      attemptCount: firstClaim.attemptCount,
+      deliveryGeneration: firstClaim.deliveryGeneration,
+      conversationGeneration: firstClaim.conversationGeneration,
+      payloadHash: firstClaim.payloadHash,
+      nowMs: 12,
+    });
+
+    const revised = updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: firstClaim.turnId,
+      content: "Version two",
+      replaceContentBlocks: [{ type: "text", id: "turn-revision-aware:text", text: "Version two" }],
+      nowMs: 13,
+    });
+    expect(revised.turnSeq).toBe(3);
+    expect(fixture.store.getRow(
+      `SELECT status, attempt_count, remote_id FROM backend_turn_outbox WHERE turn_id = ?`,
+      [firstClaim.turnId],
+    )).toEqual({ status: "pending", attempt_count: 0, remote_id: "remote-revision-aware" });
+    const beforeReplay = fixture.store.getRow(
+      `SELECT turn_seq, payload_hash FROM conversation_turns WHERE turn_id = ?`,
+      [firstClaim.turnId],
+    );
+    updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: firstClaim.turnId,
+      content: "Version two",
+      replaceContentBlocks: [{ type: "text", id: "turn-revision-aware:text", text: "Version two" }],
+      nowMs: 14,
+    });
+    expect(fixture.store.getRow(
+      `SELECT turn_seq, payload_hash FROM conversation_turns WHERE turn_id = ?`,
+      [firstClaim.turnId],
+    )).toEqual(beforeReplay);
+
+    const [secondClaim] = drainBackendTurnOutbox(fixture.store, { nowMs: 15 });
+    expect(secondClaim).toMatchObject({
+      attemptCount: 1,
+      deliveryGeneration: 2,
+      payload: {
+        journalRevision: revised.turnSeq,
+        text: "Version two",
+      },
+    });
+    expect(() => ackBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: firstClaim.turnId,
+      remoteId: "remote-revision-aware",
+      attemptCount: firstClaim.attemptCount,
+      deliveryGeneration: firstClaim.deliveryGeneration,
+      conversationGeneration: firstClaim.conversationGeneration,
+      payloadHash: firstClaim.payloadHash,
+      nowMs: 16,
+    })).toThrow(/active claimed generation/);
+    ackBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: secondClaim.turnId,
+      remoteId: "remote-revision-aware",
+      attemptCount: secondClaim.attemptCount,
+      deliveryGeneration: secondClaim.deliveryGeneration,
+      conversationGeneration: secondClaim.conversationGeneration,
+      payloadHash: secondClaim.payloadHash,
+      nowMs: 17,
+    });
+    expect(drainBackendTurnOutbox(fixture.store, { nowMs: 18 })).toEqual([]);
+
+    const newest = updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: firstClaim.turnId,
+      content: "Version three",
+      nowMs: 19,
+    });
+    const [thirdClaim] = drainBackendTurnOutbox(fixture.store, { nowMs: 20 });
+    expect(thirdClaim.payload.journalRevision).toBe(newest.turnSeq);
+    expect(thirdClaim.payload.journalRevision).toBeGreaterThan(secondClaim.payload.journalRevision);
+    expect(thirdClaim.deliveryGeneration).toBe(3);
+    fixture.store.close();
+  });
+
+  it("converges a newer revision after the first backend acknowledgement is lost", () => {
+    const fixture = newSurface("main_chat", "chat", "lost-ack");
+    recordCompletedTextTurn(fixture, "turn-lost-ack", "Initial projection", 30);
+    const [lostAckClaim] = drainBackendTurnOutbox(fixture.store, { nowMs: 31, leaseMs: 60_000 });
+    expect(lostAckClaim.payload).toMatchObject({
+      clientMessageId: "turn-lost-ack",
+      journalRevision: 1,
+      text: "Initial projection",
+    });
+
+    const enriched = updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: lostAckClaim.turnId,
+      content: "Enriched projection",
+      nowMs: 32,
+    });
+    expect(fixture.store.getRow(
+      `SELECT status, attempt_count, delivery_generation, remote_id
+       FROM backend_turn_outbox WHERE turn_id = ?`,
+      [lostAckClaim.turnId],
+    )).toEqual({ status: "pending", attempt_count: 0, delivery_generation: 1, remote_id: null });
+
+    const [retry] = drainBackendTurnOutbox(fixture.store, { nowMs: 33 });
+    expect(retry).toMatchObject({
+      attemptCount: 1,
+      deliveryGeneration: 2,
+      payload: {
+        clientMessageId: lostAckClaim.payload.clientMessageId,
+        journalRevision: enriched.turnSeq,
+        text: "Enriched projection",
+      },
+    });
+    expect(() => ackBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: lostAckClaim.turnId,
+      remoteId: "remote-lost-ack",
+      attemptCount: lostAckClaim.attemptCount,
+      deliveryGeneration: lostAckClaim.deliveryGeneration,
+      conversationGeneration: lostAckClaim.conversationGeneration,
+      payloadHash: lostAckClaim.payloadHash,
+      nowMs: 34,
+    })).toThrow(/active claimed generation/);
+    expect(ackBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: retry.turnId,
+      remoteId: "remote-lost-ack",
+      attemptCount: retry.attemptCount,
+      deliveryGeneration: retry.deliveryGeneration,
+      conversationGeneration: retry.conversationGeneration,
+      payloadHash: retry.payloadHash,
+      nowMs: 35,
+    })).toMatchObject({ status: "delivered", remoteId: "remote-lost-ack" });
+    fixture.store.close();
+  });
+
+  it("requeues an in-flight backend delivery on daemon restart", () => {
+    const databasePath = newDatabasePath();
+    let now = 100;
+    let store = new SqliteAgentStore({ databasePath, nowMs: () => now });
+    const fixture = insertSurface(store, "main_chat", "chat", "default");
+    recordCompletedTextTurn(fixture, "turn-restart", "Persist me", now);
+    expect(drainBackendTurnOutbox(store, { nowMs: now, leaseMs: 60_000 })[0]).toMatchObject({
+      status: "delivering",
+      attemptCount: 1,
+    });
+    store.close();
+
+    now = 101;
+    store = new SqliteAgentStore({ databasePath, nowMs: () => now });
+    expect(store.getRow(
+      "SELECT status, last_error_code FROM backend_turn_outbox WHERE turn_id = ?",
+      ["turn-restart"],
+    )).toEqual({ status: "retrying", last_error_code: "daemon_restart" });
+    expect(drainBackendTurnOutbox(store, { nowMs: now })[0]).toMatchObject({
+      turnId: "turn-restart",
+      status: "delivering",
+      attemptCount: 2,
+    });
+    store.close();
+  });
+
+  it("repairs a startup-terminalized turn before it can starve later backend chat sync", () => {
+    const databasePath = newDatabasePath();
+    let store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 100 });
+    const fixture = insertSurface(store, "main_chat", "chat", "restart-outbox");
+    recordCompletedTextTurn(fixture, "turn-already-delivered", "Do not resend", 5);
+    const [deliveredClaim] = drainBackendTurnOutbox(store, { nowMs: 6 });
+    ackBackendTurnOutbox(store, {
+      ownerId: fixture.ownerId,
+      turnId: deliveredClaim.turnId,
+      remoteId: "remote-already-delivered",
+      attemptCount: deliveredClaim.attemptCount,
+      deliveryGeneration: deliveredClaim.deliveryGeneration,
+      conversationGeneration: deliveredClaim.conversationGeneration,
+      payloadHash: deliveredClaim.payloadHash,
+      nowMs: 7,
+    });
+    const run = store.insertRun({
+      sessionId: fixture.sessionId,
+      clientId: "client",
+      requestId: "interrupted-after-run-success",
+      status: "succeeded",
+      mode: "ask",
+      completedAtMs: 11,
+    });
+    const attempt = store.insertAttempt({
+      runId: run.runId,
+      attemptNo: 1,
+      status: "succeeded",
+      adapterId: "acp",
+      adapterInstanceId: "",
+      completedAtMs: 11,
+    });
+    recordJournalTurn(store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-interrupted",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "streaming",
+      content: "",
+      contentBlocks: [],
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      createdAtMs: 10,
+    });
+    const staleHash = String(store.getRow(
+      "SELECT payload_hash FROM backend_turn_outbox WHERE turn_id = ?",
+      ["turn-interrupted"],
+    ).payload_hash);
+    store.close();
+
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 20 });
+    expect(store.reconcileStartup()).toMatchObject({
+      reconciledJournalTurnIds: ["turn-interrupted"],
+      repairedBackendTurnOutboxIds: ["turn-interrupted"],
+    });
+    const repairedOutbox = store.getRow(
+      "SELECT status, last_error_code, payload_hash FROM backend_turn_outbox WHERE turn_id = ?",
+      ["turn-interrupted"],
+    );
+    expect(repairedOutbox).toMatchObject({
+      status: "failed",
+      last_error_code: "empty_completed_turn_cancelled",
+    });
+    expect(repairedOutbox.payload_hash).not.toBe(staleHash);
+    expect(store.getRow(
+      "SELECT status, remote_id FROM backend_turn_outbox WHERE turn_id = ?",
+      ["turn-already-delivered"],
+    )).toEqual({
+      status: "delivered",
+      remote_id: "remote-already-delivered",
+    });
+
+    const resumedFixture = {
+      store,
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      conversationId: fixture.conversationId,
+    };
+    recordCompletedTextTurn(resumedFixture, "turn-after-restart", "Chat still syncs", 30);
+    expect(drainBackendTurnOutbox(store, { nowMs: 31 })).toMatchObject([
+      {
+        turnId: "turn-after-restart",
+        payload: { text: "Chat still syncs" },
+      },
+    ]);
+    store.close();
+  });
+
+  it("reconciles a backend row visible before outbox ACK into the canonical turn in place", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    const run = fixture.store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run_pre_ack",
+      clientId: "client",
+      requestId: "pre-ack",
+      status: "running",
+      mode: "act",
+    });
+    const spawn: ConversationContentBlock = {
+      type: "agentSpawn",
+      id: "spawn:pre-ack",
+      pillId: "pill-pre-ack",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      title: "Preserved agent",
+      objective: "Preserve structured content",
+    };
+    const resource: ConversationResource = {
+      id: "artifact:pre-ack",
+      origin: "generatedArtifact",
+      title: "Preserved artifact",
+      state: "retained",
+      artifactId: "art-pre-ack",
+      runId: run.runId,
+    };
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-pre-ack",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "completed",
+      content: "Agent accepted",
+      contentBlocks: [spawn],
+      resources: [resource],
+      producingRunId: run.runId,
+      createdAtMs: 20,
+    });
+    expect(fixture.store.getRow(
+      "SELECT status FROM backend_turn_outbox WHERE turn_id = 'turn-pre-ack'",
+    )).toEqual({ status: "pending" });
+
+    const request = beginBackendReconcile(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      nowMs: 21,
+    })!;
+    const page = applyBackendReconcilePage(fixture.store, {
+      ...request,
+      turns: [{
+        remoteId: "remote-pre-ack",
+        canonicalTurnId: "turn-pre-ack",
+        role: "assistant",
+        content: "Backend projection text must not replace canonical content",
+        contentBlocks: [{ type: "text", id: "remote:text", text: "ignored" }],
+        resources: [],
+        createdAtMs: 20,
+      }],
+      hasMore: false,
+      nowMs: 22,
+    });
+    expect(page.importedTurns).toEqual([
+      expect.objectContaining({
+        turnId: "turn-pre-ack",
+        remoteId: "remote-pre-ack",
+        content: "Agent accepted",
+        contentBlocks: [spawn],
+        resources: [resource],
+      }),
+    ]);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(1);
+    expect(fixture.store.getRow(
+      "SELECT status, remote_id FROM backend_turn_outbox WHERE turn_id = 'turn-pre-ack'",
+    )).toEqual({ status: "delivered", remote_id: "remote-pre-ack" });
+    expect(drainBackendTurnOutbox(fixture.store, { ownerId: fixture.ownerId, nowMs: 23 })).toEqual([]);
+    fixture.store.close();
+  });
+
+  it("keeps queued and in-flight backend claims isolated across owner switches", () => {
+    const store = new SqliteAgentStore({ stateDir: newStateDir(), reconcileOnOpen: false });
+    const ownerA = insertSurface(store, "main_chat", "chat", "a", "owner-a");
+    const ownerB = insertSurface(store, "main_chat", "chat", "b", "owner-b");
+    recordCompletedTextTurn(ownerA, "turn-owner-a", "A", 10);
+    recordCompletedTextTurn(ownerB, "turn-owner-b", "B", 10);
+
+    const [claimA] = drainBackendTurnOutbox(store, { ownerId: ownerA.ownerId, nowMs: 11, leaseMs: 10 });
+    expect(claimA).toMatchObject({ turnId: "turn-owner-a", ownerId: "owner-a", status: "delivering" });
+    const [claimB] = drainBackendTurnOutbox(store, { ownerId: ownerB.ownerId, nowMs: 12 });
+    expect(claimB).toMatchObject({ turnId: "turn-owner-b", ownerId: "owner-b" });
+    expect(() => failBackendTurnOutbox(store, {
+      ownerId: ownerB.ownerId,
+      turnId: claimA.turnId,
+      attemptCount: claimA.attemptCount,
+      deliveryGeneration: claimA.deliveryGeneration,
+      conversationGeneration: claimA.conversationGeneration,
+      payloadHash: claimA.payloadHash,
+      errorCode: "backend_sync_owner_changed",
+      retryAtMs: 13,
+      nowMs: 13,
+    })).toThrow(/outside owner scope/);
+    expect(store.getRow(
+      "SELECT status FROM backend_turn_outbox WHERE turn_id = ?",
+      [claimA.turnId],
+    )).toEqual({ status: "delivering" });
+    expect(failBackendTurnOutbox(store, {
+      ownerId: ownerA.ownerId,
+      turnId: claimA.turnId,
+      attemptCount: claimA.attemptCount,
+      deliveryGeneration: claimA.deliveryGeneration,
+      conversationGeneration: claimA.conversationGeneration,
+      payloadHash: claimA.payloadHash,
+      errorCode: "backend_sync_owner_changed",
+      retryAtMs: 13,
+      nowMs: 13,
+    })).toMatchObject({ status: "retrying", ownerId: ownerA.ownerId });
+    expect(drainBackendTurnOutbox(store, { ownerId: ownerB.ownerId, nowMs: 13 })).toEqual([]);
+    expect(drainBackendTurnOutbox(store, { ownerId: ownerA.ownerId, nowMs: 13 })[0]).toMatchObject({
+      turnId: claimA.turnId,
+      ownerId: ownerA.ownerId,
+      attemptCount: 2,
+    });
+    store.close();
+  });
+
+  it("deduplicates genuinely remote rows by backend remote ID", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    const input = {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      remoteId: "remote-only-1",
+      role: "user" as const,
+      surfaceKind: "main_chat",
+      content: "Sent from another device",
+      contentBlocks: [{ type: "text" as const, id: "remote-text", text: "Sent from another device" }],
+      createdAtMs: 5,
+      nowMs: 6,
+      source: "backend_reconcile" as const,
+    };
+    const first = importRemoteJournalTurn(fixture.store, input);
+    const second = importRemoteJournalTurn(fixture.store, { ...input, nowMs: 7 });
+
+    expect(first).toMatchObject({ imported: true, reconciledLocal: false });
+    expect(second).toMatchObject({ imported: false, reconciledLocal: false });
+    expect(second.turn.turnId).toBe(first.turn.turnId);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(1);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM backend_turn_outbox").count).toBe(0);
+    fixture.store.close();
+  });
+
+  it("pages the complete backend history by stable remote ID and advances the frontier", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    const firstRequest = beginBackendReconcile(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      nowMs: 100,
+    })!;
+    expect(firstRequest).toMatchObject({
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      targetKind: "messages",
+      targetId: null,
+      frontierRemoteId: null,
+      pageCursor: null,
+      pageLimit: 100,
+    });
+
+    const firstPage = applyBackendReconcilePage(fixture.store, {
+      ...firstRequest,
+      turns: [remoteTurn("remote-3", 5), remoteTurn("remote-2", 50)],
+      hasMore: true,
+      nextCursor: "remote-2",
+      nowMs: 101,
+    });
+    expect(firstPage).toMatchObject({
+      completed: false,
+      importedTurns: [
+        expect.objectContaining({ remoteId: "remote-3" }),
+        expect.objectContaining({ remoteId: "remote-2" }),
+      ],
+      nextRequest: { pageCursor: "remote-2", frontierRemoteId: null },
+    });
+    const secondPage = applyBackendReconcilePage(fixture.store, {
+      ...firstPage.nextRequest!,
+      turns: [remoteTurn("remote-1", 1)],
+      hasMore: false,
+      nowMs: 102,
+    });
+    expect(secondPage).toMatchObject({ completed: true, nextRequest: null });
+    expect(fixture.store.getRow(
+      `SELECT status, frontier_remote_id, page_cursor, page_count
+       FROM backend_reconcile_state WHERE conversation_id = ?`,
+      [fixture.conversationId],
+    )).toEqual({ status: "idle", frontier_remote_id: "remote-3", page_cursor: null, page_count: 0 });
+
+    const incremental = beginBackendReconcile(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      nowMs: 200,
+    })!;
+    expect(incremental.frontierRemoteId).toBe("remote-3");
+    const incrementalPage = applyBackendReconcilePage(fixture.store, {
+      ...incremental,
+      turns: [remoteTurn("remote-4", 3), remoteTurn("remote-3", 500), remoteTurn("remote-2", 2)],
+      hasMore: true,
+      nowMs: 201,
+    });
+    expect(incrementalPage).toMatchObject({
+      completed: true,
+      nextRequest: null,
+      importedTurns: [expect.objectContaining({ remoteId: "remote-4" })],
+    });
+    expect(fixture.store.allRows(
+      "SELECT remote_id FROM conversation_turns ORDER BY remote_id ASC",
+    )).toEqual([
+      { remote_id: "remote-1" },
+      { remote_id: "remote-2" },
+      { remote_id: "remote-3" },
+      { remote_id: "remote-4" },
+    ]);
+    expect(fixture.store.getRow(
+      "SELECT frontier_remote_id FROM backend_reconcile_state WHERE conversation_id = ?",
+      [fixture.conversationId],
+    )).toEqual({ frontier_remote_id: "remote-4" });
+    fixture.store.close();
+  });
+
+  it("restarts backend reconciliation from its stable frontier and deduplicates replayed pages", () => {
+    const databasePath = newDatabasePath();
+    let store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    const fixture = insertSurface(store, "main_chat", "chat", "default");
+    const request = beginBackendReconcile(store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      nowMs: 300,
+    })!;
+    const firstPage = applyBackendReconcilePage(store, {
+      ...request,
+      turns: [remoteTurn("restart-3", 30), remoteTurn("restart-2", 20)],
+      hasMore: true,
+      nextCursor: "restart-2",
+      nowMs: 301,
+    });
+    expect(firstPage.nextRequest?.pageCursor).toBe("restart-2");
+    store.close();
+
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: true, nowMs: () => 302 });
+    expect(store.getRow(
+      `SELECT status, frontier_remote_id, page_cursor, last_error_code
+       FROM backend_reconcile_state WHERE conversation_id = ?`,
+      [fixture.conversationId],
+    )).toEqual({
+      status: "idle",
+      frontier_remote_id: null,
+      page_cursor: null,
+      last_error_code: "daemon_restart",
+    });
+    const replay = beginBackendReconcile(store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      nowMs: 303,
+    })!;
+    expect(replay).toMatchObject({ frontierRemoteId: null, pageCursor: null });
+    const replayedPage = applyBackendReconcilePage(store, {
+      ...replay,
+      turns: [remoteTurn("restart-3", 30), remoteTurn("restart-2", 20)],
+      hasMore: true,
+      nextCursor: "restart-2",
+      nowMs: 304,
+    });
+    expect(replayedPage.importedTurns).toEqual([]);
+    applyBackendReconcilePage(store, {
+      ...replayedPage.nextRequest!,
+      turns: [remoteTurn("restart-1", 10)],
+      hasMore: false,
+      nowMs: 305,
+    });
+    expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(3);
+    expect(store.getRow(
+      "SELECT status, frontier_remote_id FROM backend_reconcile_state WHERE conversation_id = ?",
+      [fixture.conversationId],
+    )).toEqual({ status: "idle", frontier_remote_id: "restart-3" });
+    store.close();
+  });
+
+  it("does not skip an older message when a newer row is inserted between cursor pages", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    const request = beginBackendReconcile(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      nowMs: 350,
+    })!;
+    const backendRows = [
+      remoteTurn("cursor-3", 30),
+      remoteTurn("cursor-2", 20),
+      remoteTurn("cursor-1", 10),
+    ];
+    const pageAfter = (cursor: string | null, limit: number) => {
+      const start = cursor === null ? 0 : backendRows.findIndex((turn) => turn.remoteId === cursor) + 1;
+      return backendRows.slice(start, start + limit);
+    };
+    const firstRows = pageAfter(request.pageCursor, 2);
+    const first = applyBackendReconcilePage(fixture.store, {
+      ...request,
+      turns: firstRows,
+      hasMore: true,
+      nextCursor: firstRows.at(-1)!.remoteId,
+      nowMs: 351,
+    });
+
+    // A mutable offset would now start at index 2 and replay cursor-2, skipping
+    // cursor-1. The stable start-after identity still begins after cursor-2.
+    backendRows.unshift(remoteTurn("cursor-4", 40));
+    const secondRows = pageAfter(first.nextRequest!.pageCursor, 2);
+    expect(secondRows.map((turn) => turn.remoteId)).toEqual(["cursor-1"]);
+    applyBackendReconcilePage(fixture.store, {
+      ...first.nextRequest!,
+      turns: secondRows,
+      hasMore: false,
+      nowMs: 352,
+    });
+    expect(fixture.store.allRows(
+      "SELECT remote_id FROM conversation_turns ORDER BY remote_id ASC",
+    )).toEqual([
+      { remote_id: "cursor-1" },
+      { remote_id: "cursor-2" },
+      { remote_id: "cursor-3" },
+    ]);
+    fixture.store.close();
+  });
+
+  it("rejects stale or cross-owner backend reconcile pages and permits exact inactive-owner failure", () => {
+    const store = new SqliteAgentStore({ stateDir: newStateDir(), reconcileOnOpen: false });
+    const ownerA = insertSurface(store, "main_chat", "chat", "a", "owner-a");
+    insertSurface(store, "main_chat", "chat", "b", "owner-b");
+    const request = beginBackendReconcile(store, {
+      ownerId: ownerA.ownerId,
+      conversationId: ownerA.conversationId,
+      nowMs: 400,
+    })!;
+    const page = { ...request, turns: [remoteTurn("owner-a-1", 1)], hasMore: false, nowMs: 401 };
+    expect(() => applyBackendReconcilePage(store, { ...page, ownerId: "owner-b" })).toThrow(/owner-scoped/);
+    expect(() => applyBackendReconcilePage(store, { ...page, reconcileId: "reconcile:stale" })).toThrow(
+      /owner-scoped/,
+    );
+    expect(() => applyBackendReconcilePage(store, { ...page, pageCursor: "wrong-cursor" })).toThrow(/owner-scoped/);
+    expect(() => failBackendReconcile(store, {
+      ownerId: "owner-b",
+      reconcileId: request.reconcileId,
+      conversationId: request.conversationId,
+      errorCode: "backend_sync_owner_changed",
+      nowMs: 402,
+    })).toThrow(/owner-scoped/);
+    failBackendReconcile(store, {
+      ownerId: ownerA.ownerId,
+      reconcileId: request.reconcileId,
+      conversationId: request.conversationId,
+      errorCode: "backend_sync_owner_changed",
+      nowMs: 403,
+    });
+    expect(store.getRow(
+      `SELECT owner_id, status, in_flight_id, last_error_code
+       FROM backend_reconcile_state WHERE conversation_id = ?`,
+      [request.conversationId],
+    )).toEqual({
+      owner_id: ownerA.ownerId,
+      status: "failed",
+      in_flight_id: null,
+      last_error_code: "backend_sync_owner_changed",
+    });
+    store.close();
+  });
+
+  it("schedules backend reads only on an explicit owner or main-chat refresh trigger", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    for (const nowMs of [500, 501, 502]) {
+      expect(drainBackendTurnOutbox(fixture.store, { ownerId: fixture.ownerId, nowMs })).toEqual([]);
+    }
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM backend_reconcile_state").count).toBe(0);
+
+    const [activation] = beginBackendReconcilesForOwner(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: 503,
+    });
+    expect(activation).toMatchObject({ conversationId: fixture.conversationId, pageCursor: null });
+    expect(beginBackendReconcilesForOwner(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      nowMs: 504,
+    })).toEqual([]);
+    applyBackendReconcilePage(fixture.store, {
+      ...activation,
+      turns: [],
+      hasMore: false,
+      nowMs: 505,
+    });
+    expect(beginBackendReconcilesForOwner(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      nowMs: 506,
+    })).toEqual([]);
+    expect(beginBackendReconcilesForOwner(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      nowMs: 5_504,
+    })).toHaveLength(1);
+    fixture.store.close();
+  });
+
+  it("generation-fences an in-flight remote page across clear and suppresses refresh until delete ACK", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    const request = beginBackendReconcile(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      nowMs: 600,
+    })!;
+    const cleared = clearJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      expectedGeneration: 1,
+      nowMs: 601,
+    });
+    expect(() => applyBackendReconcilePage(fixture.store, {
+      ...request,
+      turns: [remoteTurn("stale-after-clear", 1)],
+      hasMore: false,
+      nowMs: 602,
+    })).toThrow(/owner-scoped/);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(0);
+    expect(beginBackendReconcile(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      nowMs: 10_000,
+    })).toBeNull();
+    const [deleteClaim] = drainBackendConversationDeleteOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: 603,
+    });
+    expect(deleteClaim.operationId).toBe(cleared.backendDeleteOperationId);
+    ackBackendConversationDeleteOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      operationId: deleteClaim.operationId,
+      conversationGeneration: deleteClaim.conversationGeneration,
+      attemptCount: deleteClaim.attemptCount,
+      deliveryGeneration: deleteClaim.deliveryGeneration,
+      payloadHash: deleteClaim.payloadHash,
+      nowMs: 604,
+    });
+    expect(beginBackendReconcile(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      nowMs: 605,
+    })).toMatchObject({ frontierRemoteId: null, pageCursor: null });
+    fixture.store.close();
+  });
+
+  it("projects remote import wakes to exact app and session surface references", () => {
+    for (const externalRefId of ["default|app-123", "server-session-123"]) {
+      const fixture = newSurface("main_chat", "chat", externalRefId);
+      const request = beginBackendReconcile(fixture.store, {
+        ownerId: fixture.ownerId,
+        conversationId: fixture.conversationId,
+        nowMs: 700,
+      })!;
+      const page = applyBackendReconcilePage(fixture.store, {
+        ...request,
+        turns: [remoteTurn(`remote-${externalRefId}`, 1)],
+        hasMore: false,
+        nowMs: 701,
+      });
+      expect(journalTurnChangedWakes(fixture.store, fixture.ownerId, page.importedTurns[0]!)).toEqual([
+        expect.objectContaining({
+          surfaceKind: "main_chat",
+          externalRefKind: "chat",
+          externalRefId,
+          conversationGeneration: 1,
+          turn: expect.objectContaining({ remoteId: `remote-${externalRefId}`, surfaceKind: "main_chat" }),
+        }),
+      ]);
+      fixture.store.close();
+    }
+  });
+
+  it("keeps task and workstream turns in the same journal without backend outbox rows", () => {
+    const dir = newStateDir();
+    const store = new SqliteAgentStore({ stateDir: dir, reconcileOnOpen: false });
+    const task = insertSurface(store, "task_chat", "task", "task-1");
+    const workstream = insertSurface(store, "workstream", "workstream", "ws-1");
+
+    for (const [fixture, origin, turnId] of [
+      [task, "task_chat", "turn-task"],
+      [workstream, "workstream", "turn-workstream"],
+    ] as const) {
+      expect(recordJournalTurn(store, {
+        ownerId: fixture.ownerId,
+        conversationId: fixture.conversationId,
+        turnId,
+        role: "user",
+        surfaceKind: origin,
+        origin,
+        status: "completed",
+        content: `Local ${origin}`,
+        contentBlocks: [{ type: "text", id: `${turnId}:text`, text: `Local ${origin}` }],
+        createdAtMs: 20,
+      })).toMatchObject({ created: true, outboxStatus: null });
+    }
+    expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(2);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM backend_turn_outbox").count).toBe(0);
+    expect(recordJournalTurn(store, {
+      ownerId: task.ownerId,
+      conversationId: task.conversationId,
+      role: "user",
+      surfaceKind: "task_chat",
+      origin: "task_chat",
+      content: "Wrong destination",
+      contentBlocks: [{ type: "text", id: "wrong:text", text: "Wrong destination" }],
+    })).toMatchObject({ created: true, outboxStatus: null });
+    store.close();
+  });
+
+  it("adds agent completion and resources to the producing turn idempotently", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    const run = fixture.store.insertRun({
+      sessionId: fixture.sessionId,
+      runId: "run-producing",
+      clientId: "client",
+      requestId: "request",
+      status: "running",
+      mode: "act",
+      createdAtMs: 30,
+    });
+    const spawn: ConversationContentBlock = {
+      type: "agentSpawn",
+      id: "agent-spawn",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      title: "Memory agent",
+      objective: "Find an insight",
+    };
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-producing",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "pending",
+      content: "Agent running",
+      contentBlocks: [spawn],
+      producingRunId: run.runId,
+      createdAtMs: 31,
+    });
+    const completion: ConversationContentBlock = {
+      type: "agentCompletion",
+      id: "agent-completion",
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      title: "Memory agent",
+      promptSnippet: "Find an insight",
+      output: "The surprising insight",
+      status: "completed",
+    };
+    const resource: ConversationResource = {
+      id: "artifact:insight",
+      origin: "generatedArtifact",
+      title: "Insight",
+      state: "retained",
+      artifactId: "art-insight",
+      runId: run.runId,
+    };
+    for (const nowMs of [32, 33]) {
+      updateJournalTurn(fixture.store, {
+        ownerId: fixture.ownerId,
+        conversationId: fixture.conversationId,
+        turnId: "turn-producing",
+        status: "completed",
+        content: "The surprising insight",
+        appendContentBlocks: [completion],
+        appendResources: [resource],
+        nowMs,
+      });
+    }
+
+    const revisions = listJournalTurns(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+    }).turns;
+    const turn = revisions.at(-1)!;
+    expect(revisions.map((revision) => revision.status)).toEqual(["pending", "completed"]);
+    expect(turn).toMatchObject({
+      turnId: "turn-producing",
+      producingRunId: run.runId,
+      status: "completed",
+      contentBlocks: [spawn, completion],
+      resources: [resource],
+    });
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(1);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM backend_turn_outbox").count).toBe(1);
+    expect(drainBackendTurnOutbox(fixture.store, { nowMs: 34 })[0].turn).toMatchObject({
+      contentBlocks: [spawn, completion],
+      resources: [resource],
+    });
+    fixture.store.close();
+  });
+
+  it("keeps turn and outbox insertion idempotent and rejects same-ID collisions", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    const input = {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-idempotent",
+      role: "user" as const,
+      surfaceKind: "main_chat",
+      origin: "typed_chat" as const,
+      status: "completed" as const,
+      content: "Same logical turn",
+      contentBlocks: [{ type: "text" as const, id: "same:text", text: "Same logical turn" }],
+      createdAtMs: 50,
+    };
+    expect(recordJournalTurn(fixture.store, input)).toMatchObject({ created: true, duplicate: false });
+    expect(recordJournalTurn(fixture.store, input)).toMatchObject({ created: false, duplicate: true });
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(1);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM backend_turn_outbox").count).toBe(1);
+    expect(() => recordJournalTurn(fixture.store, { ...input, content: "Collision" })).toThrow(
+      "different journal content",
+    );
+    fixture.store.close();
+  });
+
+  it("retries bounded delivery failures and exposes state-only observability", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    recordCompletedTextTurn(fixture, "turn-retry", "Sensitive private content", 60);
+    const [claim] = drainBackendTurnOutbox(fixture.store, { nowMs: 61 });
+    expect(() => failBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: "turn-retry",
+      attemptCount: claim.attemptCount,
+      deliveryGeneration: claim.deliveryGeneration,
+      conversationGeneration: claim.conversationGeneration,
+      payloadHash: claim.payloadHash,
+      errorCode: "raw network error body",
+      retryAtMs: 70,
+    })).toThrow("bounded error code");
+    expect(failBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: "turn-retry",
+      attemptCount: claim.attemptCount,
+      deliveryGeneration: claim.deliveryGeneration,
+      conversationGeneration: claim.conversationGeneration,
+      payloadHash: claim.payloadHash,
+      errorCode: "network_unavailable",
+      retryAtMs: 70,
+      nowMs: 62,
+    })).toMatchObject({ status: "retrying", lastErrorCode: "network_unavailable" });
+    expect(drainBackendTurnOutbox(fixture.store, { nowMs: 69 })).toEqual([]);
+    expect(drainBackendTurnOutbox(fixture.store, { nowMs: 70 })[0]).toMatchObject({ attemptCount: 2 });
+
+    const health = getJournalObservability(fixture.store, { ownerId: fixture.ownerId });
+    expect(health).toEqual({
+      turnStatusCounts: { completed: 1 },
+      deliveryStatusCounts: { delivering: 1 },
+      oldestPendingDeliveryCreatedAtMs: 60,
+    });
+    expect(JSON.stringify(health)).not.toContain("Sensitive private content");
+    fixture.store.close();
+  });
+
+  it("keeps a monotonic generation base and hard-deletes stale delivery claims across clear", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    recordCompletedTextTurn(fixture, "turn-revision", "v1", 80);
+    const updated = updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-revision",
+      content: "v2",
+      nowMs: 81,
+    });
+    const beforeClear = listJournalTurns(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      afterTurnSeq: 0,
+    });
+    expect(beforeClear.turns.map((turn) => [turn.turnId, turn.content, turn.turnSeq])).toEqual([
+      ["turn-revision", "v1", 1],
+      ["turn-revision", "v2", 2],
+    ]);
+    expect(updated.turnSeq).toBe(2);
+    const [staleClaim] = drainBackendTurnOutbox(fixture.store, { nowMs: 82 });
+
+    const cleared = clearJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      expectedGeneration: 1,
+      nowMs: 83,
+    });
+    expect(cleared).toMatchObject({
+      generation: 2,
+      generationBaseTurnSeq: 3,
+      highWaterTurnSeq: 3,
+      deletedTurns: 1,
+      backendDeleteOperationId: `delete:${fixture.conversationId}:2`,
+    });
+    const empty = listJournalTurns(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      afterTurnSeq: cleared.generationBaseTurnSeq,
+    });
+    expect(empty).toMatchObject({ generation: 2, generationBaseTurnSeq: 3, turns: [] });
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(0);
+    expect(fixture.store.getRow("SELECT COUNT(*) AS count FROM backend_turn_outbox").count).toBe(0);
+    const [deleteClaim] = drainBackendConversationDeleteOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: 84,
+    });
+    expect(deleteClaim).toMatchObject({
+      operationId: cleared.backendDeleteOperationId!,
+      ownerId: fixture.ownerId,
+      conversationGeneration: 2,
+      targetKind: "messages",
+      targetId: null,
+      status: "delivering",
+    });
+    expect(() => ackBackendConversationDeleteOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      operationId: deleteClaim.operationId,
+      conversationGeneration: deleteClaim.conversationGeneration,
+      attemptCount: deleteClaim.attemptCount,
+      deliveryGeneration: deleteClaim.deliveryGeneration,
+      payloadHash: deleteClaim.payloadHash,
+      nowMs: 84,
+    })).toThrow(/prior turn claims/);
+    expect(settleClearedBackendTurnClaim(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: staleClaim.turnId,
+      conversationId: staleClaim.conversationId,
+      attemptCount: staleClaim.attemptCount,
+      deliveryGeneration: staleClaim.deliveryGeneration,
+      conversationGeneration: staleClaim.conversationGeneration,
+      payloadHash: staleClaim.payloadHash,
+      ok: true,
+      nowMs: 84,
+    })).toBe(true);
+    expect(ackBackendConversationDeleteOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      operationId: deleteClaim.operationId,
+      conversationGeneration: deleteClaim.conversationGeneration,
+      attemptCount: deleteClaim.attemptCount,
+      deliveryGeneration: deleteClaim.deliveryGeneration,
+      payloadHash: deleteClaim.payloadHash,
+      nowMs: 85,
+    })).toMatchObject({ status: "delivered" });
+    expect(() => ackBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: staleClaim.turnId,
+      remoteId: "late-remote-id",
+      attemptCount: staleClaim.attemptCount,
+      deliveryGeneration: staleClaim.deliveryGeneration,
+      conversationGeneration: staleClaim.conversationGeneration,
+      payloadHash: staleClaim.payloadHash,
+      nowMs: 84,
+    })).toThrow(/Unknown journal turn|no backend delivery/);
+    expect(() => clearJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      expectedGeneration: 1,
+    })).toThrow(/generation is stale/);
+    fixture.store.close();
+  });
+
+  it("orders clear barriers before a new-generation POST and settles the pre-clear physical claim", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    recordCompletedTextTurn(fixture, "turn-old", "Old", 100);
+    const [oldClaim] = drainBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: 101,
+      leaseMs: 1_000,
+    });
+    const cleared = clearJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      expectedGeneration: 1,
+      nowMs: 102,
+    });
+    recordCompletedTextTurn(fixture, "turn-new", "New", 103);
+    expect(drainBackendTurnOutbox(fixture.store, { ownerId: fixture.ownerId, nowMs: 104 })).toEqual([]);
+    const [deleteClaim] = drainBackendConversationDeleteOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: 104,
+    });
+    expect(deleteClaim).toMatchObject({ operationId: cleared.backendDeleteOperationId, conversationGeneration: 2 });
+    expect(settleClearedBackendTurnClaim(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: oldClaim.turnId,
+      conversationId: oldClaim.conversationId,
+      attemptCount: oldClaim.attemptCount,
+      deliveryGeneration: oldClaim.deliveryGeneration,
+      conversationGeneration: oldClaim.conversationGeneration,
+      payloadHash: oldClaim.payloadHash,
+      ok: true,
+      nowMs: 105,
+    })).toBe(true);
+    ackBackendConversationDeleteOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      operationId: deleteClaim.operationId,
+      conversationGeneration: deleteClaim.conversationGeneration,
+      attemptCount: deleteClaim.attemptCount,
+      deliveryGeneration: deleteClaim.deliveryGeneration,
+      payloadHash: deleteClaim.payloadHash,
+      nowMs: 106,
+    });
+    expect(drainBackendTurnOutbox(fixture.store, { ownerId: fixture.ownerId, nowMs: 107 })[0]).toMatchObject({
+      turnId: "turn-new",
+      conversationGeneration: 2,
+    });
+    fixture.store.close();
+  });
+
+  it("rejects a journal clear without an exact positive generation fence", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    expect(() => clearJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      expectedGeneration: undefined,
+    } as unknown as Parameters<typeof clearJournalConversation>[1])).toThrow(/positive integer/);
+    expect(listJournalTurns(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+    }).generation).toBe(1);
+    fixture.store.close();
+  });
+
+  it("enqueues session deletion targets instead of acknowledging a local-only clear", () => {
+    const fixture = newSurface("main_chat", "chat", "server-session-1");
+    const cleared = clearJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      expectedGeneration: 1,
+      nowMs: 90,
+    });
+    expect(cleared.backendDeleteOperationId).toBe(`delete:${fixture.conversationId}:2`);
+    expect(drainBackendConversationDeleteOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: 91,
+    })[0]).toMatchObject({
+      targetKind: "chat_session",
+      targetId: "server-session-1",
+    });
+    fixture.store.close();
+  });
+
+  it("local-only clear purges local turns without enqueuing a backend delete", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    recordCompletedTextTurn(fixture, "turn-local-only-1", "hello", 10);
+    const cleared = clearJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      expectedGeneration: 1,
+      nowMs: 90,
+      deleteBackend: false,
+    });
+    // Local turns are purged and the generation is fenced, but nothing is
+    // enqueued to delete the user's server-side chat history.
+    expect(cleared.deletedTurns).toBe(1);
+    expect(cleared.backendDeleteOperationId).toBeNull();
+    expect(drainBackendConversationDeleteOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: 91,
+    })).toHaveLength(0);
+    fixture.store.close();
+  });
+
+  it("canonical local-only ownership suppresses backend deletion even when a caller requests it", () => {
+    const fixture = newSurface("onboarding", "session", "default");
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-local-onboarding",
+      role: "assistant",
+      surfaceKind: "onboarding",
+      origin: "agent_runtime",
+      status: "completed",
+      content: "setup only",
+      contentBlocks: [{ type: "text", id: "setup:text", text: "setup only" }],
+      createdAtMs: 10,
+    });
+    const cleared = clearJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      expectedGeneration: 1,
+      nowMs: 90,
+      deleteBackend: true,
+    });
+
+    expect(cleared.deletedTurns).toBe(1);
+    expect(cleared.backendDeleteOperationId).toBeNull();
+    expect(drainBackendConversationDeleteOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: 91,
+    })).toEqual([]);
+    fixture.store.close();
+  });
+
+  it("tombstones empty failed placeholders and projects structured-only completion deterministically", () => {
+    const fixture = newSurface("main_chat", "chat", "default");
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-empty-failed",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "failed",
+      content: "",
+      contentBlocks: [],
+      createdAtMs: 90,
+    });
+    expect(fixture.store.getRow(
+      "SELECT status, last_error_code FROM backend_turn_outbox WHERE turn_id = ?",
+      ["turn-empty-failed"],
+    )).toEqual({ status: "failed", last_error_code: "empty_failed_turn_cancelled" });
+
+    const block = { type: "thinking" as const, id: "structured", text: "finished" };
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn-structured",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "agent_runtime",
+      status: "completed",
+      content: "",
+      contentBlocks: [block],
+      createdAtMs: 91,
+    });
+    const [delivery] = drainBackendTurnOutbox(fixture.store, { nowMs: 92 });
+    expect(delivery).toMatchObject({
+      turnId: "turn-structured",
+      payload: { text: "Done.", sender: "ai" },
+    });
+    expect(JSON.parse(delivery.payload.metadata!)).toMatchObject({ content_blocks: [block] });
+    expect(delivery.payloadHash).toMatch(/^sha256:[a-f0-9]{64}$/);
+    fixture.store.close();
+  });
+
+  it("ties equal created_at_ms conversation tails by turn_seq rather than turn_id", () => {
+    const fixture = newSurface("main_chat", "chat", "tail-tie-break");
+    // Lexicographically larger older turn_id would win without a turn_seq tie-break.
+    recordTerminalQuestion(
+      fixture,
+      "turn_zzzz_older",
+      [
+        { optionId: "older:a", label: "Older A", preparedAnswer: "Older A" },
+        { optionId: "older:b", label: "Older B", preparedAnswer: "Older B" },
+      ],
+      100,
+    );
+    recordJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: "turn_aaaa_newer",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "Later answer without a question.",
+      contentBlocks: [
+        {
+          type: "text",
+          id: "later:text",
+          text: "Later answer without a question.",
+        },
+      ],
+      createdAtMs: 100,
+    });
+
+    expect(fixture.store.getRow(
+      `SELECT turn_id FROM conversation_turns
+       WHERE conversation_id = ?
+       ORDER BY created_at_ms DESC, turn_seq DESC, turn_id DESC LIMIT 1`,
+      [fixture.conversationId],
+    ).turn_id).toBe("turn_aaaa_newer");
+
+    // If the older unanswered question remained the tail (lexicographic turn_id),
+    // materialization would be suppressed.
+    const materialization = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-after-tie",
+      continuityKey: "intent-after-tie",
+      source: "daily_opener",
+      blocks: [{ type: "taskCard", task_id: "task-after-tie" }],
+      nowMs: 110,
+    });
+    expect(materialization).toMatchObject({
+      accepted: true,
+      suppressedByTailQuestion: false,
+      suppressedByStreamingTail: false,
+    });
+    fixture.store.close();
+  });
+});
+
+interface SurfaceFixture {
+  store: SqliteAgentStore;
+  ownerId: string;
+  sessionId: string;
+  conversationId: string;
+  surfaceKind: string;
+}
+
+function newSurface(surfaceKind: string, externalRefKind: string, externalRefId: string): SurfaceFixture {
+  const store = new SqliteAgentStore({ stateDir: newStateDir(), reconcileOnOpen: false });
+  return insertSurface(store, surfaceKind, externalRefKind, externalRefId);
+}
+
+function insertSurface(
+  store: SqliteAgentStore,
+  surfaceKind: string,
+  externalRefKind: string,
+  externalRefId: string,
+  ownerId = "owner",
+): SurfaceFixture {
+  const session = store.insertSession({ ownerId, surfaceKind, defaultAdapterId: "acp" });
+  const conversationId = `conv-${surfaceKind}-${externalRefId}`;
+  store.insertSurfaceConversation({
+    ownerId,
+    surfaceKind,
+    externalRefKind,
+    externalRefId,
+    conversationId,
+    agentSessionId: session.sessionId,
+    createdAtMs: 1,
+    lastActiveAtMs: 1,
+  });
+  return { store, ownerId, sessionId: session.sessionId, conversationId, surfaceKind };
+}
+
+function recordCompletedTextTurn(
+  fixture: SurfaceFixture,
+  turnId: string,
+  content: string,
+  createdAtMs: number,
+): void {
+  recordJournalTurn(fixture.store, {
+    ownerId: fixture.ownerId,
+    conversationId: fixture.conversationId,
+    turnId,
+    role: "assistant",
+    surfaceKind: "main_chat",
+    origin: "typed_chat",
+    status: "completed",
+    content,
+    contentBlocks: [{ type: "text", id: `${turnId}:text`, text: content }],
+    createdAtMs,
+  });
+}
+
+function recordTerminalQuestion(
+  fixture: SurfaceFixture,
+  turnId: string,
+  options: Array<{ optionId: string; label: string; preparedAnswer: string; defer?: boolean }>,
+  createdAtMs = 50,
+): void {
+  recordJournalTurn(fixture.store, {
+    ownerId: fixture.ownerId,
+    conversationId: fixture.conversationId,
+    turnId,
+    role: "assistant",
+    surfaceKind: "main_chat",
+    origin: "typed_chat",
+    status: "completed",
+    content: "Which direction should we take?",
+    contentBlocks: [{
+      type: "questionCard",
+      id: "question-card-1",
+      questionId: "question-1",
+      text: "Which direction should we take?",
+      subject: { kind: "goal", id: "goal-1" },
+      options,
+    }],
+    createdAtMs,
+  });
+}
+
+/** The journal list is an ordered revision stream; chat projects its latest revision per turn identity. */
+function currentJournalTurns(fixture: SurfaceFixture): ConversationTurn[] {
+  const latestByTurnId = new Map<string, ConversationTurn>();
+  for (const revision of listJournalTurns(fixture.store, {
+    ownerId: fixture.ownerId,
+    conversationId: fixture.conversationId,
+  }).turns) {
+    const current = latestByTurnId.get(revision.turnId);
+    if (!current || current.turnSeq < revision.turnSeq) latestByTurnId.set(revision.turnId, revision);
+  }
+  return [...latestByTurnId.values()].sort((left, right) => left.turnSeq - right.turnSeq);
+}
+
+function insertActiveRunAttempt(fixture: SurfaceFixture, suffix: string) {
+  const run = fixture.store.insertRun({
+    sessionId: fixture.sessionId,
+    runId: `run-${suffix}`,
+    clientId: "chat-first-test",
+    requestId: suffix,
+    status: "running",
+    mode: "act",
+  });
+  const attempt = fixture.store.insertAttempt({
+    attemptId: `att-${suffix}`,
+    runId: run.runId,
+    attemptNo: 1,
+    status: "running",
+    adapterId: "fake",
+    adapterInstanceId: `fake:${suffix}`,
+  });
+  return { run, attempt };
+}
+
+function recordStreamingAssistantPlaceholder(fixture: SurfaceFixture, turnId: string): void {
+  recordJournalTurn(fixture.store, {
+    ownerId: fixture.ownerId,
+    conversationId: fixture.conversationId,
+    turnId,
+    role: "assistant",
+    surfaceKind: fixture.surfaceKind,
+    origin: "typed_chat",
+    status: "streaming",
+    content: "",
+    contentBlocks: [],
+    createdAtMs: 10,
+  });
+}
+
+function journalStorageSnapshot(store: SqliteAgentStore) {
+  return {
+    turns: store.allRows(
+      "SELECT * FROM conversation_turns ORDER BY conversation_id, turn_seq, turn_id",
+    ),
+    revisions: store.allRows(
+      "SELECT * FROM conversation_turn_revisions ORDER BY conversation_id, generation, turn_seq",
+    ),
+    outbox: store.allRows(
+      "SELECT * FROM backend_turn_outbox ORDER BY conversation_id, turn_id",
+    ),
+    state: store.allRows(
+      "SELECT * FROM conversation_journal_state ORDER BY conversation_id",
+    ),
+  };
+}
+
+function remoteTurn(remoteId: string, createdAtMs: number) {
+  return {
+    remoteId,
+    role: "assistant" as const,
+    content: `Remote ${remoteId}`,
+    contentBlocks: [{ type: "text" as const, id: `${remoteId}:text`, text: `Remote ${remoteId}` }],
+    createdAtMs,
+  };
+}
+
+function newStateDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), "omi-conversation-journal-"));
+  createdDirs.push(dir);
+  return dir;
+}
+
+function newDatabasePath(): string {
+  return join(newStateDir(), "agent.sqlite3");
+}
+
+function questionContinuityKey(
+  ownerID: string,
+  conversationID: string,
+  questionID: string,
+  optionID: string,
+): string {
+  return `qri_${createHash("sha256")
+    .update(`${ownerID}\u0000${conversationID}\u0000${questionID}\u0000${optionID}`)
+    .digest("hex")
+    .slice(0, 32)}`;
+}
+
+function questionInteractionTurnID(continuityKey: string, role: "user" | "assistant"): string {
+  return `turn_${createHash("sha256").update(`${continuityKey}\u0000${role}`).digest("hex").slice(0, 16)}`;
+}

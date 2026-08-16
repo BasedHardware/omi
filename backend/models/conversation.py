@@ -1,7 +1,9 @@
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from datetime import datetime
+from collections.abc import Mapping
+from typing import Dict, List, Literal, Optional
+import uuid
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
@@ -27,6 +29,8 @@ __all__ = [
     'BulkAssignSegmentsRequest',
     'CalendarEventLink',
     'Conversation',
+    'ConversationFinalizationStatusResponse',
+    'ConversationMutationResponse',
     'ConversationPostProcessing',
     'CreateConversation',
     'CreateConversationResponse',
@@ -37,6 +41,9 @@ __all__ = [
     'MergeConversationsResponse',
     'PluginResult',
     'SearchRequest',
+    'SharedConversationChatHistoryMessage',
+    'SharedConversationChatRequest',
+    'SharedConversationChatResponse',
     'SetConversationActionItemsStateRequest',
     'SetConversationEventsStateRequest',
     'TestPromptRequest',
@@ -50,6 +57,43 @@ __all__ = [
 class UpdateConversation(BaseModel):
     title: Optional[str] = None
     overview: Optional[str] = None
+
+
+class SharedConversationChatHistoryMessage(BaseModel):
+    model_config = {'extra': 'forbid'}
+
+    role: Literal['user', 'assistant']
+    content: str = Field(min_length=1, max_length=2000, strict=True)
+
+    @field_validator('content')
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError('content must not be blank')
+        return stripped
+
+
+class SharedConversationChatRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+
+    conversation_id: str = Field(min_length=1, max_length=128, strict=True)
+    question: str = Field(min_length=1, max_length=2000, strict=True)
+    history: List[SharedConversationChatHistoryMessage] = Field(max_length=8)
+
+    @field_validator('conversation_id', 'question')
+    @classmethod
+    def validate_non_blank_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError('value must not be blank')
+        return stripped
+
+
+class SharedConversationChatResponse(BaseModel):
+    model_config = {'extra': 'forbid'}
+
+    message: str = Field(min_length=1, strict=True)
 
 
 # TODO: remove this class when the app is updated to use apps_results
@@ -81,9 +125,44 @@ class ConversationPostProcessing(BaseModel):
     fail_reason: Optional[str] = None
 
 
+class ConversationAudioSpan(BaseModel):
+    """Maps one captured audio_file part into the dense conversation MP3.
+
+    wall_offset is seconds relative to conversation.started_at (the same basis
+    as TranscriptSegment.start); artifact_offset is seconds into the MP3. The
+    >90s inter-part gaps are collapsed in the artifact, so segment-level seek is
+    span arithmetic: artifact_pos = artifact_offset + (segment.start - wall_offset).
+    """
+
+    file_id: str
+    wall_offset: float
+    artifact_offset: float
+    len: float
+
+
+class ConversationAudio(BaseModel):
+    """Stamp for the conversation-level playback artifact (playback/{uid}/{conv}/conversation.mp3).
+
+    audio_files_fingerprint identifies the audio_files content the artifact was
+    built from; a mismatch with the doc's current audio_files means the artifact
+    is stale and must be rebuilt.
+    """
+
+    audio_files_fingerprint: str
+    duration: float  # wall-clock seconds: last span wall_offset + len
+    captured_duration: float  # seconds of actual audio: sum of span lens
+    spans: List[ConversationAudioSpan] = []
+    content_type: str = 'audio/mpeg'
+    built_at: Optional[datetime] = None
+
+
 class Conversation(BaseModel):
     id: str
     created_at: datetime
+    # Firestore's document update time, attached by the database read layer.
+    # This is the canonical server revision clients use for cache reconciliation;
+    # it is deliberately not derived from started_at/finished_at.
+    updated_at: Optional[datetime] = None
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
 
@@ -96,6 +175,7 @@ class Conversation(BaseModel):
     geolocation: Optional[Geolocation] = None
     photos: List[ConversationPhoto] = []
     audio_files: List[AudioFile] = []
+    conversation_audio: Optional[ConversationAudio] = None
     private_cloud_sync_enabled: bool = False
 
     apps_results: List[AppResult] = []
@@ -134,6 +214,25 @@ class Conversation(BaseModel):
     client_platform: Optional[str] = None
 
     def __init__(self, **data):
+        raw_segments = data.get('transcript_segments')
+        conversation_id = data.get('id')
+        if isinstance(raw_segments, list) and conversation_id:
+            normalized_segments = []
+            for index, raw_segment in enumerate(raw_segments):
+                if isinstance(raw_segment, Mapping):
+                    segment = dict(raw_segment)
+                    if not segment.get('id'):
+                        segment['id'] = str(
+                            uuid.uuid5(
+                                uuid.NAMESPACE_URL,
+                                f'omi/conversations/{conversation_id}/transcript-segments/{index}',
+                            )
+                        )
+                    normalized_segments.append(segment)
+                else:
+                    normalized_segments.append(raw_segment)
+            data['transcript_segments'] = normalized_segments
+
         super().__init__(**data)
         # Update plugins_results based on apps_results
         self.plugins_results = [PluginResult(plugin_id=app.app_id, content=app.content) for app in self.apps_results]
@@ -165,10 +264,17 @@ class Conversation(BaseModel):
             else:
                 return obj
 
-        conversation_dict = self.dict()
+        conversation_dict = self.model_dump()
         # Convert all datetime objects recursively
         conversation_dict = convert_datetime_to_iso(conversation_dict)
         return conversation_dict
+
+
+class ConversationMutationResponse(BaseModel):
+    """Canonical conversation snapshot returned after a user mutation."""
+
+    status: str
+    conversation: Conversation
 
 
 class CreateConversation(BaseModel):
@@ -189,6 +295,10 @@ class CreateConversation(BaseModel):
 
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
+    # Capture provenance carried through the normal processing write. Keeping
+    # this on the create model prevents ID-less uploads from assigning role
+    # only after process_conversation has already persisted the row.
+    external_data: Optional[Dict] = None
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(
@@ -227,6 +337,17 @@ class ExternalIntegrationCreateConversation(BaseModel):
 class CreateConversationResponse(BaseModel):
     conversation: Conversation
     messages: List[Message] = []
+
+
+class ConversationFinalizationStatusResponse(BaseModel):
+    """Customer-visible projection of one durable finalization job."""
+
+    job_id: str
+    status: str
+    terminal: bool
+    retryable: bool
+    attempt_count: int
+    task_retry_count: int
 
 
 # MIGRATE: For backward compatibility with the old memories routes and app
@@ -311,3 +432,22 @@ class MergeConversationsResponse(BaseModel):
     message: str = Field(default="Merge started", description="Status message")
     warning: Optional[str] = Field(default=None, description="Warning message (e.g., large time gaps)")
     conversation_ids: List[str] = Field(description="All conversation IDs being merged")
+
+
+class SpeakerAnalytics(BaseModel):
+    speaker: str  # "You", a person's name, or a "Speaker N" diarization label
+    person_id: Optional[str] = None
+    is_user: bool = False
+    talk_seconds: float
+    word_count: int
+    words_per_minute: float
+    talk_share: float  # fraction of total talk time, 0..1
+
+
+class ConversationAnalytics(BaseModel):
+    conversation_id: str
+    total_seconds: float
+    total_words: int
+    words_per_minute: float
+    speaker_count: int
+    speakers: List[SpeakerAnalytics] = []

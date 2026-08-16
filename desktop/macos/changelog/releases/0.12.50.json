@@ -1,0 +1,7 @@
+{
+  "version": "0.12.50",
+  "date": "2026-07-08",
+  "changes": [
+    "Fixed WiFi SD-card sync not uploading downloaded recordings to the cloud"
+  ]
+}

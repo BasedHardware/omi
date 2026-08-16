@@ -14,11 +14,13 @@ skips — same fail-open posture as the rest of ``database/redis_db.py``.
 """
 
 from datetime import datetime, timezone
+import logging
 from typing import Tuple
 
 from database.redis_db import r, try_catch_decorator
 
 _TTL_SECONDS = 40 * 24 * 3600  # 40 days — comfortably past any month rollover
+logger = logging.getLogger(__name__)
 
 
 def _period_id(now: datetime) -> str:
@@ -49,6 +51,30 @@ def get_current_month_count(uid: str) -> Tuple[int, int]:
     now = datetime.now(timezone.utc)
     count = _read_count(uid, _period_id(now)) or 0
     return count, _period_reset_epoch(now)
+
+
+def reserve_current_month_slot(uid: str, monthly_limit: int) -> Tuple[bool, int, int]:
+    """Atomically reserve one free-tier call slot.
+
+    Returns (reserved, used_before_reservation, reset_at_epoch). Redis failures
+    fail open to match the non-critical quota posture used by this module.
+    """
+    now = datetime.now(timezone.utc)
+    reset_at = _period_reset_epoch(now)
+    if monthly_limit <= 0:
+        return False, 0, reset_at
+
+    key = _key(uid, _period_id(now))
+    try:
+        used_after = int(r.incr(key, 1))
+        r.expire(key, _TTL_SECONDS)
+        if used_after > monthly_limit:
+            r.decr(key, 1)
+            return False, used_after - 1, reset_at
+        return True, used_after - 1, reset_at
+    except Exception as e:
+        logger.error(f'Error reserving phone call quota {e}')
+        return True, 0, reset_at
 
 
 @try_catch_decorator

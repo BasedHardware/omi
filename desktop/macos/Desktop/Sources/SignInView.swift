@@ -1,163 +1,177 @@
+import AppKit
+import OmiTheme
 import SwiftUI
 
+/// The first screen anyone ever sees, and therefore the one that has to be most obviously *this*
+/// product rather than a template.
+///
+/// **It paints one ground, and the ground is the glass.** There was a full-bleed dune photograph here
+/// under a black gradient, and it is gone rather than restyled: an opaque image edge to edge hid the
+/// panel entirely and forced every label on this screen to be white. White type is what made this the
+/// worst-affected screen in the light conversion — it survived only *because* the art under it was
+/// dark. The blurred desktop is the backdrop now, the mark and the sentence are the design, and the
+/// whole screen is two rungs of near-black type on one floating card (`onboardingScreen`).
+///
+/// It briefly had *no* ground at all: the art came off while `ShellWindowChrome` still installed a
+/// window-wide glass slab, so a bare column was a column on glass. When that slab was retired in
+/// favour of per-destination panels, this screen kept the bare column and got the wallpaper.
 struct SignInView: View {
-    @ObservedObject var authState: AuthState
+  @ObservedObject var authState: AuthState
+  @State private var breathe = false
+  /// Sign-in opens on just the Omi mark + wordmark; after a beat the mark spins,
+  /// the "Omi" wordmark fades, and the rest of the screen reveals.
+  @State private var introRevealed = false
 
-    var body: some View {
-        ZStack {
-            // Full background
-            OmiColors.backgroundPrimary
-                .ignoresSafeArea()
+  var body: some View {
+    // Clean, centered, symmetric sign-in: brand on the glass, one primary capsule and one secondary,
+    // generous whitespace, no floating box and no second ground.
+    VStack(spacing: 0) {
+      HStack(spacing: 12) {
+        SBLogo(size: introRevealed ? 44 : 60, spinning: !introRevealed)
+          .scaleEffect(breathe ? 1.04 : 1.0)
+          .animation(InkReduceMotion.animation(SBMotion.breathe), value: breathe)
 
-            // Centered sign in card
-            VStack(spacing: 32) {
-                Spacer()
-
-                // Logo/Title
-                VStack(spacing: 16) {
-                    // Omi logo
-                    if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-                       let logoImage = NSImage(contentsOf: logoURL) {
-                        Image(nsImage: logoImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 64, height: 64)
-                    }
-
-                    Text("omi")
-                        .scaledFont(size: 48, weight: .bold)
-                        .foregroundColor(OmiColors.textPrimary)
-
-                    Text("Sign in to continue")
-                        .font(.title3)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-
-                Spacer()
-
-                // Sign in buttons
-                VStack(spacing: 12) {
-                    // Sign in with Apple
-                    Button(action: {
-                        Task {
-                            do {
-                                try await AuthService.shared.signInWithApple()
-                            } catch is CancellationError {
-                                // swallow — user initiated
-                            } catch AuthError.cancelled {
-                                // swallow — user initiated
-                            } catch {
-                                let errorMsg = "Error: \(error.localizedDescription)"
-                                authState.error = errorMsg
-                                NSLog("OMI Sign in error: %@", errorMsg)
-                            }
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "applelogo")
-                                .scaledFont(size: 18)
-                            Text("Sign in with Apple")
-                                .scaledFont(size: 17, weight: .medium)
-                        }
-                        .foregroundColor(.black)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.white)
-                        .cornerRadius(10)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(authState.isLoading)
-
-                    // Sign in with Google
-                    Button(action: {
-                        Task {
-                            do {
-                                try await AuthService.shared.signInWithGoogle()
-                            } catch is CancellationError {
-                                // swallow — user initiated
-                            } catch AuthError.cancelled {
-                                // swallow — user initiated
-                            } catch {
-                                let errorMsg = "Error: \(error.localizedDescription)"
-                                authState.error = errorMsg
-                                NSLog("OMI Sign in error: %@", errorMsg)
-                            }
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            GoogleLogo()
-                                .frame(width: 18, height: 18)
-                            Text("Sign in with Google")
-                                .scaledFont(size: 17, weight: .medium)
-                        }
-                        .foregroundColor(.black)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.white)
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(authState.isLoading)
-
-                    // Loading overlay for both buttons
-                    if authState.isLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: OmiColors.textPrimary))
-                            .padding(.top, 8)
-
-                        // Minimal escape hatch so a failed web sign-in (closed tab,
-                        // denied on Apple/Google, etc.) doesn't trap the user with
-                        // permanently disabled buttons waiting for a callback that
-                        // will never arrive.
-                        Button(action: {
-                            AuthService.shared.cancelSignIn()
-                        }) {
-                            Text("Cancel")
-                                .font(.caption)
-                                .foregroundColor(OmiColors.textTertiary)
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.top, 4)
-                    }
-
-                    if let error = authState.error {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(OmiColors.error)
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 4)
-                    }
-                }
-                .frame(width: 320)
-
-                Spacer()
-                    .frame(height: 60)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        if !introRevealed {
+          Text("Omi")
+            .inkStyle(InkType.introHero, color: Ink.primary)
+            .transition(.opacity)
         }
+      }
+
+      if introRevealed {
+        Group {
+          Text("A second brain you trust\nmore than your first")
+            .inkStyle(InkType.introHero, color: Ink.primary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, InkLayout.rhythm[0])
+
+          Text("It remembers every conversation — and does the follow-ups.")
+            .inkStyle(InkType.prose, color: Ink.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, InkLayout.rhythm[5])
+
+          VStack(spacing: InkLayout.rhythm[6]) {
+            signInButton(
+              title: "Continue with Apple",
+              kind: .primary,
+              leading: { Image(systemName: "applelogo").font(.system(size: 13)) },
+              action: { signIn(apple: true) })
+            signInButton(
+              title: "Continue with Google",
+              kind: .secondary,
+              leading: { GoogleLogo().frame(width: 15, height: 15) },
+              action: { signIn(apple: false) })
+          }
+          // This used to be a fixed 320pt column. When the window was
+          // narrower (or its usable width was reduced by window chrome),
+          // both sign-in actions extended past the visible content area.
+          .frame(maxWidth: 320)
+          .frame(maxWidth: .infinity)
+          .padding(.top, InkLayout.rhythm[0])
+
+          if authState.isLoading {
+            HStack(spacing: InkLayout.rhythm[5]) {
+              // `Ink.primary`, not a wash: a spinner nobody can see is a screen that looks frozen.
+              ProgressView().scaleEffect(0.7).tint(Ink.primary)
+              Button {
+                AuthService.shared.cancelSignIn()
+              } label: {
+                Text("Cancel").inkStyle(InkType.statusLabel, color: Ink.secondary)
+              }
+              .buttonStyle(.plain)
+            }
+            .padding(.top, InkLayout.rhythm[3])
+          }
+          if let error = authState.error {
+            // The one place this screen raises its voice. It used to be set in the same grey as the
+            // footer, which is a failed sign-in reported as a footnote.
+            Text(UserFacingErrorPresentation.message(from: error, while: .signIn))
+              .inkStyle(InkType.statusLabel, color: Ink.errorRed)
+              .multilineTextAlignment(.center)
+              .fixedSize(horizontal: false, vertical: true)
+              .frame(maxWidth: 320)
+              .frame(maxWidth: .infinity)
+              .padding(.top, InkLayout.rhythm[4])
+          }
+
+          // `secondary` and not a fainter grey: glass carries two rungs, and the bottom one is this.
+          Text("open source · runs on your mac · pause anytime")
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .padding(.top, InkLayout.rhythm[0])
+        }
+        .transition(.opacity)
+      }
     }
+    // The card, and the pin. `onboardingScreen` puts the column on the shared glass — the same
+    // material, corner and ambient shadow every panel in this app wears — and pins the light
+    // appearance, so `Ink`'s dynamic colours resolve dark here even when the machine is in Dark Mode.
+    // Without the pin this screen is near-white type on a near-white panel; without the card it is
+    // near-black type on the user's wallpaper, which is what it became when the window's ground was
+    // retired (`ShellWindowChrome`) and nobody gave this screen one.
+    .onboardingScreen()
+    .animation(InkReduceMotion.animation(.easeOut(duration: 0.5)), value: introRevealed)
+    .onAppear {
+      breathe = true
+      guard !introRevealed else { return }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+        InkReduceMotion.perform(.easeOut(duration: 0.5)) { introRevealed = true }
+      }
+    }
+  }
+
+  /// One sign-in action. A **full stadium capsule** from the design system's one button style — the
+  /// 12 pt rounded rectangle it replaces was the shape that read as a web form.
+  ///
+  /// The leading glyph takes no colour of its own: `InkButtonStyle` sets the label, so the Apple mark
+  /// inverts with the fill it sits on. `GoogleLogo` is a multicolour bitmap and is unaffected by the
+  /// tint, which is correct — it is a third-party mark, not our ink.
+  @ViewBuilder private func signInButton<Leading: View>(
+    title: String, kind: InkButton.Kind, @ViewBuilder leading: () -> Leading,
+    action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      HStack(spacing: 8) {
+        leading()
+        Text(title)
+      }
+      .frame(maxWidth: .infinity)
+    }
+    .buttonStyle(InkButtonStyle(kind: kind))
+    .disabled(authState.isLoading)
+  }
+
+  private func signIn(apple: Bool) {
+    Task {
+      do {
+        if apple {
+          try await AuthService.shared.signInWithApple()
+        } else {
+          try await AuthService.shared.signInWithGoogle()
+        }
+      } catch is CancellationError {
+      } catch AuthError.cancelled {
+      } catch {
+        let errorMsg = UserFacingErrorPresentation.message(for: error, while: .signIn)
+        authState.error = errorMsg
+        NSLog("OMI Sign in error: %@", errorMsg)
+      }
+    }
+  }
 }
 
 // MARK: - Google Logo
 
 /// Standard multicolor Google "G" logo
 struct GoogleLogo: View {
-    var body: some View {
-        if let url = Bundle.resourceBundle.url(forResource: "google_logo", withExtension: "png"),
-           let image = NSImage(contentsOf: url) {
-            Image(nsImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-        }
+  var body: some View {
+    if let url = Bundle.resourceBundle.url(forResource: "google_logo", withExtension: "png"),
+      let image = NSImage(contentsOf: url)
+    {
+      Image(nsImage: image)
+        .resizable()
+        .aspectRatio(contentMode: .fit)
     }
+  }
 }
-
-#if canImport(PreviewsMacros)
-#Preview {
-    SignInView(authState: AuthState.shared)
-}
-#endif

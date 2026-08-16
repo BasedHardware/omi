@@ -1,5 +1,6 @@
 import AppKit
 import ObjCExceptionCatcher
+import OmiTheme
 import SwiftUI
 
 // MARK: - View Exporter
@@ -58,7 +59,7 @@ enum ViewExporter {
               viewModel: DashboardViewModel(),
               appState: AppState(),
               appProvider: AppProvider(),
-              chatProvider: ChatProvider(),
+              chatProvider: previewChatProvider(),
               memoriesViewModel: MemoriesViewModel(),
               selectedIndex: .constant(0)))
         },
@@ -66,26 +67,8 @@ enum ViewExporter {
       ),
 
       (
-        "03-ai-chat",
-        { AnyView(ChatPage(appProvider: AppProvider(), chatProvider: ChatProvider())) },
-        CGSize(width: 900, height: 700)
-      ),
-
-      (
         "04-conversations",
         { AnyView(ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))) },
-        CGSize(width: 900, height: 700)
-      ),
-
-      (
-        "05-focus",
-        { AnyView(FocusPage()) },
-        CGSize(width: 900, height: 700)
-      ),
-
-      (
-        "06-insight",
-        { AnyView(InsightPage()) },
         CGSize(width: 900, height: 700)
       ),
 
@@ -109,7 +92,7 @@ enum ViewExporter {
 
       (
         "11-desktop-home",
-        { AnyView(DesktopHomeView()) },
+        { AnyView(DesktopHomeView().environmentObject(AppState())) },
         CGSize(width: 1200, height: 800)
       ),
 
@@ -141,6 +124,30 @@ enum ViewExporter {
         },
         CGSize(width: 900, height: 700)
       ),
+
+      (
+        "16-memory-atlas",
+        { MemoryAtlasExportPreview.surface() },
+        CGSize(width: 1200, height: 820)
+      ),
+
+      (
+        "17-memory-atlas-single-type",
+        { MemoryAtlasExportPreview.singleTypeSurface() },
+        CGSize(width: 1200, height: 820)
+      ),
+
+      (
+        "18-brain-map-inspector",
+        { MemoryAtlasExportPreview.inspectorSurface() },
+        CGSize(width: 1400, height: 820)
+      ),
+
+      (
+        "19-brain-map-connection",
+        { MemoryAtlasExportPreview.connectionInspectorSurface() },
+        CGSize(width: 1400, height: 820)
+      ),
     ]
 
     guard index >= 0 && index < views.count else { return nil }
@@ -148,7 +155,7 @@ enum ViewExporter {
     return (entry.0, entry.1(), entry.2)
   }
 
-  static var standaloneViewCount: Int { 14 }
+  static var standaloneViewCount: Int { 18 }
 
   private static let onboardingExportSteps: [(String, Int)] = [
     ("01-name", 0),
@@ -159,17 +166,16 @@ enum ViewExporter {
     ("06-disk-access", 5),
     ("07-file-scan", 6),
     ("08-microphone", 7),
-    ("09-notifications", 8),
-    ("10-accessibility", 9),
-    ("11-automation", 10),
-    ("12-floating-bar-shortcut", 11),
-    ("13-floating-bar", 12),
-    ("14-voice-shortcut", 13),
-    ("15-voice-demo", 14),
-    ("16-data-sources", 15),
-    ("17-exports", 16),
-    ("18-goal", 17),
-    ("19-tasks", 18),
+    ("09-accessibility", 8),
+    ("10-automation", 9),
+    ("11-floating-bar-shortcut", 10),
+    ("12-floating-bar", 11),
+    ("13-voice-shortcut", 12),
+    ("14-voice-demo", 13),
+    ("15-data-sources", 14),
+    ("16-exports", 15),
+    ("17-goal", 16),
+    ("18-tasks", 17),
   ]
 
   static func onboardingViewAt(_ index: Int) -> (String, AnyView, CGSize)? {
@@ -200,7 +206,6 @@ enum ViewExporter {
       ("Chat", "bubble.left.and.bubble.right.fill", 2),
       ("Memories", "brain", 3),
       ("Tasks", "checklist", 4),
-      ("Focus", "eye.fill", 5),
       ("Advice", "lightbulb.fill", 6),
       ("Rewind", "clock.arrow.circlepath", 7),
       ("Apps", "puzzlepiece.fill", 8),
@@ -215,7 +220,7 @@ enum ViewExporter {
         // Logo placeholder
         HStack {
           Circle()
-            .fill(Color.white.opacity(0.9))
+            .fill(Ink.primary.opacity(0.9))
             .frame(width: 28, height: 28)
             .overlay(Text("O").font(.system(size: 14, weight: .bold)).foregroundColor(.black))
           Text("Omi")
@@ -223,9 +228,9 @@ enum ViewExporter {
             .foregroundColor(.white)
           Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 20)
-        .padding(.bottom, 16)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.top, OmiSpacing.xl)
+        .padding(.bottom, OmiSpacing.lg)
 
         // Main nav items
         ForEach(items, id: \.2) { item in
@@ -235,14 +240,14 @@ enum ViewExporter {
         Spacer()
 
         Divider()
-          .background(Color.white.opacity(0.1))
-          .padding(.horizontal, 12)
+          .background(Ink.rowFillHover)
+          .padding(.horizontal, OmiSpacing.md)
 
         // Bottom items
         ForEach(bottomItems, id: \.2) { item in
           sidebarRow(title: item.0, icon: item.1, index: item.2)
         }
-        .padding(.bottom, 12)
+        .padding(.bottom, OmiSpacing.md)
       }
       .frame(width: 220)
       .background(Color(nsColor: NSColor(red: 0.07, green: 0.07, blue: 0.07, alpha: 1)))
@@ -250,7 +255,7 @@ enum ViewExporter {
 
     private func sidebarRow(title: String, icon: String, index: Int) -> some View {
       let isSelected = index == selectedIndex
-      return HStack(spacing: 10) {
+      return HStack(spacing: OmiSpacing.sm) {
         Image(systemName: icon)
           .font(.system(size: 14))
           .foregroundColor(isSelected ? .white : .white.opacity(0.5))
@@ -260,12 +265,12 @@ enum ViewExporter {
           .foregroundColor(isSelected ? .white : .white.opacity(0.5))
         Spacer()
       }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 8)
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.sm)
       .background(
-        RoundedRectangle(cornerRadius: 8)
-          .fill(isSelected ? Color.white.opacity(0.1) : Color.clear)
-          .padding(.horizontal, 8)
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+          .fill(isSelected ? Ink.rowFillHover : Color.clear)
+          .padding(.horizontal, OmiSpacing.sm)
       )
     }
   }
@@ -287,10 +292,23 @@ enum ViewExporter {
         }
       ),
       (
-        "full-ai-chat", 2,
-        { AnyView(ChatPage(appProvider: AppProvider(), chatProvider: previewChatProvider())) }
+        "full-conversations", 1,
+        {
+          AnyView(
+            ConversationsPage(
+              appState: previewConversationsAppState(),
+              selectedConversation: .constant(nil)
+            ))
+        }
       ),
-      ("full-memories", 3, { AnyView(MemoriesPage(viewModel: previewMemoriesViewModel())) }),
+      (
+        "full-memories", 3,
+        {
+          AnyView(
+            MemoriesPage(viewModel: previewMemoriesViewModel())
+          )
+        }
+      ),
       (
         "full-tasks", 4,
         {
@@ -301,8 +319,6 @@ enum ViewExporter {
               chatProvider: cp))
         }
       ),
-      ("full-focus", 5, { AnyView(FocusPage()) }),
-      ("full-insight", 6, { AnyView(InsightPage()) }),
       ("full-rewind", 7, { AnyView(RewindPage()) }),
       ("full-apps", 8, { AnyView(AppsPage(appProvider: AppProvider())) }),
       (
@@ -321,31 +337,111 @@ enum ViewExporter {
     let entry = pages[index]
     let pageContent = entry.2()
 
-    // Compose: mock sidebar + rounded content area (mirrors DesktopHomeView layout)
+    let topBarAppState = AppState()
+    let topBarMemories = previewMemoriesViewModel()
+    let topBarTasks = TasksStore.shared
+
+    // Compose with the production top bar and rounded shell.
     let fullView = AnyView(
-      HStack(spacing: 0) {
-        ZStack {
-          RoundedRectangle(cornerRadius: 16)
-            .fill(
-              Color(nsColor: NSColor(red: 0.09, green: 0.09, blue: 0.09, alpha: 1)).opacity(0.4)
-            )
-            .overlay(
-              RoundedRectangle(cornerRadius: 16)
-                .stroke(
-                  Color(nsColor: NSColor(red: 0.15, green: 0.15, blue: 0.15, alpha: 1)).opacity(
-                    0.3), lineWidth: 1)
-            )
+      ZStack {
+        RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
+          .fill(Color(red: 0.050, green: 0.052, blue: 0.059))
+          .overlay(
+            RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
+              .stroke(Ink.separator, lineWidth: 1)
+          )
+
+        VStack(spacing: 0) {
+          DesktopTopBar(
+            selectedIndex: .constant(entry.1),
+            memoryDestinationRawValue: .constant(MemoryHubDestination.memories.rawValue),
+            appState: topBarAppState,
+            memoriesViewModel: topBarMemories,
+            tasksStore: topBarTasks,
+            sinceDate: Date(),
+            onRewind: {}
+          )
           pageContent
-            .clipShape(RoundedRectangle(cornerRadius: 16))
         }
-        .padding(12)
+        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
+      .padding(OmiSpacing.md)
     )
 
-    return (entry.0, fullView, CGSize(width: 1200, height: 800))
+    return (entry.0, fullView, CGSize(width: 1600, height: 1000))
   }
 
-  static var fullPageCount: Int { 10 }
+  static var fullPageCount: Int { 11 }
+
+  private static func previewConversationsAppState() -> AppState {
+    let appState = AppState()
+    let now = Date()
+    let previews = [
+      (
+        "Product design review",
+        "We reviewed the desktop Memory experience and agreed to remove the nested navigation, widen the content, and make search behavior consistent.",
+        "✨"
+      ),
+      (
+        "Launch readiness check",
+        "The team covered beta health, release notes, and the final desktop smoke test before the next rollout.",
+        "🚀"
+      ),
+      (
+        "Weekly planning",
+        "Priorities this week are onboarding polish, a cleaner conversation reader, and fewer competing controls in the header.",
+        "🗓"
+      ),
+      (
+        "Customer feedback",
+        "Customers want transcripts to be easier to scan and Memory to feel like one coherent place instead of three separate tools.",
+        "💬"
+      ),
+      (
+        "Engineering sync",
+        "The search services now share the same debounce and cancellation policy while preserving each page's data source.",
+        "🛠"
+      ),
+      (
+        "Design system cleanup",
+        "We aligned search fields, filter pills, radii, and loading states around the existing Omi neutral palette.",
+        "◐"
+      ),
+    ]
+
+    appState.conversations = previews.enumerated().map { index, preview in
+      let createdAt = now.addingTimeInterval(Double(-index * 3_600))
+      return ServerConversation(
+        id: "conversation_preview_\(index)",
+        createdAt: createdAt,
+        startedAt: createdAt,
+        finishedAt: createdAt.addingTimeInterval(2_700),
+        structured: Structured(
+          title: preview.0,
+          overview: preview.1,
+          emoji: preview.2,
+          category: "other",
+          actionItems: [],
+          events: []
+        ),
+        transcriptSegments: [],
+        transcriptSegmentsIncluded: true,
+        geolocation: nil,
+        photos: [],
+        appsResults: [],
+        source: .desktop,
+        language: "en",
+        status: .completed,
+        discarded: false,
+        deleted: false,
+        isLocked: false,
+        starred: index == 0,
+        folderId: nil,
+        inputDeviceName: "MacBook Pro Microphone"
+      )
+    }
+    return appState
+  }
 
   private static func previewChatProvider() -> ChatProvider {
     let provider = ChatProvider()
@@ -618,7 +714,9 @@ enum ViewExporter {
       Color(nsColor: NSColor(red: 0.07, green: 0.07, blue: 0.07, alpha: 1))
       view
     }
-    .environment(\.colorScheme, .dark)
+    // Light: the app's glass is pinned `.aqua`, so a dark export is a picture of a product that no
+    // longer exists.
+    .environment(\.colorScheme, .light)
 
     let hostingView = NSHostingView(rootView: wrappedView)
     hostingView.setFrameSize(size)
@@ -630,39 +728,39 @@ enum ViewExporter {
       defer: false
     )
     window.contentView = hostingView
-    window.backgroundColor = NSColor(red: 0.07, green: 0.07, blue: 0.07, alpha: 1)
+    window.backgroundColor = Ink.nsSurface
 
     hostingView.needsLayout = true
     hostingView.layoutSubtreeIfNeeded()
 
     var success = false
-    do {
-      try ObjCExceptionCatcher.catching {
-        // Export PNG
-        guard let bitmapRep = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
-        else {
-          NSLog("ViewExporter: SKIP \(name) - no bitmap")
-          return
-        }
-        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmapRep)
-
-        if let pngData = bitmapRep.representation(using: .png, properties: [:]) {
-          let pngPath = "\(dir)/\(name).png"
-          try? pngData.write(to: URL(fileURLWithPath: pngPath))
-          let kb = pngData.count / 1024
-          NSLog("ViewExporter: \(name).png (\(Int(size.width))x\(Int(size.height))) \(kb)KB")
-        }
-
-        // Export PDF (vector data preserved for SVG conversion)
-        let pdfData = hostingView.dataWithPDF(inside: hostingView.bounds)
-        let pdfPath = "\(dir)/\(name).pdf"
-        try? pdfData.write(to: URL(fileURLWithPath: pdfPath))
-        NSLog("ViewExporter: \(name).pdf (\(pdfData.count / 1024)KB)")
-
-        success = true
+    let exception = ObjCExceptionCatcher.catching {
+      // Export PNG
+      guard let bitmapRep = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
+      else {
+        NSLog("ViewExporter: SKIP \(name) - no bitmap")
+        return
       }
-    } catch {
-      NSLog("ViewExporter: SKIP \(name) - \(error.localizedDescription)")
+      hostingView.cacheDisplay(in: hostingView.bounds, to: bitmapRep)
+
+      if let pngData = bitmapRep.representation(using: .png, properties: [:]) {
+        let pngPath = "\(dir)/\(name).png"
+        try? pngData.write(to: URL(fileURLWithPath: pngPath))
+        let kb = pngData.count / 1024
+        NSLog("ViewExporter: \(name).png (\(Int(size.width))x\(Int(size.height))) \(kb)KB")
+      }
+
+      // Export PDF (vector data preserved for SVG conversion)
+      let pdfData = hostingView.dataWithPDF(inside: hostingView.bounds)
+      let pdfPath = "\(dir)/\(name).pdf"
+      try? pdfData.write(to: URL(fileURLWithPath: pdfPath))
+      NSLog("ViewExporter: \(name).pdf (\(pdfData.count / 1024)KB)")
+
+      success = true
+    }
+    if let exception {
+      NSLog("ViewExporter: SKIP \(name) - \(exception.name.rawValue): \(exception.reason ?? "unknown")")
+      success = false
     }
 
     window.orderOut(nil)

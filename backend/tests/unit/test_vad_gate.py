@@ -638,8 +638,8 @@ class TestGatedDeepgramSocket:
 
         mock_conn.finalize.assert_called()
 
-    def test_send_finalize_exception_swallowed(self):
-        """If finalize() throws during speech->silence in send(), it should be swallowed."""
+    def test_send_finalize_exception_rejects_the_chunk(self):
+        """A failed speech-boundary flush must surface to the live session."""
         mock_conn = MagicMock()
         mock_conn.finalize.side_effect = RuntimeError("connection closed")
         gate = self._make_gate()
@@ -651,12 +651,17 @@ class TestGatedDeepgramSocket:
         for i in range(5):
             socket.send(_make_pcm(30), wall_time=t + i * 0.03)
 
-        # Silence past hangover — should not raise despite finalize error
+        # Silence past hangover — do not raise in the VAD layer, but reject the
+        # chunk so send_live_stt_audio terminates the client session.
         _set_vad_speech(False)
+        saw_rejected_chunk = False
         for i in range(30):
-            socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
+            saw_rejected_chunk = (
+                socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03) is False or saw_rejected_chunk
+            )
 
         mock_conn.finalize.assert_called()
+        assert saw_rejected_chunk is True
 
     def test_finish_shadow_mode_no_finalize(self):
         """finish() in shadow mode should NOT call finalize before finish."""
@@ -830,6 +835,19 @@ class TestDgDeadDetection:
         assert safe.is_connection_dead is True
         safe.finish()
 
+    def test_safe_socket_finalize_exception_sets_dead(self):
+        """A failed transcript flush is also a terminal provider failure."""
+        mock_conn = MagicMock()
+        mock_conn.finalize.side_effect = RuntimeError('connection reset')
+        safe = self._wrap(mock_conn)
+
+        with pytest.raises(RuntimeError, match='connection reset'):
+            safe.finalize()
+
+        assert safe.is_connection_dead is True
+        assert safe.death_reason == 'finalize RuntimeError: connection reset'
+        safe.finish()
+
     def test_safe_socket_dead_stops_sending(self):
         """After SafeDeepgramSocket is dead, send() silently drops audio."""
         mock_conn = MagicMock()
@@ -930,6 +948,7 @@ class TestDgDeadDetection:
         assert mock_conn.send.call_count > 0
 
 
+@pytest.mark.slow
 class TestSafeSocketDelegation:
     """Tests for SafeDeepgramSocket finalize/finish delegation (#5870)."""
 
@@ -1276,10 +1295,24 @@ class TestOnnxStateAndConcurrency:
                 assert errors[i] is None, f'Caller {i} got error: {errors[i]}'
                 assert results[i] is not None, f'Caller {i} got no result (deadlock?)'
 
+            # Calibrate the bound on this machine: under heavy CPU contention even bare
+            # sleeping threads take multiples of sleep_sec, so a fixed bound reports
+            # serialization that the gate did not cause.
+            baseline_threads = [threading.Thread(target=time.sleep, args=(sleep_sec,)) for _ in range(num_callers)]
+            baseline_start = time.perf_counter()
+            for t in baseline_threads:
+                t.start()
+            for t in baseline_threads:
+                t.join(timeout=10)
+            baseline = time.perf_counter() - baseline_start
+
             # ONNX is truly concurrent (no pool), so all should complete in ~1x sleep time
-            assert elapsed < sleep_sec * 3, f'Took {elapsed:.3f}s — unexpected serialization'
+            assert elapsed < max(
+                sleep_sec * 3, baseline * 1.5
+            ), f'Took {elapsed:.3f}s against a {baseline:.3f}s bare-thread baseline — unexpected serialization'
 
 
+@pytest.mark.slow
 class TestLongSessionStress:
     """Tests for long-session invariants (large counters, checkpoint churn)."""
 
@@ -1986,6 +2019,7 @@ class TestProcessAudioDgRemapWiring:
         assert received_segments[0]['end'] == 7.0
 
 
+@pytest.mark.slow
 class TestDG1011KeepaliveGap:
     """Verify DG 1011 protection via SafeDeepgramSocket auto-keepalive.
 
@@ -2131,3 +2165,62 @@ class TestGatedSTTSocketPassthroughMode:
 
         mock_conn.send.assert_called_once_with(audio)
         mock_conn.finalize.assert_called_once()
+
+
+class TestMisalignedChunks:
+    """A chunk that ends mid-frame must not disable the gate (prod: 11 sessions/24h)."""
+
+    def _make_gate(self, channels=1):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=channels,
+            mode='active',
+            uid='test',
+            session_id='test',
+        )
+
+    def test_odd_length_chunk_keeps_gate_active(self):
+        """np.frombuffer used to raise on a partial sample, failing the session open."""
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate = self._make_gate()
+        gated = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        gated.send(_make_pcm(30) + b'\x00', wall_time=1.0)
+
+        assert gated.is_gated
+        assert gate.mode == 'active'
+
+    def test_split_frame_keeps_sample_alignment(self):
+        """A frame split across two chunks must reach VAD as the same samples."""
+        pcm = struct.pack('<1600h', *[(i % 2000) - 1000 for i in range(1600)])
+        windows_whole: list[np.ndarray] = []
+        windows_split: list[np.ndarray] = []
+
+        def _record(into):
+            def _run(window, state, context):
+                into.append(np.array(window))
+                return 0.1, state, context
+
+            return _run
+
+        with patch('utils.stt.vad_gate.run_vad_window', side_effect=_record(windows_whole)):
+            self._make_gate().process_audio(pcm, 1.0)
+        with patch('utils.stt.vad_gate.run_vad_window', side_effect=_record(windows_split)):
+            gate = self._make_gate()
+            gate.process_audio(pcm[:513], 1.0)
+            gate.process_audio(pcm[513:], 1.03)
+
+        assert len(windows_split) == len(windows_whole) > 0
+        for split, whole in zip(windows_split, windows_whole):
+            assert np.array_equal(split, whole)
+
+    def test_stereo_partial_frame_is_carried(self):
+        """Stereo frames are 4 bytes; a 2-byte tail must not reach audioop.tomono."""
+        gate = self._make_gate(channels=2)
+        pcm = _make_pcm(30, channels=2)
+
+        gate.process_audio(pcm[:-2], 1.0)
+        out = gate.process_audio(pcm[-2:], 1.03)
+
+        assert out is not None

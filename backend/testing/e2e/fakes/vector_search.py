@@ -10,7 +10,6 @@ routers or database call sites.
 from __future__ import annotations
 
 import hashlib
-import math
 import re
 from collections import defaultdict
 from typing import Any
@@ -105,9 +104,23 @@ class FakeVectorIndex:
             return {"updated_count": 1}
         return {"updated_count": 0}
 
-    def delete(self, ids: list[str], namespace: str = "") -> dict[str, int]:
+    def delete(
+        self,
+        ids: list[str] | None = None,
+        namespace: str = "",
+        filter: dict[str, Any] | None = None,
+    ) -> dict[str, int]:
+        if ids is not None and filter is not None:
+            raise ValueError("delete accepts ids or filter, not both")
+        vector_ids = list(ids or [])
+        if filter is not None:
+            vector_ids = [
+                vector_id
+                for vector_id, item in self._vectors[namespace].items()
+                if self._matches_filter(item.get("metadata") or {}, filter)
+            ]
         deleted = 0
-        for vector_id in ids:
+        for vector_id in vector_ids:
             if self._vectors[namespace].pop(vector_id, None) is not None:
                 deleted += 1
             self.embeddings.forget_vector_text(vector_id)

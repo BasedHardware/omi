@@ -1,8 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class FairUseStage(str, Enum):
@@ -66,17 +70,17 @@ class FairUseState(BaseModel):
     restrict_until: Optional[datetime] = None
     last_classifier_score: float = 0.0
     last_classifier_type: UsageType = UsageType.NONE
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=_utc_now)
 
 
 class FairUseEvent(BaseModel):
     """A single fair-use violation event. Stored at users/{uid}/fair_use_events/{event_id}."""
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utc_now)
     session_id: str = ""
     trigger: SoftCapTrigger = SoftCapTrigger.DAILY
-    window_speech_ms: dict = Field(default_factory=dict)  # {daily, three_day, weekly}
-    thresholds_ms: dict = Field(default_factory=dict)  # snapshot of active thresholds
+    window_speech_ms: dict[str, int] = Field(default_factory=dict[str, int])  # {daily, three_day, weekly}
+    thresholds_ms: dict[str, int] = Field(default_factory=dict[str, int])  # snapshot of active thresholds
     classifier: Optional[ClassifierResult] = None
     enforcement_action: str = ""  # warning, throttle, restrict, none
     previous_stage: FairUseStage = FairUseStage.NONE

@@ -2,14 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  MoreVertical,
-  Copy,
-  FileText,
-  RefreshCw,
-  Trash2,
-  Check,
-} from 'lucide-react';
+import { MoreVertical, Copy, FileText, RefreshCw, Trash2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { deleteConversation, reprocessConversation } from '@/lib/api';
 import type { Conversation, TranscriptSegment } from '@/types/conversation';
@@ -37,7 +30,9 @@ function generateTranscript(segments: TranscriptSegment[], people?: Person[]): s
         speaker = 'You';
       } else if (segment.person_id && people) {
         const person = people.find((p) => p.id === segment.person_id);
-        speaker = person ? person.name : (segment.speaker_name || `Speaker ${segment.speaker_id}`);
+        speaker = person
+          ? person.name
+          : segment.speaker_name || `Speaker ${segment.speaker_id}`;
       } else if (segment.speaker_name) {
         speaker = segment.speaker_name;
       } else {
@@ -52,8 +47,9 @@ function generateTranscript(segments: TranscriptSegment[], people?: Person[]): s
  * Get summary content (prioritize app results, fallback to overview)
  */
 function getSummaryContent(conversation: Conversation): string {
-  if (conversation.apps_results?.length > 0 && conversation.apps_results[0].content?.trim()) {
-    return conversation.apps_results[0].content.trim();
+  const apps = conversation.apps_results;
+  if (apps && apps.length > 0 && apps[0].content?.trim()) {
+    return apps[0].content.trim();
   }
   return conversation.structured.overview || '';
 }
@@ -88,7 +84,7 @@ export function ConversationActionsMenu({
   }, [isOpen]);
 
   const handleCopyTranscript = async () => {
-    const transcript = generateTranscript(conversation.transcript_segments, people);
+    const transcript = generateTranscript(conversation.transcript_segments ?? [], people);
     if (!transcript) return;
 
     await navigator.clipboard.writeText(transcript);
@@ -138,7 +134,7 @@ export function ConversationActionsMenu({
     }
   };
 
-  const hasTranscript = conversation.transcript_segments?.length > 0;
+  const hasTranscript = (conversation.transcript_segments?.length ?? 0) > 0;
   const hasSummary = Boolean(getSummaryContent(conversation));
 
   return (
@@ -149,7 +145,7 @@ export function ConversationActionsMenu({
         className={cn(
           'p-2 rounded-lg transition-colors',
           'hover:bg-bg-tertiary text-text-secondary hover:text-text-primary',
-          isOpen && 'bg-bg-tertiary text-text-primary'
+          isOpen && 'bg-bg-tertiary text-text-primary',
         )}
         aria-label="Conversation actions"
       >
@@ -167,7 +163,7 @@ export function ConversationActionsMenu({
             className={cn(
               'absolute right-0 top-full mt-2 z-50',
               'min-w-[200px] py-2 rounded-xl',
-              'bg-bg-secondary border border-bg-tertiary shadow-xl'
+              'bg-bg-secondary border border-bg-tertiary shadow-xl',
             )}
           >
             {/* Copy Transcript */}
@@ -177,7 +173,7 @@ export function ConversationActionsMenu({
                 className={cn(
                   'w-full flex items-center gap-3 px-4 py-2.5',
                   'text-sm text-text-secondary hover:text-text-primary',
-                  'hover:bg-bg-tertiary transition-colors'
+                  'hover:bg-bg-tertiary transition-colors',
                 )}
               >
                 {copiedItem === 'transcript' ? (
@@ -196,7 +192,7 @@ export function ConversationActionsMenu({
                 className={cn(
                   'w-full flex items-center gap-3 px-4 py-2.5',
                   'text-sm text-text-secondary hover:text-text-primary',
-                  'hover:bg-bg-tertiary transition-colors'
+                  'hover:bg-bg-tertiary transition-colors',
                 )}
               >
                 {copiedItem === 'summary' ? (
@@ -222,11 +218,13 @@ export function ConversationActionsMenu({
                   'w-full flex items-center gap-3 px-4 py-2.5',
                   'text-sm text-text-secondary hover:text-text-primary',
                   'hover:bg-bg-tertiary transition-colors',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
                 <RefreshCw className={cn('w-4 h-4', isReprocessing && 'animate-spin')} />
-                <span>{isReprocessing ? 'Reprocessing...' : 'Reprocess Conversation'}</span>
+                <span>
+                  {isReprocessing ? 'Reprocessing...' : 'Reprocess Conversation'}
+                </span>
               </button>
             )}
 
@@ -236,7 +234,9 @@ export function ConversationActionsMenu({
             {/* Delete */}
             {showDeleteConfirm ? (
               <div className="px-4 py-2">
-                <p className="text-sm text-text-secondary mb-2">Delete this conversation?</p>
+                <p className="text-sm text-text-secondary mb-2">
+                  Delete this conversation?
+                </p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setShowDeleteConfirm(false)}
@@ -259,7 +259,7 @@ export function ConversationActionsMenu({
                 className={cn(
                   'w-full flex items-center gap-3 px-4 py-2.5',
                   'text-sm text-error hover:bg-error/10',
-                  'transition-colors'
+                  'transition-colors',
                 )}
               >
                 <Trash2 className="w-4 h-4" />

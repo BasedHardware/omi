@@ -4,6 +4,13 @@ import XCTest
 @testable import Omi_Computer
 
 final class AppleNotesReaderServiceTests: XCTestCase {
+  func testPassiveStatusDoesNotReadTheNotesStore() async {
+    let status = await AppleNotesReaderService.shared.connectionStatus()
+    guard case .needsAccess(_, let reasonCode) = status else {
+      return XCTFail("Expected passive status to avoid reading Notes, got \(status)")
+    }
+    XCTAssertEqual(reasonCode, "user_initiated_read_required")
+  }
   func testClassifiesSqliteAuthorizationDeniedAsPermissionError() {
     let error = NSError(
       domain: "GRDB",
@@ -11,10 +18,32 @@ final class AppleNotesReaderServiceTests: XCTestCase {
       userInfo: [NSLocalizedDescriptionKey: "SQLite error 23: authorization denied"]
     )
 
-    guard case .authorizationDenied(let path) = AppleNotesReaderService.classifyReadError(error, path: "/notes/NoteStore.sqlite") else {
+    guard
+      case .authorizationDenied(let path) = AppleNotesReaderService.classifyReadError(
+        error, path: "/notes/NoteStore.sqlite")
+    else {
       return XCTFail("Expected authorizationDenied classification")
     }
     XCTAssertEqual(path, "/notes/NoteStore.sqlite")
+  }
+
+  func testIsLikelyAttachmentDoesNotDropOrdinaryNotesContainingExecSubstring() {
+    // Regression: a raw `contains("exec")` substring match wrongly classified ordinary
+    // notes as attachment/metadata artifacts and silently dropped them from the import.
+    for title in ["Q3 execution plan", "Executive summary", "executed the migration", "executive decisions"] {
+      XCTAssertFalse(
+        AppleNotesReaderService.isLikelyAttachment(title: title, summary: "notes and details"),
+        "note titled \"\(title)\" must not be filtered as an attachment"
+      )
+    }
+  }
+
+  func testIsLikelyAttachmentStillFiltersArtifactTokens() {
+    // The metadata/artifact tokens the filter targets must still be caught.
+    XCTAssertTrue(AppleNotesReaderService.isLikelyAttachment(title: "kMDItemFSName", summary: ""))
+    XCTAssertTrue(AppleNotesReaderService.isLikelyAttachment(title: "SOLITE", summary: ""))
+    XCTAssertTrue(AppleNotesReaderService.isLikelyAttachment(title: "exec", summary: ""))
+    XCTAssertTrue(AppleNotesReaderService.isLikelyAttachment(title: "", summary: ""))
   }
 
   func testResolveSelectedFolderAcceptsAndInfersNotesContainer() throws {
@@ -47,17 +76,18 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     try await dbQueue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO ZICCLOUDSYNCINGOBJECT
-            (Z_PK, ZTITLE, ZSUMMARY, ZMODIFICATIONDATE, ZNOTE, ZMARKEDFORDELETION)
-          VALUES (?, ?, ?, ?, ?, ?)
-        """,
+            INSERT INTO ZICCLOUDSYNCINGOBJECT
+              (Z_PK, ZTITLE, ZSUMMARY, ZMODIFICATIONDATE, ZNOTE, ZMARKEDFORDELETION)
+            VALUES (?, ?, ?, ?, ?, ?)
+          """,
         arguments: [1, "Legacy folder import", "Parent folder still works", 42.0, 1, 0]
       )
     }
 
     let notes = try await AppleNotesReaderService.shared.readRecentNotes(
       maxResults: 10,
-      selectedFolderPath: groupContainers.path
+      selectedFolderPath: groupContainers.path,
+      userInitiated: true
     )
 
     XCTAssertEqual(notes.count, 1)
@@ -79,6 +109,25 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     }
   }
 
+  func testReadProbeRejectsInvalidFolderBeforeEnteringReaderActor() throws {
+    let root = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let invalidPath = root.appendingPathComponent("not-apple-notes", isDirectory: true).path
+
+    XCTAssertThrowsError(
+      try AppleNotesReadProbe.resolveRequestedFolder(
+        path: invalidPath,
+        homeDirectory: root
+      )
+    ) { error in
+      guard case .invalidSelectedFolder(let path) = error as? AppleNotesReaderError else {
+        return XCTFail("Expected invalidSelectedFolder, got \(error)")
+      }
+      XCTAssertEqual(path, invalidPath)
+    }
+  }
+
   func testReadRecentNotesFromSelectedFolderFixture() async throws {
     let root = try makeTemporaryDirectory()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -89,17 +138,18 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     try await dbQueue.write { db in
       try db.execute(
         sql: """
-          INSERT INTO ZICCLOUDSYNCINGOBJECT
-            (Z_PK, ZTITLE, ZSUMMARY, ZMODIFICATIONDATE, ZNOTE, ZMARKEDFORDELETION)
-          VALUES (?, ?, ?, ?, ?, ?)
-        """,
+            INSERT INTO ZICCLOUDSYNCINGOBJECT
+              (Z_PK, ZTITLE, ZSUMMARY, ZMODIFICATIONDATE, ZNOTE, ZMARKEDFORDELETION)
+            VALUES (?, ?, ?, ?, ?, ?)
+          """,
         arguments: [1, "Launch checklist", "Ship Notes connector", 42.0, 1, 0]
       )
     }
 
     let notes = try await AppleNotesReaderService.shared.readRecentNotes(
       maxResults: 10,
-      selectedFolderPath: notesContainer.path
+      selectedFolderPath: notesContainer.path,
+      userInitiated: true
     )
 
     XCTAssertEqual(notes.count, 1)
@@ -115,7 +165,8 @@ final class AppleNotesReaderServiceTests: XCTestCase {
 
     let notes = try await AppleNotesReaderService.shared.readRecentNotes(
       maxResults: -1,
-      selectedFolderPath: notesContainer.path
+      selectedFolderPath: notesContainer.path,
+      userInitiated: true
     )
 
     XCTAssertTrue(notes.isEmpty)
@@ -128,7 +179,8 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     let notesContainer = try makeNotesContainerFixture(in: root, withSchema: true)
     let status = await AppleNotesReaderService.shared.connectionStatus(
       maxResults: 10,
-      selectedFolderPath: notesContainer.path
+      selectedFolderPath: notesContainer.path,
+      userInitiated: true
     )
 
     guard case .connected(let noteCount, _) = status else {
@@ -200,7 +252,8 @@ final class AppleNotesReaderServiceTests: XCTestCase {
     _ = try DatabaseQueue(path: notesContainer.appendingPathComponent("NoteStore.sqlite").path)
     let status = await AppleNotesReaderService.shared.connectionStatus(
       maxResults: 10,
-      selectedFolderPath: notesContainer.path
+      selectedFolderPath: notesContainer.path,
+      userInitiated: true
     )
 
     guard case .error(let message, let reasonCode) = status else {
@@ -219,15 +272,15 @@ final class AppleNotesReaderServiceTests: XCTestCase {
       try dbQueue.write { db in
         try db.execute(
           sql: """
-            CREATE TABLE ZICCLOUDSYNCINGOBJECT (
-              Z_PK INTEGER PRIMARY KEY,
-              ZTITLE TEXT,
-              ZSUMMARY TEXT,
-              ZMODIFICATIONDATE REAL,
-              ZNOTE INTEGER,
-              ZMARKEDFORDELETION INTEGER
-            )
-          """
+              CREATE TABLE ZICCLOUDSYNCINGOBJECT (
+                Z_PK INTEGER PRIMARY KEY,
+                ZTITLE TEXT,
+                ZSUMMARY TEXT,
+                ZMODIFICATIONDATE REAL,
+                ZNOTE INTEGER,
+                ZMARKEDFORDELETION INTEGER
+              )
+            """
         )
       }
     }

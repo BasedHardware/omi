@@ -1,3 +1,4 @@
+import OmiTheme
 import SwiftUI
 
 /// List view showing conversations grouped by date
@@ -105,77 +106,77 @@ struct ConversationListView: View {
   }
 
   private var loadingView: some View {
-    VStack(spacing: 16) {
+    VStack(spacing: OmiSpacing.lg) {
       ProgressView()
         .scaleEffect(1.2)
-        .tint(OmiColors.purplePrimary)
+        .tint(Ink.secondary)
 
       Text("Loading conversations...")
-        .scaledFont(size: 14)
-        .foregroundColor(OmiColors.textTertiary)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  private func errorView(_ error: String) -> some View {
-    VStack(spacing: 16) {
+  private func errorView(_: String) -> some View {
+    VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "exclamationmark.triangle")
-        .scaledFont(size: 40)
-        .foregroundColor(OmiColors.warning)
+        .scaledFont(size: OmiType.hero)
+        .foregroundColor(PageGlass.warning)
 
       Text("Failed to load conversations")
-        .scaledFont(size: 16, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
+        .scaledFont(size: OmiType.subheading, weight: .medium)
+        .foregroundColor(Ink.primary)
 
-      Text(error)
-        .scaledFont(size: 14)
-        .foregroundColor(OmiColors.textTertiary)
+      Text("Check your connection and try again.")
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
 
       Button(action: onRefresh) {
         Text("Try Again")
-          .scaledFont(size: 14, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
-          .padding(.horizontal, 20)
-          .padding(.vertical, 10)
-          .omiControlSurface(fill: OmiColors.userBubble, radius: OmiChrome.chipRadius)
+          .scaledFont(size: OmiType.body, weight: .medium)
+          .foregroundColor(Ink.primary)
+          .padding(.horizontal, OmiSpacing.xl)
+          .padding(.vertical, OmiSpacing.sm)
+          .glassChip(isActive: true)
       }
       .buttonStyle(.plain)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(32)
+    .padding(OmiSpacing.section)
   }
 
   private var emptyView: some View {
-    VStack(spacing: 16) {
+    VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "bubble.left.and.bubble.right")
         .scaledFont(size: 48)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       Text("No Conversations")
-        .scaledFont(size: 18, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .scaledFont(size: OmiType.heading, weight: .semibold)
+        .foregroundColor(Ink.primary)
 
       Text("Start recording to capture your first conversation")
-        .scaledFont(size: 14)
-        .foregroundColor(OmiColors.textTertiary)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(32)
+    .padding(OmiSpacing.section)
   }
 
   private var conversationListContent: some View {
     let items = flatListItems
-    return LazyVStack(alignment: .leading, spacing: 12) {
+    return LazyVStack(alignment: .leading, spacing: OmiSpacing.md) {
       ForEach(items) { item in
         switch item {
         case .header(let key, let isFirst):
           Text(key)
-            .scaledFont(size: 13, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
-            .padding(.top, isFirst ? 0 : 18)
-            .padding(.bottom, 6)
+            .scaledFont(size: OmiType.body, weight: .semibold)
+            .foregroundColor(Ink.secondary)
+            .padding(.top, isFirst ? 0 : OmiSpacing.lg)
+            .padding(.bottom, OmiSpacing.xs)
         case .conversation(let conversation):
           ConversationRowView(
             conversation: conversation,
@@ -191,8 +192,8 @@ struct ConversationListView: View {
         }
       }
     }
-    .padding(.horizontal, 24)
-    .padding(.vertical, 20)
+    .padding(.horizontal, OmiSpacing.xxl)
+    .padding(.vertical, OmiSpacing.xl)
   }
 
   private var conversationList: some View {
@@ -206,24 +207,25 @@ struct ConversationListView: View {
         .refreshable {
           onRefresh()
         }
+        .glassScrollFade()
       }
     }
   }
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  ConversationListView(
-    conversations: [],
-    isLoading: false,
-    error: nil,
-    folders: [],
-    onSelect: { _ in },
-    onRefresh: {},
-    onMoveToFolder: { _, _ in },
-    appState: AppState()
-  )
-  .frame(width: 400, height: 600)
-  .background(OmiColors.backgroundSecondary)
-}
+  #Preview {
+    ConversationListView(
+      conversations: [],
+      isLoading: false,
+      error: nil,
+      folders: [],
+      onSelect: { _ in },
+      onRefresh: {},
+      onMoveToFolder: { _, _ in },
+      appState: AppState()
+    )
+    .frame(width: 400, height: 600)
+    .background(Ink.surface)
+  }
 #endif

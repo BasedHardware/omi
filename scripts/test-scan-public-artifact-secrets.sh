@@ -129,8 +129,8 @@ run_expect_pass "android-public-sdk-token-pass" \
   env INTERCOM_ANDROID_API_KEY=public-intercom-android-token python3 "$SCANNER" "$WORK/android-public-token/app-prod-release.aab"
 
 echo ""
-echo "=== Android no AAB built (the argparse crash case) ==="
-run_expect_fail "android-empty-glob-clear-error" "No artifacts to scan" \
+echo "=== Android no AAB built (warn and pass) ==="
+run_expect_pass "android-empty-glob-warn-pass" \
   bash -c "cd '$WORK/android-empty' && AAB_ARTIFACTS=\$(find build -path '*/outputs/*.aab' -print) && python3 '$SCANNER' \$AAB_ARTIFACTS"
 
 echo ""
@@ -139,19 +139,97 @@ run_expect_fail "secret-outside-framework-caught" "OPENAI_API_KEY" \
   python3 "$SCANNER" "$WORK/leaked.ipa"
 
 echo ""
-echo "=== Security: private key markers inside framework still caught ==="
-run_expect_fail "private-key-in-framework-caught" "private key material" \
+echo "=== Security: private key markers inside framework skipped ==="
+run_expect_pass "private-key-in-framework-skipped" \
   python3 "$SCANNER" "$WORK/privkey.ipa"
 
 echo ""
-echo "=== Security: exact denied name inside framework still caught ==="
-run_expect_fail "exact-denied-in-framework-caught" "OPENAI_API_KEY" \
+echo "=== Security: exact denied name inside framework skipped ==="
+run_expect_pass "exact-denied-in-framework-skipped" \
   python3 "$SCANNER" "$WORK/exact-denied.ipa"
 
 echo ""
 echo "=== Security: raw provider-shaped secret still caught ==="
 run_expect_fail "provider-shaped-secret-caught" "OpenAI-shaped secret" \
   python3 "$SCANNER" "$WORK/shaped-secret.ipa"
+
+echo ""
+echo "=== Security: private key in text file outside framework still caught ==="
+mkdir -p "$WORK/pk-text/Payload/Runner.app"
+printf -- '-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----' \
+  > "$WORK/pk-text/Payload/Runner.app/leaked.txt"
+make_zip "$WORK/pk-text" "$WORK/privkey-text.ipa"
+run_expect_fail "private-key-in-text-caught" "private key material" \
+  python3 "$SCANNER" "$WORK/privkey-text.ipa"
+
+echo ""
+echo "=== Security: private key in binary outside framework skipped ==="
+mkdir -p "$WORK/pk-bin/Payload/Runner.app"
+printf -- '-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----' \
+  > "$WORK/pk-bin/Payload/Runner.app/Runner"
+make_zip "$WORK/pk-bin" "$WORK/privkey-bin.ipa"
+run_expect_pass "private-key-in-binary-skipped" \
+  python3 "$SCANNER" "$WORK/privkey-bin.ipa"
+
+echo ""
+echo "=== Security: exact denied name in text file outside framework caught ==="
+mkdir -p "$WORK/exact-text/Payload/Runner.app"
+printf 'OPENAI_API_KEY' > "$WORK/exact-text/Payload/Runner.app/config.json"
+make_zip "$WORK/exact-text" "$WORK/exact-text.ipa"
+run_expect_fail "exact-denied-in-text-caught" "OPENAI_API_KEY" \
+  python3 "$SCANNER" "$WORK/exact-text.ipa"
+
+echo ""
+echo "=== Security: server secret in Info.plist caught ==="
+mkdir -p "$WORK/plist-leak/Payload/Runner.app"
+cat > "$WORK/plist-leak/Payload/Runner.app/Info.plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>GOOGLE_CLIENT_SECRET</key><string>not-a-real-secret</string>
+</dict></plist>
+EOF
+make_zip "$WORK/plist-leak" "$WORK/plist-leak.ipa"
+run_expect_fail "secret-in-info-plist-caught" "GOOGLE_CLIENT_SECRET" \
+  python3 "$SCANNER" "$WORK/plist-leak.ipa"
+
+echo ""
+echo "=== Realistic Info.plist metadata passes ==="
+mkdir -p "$WORK/plist-ok/Payload/Runner.app"
+cat > "$WORK/plist-ok/Payload/Runner.app/Info.plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLSchemes</key><array><string>$(GOOGLE_REVERSE_CLIENT_ID)</string></array>
+  </dict></array>
+  <key>UIBackgroundModes</key><array><string>audio</string><string>voip</string></array>
+</dict></plist>
+EOF
+make_zip "$WORK/plist-ok" "$WORK/plist-ok.ipa"
+run_expect_pass "realistic-info-plist-pass" \
+  python3 "$SCANNER" "$WORK/plist-ok.ipa"
+
+echo ""
+echo "=== Compiled binaries with denied-looking symbols are skipped ==="
+mkdir -p "$WORK/bin-ok/Payload/Runner.app/BatteryWidget.appex"
+printf 'CLIENT_EARLY_TRAFFIC_SECRET\nPRIVATE_KEY_ENCODE_ERROR\nSERVER_HANDSHAKE_TRAFFIC_SECRET' \
+  > "$WORK/bin-ok/Payload/Runner.app/Runner"
+printf 'CREDENTIAL_MISMATCH\nAPI_KEY\nPROJECT_TOKEN' \
+  > "$WORK/bin-ok/Payload/Runner.app/BatteryWidget.appex/BatteryWidget"
+make_zip "$WORK/bin-ok" "$WORK/binary-ok.ipa"
+run_expect_pass "compiled-binary-symbols-skipped" \
+  python3 "$SCANNER" "$WORK/binary-ok.ipa"
+
+echo ""
+echo "=== Security: CI secret values inside framework still caught ==="
+mkdir -p "$WORK/ci-fw/Payload/Runner.app/Frameworks/Leaked.framework"
+printf 'not-a-real-secret-value-test-8742' \
+  > "$WORK/ci-fw/Payload/Runner.app/Frameworks/Leaked.framework/Leaked"
+make_zip "$WORK/ci-fw" "$WORK/ci-fw.ipa"
+ENCRYPTION_SECRET=not-a-real-secret-value-test-8742 \
+  run_expect_fail "ci-value-in-framework-still-caught" "current CI value" \
+  python3 "$SCANNER" "$WORK/ci-fw.ipa"
 
 echo ""
 echo "=== Opaque resources and public Google client keys pass ==="
@@ -164,8 +242,8 @@ run_expect_pass "xcframework-tokens-pass" \
   python3 "$SCANNER" "$WORK/xcframework.ipa"
 
 echo ""
-echo "=== No arguments at all ==="
-run_expect_fail "no-args-clear-error" "No artifacts to scan" \
+echo "=== No arguments at all (warn and pass) ==="
+run_expect_pass "no-args-warn-pass" \
   python3 "$SCANNER"
 
 echo ""

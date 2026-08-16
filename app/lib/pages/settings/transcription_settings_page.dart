@@ -534,6 +534,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       final modelPath = _urlController.text;
       final hasModel = modelPath.isNotEmpty && await File(modelPath).exists();
       if (!hasModel) {
+        if (!mounted) return;
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -560,7 +561,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
       // Build the active config (with correct provider based on _useCustomStt)
       final currentConfig = _buildCurrentConfig();
-      final activeConfig = _useCustomStt ? currentConfig : CustomSttConfig(provider: SttProvider.omi);
+      final activeConfig = _useCustomStt ? currentConfig : const CustomSttConfig(provider: SttProvider.omi);
 
       // Omi-hosted engine choice (server-side): pick Parakeet vs the default via transcriptionModel.
       // The backend reads this as stt_service and routes to the self-hosted Parakeet service.
@@ -584,9 +585,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         Navigator.of(context).pop();
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.errorSaving(e.toString())), backgroundColor: Colors.red.shade700),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.errorSaving(e.toString())), backgroundColor: Colors.red.shade700),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

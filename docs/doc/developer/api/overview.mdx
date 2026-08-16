@@ -32,7 +32,8 @@ The Omi Developer API provides programmatic access to your personal Omi data, al
 
 <Steps>
   <Step title="Get Your API Key" icon="key">
-    Open the Omi app and navigate to **Settings → Developer → Create Key**
+    While signed in, open the Omi web app and navigate to **Developer → API Keys**. Create a key and choose
+    only the scopes your integration needs.
 
     <Tip>Copy the key immediately - you won't be able to see it again!</Tip>
   </Step>
@@ -72,6 +73,12 @@ The Omi Developer API provides programmatic access to your personal Omi data, al
     Check out the endpoint pages for detailed documentation on each resource.
   </Step>
 </Steps>
+
+<Note>
+Key creation is self-service. Memory endpoints additionally require server-side account readiness, so a valid
+key with `memories:read` can return `403` with code `developer_memory_access_not_ready`. That response does
+not mean the key is invalid or missing its scope; see [Memories](/doc/developer/api/memories).
+</Note>
 
 ---
 
@@ -171,7 +178,7 @@ X-RateLimit-Reset: 1642694400
     | `204 No Content` | Request succeeded with no response body |
     | `400 Bad Request` | Invalid request parameters |
     | `401 Unauthorized` | Invalid or missing API key |
-    | `403 Forbidden` | API key doesn't have required permissions |
+    | `403 Forbidden` | Required scope, key grant, or server-side memory availability is missing |
     | `404 Not Found` | Resource not found |
     | `422 Unprocessable Entity` | Validation error |
     | `429 Too Many Requests` | Rate limit exceeded |
@@ -180,7 +187,10 @@ X-RateLimit-Reset: 1642694400
   <Accordion title="Error Response Format" icon="code">
     ```json
     {
-      "detail": "Invalid API key"
+      "detail": {
+        "code": "developer_memory_access_not_ready",
+        "message": "Developer Memory API access is not enabled for this account."
+      }
     }
     ```
   </Accordion>

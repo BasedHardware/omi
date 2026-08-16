@@ -23,12 +23,20 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, cast
 
 import numpy as np
 import requests
-from gtts import gTTS
-from gtts.lang import tts_langs
+
+try:
+    from gtts import gTTS  # type: ignore[import-not-found]
+    from gtts.lang import tts_langs  # type: ignore[import-not-found]
+except ImportError:  # gTTS is an optional benchmark dependency
+    gTTS = None
+
+    def tts_langs() -> Dict[str, str]:
+        return {}
+
 
 os.environ['VAD_GATE_SPEECH_THRESHOLD'] = '0.65'
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -252,7 +260,7 @@ def synthesize_pcm_with_gtts(lang_code: str, text: str, temp_dir: Path) -> bytes
     last_error = None
     for attempt in range(1, 4):
         try:
-            gTTS(text=text, lang=lang_code, slow=False).save(str(mp3_path))
+            cast(Any, gTTS)(text=text, lang=lang_code, slow=False).save(str(mp3_path))
             last_error = None
             break
         except Exception as exc:
@@ -302,7 +310,7 @@ def run_vad_gate(pcm_data: bytes, threshold: float, session_id: str) -> Tuple[by
         uid='multilang-vad-test',
         session_id=session_id,
     )
-    gate._speech_threshold = threshold
+    cast(Any, gate)._speech_threshold = threshold
 
     chunk_bytes = int(SAMPLE_RATE * CHANNELS * SAMPLE_WIDTH * (CHUNK_MS / 1000.0))
     wall_start = time.time()
@@ -329,7 +337,7 @@ def print_table(results: List[Dict[str, object]]) -> None:
     print('-' * len(header))
     for entry in results:
         lang = str(entry['language'])
-        for volume in entry['volumes']:
+        for volume in cast(List[Dict[str, Any]], entry['volumes']):
             sim_val = volume['similarity_pct']
             save_val = volume['savings_pct']
             sim_text = f'{sim_val:6.2f}' if sim_val is not None else '  n/a '
@@ -423,7 +431,7 @@ def main() -> int:
                 error_count += 1
                 continue
 
-            language_result = {
+            language_result: Dict[str, Any] = {
                 'language': lang,
                 'gtts_language': gtts_lang,
                 'dg_language': dg_lang,

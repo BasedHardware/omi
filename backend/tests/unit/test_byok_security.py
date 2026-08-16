@@ -22,7 +22,6 @@ os.environ.setdefault('DEEPGRAM_API_KEY', 'dg-test-fake-for-unit-tests')
 os.environ.setdefault('GOOGLE_API_KEY', 'goog-test-fake-for-unit-tests')
 os.environ.setdefault('ANTHROPIC_API_KEY', 'ant-test-fake-for-unit-tests')
 
-from langchain_openai import ChatOpenAI
 from testing.import_isolation import AutoMockModule, stub_modules
 
 warnings.filterwarnings('ignore', message='.*stream_options.*')
@@ -59,6 +58,7 @@ def _make_db_fakes() -> dict:
 
     twilio_service = ModuleType("utils.twilio_service")
     twilio_service.delete_user_caller_ids = MagicMock()
+    twilio_service.delete_user_caller_ids_strict = MagicMock()
     fakes["utils.twilio_service"] = twilio_service
 
     external_integrations = ModuleType("utils.llm.external_integrations")
@@ -75,6 +75,12 @@ def _make_db_fakes() -> dict:
 @pytest.fixture(scope="module", autouse=True)
 def _byok_isolation():
     with stub_modules(_make_db_fakes()):
+        # Warm the OpenAI client construction path once (SDK import/init) so the
+        # per-test fast-unit CPU-time guard doesn't charge cold-start cost to the
+        # first cache-routing test. Uses a distinct key so no assertion is affected.
+        from utils.llm.clients import _cached_openai_chat
+
+        _cached_openai_chat('gpt-4.1-mini', 'sk-warmup-timing-guard-not-asserted', {})
         yield
 
 
@@ -320,7 +326,7 @@ class TestGeminiKeyNotInUrl:
 
 
 class TestChatQuotaBYOKBypass:
-    @patch('utils.byok.get_byok_key')
+    @patch('utils.subscription.get_byok_key')
     @patch('utils.subscription.users_db')
     def test_enforce_chat_quota_bypasses_for_byok_with_openai_key(self, mock_users_db, mock_get_key):
         mock_users_db.is_byok_active.return_value = True
@@ -328,7 +334,7 @@ class TestChatQuotaBYOKBypass:
         from utils.subscription import enforce_chat_quota
 
         enforce_chat_quota('byok-user-uid')
-        mock_users_db.is_byok_active.assert_called_once_with('byok-user-uid')
+        mock_users_db.is_byok_active.assert_called_once_with('byok-user-uid', firestore_client=None)
 
     @patch('utils.byok.get_byok_key', return_value=None)
     @patch('utils.subscription.users_db')
@@ -602,21 +608,42 @@ class TestBYOKActivationValidation:
 
 
 class TestCacheRouting:
-    def test_cached_openai_chat_no_raw_key_in_cache(self):
-        from utils.llm.clients import _cached_openai_chat, _openai_cache
+    @staticmethod
+    def _stub_openai_constructor(monkeypatch):
+        from utils.llm import clients
+
+        class _StubChatOpenAI:
+            def __init__(self, **kwargs):
+                self.model_name = kwargs['model']
+                self.openai_api_base = kwargs.get('base_url')
+
+        constructor = MagicMock(side_effect=_StubChatOpenAI)
+        clients._openai_cache.clear()
+        monkeypatch.setattr(clients, 'ChatOpenAI', constructor)
+        return clients, _StubChatOpenAI, constructor
+
+    def test_cached_openai_chat_no_raw_key_in_cache(self, monkeypatch):
+        from utils.llm import clients
 
         api_key = 'sk-secret-openai-key-for-cache-test'
-        _cached_openai_chat('gpt-4.1-mini', api_key, {})
-        for k in _openai_cache.keys():
+        monkeypatch.setattr(clients, 'ChatOpenAI', MagicMock())
+        clients._cached_openai_chat('gpt-4.1-mini', api_key, {})
+        for k in clients._openai_cache.keys():
             assert api_key not in k, f"Raw API key found in cache key: {k}"
 
-    def test_cached_openai_chat_returns_same_instance(self):
-        from utils.llm.clients import _cached_openai_chat
+    def test_cached_openai_chat_returns_same_instance(self, monkeypatch):
+        from utils.llm import clients
 
         api_key = 'sk-deterministic-test-key'
-        inst1 = _cached_openai_chat('gpt-4.1-mini', api_key, {})
-        inst2 = _cached_openai_chat('gpt-4.1-mini', api_key, {})
+        fake_client = MagicMock()
+        constructor = MagicMock(return_value=fake_client)
+        monkeypatch.setattr(clients, 'ChatOpenAI', constructor)
+
+        inst1 = clients._cached_openai_chat('gpt-4.1-mini', api_key, {})
+        inst2 = clients._cached_openai_chat('gpt-4.1-mini', api_key, {})
+
         assert inst1 is inst2
+        constructor.assert_called_once_with(model='gpt-4.1-mini', api_key=api_key)
 
     def test_cached_anthropic_no_raw_key_in_cache(self):
         from utils.llm.clients import _anthropic_cache, _cached_anthropic
@@ -634,26 +661,30 @@ class TestCacheRouting:
         inst2 = _cached_anthropic(api_key)
         assert inst1 is inst2
 
-    def test_gemini_byok_routes_to_gemini_endpoint(self):
-        from utils.llm.clients import _create_byok_client, _GEMINI_OPENAI_BASE_URL
+    def test_gemini_byok_routes_to_gemini_endpoint(self, monkeypatch):
+        from utils.llm.clients import _GEMINI_OPENAI_BASE_URL
 
-        client = _create_byok_client('gemini-2.5-flash-lite', 'gemini', 'AIza-byok-key')
-        assert isinstance(client, ChatOpenAI)
+        clients, stub_client, _constructor = self._stub_openai_constructor(monkeypatch)
+
+        client = clients._create_byok_client('gemini-2.5-flash-lite', 'gemini', 'AIza-byok-key')
+        assert isinstance(client, stub_client)
         assert client.openai_api_base == _GEMINI_OPENAI_BASE_URL
 
-    def test_openai_byok_creates_client(self):
-        from utils.llm.clients import _create_byok_client
+    def test_openai_byok_creates_client(self, monkeypatch):
+        clients, stub_client, _constructor = self._stub_openai_constructor(monkeypatch)
 
-        client = _create_byok_client('gpt-4.1-mini', 'openai', 'sk-byok-test-key')
-        assert isinstance(client, ChatOpenAI)
+        client = clients._create_byok_client('gpt-4.1-mini', 'openai', 'sk-byok-test-key')
+        assert isinstance(client, stub_client)
         assert client.model_name == 'gpt-4.1-mini'
 
-    def test_openrouter_gemini_byok_routes_to_gemini_direct(self):
+    def test_openrouter_gemini_byok_routes_to_gemini_direct(self, monkeypatch):
         """OpenRouter BYOK for Gemini models reroutes to Gemini direct endpoint."""
-        from utils.llm.clients import _create_byok_client, _GEMINI_OPENAI_BASE_URL
+        from utils.llm.clients import _GEMINI_OPENAI_BASE_URL
 
-        client = _create_byok_client('gemini-3-flash-preview', 'openrouter', 'AIza-byok-key')
-        assert isinstance(client, ChatOpenAI)
+        clients, stub_client, _constructor = self._stub_openai_constructor(monkeypatch)
+
+        client = clients._create_byok_client('gemini-3-flash-preview', 'openrouter', 'AIza-byok-key')
+        assert isinstance(client, stub_client)
         # Must use Gemini base URL, not OpenRouter
         assert client.openai_api_base == _GEMINI_OPENAI_BASE_URL
         # Must use the bare model name for Gemini direct API
@@ -705,7 +736,7 @@ class TestMiddlewareIsolation:
 
 
 class TestQuotaBoundaryTests:
-    @patch('utils.byok.get_byok_key')
+    @patch('utils.subscription.get_byok_key')
     @patch('utils.subscription.users_db')
     def test_chat_quota_bypasses_with_anthropic_key_only(self, mock_users_db, mock_get_key):
         """Anthropic-only BYOK should also bypass chat quota."""
@@ -862,6 +893,60 @@ class TestBYOKFingerprintValidation:
         try:
             validate_byok_request('byok-uid')  # Should NOT raise
             assert get_byok_keys() == {}  # Context cleared, will use Omi keys
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_valid_request_exposes_exactly_the_enrolled_keys(self, mock_get_state):
+        """A passing BYOK request makes the enrolled provider keys available downstream."""
+        from utils.byok import _byok_ctx, validate_byok_request, get_byok_keys
+
+        mock_get_state.return_value = self._mock_byok_state()
+        token = _byok_ctx.set(dict(self._valid_request_keys))
+        try:
+            validate_byok_request('byok-uid')
+            assert set(get_byok_keys()) == set(self._enrolled_fingerprints)
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_header_for_unenrolled_provider_is_not_used(self, mock_get_state):
+        """A header the enrollment cannot vouch for must never reach the provider clients.
+
+        _check_byok_validity documents that "every header key's SHA-256 must match the
+        enrolled fingerprint", but it iterated the *enrolled* fingerprints. A header for a
+        provider absent from the enrollment was therefore never examined and stayed in the
+        request context, so get_byok_keys() handed it to downstream LLM calls unvalidated.
+        """
+        from utils.byok import _byok_ctx, validate_byok_request, get_byok_keys
+
+        mock_get_state.return_value = self._mock_byok_state()
+        keys = dict(self._valid_request_keys)
+        keys['unenrolled_provider'] = 'sk-never-enrolled-and-never-fingerprinted'
+        token = _byok_ctx.set(keys)
+        try:
+            validate_byok_request('byok-uid')
+            exposed = get_byok_keys()
+            assert 'unenrolled_provider' not in exposed
+            assert set(exposed) == set(self._enrolled_fingerprints)
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_enrolled_keys_survive_alongside_an_unenrolled_header(self, mock_get_state):
+        """Dropping the unenrolled header must not disturb the enrolled ones."""
+        from utils.byok import _byok_ctx, validate_byok_request, get_byok_keys
+
+        mock_get_state.return_value = self._mock_byok_state()
+        keys = dict(self._valid_request_keys)
+        keys['unenrolled_provider'] = 'sk-never-enrolled'
+        token = _byok_ctx.set(keys)
+        try:
+            validate_byok_request('byok-uid')
+            assert get_byok_keys() == self._valid_request_keys
         finally:
             _byok_ctx.reset(token)
 
@@ -1041,18 +1126,22 @@ class TestAuthDependencyBYOKIntegration:
     """Verify shared auth dependencies call (or skip) BYOK validation."""
 
     @patch('utils.other.endpoints.validate_byok_request')
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
     @patch('utils.other.endpoints.record_user_platform')
     @patch('utils.other.endpoints.verify_token', return_value='uid-123')
-    def test_get_current_user_uid_calls_byok_validation(self, _mock_verify, _mock_platform, mock_validate):
+    def test_get_current_user_uid_calls_byok_validation(
+        self, _mock_verify, _mock_platform, _mock_deletion, mock_validate
+    ):
         from utils.other.endpoints import get_current_user_uid
 
         uid = get_current_user_uid(authorization='Bearer fake-token')
         assert uid == 'uid-123'
         mock_validate.assert_called_once_with('uid-123')
 
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
     @patch('utils.other.endpoints.record_user_platform')
     @patch('utils.other.endpoints.verify_token', return_value='uid-456')
-    def test_no_byok_validation_skips_validate(self, _mock_verify, _mock_platform):
+    def test_no_byok_validation_skips_validate(self, _mock_verify, _mock_platform, _mock_deletion):
         """get_current_user_uid_no_byok_validation must NOT call validate_byok_request."""
         from utils.other.endpoints import get_current_user_uid_no_byok_validation
 
@@ -1070,9 +1159,10 @@ class TestWSAuthDependencyBYOK:
         ws.headers = headers
         return ws
 
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
     @patch('utils.other.endpoints.validate_byok_websocket', return_value=None)
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
-    def test_ws_listen_with_byok_headers_validates(self, _mock_auth, mock_validate):
+    def test_ws_listen_with_byok_headers_validates(self, _mock_auth, mock_validate, _mock_deletion):
         import asyncio
         from utils.other.endpoints import get_current_user_uid_ws_listen
 
@@ -1081,9 +1171,10 @@ class TestWSAuthDependencyBYOK:
         assert uid == 'ws-uid'
         mock_validate.assert_called_once_with('ws-uid')
 
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
     @patch('utils.other.endpoints.validate_byok_websocket', return_value=None)
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
-    def test_ws_listen_no_headers_passes(self, _mock_auth, mock_validate):
+    def test_ws_listen_no_headers_passes(self, _mock_auth, mock_validate, _mock_deletion):
         import asyncio
         from utils.other.endpoints import get_current_user_uid_ws_listen
 
@@ -1092,9 +1183,10 @@ class TestWSAuthDependencyBYOK:
         assert uid == 'ws-uid'
         mock_validate.assert_called_once()
 
+    @patch('utils.other.endpoints.get_user_deletion_wipe_status', return_value=None)
     @patch('utils.other.endpoints.validate_byok_websocket', return_value='fingerprint mismatch')
     @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
-    def test_ws_listen_validation_failure_raises_4003(self, _mock_auth, _mock_validate):
+    def test_ws_listen_validation_failure_raises_4003(self, _mock_auth, _mock_validate, _mock_deletion):
         import asyncio
         from fastapi import WebSocketException
         from utils.other.endpoints import get_current_user_uid_ws_listen

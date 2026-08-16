@@ -19,12 +19,19 @@ import threading
 import time
 from collections import deque
 from typing import List
+import pytest
 
 SYNC_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
+PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
 
 
 def _read_sync_source():
     with open(SYNC_PATH) as f:
+        return f.read()
+
+
+def _read_pipeline_source():
+    with open(PIPELINE_PATH) as f:
         return f.read()
 
 
@@ -45,7 +52,7 @@ def _async_function_body(source: str, name: str) -> str:
 def _load_turnstile_class():
     """Extract and exec the _OrderedTurnstile class without importing routers.sync
     (which pulls in firestore/opuslib/etc.)."""
-    source = _read_sync_source()
+    source = _read_pipeline_source()
     start = source.index('class _OrderedTurnstile')
     end = source.index('\ndef ', start)
     class_src = source[start:end]
@@ -59,6 +66,7 @@ def _load_turnstile_class():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestOrderedTurnstile:
     def test_serializes_in_given_order_despite_reverse_readiness(self):
         """Threads become ready newest-first; assignment order must still be oldest-first."""
@@ -124,7 +132,7 @@ class TestOrderedTurnstile:
 
 class TestCallersUseOrderedAssignment:
     def test_process_segment_accepts_turnstile_and_releases_it(self):
-        body = _function_body(_read_sync_source(), 'process_segment')
+        body = _function_body(_read_pipeline_source(), 'process_segment')
         assert 'turnstile' in body.split('):')[0], 'process_segment must accept a turnstile param'
         assert 'wait_turn' in body, 'process_segment must wait its chronological turn'
         assert 'finally:' in body and 'turnstile.complete(path)' in body, (
@@ -132,7 +140,7 @@ class TestCallersUseOrderedAssignment:
         )
 
     def test_wait_turn_precedes_conversation_lookup(self):
-        body = _function_body(_read_sync_source(), 'process_segment')
+        body = _function_body(_read_pipeline_source(), 'process_segment')
         assert body.index('wait_turn') < body.index(
             'get_closest_conversation_to_timestamps'
         ), 'turn must be acquired before the closest-conversation lookup'
@@ -144,7 +152,7 @@ class TestCallersUseOrderedAssignment:
         assert 'assignment_turnstile,' in body, 'v1 must pass the turnstile to process_segment'
 
     def test_v2_sorts_segments_and_passes_turnstile(self):
-        body = _async_function_body(_read_sync_source(), '_run_full_pipeline_background_async')
+        body = _async_function_body(_read_pipeline_source(), '_run_full_pipeline_background_async')
         assert 'sorted(segmented_paths, key=get_timestamp_from_path)' in body
         assert '_OrderedTurnstile(' in body
         assert 'assignment_turnstile,' in body, 'v2 must pass the turnstile to process_segment'
@@ -152,15 +160,15 @@ class TestCallersUseOrderedAssignment:
     def test_both_pipelines_reprocess_merged_conversations(self):
         source = _read_sync_source()
         v1 = _async_function_body(source, 'sync_local_files')
-        v2 = _async_function_body(source, '_run_full_pipeline_background_async')
+        v2 = _async_function_body(_read_pipeline_source(), '_run_full_pipeline_background_async')
         assert '_reprocess_merged_conversations' in v1
         assert '_reprocess_merged_conversations' in v2
 
     def test_merge_path_records_merged_conversation(self):
-        body = _function_body(_read_sync_source(), 'process_segment')
+        body = _function_body(_read_pipeline_source(), 'process_segment')
         assert "_merged" in body, 'merge path must record conversations that gained segments'
 
     def test_reprocess_helper_is_fail_safe(self):
-        body = _function_body(_read_sync_source(), '_reprocess_merged_conversations')
+        body = _function_body(_read_pipeline_source(), '_reprocess_merged_conversations')
         assert "pop('_merged'" in body, 'must pop the internal key so it never leaks into responses'
         assert 'except Exception' in body, 'one failed reprocess must not fail the batch'

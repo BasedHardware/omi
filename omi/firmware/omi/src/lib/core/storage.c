@@ -47,7 +47,11 @@ LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 #define STORAGE_CONTROL_NOTIFY_SIZE 32
 #define STORAGE_NOTIFY_VALUE_MAX_LEN ((CONFIG_BT_L2CAP_TX_MTU > 3U) ? (CONFIG_BT_L2CAP_TX_MTU - 3U) : 20U)
 
-#define SYNC_SPEED_LOG_INTERVAL_MS (30 * 1000)
+#define SYNC_SPEED_LOG_INTERVAL_MS (2 * 1000)
+
+/* How often, during a bulk read, to persist the ring read pointer up to the
+ * packets the phone has confirmed receiving (incremental auto-save). */
+#define STORAGE_ADVANCE_CHECKPOINT_MS 2000
 
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t storage_write_handler(struct bt_conn *conn,
@@ -104,6 +108,13 @@ static uint8_t read_request_pending;
 static uint8_t advance_request_pending;
 static uint8_t stop_requested;
 
+/* On connect the SD may still be remounting. Hold a sync request and wait up to
+ * this long for the card to become ready, then read -- instead of replying
+ * "not ready" (the app only triggers sync once, so it would give up). */
+#define STORAGE_SD_READY_TIMEOUT_MS 5000
+static int64_t info_deadline;
+static int64_t read_deadline;
+
 static uint64_t pending_start_seq;
 static uint32_t pending_packet_count;
 static uint64_t pending_advance_seq;
@@ -116,6 +127,15 @@ static uint64_t current_read_seq;
 static uint32_t remaining_packets;
 static uint8_t transfer_end_status;
 
+/* Incremental auto-save: bytes of audio the phone has confirmed receiving are
+ * accumulated in the TX-completion callback, then the ring read pointer is
+ * advanced (and persisted to SD) up to that point. Only delivered data is ever
+ * freed, so a mid-sync disconnect resumes from the last checkpoint instead of
+ * re-syncing from the start. */
+static atomic_t sync_confirmed_bytes = ATOMIC_INIT(0);
+static uint64_t sync_checkpoint_seq;
+static int64_t sync_checkpoint_deadline_ms;
+
 static atomic_t storage_status_used_bytes = ATOMIC_INIT(0);
 static atomic_t storage_status_unread_packets = ATOMIC_INIT(0);
 static atomic_t storage_status_free_bytes = ATOMIC_INIT(0);
@@ -127,6 +147,10 @@ typedef enum {
     SYNC_SPEED_MODE_BLE,
 } sync_speed_mode_t;
 
+/* Sync-speed metering is purely a logging aid. Compile it out entirely when
+ * logging is disabled (release build) so it costs nothing on the transfer hot
+ * path. */
+#if defined(CONFIG_LOG)
 static sync_speed_mode_t sync_speed_mode = SYNC_SPEED_MODE_NONE;
 static int64_t sync_speed_window_start_ms;
 static uint64_t sync_speed_window_bytes;
@@ -155,6 +179,16 @@ static void sync_speed_add_bytes(uint32_t bytes)
         sync_speed_window_bytes = 0;
     }
 }
+#else
+static inline void sync_speed_reset(sync_speed_mode_t mode)
+{
+    ARG_UNUSED(mode);
+}
+static inline void sync_speed_add_bytes(uint32_t bytes)
+{
+    ARG_UNUSED(bytes);
+}
+#endif /* CONFIG_LOG */
 
 static void storage_status_cache_set(const sd_ring_info_t *info)
 {
@@ -206,6 +240,50 @@ static int storage_notify(struct bt_conn *conn, const void *data, uint16_t len)
     }
 
     return bt_gatt_notify(conn, &storage_service.attrs[STORAGE_WRITE_NOTIFY_ATTR_IDX], data, len);
+}
+
+/* Completion callback: a bulk DATA notification was sent, free its throttle slot.
+ * user_data carries this notification's audio-byte count (set in
+ * storage_notify_data); accumulate what the phone has confirmed receiving. */
+static void storage_data_tx_done(struct bt_conn *conn, void *user_data)
+{
+    ARG_UNUSED(conn);
+    atomic_add(&sync_confirmed_bytes, (atomic_val_t) (uintptr_t) user_data);
+    transport_bulk_tx_release();
+}
+
+/* Send a bulk DATA notification through the shared TX throttle so the sync
+ * stream never consumes the TX buffers reserved for short control notifications
+ * (battery / charging / status). Returns the same codes as storage_notify():
+ * 0 on success, -EAGAIN if unsubscribed, -ENOMEM if no throttle slot / no buffer
+ * (caller yields and retries). */
+static int storage_notify_data(struct bt_conn *conn, const void *data, uint16_t len)
+{
+    if (!storage_notify_ready(conn)) {
+        return -EAGAIN;
+    }
+
+    /* Reserve a shared slot; short timeout so a stalled link doesn't hang the
+     * transfer -> falls back to the -ENOMEM yield/retry path. */
+    if (transport_bulk_tx_acquire(K_MSEC(200)) != 0) {
+        return -ENOMEM;
+    }
+
+    /* len includes the 1-byte NOTIFY_DATA marker; the audio payload is len-1. */
+    struct bt_gatt_notify_params params = {
+        .attr = &storage_service.attrs[STORAGE_WRITE_NOTIFY_ATTR_IDX],
+        .data = data,
+        .len = len,
+        .func = storage_data_tx_done,
+        .user_data = (void *) (uintptr_t) (len > 0U ? (uint16_t) (len - 1U) : 0U),
+    };
+
+    int err = bt_gatt_notify_cb(conn, &params);
+    if (err) {
+        /* Callback will not fire -> release the slot we just took. */
+        transport_bulk_tx_release();
+    }
+    return err;
 }
 
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value)
@@ -298,6 +376,61 @@ static void reset_transfer_state(void)
     current_read_seq = 0;
     remaining_packets = 0;
     transfer_end_status = 0;
+    atomic_set(&sync_confirmed_bytes, 0);
+    sync_checkpoint_seq = 0;
+    sync_checkpoint_deadline_ms = 0;
+}
+
+/* Ring seq the phone has confirmed receiving (whole packets only). */
+static uint64_t sync_confirmed_seq(void)
+{
+    uint32_t bytes = (uint32_t) atomic_get(&sync_confirmed_bytes);
+    return transfer_start_seq + (uint64_t) (bytes / RAW_AUDIO_PACKET_BYTES);
+}
+
+/* Adjust the cached status for `delta` packets freed, without an SD read, so
+ * the app sees free space grow live during a sync. Recording (write_seq) still
+ * corrects it via the periodic SD refresh; this only makes the freeing visible
+ * between refreshes. */
+static void sync_status_account_freed(uint64_t delta)
+{
+    uint64_t freed = delta * (uint64_t) RAW_AUDIO_PACKET_BYTES;
+    atomic_val_t used = atomic_get(&storage_status_used_bytes);
+    atomic_val_t unread = atomic_get(&storage_status_unread_packets);
+    atomic_val_t free_b = atomic_get(&storage_status_free_bytes);
+
+    atomic_set(&storage_status_used_bytes, used > (atomic_val_t) freed ? used - (atomic_val_t) freed : 0);
+    atomic_set(&storage_status_unread_packets, unread > (atomic_val_t) delta ? unread - (atomic_val_t) delta : 0);
+    atomic_set(&storage_status_free_bytes, free_b + (atomic_val_t) freed);
+}
+
+/* Persist the ring read pointer up to the confirmed-synced seq. Throttled to
+ * STORAGE_ADVANCE_CHECKPOINT_MS unless forced. Only moves forward over data the
+ * phone already has, so it is always safe to call mid-transfer.
+ *
+ * force=false (mid-transfer): non-blocking advance so the BLE send stream never
+ * stalls. force=true (DONE / disconnect): blocking, to guarantee the read
+ * pointer is persisted before the transfer tears down. */
+static void sync_checkpoint_advance(bool force)
+{
+    uint64_t confirmed = sync_confirmed_seq();
+    if (confirmed <= sync_checkpoint_seq) {
+        return;
+    }
+
+    int64_t now = k_uptime_get();
+    if (!force && now < sync_checkpoint_deadline_ms) {
+        return;
+    }
+    sync_checkpoint_deadline_ms = now + STORAGE_ADVANCE_CHECKPOINT_MS;
+
+    uint64_t delta = confirmed - sync_checkpoint_seq;
+    int ret = force ? sd_ring_advance(confirmed) : sd_ring_advance_async(confirmed);
+    if (ret == 0) {
+        sync_checkpoint_seq = confirmed;
+        sync_status_account_freed(delta);
+        LOG_INF("Ring auto-advanced to synced seq %llu", (unsigned long long) confirmed);
+    }
 }
 
 void storage_stop_transfer(void)
@@ -348,9 +481,10 @@ static int start_pending_read(struct bt_conn *conn)
     current_read_seq = pending_start_seq;
     remaining_packets = requested_packets;
     transfer_end_status = 0;
-    sync_speed_mode = SYNC_SPEED_MODE_NONE;
-    sync_speed_window_bytes = 0;
-    sync_speed_window_start_ms = 0;
+    atomic_set(&sync_confirmed_bytes, 0);
+    sync_checkpoint_seq = pending_start_seq;
+    sync_checkpoint_deadline_ms = k_uptime_get() + STORAGE_ADVANCE_CHECKPOINT_MS;
+    sync_speed_reset(SYNC_SPEED_MODE_NONE);
 
     return 0;
 }
@@ -395,9 +529,11 @@ static void write_to_gatt(struct bt_conn *conn)
         return;
     }
 
+#if defined(CONFIG_LOG)
     if (sync_speed_mode != SYNC_SPEED_MODE_BLE) {
         sync_speed_reset(SYNC_SPEED_MODE_BLE);
     }
+#endif
 
     uint16_t ble_chunk = get_ble_data_chunk_size(conn);
 
@@ -433,7 +569,7 @@ static void write_to_gatt(struct bt_conn *conn)
             data_notify_buf[0] = NOTIFY_DATA;
             memcpy(data_notify_buf + 1, storage_buffer + bytes_sent, payload);
 
-            int err = storage_notify(conn, data_notify_buf, payload + 1U);
+            int err = storage_notify_data(conn, data_notify_buf, payload + 1U);
             if (err == -ENOMEM) {
                 k_yield();
                 if (consume_stop_request()) {
@@ -458,6 +594,9 @@ static void write_to_gatt(struct bt_conn *conn)
 
         current_read_seq += packets_read;
         remaining_packets -= packets_read;
+
+        /* Free device storage as the phone confirms receipt (throttled). */
+        sync_checkpoint_advance(false);
     }
 
     done_pending = true;
@@ -561,9 +700,22 @@ static void storage_write(void)
         }
 
         if (info_requested) {
-            info_requested = 0;
-            if (conn) {
+            if (!conn) {
+                info_requested = 0;
+                info_deadline = 0;
+            } else if (sd_is_ready()) {
                 (void) send_ring_info_response(conn);
+                info_requested = 0;
+                info_deadline = 0;
+            } else {
+                /* SD still remounting after connect: wait for it, up to timeout. */
+                if (info_deadline == 0) {
+                    info_deadline = k_uptime_get() + STORAGE_SD_READY_TIMEOUT_MS;
+                } else if (k_uptime_get() >= info_deadline) {
+                    (void) send_ack(conn, STORAGE_NOT_READY);
+                    info_requested = 0;
+                    info_deadline = 0;
+                }
             }
         }
 
@@ -590,25 +742,39 @@ static void storage_write(void)
         }
 
         if (read_request_pending) {
-            read_request_pending = 0;
-            if (conn) {
+            if (!conn) {
+                read_request_pending = 0;
+                read_deadline = 0;
+            } else if (sd_is_ready()) {
                 int ret = start_pending_read(conn);
                 if (ret < 0) {
                     (void) send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY));
+                }
+                read_request_pending = 0;
+                read_deadline = 0;
+            } else {
+                if (read_deadline == 0) {
+                    read_deadline = k_uptime_get() + STORAGE_SD_READY_TIMEOUT_MS;
+                } else if (k_uptime_get() >= read_deadline) {
+                    (void) send_ack(conn, STORAGE_NOT_READY);
+                    read_request_pending = 0;
+                    read_deadline = 0;
                 }
             }
         }
 
         if (transfer_active) {
             if (conn == NULL) {
+                /* Link dropped mid-sync: persist progress up to the last packet
+                 * the phone confirmed, so reconnect resumes from there. */
+                sync_checkpoint_advance(true);
                 storage_stop_transfer();
             } else if (done_pending) {
                 int err = send_done(conn, transfer_end_status, current_read_seq);
                 if (err == -ENOMEM) {
                     k_yield();
-                } else if (err == -EAGAIN) {
-                    reset_transfer_state();
                 } else {
+                    sync_checkpoint_advance(true);
                     reset_transfer_state();
                 }
             } else {

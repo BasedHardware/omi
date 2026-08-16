@@ -28,7 +28,8 @@ enum GmailReaderError: LocalizedError {
     case .noGmailCookies:
       return "No Gmail session cookies found. Make sure you're logged into Gmail."
     case .notSignedIn:
-      return "Not signed into Gmail in any browser. Open mail.google.com in Chrome, Arc, Brave, or Edge, sign in, then try again."
+      return
+        "Not signed into Gmail in any browser. Open mail.google.com in Chrome, Arc, Brave, or Edge, sign in, then try again."
     case .sessionExpired:
       return "Your Gmail session expired. Reload mail.google.com in your browser to refresh it, then try again."
     case .cookieDecryptionFailed(let msg):
@@ -60,9 +61,9 @@ enum GmailFetchOutcome: Equatable {
 
   static func == (lhs: GmailFetchOutcome, rhs: GmailFetchOutcome) -> Bool {
     switch (lhs, rhs) {
-    case let (.success(_, lb, ls), .success(_, rb, rs)):
+    case (.success(_, let lb, let ls), .success(_, let rb, let rs)):
       return lb == rb && ls == rs
-    case let (.failure(lc, ls, la), .failure(rc, rs, ra)):
+    case (.failure(let lc, let ls, let la), .failure(let rc, let rs, let ra)):
       return lc == rc && ls == rs && la == ra
     default:
       return false
@@ -144,18 +145,39 @@ actor GmailReaderService {
   /// - Parameters:
   ///   - maxResults: Maximum number of emails to return
   ///   - query: Gmail search query (default: "newer_than:1d"). For onboarding use "newer_than:30d".
-  func readRecentEmails(maxResults: Int = 50, query: String = "newer_than:1d") async throws
+  ///   - userInitiated: Whether the user explicitly requested this read. Only
+  ///     explicit reads may show the browser Safe Storage consent sheet.
+  func readRecentEmails(
+    maxResults: Int = 50,
+    query: String = "newer_than:1d",
+    userInitiated: Bool = false
+  ) async throws
     -> [GmailEmail]
   {
+    if userInitiated {
+      BrowserKeychainCache.shared.beginUserInitiatedOperation()
+    }
+    // Snapshot the selection once for the whole read: readRecentEmails runs
+    // several Python fetches (query + label feeds + date windows) and each
+    // must use the same profile, or a mid-read picker change would merge two
+    // accounts' mail into one import.
+    let selectedCookiePath = GmailSelectionStore.selectedCookiePath
     let emails: [GmailEmail]
     if let days = Self.parseNewerThanDays(query), days > 20 {
       let queryEmails = try fetchGmailViaAtomFeedSingle(
         maxResults: maxResults,
         query: query,
         feedPath: nil,
-        allowBootstrap: false
+        allowBootstrap: false,
+        userInitiated: userInitiated,
+        selectedCookiePath: selectedCookiePath
       )
-      let labelEmails = try fetchGmailViaLabelFeeds(maxResults: maxResults, query: query)
+      let labelEmails = try fetchGmailViaLabelFeeds(
+        maxResults: maxResults,
+        query: query,
+        userInitiated: userInitiated,
+        selectedCookiePath: selectedCookiePath
+      )
       var merged: [String: GmailEmail] = [:]
       for email in queryEmails + labelEmails {
         let existing = merged[email.id]
@@ -168,18 +190,29 @@ actor GmailReaderService {
         .prefix(maxResults)
         .map(\.self)
     } else {
-      emails = try fetchGmailViaAtomFeedSingle(maxResults: maxResults, query: query)
+      emails = try fetchGmailViaAtomFeedSingle(
+        maxResults: maxResults,
+        query: query,
+        userInitiated: userInitiated,
+        selectedCookiePath: selectedCookiePath
+      )
     }
     return emails.sorted { $0.date > $1.date }
   }
 
-  func verifyConnection() async -> GmailConnectionStatus {
+  func verifyConnection(userInitiated: Bool = false) async -> GmailConnectionStatus {
+    if userInitiated {
+      BrowserKeychainCache.shared.beginUserInitiatedOperation()
+    }
     do {
+      let selectedCookiePath = GmailSelectionStore.selectedCookiePath
       _ = try fetchGmailViaAtomFeedSingle(
         maxResults: 1,
         query: "newer_than:1d",
         feedPath: "atom/inbox",
-        allowBootstrap: false
+        allowBootstrap: false,
+        userInitiated: userInitiated,
+        selectedCookiePath: selectedCookiePath
       )
       return .connected(verifiedAt: Date())
     } catch let error as GmailReaderError {
@@ -197,13 +230,14 @@ actor GmailReaderService {
   }
 
   /// Synthesize profile memories and tasks from a batch of emails.
-  /// Uses an LLM call to extract ~10 memories and 2-3 tasks.
+  /// The prompt and the model live in the backend behind POST /v1/connectors/synthesize;
+  /// this only formats the metadata rows and persists what comes back.
   func synthesizeFromEmails(emails: [GmailEmail]) async -> (
     memories: Int, tasks: Int, profileSummary: String
   ) {
     guard !emails.isEmpty else { return (0, 0, "") }
 
-    // Format emails compactly for the LLM
+    // Format emails compactly for the backend
     var emailLines: [String] = []
     let dateFormatter = DateFormatter()
     dateFormatter.dateFormat = "MMM d"
@@ -214,138 +248,80 @@ actor GmailReaderService {
         ?? email.from
       emailLines.append("[\(date)] From: \(sender) | Subject: \(email.subject) | \(email.snippet)")
     }
-    let emailText = emailLines.joined(separator: "\n")
-
-    let synthesisPrompt = """
-      Analyze these \(emails.count) recent emails and extract profile information about the user.
-
-      EMAILS:
-      \(emailText)
-
-      Respond ONLY with valid JSON (no markdown, no code fences, no backticks):
-      {
-        "memories": [
-          "factual statement about the user based on email patterns"
-        ],
-        "tasks": [
-          {"description": "actionable follow-up item", "priority": "high"}
-        ],
-        "profile": "2-3 sentence summary of who this user is"
-      }
-
-      RULES:
-      - Extract exactly 10 memories (facts about their role, company, projects, relationships, interests, tools, communication patterns)
-      - Extract 2-3 tasks (pending replies, upcoming deadlines, things to follow up on)
-      - Each memory should be a single clear factual statement
-      - Task priorities: "high", "medium", or "low"
-      - Profile should summarize professional identity and key interests
-      - Do NOT include raw email content — synthesize and generalize
-      - Output ONLY the JSON object, nothing else
-      """
 
     // Retry the synthesis on transient failure instead of silently dropping the import.
     let maxAttempts = 2
     for attempt in 1...maxAttempts {
-    do {
-      if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
-        || UserDefaults.standard.bool(forKey: "forceSynthesisFail") {
-        throw NSError(domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
-      }
-      let bridge = AgentBridge(harnessMode: "piMono")
-      try await bridge.start()
-      defer { Task { await bridge.stop() } }
-
-      let result = try await bridge.query(
-        prompt: synthesisPrompt,
-        systemPrompt:
-          "You are a profile extraction assistant. Output ONLY valid JSON. No markdown, no code fences, no explanation.",
-        model: ModelQoS.Claude.synthesis,
-        onTextDelta: { @Sendable _ in },
-        onToolCall: { @Sendable _, _, _ in return "" },
-        onToolActivity: { @Sendable _, _, _, _ in }
-      )
-
-      var responseText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-      log("GmailReaderService: Synthesis response length: \(responseText.count) chars")
-
-      // Strip markdown code fences if present (```json ... ``` or ``` ... ```)
-      if responseText.hasPrefix("```") {
-        // Remove opening fence (```json or ```)
-        if let firstNewline = responseText.firstIndex(of: "\n") {
-          responseText = String(responseText[responseText.index(after: firstNewline)...])
+      do {
+        if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
+          || UserDefaults.standard.bool(forKey: "forceSynthesisFail")
+        {
+          throw NSError(
+            domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
         }
-        // Remove closing fence
-        if responseText.hasSuffix("```") {
-          responseText = String(responseText.dropLast(3)).trimmingCharacters(
-            in: .whitespacesAndNewlines)
-        }
-      }
+        let synthesis = try await APIClient.shared.synthesizeConnectorItems(
+          source: "gmail",
+          items: emailLines
+        )
 
-      // Parse the JSON response
-      guard let jsonData = responseText.data(using: .utf8),
-        let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-      else {
-        log("GmailReaderService: Failed to parse synthesis response: \(responseText.prefix(500))")
-        return (0, 0, "")
-      }
+        let memoryStrings = synthesis.memories
+        let taskDicts = synthesis.tasks
+        let profileSummary = synthesis.profile
 
-      let memoryStrings = parsed["memories"] as? [String] ?? []
-      let taskDicts = parsed["tasks"] as? [[String: Any]] ?? []
-      let profileSummary = parsed["profile"] as? String ?? ""
+        log("GmailReaderService: Parsed \(memoryStrings.count) memories, \(taskDicts.count) tasks")
 
-      log("GmailReaderService: Parsed \(memoryStrings.count) memories, \(taskDicts.count) tasks")
-
-      let artifacts = memoryStrings.map { memory in
-        ImportEvidenceBatchItem(
+        let artifacts = memoryStrings.map { memory in
+          ImportEvidenceBatchItem(
             title: "Email Profile Insight",
             snippet: memory,
             content: memory,
             metadata: ["import_kind": "profile"]
+          )
+        }
+        let legacyMemories = memoryStrings.map { memory in
+          MemoryBatchItem(
+            content: memory,
+            tags: ["gmail", "onboarding"],
+            headline: "Email Profile Insight",
+            source: "gmail"
+          )
+        }
+        let saveResult = await OnboardingImportEvidenceService.save(
+          artifacts,
+          sourceType: "gmail",
+          logPrefix: "GmailReaderService",
+          legacyMemories: legacyMemories
         )
-      }
-      let legacyMemories = memoryStrings.map { memory in
-        MemoryBatchItem(
-          content: memory,
-          tags: ["gmail", "onboarding"],
-          headline: "Email Profile Insight",
-          source: "gmail"
+
+        // Save tasks
+        var tasksSaved = 0
+        for taskDict in taskDicts {
+          let description = taskDict.description
+          guard !description.isEmpty else { continue }
+          let priority = taskDict.priority.isEmpty ? "medium" : taskDict.priority
+          let task = await TasksStore.shared.createTask(
+            description: description,
+            dueAt: nil,
+            priority: priority,
+            tags: ["gmail", "onboarding"]
+          )
+          if task != nil { tasksSaved += 1 }
+        }
+
+        log(
+          "GmailReaderService: Synthesis complete — \(saveResult.saved) memories, \(tasksSaved) tasks"
         )
-      }
-      let saveResult = await OnboardingImportEvidenceService.save(
-        artifacts,
-        sourceType: "gmail",
-        logPrefix: "GmailReaderService",
-        legacyMemories: legacyMemories
-      )
+        return (saveResult.saved, tasksSaved, profileSummary)
 
-      // Save tasks
-      var tasksSaved = 0
-      for taskDict in taskDicts {
-        guard let description = taskDict["description"] as? String else { continue }
-        let priority = taskDict["priority"] as? String ?? "medium"
-        let task = await TasksStore.shared.createTask(
-          description: description,
-          dueAt: nil,
-          priority: priority,
-          tags: ["gmail", "onboarding"]
-        )
-        if task != nil { tasksSaved += 1 }
+      } catch {
+        if attempt < maxAttempts {
+          log("GmailReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
+          try? await Task.sleep(nanoseconds: 800_000_000)
+          continue
+        }
+        log("GmailReaderService: Synthesis failed after \(attempt) attempts: \(error)")
+        return (0, 0, "")
       }
-
-      log(
-        "GmailReaderService: Synthesis complete — \(saveResult.saved) memories, \(tasksSaved) tasks"
-      )
-      return (saveResult.saved, tasksSaved, profileSummary)
-
-    } catch {
-      if attempt < maxAttempts {
-        log("GmailReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
-        try? await Task.sleep(nanoseconds: 800_000_000)
-        continue
-      }
-      log("GmailReaderService: Synthesis failed after \(attempt) attempts: \(error)")
-      return (0, 0, "")
-    }
     }
     return (0, 0, "")
   }
@@ -405,14 +381,21 @@ actor GmailReaderService {
     maxResults: Int,
     query: String = "newer_than:1d",
     feedPath: String? = nil,
-    allowBootstrap: Bool? = nil
+    allowBootstrap: Bool? = nil,
+    userInitiated: Bool = false,
+    selectedCookiePath: String? = nil
   ) throws
     -> [GmailEmail]
   {
     let shouldUseBootstrapPage =
       allowBootstrap ?? (feedPath == nil && Self.parseNewerThanDays(query) != nil)
 
-    let browserConfigs = BrowserGoogleSession.configsForPython(logPrefix: "GmailReaderService")
+    let browserConfigs = GmailSelectionStore.filter(
+      BrowserGoogleSession.configsForPython(
+        logPrefix: "GmailReaderService",
+        userInitiated: userInitiated
+      ),
+      selectedCookiePath: selectedCookiePath)
 
     guard !browserConfigs.isEmpty else {
       throw GmailReaderError.noBrowserFound
@@ -728,12 +711,12 @@ actor GmailReaderService {
     let outcome = GmailOutcomeParser.parse(json)
     let emailDicts: [[String: Any]]
     switch outcome {
-    case let .failure(cls, summary, attempts):
+    case .failure(let cls, let summary, let attempts):
       log(
         "GmailReaderService: fetch failed [\(cls.rawValue)] — \(summary) | "
           + "attempts: \(GmailOutcomeParser.diagnosticsLine(attempts))")
       throw cls.asError(summary: summary)
-    case let .success(emails, browserName, sourceName):
+    case .success(let emails, let browserName, let sourceName):
       log("GmailReaderService: Got \(emails.count) emails from \(browserName) via \(sourceName)")
       emailDicts = emails
     }
@@ -759,7 +742,12 @@ actor GmailReaderService {
     }
   }
 
-  private func fetchGmailViaLabelFeeds(maxResults: Int, query: String) throws -> [GmailEmail] {
+  private func fetchGmailViaLabelFeeds(
+    maxResults: Int,
+    query: String,
+    userInitiated: Bool = false,
+    selectedCookiePath: String? = nil
+  ) throws -> [GmailEmail] {
     guard maxResults > 0 else { return [] }
 
     let feedPaths = [
@@ -784,7 +772,9 @@ actor GmailReaderService {
         maxResults: min(20, maxResults),
         query: query,
         feedPath: feedPath,
-        allowBootstrap: false
+        allowBootstrap: false,
+        userInitiated: userInitiated,
+        selectedCookiePath: selectedCookiePath
       )
       for email in feedEmails {
         let existing = merged[email.id]
@@ -804,7 +794,11 @@ actor GmailReaderService {
       .map(\.self)
   }
 
-  private func fetchGmailViaDateWindows(daysBack: Int, maxResults: Int) throws -> [GmailEmail] {
+  private func fetchGmailViaDateWindows(
+    daysBack: Int,
+    maxResults: Int,
+    userInitiated: Bool = false
+  ) throws -> [GmailEmail] {
     guard maxResults > 0 else { return [] }
 
     let calendar = Calendar(identifier: .gregorian)
@@ -813,7 +807,10 @@ actor GmailReaderService {
       let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))
     else {
       return try fetchGmailViaAtomFeedSingle(
-        maxResults: maxResults, query: "newer_than:\(daysBack)d")
+        maxResults: maxResults,
+        query: "newer_than:\(daysBack)d",
+        userInitiated: userInitiated
+      )
     }
 
     var collected: [String: GmailEmail] = [:]
@@ -830,7 +827,11 @@ actor GmailReaderService {
       inspectedWindows += 1
 
       let query = Self.atomDateRangeQuery(start: windowStart, end: windowEnd)
-      let slice = try fetchGmailViaAtomFeedSingle(maxResults: min(20, maxResults), query: query)
+      let slice = try fetchGmailViaAtomFeedSingle(
+        maxResults: min(20, maxResults),
+        query: query,
+        userInitiated: userInitiated
+      )
       for email in slice {
         collected[email.id] = email
       }

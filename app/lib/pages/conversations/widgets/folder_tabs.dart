@@ -310,6 +310,7 @@ class _FolderContextMenu extends StatelessWidget {
     final folderProvider = Provider.of<FolderProvider>(context, listen: false);
     final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
 
     Navigator.pop(context);
 
@@ -337,7 +338,7 @@ class _FolderContextMenu extends StatelessWidget {
               // Refresh conversations to show updated folder contents
               conversationProvider.filterByFolder(moveToFolderId);
             } else {
-              scaffoldMessenger.showSnackBar(SnackBar(content: Text(context.l10n.failedToDeleteFolder)));
+              scaffoldMessenger.showSnackBar(SnackBar(content: Text(l10n.failedToDeleteFolder)));
             }
           });
         },

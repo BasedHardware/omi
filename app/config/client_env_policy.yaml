@@ -2,7 +2,6 @@
   "public_client_env": {
     "allowed": [
       "PUBLIC_API_BASE_URL",
-      "PUBLIC_STAGING_API_URL",
       "PUBLIC_USE_WEB_AUTH",
       "PUBLIC_USE_AUTH_CUSTOM_TOKEN",
       "PUBLIC_GOOGLE_MAPS_API_KEY",
@@ -41,7 +40,6 @@
   },
   "public_client_env_sources": {
     "allowed": [
-      "STAGING_API_URL"
     ]
   },
   "restricted_public_client_keys": {

@@ -35,9 +35,13 @@ class BaseBatchAudioWriter {
     private let minFreeBytes: Int64 = 200 * 1024 * 1024 // stop below 200 MB free
     let partSuffix = "part"
 
-    init(tag: String, queueLabel: String, recoveryPrefix: String) {
+    /// `queue` lets a caller share an existing serial queue instead of owning one:
+    /// the phone-mic writer runs on the controller's audio queue so encode+write
+    /// stay on a single queue and `audioQueue.sync {}` genuinely drains pending
+    /// writes. When nil (the BLE subclasses) the writer creates its own.
+    init(tag: String, queueLabel: String, recoveryPrefix: String, queue: DispatchQueue? = nil) {
         self.tag = tag
-        self.queue = DispatchQueue(label: queueLabel)
+        self.queue = queue ?? DispatchQueue(label: queueLabel)
         self.recoveryPrefix = recoveryPrefix
     }
 

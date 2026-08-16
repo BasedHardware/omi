@@ -62,6 +62,8 @@ DEFAULT_ALLOWLIST = BACKEND_DIR / "tests" / ".import_time_side_effects_legacy"
 SIDE_EFFECT_CTORS: list[tuple[str, str]] = [
     ("openai", "OpenAI"),
     ("openai", "AsyncOpenAI"),
+    ("langchain_openai", "ChatOpenAI"),
+    ("langchain_openai", "OpenAIEmbeddings"),
     ("anthropic", "Anthropic"),
     ("anthropic", "AsyncAnthropic"),
     ("deepgram", "DeepgramClient"),
@@ -197,7 +199,7 @@ def _record_offenders_in_expr(node: ast.AST, aliases: dict[str, str], out: list[
             if isinstance(sub.func, ast.Name) and sub.func.id == "open":
                 out.append((sub.lineno, "top-level open() call"))
                 continue
-        if _is_os_environ_subscript(sub):
+        if isinstance(sub, ast.Subscript) and _is_os_environ_subscript(sub):
             out.append((sub.lineno, "os.environ[] subscript at module scope"))
 
 

@@ -1,12 +1,12 @@
-import { describe, it, expect, vi } from 'vitest'
-import { buildGmailPrompt, parseGmailMemories } from './gmailExtract'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { GmailItem } from '../../../shared/types'
 
+const { omiPost } = vi.hoisted(() => ({ omiPost: vi.fn() }))
 vi.mock('./apiClient', () => ({
-  desktopApi: {
-    post: vi.fn()
-  }
+  omiApi: { post: omiPost }
 }))
+
+import { formatGmailItems, extractGmailMemories } from './gmailExtract'
 
 const item = (over: Partial<GmailItem>): GmailItem => ({
   id: 'm1',
@@ -17,29 +17,36 @@ const item = (over: Partial<GmailItem>): GmailItem => ({
   ...over
 })
 
-describe('buildGmailPrompt', () => {
-  it('includes the atomic-decomposition rule and the metadata-only framing', () => {
-    const p = buildGmailPrompt([item({})], [])
-    expect(p).toContain('atomic')
-    expect(p).toContain('subject, sender, snippet only')
-  })
+beforeEach(() => {
+  omiPost.mockReset()
+})
 
-  it('lists each email and any existing memories to avoid', () => {
-    const p = buildGmailPrompt([item({ subject: 'Flight to Bilbao' })], ['Has a girlfriend'])
-    expect(p).toContain('Flight to Bilbao')
-    expect(p).toContain('Has a girlfriend')
-    expect(p).toContain('EXISTING MEMORIES')
+describe('formatGmailItems', () => {
+  it('renders sender, subject and snippet only — never a body', () => {
+    expect(formatGmailItems([item({ subject: 'Flight to Bilbao' })])).toEqual([
+      'From: Shop <s@x.com> | Subject: Flight to Bilbao | Your order is on the way'
+    ])
   })
 })
 
-describe('parseGmailMemories', () => {
-  it('parses memories, drops blanks, and dedups against existing (case-insensitive)', () => {
-    const json = JSON.stringify({ memories: ['Has a dog', '  ', 'Lives in Bilbao'] })
-    expect(parseGmailMemories(json, ['lives in bilbao'])).toEqual(['Has a dog'])
+describe('extractGmailMemories', () => {
+  it('sends existing memories to the backend and dedups the response case-insensitively', async () => {
+    omiPost.mockResolvedValue({
+      data: { memories: ['Has a dog', '  ', 'Lives in Bilbao'], tasks: [], profile: '' }
+    })
+
+    const memories = await extractGmailMemories([item({})], ['lives in bilbao'])
+
+    expect(omiPost).toHaveBeenCalledWith(
+      '/v1/connectors/synthesize',
+      expect.objectContaining({ source: 'gmail', existing_memories: ['lives in bilbao'] }),
+      expect.anything()
+    )
+    expect(memories).toEqual(['Has a dog'])
   })
 
-  it('tolerates fenced JSON and returns [] on garbage', () => {
-    expect(parseGmailMemories('```json\n{"memories":[]}\n```', [])).toEqual([])
-    expect(parseGmailMemories('not json at all', [])).toEqual([])
+  it('never calls the backend for an empty inbox page', async () => {
+    expect(await extractGmailMemories([])).toEqual([])
+    expect(omiPost).not.toHaveBeenCalled()
   })
 })

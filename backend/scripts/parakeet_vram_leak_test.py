@@ -55,6 +55,7 @@ import threading
 import time
 import wave
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 PARAKEET_URL = os.getenv("PARAKEET_URL", "http://127.0.0.1:8080")
@@ -68,7 +69,16 @@ SLOPE_THRESH = float(os.getenv("LEAK_TEST_SLOPE_THRESH", "50.0"))
 COOLDOWN = int(os.getenv("LEAK_TEST_COOLDOWN", "30"))
 
 
-def get_gpu_memory():
+def _make_conn(timeout: int) -> http.client.HTTPConnection:
+    parsed = urlparse(PARAKEET_URL)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port
+    if port is None:
+        return http.client.HTTPConnection(host, timeout=timeout)
+    return http.client.HTTPConnection(host, port, timeout=timeout)
+
+
+def get_gpu_memory() -> Tuple[Optional[float], Optional[float]]:
     try:
         out = (
             subprocess.check_output(
@@ -84,11 +94,10 @@ def get_gpu_memory():
         return None, None
 
 
-def get_process_rss_mib():
+def get_process_rss_mib() -> Optional[float]:
     """Query parakeet /metrics for process_resident_memory_bytes as fallback."""
     try:
-        parsed = urlparse(PARAKEET_URL)
-        conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
+        conn = _make_conn(5)
         conn.request("GET", "/metrics/")
         resp = conn.getresponse()
         body = resp.read().decode()
@@ -101,15 +110,14 @@ def get_process_rss_mib():
     return None
 
 
-def get_metrics():
+def get_metrics() -> Dict[str, float]:
     try:
-        parsed = urlparse(PARAKEET_URL)
-        conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
+        conn = _make_conn(5)
         conn.request("GET", "/metrics/")
         resp = conn.getresponse()
         body = resp.read().decode()
         conn.close()
-        metrics = {}
+        metrics: Dict[str, float] = {}
         for line in body.split("\n"):
             if line.startswith("parakeet_gpu_oom_total "):
                 metrics["oom"] = float(line.split()[1])
@@ -122,14 +130,14 @@ def get_metrics():
         return {}
 
 
-def make_wav(duration_s, sample_rate=16000):
+def make_wav(duration_s: float, sample_rate: int = 16000) -> bytes:
     n_samples = int(duration_s * sample_rate)
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(sample_rate)
-        samples = []
+        samples: List[int] = []
         for i in range(n_samples):
             t = i / sample_rate
             val = 0.3 * math.sin(2 * math.pi * 250 * t)
@@ -141,8 +149,8 @@ def make_wav(duration_s, sample_rate=16000):
     return buf.getvalue()
 
 
-def load_audio_files(audio_dir):
-    files = []
+def load_audio_files(audio_dir: str) -> List[Dict[str, Any]]:
+    files: List[Dict[str, Any]] = []
     if not audio_dir or not os.path.isdir(audio_dir):
         return files
     for name in sorted(os.listdir(audio_dir)):
@@ -157,8 +165,7 @@ def load_audio_files(audio_dir):
     return files
 
 
-def send_request(wav_bytes, request_id, filename="test.wav"):
-    parsed = urlparse(PARAKEET_URL)
+def send_request(wav_bytes: bytes, request_id: int, filename: str = "test.wav") -> Dict[str, Any]:
     boundary = f"----LeakTest{request_id}"
     body = b"".join(
         [
@@ -169,9 +176,9 @@ def send_request(wav_bytes, request_id, filename="test.wav"):
             f"\r\n--{boundary}--\r\n".encode(),
         ]
     )
-    conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=600)
+    conn = _make_conn(600)
+    t0 = time.time()
     try:
-        t0 = time.time()
         conn.request(
             "POST",
             "/v2/transcribe",
@@ -187,7 +194,7 @@ def send_request(wav_bytes, request_id, filename="test.wav"):
         return {"id": request_id, "status": 0, "elapsed": time.time() - t0, "error": str(e)}
 
 
-def linear_regression(times, values):
+def linear_regression(times: List[float], values: List[float]) -> Tuple[float, float, float]:
     """Simple least-squares linear regression. Returns (slope, intercept, r_squared)."""
     n = len(times)
     if n < 3:
@@ -196,7 +203,6 @@ def linear_regression(times, values):
     sum_y = sum(values)
     sum_xy = sum(t * v for t, v in zip(times, values))
     sum_x2 = sum(t * t for t in times)
-    sum_y2 = sum(v * v for v in values)
 
     denom = n * sum_x2 - sum_x * sum_x
     if denom == 0:
@@ -211,15 +217,14 @@ def linear_regression(times, values):
     return slope, intercept, r_squared
 
 
-def main():
+def main() -> int:
     print("=" * 74)
     print("Parakeet Sustained VRAM Leak Test")
     print("=" * 74)
 
     # Health check
     try:
-        parsed = urlparse(PARAKEET_URL)
-        conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5)
+        conn = _make_conn(5)
         conn.request("GET", "/health")
         resp = conn.getresponse()
         health = resp.read().decode()
@@ -233,12 +238,12 @@ def main():
     # GPU baseline
     use_nvidia_smi = True
     baseline_used, gpu_total = get_gpu_memory()
-    if baseline_used is not None:
-        print(f"GPU: {baseline_used:.0f}/{gpu_total:.0f} MiB ({baseline_used/gpu_total*100:.1f}%)")
+    if baseline_used is not None and gpu_total is not None:
+        print(f"GPU: {baseline_used:.0f}/{gpu_total:.0f} MiB ({baseline_used / gpu_total * 100:.1f}%)")
     else:
         use_nvidia_smi = False
         baseline_used = get_process_rss_mib()
-        gpu_total = 0
+        gpu_total = 0.0
         if baseline_used is not None:
             print(f"GPU: nvidia-smi not available — using process RSS as proxy")
             print(f"  Baseline RSS: {baseline_used:.0f} MiB")
@@ -251,11 +256,12 @@ def main():
         total_dur = sum(a['duration_s'] for a in audio_files)
         print(
             f"Audio: {len(audio_files)} files from {AUDIO_DIR} "
-            f"({total_dur:.0f}s total, avg {total_dur/len(audio_files):.0f}s)"
+            f"({total_dur:.0f}s total, avg {total_dur / len(audio_files):.0f}s)"
         )
     else:
         wav_data = make_wav(AUDIO_DUR)
-        audio_files = [{'name': f'synthetic_{AUDIO_DUR:.0f}s.wav', 'data': wav_data, 'duration_s': AUDIO_DUR}]
+        synth: Dict[str, Any] = {'name': f'synthetic_{AUDIO_DUR:.0f}s.wav', 'data': wav_data, 'duration_s': AUDIO_DUR}
+        audio_files = [synth]
         print(f"Audio: synthetic {AUDIO_DUR:.0f}s WAV (set LEAK_TEST_AUDIO_DIR for real audio)")
 
     interval = 60.0 / TARGET_RPM
@@ -272,35 +278,35 @@ def main():
     print(f"  Initial OOM counter: {initial_oom:.0f}")
 
     # VRAM sampling
-    vram_samples = []
+    vram_samples: List[Dict[str, Any]] = []
     vram_lock = threading.Lock()
     stop_vram = threading.Event()
 
-    def vram_poller():
+    def vram_poller() -> None:
         while not stop_vram.is_set():
             if use_nvidia_smi:
                 used, total = get_gpu_memory()
             else:
                 used = get_process_rss_mib()
-                total = 0
-            if used is not None:
+                total = 0.0
+            if used is not None and total is not None:
                 with vram_lock:
                     vram_samples.append(
                         {
                             "time": time.monotonic(),
-                            "elapsed_s": 0,
+                            "elapsed_s": 0.0,
                             "used_mib": used,
-                            "total_mib": total,
-                            "pct": (used / total * 100) if total > 0 else 0,
+                            "total_mib": float(total),
+                            "pct": (used / total * 100) if total > 0 else 0.0,
                         }
                     )
             stop_vram.wait(VRAM_POLL)
 
     # Results tracking
     results_lock = threading.Lock()
-    results = []
+    results: List[Dict[str, Any]] = []
 
-    def fire_request(req_id):
+    def fire_request(req_id: int) -> None:
         import random
 
         audio = random.choice(audio_files)
@@ -315,12 +321,11 @@ def main():
     mem_col = "VRAM" if use_nvidia_smi else "RSS"
     print(
         f"\n{'Time':>6s}  {'Sent':>5s}  {'Done':>5s}  {'OK':>4s}  {'Fail':>4s}  "
-        f"{mem_col:>8s}  {mem_col+'pk':>8s}  {'OOMs':>5s}"
+        f"{mem_col:>8s}  {mem_col + 'pk':>8s}  {'OOMs':>5s}"
     )
     print("-" * 65)
 
     start_mono = time.monotonic()
-    start_time = time.time()
     pool = ThreadPoolExecutor(max_workers=256)
     request_id = 0
     last_report = -1
@@ -421,6 +426,7 @@ def main():
     headroom_pass = peak_pct < HEADROOM_PCT if peak_pct > 0 else True
     slope_pass = slope < SLOPE_THRESH
     cooldown_pass = True
+    recovery_pct = 0.0
     if baseline_used and final_used:
         recovery_pct = (final_used - baseline_used) / baseline_used * 100
         cooldown_pass = recovery_pct < 20
@@ -440,8 +446,8 @@ def main():
     if latencies:
         sl = sorted(latencies)
         print(
-            f"Latency: avg={sum(sl)/len(sl):.1f}s, p50={sl[len(sl)//2]:.1f}s, "
-            f"p95={sl[int(len(sl)*0.95)]:.1f}s, max={max(sl):.1f}s"
+            f"Latency: avg={sum(sl) / len(sl):.1f}s, p50={sl[len(sl) // 2]:.1f}s, "
+            f"p95={sl[int(len(sl) * 0.95)]:.1f}s, max={max(sl):.1f}s"
         )
 
     mem_label = "VRAM" if use_nvidia_smi else "RSS (proxy)"

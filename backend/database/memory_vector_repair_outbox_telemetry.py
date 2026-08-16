@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Mapping, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional, cast
 
 VECTOR_REPAIR_OUTBOX_WORKER_COMPONENT = "vector_repair_outbox_worker"
 _ALLOWED_LABEL_KEYS = {"worker_component", "status", "action", "reason", "event_type"}
@@ -38,8 +38,6 @@ def emit_vector_repair_outbox_worker_telemetry(
     to callers. This preserves the worker cleanup/ack result even when the central
     metrics/log sink is unavailable.
     """
-    if not isinstance(config, VectorRepairOutboxTelemetryConfig):
-        raise ValueError("telemetry config is required")
     if not config.enabled:
         return _telemetry_result(enabled=False)
 
@@ -84,10 +82,16 @@ def _build_vector_repair_outbox_worker_telemetry_payloads(
         )
 
     action_counts: Dict[str, int] = {"delete": 0, "repair": 0}
-    for action in tick_summary.get("actions") or []:
-        action_name = _bounded_action((action or {}).get("action"))
-        if action_name in action_counts:
-            action_counts[action_name] += 1
+    raw_actions = tick_summary.get("actions")
+    if isinstance(raw_actions, list):
+        actions_list: List[object] = cast(List[object], raw_actions)
+        for raw_action in actions_list:
+            if not isinstance(raw_action, dict):
+                continue
+            action_dict: Dict[str, Any] = cast(Dict[str, Any], raw_action)
+            action_name = _bounded_action(action_dict.get("action"))
+            if action_name in action_counts:
+                action_counts[action_name] += 1
     for action_name, count in action_counts.items():
         payloads.append(
             _metric(
@@ -178,16 +182,23 @@ def _event(name: str, labels: Dict[str, str], fields: Dict[str, Any]) -> Dict[st
 
 
 def _sanitize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    labels = payload.get("labels") or {}
-    payload["labels"] = {key: _bounded_label(value) for key, value in labels.items() if key in _ALLOWED_LABEL_KEYS}
+    raw_labels = payload.get("labels")
+    labels: Dict[str, Any] = cast(Dict[str, Any], raw_labels) if isinstance(raw_labels, dict) else {}
+    payload["labels"] = {str(key): _bounded_label(value) for key, value in labels.items() if key in _ALLOWED_LABEL_KEYS}
     return payload
 
 
 def _reason_bucket_from_summary(tick_summary: Mapping[str, Any]) -> str:
-    for error in tick_summary.get("errors") or []:
-        stage = _bounded_label((error or {}).get("stage"))
-        if stage in {"ack", "lease", "dependencies", "config", "tick"}:
-            return f"{stage}_failure"
+    raw_errors = tick_summary.get("errors")
+    if isinstance(raw_errors, list):
+        errors_list: List[object] = cast(List[object], raw_errors)
+        for raw_error in errors_list:
+            if not isinstance(raw_error, dict):
+                continue
+            error_dict: Dict[str, Any] = cast(Dict[str, Any], raw_error)
+            stage = _bounded_label(error_dict.get("stage"))
+            if stage in {"ack", "lease", "dependencies", "config", "tick"}:
+                return f"{stage}_failure"
     if _safe_int(tick_summary.get("failed_count")):
         return "worker_failure"
     return "none"

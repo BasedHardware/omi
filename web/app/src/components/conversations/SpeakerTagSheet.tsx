@@ -16,7 +16,11 @@ interface SpeakerTagSheetProps {
   conversationId: string;
   segment: TranscriptSegment;
   allSegments: TranscriptSegment[];
-  onAssignComplete?: (segmentIds: string[], personId: string | null, isUser: boolean) => void;
+  onAssignComplete?: (
+    segmentIds: string[],
+    personId: string | null,
+    isUser: boolean,
+  ) => void;
   onManagePeople?: () => void;
 }
 
@@ -68,7 +72,7 @@ export function SpeakerTagSheet({
         s.id !== segment.id &&
         s.speaker_id === segment.speaker_id &&
         !s.is_user &&
-        !s.person_id
+        !s.person_id,
     );
   }, [segment, allSegments]);
 
@@ -114,7 +118,9 @@ export function SpeakerTagSheet({
   useEffect(() => {
     if (tagOtherSegments && selectedSegmentIds.size === 0) {
       // Select all by default
-      setSelectedSegmentIds(new Set(otherUntaggedSegments.map((s) => s.id!).filter(Boolean)));
+      setSelectedSegmentIds(
+        new Set(otherUntaggedSegments.map((s) => s.id!).filter(Boolean)),
+      );
     }
   }, [tagOtherSegments, otherUntaggedSegments, selectedSegmentIds.size]);
 
@@ -198,7 +204,11 @@ export function SpeakerTagSheet({
         personId: isYouSelected ? null : selectedPersonId,
       });
 
-      onAssignComplete?.(segmentIds, isYouSelected ? null : selectedPersonId, isYouSelected);
+      onAssignComplete?.(
+        segmentIds,
+        isYouSelected ? null : selectedPersonId,
+        isYouSelected,
+      );
       onClose();
     } catch (err) {
       console.error('Failed to assign speaker:', err);
@@ -234,14 +244,14 @@ export function SpeakerTagSheet({
               'absolute bottom-0 left-0 right-0 z-50',
               'bg-bg-secondary rounded-t-2xl',
               'max-h-[80%] overflow-hidden flex flex-col',
-              'shadow-xl border-t border-bg-tertiary'
+              'shadow-xl border-t border-bg-tertiary',
             )}
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-semibold text-text-primary">
-                  Tag Speaker {segment.speaker_id + 1}
+                  Tag Speaker {(segment.speaker_id ?? 0) + 1}
                 </h2>
                 <p className="text-sm text-text-tertiary truncate mt-0.5">
                   "{segment.text.slice(0, 50)}..."
@@ -267,7 +277,9 @@ export function SpeakerTagSheet({
               {/* Add Person Form */}
               {showAddPerson && (
                 <div className="mb-4 p-3 rounded-lg bg-bg-tertiary border border-bg-quaternary">
-                  <p className="text-sm font-medium text-text-primary mb-2">Add New Person</p>
+                  <p className="text-sm font-medium text-text-primary mb-2">
+                    Add New Person
+                  </p>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -279,7 +291,7 @@ export function SpeakerTagSheet({
                         'flex-1 px-3 py-2 rounded-lg',
                         'bg-bg-secondary border border-bg-quaternary',
                         'text-sm text-text-primary placeholder:text-text-quaternary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
                       )}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') handleCreatePerson();
@@ -293,10 +305,14 @@ export function SpeakerTagSheet({
                         'px-4 py-2 rounded-lg text-sm font-medium',
                         'bg-purple-primary hover:bg-purple-secondary text-white',
                         'disabled:opacity-50 disabled:cursor-not-allowed',
-                        'transition-colors'
+                        'transition-colors',
                       )}
                     >
-                      {creatingPerson ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add'}
+                      {creatingPerson ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        'Add'
+                      )}
                     </button>
                     <button
                       onClick={() => {
@@ -313,7 +329,9 @@ export function SpeakerTagSheet({
 
               {/* Person Selection */}
               <div className="mb-4">
-                <p className="text-sm font-medium text-text-secondary mb-3">Select Person</p>
+                <p className="text-sm font-medium text-text-secondary mb-3">
+                  Select Person
+                </p>
                 {loadingPeople ? (
                   <div className="flex items-center gap-2 text-text-tertiary">
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -347,7 +365,7 @@ export function SpeakerTagSheet({
                     className={cn(
                       'w-full flex items-center justify-between p-3 rounded-lg',
                       'bg-bg-tertiary hover:bg-bg-quaternary transition-colors',
-                      'text-left'
+                      'text-left',
                     )}
                   >
                     <div className="flex items-center gap-3">
@@ -384,7 +402,8 @@ export function SpeakerTagSheet({
                           className={cn(
                             'flex items-start gap-3 p-3 rounded-lg cursor-pointer',
                             'bg-bg-tertiary hover:bg-bg-quaternary transition-colors',
-                            selectedSegmentIds.has(s.id!) && 'ring-1 ring-purple-primary/50'
+                            selectedSegmentIds.has(s.id!) &&
+                              'ring-1 ring-purple-primary/50',
                           )}
                         >
                           <input
@@ -394,7 +413,9 @@ export function SpeakerTagSheet({
                             className="mt-0.5 w-4 h-4 rounded border-bg-quaternary text-purple-primary focus:ring-purple-primary"
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-text-primary line-clamp-2">{s.text}</p>
+                            <p className="text-sm text-text-primary line-clamp-2">
+                              {s.text}
+                            </p>
                             <p className="text-xs text-text-quaternary mt-1">
                               [{formatTimestamp(s.start)} - {formatTimestamp(s.end)}]
                             </p>
@@ -408,14 +429,18 @@ export function SpeakerTagSheet({
 
               {/* Manage People Link - always visible */}
               {onManagePeople && (
-                <div className={cn(
-                  otherUntaggedSegments.length > 0 ? 'mt-4' : 'border-t border-bg-tertiary pt-4'
-                )}>
+                <div
+                  className={cn(
+                    otherUntaggedSegments.length > 0
+                      ? 'mt-4'
+                      : 'border-t border-bg-tertiary pt-4',
+                  )}
+                >
                   <button
                     onClick={onManagePeople}
                     className={cn(
                       'flex items-center gap-2 text-sm text-text-tertiary',
-                      'hover:text-text-secondary transition-colors'
+                      'hover:text-text-secondary transition-colors',
                     )}
                   >
                     <Settings className="w-4 h-4" />
@@ -434,7 +459,7 @@ export function SpeakerTagSheet({
                   'w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl',
                   'text-sm font-medium transition-all duration-150',
                   'bg-purple-primary hover:bg-purple-secondary text-white',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
                 {saving ? (
@@ -444,7 +469,10 @@ export function SpeakerTagSheet({
                   </>
                 ) : (
                   <span>
-                    Save{tagOtherSegments && selectedCount > 0 ? ` (${selectedCount + 1} segments)` : ''}
+                    Save
+                    {tagOtherSegments && selectedCount > 0
+                      ? ` (${selectedCount + 1} segments)`
+                      : ''}
                   </span>
                 )}
               </button>

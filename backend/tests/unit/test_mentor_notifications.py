@@ -122,9 +122,11 @@ def _apply_fakes(monkeypatch):
     # generate_notification / validate_notification / evaluate_proactive_notification
     # use it when tests configure mock_llm_mini.with_structured_output).
     monkeypatch.setattr(pn_mod, 'get_llm', MagicMock(return_value=mock_llm_mini))
-    # utils.llm.clients.get_llm -> fresh chain mock for _process_proactive_notification's
-    # in-function `from utils.llm.clients import get_llm`.
-    monkeypatch.setattr(llm_clients_mod, 'get_llm', MagicMock())
+    # app_integrations binds get_llm at module import; patch both the source and
+    # consumption seam to keep the proactive coordinator hermetic.
+    get_llm = MagicMock()
+    monkeypatch.setattr(llm_clients_mod, 'get_llm', get_llm)
+    monkeypatch.setattr(app_int, 'get_llm', get_llm)
 
     # app_integrations local bindings (from X import Y).
     monkeypatch.setattr(app_int, 'get_user_goals', mock_get_user_goals)
@@ -366,6 +368,47 @@ def test_process_mentor_notification_not_enough_segments():
 
     result = process_mentor_notification("test_uid_short", segments)
     assert result is None
+
+
+def test_zero_start_keeps_the_opening_line_first():
+    """A segment with start=0.0 must keep its own timestamp, not wall-clock time.
+
+    `start` is an offset into the recording, so the first segment of every conversation
+    is 0.0. The buffer used `segment.get('start', 0) or current_time`, and because 0.0 is
+    falsy the opening line was stamped with time.time() (~1.7e9). The messages are handed
+    to the mentor LLM via `sorted(..., key=timestamp)`, so the first thing the user said
+    arrived as the *last* line of the transcript.
+    """
+    message_buffer.buffers.clear()
+
+    segments = [
+        {"text": f"Segment number {i} with some conversation content", "start": float(i), "is_user": i % 2 == 0}
+        for i in range(12)
+    ]
+
+    result = process_mentor_notification("test_uid_zero_start", segments)
+
+    assert result is not None
+    timestamps = [m['timestamp'] for m in result]
+    assert timestamps[0] == 0.0, f"opening segment lost its start offset: {timestamps[0]}"
+    assert timestamps == sorted(timestamps)
+    assert result[0]['text'].startswith("Segment number 0"), result[0]['text']
+    assert result[-1]['text'].startswith("Segment number 11"), result[-1]['text']
+
+
+def test_missing_start_still_falls_back_to_current_time():
+    """A segment with no `start` key keeps the wall-clock fallback."""
+    message_buffer.buffers.clear()
+    before = time.time()
+
+    segments = [
+        {"text": f"Segment number {i} with some conversation content", "is_user": i % 2 == 0} for i in range(12)
+    ]
+
+    result = process_mentor_notification("test_uid_missing_start", segments)
+
+    assert result is not None
+    assert all(m['timestamp'] >= before for m in result)
 
 
 def test_process_mentor_notification_accumulates():
