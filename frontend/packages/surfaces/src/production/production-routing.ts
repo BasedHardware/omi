@@ -1,11 +1,10 @@
 /**
  * Which production surface the bootstrap renders.
  *
- * Extracted from `main.tsx` and kept pure so it can be executed by tests, because this
- * decision is where the night's headline result was lost: the documented launcher passes
- * `generation=platform` and **no route**, the route defaulted to `home`, the platform
- * branch was gated on `route === "memories"`, and the app rendered legacy memories with a
- * served count of zero and nothing on screen or in the logs to say so.
+ * Extracted from `main.tsx` and kept pure so it can be executed by tests.
+ * An unnamed launch now opens Activity (`conversations`). Explicit `route=`
+ * and fixture selectors still win, including leftover `route=home` search
+ * and `route=chat` for Chat-as-Home.
  *
  * Self-contained by design (no relative imports) so `node --test` runs it directly.
  */
@@ -41,13 +40,28 @@ export type ProductionRouteInput = {
  *  1. An EXPLICIT route or fixture selector always wins. Overriding it because a
  *     generation was selected would be the same bug mirrored — a host that asked for Home
  *     and silently got Memories.
- *  2. With no route named at all, a platform memories selection lands on the surface that
- *     actually reads it. Otherwise the selection is inert: the app looks perfect and the
- *     new backend serves nothing.
- *  3. Otherwise Home, the unchanged default.
+ *  2. With no route named at all, the app opens on Activity — the hub that
+ *     holds conversations, memories, folders, and brain map. Conversations is
+ *     that hub's front door (Swift's switcher order starts there). An explicit
+ *     `route=` or fixture selector still wins, including `route=home` for the
+ *     leftover search surface and `route=chat` for Chat-as-Home.
  */
+/** Activity hub front door. David named this the default landing page. */
+export const DEFAULT_PRODUCTION_ROUTE = "conversations" as const satisfies ProductionRouteName;
+
+export const ACTIVITY_HUB_ROUTES = ["conversations", "memories", "folders", "brain-map"] as const;
+
+export function isActivityHubRoute(route: string): boolean {
+  return (ACTIVITY_HUB_ROUTES as readonly string[]).includes(route);
+}
+
+/** Chat is the Home screen. `route=home` remains the leftover search surface. */
+export function isHomeScreenRoute(route: string): boolean {
+  return route === "chat" || route === "home";
+}
+
 export function resolveProductionRoute(input: ProductionRouteInput): ProductionRouteName {
-  const { requestedRoute, requestedQa, memoriesGeneration } = input;
+  const { requestedRoute, requestedQa } = input;
 
   if (requestedRoute !== null) {
     if (requestedRoute === "screen") return "rewind";
@@ -79,9 +93,7 @@ export function resolveProductionRoute(input: ProductionRouteInput): ProductionR
     || requestedQa === "memories-platform"
   ) return "memories";
 
-  const hostNamedSomething = requestedQa !== null;
-  if (!hostNamedSomething && memoriesGeneration === "platform") return "memories";
-  return "home";
+  return DEFAULT_PRODUCTION_ROUTE;
 }
 
 /** A Settings sheet may return only to a real, non-Settings destination. */

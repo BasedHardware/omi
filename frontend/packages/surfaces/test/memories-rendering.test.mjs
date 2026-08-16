@@ -82,10 +82,10 @@ test("shared chrome mirrors the shipped destination hierarchy without fake conte
     const links = [...rendered.container.querySelectorAll("a")];
     assert.ok(links.every((link) => link.getAttribute("aria-disabled") === null), "navigation destinations are enabled links");
     const home = links.find((link) => link.textContent?.includes(EN_MESSAGES["nav.home"]));
-    assert.ok(home?.getAttribute("href")?.includes("route=home"));
+    assert.ok(home?.getAttribute("href")?.includes("route=chat"));
     const activeLinks = links.filter((link) => link.getAttribute("aria-current") === "page");
     assert.ok(activeLinks.length > 0);
-    assert.ok(activeLinks.every((link) => /Library|Conversations/.test(link.textContent ?? "")));
+    assert.ok(activeLinks.every((link) => /Activity|Conversations/.test(link.textContent ?? "")));
     for (const shipped of [EN_MESSAGES["nav.apps"], EN_MESSAGES["nav.rewind"]]) {
       assert.equal(links.some((link) => link.textContent?.includes(shipped)), true);
     }

@@ -128,7 +128,7 @@ test("disabled commands do not consume events and route commands cover every liv
     assert.deepEqual(calls, []);
 
     for (const [key, route] of [
-      ["1", "home"], ["2", "conversations"], ["3", "memories"],
+      ["1", "chat"], ["2", "conversations"], ["3", "memories"],
       ["4", "tasks"], ["5", "rewind"], ["6", "apps"], [",", "settings"],
     ]) {
       const event = new rendered.window.KeyboardEvent("keydown", { key, metaKey: true, bubbles: true });
@@ -136,10 +136,10 @@ test("disabled commands do not consume events and route commands cover every liv
       assert.equal(calls.at(-1), route);
     }
     const back = new rendered.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true });
-    assert.equal(dispatch(back, registry, context), true, "Escape returns a non-Home route to Home");
-    assert.equal(calls.at(-1), "home");
-    const backFromHome = new rendered.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true });
-    assert.equal(dispatch(backFromHome, registry, { ...context, activeRoute: "home" }), false);
+    assert.equal(dispatch(back, registry, context), true, "Escape returns a non-Chat route to Chat");
+    assert.equal(calls.at(-1), "chat");
+    const backFromChat = new rendered.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true });
+    assert.equal(dispatch(backFromChat, registry, { ...context, activeRoute: "chat" }), false);
     const input = rendered.window.document.createElement("input");
     rendered.container.append(input);
     const backFromInput = new rendered.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true });
@@ -147,7 +147,7 @@ test("disabled commands do not consume events and route commands cover every liv
     assert.equal(dispatch(backFromInput, registry, context), false, "Escape in a text field stays with the field");
 
     for (const [id, route] of [
-      ["navigate-home", "home"], ["navigate-memories", "memories"], ["navigate-conversations", "conversations"],
+      ["navigate-home", "chat"], ["navigate-memories", "memories"], ["navigate-conversations", "conversations"],
       ["navigate-folders", "folders"], ["navigate-tasks", "tasks"], ["navigate-chat", "chat"],
       ["navigate-rewind", "rewind"], ["navigate-apps", "apps"], ["navigate-brain-map", "brain-map"],
       ["navigate-settings", "settings"], ["navigate-listen", "listen"],
@@ -225,10 +225,10 @@ test("command help exposes accurate landmarks, labels, chords, and focus restora
     assert.equal(restoredPrimaryNav?.inert, false, "closing help restores background interaction");
 
     const mobileLabels = rendered.container.querySelector(".nav-mobile")?.textContent ?? "";
-    for (const label of ["Home", "Conversations", "Tasks", "Apps"]) assert.match(mobileLabels, new RegExp(label));
+    for (const label of ["Home", "Activity", "Tasks", "Apps"]) assert.match(mobileLabels, new RegExp(label));
 
     const desktopLabels = rendered.container.querySelector(".nav-desktop .nav-primary")?.textContent ?? "";
-    assert.equal(desktopLabels.replace(/\s+/gu, " ").trim(), "HomeLibraryTasksRewindApps");
+    assert.equal(desktopLabels.replace(/\s+/gu, " ").trim(), "HomeActivityTasksRewindApps");
     const desktopUtilities = rendered.container.querySelector(".nav-desktop .nav-utilities");
     assert.ok(desktopUtilities?.querySelector('a[href*="route=listen"]'));
     assert.ok(desktopUtilities?.querySelector('a[href*="route=settings"]'));

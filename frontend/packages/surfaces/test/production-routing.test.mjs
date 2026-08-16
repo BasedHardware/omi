@@ -6,6 +6,8 @@ import test from "node:test";
 
 import {
   generationMismatch,
+  isActivityHubRoute,
+  isHomeScreenRoute,
   resolveProductionRoute,
   resolveSettingsReturnRoute,
 } from "../src/production/production-routing.ts";
@@ -21,21 +23,26 @@ const route = (requestedRoute, requestedQa, memoriesGeneration) =>
 // The regression this module exists for.
 // ---------------------------------------------------------------------------
 
-test("a platform memories selection with no route named lands on the surface that reads it", () => {
-  assert.equal(route(null, null, "platform"), "memories");
-  // red-proof: returning "home" here reproduces the exact failure the documented launcher
-  // hit. `dev-stack.sh --generation platform` passes `generation=platform` and NO route;
-  // the memories surface is the one that selection is asking to review. Home now honors
-  // the same selection when the host names `route=home`.
+test("an unnamed route lands on Activity regardless of memories generation", () => {
+  assert.equal(route(null, null, "platform"), "conversations");
+  assert.equal(route(null, null, "legacy"), "conversations");
+  // red-proof: returning "home" or "memories" here reopens the app on a page
+  // David did not name as the landing. Explicit `route=home` / `route=memories`
+  // still win below.
 });
 
-test("with no platform selection the default is unchanged", () => {
-  assert.equal(route(null, null, "legacy"), "home");
-  // red-proof: routing to memories regardless of generation changes the product's landing
-  // surface for every existing launch.
+test("Chat and leftover search both count as the Home screen; hub routes share Activity", () => {
+  assert.equal(isHomeScreenRoute("chat"), true);
+  assert.equal(isHomeScreenRoute("home"), true);
+  assert.equal(isHomeScreenRoute("conversations"), false);
+  assert.equal(isActivityHubRoute("conversations"), true);
+  assert.equal(isActivityHubRoute("memories"), true);
+  assert.equal(isActivityHubRoute("folders"), true);
+  assert.equal(isActivityHubRoute("brain-map"), true);
+  assert.equal(isActivityHubRoute("chat"), false);
 });
 
-test("an explicit route always beats the platform default", () => {
+test("an explicit route always beats the Activity default", () => {
   assert.equal(route("home", null, "platform"), "home");
   assert.equal(route("tasks", null, "platform"), "tasks");
   assert.equal(route("conversations", null, "platform"), "conversations");

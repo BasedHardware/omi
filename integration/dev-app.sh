@@ -207,7 +207,7 @@ else
 fi
 printf '\n  stop the stack with:  integration/dev-stack.sh --stop\n\n'
 
-macos_args=(--api "$SERVICE_URL" --route home)
+macos_args=(--api "$SERVICE_URL" --route conversations)
 (( MODE_ACCEPT )) && macos_args+=(--accept)
 
 # Human demo is headed. --accept is the headless-safe check and must not

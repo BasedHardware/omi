@@ -163,19 +163,19 @@ test("production chrome preserves QA context while clearing fixture selection", 
   assert.match(source, /params\.delete\("state"\)/);
   assert.match(source, /params\.get\("platform"\)|location\.search/);
   assert.match(source, /productionRouteHref\("tasks"\)/);
-  assert.match(source, /productionRouteHref\("home"\)/);
+  assert.match(source, /productionRouteHref\("chat"\)/);
   assert.match(source, /productionRouteHref\("rewind"\)/);
   assert.match(source, /productionRouteHref\("apps"\)/);
   assert.match(source, /productionRouteHref\("listen"\)/);
   assert.match(source, /productionRouteHref\("settings"\)/);
   assert.match(source, /productionSettingsSheetHref\(active\)/);
-  assert.match(source, /active === "home" \? "page"/);
+  assert.match(source, /isHomeScreenRoute\(active\) \? "page"/);
   assert.match(source, /active === "tasks" \? "page"/);
   assert.match(source, /export function ProductionLibrarySegment/);
   // red-proof: route links must not strand mobile/platform/profile QA on the
-  // prior fixture, while profile remains available for the bridge shell. A
-  // Home and Tasks must identify themselves in both navs without inheriting
-  // the Library-only segmented rail.
+  // prior fixture, while profile remains available for the bridge shell. Home
+  // is Chat; Activity is the hub. A Home and Tasks must identify themselves
+  // in both navs without inheriting the hub-only segmented rail.
 });
 
 test("desktop glass chrome keeps host-selected layout without changing mobile navigation", async () => {
