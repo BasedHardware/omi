@@ -245,9 +245,11 @@ if (JOURNEY) {
 
 // Newlines stay intact: execve carries them through the launcher untouched,
 // and flattening them lets a `//` line comment swallow the rest of the program.
+const realChat = process.env.OMI_CHAT_MODEL === "real";
 const driver = buildDriverSource(readFileSync(DRIVER_PATH, "utf8"), {
   screenProof: SCREEN_PROOF,
   journey: JOURNEY,
+  real: realChat,
   baseline,
 });
 const appName = JOURNEY ? JOURNEY_APP_NAME : APP_NAME;
@@ -261,14 +263,18 @@ const childEnv = {
   OMI_PROBE_JS: driver,
   OMI_PROBE_EXIT: "1",
   OMI_PROBE_PENDING_VALUE: PENDING_VALUE,
-  // The macOS probe hook clamps this at 100 (`min(..., 100)` in main.swift).
-  OMI_PROBE_MAX_ATTEMPTS: "100",
+  // Canned stays at 100. Real journey chat needs ~160 ticks for a 60s
+  // first-content wait; the macOS probe hook clamps at 250.
+  OMI_PROBE_MAX_ATTEMPTS: realChat ? "250" : "100",
   OMI_PROBE_RETRY_INTERVAL: "0.4",
   OMI_PROBE_DELAY: "5",
   OMI_PROBE_SETTLE: "2",
-  OMI_ACCEPTANCE_WAIT_SECONDS: JOURNEY ? "240" : "180",
+  OMI_ACCEPTANCE_WAIT_SECONDS: JOURNEY ? (realChat ? "300" : "240") : "180",
   OMI_READY_TIMEOUT_SECONDS: "30",
 };
+process.stdout.write(
+  `control-acceptance intent=${realChat ? "real" : "test"} probeAttempts=${childEnv.OMI_PROBE_MAX_ATTEMPTS}\n`,
+);
 delete childEnv.OMI_ACCEPTANCE;
 delete childEnv.OMI_ACCEPTANCE_EXIT;
 delete childEnv.OMI_CONSUMER_EVIDENCE_PATH;

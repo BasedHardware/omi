@@ -6,14 +6,19 @@
   const CHAT_STREAMING = "Omi is responding";
   const JOURNEY_CHAT_PROMPT = "journey-acceptance ping";
   const PHASE_TICK_LIMIT = 50;
-  // Stated outcome deadline. The macOS probe hook caps attempts at 100, so a
+  // Stated outcome deadline. The macOS probe hook caps attempts at 250, so a
   // longer wait here starves Chat/Rewind/nav when Listen does not transcribe.
   const OUTCOME_TICK_LIMIT = 40;
+  // Real-model chat wait. GLM-4.7 spent 34s in a reasoning preamble on the
+  // journey hop; 50 ticks × 0.4s = 20s timed out while the provider was still
+  // thinking. 160 × 0.4s = 64s covers the 60s first-content liveness bound.
+  const REAL_CHAT_TICK_LIMIT = 160;
   const MODE = window.__omiCAMode === "screen"
     ? "screen"
     : window.__omiCAMode === "journey"
       ? "journey"
       : "full";
+  const REAL = window.__omiCAReal === true;
   const BASELINE = window.__omiCABaseline && typeof window.__omiCABaseline === "object"
     ? window.__omiCABaseline
     : { conversationIds: [], memoryIds: [] };
@@ -92,6 +97,9 @@
   };
 
   const phaseLimit = (phase) => {
+    if (phase === "chat-wait-result" || phase === "journey-chat-wait-result") {
+      return REAL ? REAL_CHAT_TICK_LIMIT : PHASE_TICK_LIMIT;
+    }
     if (
       phase === "listen-wait-transcript"
       || phase === "screen-wait-outcome"
@@ -339,6 +347,18 @@
   state.phaseTicks = state.phase === previousPhase ? (state.phaseTicks || 0) + 1 : 1;
 
   const root = shell();
+  const chatWait = state.phase === "chat-wait-result" || state.phase === "journey-chat-wait-result";
+  const streamingNow = Boolean(
+    document.querySelector('.chat-message.is-assistant[data-delivery="streaming"]')
+    || visibleText(root).includes(CHAT_STREAMING)
+    || String(root?.getAttribute("data-consumer-semantic") || "").includes("streaming:1"),
+  );
+  if (chatWait && streamingNow) {
+    // The assistant is still working. A tick budget sized for canned chat
+    // must not fire while the real model is visibly thinking.
+    state.sawStreaming = true;
+    state.phaseTicks = 1;
+  }
 
   if (state.phase === "boot") {
     if (!root) {
@@ -385,6 +405,13 @@
     }
     else if (state.phase.startsWith("home")) timeout(state, "home", "timeout");
     else if (state.phase.startsWith("chat") || state.phase.startsWith("journey-chat")) {
+      state.witnesses = {
+        ...(state.witnesses || {}),
+        timeoutPhase: state.phase,
+        timeoutTicks: state.phaseTicks,
+        timeoutLimit: phaseLimit(state.phase),
+        real: REAL,
+      };
       timeout(state, MODE === "journey" ? "chat.memory" : "chat", "timeout");
     }
     else if (state.phase.startsWith("listen")) timeout(state, "mic", "timeout");

@@ -365,7 +365,7 @@ fi
 printf 'run %s\n' "$RUN_ID"
 printf 'service %s with one run-scoped SQLite database\n' "$SERVICE_REL"
 if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
-  printf 'local model gateway %s (real model proxy; Chat UI still says Local test gateway)\n' "$GATEWAY_URL"
+  printf 'local model gateway %s (real model proxy; Chat UI says External model response)\n' "$GATEWAY_URL"
   GATEWAY_READY="$RUN_DIR/local-model-gateway-ready.json"
   rm -f -- "$GATEWAY_PID_PATH" "$GATEWAY_IDENTITY_FILE" "$GATEWAY_READY"
   ( OMI_LOCAL_MODEL_GATEWAY_PORT="$GATEWAY_PORT" \

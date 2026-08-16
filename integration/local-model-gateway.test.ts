@@ -84,6 +84,10 @@ test("model gateway disclosures are honest and do not reuse the test-gateway str
   expect(source).toContain("GLM_BASE_URL");
   expect(source).toContain("https://api.z.ai/api/coding/paas/v4");
   expect(source).not.toContain("DEFAULT_BASE = \"https://api.z.ai/api/paas/v4\"");
+  expect(stack).not.toContain("Chat UI still says Local test gateway");
+  expect(app).not.toContain("Chat UI still says Local test gateway");
+  expect(stack).toContain("Chat UI says External model response");
+  expect(app).toContain("Chat UI says External model response");
   expect(stack).not.toContain("https://api.omi.me");
   expect(app).not.toMatch(/api\.omi\.me|\?rig=dev/);
 });
