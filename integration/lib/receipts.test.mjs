@@ -34,7 +34,7 @@ let workspaceRoot;
 const L3_DOMAINS = ["memories", "tasks", "conversations", "folders", "listen", "chat", "settings", "screen"];
 function l3Arbiters() {
   const runId = "run-receipt-test";
-  const shellTreeHash = worktreeStamp({ repo: "core-foundation" }).treeHash;
+  const shellTreeHash = worktreeStamp({ repo: "core-foundation", artifact: "macos-app" }).treeHash;
   const surfaceTreeHash = worktreeStamp({ repo: "core-foundation", artifact: "surfaces-dist" }).treeHash;
   const consumer = {
     schema: CONSUMER_EVIDENCE_SCHEMA,

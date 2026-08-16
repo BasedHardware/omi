@@ -17,6 +17,7 @@ const sanitizer = read("./lib/sanitize-log.mjs");
 const control = read("./control-acceptance/run.mjs");
 const macos = read("../frontend/shells/macos/scripts/dev-run-macos.sh");
 const ios = read("../frontend/shells/ios/scripts/dev-run-ios.sh");
+const receipts = read("./lib/receipts.mjs");
 
 test("RED-PROOF the registered stack cannot reintroduce the retired service", () => {
   // red-proof: add the old port, prototype name, or launcher path to dev-stack.
@@ -83,6 +84,14 @@ test("RED-PROOF there is one app-facing service listener and one run-scoped SQLi
   assert.match(stack, /OMI_PORT="\$SERVICE_PORT"/);
   assert.match(stack, /--app-facing-test-lease/);
   assert.doesNotMatch(stack, /SURFACES_PORT|dev-stack-static|OMI_BACKEND_URL|using external/);
+});
+
+test("RED-PROOF --assert expected shell hash is the macos-app stamp the shells bake", () => {
+  // red-proof: drop `--artifact macos-app`. expectedShell becomes the
+  // frontend+integration worktree, iOS evidence completes, and every matrix
+  // row fails as a stale shell hash because the apps stamp macos-app/ios-bundle.
+  assert.match(stack, /provenance\.mjs" --repo core-foundation --artifact macos-app/);
+  assert.match(receipts, /artifact: "macos-app"/);
 });
 
 test("RED-PROOF iOS evidence is bounded build-install-launch-collect, never optional", () => {
