@@ -18,6 +18,7 @@ from utils.notifications import (
     sync_action_item_reminder,
 )
 from utils.conversations.render import format_local_time, resolve_display_tz
+from utils.retrieval.tool_result_boundaries import trusted_tool_result
 import logging
 
 logger = logging.getLogger(__name__)
@@ -570,7 +571,11 @@ def update_action_item_tool(
     # Check if action item exists
     existing_item = action_items_db.get_action_item(uid, action_item_id)
     if not existing_item:
-        return f"Error: Action item with ID '{action_item_id}' not found. Please use get_action_items_tool first to get the correct ID."
+        return trusted_tool_result(
+            f"Error: Action item with ID '{action_item_id}' not found. Please use get_action_items_tool first to get the correct ID.",
+            trusted_control='Please use get_action_items_tool first to get the correct ID.',
+            untrusted_content=f"Error: Action item with ID '{action_item_id}' not found.",
+        )
 
     # Prepare update data
     update_data: Dict[str, Any] = {}

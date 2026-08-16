@@ -40,6 +40,7 @@ ALLOWED_REASONS = frozenset(
         'policy',
         'dispatch_disabled',
         'byok',
+        'security_screen_unavailable',
         'malformed_doc',
         'capacity_full',
         'allocation_rejected',

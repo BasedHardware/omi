@@ -277,6 +277,7 @@ class TestModelQosProfiles:
             'memory_category',
             'smart_glasses',
             'persona_chat',
+            'security_screen',
             'desktop_proactive_extraction',
         }
         expected_openai = {

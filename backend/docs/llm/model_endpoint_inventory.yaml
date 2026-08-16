@@ -44,6 +44,7 @@ model_config_features:
       - persona_chat
       - persona_chat_premium
       - persona_clone
+      - security_screen
       - session_titles
       - smart_glasses
       - wrapped_analysis

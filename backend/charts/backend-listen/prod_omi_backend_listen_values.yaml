@@ -129,6 +129,12 @@ env:
     value: "prod"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
+  - name: OMI_SECURITY_POSTURE
+    value: "auto"
+  - name: OMI_SECURITY_SCREEN_TIMEOUT_SECONDS
+    value: "8"
+  - name: OMI_SECURITY_SCREEN_TOTAL_TIMEOUT_SECONDS
+    value: "15"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
     value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE

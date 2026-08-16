@@ -32,6 +32,7 @@ from utils.integration_telemetry import (
     emit_sync_succeeded,
 )
 from utils.retrieval.tools.google_utils import google_api_request, GoogleAPIError
+from utils.retrieval.tool_result_boundaries import trusted_tool_result
 
 # Import shared Google utilities
 from utils.retrieval.tools.google_utils import refresh_google_token
@@ -1345,7 +1346,11 @@ async def update_calendar_event_tool(
                     return f"No calendar events found matching '{event_title}'."
 
                 if len(matching_events) > 1:
-                    return f"Multiple events found matching '{event_title}'. Please provide the event_id to specify which one to update."
+                    return trusted_tool_result(
+                        f"Multiple events found matching '{event_title}'. Please provide the event_id to specify which one to update.",
+                        trusted_control='Please provide the event_id to specify which one to update.',
+                        untrusted_content=f"Multiple events found matching '{event_title}'.",
+                    )
 
                 target_event_id = matching_events[0].get('id')
                 if not target_event_id:

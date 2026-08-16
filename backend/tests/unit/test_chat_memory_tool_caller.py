@@ -8,13 +8,16 @@ def test_chat_memory_tool_caller_wires_boundary_guard_before_returning_tool_outp
     agentic_py = Path(__file__).resolve().parents[2] / 'utils' / 'retrieval' / 'agentic.py'
     contents = agentic_py.read_text(encoding='utf-8')
 
-    assert 'from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary' in contents
-    assert 'result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))' in contents
+    assert 'from utils.retrieval.tool_result_boundaries import (' in contents
+    assert 'preserve_chat_memory_tool_result_boundary' in contents
+    assert 'CHAT_MEMORY_TOOL_NAMES' in contents
+    assert 'chat_memory_content_for_classification' in contents
+    assert 'result = preserve_chat_memory_tool_result_boundary(tool_name, str(raw_result))' in contents
     assert contents.index('result = await tool_obj.ainvoke(tool_input, config=config)') < contents.index(
-        'result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))'
+        'result = preserve_chat_memory_tool_result_boundary(tool_name, str(raw_result))'
     )
     assert contents.index(
-        'result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))'
+        'result = preserve_chat_memory_tool_result_boundary(tool_name, str(raw_result))'
     ) < contents.index('return result')
 
 
