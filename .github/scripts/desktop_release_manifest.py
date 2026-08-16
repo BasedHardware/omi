@@ -6,6 +6,11 @@ workflows can use the exact same contract on clean runners. The detached
 manifest digest is SHA-256 over UTF-8 JSON with sorted keys, no insignificant
 whitespace, and non-ASCII characters preserved. A detached digest avoids the
 self-referential ambiguity of embedding a manifest hash inside the manifest.
+
+``qualification_tier`` and ``qualification_passed`` are legacy evidence-class
+fields on the frozen v1 wire schema; ``signed-smoke`` is the only tier new
+manifests carry. The names must not be renamed: every stored manifest is
+validated on every read.
 """
 
 from __future__ import annotations

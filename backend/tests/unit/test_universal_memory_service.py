@@ -135,6 +135,17 @@ def test_global_write_pause_blocks_intake_but_not_reads_or_privacy_delete(servic
     )
 
 
+def test_memory_enabled_off_blocks_intake_like_mode_off(service_mod, monkeypatch):
+    service = service_mod.MemoryService(db_client=_Db())
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
+    service.ensure_canonical_mutation_ready("uid-test")
+    monkeypatch.setenv("MEMORY_ENABLED", "off")
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.ensure_canonical_mutation_ready("uid-test")
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Memory writes are globally paused"
+
+
 def test_historical_adapter_uses_injected_firestore_client(service_mod, monkeypatch):
     db = _Db()
     monkeypatch.setattr(service_mod.memories_db, "get_memories", lambda *args, **kwargs: [])

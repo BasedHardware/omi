@@ -240,9 +240,6 @@ struct SettingsContentView: View {
   // Glow preview state
   @State var isPreviewRunning: Bool = false
 
-  // Downgrade confirmation alert
-  @State var showDowngradeAlert = false
-
   // Tier gating (0 = show all, 1-6 = sequential tiers)
   @AppStorage("currentTierLevel") var currentTierLevel = 0
 

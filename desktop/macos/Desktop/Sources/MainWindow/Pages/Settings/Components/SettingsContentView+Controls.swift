@@ -770,53 +770,29 @@ extension SettingsContentView {
 
           GlassSeparator()
 
-          settingRow(
-            title: "Update Channel", subtitle: updaterViewModel.updateChannel.description,
-            settingId: "about.channel"
-          ) {
-            if AppBuild.isBetaProductionBundle {
-              // Omi Beta is permanently a beta-channel client; switching it to stable
-              // would make Sparkle replace it with the stable-identity app in place.
-              Text(UpdateChannel.beta.displayName)
+          if !AppBuild.isBetaProductionBundle {
+            settingRow(
+              title: "Omi Beta",
+              subtitle: "Install the separate Omi Beta app. It runs beside this one.",
+              settingId: "about.channel"
+            ) {
+              Button("Get Omi Beta") {
+                openURLInDefaultBrowser(AppBuild.omiBetaInstallURL)
+              }
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+            }
+          } else {
+            settingRow(
+              title: "Omi Beta",
+              subtitle: "This app updates from the Beta feed and runs beside Omi.",
+              settingId: "about.channel"
+            ) {
+              Text("Installed")
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.secondary)
-            } else {
-              SettingsMenuPicker(
-                selection: Binding(
-                  get: { updaterViewModel.updateChannel },
-                  set: { newChannel in
-                    // Switching beta → stable with a newer build: confirm first
-                    if updaterViewModel.updateChannel == .beta && newChannel == .stable
-                      && updaterViewModel.isDowngradeToStable
-                    {
-                      showDowngradeAlert = true
-                    } else {
-                      updaterViewModel.updateChannel = newChannel
-                    }
-                  }
-                )
-              ) {
-                ForEach(UpdateChannel.allCases, id: \.self) { channel in
-                  Text(channel.displayName).tag(channel)
-                }
-              }
             }
           }
         }
-      }
-      .alert("Switch to Stable Channel?", isPresented: $showDowngradeAlert) {
-        Button("Stay on Beta", role: .cancel) {}
-        Button("Switch to Stable") {
-          updaterViewModel.updateChannel = .stable
-          if let url = URL(string: "https://macos.omi.me") {
-            NSWorkspace.shared.open(url)
-          }
-        }
-      } message: {
-        let stableVersion = updaterViewModel.latestStableVersionString ?? "an older version"
-        Text(
-          "You're on a newer beta build (\(updaterViewModel.currentVersion)). The latest stable release is \(stableVersion).\n\nSwitching to Stable means you won't receive new updates until a stable release surpasses your current version. You can also download the stable version now."
-        )
       }
 
       settingsCard(settingId: "about.discord") {

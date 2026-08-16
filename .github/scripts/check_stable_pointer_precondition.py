@@ -29,7 +29,7 @@ def verify(*, beta: dict, stable: dict, release_id: str, expected_release_id: st
             raise ValueError("acknowledged Stable retry has unrelated generation drift")
         return
     if operation == "promote" and _text(beta, "release_id") != release_id:
-        raise ValueError("Stable promotion requires the exact current qualified beta release ID")
+        raise ValueError("Stable promotion requires the exact current Beta release ID")
     if current_id != expected_release_id or current_generation != expected_generation:
         raise ValueError(
             f"Stable pointer CAS mismatch: expected {expected_release_id!r}/{expected_generation}, "

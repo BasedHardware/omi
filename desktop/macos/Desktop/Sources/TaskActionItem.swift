@@ -79,6 +79,13 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     return true
   }
 
+  /// Accept receipts expose the canonical `task_id`; local rows key `id` to the
+  /// backend action-item id. Completing a just-accepted Suggested task must
+  /// match either.
+  func matchesTaskIdentifier(_ identifier: String) -> Bool {
+    id == identifier || taskId == identifier
+  }
+
   /// Server list/detail responses project soft retirement through canonical
   /// lifecycle status and may omit the legacy `deleted` field. Keep that
   /// projection here so every local cache and surface applies the same rule.
@@ -306,9 +313,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
   /// "legacy" rows must stay in the normal due-date categories.
   static let aiCaptureSources: Set<String> = ["screenshot", "conversation", "ai_suggested"]
 
-  /// An AI-captured task the user has not accepted yet. Accepting rewrites
-  /// `source` to "manual", which moves it into the due-date categories and
-  /// syncs the acceptance across devices without a new backend field.
+  /// An AI-captured task. Used to keep leftover extractor rows out of
+  /// proactive-nudge grounding; they are ordinary due-date tasks on Tasks.
   var isPendingSuggestion: Bool {
     guard !completed, !isRetired else { return false }
     guard let source else { return false }

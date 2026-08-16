@@ -72,6 +72,9 @@ def conv():
     canonical_activation_stub = ModuleType("utils.memory.canonical_activation")
     canonical_activation_stub.canonical_write_enabled = MagicMock(return_value=False)
 
+    retraction_scope_stub = ModuleType("utils.memory.retraction_scope")
+    retraction_scope_stub.retraction_can_be_skipped = MagicMock(return_value=False)
+
     # utils.request_validation — route param annotations; plain int keeps the direct-call path simple.
     request_validation_stub = ModuleType("utils.request_validation")
     request_validation_stub.NonNegativeOffset = int
@@ -121,6 +124,7 @@ def conv():
         "utils.memory.memory_service": memory_service_stub,
         "utils.memory.memory_system": memory_system_stub,
         "utils.memory.canonical_activation": canonical_activation_stub,
+        "utils.memory.retraction_scope": retraction_scope_stub,
         # utils.request_validation
         "utils.request_validation": request_validation_stub,
     }

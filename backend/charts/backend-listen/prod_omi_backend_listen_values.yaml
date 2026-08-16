@@ -129,6 +129,8 @@ env:
     value: "prod"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
+  - name: OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED
+    value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
     value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
@@ -144,10 +146,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
-  - name: MEMORY_MODE
+  - name: MEMORY_ENABLED
     value: "off"
-  - name: MEMORY_V3_GET_ENABLED
-    value: "false"
   - name: MEMORY_V3_CURSOR_SECRET
     valueFrom:
       secretKeyRef:

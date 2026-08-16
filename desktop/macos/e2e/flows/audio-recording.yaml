@@ -10,6 +10,7 @@ covers:
   - desktop/Desktop/Sources/AudioMixer.swift
   - desktop/Desktop/Sources/AppState.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+MeetingGatePause.swift
   - desktop/macos/Desktop/Sources/AppState/AppServicesCoordinator.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Permissions.swift
   - desktop/macos/Desktop/Sources/AudioCaptureService.swift

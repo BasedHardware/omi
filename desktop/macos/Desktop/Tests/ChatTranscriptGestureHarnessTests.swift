@@ -190,12 +190,11 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))")
   }
 
-  /// The transcript used to cap its column at 760pt inside a 900pt panel so a
-  /// prompt rail could live in the leftover 70pt on each side. The rail is gone,
-  /// and with it the reserved gutter: rows now reach their container's edge, the
-  /// same edge the composer below them uses. Measured on the mounted transcript
-  /// because the inset was only ever visible as painted pixels — the view's own
-  /// frame was full width the whole time.
+  /// The transcript must not cap its column to reserve a gutter. The prompt
+  /// rail is an overlay on the trailing edge; rows reach the same edge the
+  /// composer below them uses. Measured on the mounted transcript because the
+  /// inset was only ever visible as painted pixels — the view's own frame was
+  /// full width the whole time.
   func testTranscriptRowsReachTheContainerEdgeWithNoReservedGutter() throws {
     let harness = try makeHarness(messageCount: 12)
     defer { harness.tearDown() }
@@ -378,6 +377,44 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       "a track click that moved the viewport must keep the reader's position")
   }
 
+  /// Clicking "Load earlier messages" inserts rows above the viewport. The clip
+  /// origin stays at zero unless restored, which is the newly loaded oldest
+  /// row — the jump this test exists to forbid.
+  func testLoadingEarlierMessagesLeavesTheReaderOnTheSameRows() throws {
+    let harness = try makeHarness(messageCount: 80)
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+    harness.beginLiveScroll()
+    harness.scrollClipToTop()
+    XCTAssertLessThan(
+      harness.scrollTop, 80,
+      "precondition: the reader is at the top of history (scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))"
+    )
+    harness.endLiveScroll()
+    let heightBefore = harness.documentHeight
+    let topBefore = harness.scrollTop
+
+    harness.beginLoadMore()
+    harness.prependOlderMessages(count: 40)
+    harness.finishLoadMore()
+
+    XCTAssertGreaterThan(
+      harness.documentHeight, heightBefore + 200,
+      "precondition: older rows actually grew the document")
+    let expected = ChatTranscriptPrependPreservation.restoredScrollTop(
+      previousDocumentHeight: heightBefore,
+      previousScrollTop: topBefore,
+      newDocumentHeight: harness.documentHeight
+    )
+    XCTAssertEqual(
+      harness.scrollTop, expected, accuracy: 40,
+      "loading earlier messages jumped the reader (scrollTop=\(harness.scrollTop), expected ~\(expected))"
+    )
+    XCTAssertGreaterThan(
+      harness.scrollTop, 100,
+      "restore left the reader at the newly loaded oldest rows (scrollTop=\(harness.scrollTop))")
+  }
+
   // MARK: - Harness
 
   private func makeHarness(
@@ -507,7 +544,14 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     // MARK: Gestures
 
     /// Outlives every delay in `ChatScrollLiveEdge.initialRestoreSettlingDelays`.
-    func settleInitialPlacement() { pump(1.2) }
+    func settleInitialPlacement() {
+      pump(1.2)
+      if let discovered = Self.firstScrollView(in: hostingView) { scrollView = discovered }
+    }
+
+    func scrollClipToTop() {
+      setClipTop(0)
+    }
 
     func performUpwardGesture(
       events: Int, deltaPerEvent: CGFloat = 40, pumpPerEvent: TimeInterval = 0,
@@ -634,8 +678,6 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       pump(0.1)
     }
 
-    // MARK: Content mutation
-
     func appendStreamingText(_ suffix: String) {
       guard !model.messages.isEmpty else { return }
       model.messages[model.messages.count - 1].text += suffix
@@ -648,6 +690,22 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
           id: "assistant-arrival-\(model.messages.count)",
           text: String(repeating: "A newly arrived answer. ", count: 8),
           sender: .ai))
+    }
+
+    func beginLoadMore() {
+      model.hasMoreMessages = true
+      model.isLoadingMoreMessages = true
+      pump(0.05)
+    }
+
+    func prependOlderMessages(count: Int) {
+      let older = Self.makeMessages(count: count, idOffset: 10_000)
+      model.messages = older + model.messages
+    }
+
+    func finishLoadMore() {
+      model.isLoadingMoreMessages = false
+      pump(0.7)
     }
 
     /// Removes the transcript from the hierarchy and puts it back, the way
@@ -737,20 +795,21 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       return nil
     }
 
-    private static func makeMessages(count: Int) -> [ChatMessage] {
+    private static func makeMessages(count: Int, idOffset: Int = 0) -> [ChatMessage] {
       (0..<count).map { index in
-        index.isMultiple(of: 2)
+        let identity = index + idOffset
+        return identity.isMultiple(of: 2)
           ? ChatMessage(
-            id: "user-\(index)",
-            text: "Reader question number \(index) about the desktop transcript.",
-            createdAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(index)),
+            id: "user-\(identity)",
+            text: "Reader question number \(identity) about the desktop transcript.",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(identity)),
             sender: .user)
           : ChatMessage(
-            id: "assistant-\(index)",
+            id: "assistant-\(identity)",
             text: String(
-              repeating: "Assistant answer \(index) with enough prose to make the row tall. ",
+              repeating: "Assistant answer \(identity) with enough prose to make the row tall. ",
               count: 6),
-            createdAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(index)),
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(identity)),
             sender: .ai)
       }
     }
@@ -765,6 +824,8 @@ final class TranscriptModel: ObservableObject {
   @Published var conversationIdentity: String = "harness-session"
   @Published var isSending: Bool = false
   @Published var isLoadingInitial: Bool = false
+  @Published var isLoadingMoreMessages: Bool = false
+  @Published var hasMoreMessages: Bool = false
   @Published var localSendToken: LocalSendToken?
   @Published var isPresented: Bool = true
   var transcriptWindowPolicy: ChatTranscriptWindow.Policy?
@@ -784,8 +845,8 @@ struct HarnessChatHost: View {
           messages: model.messages,
           conversationIdentity: model.conversationIdentity,
           isSending: model.isSending,
-          hasMoreMessages: false,
-          isLoadingMoreMessages: false,
+          hasMoreMessages: model.hasMoreMessages,
+          isLoadingMoreMessages: model.isLoadingMoreMessages,
           isLoadingInitial: model.isLoadingInitial,
           app: nil,
           onLoadMore: {},

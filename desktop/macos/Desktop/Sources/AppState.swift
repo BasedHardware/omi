@@ -689,9 +689,6 @@ class AppState: ObservableObject {
     // singletons that read the key directly.
     UserDefaults.standard.set(false, forKey: "desktop_isPaywalled")
 
-    // Resolve the production identity before loading its shared production backend URL.
-    AppBuild.prepareUpdateChannelForBackendRouting()
-
     // Load API key from environment or .env file
     loadEnvironment()
 
