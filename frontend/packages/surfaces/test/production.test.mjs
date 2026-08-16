@@ -7,6 +7,16 @@ import test from "node:test";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => readFile(resolve(root, relative), "utf8");
 
+test("Apps is a live empty catalog, not a deferred unavailable destination", async () => {
+  const source = await read("src/production/main.tsx");
+  assert.match(source, /import \{ AppsProduction \} from "\.\/AppsProduction\.js"/);
+  assert.match(source, /<AppsProduction locale=\{locale\} onReady=\{\(\) => emitReady\("ready:empty-catalog"\)\} \/>/);
+  assert.doesNotMatch(source, /route === "apps" \|\| route === "brain-map"/);
+  // red-proof: routing Apps back through DeferredDestinationProduction restores
+  // the triple unavailable copy. The rendered-layer proof lives in
+  // apps-rendering.test.mjs; this keeps the bootstrap from silently undoing it.
+});
+
 test("production entry gates fixtures and marks the explicit host platform", async () => {
   // RETAINED-SOURCE-ASSERTION: entrypoint query gating and host-marker wiring are bootstrap structure.
   const source = await read("src/production/main.tsx");

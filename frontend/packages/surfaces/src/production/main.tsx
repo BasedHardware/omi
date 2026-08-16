@@ -45,6 +45,7 @@ import { SettingsProduction } from "./SettingsProduction.js";
 import { ListenProduction } from "./ListenProduction.js";
 import { ScreenProduction } from "./ScreenProduction.js";
 import { FoldersProduction } from "./FoldersProduction.js";
+import { AppsProduction } from "./AppsProduction.js";
 import { DeferredDestinationProduction } from "./DeferredDestinationProduction.js";
 import { ProductionLifecycleRegion } from "./ProductionPrimitives.js";
 import { createProductionListenHostPreflightProvider, createProductionListenHostSocketFactory } from "./listen-host-socket.js";
@@ -428,7 +429,10 @@ if (query.get("lab") === "1") {
   } else if (route === "unsupported") {
     root.render(<StrictMode>{unsupportedRoute()}</StrictMode>);
     emitReady("unsupported");
-  } else if (route === "apps" || route === "brain-map") {
+  } else if (route === "apps") {
+    markRendered("apps", null);
+    root.render(<StrictMode><AppsProduction locale={locale} onReady={() => emitReady("ready:empty-catalog")} /></StrictMode>);
+  } else if (route === "brain-map") {
     markRendered(route, null);
     root.render(<StrictMode><DeferredDestinationProduction destination={route} locale={locale} onReady={() => emitReady("unavailable:contract-not-connected")} /></StrictMode>);
   } else if (!isBridgeHttpAvailable()) {
