@@ -4,6 +4,7 @@ import {
   DISMISS_SUPPRESSION_MS,
   LATER_SUPPRESSION_MS,
   MAX_VISIBLE_SUGGESTED,
+  __resetInterventionCacheForTest,
   acceptSuggestedCandidate,
   isSuppressed,
   loadSuggestedCandidates,
@@ -29,6 +30,7 @@ const card = (over: Partial<SuggestedCandidate> = {}): SuggestedCandidate => ({
   id: 'c-1',
   title: 'Follow up with the vendor',
   detail: null,
+  createdAt: null,
   accountGeneration: 3,
   ...over
 })
@@ -37,6 +39,7 @@ const controlOk = { data: { workflow_mode: 'read', account_generation: 3 } }
 
 beforeEach(() => {
   window.localStorage.clear()
+  __resetInterventionCacheForTest()
 })
 
 describe('projectCandidate', () => {
@@ -44,8 +47,14 @@ describe('projectCandidate', () => {
     expect(projectCandidate(wire() as never)).toEqual({
       id: 'c-1',
       title: 'Follow up with the vendor',
-      detail: null
+      detail: null,
+      createdAt: null
     })
+  })
+
+  it('keeps the wire created_at for the intervention expiry', () => {
+    const p = projectCandidate(wire({ created_at: '2026-08-01T10:00:00Z' }) as never)
+    expect(p?.createdAt).toBe('2026-08-01T10:00:00Z')
   })
 
   it('rejects non-pending, non-task, non-create, and blank-title records', () => {
@@ -133,6 +142,7 @@ describe('accept / reject', () => {
     const post = vi
       .fn()
       .mockResolvedValueOnce({ data: { task_id: 't-7' } })
+      .mockResolvedValueOnce({ data: { intervention_id: 'iv-1' } })
       .mockResolvedValue({ data: {} })
     const result = await acceptSuggestedCandidate(card(), { post })
     expect(post).toHaveBeenCalledWith(
@@ -141,11 +151,34 @@ describe('accept / reject', () => {
       { headers: { 'X-Account-Generation': 3 } }
     )
     expect(result.taskId).toBe('t-7')
-    // Attribution rides behind with the generated FeedbackCreate wire shape and
-    // both required headers.
+    // Attribution rides behind: the presentation intervention is registered
+    // first (mac's recordOrQueueFeedback order) and the feedback threads its id
+    // in the generated FeedbackCreate wire shape with both required headers.
+    await vi.waitFor(() => expect(post).toHaveBeenCalledTimes(3))
+    expect(post).toHaveBeenCalledWith(
+      '/v1/task-intelligence/interventions',
+      expect.objectContaining({
+        surface: 'suggested',
+        subject_kind: 'candidate',
+        subject_id: 'c-1',
+        dedupe_key: expect.stringMatching(/^candidate_[0-9a-f]{32}$/),
+        expires_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/)
+      }),
+      {
+        headers: {
+          'Idempotency-Key': 'suggested-presentation:c-1',
+          'X-Account-Generation': 3
+        }
+      }
+    )
     expect(post).toHaveBeenCalledWith(
       '/v1/task-intelligence/feedback',
-      { action: 'accept_candidate', subject_id: 'c-1', subject_kind: 'candidate' },
+      {
+        action: 'accept_candidate',
+        subject_id: 'c-1',
+        subject_kind: 'candidate',
+        intervention_id: 'iv-1'
+      },
       {
         headers: {
           'Idempotency-Key': 'suggested:c-1:accept_candidate',
@@ -153,6 +186,44 @@ describe('accept / reject', () => {
         }
       }
     )
+  })
+
+  it('dismiss feedback registers the intervention first and carries its id', async () => {
+    // FeedbackCreate.validate_action rejects dismiss without an intervention_id,
+    // so a bare dismiss would 422 server-side and attribution would never record.
+    const post = vi
+      .fn()
+      .mockResolvedValueOnce({ data: {} })
+      .mockResolvedValueOnce({ data: { intervention_id: 'iv-9' } })
+      .mockResolvedValue({ data: {} })
+    await rejectSuggestedCandidate(card(), { post, now: () => 1_000 })
+    await vi.waitFor(() => expect(post).toHaveBeenCalledTimes(3))
+    const feedbackCall = post.mock.calls.find((c) => c[0] === '/v1/task-intelligence/feedback')
+    expect(feedbackCall?.[1]).toEqual({
+      action: 'dismiss',
+      subject_id: 'c-1',
+      subject_kind: 'candidate',
+      intervention_id: 'iv-9'
+    })
+  })
+
+  it('reuses the registered intervention across feedback sends', async () => {
+    const post = vi.fn((url: string) => {
+      if (url === '/v1/task-intelligence/interventions') {
+        return Promise.resolve({ data: { intervention_id: 'iv-2' } })
+      }
+      return Promise.resolve({ data: { task_id: 't-1' } })
+    }) as never
+    await rejectSuggestedCandidate(card(), { post })
+    await acceptSuggestedCandidate(card(), { post })
+    await vi.waitFor(() => {
+      const calls = (post as ReturnType<typeof vi.fn>).mock.calls
+      expect(calls.filter((c) => c[0] === '/v1/task-intelligence/feedback')).toHaveLength(2)
+    })
+    const interventionCalls = (post as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (c) => c[0] === '/v1/task-intelligence/interventions'
+    )
+    expect(interventionCalls).toHaveLength(1)
   })
 
   it('reject posts the resolution and persists the 30-day suppression', async () => {

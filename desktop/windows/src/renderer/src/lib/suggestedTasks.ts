@@ -22,6 +22,9 @@ export type ProjectedCandidate = {
   id: string
   title: string
   detail: string | null
+  /** Wire created_at, kept for the deterministic intervention expiry (mac:
+   *  deterministicInterventionExpiry). Null when the record carries none. */
+  createdAt: string | null
 }
 
 export type SuggestedCandidate = ProjectedCandidate & {
@@ -101,7 +104,8 @@ export function projectCandidate(record: CandidateWire): ProjectedCandidate | nu
   return {
     id,
     title,
-    detail: typeof detailRaw === 'string' && detailRaw.trim() ? detailRaw.trim() : null
+    detail: typeof detailRaw === 'string' && detailRaw.trim() ? detailRaw.trim() : null,
+    createdAt: typeof record.created_at === 'string' ? record.created_at : null
   }
 }
 
@@ -151,25 +155,106 @@ export async function loadSuggestedCandidates(
   return { candidates: projected, accountGeneration }
 }
 
-/** Fire-and-forget attribution. The wire shape is the generated FeedbackCreate
- *  (action + subject_id + subject_kind), and the endpoint requires both the
- *  idempotency key (mac's exact shape) and the account generation header. */
+/** In-session intervention registrations by candidate (mac:
+ *  SuggestedTasksStore.interventionIDs). The PROMISE is cached, not the id, so
+ *  concurrent feedback sends share one in-flight registration; the server also
+ *  dedupes on dedupe_key + Idempotency-Key, so a lost cache only costs an extra
+ *  idempotent POST. */
+const interventionRequests = new Map<string, Promise<string>>()
+
+/** Test seam: the cache is module-level state. */
+export function __resetInterventionCacheForTest(): void {
+  interventionRequests.clear()
+}
+
+/** Mac's candidateRecommendationDedupeKey: `candidate_` + first 16 bytes of
+ *  SHA-256(candidateId), hex. */
+async function candidateDedupeKey(candidateId: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(candidateId))
+  const prefix = [...new Uint8Array(digest).slice(0, 16)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+  return `candidate_${prefix}`
+}
+
+/** Mac's deterministicInterventionExpiry: created_at + 10 years, anchored to
+ *  2100-01-01 when the record has no parseable created_at. */
+function interventionExpiry(createdAt: string | null): string {
+  const parsed = createdAt == null ? NaN : Date.parse(createdAt)
+  const anchor = Number.isNaN(parsed) ? 4_102_444_800_000 : parsed
+  return new Date(anchor + 10 * 365 * 24 * 60 * 60 * 1000).toISOString()
+}
+
+/** Register (or reuse) the presentation intervention for a candidate, mirroring
+ *  mac's ensureIntervention. FeedbackCreate.validate_action REJECTS dismiss /
+ *  later / do_now feedback without an intervention_id, so feedback must thread
+ *  the returned id or the backend 422s and attribution never records. */
+function ensureIntervention(
+  post: typeof omiApi.post,
+  candidate: SuggestedCandidate
+): Promise<string> {
+  const cached = interventionRequests.get(candidate.id)
+  if (cached) return cached
+  const registration = (async () => {
+    const res = await post(
+      '/v1/task-intelligence/interventions',
+      {
+        surface: 'suggested',
+        subject_kind: 'candidate',
+        subject_id: candidate.id,
+        dedupe_key: await candidateDedupeKey(candidate.id),
+        expires_at: interventionExpiry(candidate.createdAt)
+      },
+      {
+        headers: {
+          'Idempotency-Key': `suggested-presentation:${candidate.id}`,
+          'X-Account-Generation': candidate.accountGeneration
+        }
+      }
+    )
+    const record = res.data as { intervention_id?: string } | null
+    const interventionId = record?.intervention_id
+    if (!interventionId) throw new Error('intervention response carried no intervention_id')
+    return interventionId
+  })()
+  // A failed registration must not poison the cache; the next send retries.
+  interventionRequests.set(
+    candidate.id,
+    registration.catch((e) => {
+      interventionRequests.delete(candidate.id)
+      throw e
+    })
+  )
+  return interventionRequests.get(candidate.id) as Promise<string>
+}
+
+/** Fire-and-forget attribution. Registers the presentation intervention first
+ *  and threads its id into the generated FeedbackCreate shape (mac's
+ *  recordOrQueueFeedback order); the endpoint requires both the idempotency key
+ *  and the account generation header. */
 function sendFeedback(
   post: typeof omiApi.post,
-  candidateId: string,
-  action: 'accept_candidate' | 'dismiss',
-  accountGeneration: number
+  candidate: SuggestedCandidate,
+  action: 'accept_candidate' | 'dismiss'
 ): void {
-  void post(
-    '/v1/task-intelligence/feedback',
-    { action, subject_id: candidateId, subject_kind: 'candidate' },
-    {
-      headers: {
-        'Idempotency-Key': `suggested:${candidateId}:${action}`,
-        'X-Account-Generation': accountGeneration
+  void (async () => {
+    const interventionId = await ensureIntervention(post, candidate)
+    await post(
+      '/v1/task-intelligence/feedback',
+      {
+        action,
+        subject_id: candidate.id,
+        subject_kind: 'candidate',
+        intervention_id: interventionId
+      },
+      {
+        headers: {
+          'Idempotency-Key': `suggested:${candidate.id}:${action}`,
+          'X-Account-Generation': candidate.accountGeneration
+        }
       }
-    }
-  ).catch(() => {
+    )
+  })().catch(() => {
     // Attribution is best-effort in this first Windows cut; mac queues failures
     // in a durable outbox — tracked as a follow-up.
   })
@@ -185,7 +270,7 @@ export async function acceptSuggestedCandidate(
     {},
     { headers: { 'X-Account-Generation': candidate.accountGeneration } }
   )
-  sendFeedback(post, candidate.id, 'accept_candidate', candidate.accountGeneration)
+  sendFeedback(post, candidate, 'accept_candidate')
   const receipt = res.data as { task_id?: string | null } | null
   return { taskId: receipt?.task_id ?? null }
 }
@@ -203,5 +288,5 @@ export async function rejectSuggestedCandidate(
   )
   // Mac persists the 30-day suppression once the reject sticks.
   suppressCandidate(candidate.id, DISMISS_SUPPRESSION_MS, now())
-  sendFeedback(post, candidate.id, 'dismiss', candidate.accountGeneration)
+  sendFeedback(post, candidate, 'dismiss')
 }

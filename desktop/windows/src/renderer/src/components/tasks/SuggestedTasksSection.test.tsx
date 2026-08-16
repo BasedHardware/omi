@@ -18,6 +18,7 @@ const card = (over: Partial<SuggestedCandidate> = {}): SuggestedCandidate => ({
   id: 'c-1',
   title: 'Reply to the vendor thread',
   detail: 'seen in Slack',
+  createdAt: null,
   accountGeneration: 1,
   ...over
 })
