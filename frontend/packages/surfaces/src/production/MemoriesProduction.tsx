@@ -8,11 +8,9 @@ import { ProductionDataSourceBadge, ProductionFilterChips, ProductionLifecycleRe
 import { ProductionIcon } from "./ProductionIcon.js";
 import { listEmptyKind } from "./list-empty-presentation.js";
 import { presentMemoryContent } from "./memory-presentation.js";
-import { createProductionCommandRegistry, dispatchProductionCommand } from "./command-registry.js";
 
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
-const commandRegistry = createProductionCommandRegistry();
 
 function MemoryCard({ memory, store, locale, run }: {
   memory: Memory;
@@ -20,26 +18,14 @@ function MemoryCard({ memory, store, locale, run }: {
   locale: Locale;
   run: RunOperation;
 }): React.JSX.Element {
-  const [draft, setDraft] = useState(memory.content);
   const [expanded, setExpanded] = useState(false);
-  const [editing, setEditing] = useState(false);
   // Split the stored value first, then collapse only its body. This keeps the
   // provenance prefix visible without ever changing the value sent to a store.
   const { provenance, body } = presentMemoryContent(memory.content);
   const isLong = body.length > 240;
   const visibleText = !expanded && isLong ? `${body.slice(0, 240)}…` : body;
   const targetVisibility = memory.visibility === "public" ? "private" : "public";
-  useEffect(() => setDraft(memory.content), [memory.content]);
 
-  const cancelEdit = (): void => {
-    setDraft(memory.content);
-    setEditing(false);
-  };
-  const save = async (): Promise<void> => {
-    const value = draft.trim();
-    if (!value || value === memory.content) { setEditing(false); return; }
-    if (await run(() => store.patch(memory.id, { content: value }))) setEditing(false);
-  };
   return (
     <article className={`memory-card${memory.locked ? " is-locked" : ""}`} data-memory-id={memory.id} data-long={isLong || undefined}>
       <header className="memory-card-header">
@@ -54,36 +40,14 @@ function MemoryCard({ memory, store, locale, run }: {
           <p className="memory-content locked-content">{visibleText}</p>
           <p className="locked-explanation">{t(locale, "locked.body")}</p>
         </>
-      ) : editing ? (
-        <textarea className="memory-editor" value={draft} aria-label={t(locale, "memories.edit")} autoFocus onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
-          dispatchProductionCommand(event.nativeEvent, commandRegistry, {
-            activeRoute: "memories",
-            navigate: () => undefined,
-            handlers: { "save-memory": () => void save(), "cancel-memory": cancelEdit },
-          });
-        }} />
       ) : (
         <p className="memory-content">{visibleText}</p>
       )}
       <div className="memory-actions" role="group" aria-label={t(locale, "memories.action")}>
-        {memory.locked ? (
-          <>
-            <span className="locked-label">{t(locale, "locked.title")}</span>
-            <button type="button" onClick={() => void run(() => store.patch(memory.id, { visibility: targetVisibility }))}>
-              {targetVisibility === "public" ? t(locale, "memories.makePublic") : t(locale, "memories.makePrivate")}
-            </button>
-          </>
-        ) : (
-          <>
-            <button type="button" onClick={() => editing ? cancelEdit() : setEditing(true)} aria-label={t(locale, "memories.edit")}>
-              {editing ? t(locale, "common.cancel") : t(locale, "common.edit")}
-            </button>
-            {editing && <button type="button" onClick={() => void save()}>{t(locale, "common.save")}</button>}
-            <button type="button" onClick={() => void run(() => store.patch(memory.id, { visibility: targetVisibility }))}>
-              {targetVisibility === "public" ? t(locale, "memories.makePublic") : t(locale, "memories.makePrivate")}
-            </button>
-          </>
-        )}
+        {memory.locked && <span className="locked-label">{t(locale, "locked.title")}</span>}
+        <button type="button" onClick={() => void run(() => store.patch(memory.id, { visibility: targetVisibility }))}>
+          {targetVisibility === "public" ? t(locale, "memories.makePublic") : t(locale, "memories.makePrivate")}
+        </button>
         {isLong && <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
           {expanded ? t(locale, "content.showLess") : t(locale, "content.showMore")}
         </button>}

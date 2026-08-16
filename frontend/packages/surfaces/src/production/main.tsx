@@ -38,7 +38,7 @@ import { openFolderRouteSource } from "./folder-sources.js";
 import { homeConversationHitFromRecord, homeMemoryHitFromLegacy } from "./home-hits.js";
 import { MemoriesPlatformProduction } from "./MemoriesPlatformProduction.js";
 import { fixtureStore, FIXTURE_STATES, type FixtureState } from "./memory-fixtures.js";
-import { PROPOSITION_FIXTURE_STATES, fixturePropositionStore, type PropositionFixtureState } from "./proposition-fixtures.js";
+import { PROPOSITION_FIXTURE_STATES, fixtureMemoryCorrectionStore, fixturePropositionStore, type PropositionFixtureState } from "./proposition-fixtures.js";
 import { ChatProduction } from "./ChatProduction.js";
 import { SettingsProduction } from "./SettingsProduction.js";
 import { ListenProduction } from "./ListenProduction.js";
@@ -377,7 +377,7 @@ if (query.get("lab") === "1") {
   if (propositionFixture) {
     // `source` is required by the component, so a fixture render can never be mistaken
     // for live account data — the badge is on screen at every width.
-    root.render(<StrictMode><MemoriesPlatformProduction store={fixturePropositionStore(propositionFixture)} source={{ kind: "fixture", fixture: propositionFixture }} locale={locale} onReady={() => emitReady(`fixture:${propositionFixture}`)} /></StrictMode>);
+    root.render(<StrictMode><MemoriesPlatformProduction store={fixturePropositionStore(propositionFixture)} correction={fixtureMemoryCorrectionStore()} source={{ kind: "fixture", fixture: propositionFixture }} locale={locale} onReady={() => emitReady(`fixture:${propositionFixture}`)} /></StrictMode>);
   } else if (chatFixture) {
     root.render(<StrictMode><ChatProduction store={fixtureChatStore(chatFixture)} fixture={chatFixture} locale={locale} onReady={() => emitReady(`fixture:${chatFixture}`)} /></StrictMode>);
   } else if (settingsFixture) {
@@ -449,9 +449,10 @@ if (query.get("lab") === "1") {
         const stores = platform;
         if (route === "memories" && platform.selection.memories === "platform") {
           const store = await platform.openSynthesizedMemories();
+          const correction = await platform.openMemoryCorrection();
           await store.refresh();
           markRendered("memories-platform", "platform");
-          root.render(<StrictMode><MemoriesPlatformProduction store={store} source={{ kind: "live", origin: hostConfig.platformOriginLabel ?? "bridge" }} locale={locale} onReady={() => emitReady("bridge:platform")} /></StrictMode>);
+          root.render(<StrictMode><MemoriesPlatformProduction store={store} correction={correction} source={{ kind: "live", origin: hostConfig.platformOriginLabel ?? "bridge" }} locale={locale} onReady={() => emitReady("bridge:platform")} /></StrictMode>);
           return;
         }
         if (route === "home") {

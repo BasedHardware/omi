@@ -27,12 +27,17 @@ import {
   ConversationsStore,
   FoldersStore,
   MemoriesStore,
+  MemoryCorrectionStore,
   PlatformConversationsStore,
   PlatformFoldersStore,
   PlatformTasksStore,
   SynthesizedMemoriesStore,
   TasksStore,
 } from "@omi-core/domain";
+import {
+  WRITE_ID_ENTROPY_BYTES,
+  createDevAccountEpochProvider,
+} from "@omi-core/adapters-platform";
 import {
   openProductionChatStore,
   type ProductionChatStore,
@@ -155,6 +160,15 @@ export type ProductionSynthesizedMemoryStore = ObservableStore & {
 };
 
 /**
+ * The correction path for platform Memories: add a fact, which is a
+ * user-asserted STM note. Named separately from the synthesized READ store
+ * because that projection has no writes.
+ */
+export type ProductionMemoryCorrectionStore = {
+  submitFact(text: string): Promise<void>;
+};
+
+/**
  * The platform generation's task READ store.
  *
  * ADDITIVE AND SEPARATE from `ProductionTaskStore`, and the reason is NOT the
@@ -221,6 +235,12 @@ export type PlatformProductionStoreFactory = ProductionStoreFactory & {
   readonly rejected: readonly GenerationRejection[];
   openSynthesizedMemories(): Promise<ProductionSynthesizedMemoryStore>;
   /**
+   * The correction path: `POST /v1/stm-notes/ops`. Named separately, and
+   * `openMemories()` is not repointed at it. A user-asserted note is not a
+   * patch of a synthesized proposition.
+   */
+  openMemoryCorrection(): Promise<ProductionMemoryCorrectionStore>;
+  /**
    * The platform generation's tasks READ store.
    *
    * NAMED SEPARATELY ON PURPOSE, and `openTasks()` is NOT repointed at it. Fable
@@ -280,12 +300,17 @@ export interface ProductionTransports {
  * `resolveGenerationSelection`, and anything unavailable is rejected loudly
  * and falls back to `legacy` rather than being silently downgraded.
  *
- * Note what the legacy ports do under a platform selection for memories:
- * `openMemories()` still returns the LEGACY editable store. That is not an
- * oversight. The two record classes coexist, and a surface that wants the
- * platform read model asks for it by name via `openSynthesizedMemories()`.
- * Pointing `openMemories()` at a read model that cannot create, patch or
- * delete would satisfy the type and break every caller at runtime.
+ * David's 2026-08-16 ruling retires memory editing: users correct Omi by
+ * adding a fact through consolidation (`POST /v1/stm-notes/ops`). That
+ * discharges the earlier note that `openMemories()` returning the legacy
+ * *editable* store was "not an oversight."
+ *
+ * `openMemories()` STILL returns the legacy store and is NOT pointed at
+ * `openSynthesizedMemories()`. The record classes still differ — the
+ * synthesized projection has no `content` / `locked` / `visibility` — and
+ * pointing the port at a read model would satisfy the type and break every
+ * caller at runtime. If the legacy store becomes unreferenced, that is the
+ * eviction lane's business. The correction path is `openMemoryCorrection()`.
  */
 export function createPlatformProductionStoreFactory(
   bridge: StorageBridge,
@@ -295,12 +320,20 @@ export function createPlatformProductionStoreFactory(
 ): PlatformProductionStoreFactory {
   const { selection, rejected } = resolveGenerationSelection(requestedGenerations);
   const legacy = createLegacyProductionStoreFactory(bridge, env, transports.legacyHttp);
+  const epochs = createDevAccountEpochProvider();
+  const entropy = (): Uint8Array => {
+    const bytes = new Uint8Array(WRITE_ID_ENTROPY_BYTES);
+    globalThis.crypto.getRandomValues(bytes);
+    return bytes;
+  };
   return {
     ...legacy,
     selection,
     rejected,
     openSynthesizedMemories: () =>
       SynthesizedMemoriesStore.open(bridge, env, transports.platformHttp),
+    openMemoryCorrection: async () =>
+      MemoryCorrectionStore.open(transports.platformHttp, epochs, entropy),
     openPlatformTasks: () => PlatformTasksStore.open(bridge, env, transports.platformHttp),
     openPlatformConversations: () =>
       PlatformConversationsStore.open(bridge, env, transports.platformHttp),

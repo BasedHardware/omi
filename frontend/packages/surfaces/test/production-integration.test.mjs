@@ -111,6 +111,9 @@ test("bootstrap chooses backend generation through one production factory", asyn
   // Routing itself — including the default that makes a bare `generation=platform` land
   // here at all — is covered behaviorally in production-routing.test.mjs.
   assert.match(main, /route === "memories" && platform\.selection\.memories === "platform"/);
+  assert.match(main, /platform\.openMemoryCorrection\(\)/);
+  assert.match(stores, /openMemoryCorrection\(\)/);
+  assert.doesNotMatch(stores, /openMemories:\s*\(\)\s*=>[\s\S]{0,120}SynthesizedMemoriesStore/);
   const homeSources = await read("src/production/home-sources.ts");
   assert.match(homeSources, /openSynthesizedMemories\(\)/);
   assert.match(homeSources, /openPlatformConversations\(\)/);

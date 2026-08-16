@@ -1,5 +1,5 @@
 import type { RefreshPhase, StoreStatus } from "@omi-core/domain";
-import type { ProductionSynthesizedMemoryStore } from "./ProductionStores.js";
+import type { ProductionMemoryCorrectionStore, ProductionSynthesizedMemoryStore } from "./ProductionStores.js";
 import type { SynthesizedMemoryItem, SynthesizedRecallReason, SynthesizedRecallState } from "@omi-core/contracts";
 
 /**
@@ -170,6 +170,27 @@ export function fixturePropositionStore(
       items = [...items, ...continuationItems()];
       recall = known("complete", []);
       notify();
+    },
+  };
+}
+
+/**
+ * Fixture correction port. It records the submitted text and does not invent
+ * a synthesized row — a note is consolidated, it does not instantly rewrite
+ * the list.
+ */
+export function fixtureMemoryCorrectionStore(): ProductionMemoryCorrectionStore & {
+  readonly submitted: readonly string[];
+} {
+  const submitted: string[] = [];
+  return {
+    get submitted() {
+      return submitted;
+    },
+    async submitFact(text: string) {
+      const value = text.trim();
+      if (!value) throw new Error("refusing to submit an empty fact");
+      submitted.push(value);
     },
   };
 }

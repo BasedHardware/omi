@@ -17,8 +17,10 @@ import {
  * generation selection.
  *
  * Platform memories come from `openSynthesizedMemories()`, never from
- * `openMemories()` — that port stays the legacy editable store. Platform
- * conversations come from `openPlatformConversations()` by the same rule.
+ * `openMemories()` — that port stays the legacy store (David's 2026-08-16
+ * ruling retired in-place edits; the port is still not pointed at the
+ * synthesized read model). Platform conversations come from
+ * `openPlatformConversations()` by the same rule.
  * Mapping to Home's hit shape happens here, at the surface boundary.
  */
 export async function openHomeSearchSources(

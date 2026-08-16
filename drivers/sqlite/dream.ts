@@ -20,6 +20,10 @@ import { SqliteLedger } from "./index";
 
 export const DEFAULT_DREAM_MODEL_VERSION = "deterministic-fake-v1";
 export const TRUSTED_SOURCE_TRUST = new Set(["user_asserted", "imported_unverified"]);
+// user_asserted is fully trusted for promotion (never filtered). That is not
+// a lock field and not an overwrite. Overwrite protection is append-only
+// promotion of new canonical revisions; this set only lets a user-asserted
+// note enter the graph without a subject:owner label.
 // model_version is provenance, not decoration: a live-adjudicated commit must
 // not claim the deterministic fake produced it.
 const versionsFor = (model_version: string) => ({ strategy_version: "dream-consolidation-v1", model_version, prompt_version: "dream-v1", policy_version: "d50-v1", code_version: "dream-v1", schema_version: "stage-b2-v1", tokenizer_version: "none", tool_version: "dream-v1" });

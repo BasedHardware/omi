@@ -23,6 +23,45 @@
 
 .proposition-search { flex: 1 1 auto; min-width: 0; }
 
+.fact-correction-trigger {
+  min-height: var(--min-tap-target);
+  min-width: var(--min-tap-target);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--content-primary);
+  background: var(--surface-raised);
+}
+
+.fact-correction {
+  display: grid;
+  gap: var(--space-sm);
+  margin: 0 0 var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-section);
+  background: var(--surface-elevated);
+}
+
+.fact-correction textarea {
+  min-height: 64px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: var(--space-md);
+  color: var(--content-primary);
+  background: var(--surface-raised);
+}
+
+.fact-correction-help,
+.proposition-correction-accepted {
+  margin: 0;
+  color: var(--content-tertiary);
+  font-size: var(--type-label-size);
+  line-height: var(--type-body-line);
+}
+
+.proposition-correction-accepted { margin: 0 0 var(--space-md); }
+
 .completeness-notice {
   margin: var(--space-sm) 0;
   padding: var(--space-sm) var(--space-md);
@@ -168,7 +207,8 @@
 }
 
 .proposition-details-toggle:focus-visible,
-.proposition-load-more:focus-visible {
+.proposition-load-more:focus-visible,
+.fact-correction-trigger:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus);
   outline-offset: 2px;
 }

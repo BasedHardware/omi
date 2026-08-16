@@ -15,6 +15,7 @@ import {
 } from "../src/production/proposition-presentation.ts";
 import {
   PROPOSITION_FIXTURE_STATES,
+  fixtureMemoryCorrectionStore,
   fixturePropositionStore,
 } from "../src/production/proposition-fixtures.ts";
 import { EN_MESSAGES } from "@omi-core/i18n";
@@ -169,6 +170,7 @@ test("platform Memories hides healthy projection machinery and raw coordinates u
   const Component = await loadProductionExport("MemoriesPlatformProduction.tsx", "MemoriesPlatformProduction");
   const rendered = await renderComponent(Component, {
     store: fixturePropositionStore("normal"),
+    correction: fixtureMemoryCorrectionStore(),
     source: { kind: "fixture", fixture: "normal" },
   });
   try {
@@ -215,6 +217,7 @@ test("legacy Memories unavailable is Temporarily unavailable; platform Memories 
   const Component = await loadProductionExport("MemoriesPlatformProduction.tsx", "MemoriesPlatformProduction");
   const platform = await renderComponent(Component, {
     store: fixturePropositionStore("normal"),
+    correction: fixtureMemoryCorrectionStore(),
     source: { kind: "live", origin: "bridge" },
   });
   try {
@@ -282,7 +285,7 @@ test("fixture provenance stays visible; live account data does not wear a pill",
     {
       module: "MemoriesPlatformProduction.tsx",
       exportName: "MemoriesPlatformProduction",
-      props: { store: fixturePropositionStore("normal"), source: { kind: "fixture", fixture: "normal" } },
+      props: { store: fixturePropositionStore("normal"), correction: fixtureMemoryCorrectionStore(), source: { kind: "fixture", fixture: "normal" } },
     },
     {
       module: "ChatProduction.tsx",
@@ -441,15 +444,113 @@ test("filtering matches proposition text over loaded rows only", () => {
   // would claim a backend search this function does not perform.
 });
 
-test("the platform Memories surface exposes no write affordance and no legacy memory field", async () => {
+test("the platform Memories surface exposes no in-place edit and no legacy memory field", async () => {
   // RETAINED-SOURCE-ASSERTION: capability and legacy-field absence is a complete module-boundary claim.
   const source = await read("src/production/MemoriesPlatformProduction.tsx");
-  for (const forbidden of ["store.create", "store.patch", "store.delete", "memories.visibility", "memory.visibility", "makePublic", "makePrivate", "deleteConfirm", "<textarea"]) {
+  for (const forbidden of ["store.create", "store.patch", "store.delete", "memories.visibility", "memory.visibility", "makePublic", "makePrivate", "deleteConfirm", "memories.edit", "memory-editor"]) {
     assert.ok(!source.includes(forbidden), `platform Memories must not reference ${forbidden}`);
   }
   assert.ok(source.includes('data-generation="platform"'), "the generation must be inspectable in the DOM");
   assert.ok(source.includes("data-data-source={source.kind}"), "the data source must be inspectable in the DOM");
+  assert.ok(source.includes("correction.submitFact"), "the correction path must be the named fact composer");
+  assert.ok(source.includes("data-correction-composer"), "the correction composer must be inspectable in the DOM");
   // red-proof: reintroducing the legacy editable card here passes every other test in this
-  // file while breaking board ruling PR-2 — the platform wire has no editable memory
-  // fields and no internal record ids to edit them by.
+  // file while breaking the 2026-08-16 retirement — correction is adding a fact, not
+  // patching a synthesized proposition.
+});
+
+function setTextareaValue(rendered, textarea, value) {
+  const setter = Object.getOwnPropertyDescriptor(rendered.window.HTMLTextAreaElement.prototype, "value")?.set;
+  assert.ok(setter, "jsdom textarea value setter is available");
+  setter.call(textarea, value);
+  textarea.dispatchEvent(new rendered.window.Event("input", { bubbles: true }));
+}
+
+test("the retired edit affordance is absent from the rendered platform Memories surface", async () => {
+  const Component = await loadProductionExport("MemoriesPlatformProduction.tsx", "MemoriesPlatformProduction");
+  const rendered = await renderComponent(Component, {
+    store: fixturePropositionStore("normal"),
+    correction: fixtureMemoryCorrectionStore(),
+    source: { kind: "live", origin: "bridge" },
+  });
+  try {
+    await rendered.act(async () => { for (let index = 0; index < 6; index += 1) await Promise.resolve(); });
+    const text = rendered.container.textContent ?? "";
+    assert.equal(rendered.container.querySelector(`[aria-label="${EN_MESSAGES["memories.edit"]}"]`), null);
+    assert.equal(rendered.container.querySelector(".memory-editor"), null);
+    assert.equal(text.includes(EN_MESSAGES["memories.edit"]), false);
+    assert.equal(text.includes(EN_MESSAGES["common.edit"]), false);
+    assert.ok(text.includes(EN_MESSAGES["memoriesPlatform.correctionNote"]));
+    assert.doesNotMatch(EN_MESSAGES["memoriesPlatform.correctionNote"], /instant|immediately|right away|consolidat/i);
+    const trigger = rendered.container.querySelector(`button[aria-label="${EN_MESSAGES["memoriesPlatform.correctionTitle"]}"]`);
+    assert.ok(trigger, "adding a fact must be discoverable on the rendered surface");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("adding a fact posts a note and does not instantly rewrite the list", async () => {
+  const Component = await loadProductionExport("MemoriesPlatformProduction.tsx", "MemoriesPlatformProduction");
+  const correction = fixtureMemoryCorrectionStore();
+  const store = fixturePropositionStore("normal");
+  const before = (await store.list()).map((row) => row.text);
+  const rendered = await renderComponent(Component, {
+    store,
+    correction,
+    source: { kind: "live", origin: "bridge" },
+  });
+  try {
+    await rendered.act(async () => { for (let index = 0; index < 6; index += 1) await Promise.resolve(); });
+    const trigger = rendered.container.querySelector(`button[aria-label="${EN_MESSAGES["memoriesPlatform.correctionTitle"]}"]`);
+    assert.ok(trigger);
+    await rendered.act(async () => { trigger.click(); });
+    const form = rendered.container.querySelector("[data-correction-composer]");
+    const draft = form?.querySelector(`textarea[aria-label="${EN_MESSAGES["memoriesPlatform.correctionTitle"]}"]`);
+    assert.ok(form && draft);
+    assert.ok((form.textContent ?? "").includes(EN_MESSAGES["memoriesPlatform.correctionHelp"]));
+    assert.doesNotMatch(EN_MESSAGES["memoriesPlatform.correctionHelp"], /instant|immediately|right away|consolidat/i);
+    await rendered.act(async () => {
+      setTextareaValue(rendered, draft, "Atlas likes oat milk at Harborline Cafe");
+    });
+    await rendered.act(async () => {
+      form.dispatchEvent(new rendered.window.Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    assert.deepEqual(correction.submitted, ["Atlas likes oat milk at Harborline Cafe"]);
+    const after = (await store.list()).map((row) => row.text);
+    assert.deepEqual(after, before, "the fixture list must not invent a row the pipeline has not consolidated");
+    assert.equal(rendered.container.querySelector("[data-correction-accepted]")?.textContent, EN_MESSAGES["memoriesPlatform.correctionAccepted"]);
+    assert.doesNotMatch(EN_MESSAGES["memoriesPlatform.correctionAccepted"], /instant|immediately|right away|consolidat/i);
+    assert.equal((rendered.container.textContent ?? "").includes("Atlas likes oat milk at Harborline Cafe"), false);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("a consolidated user-asserted fact is visible on the platform Memories surface", async () => {
+  const FACT = "Atlas likes oat milk at Harborline Cafe";
+  const store = {
+    status: () => ({ refresh: { phase: "ready", hasSavedData: true }, queue: { phase: "idle", pendingCount: 0 } }),
+    subscribe: () => () => undefined,
+    refresh: async () => undefined,
+    list: async () => [{ id: "prop:user-asserted", text: FACT }],
+    recall: () => ({ kind: "known", status: "complete", reasons: [], complete: true, queryGap: false, hasMore: false }),
+    hasMore: () => false,
+    loadMore: async () => undefined,
+  };
+  const Component = await loadProductionExport("MemoriesPlatformProduction.tsx", "MemoriesPlatformProduction");
+  const rendered = await renderComponent(Component, {
+    store,
+    correction: fixtureMemoryCorrectionStore(),
+    source: { kind: "live", origin: "bridge" },
+  });
+  try {
+    await rendered.act(async () => { for (let index = 0; index < 6; index += 1) await Promise.resolve(); });
+    const card = rendered.container.querySelector('[data-proposition-id="prop:user-asserted"] .proposition-text');
+    assert.equal(card?.textContent, FACT);
+    assert.equal(rendered.container.querySelector(`button[aria-label="${EN_MESSAGES["memories.edit"]}"]`), null);
+  } finally {
+    await rendered.cleanup();
+  }
 });

@@ -41,7 +41,7 @@ test("memory cards render provenance as metadata and classify only the body as l
   }
 });
 
-test("memory create and edit affordances execute keyboard-safe form behavior", async () => {
+test("memory create affordance executes keyboard-safe form behavior and in-place edit is gone", async () => {
   const rendered = await renderMemories();
   try {
     const create = rendered.container.querySelector("button.memory-create-trigger");
@@ -63,16 +63,9 @@ test("memory create and edit affordances execute keyboard-safe form behavior", a
     assert.ok(rendered.container.textContent?.includes("Created through the rendered form"));
     assert.equal(rendered.container.querySelector("form.memory-create"), null);
 
-    const edit = rendered.container.querySelector(`button[aria-label="${EN_MESSAGES["memories.edit"]}"]`);
-    assert.ok(edit);
-    await rendered.act(async () => { edit.click(); });
-    const editor = rendered.container.querySelector(`textarea[aria-label="${EN_MESSAGES["memories.edit"]}"]`);
-    assert.ok(editor);
-    assert.equal(rendered.window.document.activeElement, editor);
-    await rendered.act(async () => {
-      editor.dispatchEvent(new rendered.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    });
-    assert.equal(rendered.container.querySelector(`textarea[aria-label="${EN_MESSAGES["memories.edit"]}"]`), null);
+    assert.equal(rendered.container.querySelector(`button[aria-label="${EN_MESSAGES["memories.edit"]}"]`), null);
+    assert.equal(rendered.container.querySelector(".memory-editor"), null);
+    assert.equal((rendered.container.textContent ?? "").includes(EN_MESSAGES["memories.edit"]), false);
   } finally {
     await rendered.cleanup();
   }
