@@ -52,21 +52,29 @@ async def send_daily_summary_notification() -> None:
         # Group timezones by their current local hour
         timezones_by_hour = _get_timezones_grouped_by_hour()
 
-        # Resolve the delivery backend ONCE here (utils layer), not inside the database helper: the DB
-        # layer persists/reads recipients but must not own delivery policy. Threaded down so the recipient
-        # shape (FCM tokens vs UnifiedPush endpoints) is decided by the caller (cubic PR 10887 #3) AND the
-        # per-user send does not re-resolve it — an invalid backend records its fallback once, not per user
-        # (cubic other/notifications.py:58).
+        # Resolve the delivery backend ONCE here (utils/service layer), not inside the database helper: the
+        # DB layer reads persistence but must not own delivery policy (cubic PR 10887 #427 / #3). The DB
+        # returns eligible users neutrally; THIS layer picks the recipient reader for the resolved backend
+        # and composes the fan-out. Resolving once also records an invalid-backend fallback once, not per
+        # user (cubic other/notifications.py:58).
         backend = resolve_push_backend()
-        unifiedpush = backend == UNIFIEDPUSH
 
         for target_hour, timezones in timezones_by_hour.items():
-            # Get users in those timezones who want notifications at this hour
-            users = await _get_users_for_daily_summary(timezones, target_hour, unifiedpush)
-
-            if users:
-                logger.info(f"Sending daily summary to {len(users)} users at local hour {target_hour}")
-                await _send_bulk_summary_notification(users, backend)
+            # Eligible users (uid, user_data, time_zone) — backend-neutral
+            users = await _get_users_for_daily_summary(timezones, target_hour)
+            if not users:
+                continue
+            # Fetch recipients for the resolved backend (UnifiedPush endpoints keyed by uid, or FCM tokens),
+            # then keep only users with a deliverable recipient and shape them for the sender.
+            recipients_by_uid = await _recipients_by_uid(users, timezones, backend)
+            fan_out = [
+                (uid, recipients_by_uid.get(uid, []), tz)
+                for uid, _user_data, tz in users
+                if recipients_by_uid.get(uid)
+            ]
+            if fan_out:
+                logger.info(f"Sending daily summary to {len(fan_out)} users at local hour {target_hour}")
+                await _send_bulk_summary_notification(fan_out, backend)
 
     except Exception as e:
         logger.error(f"Error sending daily summary: {e}")
@@ -74,16 +82,27 @@ async def send_daily_summary_notification() -> None:
 
 
 async def _get_users_for_daily_summary(
-    timezones: List[str], target_hour: int, unifiedpush: bool
-) -> List[Tuple[str, List[Any], Any]]:  # recipients: FCM tokens (str) OR UnifiedPushEndpoint
+    timezones: List[str], target_hour: int
+) -> List[Tuple[str, Dict[str, Any], Any]]:  # (uid, user_data, time_zone) — neutral
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
     chunk_results = await asyncio.gather(
         *[
-            run_blocking(db_executor, notification_db.get_users_for_daily_summary, chunk, target_hour, unifiedpush)
+            run_blocking(db_executor, notification_db.get_users_for_daily_summary, chunk, target_hour)
             for chunk in timezone_chunks
         ]
     )
     return [user for chunk in chunk_results for user in chunk]
+
+
+async def _recipients_by_uid(
+    users: List[Tuple[str, Dict[str, Any], Any]], timezones: List[str], backend: str
+) -> Dict[str, List[Any]]:
+    """Recipients keyed by uid for the resolved delivery backend — the service-layer delivery-policy
+    decision (cubic PR 10887 #427). UnifiedPush: one batched collection-group read by timezone; FCM: the
+    users' subcollection tokens + legacy field. Both are neutral DB reads run on the DB worker."""
+    if backend == UNIFIEDPUSH:
+        return await run_blocking(db_executor, notification_db.get_unifiedpush_endpoints_by_uid, timezones)
+    return await run_blocking(db_executor, notification_db.get_fcm_tokens_for_users, users)
 
 
 def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:

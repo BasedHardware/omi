@@ -385,104 +385,80 @@ def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str
 
 
 def get_users_for_daily_summary(
-    timezones: list[str], target_local_hour: int, unifiedpush: bool
-) -> List[Tuple[str, List[Any], Any]]:  # recipients: FCM tokens (str) OR UnifiedPushEndpoint
-    """
-    Get users who should receive daily summary notifications.
+    timezones: list[str], target_local_hour: int
+) -> List[Tuple[str, Dict[str, Any], Any]]:
+    """Eligible daily-summary users in the given timezones: ``(uid, user_data, time_zone)``.
 
-    This function queries users who:
-    1. Are in one of the provided timezones (where it's currently target_local_hour)
-    2. Have daily_summary_hour_local set to target_local_hour OR have no preference (uses default)
-    3. Have daily_summary_enabled not explicitly set to False
-
-    Args:
-        timezones: List of IANA timezone names where it's currently target_local_hour
-        target_local_hour: The local hour we're sending notifications for (0-23)
-        unifiedpush: Which recipients this deployment delivers to — UnifiedPush endpoints when True,
-            else FCM tokens. Resolved by the caller (utils layer); this DB helper reads recipients but
-            must not own delivery policy (cubic PR 10887 #3). In a UnifiedPush deployment NO user has
-            FCM tokens, so without this the "no recipients -> skip" below would drop EVERY user and send
-            zero daily summaries (cubic PR 10887 B2).
-
-    Returns:
-        List of (uid, [tokens], time_zone) tuples.
-    """
+    Queries users who (1) are in one of the timezones (where it is currently ``target_local_hour``),
+    (2) have ``daily_summary_hour_local`` == that hour (or no preference -> default), and (3) have not
+    disabled daily summaries. Backend-NEUTRAL: it returns WHO to notify and their document; the service
+    layer (utils/other/notifications.py) resolves the delivery backend and fetches the recipients —
+    UnifiedPush endpoints via ``get_unifiedpush_endpoints_by_uid`` or FCM tokens via
+    ``get_fcm_tokens_for_users``. This helper must not own delivery policy (cubic PR 10887 #427 / #3)."""
     if not timezones:
         return []
 
-    users: List[Tuple[str, List[Any], Any]] = []
-
+    users: List[Tuple[str, Dict[str, Any], Any]] = []
     # 'Where in' query only supports 30 or fewer items in list so we split in chunks
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
 
     for chunk in timezone_chunks:
-        chunk_users: List[Tuple[str, List[Any], Any]] = []
+        chunk_users: List[Tuple[str, Dict[str, Any], Any]] = []
         try:
-            # For UnifiedPush, batch this chunk's endpoints in ONE collection-group query keyed by uid,
-            # instead of a per-user get_all_endpoints inside the loop below (N+1 on the DB worker every
-            # summary hour, cubic PR 10887 database/notifications.py:443). save_endpoint stamps the
-            # endpoint's time_zone alongside the user's, so filtering the group by the chunk's timezones
-            # returns exactly the matched users' endpoints.
-            endpoints_by_uid: Dict[str, List[Any]] = {}
-            if unifiedpush:
-                for snap in (
-                    db.collection_group(_UNIFIEDPUSH_COLLECTION)
-                    .where(filter=FieldFilter('time_zone', 'in', chunk))
-                    .stream()
-                ):
-                    parts = snap.reference.path.split('/')  # users/{uid}/unifiedpush_endpoints/{device_key}
-                    if len(parts) > 1:
-                        endpoints_by_uid.setdefault(parts[1], []).append(_endpoint_from_doc(snap))
-
-            # Query users in these timezones
             query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
-
             for user_doc in query.stream():
-                uid = str(user_doc.id)
                 user_data = _typed_doc(user_doc)
-
-                # Check if daily summary is enabled (default: True)
+                # Daily summary enabled (default: True)
                 if user_data.get('daily_summary_enabled') is False:
                     continue
-
-                # Check if user's preferred hour matches target hour
-                # If not set, use default (22 = 10 PM)
+                # Preferred hour matches target (unset -> default 22 = 10 PM)
                 user_hour = user_data.get('daily_summary_hour_local', DEFAULT_DAILY_SUMMARY_HOUR_LOCAL)
                 if user_hour != target_local_hour:
                     continue
-
-                # Collect the recipients the active backend delivers to. For UnifiedPush the per-user
-                # send (_send_to_user) looks the endpoints up by uid, so the list only needs to be
-                # non-empty to keep the user in the fan-out; for FCM it carries the tokens to send.
-                recipients: List[Any]
-                if unifiedpush:
-                    recipients = endpoints_by_uid.get(uid, [])  # from the batched group query above
-                else:
-                    tokens: List[str] = []
-                    token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
-                    for token_doc in token_docs:
-                        token_data = _typed_doc(token_doc)
-                        token_value = token_data.get('token')
-                        if token_value:
-                            tokens.append(str(token_value))
-                    # Add legacy token if exists and not already in list
-                    legacy_token = user_data.get('fcm_token')
-                    if legacy_token and legacy_token not in tokens:
-                        tokens.append(str(legacy_token))
-                    recipients = tokens
-
-                # Skip users with no deliverable recipient on this backend
-                if not recipients:
-                    continue
-
-                time_zone = user_data.get('time_zone')
-                chunk_users.append((uid, recipients, time_zone))
-
+                chunk_users.append((str(user_doc.id), user_data, user_data.get('time_zone')))
         except Exception as e:
             logger.error(f"Error querying chunk for daily summary: {e}")
         users.extend(chunk_users)
 
     return users
+
+
+def get_unifiedpush_endpoints_by_uid(time_zones: List[str]) -> Dict[str, List[UnifiedPushEndpoint]]:
+    """UnifiedPush endpoints keyed by uid for every user whose ``time_zone`` is in ``time_zones``. ONE
+    collection-group query per 30-chunk (not a per-user ``get_all_endpoints`` = N+1). ``save_endpoint``
+    stamps the endpoint's ``time_zone`` with the user's, so the group filter returns exactly the matched
+    users' endpoints. Neutral read — the service decides WHEN to use it (cubic PR 10887 #427)."""
+    by_uid: Dict[str, List[UnifiedPushEndpoint]] = {}
+    if not time_zones:
+        return by_uid
+    store = get_document_store()
+    unique = list(dict.fromkeys(time_zones))
+    for i in range(0, len(unique), 30):
+        try:
+            for doc in store.query_group(_UNIFIEDPUSH_COLLECTION, filters=[('time_zone', 'in', unique[i : i + 30])]):
+                parts = doc.path.split('/')  # users/{uid}/unifiedpush_endpoints/{device_key}
+                if len(parts) > 1:
+                    by_uid.setdefault(parts[1], []).append(_endpoint_from_doc(doc))
+        except Exception as e:
+            logger.error(f'UnifiedPush timezone chunk {i // 30} failed (other chunks unaffected): {e}')
+    return by_uid
+
+
+def get_fcm_tokens_for_users(users: List[Tuple[str, Dict[str, Any], Any]]) -> Dict[str, List[str]]:
+    """FCM tokens keyed by uid for the given eligible users (subcollection ``fcm_tokens`` + legacy
+    ``user.fcm_token``). Runs in one DB-worker call for the whole batch; neutral read (cubic PR 10887 #427)."""
+    tokens_by_uid: Dict[str, List[str]] = {}
+    for uid, user_data, _tz in users:
+        tokens: List[str] = []
+        for token_doc in db.collection('users').document(uid).collection('fcm_tokens').stream():
+            token_value = _typed_doc(token_doc).get('token')
+            if token_value:
+                tokens.append(str(token_value))
+        legacy_token = user_data.get('fcm_token')  # add legacy token if present and not already listed
+        if legacy_token and legacy_token not in tokens:
+            tokens.append(str(legacy_token))
+        tokens_by_uid[uid] = tokens
+    return tokens_by_uid
 
 
 def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:

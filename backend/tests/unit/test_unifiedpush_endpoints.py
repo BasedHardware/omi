@@ -178,26 +178,42 @@ def test_get_users_endpoints_in_timezones_chunks_over_30(fake_store):
     assert len(eps) == 35  # every timezone chunk was queried and its endpoints aggregated
 
 
-def test_daily_summary_includes_unifiedpush_users_without_fcm_tokens(monkeypatch):
-    # cubic PR 10887 B2: in a UnifiedPush deployment nobody has FCM tokens, so the "no tokens -> skip"
-    # dropped EVERY user and sent zero daily summaries. With backend=unifiedpush the fan-out must
-    # include a user who has endpoints (by uid; the per-user send resolves endpoints), and still skip
-    # a user with none.
+def test_daily_summary_neutral_users_and_unifiedpush_endpoints_by_uid(monkeypatch):
+    # cubic PR 10887 #427 (+B2): the DB helper is now backend-NEUTRAL — get_users_for_daily_summary returns
+    # every eligible user (recipient filtering is the service's job), and the batched get_unifiedpush_
+    # endpoints_by_uid keys endpoints by uid so the service composes the fan-out (a UnifiedPush user with an
+    # endpoint is delivered to; one without is dropped at compose time, not by the user query).
     store = FakeDocumentStore()
     monkeypatch.setattr(notification_db, 'get_document_store', lambda: store)
     install_fake_db_client(monkeypatch, store=store)
-    monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', 'unifiedpush')
 
+    store.set('users/u-has', {'time_zone': 'UTC'})
     notification_db.save_endpoint(
         'u-has', {'endpoint': 'http://ntfy/a?up=1', 'device_key': 'android_a', 'time_zone': 'UTC'}
     )
-    store.set('users/u-none', {'time_zone': 'UTC'})  # same tz/hour, but no UnifiedPush endpoint
+    store.set('users/u-none', {'time_zone': 'UTC'})  # eligible user, no UnifiedPush endpoint
 
-    # The caller (utils layer) resolves the backend and passes unifiedpush=True; the DB helper no
-    # longer reads PUSH_NOTIFICATION_BACKEND itself (cubic PR 10887 #3).
-    users = notification_db.get_users_for_daily_summary(
-        ['UTC'], notification_db.DEFAULT_DAILY_SUMMARY_HOUR_LOCAL, True
-    )
-    uids = {u[0] for u in users}
-    assert 'u-has' in uids  # UnifiedPush user is included (was skipped before this fix)
-    assert 'u-none' not in uids  # a user with no deliverable recipient is still skipped
+    # Neutral: BOTH eligible users come back (no recipient decision in the DB layer)
+    users = notification_db.get_users_for_daily_summary(['UTC'], notification_db.DEFAULT_DAILY_SUMMARY_HOUR_LOCAL)
+    assert {u[0] for u in users} == {'u-has', 'u-none'}
+    assert all(isinstance(u[1], dict) for u in users)  # (uid, user_data, time_zone) shape
+
+    # Batched endpoint reader keys by uid and includes only users who registered an endpoint
+    by_uid = notification_db.get_unifiedpush_endpoints_by_uid(['UTC'])
+    assert set(by_uid) == {'u-has'} and len(by_uid['u-has']) == 1  # u-none dropped at compose time
+
+
+def test_get_fcm_tokens_for_users_reads_subcollection_and_legacy(monkeypatch):
+    # cubic PR 10887 #427: the FCM recipient composition moved to a neutral batched DB read — subcollection
+    # fcm_tokens + the legacy user.fcm_token, keyed by uid (deduped), for the service to compose the fan-out.
+    store = FakeDocumentStore()
+    monkeypatch.setattr(notification_db, 'get_document_store', lambda: store)
+    install_fake_db_client(monkeypatch, store=store)
+    store.set('users/u1', {'time_zone': 'UTC', 'fcm_token': 'legacy-1'})
+    store.set('users/u1/fcm_tokens/d1', {'token': 't-a'})
+    store.set('users/u2', {'time_zone': 'UTC'})  # eligible, no tokens
+
+    users = [('u1', {'fcm_token': 'legacy-1'}, 'UTC'), ('u2', {}, 'UTC')]
+    tokens = notification_db.get_fcm_tokens_for_users(users)
+    assert set(tokens['u1']) == {'t-a', 'legacy-1'}  # subcollection + legacy, deduped
+    assert tokens['u2'] == []  # no deliverable recipient -> dropped by the service's compose step
