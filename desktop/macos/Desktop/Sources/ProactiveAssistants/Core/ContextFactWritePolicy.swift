@@ -46,37 +46,83 @@ enum ContextFactWritePolicy {
   static let humanEventWorthinessFloor = 0.6
 
   /// Extraction machinery observed echoed back as statements in live data.
+  ///
+  /// Every pattern is anchored to the echo it was measured on. Unanchored
+  /// substrings are unsafe here because this verdict skips the INSERT entirely:
+  /// a bare `unknown/` also deletes "Push to unknown/production failed.", and a
+  /// bare `150-400` also deletes "Latency is 150-400ms at p99." Dropping a real
+  /// fact is worse than storing a machinery echo, so the cost of a miss is
+  /// deliberately lower than the cost of a false positive.
   private static let machineryPatterns: [String] = [
-    #"unknown/"#,
-    #"^The destination\b"#,
-    #"notify_worthiness|evidence_refs|evidence_text|bucket_entry_refs|fact_ids"#,
-    #"150-400|token summary|discrete factual records"#,
-    #"(?i)untrusted screen|quoted data|screen-derived"#,
+    #"(?i)^\W*the destination is unknown/"#,
+    #"(?i)untrusted screen-derived content"#,
+    #"\b(?:notify_worthiness|evidence_refs|evidence_text|bucket_entry_refs|fact_ids)\b"#,
+    #"(?i)\b150-400 token summary\b"#,
+    #"(?i)\bdiscrete factual records\b"#,
+    // The prompt's own Good/Bad examples. Examples leak verbatim on this model
+    // (~1 in 14 calls). The Good example is a named-person speech-act, which is
+    // exactly the class `floorHumanEvent` promotes to arming eligibility — so a
+    // leaked example would not merely be stored, it would arm a notification.
+    #"(?i)^\W*nik asked for the demo recording before tomorrow's launch video"#,
+    #"(?i)^\W*the user is viewing a window with a sidebar and a chat panel"#,
+    #"(?i)^\W*ambient narrative:"#,
   ]
 
-  private static let uiNoun =
-    "(?:screen|window|tab|tabs|page|panel|pane|sidebar|interface|navigation|inbox|workspace"
-    + "|browser|app|application|dashboard|view|list|menu|button|section|sections|header|feed"
-    + "|chart|charts|column|columns|thread|dialog|prompt|editor|area|layout|theme|avatar|icon"
-    + "|label|labels|folder|folders)"
+  /// Pure interface chrome. A sentence *about* one of these is a description of
+  /// the display, whatever else it says.
+  ///
+  /// Content-bearing nouns a screen merely happens to render — thread, list,
+  /// feed, chart, inbox, editor, dashboard, column, folder, section — are
+  /// deliberately NOT here. "The chart shows error rate above the SLO" and "The
+  /// thread shows Nik asked for the recording" carry the payload in the object,
+  /// not the subject, and capping them silently zeroes a real signal. Missing
+  /// some scenery is the intended trade: everything here still reaches the
+  /// director, so a miss costs noise, while a false positive costs a fact.
+  private static let chromeNoun =
+    "(?:screen|window|tab|tabs|page|panel|pane|sidebar|interface|navigation|workspace"
+    + "|browser|app|application|view|menu|button|header|toolbar|dialog|prompt|layout"
+    + "|theme|avatar|icon)"
 
-  /// Display-language shapes. Deliberately does not include a bare "is present"
-  /// (only "is present in"): "A remediation instruction is present to repair
-  /// the surface" is an action item, and bare "present" was the one pattern
-  /// that wrongly capped it during held-out evaluation.
+  /// Display-language shapes, each anchored to an interface subject rather than
+  /// to a bare copula.
+  ///
+  /// The unanchored earlier form matched the *phrase* "is open" / "appears in"
+  /// anywhere in a sentence, which is ordinary English for work status:
+  /// "PR #11651 is open and blocked on review", "The feature flag is now active
+  /// in production", "Legal is reviewing the MSA before Friday" and "The
+  /// regression appears in the latest build" were all capped to worthiness 0.
+  /// The extraction prompt bans a *subject* ("an app, window, tab … is open"),
+  /// so the enforcement matches that predicate and not the verb alone.
   private static let sceneryPatterns: [String] = [
-    #"\b(?:is|are|was|were|remains?)\s+(?:currently\s+|now\s+|being\s+)?(?:open|opened|visible|displayed|shown|active|highlighted|listed|in focus|in use|in view|on screen|viewed|used|read|displaying|showing)\b"#,
-    #"\b(?:is|are)\s+(?:viewing|browsing|reviewing|looking at|reading|scrolling|preparing to type|interacting with|working within|signed in)\b"#,
-    "(?i)^(?:the|a|an)?\\s*(?:[A-Z][\\w.-]*\\s+)?(?:left\\s+|right\\s+|top\\s+|bottom\\s+|main\\s+)?"
-      + uiNoun
+    // "The user is viewing / browsing / reading …" — the observer framing.
+    #"(?i)\b(?:the\s+)?user\s+(?:is|was)\s+(?:currently\s+|now\s+)?(?:viewing|browsing|reviewing|looking at|reading|scrolling|preparing to type|interacting with|working within|signed in|using)\b"#,
+    // An interface subject in an open/visible/active state.
+    "(?i)^\\W*(?:the|a|an)?\\s*[^.]{0,60}?\\b" + chromeNoun
+      + "\\b[^.]{0,60}?\\b(?:is|are|was|were|remains?)\\s+(?:currently\\s+|now\\s+|being\\s+)?"
+      + "(?:open|opened|visible|displayed|shown|active|highlighted|in focus|in use|in view"
+      + "|on screen|present)\\b",
+    // An interface subject doing the displaying.
+    "(?i)^\\W*(?:the|a|an)?\\s*(?:[A-Z][\\w.-]*\\s+)?(?:left\\s+|right\\s+|top\\s+|bottom\\s+|main\\s+)?"
+      + chromeNoun
       + "\\b[^.]{0,60}?\\b(?:shows?|showing|displays?|displaying|lists?|listing|contains?|containing|includes?|including|features?|indicates?|presents?|offers?|suggests?|suggesting)\\b",
-    "\\b(?:shows?|displays?)\\s+(?:a|an|the|multiple|various|several)?\\s*[^.]{0,40}?" + uiNoun
-      + "\\b",
     #"(?i)\b(?:unread|new)\s+(?:messages?|items?|notifications?)\b"#,
-    #"(?i)\b(?:appears?|is present|are present)\s+in\b"#,
+    // Only "appears in <the interface>", never a bare "appears in": a
+    // regression appearing in a build is an event, not a description.
+    "(?i)\\b(?:appears?|is present|are present)\\s+in\\s+(?:the\\s+|a\\s+|an\\s+)?[^.]{0,30}?\\b"
+      + chromeNoun + "\\b",
     #"(?i)\bwindow (?:titled|named|labeled)\b"#,
-    #"(?i)\b(?:email|message)s?\b[^.]{0,80}\b(?:in the inbox|is listed|are listed|in the list)\b"#,
-    #"(?i)^(?:the\s+)?active (?:window|tab|app)\b"#,
+    #"(?i)^\W*(?:the\s+)?active (?:window|tab|app)\b"#,
+    // "… is open in a tab within a browser": the subject is ordinary content,
+    // but the state verb is qualified by where on the display it sits. Anchored
+    // on the location phrase, so "PR #11651 is open and blocked on review"
+    // (no interface location) is untouched.
+    "(?i)\\b(?:is|are|was|were)\\s+(?:currently\\s+|now\\s+)?"
+      + "(?:open|opened|visible|displayed|shown|active|highlighted)\\s+(?:in|on|within|under)\\s+"
+      + "(?:a|an|the)?\\s*[^.]{0,30}?\\b" + chromeNoun + "\\b",
+    // "Finder is being used." — bare app-usage narration with no object. Kept
+    // sentence-final so "The staging cluster is being used for the load test"
+    // (which says what for) still passes.
+    #"(?i)\bis being (?:used|viewed|displayed|shown)\s*\.?\s*$"#,
   ]
 
   private static let speechVerbs =
@@ -129,5 +175,16 @@ enum ContextFactWritePolicy {
 
   private static func matchesAny(_ patterns: [String], in statement: String) -> Bool {
     patterns.contains { statement.range(of: $0, options: .regularExpression) != nil }
+  }
+
+  /// An invalid pattern fails silently in both engines used here: `try?` leaves
+  /// `humanEventRegex` nil, and `range(of:options:.regularExpression)` returns
+  /// nil, so a broken rule reads exactly like a rule that never matches.
+  /// Asserted by the tests so a typo cannot quietly disable enforcement.
+  static var allPatternsCompile: Bool {
+    humanEventRegex != nil
+      && (machineryPatterns + sceneryPatterns).allSatisfy {
+        (try? NSRegularExpression(pattern: $0)) != nil
+      }
   }
 }

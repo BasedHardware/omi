@@ -41,7 +41,7 @@ final class ContextFactWritePolicyTests: XCTestCase {
       "David posted a thread about odd behavior where Boardy recommends something but has context-loss.",
       "Mihir Malde thanked flagging the issue and said the team is looking into fixing it.",
       "Kory Hoang mentions an upcoming first interview for a position and shares a URL.",
-      "Nik asked for the demo recording before tomorrow's launch video.",
+      "Ratnam requested a GitHub username or URL from the other party.",
     ] {
       XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .floorHumanEvent, statement)
     }
@@ -75,5 +75,65 @@ final class ContextFactWritePolicyTests: XCTestCase {
     ] {
       XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .pass, statement)
     }
+  }
+
+  /// The collision class an earlier revision of this policy silently zeroed.
+  ///
+  /// Scenery language and work-status language share verbs. "is open",
+  /// "is active", "appears in", "is reviewing" and "shows" are how English
+  /// states that a pull request is unmerged, a flag is live, a regression
+  /// landed, a person is doing something, or a metric breached a threshold.
+  /// Matching the verb alone capped every sentence below to worthiness 0,
+  /// removing it from arming, pooling, departure evaluation and director
+  /// eligibility at once. Scenery is now anchored to an *interface subject*,
+  /// matching the predicate the extraction prompt actually states.
+  func testWorkStatusLanguageIsNotMistakenForScenery() {
+    for statement in [
+      "PR #11651 is open and blocked on review.",
+      "The feature flag is now active in production.",
+      "Legal is reviewing the MSA before Friday.",
+      "The regression appears in the latest build after the deploy.",
+      "The chart shows error rate above the SLO.",
+      "The staging cluster is being used for the load test.",
+    ] {
+      XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .pass, statement)
+    }
+  }
+
+  /// `dropMachinery` skips the INSERT, so a false positive destroys a fact
+  /// outright rather than demoting it. These four were deleted by unanchored
+  /// substrings (`unknown/`, `^The destination`, `150-400`) before the patterns
+  /// were anchored to the echoes they were measured on.
+  func testRealStatementsSharingMachineryTokensAreNotDropped() {
+    for statement in [
+      "Push to unknown/production failed.",
+      "The destination branch cannot fast-forward.",
+      "The destination folder is missing from the artifact.",
+      "Latency is 150-400ms at p99.",
+    ] {
+      XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .pass, statement)
+    }
+  }
+
+  /// The extraction prompt's own examples leak verbatim on this model (~1 in 14
+  /// calls). The Good example is a named-person speech-act, which is the class
+  /// `floorHumanEvent` raises to arming eligibility — so an unguarded leak
+  /// would not just be stored, it would arm a notification built from the
+  /// prompt's placeholder text.
+  func testPromptExamplesCannotLeakIntoStoredFacts() {
+    for statement in [
+      "Nik asked for the demo recording before tomorrow's launch video.",
+      "The user is viewing a window with a sidebar and a chat panel.",
+      "Ambient narrative: the user appears to be coordinating a recording workflow.",
+    ] {
+      XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .dropMachinery, statement)
+    }
+  }
+
+  /// Both engines used here fail silently on an invalid pattern: `try?` leaves
+  /// the regex nil and `range(of:options:)` returns nil, so a typo reads
+  /// exactly like a rule that never matches.
+  func testEveryPatternCompiles() {
+    XCTAssertTrue(ContextFactWritePolicy.allPatternsCompile)
   }
 }

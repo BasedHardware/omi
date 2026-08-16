@@ -719,9 +719,21 @@ actor ContextProactivityEngine {
           state: "failed")
         return
       }
-      let decision =
-        ContextProactiveCandidateGate.parse(result.content)
-        ?? ContextProactiveCandidateGate.Decision(show: false, reason: "malformed_gate_response")
+      // An unparseable body is not a decision. The reasoning model bills its
+      // thinking into completion tokens, so a budget that runs out returns
+      // `finish_reason=length` with empty content — which is silence about the
+      // question, not an answer of "no". Treating it as "no" retired the
+      // candidate permanently (`declineCandidate` below), so one truncated call
+      // destroyed a notification that no later visit could ever recover.
+      // Suppress this visit, leave the candidate armed, and let a later visit
+      // ask again or let it expire on its own.
+      guard let decision = ContextProactiveCandidateGate.parse(result.content) else {
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "silence",
+          provenanceJSON: "{\"reason\":\"malformed_gate_response\",\"source\":\"candidate\"}",
+          message: nil, state: "suppressed")
+        return
+      }
       let reason = String(decision.reason.prefix(1_200))
       var provenance: [String: Any] = [
         "source": "candidate",
