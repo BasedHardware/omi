@@ -44,6 +44,25 @@ final class ProactiveLaneClientTests: XCTestCase {
       "proactive_quota_cooldown status=429")
   }
 
+  func testUnprocessableEntityIsClassifiedAsInvalidStructuredOutputNotHttpError() throws {
+    let classified = ProactiveLaneFailureClassification.classify(
+      ProactiveLaneClientError.http(status: 422, retryAfterSeconds: nil))
+    XCTAssertEqual(classified.failure, "invalid_structured_output")
+    XCTAssertEqual(classified.status, 422)
+    XCTAssertEqual(classified.logDescription, "invalid_structured_output status=422")
+    let json = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(classified.provenanceJSON.utf8)) as? [String: Any])
+    XCTAssertEqual(json["failure"] as? String, "invalid_structured_output")
+    XCTAssertEqual((json["status"] as? NSNumber)?.intValue, 422)
+    XCTAssertNil(json["error_type"])
+
+    let transport = ProactiveLaneFailureClassification.classify(
+      ProactiveLaneClientError.http(status: 502, retryAfterSeconds: nil))
+    XCTAssertEqual(transport.failure, "http_error")
+    XCTAssertEqual(transport.status, 502)
+    XCTAssertNotEqual(classified.failure, transport.failure)
+  }
+
   func testGarbageEnvelopeThrowsInvalidResponseNotARawSerializationError() {
     do {
       _ = try ProactiveLaneClient.parseEnvelope(Data("not-json".utf8))

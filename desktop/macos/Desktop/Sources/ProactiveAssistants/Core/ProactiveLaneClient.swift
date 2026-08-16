@@ -62,6 +62,8 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
     switch failure {
     case "http_error":
       return "http_error status=\(status ?? 0)"
+    case "invalid_structured_output":
+      return "invalid_structured_output status=\(status ?? 0)"
     case "quota_cooldown":
       return "quota_cooldown status=\(status ?? 0)"
     case "network":
@@ -75,6 +77,10 @@ struct ProactiveLaneFailureClassification: Equatable, Sendable {
     if let laneError = error as? ProactiveLaneClientError {
       switch laneError {
       case .http(let status, _):
+        if status == 422 {
+          return ProactiveLaneFailureClassification(
+            failure: "invalid_structured_output", status: status, errorType: nil)
+        }
         return ProactiveLaneFailureClassification(failure: "http_error", status: status, errorType: nil)
       case .quotaCooldown(_):
         return ProactiveLaneFailureClassification(failure: "quota_cooldown", status: 429, errorType: nil)
