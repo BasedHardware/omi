@@ -18,19 +18,14 @@
   position: relative;
 }
 
+/* A row of the message list now, not chrome above it — the list is the scroll
+   container on desktop, so a sibling here stayed frozen over a thread that
+   scrolled underneath. Centred and vertically padded to match Swift's
+   `loadMoreButton` (.frame(maxWidth: .infinity).padding(.vertical, sm)). */
 .chat-history-controls {
   display: flex;
   justify-content: center;
-}
-
-.chat-history-start {
-  margin: 0;
-  color: var(--content-tertiary);
-  font-family: var(--type-label-family);
-  font-size: var(--type-label-size);
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
+  padding-block: var(--space-xs);
 }
 
 .chat-message-list {
@@ -124,11 +119,17 @@ html[data-platform="mobile"] .chat-jump-latest {
   color: var(--content-primary);
 }
 
+/* Provenance, at the weight of a footnote rather than a panel.
+ *
+ * Every answer carried a full-width bordered card on a raised fill, so a
+ * transcript read as a stack of boxes with prose between them. The claim is
+ * unchanged — the tier chip still names the adapter that actually answered, and
+ * the whole run is still one click away — but a closed disclosure is now a line
+ * under the answer instead of a container around it. The tap target survives
+ * because it is an accessibility floor, not decoration.
+ */
 .chat-agent-run {
-  margin-top: var(--space-sm);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--surface-raised);
+  margin-top: var(--space-xs);
 }
 
 .chat-agent-run summary {
@@ -137,9 +138,16 @@ html[data-platform="mobile"] .chat-jump-latest {
   align-items: center;
   gap: var(--space-xs) var(--space-sm);
   min-height: var(--min-tap-target);
-  padding: var(--space-xs) var(--space-sm);
   cursor: pointer;
-  color: var(--content-primary);
+  color: var(--content-secondary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+}
+
+/* Open, it needs to read as belonging to the answer above it. A rule down the
+   side does that with none of the enclosure a border draws when closed. */
+.chat-agent-run[open] {
+  margin-bottom: var(--space-sm);
 }
 
 .chat-agent-capability,
@@ -160,7 +168,9 @@ html[data-platform="mobile"] .chat-jump-latest {
   display: grid;
   gap: var(--space-xs);
   margin: 0;
-  padding: 0 var(--space-sm) var(--space-sm) calc(var(--space-xl) + var(--space-xs));
+  padding: var(--space-xs) 0 0 var(--space-md);
+  border-inline-start: 1px solid var(--border);
+  margin-inline-start: var(--space-xs);
 }
 
 .chat-agent-run li p {
@@ -329,9 +339,10 @@ html[data-platform="desktop"] main[data-route="chat"] .chat-composer {
   font-size: var(--type-label-size);
 }
 
+/* Input first, then the two controls that act on it. */
 .chat-composer-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: var(--space-sm);
   align-items: end;
 }
@@ -376,8 +387,10 @@ html[data-platform="mobile"] .chat-composer {
   box-shadow: 0 var(--space-sm) var(--space-xl) var(--surface-scrim);
 }
 
+/* Two columns here, with Send on its own full-width row below. Follows the
+   desktop order: the input takes the wide column, attach the narrow one. */
 html[data-platform="mobile"] .chat-composer-row {
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 html[data-platform="mobile"] .chat-send {

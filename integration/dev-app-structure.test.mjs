@@ -21,14 +21,17 @@ test("RED-PROOF dev-app.sh composes the existing stack and macOS launcher", () =
 });
 
 test("RED-PROOF the demo launcher exports the persona only for the stack it boots", () => {
-  assert.match(app, /OMI_SEED_PERSONA=demo OMI_STT_ENGINE=mlx-whisper "\$STACK" --up/);
+  assert.match(
+    app,
+    /OMI_SEED_PERSONA=demo OMI_STT_ENGINE=mlx-whisper OMI_CHAT_MODEL="\$OMI_CHAT_MODEL" "\$STACK" --up/,
+  );
   assert.match(app, /serving "\$SERVICE_URL"/);
   assert.match(app, /serving "\$GATEWAY_URL"/);
   assert.match(app, /reused the listeners already serving 4851 and 8788/);
 });
 
 test("RED-PROOF the headed human path asks for on-device STT, not the scripted adapter", () => {
-  assert.match(app, /OMI_STT_ENGINE=mlx-whisper "\$STACK" --up/);
+  assert.match(app, /OMI_STT_ENGINE=mlx-whisper OMI_CHAT_MODEL/);
   assert.match(app, /status\?\.stt_engine/);
   assert.match(app, /this stack is not transcribing real speech/);
   assert.match(app, /exit 1/);
@@ -36,6 +39,42 @@ test("RED-PROOF the headed human path asks for on-device STT, not the scripted a
   assert.match(stack, /LEASE_MODE=1/);
   // red-proof: dropping OMI_STT_ENGINE from the boot line, or launching against
   // a reused scripted stack, leaves Listen on createScriptedTranscriptionSource.
+});
+
+test("RED-PROOF the headed human path answers chat with a real model by default", () => {
+  // red-proof: restore `""|test) ;;` to the case arm and an unset env silently
+  // selects the canned gateway again — which is exactly the reported defect,
+  // "Local test gateway answered." to every question.
+  assert.match(app, /OMI_CHAT_MODEL="\$\{OMI_CHAT_MODEL:-real\}"/);
+  assert.doesNotMatch(app, /^\s*""\|test\) ;;$/m);
+  assert.match(app, /OMI_CHAT_MODEL="\$OMI_CHAT_MODEL" "\$STACK" --up/);
+});
+
+test("RED-PROOF a canned stack is refused rather than served as if it were thinking", () => {
+  // red-proof: delete the chat_gateway branch and `bun run app` happily attaches
+  // to a reused 8788 stack, so Chat answers "Local test gateway answered."
+  // The gate reads the same capability tier the transcript chip renders.
+  assert.match(app, /status\?\.chat_gateway/);
+  assert.match(app, /chat_gateway" == "real-provider"/);
+  assert.match(app, /this stack is not answering chat with a real model/);
+  assert.match(app, /Local test gateway answered\./);
+});
+
+test("RED-PROOF a missing provider key fails closed and names what is missing", () => {
+  // red-proof: drop this guard and a keyless machine falls through to a gateway
+  // that cannot start, or worse, to canned answers presented as a real model.
+  assert.match(app, /GLM_API_KEY/);
+  assert.match(app, /ZAI_API_KEY/);
+  assert.match(app, /OMI_BENCH_OPENAI_API_KEY/);
+  assert.match(app, /no provider key is set/);
+  assert.match(app, /OMI_CHAT_MODEL=test bun run app/);
+});
+
+test("RED-PROOF the real-model default is the headed path only, never the ladder", () => {
+  // red-proof: moving the `:-real` default into dev-stack.sh would make provider
+  // uptime trunk colour. L3/L4 drive dev-stack.sh directly and must stay canned.
+  assert.doesNotMatch(stack, /OMI_CHAT_MODEL="\$\{OMI_CHAT_MODEL:-real\}"/);
+  assert.match(stack, /""\|test\) ;;/);
 });
 
 test("RED-PROOF the demo launcher never prints a token", () => {

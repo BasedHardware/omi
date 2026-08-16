@@ -12,6 +12,7 @@ import {
   bootGatewayKind,
   bootGatewayModel,
   probeGatewayEngineIdentity,
+  stampForGatewayEngine,
 } from "../chat/gateway-engine-identity";
 import {
   DevSttConfigError,
@@ -303,6 +304,7 @@ const main = async (): Promise<void> => {
       },
     });
   let service: ReturnType<typeof createLocalDevService>;
+  const chatModelId = bootGatewayModel(engineIdentity);
   const transcriptionSource = config.stt.kind === "mlx-whisper"
     ? createMlxWhisperTranscriptionSource({
       subprocess: {
@@ -337,6 +339,13 @@ const main = async (): Promise<void> => {
       generationSource,
       ...(transcriptionSource === null ? {} : { transcriptionSource }),
       sttEngine: config.stt.kind,
+      // The tier, not the URL: `/v1/qa/status` must answer the same question
+      // the Chat chip answers, so a launcher that gates on it cannot admit a
+      // stack whose answers would read "Local test gateway".
+      chatGateway: engineIdentity === null
+        ? "none"
+        : stampForGatewayEngine(engineIdentity, "default").tier,
+      ...(chatModelId === null ? {} : { chatModel: chatModelId }),
       screenRetentionIntervalMs: SCREEN_RETENTION_INTERVAL_MS,
       ...(config.generationLiveness === null
         ? {}
@@ -442,7 +451,7 @@ const main = async (): Promise<void> => {
     + `  served-request count prints below whenever it changes.\n`
     + `  if it stays at 0 while the app shows memories, the app is NOT talking to this backend.\n\n`,
   );
-  const gatewayModel = bootGatewayModel(engineIdentity);
+  const gatewayModel = chatModelId;
   appendRuntimeLog({
     proc: "service",
     level: "info",

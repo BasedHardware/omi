@@ -20,8 +20,15 @@ GATEWAY_URL="http://127.0.0.1:8788"
 SURFACE_URL="http://127.0.0.1:5290"
 RUNDIR="${OMI_DEV_STACK_RUNDIR:-/tmp/omi-dev-stack}"
 OWNERFILE="$RUNDIR/service-owner.json"
-case "${OMI_CHAT_MODEL:-}" in
-  ""|test) ;;
+# The headed human path defaults to a REAL model. The canned gateway answering
+# "Local test gateway answered." to everything is the defect this closes, so
+# `real` is what an unset env means HERE. Verification stays canned: L3/L4 drive
+# dev-stack.sh directly and never read this default, which is deliberate —
+# provider uptime must not become trunk colour.
+OMI_CHAT_MODEL="${OMI_CHAT_MODEL:-real}"
+export OMI_CHAT_MODEL
+case "$OMI_CHAT_MODEL" in
+  test) ;;
   real)
     GATEWAY_URL="http://127.0.0.1:8791"
     ;;
@@ -31,6 +38,16 @@ case "${OMI_CHAT_MODEL:-}" in
     ;;
 esac
 
+# Fail closed BEFORE booting anything. A missing key must name itself, not
+# degrade into canned answers that look like a working model.
+if [[ "$OMI_CHAT_MODEL" == "real" && -z "${GLM_API_KEY:-}${ZAI_API_KEY:-}${OMI_BENCH_OPENAI_API_KEY:-}" ]]; then
+  echo "ERROR: the headed app answers with a real model, and no provider key is set." >&2
+  echo "       Set one of GLM_API_KEY, ZAI_API_KEY, or OMI_BENCH_OPENAI_API_KEY." >&2
+  echo "       To run the canned gateway on purpose instead: OMI_CHAT_MODEL=test bun run app" >&2
+  echo "       (canned chat answers every question with \"Local test gateway answered.\")" >&2
+  exit 1
+fi
+
 MODE_ACCEPT=0
 while (( $# )); do
   case "$1" in
@@ -38,8 +55,8 @@ while (( $# )); do
     --help|-h)
       sed -n '2,8p' "$0"
       printf '%s\n' "usage: integration/dev-app.sh [--accept]"
-      printf '%s\n' "  boots or reuses the local stack with OMI_SEED_PERSONA=demo and OMI_STT_ENGINE=mlx-whisper, then launches the macOS shell."
-      printf '%s\n' "  OMI_CHAT_MODEL=real opts into the local real-model proxy (see integration/README.md)."
+      printf '%s\n' "  boots or reuses the local stack with OMI_SEED_PERSONA=demo, OMI_STT_ENGINE=mlx-whisper, and OMI_CHAT_MODEL=real, then launches the macOS shell."
+      printf '%s\n' "  chat answers with a real model by default; OMI_CHAT_MODEL=test opts back into the canned local test gateway (see integration/README.md)."
       printf '%s\n' "  stop the stack with: integration/dev-stack.sh --stop"
       exit 0
       ;;
@@ -60,8 +77,11 @@ serving "$SERVICE_URL" && service_up=1
 serving "$GATEWAY_URL" && gateway_up=1
 
 if (( service_up == 1 && gateway_up == 0 )); then
-  if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+  if [[ "$OMI_CHAT_MODEL" == "real" ]]; then
     echo "ERROR: service is already on 4851 but the local model gateway is not on 8791." >&2
+    if serving "http://127.0.0.1:8788"; then
+      echo "  That stack is the canned one: it answers every chat question with \"Local test gateway answered.\"" >&2
+    fi
   else
     echo "ERROR: service is already on 4851 but the local test gateway is not on 8788." >&2
   fi
@@ -70,7 +90,7 @@ if (( service_up == 1 && gateway_up == 0 )); then
   exit 1
 fi
 if (( service_up == 0 && gateway_up == 1 )); then
-  if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+  if [[ "$OMI_CHAT_MODEL" == "real" ]]; then
     echo "ERROR: local model gateway is already on 8791 but the service is not on 4851." >&2
   else
     echo "ERROR: local test gateway is already on 8788 but the service is not on 4851." >&2
@@ -81,7 +101,7 @@ fi
 
 booted=0
 if (( service_up == 0 && gateway_up == 0 )); then
-  OMI_SEED_PERSONA=demo OMI_STT_ENGINE=mlx-whisper "$STACK" --up
+  OMI_SEED_PERSONA=demo OMI_STT_ENGINE=mlx-whisper OMI_CHAT_MODEL="$OMI_CHAT_MODEL" "$STACK" --up
   booted=1
 fi
 
@@ -133,15 +153,41 @@ stt_engine="$(STATUS_JSON="$STATUS_JSON" node -e '
   } catch {}
 ')"
 
+chat_gateway="$(STATUS_JSON="$STATUS_JSON" node -e '
+  try {
+    const status = JSON.parse(process.env.STATUS_JSON);
+    if (typeof status?.chat_gateway === "string") process.stdout.write(status.chat_gateway);
+  } catch {}
+')"
+chat_model="$(STATUS_JSON="$STATUS_JSON" node -e '
+  try {
+    const status = JSON.parse(process.env.STATUS_JSON);
+    if (typeof status?.chat_model === "string") process.stdout.write(status.chat_model);
+  } catch {}
+')"
+
 printf 'omi local demo app\n\n'
 printf '  base URL   %s\n' "$SERVICE_URL"
-if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+if [[ "$OMI_CHAT_MODEL" == "real" ]]; then
   printf '  gateway    %s  (local real-model proxy — Chat UI says External model response; attachments still fail closed)\n' "$GATEWAY_URL"
 else
   printf '  gateway    %s  (local test gateway — chat generation is not a real model)\n' "$GATEWAY_URL"
 fi
 printf '  identity   %s\n' "$IDENTITY"
 printf '  surface    %s\n' "$SURFACE_URL"
+if [[ "$OMI_CHAT_MODEL" != "real" ]]; then
+  printf '  chat       %s (canned; every answer is "Local test gateway answered.")\n' "${chat_gateway:-unknown}"
+elif [[ "$chat_gateway" == "real-provider" ]]; then
+  printf '  chat       real-provider%s (your questions reach a real model)\n' \
+    "${chat_model:+ ($chat_model)}"
+else
+  printf 'ERROR: this stack is not answering chat with a real model (chat=%s).\n' "${chat_gateway:-missing}" >&2
+  printf '       Chat will answer "Local test gateway answered." to everything instead of thinking.\n' >&2
+  printf '       Stop it and boot the headed path: integration/dev-stack.sh --stop\n' >&2
+  printf '       then: OMI_SEED_PERSONA=demo OMI_STT_ENGINE=mlx-whisper OMI_CHAT_MODEL=real integration/dev-stack.sh --up\n' >&2
+  printf '       with GLM_API_KEY (or ZAI_API_KEY / OMI_BENCH_OPENAI_API_KEY) set in that environment.\n' >&2
+  exit 1
+fi
 if [[ "$stt_engine" == "mlx-whisper" ]]; then
   printf '  stt        mlx-whisper (on-device; your speech should appear in Listen)\n'
 else
@@ -154,7 +200,7 @@ else
 fi
 if (( booted )); then
   printf '  stack      booted with the demo persona for this process\n'
-elif [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
+elif [[ "$OMI_CHAT_MODEL" == "real" ]]; then
   printf '  stack      reused the listeners already serving 4851 and 8791\n'
 else
   printf '  stack      reused the listeners already serving 4851 and 8788\n'

@@ -579,15 +579,21 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
     draftRef.current?.focus();
   };
 
+  const attachmentCapLabel = capabilities.maxAttachmentsPerMessage !== null
+    ? t(locale, "chat.attachmentLimit", { count: capabilities.maxAttachmentsPerMessage })
+    : null;
+  // Only a state that BLOCKS attaching earns a standing line above the input.
+  // The plain cap is help for the control it constrains, not composer chrome:
+  // "Up to 4 attachments per message." sat over the textarea on every visit,
+  // permanently, for a rule that only matters once you reach for the button.
   const attachmentHint = !stagingAvailable
     ? t(locale, "chat.attachmentUnavailable")
     : capState.reason === "unknown-cap"
     ? t(locale, "chat.attachmentCapUnknown")
     : capState.reason === "at-limit" && capabilities.maxAttachmentsPerMessage !== null
       ? t(locale, "chat.attachmentLimitReached", { count: capabilities.maxAttachmentsPerMessage })
-      : capabilities.maxAttachmentsPerMessage !== null
-        ? t(locale, "chat.attachmentLimit", { count: capabilities.maxAttachmentsPerMessage })
-        : null;
+      : null;
+  const attachmentTitle = attachmentHint ?? attachmentCapLabel ?? t(locale, "chat.attach");
   const admittedUserMessages = messages.filter(
     (message) => message.role === "user" && message.delivery.kind === "canonical",
   ).length;
@@ -630,15 +636,6 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
           </div>
         ) : (
           <section className="chat-thread" aria-label={t(locale, "chat.messagesLabel")}>
-            <div className="chat-history-controls">
-              {hasOlder && olderCursor ? (
-                <button type="button" onClick={() => void loadOlder()} disabled={loadingOlder} aria-label={loadingOlder ? t(locale, "chat.loadingOlder") : t(locale, "chat.loadOlder")}>
-                  {loadingOlder ? t(locale, "chat.loadingOlder") : t(locale, "chat.loadOlder")}
-                </button>
-              ) : (
-                <p className="chat-history-start">{t(locale, "chat.historyStart")}</p>
-              )}
-            </div>
             <ol
               className="chat-message-list"
               ref={messageListRef}
@@ -657,6 +654,22 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                 if (["ArrowUp", "PageUp", "Home"].includes(event.key)) leaveLiveEdge();
               }}
             >
+              {/*
+                Inside the scroller, above the messages — the same place Swift
+                puts `loadMoreButton` (ChatMessagesView: `ScrollView { VStack {
+                loadMoreButton; messageContent } }`). As a sibling of the list it
+                was frozen chrome over a thread that scrolled underneath it, so a
+                reader scrolled past the top saw a centred announcement standing
+                over a decapitated first turn. A transcript already at its
+                beginning says nothing here, exactly as Swift renders nothing.
+              */}
+              {hasOlder && olderCursor && (
+                <li className="chat-history-controls">
+                  <button type="button" onClick={() => void loadOlder()} disabled={loadingOlder} aria-label={loadingOlder ? t(locale, "chat.loadingOlder") : t(locale, "chat.loadOlder")}>
+                    {loadingOlder ? t(locale, "chat.loadingOlder") : t(locale, "chat.loadOlder")}
+                  </button>
+                </li>
+              )}
               {messages.map((message) => {
                 const statusLabel = deliveryLabel(message, locale);
                 const busy = message.delivery.kind === "streaming";
@@ -853,18 +866,12 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
             </ul>
           )}
           {attachmentHint && <p id="chat-attachment-hint" className="chat-attachment-hint">{attachmentHint}</p>}
+          {/*
+            The field the reader came to type in leads the row; attaching and
+            sending follow it. A secondary control between the composer's edge
+            and the input made the textarea the middle of three things.
+          */}
           <div className="chat-composer-row">
-            <button
-              type="button"
-              className="chat-attach control-tertiary"
-              disabled={!stagingAvailable || !capState.enabled || sending || staging}
-              aria-label={t(locale, "chat.attach")}
-              aria-describedby={attachmentHint ? "chat-attachment-hint" : undefined}
-              title={attachmentHint ?? t(locale, "chat.attach")}
-              onClick={() => void attach()}
-            >
-              {t(locale, "chat.attach")}
-            </button>
             <textarea
               ref={draftRef}
               className="chat-draft"
@@ -873,6 +880,17 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
               aria-label={t(locale, "chat.composerLabel")}
               onChange={(event) => setDraft(event.target.value)}
             />
+            <button
+              type="button"
+              className="chat-attach control-tertiary"
+              disabled={!stagingAvailable || !capState.enabled || sending || staging}
+              aria-label={t(locale, "chat.attach")}
+              aria-describedby={attachmentHint ? "chat-attachment-hint" : undefined}
+              title={attachmentTitle}
+              onClick={() => void attach()}
+            >
+              {t(locale, "chat.attach")}
+            </button>
             <button type="submit" className="chat-send control-primary" disabled={!canSend} aria-busy={sending || undefined} aria-label={sending ? t(locale, "chat.pending") : t(locale, "chat.send")}>
               {sending ? t(locale, "chat.pending") : t(locale, "chat.send")}
             </button>

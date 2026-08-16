@@ -283,8 +283,12 @@ test("shared primitive/static CSS contract covers provenance, focus, motion, tra
     /html\[data-platform="desktop"\]\[data-native-glass="true"\][\s\S]*?\.home-results-panel \{[^}]*background:\s*transparent/,
   );
   const chatStyles = await read("src/production/chat.css");
-  assert.match(chatStyles, /\.chat-history-start \{[^}]*text-transform:\s*none/);
-  assert.doesNotMatch(chatStyles, /\.chat-history-start \{[^}]*text-transform:\s*uppercase/);
+  // `.chat-history-start` is gone, so the rule that kept its sentence from
+  // shouting has nothing left to protect. What replaces it guards the reason the
+  // sentence went: a thread at its beginning says nothing, and the row that can
+  // still appear at the top of the transcript is a centred control, not chrome.
+  assert.doesNotMatch(chatStyles, /\.chat-history-start\b/);
+  assert.match(chatStyles, /\.chat-history-controls \{[^}]*justify-content: center/);
   assert.match(styles, /\.production-page-heading h1 \{[^}]*max-width: var\(--measure-title\)/);
   assert.match(styles, /\.production-page-description \{[^}]*max-width: var\(--measure-body\)/);
   assert.match(styles, /\.memory-meta \{[^}]*font-family: var\(--type-meta-family\)/);
