@@ -578,6 +578,53 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
                       height={image.image.height}
                     />
                     {ocr && <FrameHighlights blocks={ocr.blocks} matchedIds={matched} />}
+                    {/*
+                      Chrome that sits *on* the picture, as `RewindStageChrome`
+                      draws it: the app chevrons on the frame's edges and the
+                      moment it was taken at bottom-left.
+
+                      It hangs off the image wrapper rather than the stage
+                      because the wrapper *is* the picture's rectangle — the
+                      stage is `place-items: center` around a `object-fit:
+                      contain` image, so a capture narrower than the stage
+                      leaves a band of empty ground down each side. Anchored to
+                      the stage, the chevrons floated out in that band, yards
+                      from the frame they step through, which is the same defect
+                      `RewindStageFit` exists to fix on the macOS side. CSS
+                      layout answers it here, so no geometry is computed.
+
+                      Absent, not disabled, at the ends of the day: a disabled
+                      control still advertises a step that does not exist. Named
+                      by `aria-label` plus tooltip, following the glyph
+                      precedent the composer's attach button set.
+                    */}
+                    <div className="screen-stage-chrome">
+                      {previousAppIndex !== null && (
+                        <button
+                          type="button"
+                          className="screen-stage-chevron is-previous"
+                          aria-label={t(locale, "screen.previousApp")}
+                          title={t(locale, "screen.previousApp")}
+                          onClick={() => store.selectFrame(previousAppIndex)}
+                        >
+                          <ProductionIcon name="back" />
+                        </button>
+                      )}
+                      {nextAppIndex !== null && (
+                        <button
+                          type="button"
+                          className="screen-stage-chevron is-next"
+                          aria-label={t(locale, "screen.nextApp")}
+                          title={t(locale, "screen.nextApp")}
+                          onClick={() => store.selectFrame(nextAppIndex)}
+                        >
+                          <ProductionIcon name="forward" />
+                        </button>
+                      )}
+                      <span className="screen-timestamp-pill" data-timestamp-pill="true">
+                        {selectedStamp}
+                      </span>
+                    </div>
                   </div>
                 ) : image.kind === "loading" ? (
                   <div className="screen-frame-loading">
@@ -592,48 +639,6 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
                     <ProductionEmptyState icon="screen" title={t(locale, "screen.frameImageUnavailable")} />
                   </div>
                 ) : null}
-                {/*
-                  Chrome that sits *on* the picture, as `RewindStageChrome` draws
-                  it: the app chevrons on the frame's edges and the moment it was
-                  taken at bottom-left. A control that steps through the picture
-                  belongs on the picture — parked on the stage's margin above it,
-                  the pill read as a caption for the page rather than a label on
-                  the frame.
-
-                  Each chevron is absent, not disabled, at the ends of the day:
-                  a disabled control still advertises a step that does not exist.
-                  Name via aria-label and tooltip, following the glyph precedent
-                  the composer's attach button set.
-                */}
-                {selected && (
-                  <div className="screen-stage-chrome">
-                    {previousAppIndex !== null && (
-                      <button
-                        type="button"
-                        className="screen-stage-chevron is-previous"
-                        aria-label={t(locale, "screen.previousApp")}
-                        title={t(locale, "screen.previousApp")}
-                        onClick={() => store.selectFrame(previousAppIndex)}
-                      >
-                        <ProductionIcon name="back" />
-                      </button>
-                    )}
-                    {nextAppIndex !== null && (
-                      <button
-                        type="button"
-                        className="screen-stage-chevron is-next"
-                        aria-label={t(locale, "screen.nextApp")}
-                        title={t(locale, "screen.nextApp")}
-                        onClick={() => store.selectFrame(nextAppIndex)}
-                      >
-                        <ProductionIcon name="forward" />
-                      </button>
-                    )}
-                    <span className="screen-timestamp-pill" data-timestamp-pill="true">
-                      {selectedStamp}
-                    </span>
-                  </div>
-                )}
               </div>
               {extracted !== "" && (
                 <section className="screen-extracted" aria-label={t(locale, "screen.extractedText")}>
