@@ -22,6 +22,7 @@ from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.temporal import MAX_EXTRACTED_DATE_LOOKAHEAD_DAYS, date_in_tz, normalize_extracted_dates
+from utils.llm.work_context import get_work_context_section
 
 from .clients import get_llm
 import logging
@@ -508,56 +509,6 @@ def get_current_datetime_block(uid: str, tz: Optional[str] = None, location: Opt
     )
 
 
-WORK_CONTEXT_FACT_LIMIT = 20
-WORK_CONTEXT_MINIMUM_CONFIDENCE = 0.6
-
-
-def _sanitize_prompt_text(value: str) -> str:
-    """Neutralize markup in model-authored text before it enters the prompt."""
-
-    return value.replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-
-
-def _get_work_context_section(uid: str, user_name: str) -> str:
-    """Render recently observed work context from synced context bucket facts.
-
-    The facts are extracted from the user's own screen activity on their devices
-    and already passed device-side validation. They are model-authored text, so
-    they are sanitized here for the same reason page-context titles are.
-
-    Chat must never fail because this optional context is unavailable, so every
-    failure degrades to an empty section.
-    """
-
-    try:
-        import database.account_cutover as account_cutover_db
-        import database.context_buckets as context_buckets_db
-
-        account_generation = account_cutover_db.get_account_cutover_record(uid).account_generation
-        facts = context_buckets_db.list_context_facts(
-            uid,
-            account_generation=account_generation,
-            minimum_confidence=WORK_CONTEXT_MINIMUM_CONFIDENCE,
-            limit=WORK_CONTEXT_FACT_LIMIT,
-        )
-    except Exception as error:
-        logger.warning(f"work context unavailable for prompt assembly: {error}")
-        return ""
-
-    if not facts:
-        return ""
-
-    fact_lines = "\n".join(f"- {_sanitize_prompt_text(fact.statement)}" for fact in facts)
-    return f"""<work_context>
-Recently observed on {user_name}'s devices:
-{fact_lines}
-This is background awareness of what they have been working on. Use it when it is
-relevant, and never recite it back or imply you were watching them.
-</work_context>
-
-"""
-
-
 def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by retrieval/agentic.py
     uid: str,
     app: Optional[App] = None,
@@ -650,7 +601,7 @@ Keep these goals in mind when giving advice or suggestions.
 
 """
 
-    work_context_section = _get_work_context_section(uid, user_name)
+    work_context_section = get_work_context_section(uid, user_name)
 
     # Add page context if provided
     context_section = ""
