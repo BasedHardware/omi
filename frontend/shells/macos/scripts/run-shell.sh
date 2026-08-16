@@ -1,5 +1,5 @@
 #!/bin/bash
-# The native inner loop: kill the running shell, regenerate + rebuild, relaunch.
+# The native inner loop: kill the running shell, rebuild if inputs changed, relaunch.
 # Usage: OMI_BUILD_DIR=<scratch> OMI_SURFACE_PROFILE=<unique-id> scripts/run-shell.sh
 # Serves the real @omi-core/surfaces dist/ from a loopback origin.
 # Default 5290 is the pinned app origin (IndexedDB persists across relaunch).
@@ -70,7 +70,22 @@ if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
   echo "ERROR: loopback port $port remained busy after stopping $app_name" >&2
   exit 1
 fi
-"$here/scripts/build-shell.sh"
+# Rebuild only on an exact mismatch of the inputs that land in the bundle.
+# Skipping a needed rebuild is the stale-binary failure that cost this program
+# a night; skipping an unneeded one is the 15–50s the person launching the
+# app actually waits on.
+#
+# The skip lives HERE, not in build-shell.sh. Direct callers of that script
+# (ui-harness, fixture capture) still always compile. L3/L4 pass a fresh
+# OMI_BUILD_DIR, so they still always compile too. A checker failure or an
+# unavailable stamp is a rebuild, never a skip. No mtimes, no heuristics:
+# macos-app treeHash must agree, and the surfaces dist bytes must match the
+# bundled copy.
+if [[ -x "$executable" ]] && node "$here/scripts/shell-bundle-fresh.mjs" --app "$app" --dist "${OMI_SURFACES_DIST:-}"; then
+  :
+else
+  "$here/scripts/build-shell.sh"
+fi
 # Launch the executable directly so OMI_SURFACE_* and privileged API custody
 # stay in the child environment. LaunchServices/open is not a reliable env
 # propagation boundary; the token is never placed in argv.
