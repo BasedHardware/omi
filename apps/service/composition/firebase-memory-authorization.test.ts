@@ -72,7 +72,7 @@ const setup = (options: {
   const accounts: string[] = [];
   const adapter = {
     verification_source: options.verification_source ?? "firebase_production" as const,
-    async verifyIdToken(_token: string, checkRevoked: true): Promise<unknown> {
+    async verifyIdToken(_token: string, checkRevoked: boolean): Promise<unknown> {
       order.push("identity");
       revoked.push(checkRevoked);
       return Object.prototype.hasOwnProperty.call(options, "decoded") ? options.decoded : claims();
@@ -109,8 +109,8 @@ describe("Firebase identity to application authorization composition", () => {
   test("checks identity, fixed application grant, and coherent epoch in order before minting", async () => {
     const fixture = setup();
     const result = await fixture.authorizer.authorize("header.payload.signature", NOW);
-    expect(fixture.order).toEqual(["identity", "authorization", "control"]);
-    expect(fixture.revoked).toEqual([true]);
+    expect(fixture.order).toEqual(["identity", "identity", "authorization", "control"]);
+    expect(fixture.revoked).toEqual([false, true]);
     expect(fixture.requests).toEqual([{
       firebase_project_id: PROJECT,
       firebase_uid: "firebase-user-alice",

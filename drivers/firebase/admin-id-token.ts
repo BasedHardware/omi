@@ -24,7 +24,7 @@ export interface FirebaseAdminIdTokenAdapterConfig {
 
 export interface FirebaseAdminIdTokenAdapter {
   readonly verification_source: FirebaseAdminVerificationSource;
-  verifyIdToken(token: string, checkRevoked: true): Promise<unknown>;
+  verifyIdToken(token: string, checkRevoked: boolean): Promise<unknown>;
 }
 
 export interface FirebaseAdminIdTokenAdapterHandle {
@@ -70,6 +70,22 @@ const validCoordinate = (value: unknown, max: number): value is string =>
   && SAFE_COORDINATE.test(value);
 
 const closedFailure = (): Error => new Error("firebase_admin_identity_unavailable");
+const rejectedFailure = (): Error => new Error("firebase_admin_identity_rejected");
+
+const REJECTED_AUTH_CODES = new Set([
+  "auth/id-token-revoked",
+  "auth/user-disabled",
+  "auth/id-token-expired",
+  "auth/invalid-id-token",
+  "auth/argument-error",
+]);
+
+const rejectedAuthError = (error: unknown): boolean =>
+  error !== null
+  && typeof error === "object"
+  && "code" in error
+  && typeof (error as { readonly code: unknown }).code === "string"
+  && REJECTED_AUTH_CODES.has((error as { readonly code: string }).code);
 
 const emulatorCoordinate = (): Readonly<{ readonly present: boolean; readonly value: string | null }> => {
   const present = Object.prototype.hasOwnProperty.call(process.env, EMULATOR_ENV);
@@ -129,14 +145,15 @@ export const createFirebaseAdminIdTokenAdapter = async (
   let closed = false;
   const adapter: FirebaseAdminIdTokenAdapter = Object.freeze({
     verification_source: verificationSource,
-    async verifyIdToken(token: string, checkRevoked: true): Promise<unknown> {
+    async verifyIdToken(token: string, checkRevoked: boolean): Promise<unknown> {
       const currentEmulator = emulatorCoordinate();
-      if (closed || checkRevoked !== true
+      if (closed || (checkRevoked !== true && checkRevoked !== false)
         || currentEmulator.present !== emulator.present
         || currentEmulator.value !== emulator.value) throw closedFailure();
       try {
-        return await auth.verifyIdToken(token, true);
-      } catch {
+        return await auth.verifyIdToken(token, checkRevoked);
+      } catch (error) {
+        if (rejectedAuthError(error)) throw rejectedFailure();
         throw closedFailure();
       }
     },

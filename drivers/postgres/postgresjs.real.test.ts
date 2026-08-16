@@ -3881,8 +3881,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       runtime_mode: "deployed",
       id_token_adapter: {
         verification_source: "firebase_production",
-        verifyIdToken: async (_token, checkRevoked) => {
-          expect(checkRevoked).toBe(true);
+        verifyIdToken: async (_token, _checkRevoked) => {
           return firebaseClaims;
         },
       },
@@ -3993,8 +3992,7 @@ realTest("PostgreSQL 18.4 real adapter qualification scaffold", () => {
       runtime_mode: "deployed",
       id_token_adapter: {
         verification_source: "firebase_production",
-        verifyIdToken: async (_token, checkRevoked) => {
-          expect(checkRevoked).toBe(true);
+        verifyIdToken: async (_token, _checkRevoked) => {
           return firebaseClaims;
         },
       },

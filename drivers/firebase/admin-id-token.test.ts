@@ -71,6 +71,11 @@ describe("official Firebase Admin ID-token adapter", () => {
       try {
         expect(await handle.adapter.verifyIdToken("header.payload.signature", true)).toBe(decoded);
         expect(calls).toEqual([["header.payload.signature", true]]);
+        expect(await handle.adapter.verifyIdToken("header.payload.signature", false)).toBe(decoded);
+        expect(calls).toEqual([
+          ["header.payload.signature", true],
+          ["header.payload.signature", false],
+        ]);
       } finally {
         auth.verifyIdToken = original;
       }
@@ -135,6 +140,32 @@ describe("official Firebase Admin ID-token adapter", () => {
           .rejects.toThrow(/^firebase_admin_identity_unavailable$/);
       } finally {
         auth.verifyIdToken = original;
+      }
+    });
+  });
+
+  test("revoked and invalid SDK codes are rejected, not treated as an outage", async () => {
+    await withoutEmulator(async () => {
+      const appName = nextAppName();
+      const handle = await construct({ app_name: appName });
+      const auth = getAuth(getApp(appName));
+      const original = auth.verifyIdToken;
+      for (const code of [
+        "auth/id-token-revoked",
+        "auth/user-disabled",
+        "auth/id-token-expired",
+        "auth/invalid-id-token",
+        "auth/argument-error",
+      ]) {
+        auth.verifyIdToken = (async () => {
+          throw Object.assign(new Error("raw SDK provider sentinel"), { code });
+        }) as typeof auth.verifyIdToken;
+        try {
+          await expect(handle.adapter.verifyIdToken("header.payload.signature", true))
+            .rejects.toThrow(/^firebase_admin_identity_rejected$/);
+        } finally {
+          auth.verifyIdToken = original;
+        }
       }
     });
   });

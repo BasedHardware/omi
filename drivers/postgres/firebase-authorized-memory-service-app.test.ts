@@ -57,6 +57,45 @@ describe("PostgreSQL Firebase canonical memory service app", () => {
     expect(await mcp.text()).toBe("mcp");
   });
 
+  test("a valid signature that cannot re-check revocation is not a logout", async () => {
+    const projectId = "omi-project";
+    const now = 1_800_000_000;
+    const base = options();
+    const app = createPostgresFirebaseAuthorizedMemoryServiceApp({
+      ...base,
+      now_epoch_seconds: () => now,
+      memory_read: {
+        ...base.memory_read,
+        authorization: {
+          ...base.memory_read.authorization,
+          project_id: projectId,
+          id_token_adapter: {
+            verification_source: "firebase_production",
+            async verifyIdToken(_token: string, checkRevoked: boolean): Promise<unknown> {
+              if (checkRevoked) throw new Error("firebase_admin_identity_unavailable");
+              return {
+                aud: projectId,
+                iss: `https://securetoken.google.com/${projectId}`,
+                sub: "firebase-user-1",
+                uid: "firebase-user-1",
+                exp: now + 3_600,
+                iat: now - 60,
+                auth_time: now - 120,
+              };
+            },
+          },
+        },
+      },
+    });
+    const memory = await app.request("/v1/memories", {
+      headers: { authorization: "Bearer header.payload.signature" },
+    });
+    expect(memory.status).toBe(500);
+    expect(await memory.text()).toBe('{"error":"internal_server_error"}');
+    expect(memory.status).not.toBe(401);
+    expect(memory.status).not.toBe(200);
+  });
+
   test("rejects extra, accessor, and proxy composition options before dependency work", () => {
     expect(() => createPostgresFirebaseAuthorizedMemoryServiceApp({
       ...options(),

@@ -34,9 +34,17 @@ runtime mode (`deployed` or `local_test`). The adapter declares whether it is a
 production Firebase verifier or the Auth emulator. A deployed verifier refuses
 emulator construction before any token is inspected.
 
-For each bounded JWT-shaped bearer token the boundary calls the injected
-adapter exactly once with `checkRevoked=true`. It then independently validates
-and detaches the returned decoded claims:
+For each bounded JWT-shaped bearer token the boundary first calls the injected
+adapter with `checkRevoked=false` so signature, expiry, issuer, and audience
+are verified locally and strictly. Revocation is re-checked with
+`checkRevoked=true` on a named 15-minute window
+(`FIREBASE_REVOCATION_RECHECK_WINDOW_SECONDS`). A successful revocation check
+is remembered as a digest-keyed verification result, never as the token
+itself. Inside the window a token revoked at Google is still accepted — that
+cost is accepted and visible on the constant. After the window the next
+request re-checks.
+
+It then independently validates and detaches the returned decoded claims:
 
 - `aud` equals the configured project id;
 - `iss` equals the exact secure-token issuer for that project;
@@ -55,7 +63,10 @@ does not copy email, phone, provider data, custom claims, raw token bytes, or
 adapter metadata. Verification throw/rejection, revoked/disabled user,
 malformed claims, wrong project/issuer, expiry, future time, and deployed
 emulator mode all return the same `null` authentication result without raw
-error logging.
+error logging. If the signature is valid but the revocation re-check cannot
+run (offline, outage) after the window — or before any successful revocation
+check — the boundary returns the distinct frozen
+`FIREBASE_IDENTITY_REFRESH_UNAVAILABLE` result: not a logout and not a grant.
 
 The Firebase uid is an external credential binding, not the ADR-012 account
 identifier. No code in this unit may map it to an owner, read control state,
@@ -78,11 +89,14 @@ tests before route activation.
 ## Pre-registered tests
 
 1. Exact project/issuer/subject/time claims return one frozen project-bound identity after
-   one adapter call with `checkRevoked=true`.
+   a local signature verification (`checkRevoked=false`) and one revocation check
+   (`checkRevoked=true`).
 2. Wrong audience, issuer, uid/sub mismatch, empty/oversized subject, expired
    token, future issue/auth time, unsafe counters, malformed token, and hostile
    decoded objects all return byte-identical `null`.
 3. Adapter throw and rejection return `null` and never copy a sentinel error.
+   Adapter unavailability after a valid signature returns
+   `FIREBASE_IDENTITY_REFRESH_UNAVAILABLE`, not `null`.
 4. A deployed runtime rejects an emulator adapter at construction; local test
    mode may use it and may accept the emulator's unsigned JWT shape only through
    that adapter.
@@ -95,3 +109,6 @@ tests before route activation.
    runtime/source kinds, and invalid clocks fail closed without token work.
 8. The module imports no route, control source, grant, repository, database,
    filesystem, environment, network, model, or credential secret.
+9. A token revoked at Google is accepted inside the named 15-minute window and
+   rejected after the window elapses. Offline inside the window still
+   authenticates; offline after the window is the refresh-unavailable result.
