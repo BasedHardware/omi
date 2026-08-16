@@ -647,6 +647,14 @@ export class DashboardIntelligenceStore {
     }
     const opened = await handler(row)
     if (!opened) return false
+    // Mac parity: a successful open binds the most recent learnable screen
+    // context to this recommendation's subject (main-side binding service,
+    // 90-second window). Optional-chained: absent bridge = no-op.
+    void window.omi?.directorBindRecentContext?.({
+      kind: row.wire.subjectKind,
+      id: row.wire.subjectId,
+      workstreamID: row.wire.destinationWorkstreamId ?? null
+    })
     await this.recordPrimaryAction(row)
     return true
   }

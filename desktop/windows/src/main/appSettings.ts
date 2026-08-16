@@ -141,6 +141,21 @@ export type AppSettings = {
    *  any capture — it only makes the (currently DARK) tool available. Mirrors Mac's
    *  ChatToolExecutor gate; only its Settings location differs (Windows: Privacy). */
   chatScreenshotSharingEnabled: boolean
+  /** Context director: master switch for the bucket pipeline (visit tracking,
+   *  screen extraction into context buckets, and director evaluations). Default
+   *  OFF — ships dark, mirroring mac where the pipeline runs only on the beta
+   *  bundle; the Settings toggle is the rollout lever. When OFF, the legacy
+   *  TCRS resurfacing path runs instead (mac's exact flag inversion). Sits
+   *  UNDER `screenAnalysisEnabled` via the coordinator like every peer. */
+  contextDirectorEnabled: boolean
+  /** Notification-settings sync journal (mac: notification_settings_sync_revision):
+   *  monotonic revision of the local {notificationsEnabled, notificationFrequency}
+   *  pair. Bumped by the sync wiring on every local mutation; a PATCH completes
+   *  only against a matching revision. */
+  notificationSettingsSyncRevision: number
+  /** Notification-settings sync journal (mac: notification_settings_pending_sync):
+   *  true while a local mutation has not been confirmed pushed to the backend. */
+  notificationSettingsPendingSync: boolean
   /** Track 3 (Goals, Wave C): whether the on-device goal generator runs on a
    *  periodic timer. Default OFF, mirroring Mac's `goalGenerationEnabled`. Gated
    *  further at runtime by [<3 active goals] + [once per calendar day]. The manual
@@ -310,6 +325,18 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     // Default ON (opt-out): only an explicit false turns Screen Sharing in Chat
     // off. Matches Mac's absent-key-means-enabled default.
     chatScreenshotSharingEnabled: r.chatScreenshotSharingEnabled !== false,
+    // Default OFF (opt-IN, === true): the director pipeline ships dark until the
+    // user (or an env force) turns it on; TCRS covers the flag-off world.
+    contextDirectorEnabled: r.contextDirectorEnabled === true,
+    // Sync journal: a junk revision reads as 0 (never synced); pending only on
+    // an explicit true so a corrupt file cannot trap the retry loop on.
+    notificationSettingsSyncRevision:
+      typeof r.notificationSettingsSyncRevision === 'number' &&
+      Number.isInteger(r.notificationSettingsSyncRevision) &&
+      r.notificationSettingsSyncRevision >= 0
+        ? r.notificationSettingsSyncRevision
+        : 0,
+    notificationSettingsPendingSync: r.notificationSettingsPendingSync === true,
     // Default OFF (opt-IN, === true): goal auto-generation only runs once the user
     // turns it on. Mirrors Mac's `goalGenerationEnabled` default.
     goalAutoGenerationEnabled: r.goalAutoGenerationEnabled === true,

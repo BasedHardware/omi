@@ -152,6 +152,9 @@ import type {
 } from '../../shared/types'
 import { perfMark } from '../../shared/perf'
 import { cachedStmt } from './stmtCache'
+import { CONTEXT_BUCKET_SCHEMA } from './contextBucketSchema'
+import { runDeterministicGCOn, type ContextBucketDb } from './contextBucketStore'
+import { reconcileAbandonedDeliveriesOn } from './proactivityLedger'
 
 // Time a synchronous DB helper and emit a perf mark with its duration in ms.
 // Always-on (perfMark is a no-op unless OMI_PERF_LOG is set), so the bench can
@@ -667,6 +670,10 @@ function get(): Database.Database {
   // Proactive Insights history. DDL lives in insightStore.ts so prod and the
   // node:sqlite CRUD tests run the same SQL.
   db.exec(INSIGHTS_SCHEMA)
+  // Context-director bucket substrate (visits/buckets/facts/deliveries etc.).
+  // DDL lives in contextBucketSchema.ts so prod and the node:sqlite CRUD tests
+  // run the same SQL; every table is user-scoped (see USER_DATA_TABLES).
+  db.exec(CONTEXT_BUCKET_SCHEMA)
   // Migrate older databases that have local_conversation without these columns.
   ensureColumn(db, 'local_conversation', 'kind', "TEXT NOT NULL DEFAULT 'recording'")
   ensureColumn(db, 'local_conversation', 'messages', 'TEXT')
@@ -2300,4 +2307,21 @@ export function searchStagedTasksFTS(
   limit?: number
 ): { id: number; description: string; relevanceScore: number | null }[] {
   return searchStagedTasksFTSOn(taskStoreDb(), query, limit)
+}
+
+// --- Context director (bucket substrate) ------------------------------------
+// The director's store modules are all `*On(db, …)` functions; rather than
+// mirror every one as a wrapper here, expose the structural handle once. The
+// better-sqlite3 Database satisfies ContextBucketDb structurally.
+
+export function contextDirectorDb(): ContextBucketDb {
+  return get() as unknown as ContextBucketDb
+}
+
+export function runContextBucketGC(now: number): void {
+  runDeterministicGCOn(contextDirectorDb(), now)
+}
+
+export function reconcileAbandonedProactiveDeliveries(now: number): number {
+  return reconcileAbandonedDeliveriesOn(contextDirectorDb(), now)
 }

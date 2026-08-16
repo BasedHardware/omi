@@ -264,6 +264,18 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('tasks:changed', listener)
     return () => ipcRenderer.removeListener('tasks:changed', listener)
   },
+  // Context director: the renderer relays its stable device-id hash (so main's
+  // snapshot calls share the renderer's device scope), reports recommendation
+  // opens for recent-context binding, and receives director/TCRS-evaluated
+  // What-Matters-Now projections for the dashboard store seam.
+  directorSetDeviceId: (hash: string) => ipcRenderer.send('director:setDeviceId', hash),
+  directorBindRecentContext: (subject: { kind: string; id: string; workstreamID: string | null }) =>
+    ipcRenderer.invoke('director:bindRecentContext', subject) as Promise<boolean>,
+  onContextProjection: (cb: (raw: unknown) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, raw: unknown): void => cb(raw)
+    ipcRenderer.on('intelligence:contextProjection', listener)
+    return () => ipcRenderer.removeListener('intelligence:contextProjection', listener)
+  },
   onTasksOpFailed: (cb: (failure: TaskOpFailure) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, failure: TaskOpFailure): void => cb(failure)
     ipcRenderer.on('tasks:opFailed', listener)

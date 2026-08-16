@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-// The General tab's "Screen Analysis" row: reflects the current screenAnalysisEnabled
-// value, writes the flag through the scoped assistant bridge on toggle, and stays in
-// lock-step with the tray checkbox via the settings broadcast.
+// The General tab's "Context Director" row: reflects contextDirectorEnabled,
+// writes the flag through the scoped assistant bridge on toggle, and follows
+// the settings broadcast — the same contract as the Screen Analysis row above it.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, act, fireEvent, screen } from '@testing-library/react'
-import { ScreenAnalysisRow } from './GeneralTab'
+import { ContextDirectorRow } from './GeneralTab'
 import { SettingsSearchProvider } from '../SettingsSearchProvider'
 import type { AssistantSettingsView } from '../../../../../shared/types'
 
@@ -46,44 +46,28 @@ afterEach(cleanup)
 const renderRow = (): void => {
   render(
     <SettingsSearchProvider>
-      <ScreenAnalysisRow />
+      <ContextDirectorRow />
     </SettingsSearchProvider>
   )
 }
 const sw = (): HTMLButtonElement =>
-  screen.getByRole('switch', { name: 'Screen Analysis' }) as HTMLButtonElement
+  screen.getByRole('switch', { name: 'Context Director' }) as HTMLButtonElement
 
-describe('GeneralTab ScreenAnalysisRow', () => {
-  it('reflects the current screenAnalysisEnabled value once loaded', async () => {
+describe('GeneralTab ContextDirectorRow', () => {
+  it('reflects the default-off value once loaded and writes the toggle through the bridge', async () => {
     renderRow()
-    await screen.findByText('Screen Analysis')
+    await screen.findByText('Context Director')
+    expect(sw().getAttribute('aria-checked')).toBe('false')
+
+    fireEvent.click(sw())
+    expect(setSettings).toHaveBeenCalledWith({ contextDirectorEnabled: true })
     expect(sw().getAttribute('aria-checked')).toBe('true')
   })
 
-  it('reflects an OFF value', async () => {
-    store = { ...VIEW, screenAnalysisEnabled: false }
+  it('follows the settings broadcast so the row and any other surface agree', async () => {
     renderRow()
-    await screen.findByText('Screen Analysis')
-    expect(sw().getAttribute('aria-checked')).toBe('false')
-  })
-
-  it('writes screenAnalysisEnabled when toggled', async () => {
-    renderRow()
-    await screen.findByText('Screen Analysis')
-    act(() => {
-      fireEvent.click(sw())
-    })
-    expect(setSettings).toHaveBeenCalledWith({ screenAnalysisEnabled: false })
-    expect(sw().getAttribute('aria-checked')).toBe('false')
-  })
-
-  it('re-renders from a broadcast (tray checkbox wrote the flag in another window)', async () => {
-    renderRow()
-    await screen.findByText('Screen Analysis')
+    await screen.findByText('Context Director')
+    act(() => changeCb?.({ ...VIEW, contextDirectorEnabled: true }))
     expect(sw().getAttribute('aria-checked')).toBe('true')
-    act(() => {
-      changeCb?.({ ...VIEW, screenAnalysisEnabled: false })
-    })
-    expect(sw().getAttribute('aria-checked')).toBe('false')
   })
 })

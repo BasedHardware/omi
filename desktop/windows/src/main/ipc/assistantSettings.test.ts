@@ -59,7 +59,8 @@ const VIEW_KEYS: (keyof AssistantSettingsView)[] = [
   'focusNotificationsEnabled',
   'memoryEnabled',
   'glowOverlayEnabled',
-  'screenAnalysisEnabled'
+  'screenAnalysisEnabled',
+  'contextDirectorEnabled'
 ]
 
 describe('assistantSettings IPC', () => {

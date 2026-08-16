@@ -854,6 +854,19 @@ export type OmiBridgeApi = {
   /** main → renderer: the local task store changed (optimistic write or a
    *  background sync landed). Returns an unsubscribe fn. */
   onTasksChanged: (cb: () => void) => () => void
+  /** Context director: relay the renderer's stable device-id hash so main-side
+   *  snapshot calls share the renderer's device scope. */
+  directorSetDeviceId: (hash: string) => void
+  /** Context director: report a recommendation open so the subject-binding
+   *  service can bind the most recent learnable context (90s window). */
+  directorBindRecentContext: (subject: {
+    kind: string
+    id: string
+    workstreamID: string | null
+  }) => Promise<boolean>
+  /** main → renderer: a director/TCRS-evaluated What-Matters-Now projection
+   *  (raw wire JSON; parse with readWmnProjection). Returns an unsubscribe fn. */
+  onContextProjection: (cb: (raw: unknown) => void) => () => void
   /** main → renderer: a task mutation the user saw did NOT stick (e.g. a delete
    *  that failed and whose row was restored). Lets the renderer toast instead of
    *  diverging silently. Returns an unsubscribe fn. */
@@ -2190,6 +2203,9 @@ export type AssistantSettingsView = {
   glowOverlayEnabled: boolean
   /** Master switch for the whole screen-analysis loop (Focus/memory/task/insight). */
   screenAnalysisEnabled: boolean
+  /** Whether the context-director bucket pipeline runs (default OFF; TCRS covers
+   *  the flag-off world). */
+  contextDirectorEnabled: boolean
 }
 
 export type InsightPayload = {
