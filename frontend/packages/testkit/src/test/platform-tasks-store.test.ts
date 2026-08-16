@@ -221,6 +221,72 @@ test("create refuses to journal when the read has not observed an account epoch"
   await assert.rejects(() => store.create("no epoch"), /account-epoch/);
 });
 
+test("a second create with the same normalized description does not enqueue while the first is open", async () => {
+  // write_id is minted, not derived from content (B1). Same write_id with a
+  // different fingerprint is write_id_reuse. Double-tap protection is this
+  // coalesce, not a content-keyed registry row.
+  const empty = pageFor("absence:query_gap") as Record<string, unknown>;
+  empty["accountEpoch"] = 7;
+  const revision = "d".repeat(64);
+  const http = new Scripted([
+    ok(empty),
+    {
+      status: 200,
+      json: { applied: { record_id: "placeholder", revision }, idempotent: false },
+      text: JSON.stringify({ applied: { record_id: "placeholder", revision }, idempotent: false }),
+    },
+  ]);
+  const store = await PlatformTasksStore.open(disk().openBridge("u1"), env, http);
+  await store.refresh();
+  await Promise.all([
+    store.create("  Buy   Milk "),
+    store.create("buy milk"),
+  ]);
+  await env.advance(10);
+  const listed = await store.list();
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0]!.description, "  Buy   Milk ");
+  assert.equal(http.calls.filter((call) => call.method === "POST").length, 1);
+  await store.create("BUY MILK");
+  assert.equal((await store.list()).length, 1);
+  assert.equal(http.calls.filter((call) => call.method === "POST").length, 1);
+});
+
+test("the same description may create again after the open row is completed", async () => {
+  const empty = pageFor("absence:query_gap") as Record<string, unknown>;
+  empty["accountEpoch"] = 7;
+  const http = new Scripted([
+    ok(empty),
+    {
+      status: 200,
+      json: { applied: { record_id: "a", revision: "e".repeat(64) }, idempotent: false },
+      text: JSON.stringify({ applied: { record_id: "a", revision: "e".repeat(64) }, idempotent: false }),
+    },
+    {
+      status: 200,
+      json: { applied: { record_id: "a", revision: "f".repeat(64) }, idempotent: false },
+      text: JSON.stringify({ applied: { record_id: "a", revision: "f".repeat(64) }, idempotent: false }),
+    },
+    {
+      status: 200,
+      json: { applied: { record_id: "b", revision: "g".repeat(64) }, idempotent: false },
+      text: JSON.stringify({ applied: { record_id: "b", revision: "g".repeat(64) }, idempotent: false }),
+    },
+  ]);
+  const store = await PlatformTasksStore.open(disk().openBridge("u1"), env, http);
+  await store.refresh();
+  await store.create("Buy milk");
+  await env.advance(10);
+  const firstId = (await store.list())[0]!.id;
+  await store.patch(firstId, { completed: true });
+  await env.advance(10);
+  await store.create("Buy milk");
+  await env.advance(10);
+  const listed = await store.list();
+  assert.equal(listed.filter((row) => row.description === "Buy milk").length, 2);
+  assert.equal(http.calls.filter((call) => call.method === "POST").length, 3);
+});
+
 test("a patch against a bare opaque read handle is refused rather than upserted", async () => {
   // red-proof: send the HMAC handle as record_id. The write door upserts a
   // second row. APPLIED AND OBSERVED RED.

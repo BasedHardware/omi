@@ -124,36 +124,12 @@ const postJson = (
   body: JSON.stringify(body),
 });
 
-const cutOverTasks = async (baseUrl: string, token: string): Promise<void> => {
-  for (const body of [
-    {
-      control_revision: 1,
-      account_generation: "legacy",
-      account_epoch: null,
-      lifecycle_state: "active",
-      deletion_epoch: null,
-    },
-    {
-      control_revision: 2,
-      account_generation: "migrating",
-      account_epoch: null,
-      lifecycle_state: "active",
-      deletion_epoch: null,
-    },
-    {
-      control_revision: 3,
-      account_generation: "new",
-      account_epoch: 7,
-      lifecycle_state: "active",
-      deletion_epoch: null,
-    },
-  ]) {
-    expect((await postJson(baseUrl, "/v1/qa/control/observe", token, body)).status).toBe(200);
-  }
-  expect((await postJson(baseUrl, "/v1/qa/control/activate", token, {
-    epoch: 7,
-    at_control_revision: 3,
-  })).status).toBe(200);
+const assertOwnerWriteReady = async (baseUrl: string, token: string): Promise<void> => {
+  const tasks = await fetch(`${baseUrl}/v1/tasks`, {
+    headers: authorizedHeaders(token, "macos"),
+  });
+  expect(tasks.status).toBe(200);
+  expect(await tasks.json()).toMatchObject({ accountEpoch: 7 });
 };
 
 const chatPayload = (shell: "macos" | "ios", id = `subprocess-chat-${shell}`) => ({
@@ -258,7 +234,30 @@ test("real dev-server owns one durable SQLite service for all eight domains", as
       ownerAccountId: "local-dev-user",
     });
     expect(first.readiness.pid).toBe(first.child.pid);
-    await cutOverTasks(first.baseUrl, first.readiness.devToken);
+    await assertOwnerWriteReady(first.baseUrl, first.readiness.devToken);
+    const createdTask = await postJson(first.baseUrl, "/v1/tasks/ops", first.readiness.devToken, {
+      write_id: "a".repeat(64),
+      account_epoch: 7,
+      domain: "tasks",
+      op: {
+        op: "create",
+        record_id: "boot-cutover-task",
+        content: {
+          description: "boot cutover write",
+          completed: false,
+          completedAt: null,
+          dueAt: null,
+          owner: null,
+          source: "user",
+          provenance: [],
+          sortOrder: 0,
+          indentLevel: 0,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    });
+    expect(createdTask.status).toBe(200);
     await exerciseShell(first.baseUrl, first.readiness.devToken, "macos");
     await exerciseShell(first.baseUrl, first.readiness.devToken, "ios");
 
