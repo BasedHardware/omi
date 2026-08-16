@@ -677,16 +677,32 @@ actor ContextProactivityEngine {
         state: "failed")
       return
     }
+    // The facts the candidate was written from, not just this visit's facts:
+    // the gate is judging a claim made at write time, and without its original
+    // evidence it could only compare the claim against the current screen —
+    // which is how 13 of 14 live rejections came to read "not supported by the
+    // current screen" for candidates that were correct when written.
+    let groundingFacts = await store.groundingFactStatements(
+      candidate.groundingFactIDs, bucketID: candidate.bucketID)
     do {
       let result = try await client.complete(
         operation: ModelQoS.Proactivity.reasoningOperation,
         prompt: ContextProactiveCandidateGate.prompt(
           message: candidate.message,
+          groundingFacts: groundingFacts,
           validatedFacts: snapshot.validatedFacts,
           recentDeliveries: recentDeliveries),
         imageData: currentFrame.jpegData,
         jsonSchema: ContextProactiveCandidateGate.schema,
-        maxCompletionTokens: 120,
+        // 400, not 120: the reasoning model bills its thinking into completion
+        // tokens. Measured directly against the same model with this exact
+        // prompt shape: at 120 the call finished with `finish_reason=length`,
+        // 120/120 tokens spent on reasoning, and EMPTY content in 2 of 3
+        // attempts — which parses as malformed and silently suppresses the
+        // candidate. At 400 every attempt finished clean (33-174 reasoning
+        // tokens plus the small JSON body). Live provenance shows the same
+        // degenerate shape (a bare "false" reason) at the old cap.
+        maxCompletionTokens: 400,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
       // The gate awaited the model; ownership can be revoked or the visit can
@@ -703,9 +719,21 @@ actor ContextProactivityEngine {
           state: "failed")
         return
       }
-      let decision =
-        ContextProactiveCandidateGate.parse(result.content)
-        ?? ContextProactiveCandidateGate.Decision(show: false, reason: "malformed_gate_response")
+      // An unparseable body is not a decision. The reasoning model bills its
+      // thinking into completion tokens, so a budget that runs out returns
+      // `finish_reason=length` with empty content — which is silence about the
+      // question, not an answer of "no". Treating it as "no" retired the
+      // candidate permanently (`declineCandidate` below), so one truncated call
+      // destroyed a notification that no later visit could ever recover.
+      // Suppress this visit, leave the candidate armed, and let a later visit
+      // ask again or let it expire on its own.
+      guard let decision = ContextProactiveCandidateGate.parse(result.content) else {
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "silence",
+          provenanceJSON: "{\"reason\":\"malformed_gate_response\",\"source\":\"candidate\"}",
+          message: nil, state: "suppressed")
+        return
+      }
       let reason = String(decision.reason.prefix(1_200))
       var provenance: [String: Any] = [
         "source": "candidate",
