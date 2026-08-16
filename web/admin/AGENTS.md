@@ -19,3 +19,11 @@ Subscription metrics use `lib/stripe-subscriptions.ts`; never list subscriptions
 - Marketplace apps are excluded by `metadata.app_id`, stamped by the backend on app checkout.
 - MRR includes `active` and `past_due`; report `trialing` separately.
 - Normalize amounts with each price's `interval` and `interval_count`; never assume monthly or annual pricing.
+
+## Grafana omi-tv
+
+`/dashboard` embeds Grafana uid `omi-tv`. The board JSON lives at
+`grafana/dashboards/omi-tv.json`. Activation panels must query
+`/api/omi/stats/activation?days=60` (`rate`, `weeks[]`) — not viral-metrics
+`summary.activationRate`. Apply with `grafana/apply_omi_tv_dashboard.py`; skip
+when `GRAFANA_TOKEN` is unset. See `grafana/README.md`.
