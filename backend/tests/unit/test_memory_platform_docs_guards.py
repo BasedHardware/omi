@@ -31,6 +31,13 @@ def test_api_service_doc_is_explicit_that_limit_bounds_the_page_not_the_scan():
     assert 'page-size contract for the response, not a request-cost bound' in doc
 
 
+def test_search_response_model_documents_limit_as_a_page_size_over_a_full_scan():
+    source = (BACKEND_DIR / 'models' / 'memory_product.py').read_text()
+    assert 'limit' in source
+    assert 'full default-visible match set' in source
+    assert 'returned page' in source
+
+
 def test_published_embed_examples_use_a_sandbox_the_frame_cannot_remove():
     for doc in sorted(DOCS_DIR.glob('*.md')):
         for tokens in re.findall(r'sandbox="([^"]*)"', doc.read_text()):
