@@ -184,10 +184,14 @@ type Deps = {
 }
 
 function defaultDeps(): Deps {
+  // Late-bound wrappers, not .bind at construction: the store singleton is
+  // created at module import, and eagerly dereferencing client methods there
+  // couples every importer's test double to the full axios surface.
   return {
-    get: omiApi.get.bind(omiApi),
-    post: omiApi.post.bind(omiApi),
-    del: omiApi.delete.bind(omiApi),
+    get: ((...args: Parameters<typeof omiApi.get>) => omiApi.get(...args)) as typeof omiApi.get,
+    post: ((...args: Parameters<typeof omiApi.post>) => omiApi.post(...args)) as typeof omiApi.post,
+    del: ((...args: Parameters<typeof omiApi.delete>) =>
+      omiApi.delete(...args)) as typeof omiApi.delete,
     now: Date.now,
     uuid: () => crypto.randomUUID(),
     ownerId: outboxOwnerId
