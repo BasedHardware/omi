@@ -1,0 +1,19 @@
+.github/failure-classes/FC-gated-capability-reported-never-requested.json
+  s_fe9b5f58848810::t_679f952e3652d9 1-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f8f71fd798d792fac6588a5b04a0e4a200f0a86e",
+  "prompts": {},
+  "sessions": {
+    "s_fe9b5f58848810": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "523f4649-d10d-476a-9e8e-831ac39269e9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
