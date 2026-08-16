@@ -10,10 +10,11 @@ objects, `memories-backend` vectors, and the `legacy_conversations` /
 `canonical_memory_atoms` search collections. They cannot read those
 stores, and they cannot serve a user.
 
-They are here because David ruled the new stack self-contained: no leak
-except Firebase auth (and the chat model provider). The migration logic
-was already written; it was living inside the product it is supposed to
-be separate from. Moving it is how it stays written once.
+They are here because David ruled the new stack self-contained: the
+service may leave the machine only for Firebase Authentication and the
+chat model provider. The migration logic was already written; it was
+living inside the product it is supposed to be separate from. Moving it
+is how it stays written once.
 
 ## What this must never do
 
@@ -21,12 +22,16 @@ be separate from. Moving it is how it stays written once.
   `apps/service` that binds these participants.
 - Read. Every client here is delete-only.
 - Be imported by `apps/service` or `drivers/`. `lint:imports` fails
-  that. `lint:closure` forbids `migration/` on the production
-  entrypoints.
+  that. `lint:closure` (Rule 18) is the import-closure fence: it forbids
+  value-linking `migration/` from the production entrypoints. It does
+  not inspect `fetch` URLs or observe network traffic; see
+  [`docs/architecture.md`](../docs/architecture.md) and
+  [`docs/network-fence-proposal.md`](../docs/network-fence-proposal.md).
 
 Live search is FTS5. Chat attachments are a sqlite BLOB. Semantic search
 is an unconfigured stub. `drivers/firebase` (auth) and `drivers/model`
-stay where they are; they are the sanctioned leaks.
+stay where they are. Rule 18 keeps this directory off those graphs; it
+does not prove the running process talked only to sanctioned hosts.
 
 ## Layout
 
