@@ -60,7 +60,23 @@ _DIRECT_MODELS = {
     "proactive_extraction": "gpt-5-nano",
     "proactive_reasoning": "gpt-5.6-luna",
 }
+# Must match generated_route_overrides.yaml for these features. The direct
+# recovery path previously used medium for reasoning, which let luna spend a
+# client 800-token cap entirely on hidden reasoning and return truncated JSON.
+_DIRECT_REASONING_EFFORT = {
+    "proactive_extraction": "minimal",
+    "proactive_reasoning": "low",
+}
+# The Pydantic field maximum is also the last-resort reasoning retry ceiling.
+_MAX_COMPLETION_TOKENS = 4096
+# Proven recovery budget for length-exhausted structured output. Extraction
+# retries at this ceiling. Reasoning uses it as the first-attempt floor: a
+# 5-hour dogfood session exhausted the client's 800-token cap on 29/30 luna
+# failures (HTTP 200, truncated JSON, 1.7–2.9s). Unused cap is not billed.
 _DIRECT_EXTRACTION_RETRY_MAX_COMPLETION_TOKENS = 2400
+_REASONING_MIN_COMPLETION_TOKENS = _DIRECT_EXTRACTION_RETRY_MAX_COMPLETION_TOKENS
+_INVALID_STRUCTURED_OUTPUT_STATUS = 422
+_INVALID_STRUCTURED_OUTPUT_DETAIL = "Proactive model returned invalid structured output"
 
 
 @dataclass(frozen=True)
@@ -131,8 +147,10 @@ def _proactive_provider_request(request: "ProactiveCompletionRequest", uid: str,
     payload["model"] = _DIRECT_MODELS[request.operation.value]
     # OpenAI reasoning models otherwise default to spending the entire completion
     # budget on hidden reasoning. Extraction then returns an empty message with
-    # finish_reason=length instead of the required strict JSON payload.
-    payload["reasoning_effort"] = "minimal" if request.operation == ProactiveOperation.EXTRACTION else "medium"
+    # finish_reason=length instead of the required strict JSON payload. Reasoning
+    # matches the gateway lane (low), not medium: medium plus the client's 800-token
+    # cap is the combination that returned truncated JSON as a 502.
+    payload["reasoning_effort"] = _DIRECT_REASONING_EFFORT[request.operation.value]
     # Keep the breakpointed messages built above. The desktop client packs the stable
     # bucket prompt, the volatile frame metadata and the screenshot into ONE user
     # message, and the provider only serves a cache read from a prefix that ends on a
@@ -181,7 +199,7 @@ class ProactiveCompletionRequest(BaseModel):
     operation: ProactiveOperation
     messages: list[dict[str, Any]] = Field(min_length=1, max_length=16)
     response_format: dict[str, Any]
-    max_completion_tokens: int = Field(default=1024, ge=1, le=4096)
+    max_completion_tokens: int = Field(default=1024, ge=1, le=_MAX_COMPLETION_TOKENS)
     cache_key: str | None = Field(default=None, min_length=1, max_length=200)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -342,7 +360,7 @@ def _gateway_payload(request: ProactiveCompletionRequest) -> dict[str, Any]:
         "model": _OPERATION_LANES[operation],
         "messages": request.messages,
         "response_format": request.response_format,
-        "max_completion_tokens": request.max_completion_tokens,
+        "max_completion_tokens": _effective_max_completion_tokens(request),
         "metadata": {
             **request.metadata,
             "omi_feature": f"desktop_{operation}",
@@ -432,6 +450,27 @@ def _usage_envelope(response: Mapping[str, Any]) -> ProactiveUsageEnvelope:
     )
 
 
+def _effective_max_completion_tokens(request: ProactiveCompletionRequest) -> int:
+    """Return the completion cap actually forwarded to the provider.
+
+    The desktop client sizes ``max_completion_tokens`` for visible JSON. A
+    reasoning model can spend that entire cap on hidden tokens, so reasoning
+    requests are raised to the budget that already recovers extraction length
+    exhaustion. Unused cap is not billed; a retry that doubles delivery-path
+    latency is reserved for the remaining truncations.
+    """
+    requested = request.max_completion_tokens
+    if request.operation == ProactiveOperation.REASONING:
+        return max(requested, _REASONING_MIN_COMPLETION_TOKENS)
+    return requested
+
+
+def _retry_max_completion_tokens(operation: ProactiveOperation) -> int:
+    if operation == ProactiveOperation.REASONING:
+        return _MAX_COMPLETION_TOKENS
+    return _DIRECT_EXTRACTION_RETRY_MAX_COMPLETION_TOKENS
+
+
 def _looks_like_truncated_json(content: str) -> bool:
     stripped = content.rstrip()
     if not stripped:
@@ -454,17 +493,20 @@ def _looks_like_truncated_json(content: str) -> bool:
     return False
 
 
-def _should_retry_direct_extraction(
+def _should_retry_truncated_structured_output(
     response: Any,
     request: ProactiveCompletionRequest,
-    provider_request: _ProviderRequest,
+    *,
+    attempted_max_completion_tokens: int,
 ) -> bool:
-    """Retry only the known dev-direct extraction length exhaustion shape."""
-    if (
-        provider_request.fallback_class != "dev_direct_openai"
-        or request.operation != ProactiveOperation.EXTRACTION
-        or request.max_completion_tokens >= _DIRECT_EXTRACTION_RETRY_MAX_COMPLETION_TOKENS
-    ):
+    """Retry once when a reasoning model spent the completion cap on hidden tokens.
+
+    The backend resizes the budget on retry, which a client retry of the same
+    800-token request cannot do. Transport errors are not retried here: 429 must
+    reach the client cooldown, and a 4xx/5xx without a changed request would
+    hide an outage as a transient blip.
+    """
+    if attempted_max_completion_tokens >= _retry_max_completion_tokens(request.operation):
         return False
     if not isinstance(response, Mapping):
         return False
@@ -481,12 +523,13 @@ def _should_retry_direct_extraction(
     return isinstance(content, str) and _looks_like_truncated_json(content)
 
 
-def _record_direct_extraction_retry_outcome(outcome: str) -> None:
-    """Record one terminal event for the bounded direct Nano retry."""
+def _record_length_retry_outcome(provider_request: _ProviderRequest, outcome: str) -> None:
+    """Record one terminal event for the bounded structured-output length retry."""
+    direct = provider_request.fallback_class == "dev_direct_openai"
     record_fallback(
         component="llm_gateway",
-        from_mode="direct_openai",
-        to_mode="direct_openai_retry",
+        from_mode="direct_openai" if direct else "gateway",
+        to_mode="direct_openai_retry" if direct else "gateway_retry",
         reason="capability_mismatch",
         outcome=outcome,
         log=logger,
@@ -535,17 +578,23 @@ async def proactive_completion(
     _apply_quota_headers(response, quota)
     request_id = str(uuid4())
     provider_request: _ProviderRequest | None = None
-    direct_extraction_retry_attempted = False
+    length_retry_attempted = False
     try:
         provider_request = _proactive_provider_request(request, uid, request_id)
+        attempted_max_completion_tokens = provider_request.payload["max_completion_tokens"]
         response_body = await _post_provider_completion(provider_request)
-        if _should_retry_direct_extraction(response_body, request, provider_request):
-            direct_extraction_retry_attempted = True
+        if _should_retry_truncated_structured_output(
+            response_body,
+            request,
+            attempted_max_completion_tokens=attempted_max_completion_tokens,
+        ):
+            length_retry_attempted = True
+            retry_max = _retry_max_completion_tokens(request.operation)
             choice = response_body["choices"][0]
             message = choice.get("message") if isinstance(choice, Mapping) else None
             content = message.get("content") if isinstance(message, Mapping) else None
             logger.warning(
-                "desktop_proactivity_direct_extraction_length_retry operation=%s finish_reason=%s "
+                "desktop_proactivity_length_retry operation=%s finish_reason=%s "
                 "choices_count=%s content_type=%s content_length=%s initial_max_completion_tokens=%s "
                 "retry_max_completion_tokens=%s",
                 operation,
@@ -553,21 +602,21 @@ async def proactive_completion(
                 len(response_body["choices"]),
                 type(content).__name__,
                 len(content) if isinstance(content, str) else 0,
-                request.max_completion_tokens,
-                _DIRECT_EXTRACTION_RETRY_MAX_COMPLETION_TOKENS,
+                attempted_max_completion_tokens,
+                retry_max,
             )
             response_body = await _post_provider_completion(
                 provider_request,
-                max_completion_tokens=_DIRECT_EXTRACTION_RETRY_MAX_COMPLETION_TOKENS,
+                max_completion_tokens=retry_max,
             )
     except HTTPException:
-        if direct_extraction_retry_attempted:
-            _record_direct_extraction_retry_outcome("exhausted")
+        if length_retry_attempted and provider_request is not None:
+            _record_length_retry_outcome(provider_request, "exhausted")
         await _release_quota(uid, request.operation)
         raise
     except (httpx.HTTPError, ValueError, TypeError) as exc:
-        if direct_extraction_retry_attempted:
-            _record_direct_extraction_retry_outcome("exhausted")
+        if length_retry_attempted and provider_request is not None:
+            _record_length_retry_outcome(provider_request, "exhausted")
         await _release_quota(uid, request.operation)
         if isinstance(exc, httpx.HTTPStatusError):
             logger.warning(
@@ -585,28 +634,31 @@ async def proactive_completion(
             )
         raise HTTPException(status_code=502, detail="Proactive model unavailable") from exc
     if not isinstance(response_body, dict):
-        if direct_extraction_retry_attempted:
-            _record_direct_extraction_retry_outcome("exhausted")
+        if length_retry_attempted and provider_request is not None:
+            _record_length_retry_outcome(provider_request, "exhausted")
         await _release_quota(uid, request.operation)
         raise HTTPException(status_code=502, detail="Proactive model returned an invalid response")
     try:
         _validate_gateway_output(response_body, request)
     except HTTPException as exc:
-        if direct_extraction_retry_attempted:
-            _record_direct_extraction_retry_outcome("exhausted")
+        if length_retry_attempted and provider_request is not None:
+            _record_length_retry_outcome(provider_request, "exhausted")
         await _release_quota(uid, request.operation)
         logger.warning(
-            "desktop_proactivity_invalid_structured_output operation=%s fallback_class=%s provider_model=%s detail=%s",
+            "desktop_proactivity_invalid_structured_output operation=%s fallback_class=%s "
+            "provider_model=%s status=%s detail=%s",
             operation,
-            provider_request.fallback_class,
+            provider_request.fallback_class if provider_request is not None else "unknown",
             response_body.get("model", "unknown"),
+            exc.status_code,
             exc.detail,
         )
         raise
-    if direct_extraction_retry_attempted:
-        _record_direct_extraction_retry_outcome("recovered")
+    if length_retry_attempted and provider_request is not None:
+        _record_length_retry_outcome(provider_request, "recovered")
     usage = _usage_envelope(response_body)
     provider_model = response_body.get("model")
+    assert provider_request is not None
     return ProactiveCompletionEnvelope(
         operation=request.operation,
         lane=lane,
@@ -618,23 +670,27 @@ async def proactive_completion(
     )
 
 
+def _invalid_structured_output() -> HTTPException:
+    return HTTPException(status_code=_INVALID_STRUCTURED_OUTPUT_STATUS, detail=_INVALID_STRUCTURED_OUTPUT_DETAIL)
+
+
 def _validate_gateway_output(response: Mapping[str, Any], request: ProactiveCompletionRequest) -> None:
     """Fail closed if the gateway/provider did not honor the strict JSON contract."""
     response_format = request.response_format.get("json_schema")
     schema = response_format.get("schema") if isinstance(response_format, Mapping) else None
     choices = response.get("choices")
     if not isinstance(schema, Mapping) or not isinstance(choices, list) or not choices:
-        raise HTTPException(status_code=502, detail="Proactive model returned invalid structured output")
+        raise _invalid_structured_output()
     validator = Draft202012Validator(schema)
     for choice in choices:
         if not isinstance(choice, Mapping):
-            raise HTTPException(status_code=502, detail="Proactive model returned invalid structured output")
+            raise _invalid_structured_output()
         message = choice.get("message")
         content = message.get("content") if isinstance(message, Mapping) else None
         if not isinstance(content, str):
-            raise HTTPException(status_code=502, detail="Proactive model returned invalid structured output")
+            raise _invalid_structured_output()
         try:
             decoded = json.loads(content)
             validator.validate(decoded)
         except (json.JSONDecodeError, ValidationError, TypeError) as exc:
-            raise HTTPException(status_code=502, detail="Proactive model returned invalid structured output") from exc
+            raise _invalid_structured_output() from exc
