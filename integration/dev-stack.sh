@@ -556,7 +556,7 @@ if (( core_build_status != 0 )); then
   exit "$core_build_status"
 fi
 
-CORE_TREE="$(node "$HERE/lib/provenance.mjs" --repo core-foundation | node -e '
+CORE_TREE="$(node "$HERE/lib/provenance.mjs" --repo core-foundation --artifact macos-app | node -e '
   let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).treeHash??"")}catch{}})')"
 SURFACE_TREE="$(node -e '
   const fs=require("fs");try{process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).treeHash??"")}catch{}' \

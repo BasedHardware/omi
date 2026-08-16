@@ -212,15 +212,20 @@ function stampDeclaredRepos(row) {
 }
 
 /**
- * L3's evidence matrix carries two hashes, the same split `dev-stack.sh` uses:
- * the core-foundation worktree (frontend + integration) for the shells, and
- * the surfaces-dist artifact scope (frontend/ only) for the built bundle.
- * Collapsing them to one hash after colocation made every L3 receipt fail
- * while `--assert` itself was green.
+ * L3's evidence matrix carries the hashes the shells actually bake:
+ * macos-app / ios-bundle for the native writers, surfaces-dist for the
+ * copied bundle. Both are `frontend/`-scoped. Using the full
+ * core-foundation worktree (frontend + integration) as expectedShell
+ * made every `--assert` fail once iOS evidence completed: the apps stamp
+ * macos-app, not the lane worktree.
  */
 function l3ExpectedTreeHashes(stamps) {
   const core = stamps?.["core-foundation"];
-  const expectedShellTreeHash = core?.treeHash;
+  const expectedShellTreeHash = worktreeStamp({
+    repo: "core-foundation",
+    repoRoot: core?.repoRoot,
+    artifact: "macos-app",
+  }).treeHash;
   const expectedSurfaceTreeHash = worktreeStamp({
     repo: "core-foundation",
     repoRoot: core?.repoRoot,
