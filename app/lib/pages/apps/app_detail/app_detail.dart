@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/utils/share_links.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
@@ -687,7 +688,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   box != null ? box.localToGlobal(Offset.zero) & box.size : null;
 
                               await Share.share(
-                                'https://h.omi.me/apps/${app.id}',
+                                appShareUrl(app.id),
                                 subject: app.name,
                                 sharePositionOrigin: sharePositionOrigin,
                               );
