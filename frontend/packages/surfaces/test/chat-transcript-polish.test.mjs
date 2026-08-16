@@ -240,9 +240,13 @@ test("a cap that blocks attaching is still said out loud", async () => {
   }
 });
 
-test("the composer leads with the input, then attach, then send", async () => {
-  // red-proof: leaving `.chat-attach` first in the DOM puts a secondary control
-  // between the composer's edge and the field the reader came to type in.
+test("the composer is attach, then input, then send — Swift's order", async () => {
+  // Swift decides this one: ChatInputView's HStack is `paperclip Button` then
+  // the input, and the upstream tip still reads that way. What made the leading
+  // slot look wrong here was weight, not position — a word-width labelled
+  // button where Swift draws a 32pt glyph.
+  // red-proof: reordering to `chat-draft, chat-attach, chat-send` invents a
+  // third answer that neither Swift nor this repo's mobile template agrees with.
   const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
   const rendered = await renderComponent(ChatProduction, {
     store: threadStore({ messages: [human("m1", "yo what's up")] }),
@@ -250,16 +254,39 @@ test("the composer leads with the input, then attach, then send", async () => {
   try {
     const row = rendered.container.querySelector(".chat-composer-row");
     const order = [...row.children].map((node) => node.className.split(" ")[0]);
-    assert.deepEqual(order, ["chat-draft", "chat-attach", "chat-send"]);
+    assert.deepEqual(order, ["chat-attach", "chat-draft", "chat-send"]);
     // Mobile lays the same three out in two columns plus a full-width Send row,
-    // so its template has to follow the DOM order too. Left as `auto minmax(0,
-    // 1fr)` it kept sizing column one for the button that no longer sits there
-    // and shrink-wrapped the textarea instead.
+    // so its template has to follow the DOM order too: a template that sizes
+    // column one for the wrong child shrink-wraps the textarea.
     const css = await read("src/production/chat.css");
     assert.match(
       css,
-      /html\[data-platform="mobile"\] \.chat-composer-row \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto/,
+      /html\[data-platform="mobile"\] \.chat-composer-row \{[^}]*grid-template-columns: auto minmax\(0, 1fr\)/,
     );
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("attach is a named glyph, not a word, and never a nameless one", async () => {
+  // The whole point of moving to Swift's weight is that the control stops
+  // spending a word of the composer on itself. That is only safe while the
+  // accessible name survives the visible text going away.
+  // red-proof: rendering `{t(locale, "chat.attach")}` as the button's child puts
+  // the word back; dropping `aria-label` leaves a button a screen reader can
+  // only call "button" — and `check-accessibility-names` fails the build on it.
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const rendered = await renderComponent(ChatProduction, {
+    store: threadStore({ messages: [human("m1", "yo what's up")] }),
+  });
+  try {
+    const attach = rendered.container.querySelector(".chat-attach");
+    assert.ok(attach, "attaching is still offered");
+    assert.equal(attach.textContent.trim(), "", "no visible word in the leading slot");
+    assert.equal(attach.getAttribute("aria-label"), EN_MESSAGES["chat.attach"]);
+    const icon = attach.querySelector("svg.production-icon");
+    assert.ok(icon, "the glyph comes from the audited icon vocabulary");
+    assert.equal(icon.getAttribute("aria-hidden"), "true", "the glyph is not a second name");
   } finally {
     await rendered.cleanup();
   }
