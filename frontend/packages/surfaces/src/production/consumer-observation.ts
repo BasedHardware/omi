@@ -73,7 +73,8 @@ export function readRenderedConsumerObservation(
     const frames = Number(surface.dataset["frameTotal"]);
     const image = surface.dataset["frameImage"];
     if (!Number.isSafeInteger(frames) || frames < 0) return null;
-    if (frames > 0 && image !== "ready") return null;
+    const hostCannotDecode = image === "unavailable" && surface.dataset["bridge"] === "absent";
+    if (frames > 0 && image !== "ready" && !hostCannotDecode) return null;
   }
   if (renderedRoute === "listen") {
     return transcript === null

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi_webview_proto/listen_preflight_policy.dart';
 import 'package:omi_webview_proto/listen_socket_host.dart';
 
 void main() {
@@ -21,6 +22,24 @@ void main() {
     expect(isListenProtocolReady('{"type":"service_status","status":"starting"}'), isFalse);
     expect(isListenProtocolReady('{"type":"open"}'), isFalse);
     expect(isListenProtocolReady('not-json'), isFalse);
+  });
+
+  test('evidence audio opens Listen without a granted microphone or input device', () {
+    // red-proof: drop evidenceAudioEnabled from canOpen; denied/unavailable
+    // would block the synthetic PCM path the way the simulator 124 did.
+    expect(listenPreflightCanOpen(<Object?, Object?>{'permission': 'denied', 'deviceState': 'unavailable'}), isFalse);
+    expect(
+      listenPreflightCanOpen(
+        <Object?, Object?>{'permission': 'denied', 'deviceState': 'unavailable'},
+        evidenceAudioEnabled: true,
+      ),
+      isTrue,
+    );
+    expect(listenPreflightCanOpen(<Object?, Object?>{'permission': 'granted', 'deviceState': 'available'}), isTrue);
+    expect(listenEvidencePreflightPayload['permission'], 'granted');
+    expect(listenEvidencePreflightPayload['deviceState'], 'available');
+    expect(listenEvidencePreflightPayload['deviceLabel'], 'Evidence audio');
+    expect(listenEvidencePreflightPayload['recovery'], isNull);
   });
 
   test('native Listen evidence gate sends exact audio once to a hermetic local service', () async {

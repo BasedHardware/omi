@@ -417,19 +417,45 @@ if [[ -z "$container" || ! -d "$container/Documents" ]]; then
 fi
 container_result="$container/Documents/$evidence_filename"
 rm -f -- "$container_result"
-xcrun simctl launch "$device" "$bundle_id" >/dev/null
+launch_out="$(xcrun simctl launch "$device" "$bundle_id")"
+printf '%s\n' "$launch_out"
 launched=1
+app_pid=""
+if [[ "$launch_out" =~ :[[:space:]]*([0-9]+)[[:space:]]*$ ]]; then
+  app_pid="${BASH_REMATCH[1]}"
+fi
+
+dump_ios_probe_log() {
+  local probe_log="$container/Documents/probe-log.txt"
+  [[ -s "$probe_log" ]] || return 0
+  echo "ERROR: iOS probe-log (last 80 lines):" >&2
+  tail -n 80 "$probe_log" >&2
+  if [[ -n "${OMI_DEV_STACK_RUNDIR:-}" && -d "${OMI_DEV_STACK_RUNDIR}" ]]; then
+    cp "$probe_log" "$OMI_DEV_STACK_RUNDIR/ios-probe-log.txt" || true
+  fi
+}
 
 evidence_wait_seconds="${OMI_CONSUMER_EVIDENCE_WAIT_SECONDS:-180}"
 if [[ ! "$evidence_wait_seconds" =~ ^[0-9]+$ ]] || (( evidence_wait_seconds < 1 || evidence_wait_seconds > 300 )); then
   echo "ERROR: OMI_CONSUMER_EVIDENCE_WAIT_SECONDS must be 1..300." >&2
   exit 2
 fi
+app_was_alive=0
 for ((second = 0; second < evidence_wait_seconds; second++)); do
   [[ -s "$container_result" ]] && break
+  if [[ -n "$app_pid" ]]; then
+    if kill -0 "$app_pid" 2>/dev/null; then
+      app_was_alive=1
+    elif (( app_was_alive )); then
+      dump_ios_probe_log
+      echo "ERROR: iOS evidence process exited before writing the native result." >&2
+      exit 1
+    fi
+  fi
   sleep 1
 done
 if [[ ! -s "$container_result" ]]; then
+  dump_ios_probe_log
   echo "ERROR: native iOS result was not written within ${evidence_wait_seconds}s." >&2
   exit 124
 fi

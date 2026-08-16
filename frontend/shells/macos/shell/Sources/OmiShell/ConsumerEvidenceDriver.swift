@@ -214,7 +214,10 @@ final class ConsumerEvidenceDriver {
         semantic: e.dataset.consumerSemantic || null,
         transcriptPresent: e.dataset.consumerTranscript !== undefined,
         startListenPresent: Boolean(button),
-        startListenDisabled: button ? Boolean(button.disabled) : null
+        startListenDisabled: button ? Boolean(button.disabled) : null,
+        bridge: e.dataset.bridge || null,
+        frameTotal: e.dataset.frameTotal || null,
+        frameImage: e.dataset.frameImage || null
       });
     })()
     """#
@@ -234,7 +237,7 @@ final class ConsumerEvidenceDriver {
         const frames = Number(e.dataset.frameTotal);
         const image = e.dataset.frameImage;
         if (!Number.isSafeInteger(frames) || frames < 0) return null;
-        if (frames > 0 && image !== 'ready') return null;
+        if (frames > 0 && image !== 'ready' && !(image === 'unavailable' && e.dataset.bridge === 'absent')) return null;
       }
       if (route === 'listen') {
         const transcript = e.dataset.consumerTranscript;

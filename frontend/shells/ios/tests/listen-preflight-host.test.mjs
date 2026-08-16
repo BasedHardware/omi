@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import test from "node:test";
 
@@ -28,6 +28,8 @@ test("iOS Listen preflight uses native permission APIs and never exposes hardwar
   assert.match(dartHost, /__omiListenPreflightEvent/);
   assert.match(dartHost, /listenPreflightCanOpen/);
   assert.match(dartHost, /_listenPreflightReady/);
+  assert.match(dartHost, /if \(evidenceAudioEnabled\) return true/);
+  assert.match(dartHost, /_emitEvidencePreflight/);
   assert.match(dartHost, /'type': 'close', 'code': 1008/);
   assert.match(dartHost, /permission.*unavailable/s);
   assert.doesNotMatch(dartHost, /device(?:Id|UUID|Uid)\b|serial(?:number)?\b/i);
@@ -44,13 +46,22 @@ test(
 void main() {
   print('DENIED=' + policy.listenPreflightCanOpen(<Object?, Object?>{'permission': 'denied', 'deviceState': 'unavailable'}).toString());
   print('GRANTED=' + policy.listenPreflightCanOpen(<Object?, Object?>{'permission': 'granted', 'deviceState': 'available'}).toString());
+  print('EVIDENCE=' + policy.listenPreflightCanOpen(<Object?, Object?>{'permission': 'denied', 'deviceState': 'unavailable'}, evidenceAudioEnabled: true).toString());
+  print('LABEL=' + (policy.listenEvidencePreflightPayload['deviceLabel'] as String));
 }
 `);
       const output = execFileSync("dart", ["run", main], { encoding: "utf8" });
       assert.match(output, /DENIED=false/);
       assert.match(output, /GRANTED=true/);
+      assert.match(output, /EVIDENCE=true/);
+      assert.match(output, /LABEL=Evidence audio/);
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }
   },
 );
+
+test("L2 runs the iOS Listen preflight host red-proof", () => {
+  const lanes = readFileSync(resolve(ROOT, "../../../integration/lanes.mjs"), "utf8");
+  assert.match(lanes, /frontend\/shells\/ios\/tests\/listen-preflight-host\.test\.mjs/);
+});

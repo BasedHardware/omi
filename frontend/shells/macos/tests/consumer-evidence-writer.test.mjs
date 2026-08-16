@@ -31,6 +31,8 @@ test("macOS evidence driver authors through the rendered composer and waits for 
   assert.match(driver, /CONSUMER-EVIDENCE: accepted/);
   assert.match(driver, /CONSUMER-EVIDENCE: abort-at/);
   assert.match(driver, /startListenDisabled/);
+  assert.match(driver, /image === 'unavailable' && e\.dataset\.bridge === 'absent'/);
+  assert.match(driver, /frameImage: e\.dataset\.frameImage/);
   const runShell = readFileSync(join(root, "scripts/run-shell.sh"), "utf8");
   assert.match(runShell, /native shell abort/);
   assert.match(runShell, /CONSUMER-EVIDENCE:/);
