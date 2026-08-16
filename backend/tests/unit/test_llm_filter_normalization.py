@@ -1,6 +1,60 @@
+from __future__ import annotations
+
 import pytest
 
-from utils.llm.chat import normalize_filter
+from utils.llm import chat
+from utils.llm.chat import ExtractedInformation
+
+
+class FakeParser:
+    def __init__(self, response):
+        self.response = response
+
+    def invoke(self, prompt):
+        return self.response
+
+
+class FakeLLM:
+    def __init__(self, response):
+        self.response = response
+
+    def with_structured_output(self, output_model):
+        return FakeParser(self.response)
+
+
+@pytest.fixture
+def stored_items(monkeypatch):
+    stored = []
+
+    def fake_get_llm(feature):
+        response = ExtractedInformation(
+            people=['New York City!', 'John Patrick Doe'],
+            topics=['Artificial Intelligence Research', 'the great big topic'],
+            entities=['Bank of America', 'Natural Language Processing'],
+            dates=[],
+        )
+        return FakeLLM(response)
+
+    monkeypatch.setattr(chat, 'get_llm', fake_get_llm)
+    monkeypatch.setattr(chat, 'add_filter_category_item', lambda uid, cat, item: stored.append((cat, item)))
+    return stored
+
+
+def test_stored_filters_are_normalized_at_storage_boundary(monkeypatch, stored_items) -> None:
+    metadata = chat._process_extracted_metadata('uid-1', prompt='ignored', reference_date='2026-08-16')
+
+    assert metadata['people'] == ['new york', 'john patrick']
+    assert metadata['topics'] == ['ai research', 'great big']
+    assert metadata['entities'] == ['bank america', 'nlp']
+
+    assert sorted(stored_items) == [
+        ('entities', 'bank america'),
+        ('entities', 'nlp'),
+        ('people', 'john patrick'),
+        ('people', 'new york'),
+        ('topics', 'ai research'),
+        ('topics', 'great big'),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -21,4 +75,4 @@ from utils.llm.chat import normalize_filter
     ],
 )
 def test_normalize_filter(value, expected):
-    assert normalize_filter(value) == expected
+    assert chat.normalize_filter(value) == expected
