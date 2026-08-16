@@ -24,6 +24,15 @@ void main() {
     expect(isListenProtocolReady('not-json'), isFalse);
   });
 
+  test('control probe uses the same evidence-audio grant as consumer evidence', () {
+    // red-proof: return only consumerEvidence. The 2026-08-16 control probe
+    // timed out in listen-act because the simulator never grants TCC and the
+    // grant lived only on the evidence filename path.
+    expect(listenEvidenceAudioEnabled(consumerEvidence: true, controlProbe: false), isTrue);
+    expect(listenEvidenceAudioEnabled(consumerEvidence: false, controlProbe: true), isTrue);
+    expect(listenEvidenceAudioEnabled(consumerEvidence: false, controlProbe: false), isFalse);
+  });
+
   test('evidence audio opens Listen without a granted microphone or input device', () {
     // red-proof: drop evidenceAudioEnabled from canOpen; denied/unavailable
     // would block the synthetic PCM path the way the simulator 124 did.

@@ -12,6 +12,16 @@ const Map<String, Object?> listenEvidencePreflightPayload = <String, Object?>{
   'recovery': null,
 };
 
+/// Consumer evidence and the control probe are mutually exclusive hosts, but
+/// both run on a simulator that never grants microphone TCC. The same
+/// synthetic-PCM grant has to be wired through this second caller, or Start
+/// stays disabled and the probe times out in `listen-act`.
+bool listenEvidenceAudioEnabled({
+  required bool consumerEvidence,
+  required bool controlProbe,
+}) =>
+    consumerEvidence || controlProbe;
+
 bool listenPreflightCanOpen(
   Map<Object?, Object?> payload, {
   bool evidenceAudioEnabled = false,

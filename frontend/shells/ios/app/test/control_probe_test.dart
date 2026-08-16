@@ -113,6 +113,12 @@ void main() {
     expect(sent, contains(controlProbeScriptId));
     expect(sent, contains(controlProbeResultAttr));
     expect(controlProbePageBundle('(function () { return 1; })()'), contains('setInterval'));
+    expect(controlProbePageBundle('(function () { return 1; })()'), contains('data-omi-ca-steps'));
+    expect(controlProbePageBundle('(function () { return 1; })()'), contains('__omiCAHostPoll === document'));
+    expect(controlProbeDeferredInstallSource('(() => 1)()'), contains('__omiCAInstallWatch === document'));
+    expect(controlProbeDeferredShellWatchSource(), contains('__omiCAShellWatch === document'));
+    expect(controlProbeInstallSource('(function () {\nreturn 1;\n})()'), contains("data-production-shell='true'"));
+    expect(controlProbeDiagnosticSource, contains('data-omi-ca-steps'));
     expect(controlProbeShellProbeSource, contains('getElementById("root")'));
     expect(controlProbeShellProbeSource, contains("data-production-shell='true'"));
     expect(controlProbeShellProbeSource.contains(controlProbeScriptId), isFalse);
@@ -193,6 +199,37 @@ void main() {
     await driver.start();
     expect(sources.any((source) => source.contains('setTimeout')), isTrue);
     expect(controlProbeDeferredInstallSource('(() => 1)()'), contains(controlProbeChannelName));
+    expect(controlProbeDeferredInstallSource('(() => 1)()'), contains("data-production-shell='true'"));
+    expect(await result.readAsString(), 'PROBE_JS: $finished error: none\n');
+  });
+
+  test('resumeAfterNavigation re-injects while the result wait is open', () async {
+    // red-proof: keep __omiCAInstallWatch as a boolean so an <a href> to
+    // memories never re-injects (2026-08-16: mountLen:0, script:false).
+    final scratch = await Directory.systemTemp.createTemp('omi-ios-control-probe-resume-');
+    addTearDown(() => scratch.delete(recursive: true));
+    final result = File('${scratch.path}/$controlProbeResultFilename');
+    var installCount = 0;
+    const finished = '{"schema":"omi.control-acceptance.v1","steps":[{"slug":"home","verdict":"ready"}]}';
+    final driver = ControlProbeDriver(
+      driverSource: '(() => 1)()',
+      resultPath: result.path,
+      useJavaScriptChannel: true,
+      initialDelay: Duration.zero,
+      resultWait: const Duration(seconds: 2),
+      sleep: (_) async {},
+      evaluate: (source) async {
+        if (source.contains('__omiCAInstallWatch === document')) installCount += 1;
+        return controlProbePendingValue;
+      },
+    );
+    await driver.acceptChannel('shell:home');
+    final started = driver.start();
+    await Future<void>.delayed(Duration.zero);
+    await driver.resumeAfterNavigation();
+    await driver.acceptChannel(finished);
+    await started;
+    expect(installCount, greaterThanOrEqualTo(2));
     expect(await result.readAsString(), 'PROBE_JS: $finished error: none\n');
   });
 
@@ -214,6 +251,51 @@ void main() {
     );
     await driver.start();
     expect(await result.readAsString(), 'PROBE_JS: nil error: probe-evaluate-timeout\n');
+  });
+
+  test('probe timeout publishes recorded steps so CONTROL lines are not missing-step', () async {
+    // red-proof: keep only the PENDING timeout line. A 2026-08-16 iOS run had
+    // mic=transcript-rendered and screen=bridge-unreachable in window.name
+    // while every CONTROL slug printed missing-step.
+    final scratch = await Directory.systemTemp.createTemp('omi-ios-control-probe-steps-');
+    addTearDown(() => scratch.delete(recursive: true));
+    final result = File('${scratch.path}/$controlProbeResultFilename');
+    const steps = [
+      {'slug': 'home', 'verdict': 'ready'},
+      {'slug': 'mic', 'verdict': 'transcript-rendered'},
+      {'slug': 'screen', 'verdict': 'bridge-unreachable'},
+    ];
+    final driver = ControlProbeDriver(
+      driverSource: '(() => 1)()',
+      resultPath: result.path,
+      maxAttempts: 2,
+      retryInterval: Duration.zero,
+      initialDelay: Duration.zero,
+      sleep: (_) async {},
+      evaluate: (source) async {
+        if (source.contains('return "reset"')) return 'reset';
+        if (source.contains('if (!html) return "OMI_CONTROL_PENDING"') && source.contains('omi-ca-driver') == false) {
+          return 'home';
+        }
+        if (source.contains('hasRoot: !!root')) {
+          return jsonEncode({
+            'href': 'omi-ui://local/index.html?route=memories',
+            'phase': 'nav-wait',
+            'steps': steps,
+            'shell': false,
+          });
+        }
+        return controlProbePendingValue;
+      },
+    );
+    await driver.start();
+    final text = await result.readAsString();
+    expect(text, contains('probe-timeout:'));
+    expect(text, contains('"slug":"mic"'));
+    final last = text.trim().split('\n').last;
+    expect(last, startsWith('PROBE_JS: {"schema":"omi.control-acceptance.v1"'));
+    expect(last, contains('"verdict":"transcript-rendered"'));
+    expect(last, endsWith('error: none'));
   });
 
   test('probe driver rejects an empty program and tears down a failed write', () async {

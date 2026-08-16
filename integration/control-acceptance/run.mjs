@@ -15,6 +15,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildDriverSource } from "./driver-source.mjs";
+import { holdSimulatorLease } from "../lib/ios-lane-device.mjs";
 import {
   GATEWAY_REQUEST_LOG_NAME,
   JOURNEY_STEP_SLUGS,
@@ -50,43 +51,6 @@ function serving(url) {
     stdio: ["ignore", "pipe", "pipe"],
   });
   return result.status === 0;
-}
-
-function findBootedIosSimulator() {
-  const wanted = typeof process.env.OMI_IOS_DEVICE === "string" && process.env.OMI_IOS_DEVICE.length > 0
-    ? process.env.OMI_IOS_DEVICE
-    : null;
-  const listed = spawnSync("xcrun", ["simctl", "list", "devices", "booted", "-j"], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  if (listed.status !== 0) {
-    return { ok: false, reason: (listed.stderr || "xcrun simctl list devices booted failed").trim() };
-  }
-  let data;
-  try {
-    data = JSON.parse(listed.stdout);
-  } catch {
-    return { ok: false, reason: "simctl booted-device JSON was unreadable" };
-  }
-  const ios = [];
-  for (const [runtime, devices] of Object.entries(data?.devices ?? {})) {
-    if (!/iOS|iphoneos/i.test(runtime)) continue;
-    for (const device of devices ?? []) {
-      if (!device || device.state !== "Booted" || typeof device.udid !== "string") continue;
-      if (wanted && device.udid === wanted) {
-        return { ok: true, udid: device.udid, name: device.name ?? device.udid };
-      }
-      ios.push(device);
-    }
-  }
-  if (wanted) {
-    return { ok: false, reason: `OMI_IOS_DEVICE=${wanted} is not a booted iOS simulator` };
-  }
-  if (ios.length === 0) {
-    return { ok: false, reason: "no booted iOS simulator" };
-  }
-  return { ok: true, udid: ios[0].udid, name: ios[0].name ?? ios[0].udid };
 }
 
 function printReport(report) {
@@ -156,7 +120,9 @@ if (process.argv.includes("--help") || process.argv.includes("-h")) {
       "",
       "--ios           use frontend/shells/ios/scripts/dev-run-ios.sh. Origin is",
       "                the frozen custom scheme, not the macOS 5290/15290 lease.",
-      "                Mutually exclusive with --screen-proof.",
+      "                Acquires a run-scoped simulator lease; never attaches to a",
+      "                stranger's already-booted device. Mutually exclusive with",
+      "                --screen-proof.",
       "--screen-proof  only the Rewind capture control + omiScreenBridge round",
       "                trip. Does not send Chat. Use this when the local service",
       "                is already serving and the canned gateway is not paired with it.",
@@ -200,14 +166,7 @@ if (SCREEN_PROOF) {
 }
 
 let iosDevice = null;
-if (IOS) {
-  const sim = findBootedIosSimulator();
-  if (!sim.ok) {
-    fail(`ERROR: --ios needs a booted iOS simulator before the leased stack is created. ${sim.reason}`);
-  }
-  iosDevice = sim.udid;
-  process.stdout.write(`control-acceptance ios-simulator ${sim.name} ${sim.udid}\n`);
-}
+let simulatorLease = null;
 
 const runDir = mkdtempSync(join(tmpdir(), "omi-control-acceptance-"));
 const buildDir = join(runDir, "build");
@@ -220,11 +179,36 @@ const stopIfBooted = () => {
     stdio: "inherit",
   });
 };
-process.on("exit", stopIfBooted);
+const releaseSimulator = () => {
+  simulatorLease?.release();
+  simulatorLease = null;
+};
+process.on("exit", () => {
+  stopIfBooted();
+  releaseSimulator();
+});
 process.on("SIGINT", () => {
   stopIfBooted();
+  releaseSimulator();
   process.exit(130);
 });
+
+if (IOS) {
+  // A booted device with no live lease is someone else's (David's headed
+  // simulator, another tool). Attach only to a device this run leased.
+  try {
+    simulatorLease = holdSimulatorLease({
+      holderScript: join(PLATFORM_ROOT, "integration/lib/stack-simulator-lease.ts"),
+      runId: `control-ios-${process.pid}`,
+      outPath: join(runDir, "simulator-lease.json"),
+      parentPid: process.pid,
+    });
+  } catch (error) {
+    fail(`ERROR: --ios could not acquire a run-scoped simulator before the leased stack is created. ${error instanceof Error ? error.message : error}`);
+  }
+  iosDevice = simulatorLease.udid;
+  process.stdout.write(`control-acceptance ios-simulator ${simulatorLease.name} ${simulatorLease.udid}\n`);
+}
 
 if (!SCREEN_PROOF) {
   // Verification never attaches to 4851/8788/8791. Those ports are the

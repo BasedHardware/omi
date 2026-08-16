@@ -272,9 +272,12 @@ test("iOS reuses the macOS driver and verdict, and is not an L3/L4 gate", () => 
   assert.match(run, /IOS && SCREEN_PROOF/);
   assert.match(run, /OMI_PROBE_JS_FILE/);
   assert.match(run, /DRIVER_PATH/);
-  assert.match(run, /findBootedIosSimulator/);
-  assert.match(run, /no booted iOS simulator/);
+  assert.match(run, /holdSimulatorLease/);
+  assert.match(run, /stack-simulator-lease\.ts/);
+  assert.match(run, /could not acquire a run-scoped simulator/);
   assert.match(run, /before the leased stack is created/);
+  assert.doesNotMatch(run, /findBootedIosSimulator/);
+  assert.doesNotMatch(run, /no booted iOS simulator/);
   assert.match(run, /maxBuffer: 64 \* 1024 \* 1024/);
   assert.doesNotMatch(run, /skipped-simulator|skipped-no-bridge|skipped-no-mic/);
   assert.equal(SKIP_VERDICTS.includes("skipped-tcc-denied"), true);

@@ -96,8 +96,11 @@ String controlProbePageBundle(String driverSource) {
   return '''
 ${controlProbeStoragePrelude.trim()}
 (function () {
-  if (window.__omiCAHostPoll) return;
-  window.__omiCAHostPoll = true;
+  // Key the watch to this document. A 2026-08-16 run reused window across
+  // an <a href> to memories, left #root empty (mountLen:0, script:false),
+  // and never re-injected because a boolean watch stayed true.
+  if (window.__omiCAHostPoll === document) return;
+  window.__omiCAHostPoll = document;
   window.__omiCAResult = "$pending";
   if (document.documentElement) {
     document.documentElement.setAttribute("$attr", "$pending");
@@ -112,6 +115,10 @@ ${controlProbeStoragePrelude.trim()}
           document.documentElement.setAttribute(
             "data-omi-ca-phase",
             parsed && parsed.phase ? String(parsed.phase) : ""
+          );
+          document.documentElement.setAttribute(
+            "data-omi-ca-steps",
+            JSON.stringify(parsed && parsed.steps ? parsed.steps : [])
           );
         } catch (e0) {}
       }
@@ -143,6 +150,17 @@ String controlProbeInstallSource(String driverSource) {
   var root = document.documentElement;
   if (!root) return "$controlProbePendingValue";
   if (!document.getElementById("$controlProbeScriptId")) {
+    // A 2026-08-16 run that injected on a post-navigation document while
+    // #root was still empty left mountLen:0 for the rest of the timeout
+    // (phase=nav-wait, route=memories). Wait for the shell marker the same
+    // way the first inject does.
+    var mount = document.getElementById("root");
+    var html = mount && typeof mount.innerHTML === "string" ? mount.innerHTML : "";
+    var shell = document.querySelector("main[data-production-shell='true']");
+    var route = shell ? shell.getAttribute("data-route") : "";
+    if (!html || typeof route !== "string" || !route) {
+      return "$controlProbePendingValue";
+    }
     var script = document.createElement("script");
     script.id = "$controlProbeScriptId";
     script.textContent = $bundle;
@@ -201,6 +219,17 @@ const controlProbeDiagnosticSource = r'''
     mountHead: html.slice(0, 80),
     scripts: document.scripts ? document.scripts.length : 0,
     phase: root ? (root.getAttribute("data-omi-ca-phase") || "") : "",
+    steps: (function () {
+      try {
+        var attr = root ? root.getAttribute("data-omi-ca-steps") : null;
+        if (attr) return JSON.parse(attr);
+        if (typeof window.name === "string" && window.name.indexOf("omiCA:") === 0) {
+          var parsed = JSON.parse(window.name.slice("omiCA:".length));
+          return parsed && parsed.steps ? parsed.steps : [];
+        }
+      } catch (e) {}
+      return [];
+    })(),
     name: typeof window.name === "string" && window.name.indexOf("omiCA:") === 0
   });
 })()
@@ -212,8 +241,8 @@ String controlProbeDeferredShellWatchSource() {
   return '''
 (function () {
   setTimeout(function () {
-    if (window.__omiCAShellWatch) return;
-    window.__omiCAShellWatch = true;
+    if (window.__omiCAShellWatch === document) return;
+    window.__omiCAShellWatch = document;
     var tick = function () {
       var mount = document.getElementById("root");
       var html = mount && typeof mount.innerHTML === "string" ? mount.innerHTML : "";
@@ -237,12 +266,27 @@ String controlProbeDeferredInstallSource(String driverSource) {
   return '''
 (function () {
   setTimeout(function () {
-    var root = document.documentElement;
-    if (!root || document.getElementById("$controlProbeScriptId")) return;
-    var script = document.createElement("script");
-    script.id = "$controlProbeScriptId";
-    script.textContent = $bundle;
-    root.appendChild(script);
+    if (window.__omiCAInstallWatch === document) return;
+    window.__omiCAInstallWatch = document;
+    var tryInject = function () {
+      var root = document.documentElement;
+      if (!root || document.getElementById("$controlProbeScriptId")) {
+        if (window.__omiCAInstallTimer) clearInterval(window.__omiCAInstallTimer);
+        return;
+      }
+      var mount = document.getElementById("root");
+      var html = mount && typeof mount.innerHTML === "string" ? mount.innerHTML : "";
+      var shell = document.querySelector("main[data-production-shell='true']");
+      var route = shell ? shell.getAttribute("data-route") : "";
+      if (!html || typeof route !== "string" || !route) return;
+      var script = document.createElement("script");
+      script.id = "$controlProbeScriptId";
+      script.textContent = $bundle;
+      root.appendChild(script);
+      if (window.__omiCAInstallTimer) clearInterval(window.__omiCAInstallTimer);
+    };
+    window.__omiCAInstallTimer = setInterval(tryInject, 400);
+    tryInject();
   }, 0);
   return "$controlProbePendingValue";
 })()
@@ -400,6 +444,20 @@ final class ControlProbeDriver {
     await _startViaEvaluate();
   }
 
+  /// Re-inject the page-world driver after an `<a href>` navigation. The
+  /// previous document's script is gone; sessionStorage/window.name is not.
+  /// Must not reset storage.
+  Future<void> resumeAfterNavigation() async {
+    if (!_started || _wrote) return;
+    final result = _resultCompleter;
+    if (useJavaScriptChannel && (result == null || result.isCompleted)) return;
+    try {
+      await _evaluateBounded(controlProbeDeferredInstallSource(driverSource));
+    } on TimeoutException {
+      // The result wait still owns the timeout.
+    }
+  }
+
   Future<void> _startViaChannel() async {
     _shellCompleter = Completer<String>();
     _resultCompleter = Completer<String>();
@@ -437,10 +495,12 @@ final class ControlProbeDriver {
       final value = await _resultCompleter!.future.timeout(resultWait);
       await writeLine(formatProbeJsLine(value: value));
     } on TimeoutException {
-      await writeLine(formatProbeJsLine(
-        value: pendingValue,
+      await _writeTimeout(
+        lastValue: pendingValue,
         error: 'probe-timeout:channel;lastShell=$lastShell;injected=true;dartQuery=${hostQuery.replaceAll(RegExp(r'\s+'), '')}',
-      ));
+        lastShellValue: lastShell,
+        shellReady: true,
+      );
     }
   }
 
@@ -504,27 +564,52 @@ final class ControlProbeDriver {
     required String? lastShellValue,
     required bool shellReady,
   }) async {
-    await writeLine(formatProbeJsLine(value: lastValue, error: error));
+    String? diagnostic;
+    List<dynamic>? steps;
     try {
-      final diagnostic = normalizeProbeJsResult(await _evaluateBounded(controlProbeDiagnosticSource));
+      diagnostic = normalizeProbeJsResult(await _evaluateBounded(controlProbeDiagnosticSource));
       if (diagnostic != null && diagnostic != pendingValue && diagnostic.startsWith('{')) {
-        final query = hostQuery.replaceAll(RegExp(r'\s+'), '');
-        await writeLine(formatProbeJsLine(
-          value: lastValue,
-          error: 'probe-timeout:$diagnostic;lastShell=${lastShellValue ?? 'nil'};injected=$shellReady;dartQuery=$query',
-        ));
+        final decoded = jsonDecode(diagnostic);
+        if (decoded is Map && decoded['steps'] is List) {
+          steps = decoded['steps'] as List<dynamic>;
+        }
       }
     } catch (_) {
-      // The pending line above is enough for verdict.parseProbeJsLine.
+      diagnostic = null;
     }
+    final query = hostQuery.replaceAll(RegExp(r'\s+'), '');
+    final timeoutLine = diagnostic != null && diagnostic.startsWith('{')
+        ? formatProbeJsLine(
+            value: lastValue,
+            error:
+                'probe-timeout:$diagnostic;lastShell=${lastShellValue ?? 'nil'};injected=$shellReady;dartQuery=$query',
+          )
+        : formatProbeJsLine(value: lastValue, error: error);
+    if (steps != null && steps.isNotEmpty) {
+      // Recorded outcomes are the CONTROL lines. A timeout that swallowed
+      // them printed every slug missing-step after Listen had already
+      // rendered a transcript (measured 2026-08-16).
+      await writeBody(
+        '$timeoutLine\n${formatProbeJsLine(value: jsonEncode({
+          'schema': 'omi.control-acceptance.v1',
+          'steps': steps,
+        }))}\n',
+      );
+      return;
+    }
+    await writeLine(timeoutLine);
   }
 
   Future<void> writeLine(String line, {bool finished = true}) async {
+    await writeBody('$line\n', finished: finished);
+  }
+
+  Future<void> writeBody(String body, {bool finished = true}) async {
     final result = File(resultPath);
     await result.parent.create(recursive: true);
     final temporary = File('$resultPath.$pid.${DateTime.now().microsecondsSinceEpoch}.tmp');
     try {
-      await temporary.writeAsString('$line\n', flush: true);
+      await temporary.writeAsString(body, flush: true);
       await temporary.rename(resultPath);
       if (finished) _wrote = true;
     } finally {
