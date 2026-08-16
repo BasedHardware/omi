@@ -78,8 +78,7 @@ DailySummary _summary({List<LocationPin>? locations}) {
     headline: 'A day around the city',
     overview: 'A productive day.',
     stats: DayStats(totalConversations: 1, totalDurationMinutes: 30),
-    locations:
-        locations ??
+    locations: locations ??
         [
           LocationPin(latitude: 37.7749, longitude: -122.4194, address: 'Home, San Francisco', time: '08:00'),
           LocationPin(latitude: 37.7849, longitude: -122.4094, address: 'Office, San Francisco', time: '10:00'),

@@ -16,10 +16,10 @@ class IntegrationProvider extends ChangeNotifier {
     IntegrationSaver? saveStatus,
     IntegrationDeleter? deleteStatus,
     IntegrationPrefWriter? persistPref,
-  }) : _fetchStatus = fetchStatus ?? getIntegration,
-       _saveStatus = saveStatus ?? saveIntegration,
-       _deleteStatus = deleteStatus ?? deleteIntegration,
-       _persistPref = persistPref ?? _defaultPersistPref;
+  })  : _fetchStatus = fetchStatus ?? getIntegration,
+        _saveStatus = saveStatus ?? saveIntegration,
+        _deleteStatus = deleteStatus ?? deleteIntegration,
+        _persistPref = persistPref ?? _defaultPersistPref;
 
   final IntegrationStatusFetcher _fetchStatus;
   final IntegrationSaver _saveStatus;
