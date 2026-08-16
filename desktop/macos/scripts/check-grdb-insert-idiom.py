@@ -31,6 +31,16 @@ one insert idiom, `inserted(db)`. The direct form buys nothing here, every
 production seam already uses `inserted(db)`, and any new direct `.insert(db)` is
 rejected regardless of the receiver's conformance.
 
+Two properties keep that rule honest without a Swift type checker:
+
+  * Comments and string literals are blanked before matching, so
+    `// never call record.insert(db)` and `let hint = "record.insert(db)"` are
+    not reported. See `mask_comments_and_strings`.
+  * A match must be a `try` expression. Every GRDB insert overload throws, so a
+    real call always carries `try`; `Set.insert`/`Array.insert` do not throw, so
+    `values.insert(db)` on a `Set<Int>` cannot be mistaken for one. This costs no
+    false negatives, because an untried `record.insert(db)` does not compile.
+
 Real instances this would have caught, both fixed before this checker landed:
   * `Screenshot` in RewindDatabase.insertScreenshot (#11208) - RewindIndexer
     never queued a captured frame for embedding, because every consumer was
@@ -56,12 +66,21 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DESKTOP_DIR = SCRIPT_DIR.parent
 DEFAULT_SOURCES_DIR = DESKTOP_DIR / "Desktop" / "Sources"
 
-# A GRDB persistence call is identified by its database-handle argument. Set and
-# Array inserts in this codebase pass ids, keys and elements (`.insert(task.id)`,
-# `.insert(task, at: 0)`), never a bare `db`/`database`, so this cannot collide
-# with them.
+# Two signals identify a GRDB persistence call without resolving the receiver's type:
+#
+# 1. The argument is a database handle. `db`/`database` name a GRDB
+#    `Database`/`DatabaseQueue`/`DatabasePool` everywhere in Desktop/Sources; Set and
+#    Array inserts pass ids, keys and elements (`.insert(task.id)`, `.insert(task, at: 0)`).
+# 2. The call is a `try` expression. Every GRDB insert overload throws, so real calls
+#    always carry `try`, while `Set.insert`/`Array.insert` do not throw and so cannot.
+#
+# Together these keep `values.insert(db)` on a `Set<Int>` out of the report without
+# needing a Swift type checker, and they cannot hide a real insert: an untried
+# `record.insert(db)` does not compile.
 DB_HANDLE_NAMES = ("db", "database")
 DIRECT_INSERT = re.compile(
+    r"\btry\b[!?]?\s*(?:await\s+)?"
+    r"[A-Za-z_][A-Za-z0-9_]*(?:[?!]?\.[A-Za-z_][A-Za-z0-9_]*|\[[^\]\n]*\])*"
     r"\.insert\(\s*(?P<handle>" + "|".join(DB_HANDLE_NAMES) + r")\s*(?=[,)])"
 )
 
@@ -72,18 +91,110 @@ REMEDY = (
 )
 
 
-def find_violations(sources_dir: Path) -> list[tuple[Path, int, str]]:
-    """Return (path, line number, line text) for every direct GRDB insert."""
-    violations: list[tuple[Path, int, str]] = []
+def mask_comments_and_strings(text: str) -> str:
+    """Blank out Swift comments and string literals, preserving offsets and newlines.
+
+    The checker matches source code, not prose: `// never call record.insert(db)` and
+    `let hint = "record.insert(db)"` are not calls. Blanking rather than deleting keeps
+    every byte offset and line number identical to the original file.
+
+    Covers the Swift lexical forms that can contain the pattern: line comments, nested
+    block comments, single-line strings with escapes, multiline `\"\"\"` strings, and raw
+    strings with any number of `#` delimiters (where `\\` is not an escape).
+    """
+    out = list(text)
+    length = len(text)
+    index = 0
+
+    def blank(start: int, end: int) -> None:
+        for position in range(start, min(end, length)):
+            if out[position] != "\n":
+                out[position] = " "
+
+    while index < length:
+        char = text[index]
+
+        if char == "/" and text.startswith("//", index):
+            end = text.find("\n", index)
+            end = length if end == -1 else end
+            blank(index, end)
+            index = end
+            continue
+
+        if char == "/" and text.startswith("/*", index):
+            depth = 1
+            cursor = index + 2
+            while cursor < length and depth:
+                if text.startswith("/*", cursor):
+                    depth += 1
+                    cursor += 2
+                elif text.startswith("*/", cursor):
+                    depth -= 1
+                    cursor += 2
+                else:
+                    cursor += 1
+            blank(index, cursor)
+            index = cursor
+            continue
+
+        if char in '#"':
+            hashes = 0
+            cursor = index
+            while cursor < length and text[cursor] == "#":
+                hashes += 1
+                cursor += 1
+            if cursor >= length or text[cursor] != '"':
+                # `#available`, `#selector`, a lone `#` — not a string literal.
+                index = cursor + 1 if hashes else index + 1
+                continue
+
+            pound = "#" * hashes
+            multiline = text.startswith('"""', cursor)
+            terminator = ('"""' + pound) if multiline else ('"' + pound)
+            cursor += 3 if multiline else 1
+
+            while cursor < length:
+                if hashes == 0 and text[cursor] == "\\":
+                    cursor += 2
+                    continue
+                if hashes and text.startswith("\\" + pound, cursor):
+                    cursor += 1 + hashes + 1
+                    continue
+                if text.startswith(terminator, cursor):
+                    cursor += len(terminator)
+                    break
+                if not multiline and text[cursor] == "\n":
+                    # Unterminated single-line string; do not swallow the rest of the file.
+                    break
+                cursor += 1
+
+            blank(index, cursor)
+            index = cursor
+            continue
+
+        index += 1
+
+    return "".join(out)
+
+
+def find_violations(sources_dir: Path) -> list[tuple[Path, int, str, str]]:
+    """Return (path, line number, line text, handle) for every direct GRDB insert."""
+    violations: list[tuple[Path, int, str, str]] = []
     for path in sorted(sources_dir.rglob("*.swift")):
         try:
             text = path.read_text(encoding="utf-8")
         except OSError as exc:  # pragma: no cover - unreadable file is a real failure
             print(f"check-grdb-insert-idiom: cannot read {path}: {exc}", file=sys.stderr)
             raise SystemExit(2) from exc
-        for lineno, line in enumerate(text.splitlines(), start=1):
-            if DIRECT_INSERT.search(line):
-                violations.append((path, lineno, line.strip()))
+        masked = mask_comments_and_strings(text)
+        original_lines = text.splitlines()
+        for match in DIRECT_INSERT.finditer(masked):
+            # The call site is where `.insert(` sits, which may be a continuation line
+            # below the `try` that opened the expression.
+            insert_offset = masked.index(".insert(", match.start(), match.end())
+            lineno = masked.count("\n", 0, insert_offset) + 1
+            line = original_lines[lineno - 1].strip() if lineno <= len(original_lines) else ""
+            violations.append((path, lineno, line, match.group("handle")))
     return violations
 
 
@@ -111,13 +222,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     print("FAIL: direct GRDB insert(db) found; the rowid-capturing idiom is inserted(db)")
-    for path, lineno, line in violations:
+    for path, lineno, line, handle in violations:
         try:
             display = path.relative_to(Path.cwd())
         except ValueError:
             display = path
-        handle_match = DIRECT_INSERT.search(line)
-        handle = handle_match.group("handle") if handle_match else "db"
         print(f"- {display}:{lineno}: {line}")
         print(f"  {REMEDY.format(handle=handle)}")
     return 1
