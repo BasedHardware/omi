@@ -35,6 +35,10 @@ import {
   DEMO_PERSONA_MEMORY_COUNT,
   parseSeedPersona,
 } from "../qa/demo-persona";
+import {
+  ensureLocalOwnerWriteReady,
+  LocalOwnerWriteReadyError,
+} from "../qa/local-owner-cutover";
 import { QA_EVIDENCE_PATH } from "../routes/qa-evidence";
 import { SCREEN_RETENTION_INTERVAL_MS } from "../screen/retention-worker";
 import { createSqliteLocalServiceStores } from "../../../drivers/sqlite/service-stores";
@@ -333,6 +337,31 @@ const main = async (): Promise<void> => {
   } catch (error) {
     void transcriptionSource?.dispose();
     return fail(`failed to seed QA data: ${error instanceof Error ? error.message : "unknown error"}`, "seed_failed");
+  }
+
+  // A local-first stack has one account and no migration to stage. Platform
+  // writes need `account_generation: "new"` and an activated epoch; the headed
+  // app does not run the QA observe/activate dance the `/v1/tasks/ops` tests
+  // do. Cut over only when the projection is absent. A durable partial or
+  // poisoned row is a boot failure — restaging from revision 1 would poison
+  // every subsequent write.
+  try {
+    const outcome = ensureLocalOwnerWriteReady(
+      service.writePath.control,
+      config.ownerAccountId,
+    );
+    appendRuntimeLog({
+      proc: "service",
+      level: "info",
+      event: "service.local_owner_write_ready",
+      outcome,
+    });
+  } catch (error) {
+    void transcriptionSource?.dispose();
+    const message = error instanceof LocalOwnerWriteReadyError
+      ? error.message
+      : error instanceof Error ? error.message : "unknown error";
+    return fail(`failed to admit the local owner for platform writes: ${message}`, "local_owner_cutover_failed");
   }
 
   let server: { stop: (closeActive?: boolean) => void };

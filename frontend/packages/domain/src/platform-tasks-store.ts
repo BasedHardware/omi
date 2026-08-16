@@ -76,6 +76,7 @@ export class PlatformTasksStore {
   private aliases: Record<string, string> = {};
   private revisionToRecordId: Record<string, string> = {};
   private knownRecordIds = new Set<string>();
+  private readonly createInFlight = new Set<string>();
   private readonly refreshTracker: RefreshTracker;
 
   private constructor(
@@ -204,11 +205,26 @@ export class PlatformTasksStore {
   }
 
   async create(description: string, dueAt?: number): Promise<void> {
-    const op = buildCreateTask(this.env, description, dueAt);
-    this.knownRecordIds.add(op.id);
-    await this.persistIdentity();
-    await this.outbox.enqueue(taskToPendingOp(op));
-    this.notify();
+    // write_id stays minted (B1). Deriving it from description collides with
+    // opFingerprint (account_epoch + domain + whole op including record_id and
+    // createdAt) and the server answers write_id_reuse — a permanent dead
+    // letter, worse than two cards. Double-tap is coalesced here instead:
+    // same normalized text as an in-flight or incomplete listed/pending task
+    // does not enqueue a second create. Completing or deleting the open row
+    // is a new task, on purpose — two "Buy milk"s after the first is done.
+    const key = normalizeTaskCreateKey(description);
+    if (this.createInFlight.has(key)) return;
+    this.createInFlight.add(key);
+    try {
+      if (await this.hasOpenTaskWithDescription(key)) return;
+      const op = buildCreateTask(this.env, description, dueAt);
+      this.knownRecordIds.add(op.id);
+      await this.persistIdentity();
+      await this.outbox.enqueue(taskToPendingOp(op));
+      this.notify();
+    } finally {
+      this.createInFlight.delete(key);
+    }
   }
 
   async patch(id: string, patch: TaskPatch): Promise<void> {
@@ -295,6 +311,11 @@ export class PlatformTasksStore {
     this.notify();
   }
 
+  private async hasOpenTaskWithDescription(key: string): Promise<boolean> {
+    const listed = await this.list();
+    return listed.some((item) => !item.completed && normalizeTaskCreateKey(item.description) === key);
+  }
+
   private observeEpoch(epoch: unknown): void {
     this.epochs.observeAccountEpoch(epoch);
   }
@@ -343,6 +364,10 @@ export class PlatformTasksStore {
 }
 
 /** First occurrence wins, so deterministic server order survives. */
+function normalizeTaskCreateKey(description: string): string {
+  return description.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 function dedupeById(items: readonly PlatformTaskItem[]): readonly PlatformTaskItem[] {
   const seen = new Set<string>();
   const out: PlatformTaskItem[] = [];
