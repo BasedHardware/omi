@@ -44,7 +44,7 @@ html[data-platform="desktop"] .home-search-hero {
   -webkit-backdrop-filter: blur(28px) saturate(1.28);
   backdrop-filter: blur(28px) saturate(1.28);
 }
-html[data-platform="desktop"] .home-search input { min-height: var(--min-tap-target); padding: 5px 44px; font-size: 21px; line-height: 24px; letter-spacing: -.25px; }
+html[data-platform="desktop"] .home-search input { min-height: var(--min-tap-target); padding: 5px 44px; font-size: var(--type-search-size); line-height: 24px; letter-spacing: -.25px; }
 html[data-platform="desktop"] .home-chat-entry { grid-row: 2; justify-self: end; width: min(420px, 100%); border-color: var(--glass-border); background: var(--glass-surface-soft); box-shadow: inset 0 1px 0 var(--glass-highlight); }
 html[data-platform="desktop"] .home-results-panel {
   grid-row: 3;
@@ -56,7 +56,7 @@ html[data-platform="desktop"] .home-results-panel {
   -webkit-backdrop-filter: blur(30px) saturate(1.25);
   backdrop-filter: blur(30px) saturate(1.25);
 }
-html[data-platform="desktop"] .home-kind-filter button { min-height: var(--min-tap-target); padding: 3px 11px; border-color: transparent; background: var(--glass-surface-soft); font-size: 11px; }
+html[data-platform="desktop"] .home-kind-filter button { min-height: var(--min-tap-target); padding: 3px 11px; border-color: transparent; background: var(--glass-surface-soft); font-size: var(--type-label-size); }
 html[data-platform="desktop"] .home-kind-filter button[aria-pressed="true"] { background: var(--glass-surface-strong); box-shadow: inset 0 0 0 1px var(--glass-border); }
 html[data-platform="desktop"] .home-result-row { grid-template-columns: 34px minmax(0,1fr); min-height: 58px; padding: 7px 8px; border-bottom: 1px solid var(--control-border); border-radius: 10px; }
 html[data-platform="desktop"] .home-result-icon { width: var(--min-tap-target); min-height: var(--min-tap-target); }

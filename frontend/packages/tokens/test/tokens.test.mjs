@@ -57,7 +57,10 @@ test("ships a complete visual-state token contract without an unbundled font", (
 });
 
 test("defines one executable content role, measure, truncation, and date-granularity matrix", () => {
-  assert.deepEqual(Object.keys(TYPOGRAPHY_CONTENT_POLICY), ["display", "title", "heading", "body", "row", "label", "meta", "button", "code"]);
+  assert.deepEqual(Object.keys(TYPOGRAPHY_CONTENT_POLICY), [
+    "display", "title", "heading", "body", "row", "label", "meta", "button", "code",
+    "search", "glyph", "accessory", "micro", "hint", "kbd",
+  ]);
   for (const theme of Object.values(SEMANTIC_TOKENS)) {
     const type = theme.typography;
     assert.ok(type.display.size >= type.title.size, `${theme.name} display is at least as large as title`);
@@ -79,6 +82,15 @@ test("defines one executable content role, measure, truncation, and date-granula
   for (const theme of Object.values(SEMANTIC_TOKENS)) {
     assert.deepEqual(Object.keys(theme.typography), Object.keys(TYPOGRAPHY_CONTENT_POLICY));
   }
+  const desktop = getTheme("desktopLightGlass").typography;
+  assert.equal(desktop.search.size, 21);
+  assert.equal(desktop.glyph.size, 18);
+  assert.equal(desktop.accessory.size, 17);
+  assert.equal(desktop.micro.size, 10);
+  assert.equal(desktop.hint.size, 9);
+  assert.equal(desktop.kbd.size, 8);
+  assert.notEqual(desktop.search.size, desktop.title.size, "21px search must not round into 22px title");
+  assert.equal(getTheme("desktopDarkGlass").typography.kbd.size, 8);
 });
 
 function parseColor(value) {
