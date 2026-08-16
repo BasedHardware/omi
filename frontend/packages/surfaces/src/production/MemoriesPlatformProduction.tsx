@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatDate, t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
-import type { ProductionSynthesizedMemoryStore } from "./ProductionStores.js";
+import type { ProductionMemoryCorrectionStore, ProductionSynthesizedMemoryStore } from "./ProductionStores.js";
 import type { SynthesizedMemoryItem, SynthesizedRecallState } from "@omi-core/contracts";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
+import { ProductionIcon } from "./ProductionIcon.js";
+import { createProductionCommandRegistry, dispatchProductionCommand } from "./command-registry.js";
 import {
   citationSummary,
   completenessNotice,
@@ -17,19 +19,22 @@ import {
 import "./memories-platform.css";
 
 /**
- * Platform-generation Memories (board ruling PR-2).
+ * Platform-generation Memories (board ruling PR-2, edit retirement 2026-08-16).
  *
  * A READ model over ratified contracts 0.1.1: stable human-readable propositions with
  * lineage, latest projection by default, citations and provenance shown when present and
- * absent-safe when not. There is no editing, no visibility toggle, no delete and no
- * create, because the wire carries none of those. The legacy editable surface still lives
- * in `MemoriesProduction.tsx`; the two are different generations, not versions.
+ * absent-safe when not. There is no in-place edit, no visibility toggle and no delete,
+ * because the wire carries none of those. Correction is adding a fact through
+ * `POST /v1/stm-notes/ops` — a new note, consolidated, not a patch of a proposition.
  *
  * Every honesty decision on this screen comes from `proposition-presentation.ts`, which is
- * pure and directly tested. This component renders those decisions and adds none.
+ * pure and directly tested. This component renders those decisions and adds none, except
+ * the correction composer, whose copy is required not to claim immediacy the pipeline
+ * does not deliver.
  */
 
 type Locale = string;
+const commandRegistry = createProductionCommandRegistry();
 
 function propositionPrimaryText(item: SynthesizedMemoryItem, locale: Locale): string {
   const content = presentPropositionContent(item.text);
@@ -83,8 +88,9 @@ function PropositionCard({ item, locale }: {
   );
 }
 
-export function MemoriesPlatformProduction({ store, source, locale = "en", onReady }: {
+export function MemoriesPlatformProduction({ store, correction, source, locale = "en", onReady }: {
   store: ProductionSynthesizedMemoryStore;
+  correction: ProductionMemoryCorrectionStore;
   /**
    * Required, not optional: every call site must declare whether these rows are a review
    * corpus or the signed-in account's real data. A surface that cannot say which one it
@@ -100,6 +106,9 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
   const [query, setQuery] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [correctionStatus, setCorrectionStatus] = useState<"idle" | "submitting" | "accepted" | "error">("idle");
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
@@ -157,6 +166,35 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
     setLoadingMore(false);
   };
 
+  const submitFact = async (): Promise<void> => {
+    const text = draft.trim();
+    if (!text || correctionStatus === "submitting") return;
+    setCorrectionStatus("submitting");
+    setOperationError(null);
+    try {
+      await correction.submitFact(text);
+      setDraft("");
+      setComposerOpen(false);
+      setCorrectionStatus("accepted");
+      await reload();
+      try {
+        await store.refresh();
+      } catch {
+        setOperationError(t(locale, "lifecycle.error"));
+      }
+      await reload();
+    } catch {
+      setCorrectionStatus("error");
+      setOperationError(t(locale, "memoriesPlatform.correctionFailed"));
+    }
+  };
+  const cancelComposer = (): void => {
+    setDraft("");
+    setComposerOpen(false);
+    if (correctionStatus === "submitting") return;
+    if (correctionStatus !== "accepted") setCorrectionStatus("idle");
+  };
+
   return (
     <main
       className="production-shell"
@@ -169,6 +207,7 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
       data-qa-fixture={source.kind === "fixture" ? source.fixture : "none"}
       data-consumer-semantic={`memories:visible:${visibleItems.length}:total:${items.length}`}
       data-completeness={completeness.kind}
+      data-correction-status={correctionStatus}
     >
       <ProductionChrome locale={locale} active="memories" placement="top" />
       <section className="desktop-page-panel">
@@ -202,7 +241,39 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
           )}
         </div>
         <ProductionLiveAnnouncement message={t(locale, "lifecycle.resultsCount", { count: visibleItems.length })} />
-        <p className="proposition-read-only-note">{t(locale, "memoriesPlatform.readOnlyNote")}</p>
+        <p className="proposition-read-only-note">{t(locale, "memoriesPlatform.correctionNote")}</p>
+        {correctionStatus === "accepted" && (
+          <p className="proposition-correction-accepted" role="status" data-correction-accepted="true">
+            {t(locale, "memoriesPlatform.correctionAccepted")}
+          </p>
+        )}
+        {composerOpen && (
+          <form
+            className="fact-correction"
+            data-correction-composer="true"
+            aria-label={t(locale, "memoriesPlatform.correctionTitle")}
+            onSubmit={(event) => { event.preventDefault(); void submitFact(); }}
+          >
+            <textarea
+              autoFocus
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={t(locale, "memoriesPlatform.correctionPlaceholder")}
+              aria-label={t(locale, "memoriesPlatform.correctionTitle")}
+              onKeyDown={(event) => {
+                dispatchProductionCommand(event.nativeEvent, commandRegistry, {
+                  activeRoute: "memories",
+                  navigate: () => undefined,
+                  handlers: { "save-memory": () => void submitFact(), "cancel-memory": cancelComposer },
+                });
+              }}
+            />
+            <p className="fact-correction-help">{t(locale, "memoriesPlatform.correctionHelp")}</p>
+            <button type="submit" disabled={!draft.trim() || correctionStatus === "submitting"}>
+              {t(locale, "memoriesPlatform.correctionSubmit")}
+            </button>
+          </form>
+        )}
         <div className="proposition-controls">
           <ProductionSearchField
             className="proposition-search"
@@ -211,6 +282,22 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
             value={query}
             onValueChange={setQuery}
           />
+          <button
+            className="fact-correction-trigger"
+            type="button"
+            aria-expanded={composerOpen}
+            aria-label={composerOpen ? t(locale, "common.cancel") : t(locale, "memoriesPlatform.correctionTitle")}
+            title={composerOpen ? t(locale, "common.cancel") : t(locale, "memoriesPlatform.correctionTitle")}
+            onClick={() => {
+              if (composerOpen) cancelComposer();
+              else {
+                setComposerOpen(true);
+                if (correctionStatus !== "accepted") setCorrectionStatus("idle");
+              }
+            }}
+          >
+            <ProductionIcon name={composerOpen ? "close" : "plus"} />
+          </button>
         </div>
         {presentation === "recall-unknown" ? (
           <div className="empty-state" data-empty-kind="recall-unknown">

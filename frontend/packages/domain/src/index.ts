@@ -8,6 +8,7 @@ export * from "./folders-store.js";
 export * from "./generation-selection.js";
 export * from "./memories-codec.js";
 export * from "./memories-store.js";
+export * from "./memory-correction-store.js";
 export * from "./platform-conversations-store.js";
 export * from "./platform-folders-store.js";
 export * from "./platform-settings-store.js";

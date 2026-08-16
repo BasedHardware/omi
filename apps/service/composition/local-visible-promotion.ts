@@ -28,6 +28,15 @@ export interface LocalVisiblePromotionReport {
  * the structured claim and writes a new canonical revision with literal
  * arguments so the existing QA synthesizer can render the fact. It does not
  * filter, quality-gate, or drop user content.
+ *
+ * LOCKED-ROW PRINCIPLE (legacy `is_locked` carried forward, 2026-08-16): a user-asserted fact is never silently overwritten.
+ * Mechanism: this function only appends new canonical revisions for provisionals
+ * that have not already been promoted (`alreadyCanonical` via
+ * `source_provisional_revision_ids`). It copies `evidence_refs` and literal
+ * argument surfaces; it does not mutate an existing canonical claim. There is
+ * no content-patch door on the synthesized projection (`POST /v1/memories/ops`
+ * stays 422). A later user note is a new create (`POST /v1/stm-notes/ops`,
+ * `op: "create"` only).
  */
 export const promoteLocalVisibleClaims = (
   ledger: SqliteLedger,

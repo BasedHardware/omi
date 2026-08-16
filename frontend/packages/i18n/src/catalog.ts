@@ -447,13 +447,18 @@ export const EN_MESSAGES = {
   "dataSource.live": "Your account data",
   "dataSource.detail": "{source} · {detail}",
 
-  // Platform-generation Memories (synthesized read model). This surface renders
-  // propositions with lineage. It has no editing copy on purpose: the ratified
-  // read contract carries no editable memory fields.
+  // Platform-generation Memories (synthesized read model). Correction is adding
+  // a fact through consolidation — never an in-place edit of a proposition.
   "memoriesPlatform.title": "Memories",
   "memoriesPlatform.subtitle": "What Omi has learned and can use to help you.",
   "memoriesPlatform.propositions": "Memories",
-  "memoriesPlatform.readOnlyNote": "Omi updates these memories as it learns. They cannot be edited here yet.",
+  "memoriesPlatform.correctionNote": "To correct something, add a fact. Omi learns it as a new fact; it does not rewrite an existing memory in place.",
+  "memoriesPlatform.correctionTitle": "Add a fact",
+  "memoriesPlatform.correctionPlaceholder": "Add a fact Omi should know",
+  "memoriesPlatform.correctionHelp": "This is saved as a note. Omi will learn it as a new fact, not as an edit of an existing memory.",
+  "memoriesPlatform.correctionSubmit": "Add fact",
+  "memoriesPlatform.correctionAccepted": "Saved as a note. It will appear among your memories after Omi learns it, as a new fact rather than an edit of an existing one.",
+  "memoriesPlatform.correctionFailed": "Omi could not save that note.",
   "memoriesPlatform.filterSavedPlaceholder": "Filter memories",
   "memoriesPlatform.emptyBody": "Memories will appear here as Omi learns what matters to you.",
   "memoriesPlatform.queryGapTitle": "No memories found",

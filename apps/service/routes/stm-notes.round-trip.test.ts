@@ -7,10 +7,15 @@
  * text that carries the fact. Red-proof: the same assertion fails when the
  * local pipeline is unwired (`accept-only`).
  */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { parseSynthesizedPageJson } from "@omi-core/ratified-contracts/projections/synthesized";
+import { WRITE_ERRORS } from "@omi-core/ratified-contracts/write/ops";
 
 import {
   createInMemoryLocalServiceStores,
@@ -261,6 +266,66 @@ describe("HTTP user-asserted note round trip at GET /v1/memories", () => {
     hop("rendered", rendered.texts);
     expect(rendered.status).toBe(200);
     expect(rendered.texts.some((text) => text.includes(NOTE_FACT))).toBe(true);
+  });
+
+  test("a later note adds; it does not overwrite the first user-asserted fact", async () => {
+    const booted = bootNotes("wired");
+    await cutOver(booted);
+    const first = await postNote(booted, noteEnvelope(NOTE_FACT, "c"));
+    expect(first.status).toBe(200);
+    const CORRECTION = "Atlas likes almond milk at Harborline Cafe";
+    const second = await postNote(booted, noteEnvelope(CORRECTION, "d"));
+    expect(second.status).toBe(200);
+    const rendered = await renderedMemories(booted.service, booted.service.devToken);
+    hop("rendered-additive", rendered.texts);
+    expect(rendered.status).toBe(200);
+    expect(rendered.texts.some((text) => text.includes(NOTE_FACT))).toBe(true);
+    expect(rendered.texts.some((text) => text.includes(CORRECTION))).toBe(true);
+  });
+
+  test("POST /v1/memories/ops cannot patch a synthesized memory", async () => {
+    const booted = bootNotes("wired");
+    await cutOver(booted);
+    await postNote(booted, noteEnvelope(NOTE_FACT, "e"));
+    const before = await renderedMemories(booted.service, booted.service.devToken);
+    const response = await booted.service.app.request("/v1/memories/ops", {
+      method: "POST",
+      headers: {
+        authorization: booted.auth,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        write_id: writeId("f"),
+        account_epoch: ACTIVE_EPOCH,
+        domain: "memories",
+        op: { op: "patch", record_id: "anything", patch: { text: "silently overwritten" } },
+      }),
+    });
+    expect(response.status).toBe(WRITE_ERRORS.validation.status);
+    expect(await response.text()).toBe(WRITE_ERRORS.validation.body);
+    const after = await renderedMemories(booted.service, booted.service.devToken);
+    expect(after.texts).toEqual(before.texts);
+    expect(after.texts.some((text) => text.includes("silently overwritten"))).toBe(false);
+    expect(after.texts.some((text) => text.includes(NOTE_FACT))).toBe(true);
+  });
+});
+
+describe("locked-row principle on the platform path", () => {
+  test("the mechanism is append-only promotion and create-only notes, not a locked field", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const promotion = readFileSync(join(here, "../composition/local-visible-promotion.ts"), "utf8");
+    const notes = readFileSync(join(here, "stm-notes.ts"), "utf8");
+    expect(promotion).toContain("alreadyCanonical");
+    expect(promotion).toContain("source_provisional_revision_ids");
+    expect(promotion).toContain("canonical:local-visible:");
+    expect(promotion).toContain("a user-asserted fact is never silently overwritten");
+    expect(notes).toContain('op.op !== "create"');
+    expect(notes).toContain('write_door: "http"');
+    expect(notes).toContain("The note is never quality-gated or dropped");
+    const quality = readFileSync(join(here, "../../../core/extract/quality.ts"), "utf8");
+    expect(quality).not.toContain("source_trust");
+    expect(quality).not.toContain("user_asserted");
+    expect(quality).toContain("distributional");
   });
 });
 

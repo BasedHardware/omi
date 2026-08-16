@@ -9,6 +9,7 @@ export * from "./listen.js";
 export * from "./memories.js";
 export * from "./screen.js";
 export * from "./settings.js";
+export * from "./stm-notes.js";
 export * from "./tasks-ops.js";
 export * from "./tasks.js";
 export * from "./write-ops.js";

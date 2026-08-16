@@ -57,6 +57,12 @@
  *   (`memory_api_contract.memory_api_payload` strips neither internal- nor
  *   canonical-lifecycle-listed fields that would cover it), so this is a
  *   signal we may rely on rather than infer.
+ *
+ * David's 2026-08-16 ruling retires in-place memory editing on the platform
+ * path. This lock remains the legacy truncation guard; it is not deleted
+ * here (eviction of adapters-legacy is a different lane). The platform
+ * equivalent is the append-only promotion of user-asserted notes, not a
+ * `locked` field on the synthesized projection.
  */
 
 import type { Memory, MemoryIdSnapshot, MemoryOp, MemoryPatch } from "@omi-core/contracts";
