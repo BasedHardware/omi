@@ -103,7 +103,7 @@ const productInfo = {
   description: 'AI-powered wearable necklace. Real-time AI voice assistant.',
   price: '89',
   currency: 'USD',
-  url: 'https://www.omi.me/products/friend-dev-kit-2',
+  url: 'https://www.omi.me/products/omi-dev-kit-2',
 };
 
 const appStoreInfo = {
