@@ -240,9 +240,6 @@ struct SettingsContentView: View {
   // Glow preview state
   @State var isPreviewRunning: Bool = false
 
-  // Downgrade confirmation alert
-  @State var showDowngradeAlert = false
-
   // Tier gating (0 = show all, 1-6 = sequential tiers)
   @AppStorage("currentTierLevel") var currentTierLevel = 0
 
@@ -362,6 +359,7 @@ struct SettingsContentView: View {
   @AppStorage("multiChatEnabled") var multiChatEnabled = false
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
   @AppStorage("useLegacyHomeDesign") var useLegacyHomeDesign = false
+  @AppStorage("speakNotificationsAloud") var speakNotificationsAloud = false
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"

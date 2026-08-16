@@ -58,7 +58,6 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         workflows = ROOT / ".github" / "workflows"
         cls.dev = (workflows / "desktop_backend_auto_dev.yml").read_text(encoding="utf-8")
         cls.prod = (workflows / "desktop_backend_prod.yml").read_text(encoding="utf-8")
-        cls.qualification = (workflows / "desktop_qualify_beta.yml").read_text(encoding="utf-8")
         cls.stable = (workflows / "desktop_promote_prod.yml").read_text(encoding="utf-8")
         cls.recovery = (workflows / "desktop_backend_recover_prod.yml").read_text(encoding="utf-8")
         cls.dockerfile = (ROOT / "backend/Dockerfile.desktop_backend").read_text(encoding="utf-8")
@@ -70,7 +69,6 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
             POLICY.validate_all(
                 dev=self.dev,
                 prod=self.prod,
-                qualification=self.qualification,
                 stable=self.stable,
                 recovery=self.recovery,
                 dockerfile=self.dockerfile,
@@ -243,17 +241,8 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
 
     def test_rejects_missing_release_compatibility_gate(self) -> None:
         mutated = self.stable.replace("Verify live desktop-backend chat compatibility", "Compatibility omitted")
-        errors = POLICY.validate_desktop_release_gates(self.qualification, mutated)
+        errors = POLICY.validate_desktop_release_gates(mutated)
         self.assertTrue(any("desktop_promote_prod.yml" in error for error in errors), errors)
-
-    def test_rejects_beta_qualification_against_production_desktop_backend(self) -> None:
-        mutated = self.qualification.replace(
-            "https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
-            "https://desktop-backend-hhibjajaja-uc.a.run.app",
-            1,
-        )
-        errors = POLICY.validate_desktop_release_gates(mutated, self.stable)
-        self.assertTrue(any("desktop_qualify_beta.yml" in error for error in errors), errors)
 
     def test_rejects_an_agent_vm_job_argument_that_deploy_cloudrun_would_split(self) -> None:
         mutated = self.dev.replace("'--args=-m,jobs.agent_vm_reconciler'", "--args=-m,jobs.agent_vm_reconciler", 1)
@@ -283,24 +272,6 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                         mutated = workflow[:start] + mutated_block + workflow[start + len(block) :]
                         errors = POLICY.validate_deploy_workflow(mutated, production=production)
                         self.assertTrue(any(contract in error and "request service" in error for error in errors), errors)
-
-    def test_rejects_beta_qualification_without_development_python_health(self) -> None:
-        mutated = self.qualification.replace(
-            "https://api.omiapi.com/v1/health",
-            "https://api.omi.me/v1/health",
-            1,
-        )
-        errors = POLICY.validate_desktop_release_gates(mutated, self.stable)
-        self.assertTrue(any("development Python" in error for error in errors), errors)
-
-    def test_rejects_beta_qualification_without_production_firebase_uid_continuity(self) -> None:
-        mutated = self.qualification.replace(
-            "Prove production Firebase UID continuity on Beta development authorities",
-            "UID continuity omitted",
-            1,
-        )
-        errors = POLICY.validate_desktop_release_gates(mutated, self.stable)
-        self.assertTrue(any("UID continuity" in error for error in errors), errors)
 
     def test_rejects_development_serving_with_a_development_firebase_project(self) -> None:
         mutated = self.dev.replace(

@@ -21,6 +21,13 @@ enum CaptureListeningLogic {
     isCaptureMonitoring || ProactiveAssistantsPlugin.shared.isMonitoring
   }
 
+  /// The top-bar / Home listening readout. A session that is only *armed* (Only Meetings, no
+  /// call) is inactive — the mic is paused, so lighting the green dot would lie.
+  static func listeningStatus(appState: AppState) -> HomeStatusState {
+    if appState.transcriptionServiceError != nil { return .blocked }
+    return appState.isLiveCapturing ? .active : .inactive
+  }
+
   static func audioRecordingMode(raw: String) -> AssistantSettings.AudioRecordingMode {
     AssistantSettings.AudioRecordingMode(rawValue: raw) ?? .onlyMeetings
   }
@@ -55,17 +62,50 @@ enum CaptureListeningLogic {
     }
   }
 
+  /// Off → Always On → Only Meetings → Off.
+  ///
+  /// `AudioRecordingMode` has three cases, but the control only ever reached two of them: it
+  /// flipped between `.off` and `.onlyMeetings`, so `.always` — the mode that actually records
+  /// continuously — could not be selected from the top bar or Home at all, and turning the
+  /// microphone "on" silently armed a gate that keeps it shut until a call starts.
+  static func nextAudioRecordingMode(after mode: AssistantSettings.AudioRecordingMode)
+    -> AssistantSettings.AudioRecordingMode
+  {
+    switch mode {
+    case .off: return .always
+    case .always: return .onlyMeetings
+    case .onlyMeetings: return .off
+    }
+  }
+
+  /// The name of a *mode*, for naming a state the session is not in yet.
+  ///
+  /// Distinct from `listeningModeTitle`, which describes the **running** session and may answer
+  /// with the live microphone's own name ("Ray-Ban Meta") or with "In Meeting". That is the right
+  /// answer for "what is happening now" and the wrong one for "what does this click select".
+  static func audioRecordingModeTitle(_ mode: AssistantSettings.AudioRecordingMode) -> String {
+    switch mode {
+    case .off: return "Off"
+    case .always: return "Always On"
+    case .onlyMeetings: return "Only Meetings"
+    }
+  }
+
   // MARK: Actions
 
-  static func toggleListening(
+  /// Advance the control one step. Returns the mode it landed on so a caller can react to the
+  /// transition itself, or `nil` when the click was spent on the permission prompt and the state
+  /// did not move.
+  @discardableResult
+  static func cycleListening(
     appState: AppState, audioRecordingModeRaw: Binding<String>, isTogglingListening: Binding<Bool>
-  ) {
+  ) -> AssistantSettings.AudioRecordingMode? {
     let currentMode = audioRecordingMode(raw: audioRecordingModeRaw.wrappedValue)
-    let nextMode: AssistantSettings.AudioRecordingMode = currentMode == .off ? .onlyMeetings : .off
+    let nextMode = nextAudioRecordingMode(after: currentMode)
     let enabled = nextMode != .off
     if enabled && !appState.hasMicrophonePermission {
       appState.requestMicrophonePermission()
-      return
+      return nil
     }
 
     isTogglingListening.wrappedValue = true
@@ -75,6 +115,7 @@ enum CaptureListeningLogic {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
       isTogglingListening.wrappedValue = false
     }
+    return nextMode
   }
 
   static func toggleCapture(

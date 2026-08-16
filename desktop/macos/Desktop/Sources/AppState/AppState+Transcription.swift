@@ -616,6 +616,8 @@ extension AppState {
     isAwaitingMeeting = mode == .onlyMeetings && !meetingActive
 
     guard meetingStateReady else {
+      // Fail closed while the gate has not answered — see `pauseCaptureWhileMeetingGateUnknown`.
+      pauseCaptureIfMeetingGateUnknown(mode: mode, meetingStateReady: meetingStateReady)
       log("Transcription: waiting for meeting detector before changing capture state")
       return
     }

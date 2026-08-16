@@ -9887,4 +9887,11 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Deschide magazinul';
+
+  @override
+  String get sendRawAudioToOmi => 'Trimite sunetul brut către Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Dezactivează pentru a împiedica trimiterea sunetului brut către Omi. Transcrierile și datele necesare funcțiilor cloud pot fi trimise în continuare către Omi.';
 }

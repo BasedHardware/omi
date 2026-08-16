@@ -49,24 +49,27 @@ enum ShellSummonPlacement {
   /// The size a shell that has never been placed on this display arrives at.
   ///
   /// Deliberately smaller than the old managed-window default: a surface you summon over your work
-  /// should read as a panel you called up, not as an application you switched to. It stays above
-  /// `DesktopWindowLayoutPolicy.minimumContentSize`, which is the floor the destinations lay out to.
-  static let defaultSize = NSSize(width: 960, height: 700)
+  /// should read as a panel you called up, not as an application you switched to. Width is the
+  /// hugged glass (readable lane + page margins), so a 5K display still gets a panel, not a sheet.
+  /// It stays above `DesktopWindowLayoutPolicy.minimumContentSize`, which is the floor the
+  /// destinations lay out to.
+  static let defaultSize = NSSize(
+    width: DesktopWindowLayoutPolicy.maximumContentWidth, height: 700)
 
   /// Where the shell lands on a given display.
   ///
   /// A remembered frame wins, shrunk and nudged until it fits — a display can get smaller (resolution
   /// change, a scaled mode, a menu bar appearing) and a frame restored past the edge is a shell with
-  /// its query field off-screen. With nothing remembered it is centred, which is where a summoned
-  /// surface belongs the first time you ask for it.
+  /// its query field off-screen. Width is also clamped to the hug max so a frame remembered from the
+  /// pre-hug oversized window cannot restore the invisible border. With nothing remembered it is
+  /// centred, which is where a summoned surface belongs the first time you ask for it.
   static func frame(remembered: NSRect?, visibleFrame: NSRect, defaultSize: NSSize = defaultSize) -> NSRect {
     guard let remembered, remembered.width > 1, remembered.height > 1 else {
       return centered(defaultSize, in: visibleFrame)
     }
-    let size = NSSize(
-      width: min(remembered.width, visibleFrame.width),
-      height: min(remembered.height, visibleFrame.height))
-    return clamped(NSRect(origin: remembered.origin, size: size), into: visibleFrame)
+    return clamped(
+      NSRect(origin: remembered.origin, size: fitted(remembered.size, in: visibleFrame)),
+      into: visibleFrame)
   }
 
   /// The least of a shell a person can actually use: enough visible surface to read the panel and
@@ -108,14 +111,23 @@ enum ShellSummonPlacement {
   }
 
   static func centered(_ size: NSSize, in visibleFrame: NSRect) -> NSRect {
-    let fitted = NSSize(
-      width: min(size.width, visibleFrame.width),
-      height: min(size.height, visibleFrame.height))
+    let fittedSize = fitted(size, in: visibleFrame)
     return NSRect(
-      x: visibleFrame.midX - fitted.width / 2,
-      y: visibleFrame.midY - fitted.height / 2,
-      width: fitted.width,
-      height: fitted.height)
+      x: visibleFrame.midX - fittedSize.width / 2,
+      y: visibleFrame.midY - fittedSize.height / 2,
+      width: fittedSize.width,
+      height: fittedSize.height)
+  }
+
+  /// Points, not pixels: `visibleFrame` is already in points, and Retina scale must not change this.
+  static func fitted(
+    _ size: NSSize,
+    in visibleFrame: NSRect,
+    maxWidth: CGFloat = DesktopWindowLayoutPolicy.maximumContentWidth
+  ) -> NSSize {
+    NSSize(
+      width: min(size.width, visibleFrame.width, maxWidth),
+      height: min(size.height, visibleFrame.height))
   }
 
   private static func clamped(_ rect: NSRect, into visibleFrame: NSRect) -> NSRect {

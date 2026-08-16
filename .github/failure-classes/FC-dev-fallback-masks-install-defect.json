@@ -4,8 +4,7 @@
   "violated_contract": "A packaged app must resolve every runtime resource from inside its own bundle; a development-only fallback path must never be the reason a launch check passes.",
   "canonical_prevention": "Resolve resources through the app's own Contents/Resources accessor (Bundle.resourceBundle) and verify launch on a machine or layout where no repo checkout or .build fallback exists; forbid the SwiftPM generated Bundle.module accessor in app sources via tripwire.",
   "canonical_prevention_artifact": [
-    "desktop/macos/scripts/launcher-bootstrap.sh",
-    ".github/scripts/test_desktop_release_flow_contract.py"
+    "desktop/macos/scripts/launcher-bootstrap.sh"
   ],
   "evidence_prs": [
     10350

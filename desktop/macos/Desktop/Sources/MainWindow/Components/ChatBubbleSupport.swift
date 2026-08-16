@@ -19,6 +19,49 @@ enum ChatBubbleTruncation {
   }
 }
 
+/// Assistant `text_delta` before the first tool call is commentary, not the answer.
+/// The host still concatenates every delta into `message.text`; this projection is
+/// what the bubble, copy affordance, and truncation must use instead.
+enum ChatAssistantAnswerText {
+  static func visible(
+    contentBlocks: [ChatContentBlock],
+    fallback: String,
+    isStreaming: Bool
+  ) -> String {
+    func texts(in slice: ArraySlice<ChatContentBlock>) -> [String] {
+      slice.compactMap { block in
+        guard case .text(_, let text) = block else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+      }
+    }
+
+    let fallbackText = fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard
+      let lastTool = contentBlocks.lastIndex(where: { block in
+        if case .toolCall = block { return true }
+        return false
+      })
+    else {
+      let fromBlocks = texts(in: contentBlocks[...]).joined(separator: "\n")
+      return fromBlocks.isEmpty ? fallbackText : fromBlocks
+    }
+
+    let afterTools = texts(in: contentBlocks[(lastTool + 1)...])
+    if !afterTools.isEmpty {
+      return afterTools.joined(separator: "\n")
+    }
+    if isStreaming {
+      return ""
+    }
+    let beforeTools = texts(in: contentBlocks[..<lastTool])
+    if !beforeTools.isEmpty {
+      return beforeTools.joined(separator: "\n")
+    }
+    return fallbackText
+  }
+}
+
 /// Shared understated date treatment for a transcript row and its prompt-rail
 /// preview. Keeping this outside the bubble makes the time contextual rather
 /// than part of the message itself.
@@ -44,13 +87,30 @@ struct ChatMessageTimestamp: View {
 /// the message and started reading as page furniture. Today says the time; this
 /// year adds the day; only another year is worth naming.
 enum ChatMessageTimestampFormat {
-  static func text(for date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
-    let time = date.formatted(.dateTime.hour().minute())
+  /// - Parameters:
+  ///   - calendar: decides *and* renders. Which day a message belongs to and which day the stamp
+  ///     says have to be the same question: `Date.FormatStyle` otherwise resolves against
+  ///     `.autoupdatingCurrent`, so a caller passing any other calendar would get "today" decided in
+  ///     one zone and the clock time printed in another — a 1:28 PM stamp on a row the same call
+  ///     just decided was yesterday.
+  ///   - locale: how the stamp is worded; the user's, so the month reads in their language.
+  static func text(
+    for date: Date, now: Date = Date(), calendar: Calendar = .current, locale: Locale = .current
+  ) -> String {
+    func render(_ style: Date.FormatStyle) -> String {
+      var style = style
+      style.calendar = calendar
+      style.timeZone = calendar.timeZone
+      style.locale = locale
+      return date.formatted(style)
+    }
+
+    let time = render(.dateTime.hour().minute())
     if calendar.isDate(date, inSameDayAs: now) { return time }
     if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
-      return "\(date.formatted(.dateTime.month(.abbreviated).day())) · \(time)"
+      return "\(render(.dateTime.month(.abbreviated).day())) · \(time)"
     }
-    return "\(date.formatted(.dateTime.year().month(.abbreviated).day())) · \(time)"
+    return "\(render(.dateTime.year().month(.abbreviated).day())) · \(time)"
   }
 }
 
@@ -249,6 +309,8 @@ struct BackgroundAgentSummary: Equatable {
 /// Footer actions for an assistant row. A finished reply is rateable as soon as
 /// it has copyable text; waiting for `isSynced` hid thumbs on the live tail
 /// because completion clears streaming before the journal remote id lands.
+/// Persistence of that rating is `ChatMessageRatingPersistence` — show the
+/// buttons now, PATCH after sync.
 enum ChatBubbleMetadataBand: Equatable {
   case hidden
   case timestampOnly

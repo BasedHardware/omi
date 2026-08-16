@@ -82,9 +82,9 @@ enum PageGlassLaneLayout {
   /// having jumped on navigation.
   static let topGap: CGFloat = OmiSpacing.sm
 
-  /// …and the same margin under it, so the panel reads as a floating object with a bottom edge rather
-  /// than as a sheet that runs out of window.
-  static var bottomGap: CGFloat { topGap }
+  /// Flush with the window's bottom edge so the resize handle sits on the visible panel, not on
+  /// an invisible gutter under it.
+  static let bottomGap: CGFloat = 0
 }
 
 // MARK: - The panel

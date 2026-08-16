@@ -75,6 +75,14 @@ _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER = 'X-Omi-Memory-Default-Delete-Supported
 _MEMORY_NEXT_CURSOR_HEADER = 'X-Omi-Memory-Next-Cursor'
 
 
+def _normalize_memory_list_cursor(cursor: Optional[str]) -> Optional[str]:
+    """Treat missing/blank cursor as first-page so ``?cursor=`` cannot skip the fallback."""
+    if cursor is None:
+        return None
+    stripped = cursor.strip()
+    return stripped or None
+
+
 class BatchMemoriesRequest(BaseModel):
     memories: List[Memory] = Field(
         description="List of memories to create in a single batch request",
@@ -540,6 +548,7 @@ def get_memories(
 
     # Cursor and legacy offset paging are mutually exclusive. Cursor mode owns
     # accounts beyond the bounded offset compatibility window.
+    cursor = _normalize_memory_list_cursor(cursor)
     if cursor is not None and bounded_offset != 0:
         raise HTTPException(
             status_code=400,
@@ -576,7 +585,15 @@ def get_memories(
                 include_archive=include_archive,
             )
         except HTTPException as exc:
-            if exc.status_code != 503 or exc.detail != "Memory cursor unavailable":
+            # First page must succeed whenever the legacy offset read can serve
+            # it. The cursor path 503s on a missing cursor secret
+            # ("Memory cursor unavailable"); the canonical keyset scan wraps any
+            # underlying failure as "Canonical memory unavailable". Both fall
+            # back to read(); unrelated errors (4xx, other 503s) propagate.
+            if exc.status_code != 503 or exc.detail not in (
+                "Memory cursor unavailable",
+                "Canonical memory unavailable",
+            ):
                 raise
         else:
             if page.next_cursor:

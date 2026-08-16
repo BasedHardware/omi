@@ -513,7 +513,7 @@ def main() -> int:
     errors.extend(check_desktop_candidate_trigger_authority())
     errors.extend(check_codemagic_release_publishers())
     errors.extend(check_desktop_preview_publishing())
-    errors.extend(check_desktop_qualification_runner())
+    errors.extend(check_desktop_promotion_independent_of_qualification())
     errors.extend(check_desktop_update_docs())
     errors.extend(check_no_unprovisioned_beta_backend_hosts())
     errors.extend(check_mobile_codemagic_release_triggers())
@@ -897,62 +897,9 @@ def check_desktop_preview_publishing() -> list[str]:
     return errors
 
 
-def check_desktop_qualification_runner() -> list[str]:
-    path = ROOT / ".github/workflows/desktop_qualify_beta.yml"
-    if not path.exists():
-        return ["desktop release is missing the trusted macOS qualification workflow"]
-
-    text = path.read_text(encoding="utf-8")
+def check_desktop_promotion_independent_of_qualification() -> list[str]:
+    """Promotion and recovery must not reintroduce the deleted qualification lane."""
     errors: list[str] = []
-    if "pull_request:" in text or "push:" in text:
-        errors.append("desktop qualification runner must not execute pull-request or push workflows")
-    for required_fragment in (
-        "workflow_dispatch:",
-        "self-hosted",
-        "macos",
-        "omi-desktop-qualification",
-        'git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"',
-        "check-desktop-auto-beta-candidate.py",
-        "--automatic",
-        "actions/create-github-app-token@v3",
-        "Checkout trusted qualification controls",
-        "path: qualification-controls",
-        "group: desktop-beta-qualification-m1",
-        "cancel-in-progress: false",
-    ):
-        if required_fragment not in text:
-            errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")
-    if "desktop_promote_beta.yml" in text:
-        errors.append("desktop qualification runner must not promote beta inside its own run")
-    if "qualify-m4-mini" in text or "plan-fallbacks" in text:
-        errors.append("desktop qualification runner must use only the global M1 fallback lane")
-    probe_start = text.find("Prove production Firebase UID continuity on Beta development authorities")
-    probe_end = text.find("Fetch candidate release inputs into this run only", probe_start)
-    probe = text[probe_start:probe_end] if probe_start >= 0 and probe_end > probe_start else ""
-    for required_fragment in (
-        "umask 077",
-        'gha_application_credentials_file="${GOOGLE_APPLICATION_CREDENTIALS:?google-github-actions/auth did not provide credentials}"',
-        'gha_credentials_file="${GOOGLE_GHA_CREDS_PATH:-$gha_application_credentials_file}"',
-        "trap 'rm -f -- \"$gha_application_credentials_file\" \"$gha_credentials_file\" \"$signer_file\" \"$token_file\"' EXIT",
-        'rm -f -- "$signer_file"',
-        'rm -f -- "$gha_application_credentials_file" "$gha_credentials_file"',
-        "unset GOOGLE_APPLICATION_CREDENTIALS GOOGLE_GHA_CREDS_PATH CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
-        "unset FIREBASE_PROBE_SIGNER_B64",
-    ):
-        if required_fragment not in probe:
-            errors.append(f"desktop qualification runner is missing Firebase probe cleanup: {required_fragment}")
-    if not (
-        probe.find("firebase_release_probe_token.py")
-        < probe.rfind('rm -f -- "$signer_file"')
-        < probe.rfind('rm -f -- "$gha_application_credentials_file" "$gha_credentials_file"')
-        < probe.find("probe_beta_uid_continuity.py")
-    ):
-        errors.append(
-            "desktop qualification runner must remove Firebase probe and GitHub auth credentials before probing"
-        )
-    if "working-directory: qualification-controls" not in probe:
-        errors.append("desktop qualification runner must run the Firebase probe from trusted main controls")
-
     promotion = ROOT / ".github/workflows/desktop_promote_beta.yml"
     promotion_text = promotion.read_text(encoding="utf-8") if promotion.exists() else ""
     for required_fragment in (
@@ -979,27 +926,11 @@ def check_desktop_qualification_runner() -> list[str]:
             errors.append(f"desktop beta recovery workflow is missing signed-evidence guard: {required_fragment}")
     if "qualification_run_id" in recovery_text:
         errors.append("desktop beta recovery workflow still requires retired qualification identity")
-
-    candidate_gate = ROOT / ".github/scripts/check-desktop-auto-beta-candidate.py"
-    candidate_gate_text = candidate_gate.read_text(encoding="utf-8") if candidate_gate.exists() else ""
-    for required_fragment in (
-        "REQUIRED_STRUCTURAL_SMOKE_CHECKS",
-        "REQUIRED_BETA_BEHAVIORAL_SMOKE_CHECKS",
-        "require_behavioral_checks=False",
-        "require_behavioral_checks=True",
-        "UserNotifications settings callback completion canary passed",
-        "notification_callback_canary",
-        "callback canary",
-    ):
-        if required_fragment not in candidate_gate_text:
-            errors.append(
-                f"desktop beta candidate gate is missing UserNotifications callback evidence guard: {required_fragment}"
-            )
     return errors
 
 
 def check_desktop_update_docs() -> list[str]:
-    """Keep operator docs aligned with Stable/Beta's qualified artifact identities."""
+    """Keep operator docs aligned with Stable/Beta's signed artifact identities."""
     path = ROOT / "docs/doc/developer/desktop-updates.mdx"
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     errors: list[str] = []
