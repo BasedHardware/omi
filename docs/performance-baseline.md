@@ -80,6 +80,23 @@ wait fell from **16775 ms** (this machine, before) / **27510 ms**
 A needed rebuild still costs a full `swiftc` (Swift-line change: 16060 ms;
 surfaces-dist byte change: 16040 ms). That is the correct trade.
 
+Independent re-measure at the same after-ref `0d4a7268f4`, private
+`OMI_BUILD_DIR` under `/tmp`, origin **15290**, David's 4851/8788/5290
+untouched. Loadavg 17.11 / 9.67 / 8.83. Warm rebuilds were forced by
+deleting `Contents/Resources/omi-build-stamp.json` so the skip cannot
+fire — current `run-shell.sh`, not a checkout of the parent.
+
+| Kind | Clock | N | Median | Min | Max | Spread | Samples |
+|---|---|---:|---:|---:|---:|---:|---|
+| Cold (no `.app` yet) | `run-shell.sh` to ready | 1 | 25588 | 25588 | 25588 | — | 25588 |
+| Warm, stamp deleted (still rebuilds) | `run-shell.sh` to ready | 5 | 16085 | 15999 | 16412 | 413 | 16085, 15999, 16084, 16315, 16412 |
+| Unchanged tree, second+ launch | `run-shell.sh` to ready | 5 | 1370 | 1364 | 1374 | 10 | 1370, 1364, 1367, 1370, 1374 |
+
+Every skip sample printed `cached:` and did not print `built:`. Median
+launcher wait **1370 ms** vs this re-measure's rebuild **16085 ms** /
+`perf-baseline` **27510 ms**. Same shape as the table above; load is
+why 16s is not 27s.
+
 ---
 
 ## What changed
