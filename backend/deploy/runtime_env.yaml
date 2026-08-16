@@ -45,7 +45,7 @@ environments:
             value: gateway
             category: rollout
           OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           OMI_LLM_CHAT_AGENT_ROUTE:
             value: gateway
@@ -1022,7 +1022,7 @@ environments:
             value: gateway
             category: rollout
           OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           OMI_LLM_CHAT_AGENT_ROUTE:
             value: gateway

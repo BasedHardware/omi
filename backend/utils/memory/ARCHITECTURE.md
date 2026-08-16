@@ -109,8 +109,11 @@ extractor share one optional OpenAI Flex switch and use dedicated gateway lanes.
 Manual and post-OAuth X syncs remain Standard. Ordinary `memory_conflict`,
 `memory_l2`, and `memories` traffic keeps its Standard timeout and cannot
 request Flex. `OMI_BACKGROUND_FLEX_CAPABLE` is present only on the two owning
-jobs. The live Firestore control at `llm_runtime_controls/background_flex`
-must contain exactly:
+jobs. The live Firestore control is stage-scoped because dev and prod can share
+the customer Firestore project: dev uses
+`llm_runtime_controls/background_flex_dev`, and prod uses
+`llm_runtime_controls/background_flex_prod`. Each document must contain
+exactly:
 
 ```json
 {"enabled":false,"generation":1}

@@ -158,7 +158,7 @@ def _env_flag_enabled(name: str, *, default: bool = False) -> bool:
 
 
 def _gpt56_explicit_cache_enabled() -> bool:
-    return should_route_features_through_gateway() and _env_flag_enabled(GPT56_EXPLICIT_CACHE_ENABLED_ENV)
+    return should_route_features_through_gateway() and _env_flag_enabled(GPT56_EXPLICIT_CACHE_ENABLED_ENV, default=True)
 
 
 def _env_sample_rate(name: str, *, default: float = 0.0) -> float:
