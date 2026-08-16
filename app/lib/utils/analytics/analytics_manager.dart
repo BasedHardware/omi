@@ -56,7 +56,7 @@ class AnalyticsManager {
         PlatformService.isAnalyticsSupported,
         adapter.init,
       ).timeout(timeout);
-      await _loadGlobalEventProperties();
+      await _loadGlobalEventProperties(timeout: timeout);
       await _loadPersonPropertyCache();
       _analyticsReady = true;
       _retryTimer?.cancel();
@@ -2105,11 +2105,11 @@ class AnalyticsManager {
     return 'unknown';
   }
 
-  static Future<void> _loadGlobalEventProperties() async {
+  static Future<void> _loadGlobalEventProperties({required Duration timeout}) async {
     var version = 'unknown';
     var build = 'unknown';
     try {
-      final packageInfo = await PackageInfo.fromPlatform();
+      final packageInfo = await PackageInfo.fromPlatform().timeout(timeout);
       if (packageInfo.version.isNotEmpty) version = packageInfo.version;
       if (packageInfo.buildNumber.isNotEmpty) build = packageInfo.buildNumber;
     } catch (_) {}
