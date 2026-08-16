@@ -46,7 +46,9 @@ test("macOS evidence driver authors through the rendered composer and waits for 
   assert.match(driver, /frameImage: e\.dataset\.frameImage/);
   const runShell = readFileSync(join(root, "scripts/run-shell.sh"), "utf8");
   assert.match(runShell, /native shell abort/);
+  assert.match(runShell, /native run log:/);
   assert.match(runShell, /CONSUMER-EVIDENCE:/);
+  assert.match(runShell, /\^listen-/);
   const finishBody = driver.match(/func pageDidFinish[\s\S]*?\n  \}/u)?.[0] ?? "";
   assert.doesNotMatch(finishBody, /\.begin\(|listenStartRequested = false|chatAdmissionBaseline = nil|chatSubmitted = false/);
   const consumer = readFileSync(source, "utf8");
