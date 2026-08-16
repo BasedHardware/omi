@@ -38,6 +38,43 @@ def test_desktop_backend_cors_rejects_wildcard(monkeypatch):
         desktop_backend._cors_allowed_origins_from_env()
 
 
+def test_desktop_backend_cors_rejects_wildcard_even_with_blank_entries(monkeypatch):
+    monkeypatch.setenv('CORS_ALLOWED_ORIGINS', 'https://app.example, , *')
+
+    with pytest.raises(RuntimeError, match='must not contain'):
+        desktop_backend._cors_allowed_origins_from_env()
+
+
+def test_desktop_backend_cors_blank_only_origins_default_to_deny(monkeypatch):
+    monkeypatch.setenv('CORS_ALLOWED_ORIGINS', '   ')
+
+    assert desktop_backend._cors_allowed_origins_from_env() == []
+
+
+def test_desktop_backend_cors_unset_origins_default_to_deny(monkeypatch):
+    monkeypatch.delenv('CORS_ALLOWED_ORIGINS', raising=False)
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
+
+    assert desktop_backend._cors_allowed_origins_from_env() == []
+
+
+def test_desktop_backend_cors_empty_allowlist_denies_every_origin(monkeypatch):
+    monkeypatch.delenv('CORS_ALLOWED_ORIGINS', raising=False)
+    client = _test_client(monkeypatch, desktop_backend._build_app())
+
+    with client:
+        denied = client.options(
+            '/',
+            headers={
+                'Origin': 'https://app.example',
+                'Access-Control-Request-Method': 'GET',
+            },
+        )
+
+    assert denied.status_code == 400
+    assert 'access-control-allow-origin' not in denied.headers
+
+
 def test_desktop_backend_cors_middleware_enforces_allowlist(monkeypatch):
     monkeypatch.setenv('CORS_ALLOWED_ORIGINS', 'https://app.example')
     client = _test_client(monkeypatch, desktop_backend._build_app())
