@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowUp, Link as LinkIcon, Loader2, Paperclip } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import {
@@ -47,13 +47,34 @@ export function HubAskBar(props: {
    *  panel and silently drops your focus on the floor, so the first thing you type
    *  goes nowhere. */
   autoFocus?: boolean
+  /** Bump to pull keyboard focus into the input without remounting — used when
+   *  a knows question row prefills the draft (mac parity: homeAskFieldFocused). */
+  focusSignal?: number
 }): React.JSX.Element {
-  const { value, onChange, onSubmit, onFocus, sending, connectActive, onToggleConnect, autoFocus } =
-    props
+  const {
+    value,
+    onChange,
+    onSubmit,
+    onFocus,
+    sending,
+    connectActive,
+    onToggleConnect,
+    autoFocus,
+    focusSignal
+  } = props
   const [focused, setFocused] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [rejectNote, setRejectNote] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // A focusSignal bump pulls the caret in after a programmatic prefill; rAF for
+  // the same reason as the mousedown handler below (focus inside the triggering
+  // event's dispatch is swallowed).
+  useEffect(() => {
+    if (focusSignal === undefined || focusSignal === 0) return
+    const raf = requestAnimationFrame(() => inputRef.current?.focus())
+    return () => cancelAnimationFrame(raf)
+  }, [focusSignal])
   const attachments = usePendingAttachments()
   const atCap = attachments.length >= MAX_CHAT_ATTACHMENTS
   // Send is allowed with text OR at least one attachment that hasn't failed —
