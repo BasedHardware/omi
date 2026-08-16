@@ -844,6 +844,37 @@ test("Listen Start posts the host capture start verb and Stop posts stop then cl
   }
 });
 
+test("Listen does not claim ready while microphone preflight is still checking", async () => {
+  // red-proof: mapping idle transport to ready while permission is unknown
+  // puts Start in the DOM disabled; the evidence driver then latches a
+  // click that never fires. Checking preflight must not be ready.
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const env = { now: () => 0, random: () => 0.25, fallbackSink: { record() {} }, delay: () => () => {} };
+  const preflight = {
+    snapshot: () => freezeListenPreflightSnapshot({
+      permission: "unknown", device: { state: "unknown", label: null }, recovery: null,
+    }),
+    subscribe: () => () => {},
+    async refresh() {},
+  };
+  const client = createPlatformListenCaptureClient({
+    env,
+    schema,
+    openSocket() { return new FakeSocket(); },
+    preflight,
+  });
+  const store = createPlatformProductionListenStore(client, env);
+  assert.equal(store.status().refresh.phase, "initial-loading");
+  const rendered = await renderComponent(ListenProduction, { store });
+  try {
+    const root = rendered.container.querySelector("main[data-production-shell='true']");
+    assert.equal(root?.getAttribute("data-surface-state"), "initial-loading");
+    assert.equal(rendered.container.querySelector("[data-consumer-action='start-listen']"), null);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("platform Listen client starts host capture on connect and reconnect, and stops before close", async () => {
   const calls = [];
   class CaptureSocket extends FakeSocket {
