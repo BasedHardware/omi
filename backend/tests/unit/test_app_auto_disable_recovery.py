@@ -110,6 +110,42 @@ class TestRedirectDoesNotAdvanceAutoDisable:
         )
 
 
+class TestActionCodeStubsMatchTheRealModule:
+    """Two suites hand-stub `database.webhook_health` and must mirror these codes.
+
+    `utils.app_integrations` imports the action codes by name, so a stub missing
+    one fails the whole module import — which is how adding them broke
+    test_async_app_integrations.py in CI. Hardcoded stub values can also drift
+    the other way and silently assert against the wrong number, so this is a
+    **static checker**: it reads the stub sources and compares their literals to
+    the real module.
+    """
+
+    STUBS = (
+        "test_async_app_integrations.py",
+        "test_async_realtime_integrations_offload.py",
+    )
+
+    @pytest.mark.parametrize('stub', STUBS)
+    def test_stub_action_codes_match(self, stub):
+        import pathlib
+        import re
+
+        import database.webhook_health as real
+
+        source = (pathlib.Path(__file__).parent / stub).read_text()
+        declared = re.findall(
+            r'sys\.modules\["database\.webhook_health"\]\.(ACTION_\w+) = (\d+)',
+            source,
+        )
+        assert declared, f'{stub} no longer stubs the action codes; app_integrations imports them by name'
+        for name, value in declared:
+            assert getattr(real, name) == int(value), (
+                f'{stub} stubs {name}={value} but database.webhook_health defines '
+                f'{getattr(real, name)}; the stub would assert against the wrong code'
+            )
+
+
 class TestRedirectNotifiesWithoutDisabling:
     def test_action_notifies_the_owner_and_leaves_the_app_enabled(self):
         import utils.app_integrations as integrations
