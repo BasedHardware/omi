@@ -352,7 +352,23 @@ test("the wire op carries the record and the keyed patch, and never the client-p
     description: "buy milk",
     source: "user",
   });
-  assert.deepEqual(created, { op: "create", record_id: RECORD, content: { description: "buy milk", source: "user" } });
+  assert.deepEqual(created, {
+    op: "create",
+    record_id: RECORD,
+    content: {
+      description: "buy milk",
+      completed: false,
+      completedAt: null,
+      dueAt: null,
+      owner: null,
+      source: "user",
+      provenance: [],
+      sortOrder: 0,
+      indentLevel: 0,
+      createdAt: 5,
+      updatedAt: 5,
+    },
+  });
 
   const patched = taskOpToWriteOp({ op: "patch", opId: "quiet-otter-lucid", id: RECORD, at: 5, patch: { completed: true } });
   assert.deepEqual(patched, { op: "patch", record_id: RECORD, patch: { completed: true } });

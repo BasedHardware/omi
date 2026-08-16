@@ -24,7 +24,7 @@ test("production entry gates fixtures and marks the explicit host platform", asy
   assert.match(source, /fixtureConversationStore\(conversationFixture, requestedQa === "conversation-detail"\)/);
   assert.match(source, /requestedQa === "tasks"/);
   assert.match(source, /TASK_FIXTURE_STATES\.includes/);
-  assert.match(source, /stores\.openTasks\(\)/);
+  assert.match(source, /openTaskRouteSource\(platform\)/);
   assert.match(source, /now=\{TASK_FIXED_NOW\}/);
   // red-proof: dropping the detail-fixture fallback strands the documented
   // qa=conversation-detail URL on a not-found view unless a hidden row ID is

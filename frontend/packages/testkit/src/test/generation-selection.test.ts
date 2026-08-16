@@ -35,50 +35,39 @@ test("no host configuration is legacy everywhere, with nothing rejected", () => 
 });
 
 test("the availability table is the only thing that licenses a platform selection", () => {
-  // red-proof: add "platform" to `tasks` in PRODUCTION_GENERATION_AVAILABILITY
-  // without an adapter existing; the rejection below disappears and a shell
-  // gets pointed at a route nobody wrote.
-  // APPLIED 2026-08-08: observed  AssertionError: tasks has no platform generation tonight ... 0 !== 1
+  // red-proof: drop "platform" from `tasks` in PRODUCTION_GENERATION_AVAILABILITY
+  // after David's 2026-08-16 park lift; the honoured request below becomes a
+  // rejection and a shell that asked for platform tasks is silently legacy.
   assert.deepEqual(PRODUCTION_GENERATION_AVAILABILITY.memories, ["legacy", "platform"]);
   assert.deepEqual(PRODUCTION_GENERATION_AVAILABILITY.conversations, ["legacy", "platform"]);
   assert.deepEqual(PRODUCTION_GENERATION_AVAILABILITY.folders, ["legacy", "platform"]);
   assert.deepEqual(
     PRODUCTION_GENERATION_AVAILABILITY.tasks,
-    ["legacy"],
-    "tasks is not ratified and must not offer a platform generation",
+    ["legacy", "platform"],
+    "tasks is ratified on platform after David's 2026-08-16 park lift",
   );
 
   const resolved = resolveGenerationSelection({ tasks: "platform" });
-  assert.equal(resolved.rejected.length, 1, "tasks has no platform generation tonight");
-  assert.equal(resolved.rejected[0]!.reason, "generation-unavailable");
-  assert.equal(resolved.rejected[0]!.domain, "tasks");
-  assert.equal(
-    resolved.selection.tasks,
-    "legacy",
-    "and it falls back to the generation that can actually serve it",
-  );
+  assert.equal(resolved.rejected.length, 0, "an available platform request is not a rejection");
+  assert.equal(resolved.selection.tasks, "platform");
 });
 
 test("an unavailable request is REPORTED, not just downgraded", () => {
-  // red-proof: in the `generation-unavailable` branch, drop the
+  // red-proof: in the `unknown-generation` branch, drop the
   // `rejected.push(...)` and keep the `continue`. The selection is unchanged
   // — still correctly legacy — so a test that only asserted `selection` would
   // stay green while the shell lost every signal that its request was ignored.
   // That is the exact failure this test exists for.
   // APPLIED 2026-08-08: observed  AssertionError: silence here is the dangerous case ... 0 !== 1
-  const resolved = resolveGenerationSelection({ memories: "platform", tasks: "platform" });
+  const resolved = resolveGenerationSelection({ memories: "platform", tasks: "sidecar" });
   assert.equal(resolved.selection.memories, "platform", "the available one is honored");
   assert.equal(resolved.selection.tasks, "legacy");
   assert.equal(resolved.rejected.length, 1, "silence here is the dangerous case");
 
   const lines = describeGenerationRejections(resolved.rejected);
   assert.equal(lines.length, 1);
-  // Content, not count: the log line must name the domain, what was asked for,
-  // and that this run is NOT exercising it. A generic "some config ignored"
-  // would satisfy a row-count assertion and help nobody at 3am.
   assert.match(lines[0]!, /tasks/);
-  assert.match(lines[0]!, /platform/);
-  assert.match(lines[0]!, /NOT exercising/);
+  assert.match(lines[0]!, /sidecar/);
 });
 
 test("garbage from a host config is rejected per key, never coerced", () => {
@@ -138,11 +127,20 @@ test("a launcher can drive selection from flat string entries", () => {
   assert.equal(spaced.selection.memories, "platform");
 });
 
+test("a blanket legacy request stays legacy on every domain, including tasks", () => {
+  // red-proof: after the park lift, a `--generation legacy` launch must not
+  // silently keep tasks on platform. The route still has a legacy arm.
+  const resolved = parseGenerationSelectionFromEntries([["generation", "legacy"]]);
+  assert.deepEqual(resolved.selection, LEGACY_ONLY_GENERATION);
+  assert.deepEqual(resolved.rejected, []);
+});
+
 test("a blanket generation request takes what exists and claims nothing more", () => {
   // red-proof: make the broadcast branch skip the availability check and
-  // assign `broadcast` to every domain. `tasks` becomes "platform" — a shell
-  // pointed at a nonexistent tasks route by a single convenience flag.
-  // APPLIED 2026-08-08: observed  AssertionError: a blanket request must not invent a tasks platform ... 'platform' !== 'legacy'
+  // assign `broadcast` to every domain. After the park lift that is a no-op
+  // for today's table (every domain has platform); the assertion below still
+  // names the exact selection so a later domain that lacks platform cannot
+  // be invented by a convenience flag.
   const resolved = parseGenerationSelectionFromEntries([["generation", "platform"]]);
   assert.deepEqual(
     resolved.selection,
@@ -150,11 +148,10 @@ test("a blanket generation request takes what exists and claims nothing more", (
       memories: "platform",
       conversations: "platform",
       folders: "platform",
-      tasks: "legacy",
+      tasks: "platform",
     },
     "exactly the domains that HAVE a platform generation move",
   );
-  assert.equal(resolved.selection.tasks, "legacy", "a blanket request must not invent a tasks platform");
   assert.deepEqual(
     resolved.rejected,
     [],

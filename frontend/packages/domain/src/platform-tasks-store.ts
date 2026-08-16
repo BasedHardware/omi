@@ -1,56 +1,58 @@
 /**
- * PlatformTasksStore — the platform generation's task READ store.
+ * PlatformTasksStore — the platform generation's task store.
  *
- * The one object a platform-generation Tasks surface talks to. Structurally the
- * sibling of `SynthesizedMemoriesStore`, and the differences from `TasksStore`
- * (the legacy one) are all consequences of one fact: this store has no writes.
+ * Reads carry the server's completeness envelope (never restored from cache,
+ * never derived from item counts). Writes go through `POST /v1/tasks/ops` via
+ * Outbox, using the established write envelope (`write_id`, `account_epoch`)
+ * and the stamps minted at enqueue. `openTasks()` is NOT repointed here —
+ * the Tasks route branches to this store by name, as Conversations and
+ * Folders already do.
  *
- *  - No `Outbox`. There is nothing to enqueue, so `status().queue` is a
- *    permanently idle `QueueStatus`. It is still REPORTED, because a surface
- *    must render offline/queue state identically across generations — that is
- *    the whole promise of the `ProductionStores` ports, and it is what
- *    `DAVID-tasks-read-epoch-and-ci` D2's parity is FOR. A surface that had to
- *    ask which generation it was on would make the port a lie.
- *  - No `Projection` and no alias map. Writes go through `POST /v1/tasks/ops`,
- *    which is a separate ratified wire with its own idempotency; the local
- *    slug ↔ server id alias `adapters-legacy/src/tasks.ts` maintains does not
- *    cross this wire at all (D2).
+ * THE HONESTY RULE, carried over from the memories read store: cached items
+ * survive a reopen, THE COVERAGE STATE DOES NOT. On open, before any refresh,
+ * `coverage()` is `{ kind: "unknown" }` even when the cache is full.
  *
- * THE HONESTY RULE, carried over verbatim from the memories read store because
- * it is not a memories-specific rule: cached items survive a reopen, THE
- * COVERAGE STATE DOES NOT. On open, before any refresh, `coverage()` is
- * `{ kind: "unknown" }` even when the cache is full. Coverage is a claim about
- * the server's state at the moment it was made, and a claim persisted yesterday
- * says nothing about today. Restoring a cached `complete` would let a cold start
- * tell a user "that is everything" about a set it has not looked at.
- *
- * It matters more here than it does for memories. A tasks page can be
- * `incomplete` for `pending_writes` — an op the write path applied that this
- * projection has not caught up with — so a restored `complete` could hide the
- * user's own most recent edit and report the set as whole.
- *
- * WHAT THIS STORE DELIBERATELY DOES NOT DO: reconcile or delete. Nothing here
- * removes a local row. `fetchPlatformTaskIdSnapshot` exists for the day a
- * reconciling caller needs one, and it is the thing that carries the
- * `wholeSet` flag; this store only ever replaces or appends what it displays.
+ * WRITE IDENTITY. The read wire serves reader-scoped opaque handles
+ * (`task1_` + HMAC). The write envelope's `record_id` is the storage id the
+ * client minted on create. HMAC is one-way, so the alias that maps a read
+ * handle back to a write id is client-private and is joined on the store-owned
+ * `revision` returned in `WriteAccepted`. Tasks this client did not create
+ * have no write id; a patch against a bare opaque handle is refused rather
+ * than upserting a second record.
  */
 
-import type { DurableKv, StorageBridge } from "@omi-core/contracts";
-import type { HttpClient, PlatformTaskCoverageState, PlatformTaskItem } from "@omi-core/contracts";
+import type {
+  DeadLetter,
+  DurableKv,
+  HttpClient,
+  PlatformTaskCoverageState,
+  PlatformTaskItem,
+  StorageBridge,
+  Task,
+  TaskPatch,
+} from "@omi-core/contracts";
 import type { Env } from "@omi-core/kernel";
-import type { QueueStatus } from "@omi-core/sync";
+import { Outbox } from "@omi-core/sync";
 import {
+  WRITE_ID_ENTROPY_BYTES,
+  createDevAccountEpochProvider,
+  createPlatformWriteStamps,
   fetchPlatformTaskPage,
   platformTaskCoverageFromPage,
   platformTaskItemsFromPage,
+  platformTasksTransport,
+  type MutableAccountEpochProvider,
   type PlatformTasksPageRequest,
 } from "@omi-core/adapters-platform";
+import { buildCreateTask, buildDeleteTask, buildPatchTask, tasksCodec, taskToPendingOp } from "./tasks-codec.js";
 import { RefreshTracker, type StoreStatus } from "./store-status.js";
 
 const ITEMS_KEY = "items";
-
-/** A read model never queues a write. Reported, never derived by the surface. */
-const READ_ONLY_QUEUE: QueueStatus = { phase: "idle", pendingCount: 0 };
+const ALIAS_KEY = "id-aliases";
+const REVISION_KEY = "write-revisions";
+const KNOWN_IDS_KEY = "known-record-ids";
+/** Grammar of a platform read handle. Not a write `record_id`. */
+const OPAQUE_TASK_REF = /^task1_[0-9a-f]{64}$/;
 
 export interface PlatformTasksStoreOptions {
   /** Route override; the transport binding still owns the base URL. */
@@ -58,16 +60,31 @@ export interface PlatformTasksStoreOptions {
   readonly limit?: number;
 }
 
+function entropyFromEnv(env: Env): Uint8Array {
+  const bytes = new Uint8Array(WRITE_ID_ENTROPY_BYTES);
+  for (let index = 0; index < bytes.length; index++) {
+    bytes[index] = Math.floor(env.random() * 256) & 0xff;
+  }
+  return bytes;
+}
+
 export class PlatformTasksStore {
   private listeners = new Set<() => void>();
   private items: readonly PlatformTaskItem[] = [];
   private coverageState: PlatformTaskCoverageState = { kind: "unknown" };
   private nextCursor: string | null = null;
+  private aliases: Record<string, string> = {};
+  private revisionToRecordId: Record<string, string> = {};
+  private knownRecordIds = new Set<string>();
   private readonly refreshTracker: RefreshTracker;
 
   private constructor(
+    private readonly env: Env,
     private readonly http: HttpClient,
     private readonly kv: DurableKv,
+    private readonly identityKv: DurableKv,
+    private readonly outbox: Outbox,
+    private readonly epochs: MutableAccountEpochProvider,
     private readonly options: PlatformTasksStoreOptions,
     hasSavedData: boolean,
   ) {
@@ -76,15 +93,65 @@ export class PlatformTasksStore {
 
   static async open(
     bridge: StorageBridge,
-    _env: Env,
+    env: Env,
     http: HttpClient,
     options: PlatformTasksStoreOptions = {},
   ): Promise<PlatformTasksStore> {
     const kv = await bridge.openKv("platform-tasks");
+    const identityKv = await bridge.openKv("platform-tasks-identity");
     const cached = readCachedItems(await kv.get(ITEMS_KEY));
-    const store = new PlatformTasksStore(http, kv, options, cached.length > 0);
+    const epochs = createDevAccountEpochProvider(null);
+    let store: PlatformTasksStore | undefined;
+    const transport = platformTasksTransport({
+      http,
+      onControlUnavailable: () => {
+        void store?.refresh();
+      },
+    });
+    const outbox = await Outbox.open(
+      bridge,
+      env,
+      transport,
+      "platform-tasks",
+      createPlatformWriteStamps({
+        entropy: () => entropyFromEnv(env),
+        epochs,
+      }),
+    );
+    store = new PlatformTasksStore(
+      env,
+      http,
+      kv,
+      identityKv,
+      outbox,
+      epochs,
+      options,
+      cached.length > 0,
+    );
     store.items = cached;
-    // Deliberately NOT restored: `coverageState` stays `unknown`. See the header.
+    store.aliases = readStringMap(await identityKv.get(ALIAS_KEY));
+    store.revisionToRecordId = readStringMap(await identityKv.get(REVISION_KEY));
+    store.knownRecordIds = new Set(readStringList(await identityKv.get(KNOWN_IDS_KEY)));
+    outbox.onChange = () => store!.notify();
+    outbox.onOutcome = async (op, outcome) => {
+      if (outcome.state !== "confirmed") return;
+      if (outcome.serverRevision !== undefined) {
+        store!.revisionToRecordId[outcome.serverRevision] = op.recordId;
+      }
+      store!.knownRecordIds.add(op.recordId);
+      const current = store!.items.find((row) => row.id === op.recordId) ?? null;
+      const next = tasksCodec.applyOp(op.payload, current as Task | null);
+      if (next === null) {
+        store!.items = store!.items.filter((row) => row.id !== op.recordId);
+      } else if (current === null) {
+        store!.items = [...store!.items, next as PlatformTaskItem];
+      } else {
+        store!.items = store!.items.map((row) => (row.id === next.id ? (next as PlatformTaskItem) : row));
+      }
+      await store!.persistItems();
+      await store!.persistIdentity();
+      store!.notify();
+    };
     return store;
   }
 
@@ -94,7 +161,26 @@ export class PlatformTasksStore {
   }
 
   async list(): Promise<readonly PlatformTaskItem[]> {
-    return this.items;
+    const pending = this.outbox.pendingOps().map((o) => ({ recordId: o.recordId, payload: o.payload }));
+    const overlaid: PlatformTaskItem[] = [];
+    const seen = new Set<string>();
+    for (const item of this.items) {
+      let current: Task | null = item as Task;
+      for (const op of pending.filter((pendingOp) => pendingOp.recordId === item.id)) {
+        current = tasksCodec.applyOp(op.payload, current);
+        if (current === null) break;
+      }
+      if (current !== null) {
+        overlaid.push(current as PlatformTaskItem);
+        seen.add(item.id);
+      }
+    }
+    for (const op of pending) {
+      if (seen.has(op.recordId)) continue;
+      const created = tasksCodec.applyOp(op.payload, null);
+      if (created !== null) overlaid.push(created as PlatformTaskItem);
+    }
+    return overlaid.sort((a, b) => Number(a.completed) - Number(b.completed) || b.createdAt - a.createdAt);
   }
 
   coverage(): PlatformTaskCoverageState {
@@ -106,7 +192,41 @@ export class PlatformTasksStore {
   }
 
   status(): StoreStatus {
-    return { refresh: this.refreshTracker.snapshot(), queue: READ_ONLY_QUEUE };
+    return { refresh: this.refreshTracker.snapshot(), queue: this.outbox.queueStatus() };
+  }
+
+  deadLetters(): Promise<DeadLetter[]> {
+    return this.outbox.deadLetters();
+  }
+
+  discardDeadLetter(opId: string): Promise<void> {
+    return this.outbox.discardDeadLetter(opId);
+  }
+
+  async create(description: string, dueAt?: number): Promise<void> {
+    const op = buildCreateTask(this.env, description, dueAt);
+    this.knownRecordIds.add(op.id);
+    await this.persistIdentity();
+    await this.outbox.enqueue(taskToPendingOp(op));
+    this.notify();
+  }
+
+  async patch(id: string, patch: TaskPatch): Promise<void> {
+    const recordId = this.toWireId(id);
+    this.assertWritableId(recordId);
+    await this.outbox.enqueue(taskToPendingOp(buildPatchTask(this.env, recordId as Task["id"], patch)));
+    this.notify();
+  }
+
+  async delete(id: string): Promise<void> {
+    const recordId = this.toWireId(id);
+    this.assertWritableId(recordId);
+    await this.outbox.enqueue(taskToPendingOp(buildDeleteTask(this.env, recordId as Task["id"])));
+    this.notify();
+  }
+
+  onAuthRestored(): void {
+    this.outbox.onAuthRestored();
   }
 
   /**
@@ -130,12 +250,14 @@ export class PlatformTasksStore {
       return;
     }
 
-    const items = platformTaskItemsFromPage(outcome.page);
+    this.observeEpoch(outcome.page.accountEpoch);
+    const items = platformTaskItemsFromPage(outcome.page).map((item) => this.rekey(item));
     await this.refreshTracker.applyIfCurrent(token, async () => {
       this.items = items;
       this.coverageState = platformTaskCoverageFromPage(outcome.page);
       this.nextCursor = outcome.page.window.hasMore ? outcome.page.window.nextCursor : null;
-      await this.kv.set(ITEMS_KEY, JSON.stringify(items));
+      await this.persistItems();
+      await this.persistIdentity();
     });
     if (this.refreshTracker.isCurrent(token)) {
       this.refreshTracker.complete(token, true, this.items.length > 0);
@@ -160,26 +282,41 @@ export class PlatformTasksStore {
       this.notify();
       return;
     }
-    // Dedupe by id, keeping the FIRST occurrence, i.e. the earlier page.
-    //
-    // `walkPlatformTaskPages` refuses a walk with repeated ids OUTRIGHT, and the
-    // two answers differ because the two decisions differ: a walk's product is a
-    // SET, and a set is what licenses deleting local rows, so an unreliable one
-    // must produce no answer at all. Nothing is being deleted here — this is
-    // incremental display — and refusing to render would lose a user their
-    // working list over a server hiccup. Keeping the first occurrence preserves
-    // deterministic server order and cannot double a row.
-    const appended = dedupeById([...this.items, ...platformTaskItemsFromPage(outcome.page)]);
+    this.observeEpoch(outcome.page.accountEpoch);
+    const appended = dedupeById([
+      ...this.items,
+      ...platformTaskItemsFromPage(outcome.page).map((item) => this.rekey(item)),
+    ]);
     this.items = appended;
     this.coverageState = platformTaskCoverageFromPage(outcome.page);
     this.nextCursor = outcome.page.window.hasMore ? outcome.page.window.nextCursor : null;
-    await this.kv.set(ITEMS_KEY, JSON.stringify(appended));
+    await this.persistItems();
+    await this.persistIdentity();
     this.notify();
   }
 
-  /** Symmetry with the write stores: a read model has no paused queue to resume. */
-  onAuthRestored(): void {
-    // Intentionally empty. Declared so the surface-facing shape is uniform.
+  private observeEpoch(epoch: unknown): void {
+    this.epochs.observeAccountEpoch(epoch);
+  }
+
+  private rekey(item: PlatformTaskItem): PlatformTaskItem {
+    const byRevision = item.revision !== null ? this.revisionToRecordId[item.revision] : undefined;
+    const byOpaque = this.aliases[item.id];
+    const local = byRevision ?? byOpaque;
+    if (local === undefined || local === item.id) return item;
+    this.aliases[item.id] = local;
+    this.knownRecordIds.add(local);
+    return { ...item, id: local };
+  }
+
+  private toWireId(id: string): string {
+    return this.aliases[id] ?? id;
+  }
+
+  private assertWritableId(id: string): void {
+    if (OPAQUE_TASK_REF.test(id) && !this.knownRecordIds.has(id)) {
+      throw new Error("platform task write refused: opaque read handle has no write id");
+    }
   }
 
   private pageRequest(cursor: string | null): PlatformTasksPageRequest {
@@ -188,6 +325,16 @@ export class PlatformTasksStore {
       ...(this.options.limit !== undefined ? { limit: this.options.limit } : {}),
       cursor,
     };
+  }
+
+  private async persistItems(): Promise<void> {
+    await this.kv.set(ITEMS_KEY, JSON.stringify(this.items));
+  }
+
+  private async persistIdentity(): Promise<void> {
+    await this.identityKv.set(ALIAS_KEY, JSON.stringify(this.aliases));
+    await this.identityKv.set(REVISION_KEY, JSON.stringify(this.revisionToRecordId));
+    await this.identityKv.set(KNOWN_IDS_KEY, JSON.stringify([...this.knownRecordIds]));
   }
 
   private notify(): void {
@@ -205,6 +352,32 @@ function dedupeById(items: readonly PlatformTaskItem[]): readonly PlatformTaskIt
     out.push(item);
   }
   return out;
+}
+
+function readStringMap(raw: string | null): Record<string, string> {
+  if (raw === null) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === "string") out[key] = value;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function readStringList(raw: string | null): readonly string[] {
+  if (raw === null) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is string => typeof entry === "string");
+  } catch {
+    return [];
+  }
 }
 
 /**
