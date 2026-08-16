@@ -480,30 +480,22 @@ if (query.get("lab") === "1") {
               ? env.now()
               : null;
           markRendered("home", memoriesGeneration, { conversations: conversationsGeneration });
-          const homeReady = memoriesGeneration === "platform" || conversationsGeneration === "platform"
-            ? "bridge:platform"
-            : "bridge";
-          root.render(<StrictMode><HomeProduction sources={sources} source={{ kind: "live", origin: hostConfig.platformOriginLabel ?? "bridge" }} locale={locale} initialLastSuccessAt={homeInitialLastSuccessAt} now={env.now} onReady={() => emitReady(homeReady)} /></StrictMode>);
+          root.render(<StrictMode><HomeProduction sources={sources} source={{ kind: "live", origin: hostConfig.platformOriginLabel ?? "bridge" }} locale={locale} initialLastSuccessAt={homeInitialLastSuccessAt} now={env.now} onReady={() => emitReady("bridge:platform")} /></StrictMode>);
         } else if (route === "tasks") {
           const { store, tasksGeneration } = await openTaskRouteSource(platform);
           markRendered("tasks", null, { tasks: tasksGeneration });
-          const tasksReady = tasksGeneration === "platform" ? "bridge:platform" : "bridge";
-          root.render(<StrictMode><TasksProduction store={store} locale={locale} translate={translateTasks} now={env.now()} onReady={() => emitReady(tasksReady)} /></StrictMode>);
+          root.render(<StrictMode><TasksProduction store={store} locale={locale} translate={translateTasks} now={env.now()} onReady={() => emitReady("bridge:platform")} /></StrictMode>);
         } else if (route === "conversations") {
           const { store, foldersStore, conversationsGeneration, foldersGeneration } = await openConversationRouteSources(platform);
           markRendered("conversations", null, {
             conversations: conversationsGeneration,
             folders: foldersGeneration,
           });
-          const conversationsReady = conversationsGeneration === "platform" || foldersGeneration === "platform"
-            ? "bridge:platform"
-            : "bridge";
-          root.render(<StrictMode><ConversationsProduction store={store} foldersStore={foldersStore} detailId={detailId} initialFolderId={initialFolderId} locale={locale} onReady={() => emitReady(conversationsReady)} /></StrictMode>);
+          root.render(<StrictMode><ConversationsProduction store={store} foldersStore={foldersStore} detailId={detailId} initialFolderId={initialFolderId} locale={locale} onReady={() => emitReady("bridge:platform")} /></StrictMode>);
         } else if (route === "folders") {
           const { store, foldersGeneration } = await openFolderRouteSource(platform);
           markRendered("folders", null, { folders: foldersGeneration });
-          const foldersReady = foldersGeneration === "platform" ? "bridge:platform" : "bridge";
-          root.render(<StrictMode><FoldersProduction store={store} locale={locale} onReady={() => emitReady(foldersReady)} /></StrictMode>);
+          root.render(<StrictMode><FoldersProduction store={store} locale={locale} onReady={() => emitReady("bridge:platform")} /></StrictMode>);
         } else if (route === "listen") {
           const openSocket = hostConfig.listenSocketFactory
             ?? createProductionListenHostSocketFactory();
