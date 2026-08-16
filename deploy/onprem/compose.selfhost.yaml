@@ -232,7 +232,7 @@ services:
       PARAKEET_STREAM_CAPACITY: "1"
       PARAKEET_STREAM_ALLOCATION_PERCENT: "0"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -304,7 +304,7 @@ services:
       # /health reports ready only once large-v3 is resident (main.py loads eagerly at import), so the
       # parakeet NIM gateway can gate on this and never forward before whisper can serve (cubic PR 10887
       # compose.selfhost.yaml:207). Long start_period: model load on first boot.
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 60

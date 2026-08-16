@@ -125,9 +125,10 @@ PY"
       resp=$(docker run --rm --network "container:$(cid parakeet)" -v "$(dirname "$ITALIAN_AUDIO")":/audio:ro \
         "$TEST_IMAGE" /opt/venv/bin/python -c "
 import sys, httpx
-f = '/audio/$audio_name'
+# Multipart filename must be the BASENAME (like curl -F): the gateway builds a temp path from it, so a
+# full path ('/audio/italian.wav') would create _temp/<uuid>/audio/... and 500 (FileNotFoundError).
 r = httpx.post('http://127.0.0.1:8080/v1/transcribe',
-               files={'file': (f, open(f, 'rb'), 'audio/wav')}, timeout=120)
+               files={'file': ('$audio_name', open('/audio/$audio_name', 'rb'), 'audio/wav')}, timeout=120)
 sys.stdout.write(r.text)")
       printf '  -> %.200s\n' "$resp"
       # A non-empty transcription proves gateway -> whisper -> STT end to end (auto-detected language).
