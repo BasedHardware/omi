@@ -337,7 +337,7 @@ final class ConsumerEvidenceDriver {
   private static let startListenScript = #"""
     (() => {
       const button = document.querySelector("main[data-production-shell='true'][data-route='listen'][data-surface-state='ready'] [data-consumer-action='start-listen']");
-      if (!button) return false;
+      if (!button || button.disabled) return false;
       button.click();
       return true;
     })()

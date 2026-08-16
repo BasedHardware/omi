@@ -99,16 +99,29 @@ export function platformListenCaptureState(
   return { kind: "capturing", elapsedSeconds: elapsed, untranscribedSeconds: backlog };
 }
 
+function listenRefreshPhase(
+  transportPhase: ReturnType<PlatformListenCaptureClient["snapshot"]>["phase"],
+  preflight: ReturnType<PlatformListenCaptureClient["preflight"]>,
+  hasSavedData: boolean,
+): StoreStatus["refresh"]["phase"] {
+  if (transportPhase === "reconnecting" || transportPhase === "failed") {
+    return hasSavedData ? "saved-but-refresh-failed" : "unavailable";
+  }
+  const checking = preflight.permission === "unknown" || preflight.permission === "checking"
+    || preflight.device.state === "unknown" || preflight.device.state === "checking";
+  if (checking) return hasSavedData ? "refreshing" : "initial-loading";
+  if (preflight.permission !== "granted" || preflight.device.state !== "available") {
+    return hasSavedData ? "saved-but-refresh-failed" : "unavailable";
+  }
+  return "ready";
+}
+
 function status(client: PlatformListenCaptureClient): StoreStatus {
   const snapshot = client.snapshot();
   const hasSavedData = client.stream().getTranscriptSegments().length > 0;
-  const phase = snapshot.phase;
   return {
     refresh: {
-      phase:
-        phase === "reconnecting" || phase === "failed"
-          ? hasSavedData ? "saved-but-refresh-failed" : "unavailable"
-          : "ready",
+      phase: listenRefreshPhase(snapshot.phase, client.preflight(), hasSavedData),
       hasSavedData,
     },
     queue: IDLE_QUEUE,

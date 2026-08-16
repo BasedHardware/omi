@@ -28,6 +28,7 @@ test("macOS evidence driver authors through the rendered composer and waits for 
   assert.match(driver, /let clicked = Self\.jsFlag\(value\)/);
   assert.match(driver, /let submitted = Self\.jsFlag\(value\)/);
   assert.match(driver, /listen-click poll=/);
+  assert.match(driver, /if \(!button \|\| button\.disabled\) return false/);
   assert.match(driver, /chat-author poll=/);
   assert.match(driver, /chat-submit poll=/);
   assert.match(driver, /wait=transcript-after-click/);
