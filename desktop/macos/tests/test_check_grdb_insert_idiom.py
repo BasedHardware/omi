@@ -35,8 +35,13 @@ _spec.loader.exec_module(checker)
 
 
 class GRDBInsertIdiomCheckerTests(unittest.TestCase):
-    def _run(self, swift_by_relative_path: dict[str, str]) -> tuple[int, str]:
-        """Write a disposable Swift tree, run the real checker, return (exit code, stdout)."""
+    def _run(self, swift_by_relative_path: dict[str, str]) -> tuple[int, list[str]]:
+        """Write a disposable Swift tree, run the real checker.
+
+        Returns the exit code and one `file:line: source` entry per reported
+        violation, so every assertion can pin the exact set rather than probing
+        for a substring and letting extra reports slip through.
+        """
         with TemporaryDirectory() as tmp:
             sources = Path(tmp) / "Sources"
             for relative_path, body in swift_by_relative_path.items():
@@ -48,12 +53,17 @@ class GRDBInsertIdiomCheckerTests(unittest.TestCase):
             buffer = io.StringIO()
             with redirect_stdout(buffer):
                 code = checker.main(["--sources-dir", str(sources)])
-            return code, buffer.getvalue()
+            reported = [
+                line[2:].replace(f"{sources}/", "")
+                for line in buffer.getvalue().splitlines()
+                if line.startswith("- ")
+            ]
+            return code, reported
 
     def test_flags_the_screenshot_instance_from_11208(self):
         # Verbatim shape of RewindDatabase.insertScreenshot before #11208, where
         # every consumer read `if let id = inserted.id` and got nothing.
-        code, output = self._run(
+        code, reported = self._run(
             {
                 "Rewind/Core/RewindDatabase.swift": """
                 func insertScreenshot(_ screenshot: Screenshot) throws -> Screenshot {
@@ -68,11 +78,10 @@ class GRDBInsertIdiomCheckerTests(unittest.TestCase):
         )
 
         self.assertEqual(code, 1)
-        self.assertIn("Rewind/Core/RewindDatabase.swift:4", output)
-        self.assertIn("try record.insert(db)", output)
+        self.assertEqual(reported, ["Rewind/Core/RewindDatabase.swift:4: try record.insert(db)"])
 
     def test_flags_the_ai_user_profile_instance_from_11216(self):
-        code, output = self._run(
+        code, reported = self._run(
             {
                 "ProactiveAssistants/Services/AIUserProfileService.swift": """
                 func generateProfile() async throws -> AIUserProfileRecord {
@@ -87,18 +96,42 @@ class GRDBInsertIdiomCheckerTests(unittest.TestCase):
         )
 
         self.assertEqual(code, 1)
-        self.assertIn("AIUserProfileService.swift:4", output)
+        self.assertEqual(
+            reported,
+            [
+                "ProactiveAssistants/Services/AIUserProfileService.swift:4: "
+                "try record.insert(database)"
+            ],
+        )
 
     def test_flags_the_conflict_resolution_overload(self):
-        code, output = self._run(
+        code, reported = self._run(
             {"Storage.swift": "try record.insert(db, onConflict: .replace)\n"}
         )
 
         self.assertEqual(code, 1)
-        self.assertIn("Storage.swift:1", output)
+        self.assertEqual(
+            reported, ["Storage.swift:1: try record.insert(db, onConflict: .replace)"]
+        )
+
+    def test_flags_a_try_expression_split_across_lines(self):
+        # swift-format can wrap a long call, so the `try` that proves this is a
+        # throwing GRDB call may sit a line above the call itself. The report must
+        # point at the call site, not at the `try`.
+        code, reported = self._run(
+            {
+                "Storage.swift": """
+                try
+                  record.insert(db)
+                """
+            }
+        )
+
+        self.assertEqual(code, 1)
+        self.assertEqual(reported, ["Storage.swift:2: record.insert(db)"])
 
     def test_accepts_the_inserted_idiom(self):
-        code, output = self._run(
+        code, reported = self._run(
             {
                 "Storage.swift": """
                 let saved = try record.inserted(db)
@@ -108,12 +141,12 @@ class GRDBInsertIdiomCheckerTests(unittest.TestCase):
         )
 
         self.assertEqual(code, 0)
-        self.assertIn("ok:", output)
+        self.assertEqual(reported, [])
 
     def test_does_not_flag_set_and_array_inserts(self):
         # These shapes are all live in Desktop/Sources; a bare `.insert(` rule
         # would flag every one of them.
-        code, _ = self._run(
+        code, reported = self._run(
             {
                 "Collections.swift": """
                 seen.insert(task.id)
@@ -126,17 +159,112 @@ class GRDBInsertIdiomCheckerTests(unittest.TestCase):
         )
 
         self.assertEqual(code, 0)
+        self.assertEqual(reported, [])
 
-    def test_reports_every_violation_not_just_the_first(self):
-        code, output = self._run(
+    def test_does_not_flag_a_collection_element_that_happens_to_be_named_db(self):
+        # cubic's case: the argument name alone cannot tell a GRDB handle from an
+        # Int. `Set.insert` does not throw, so the absence of `try` settles it.
+        code, reported = self._run(
             {
-                "A.swift": "try one.insert(db)\n",
-                "B.swift": "try two.insert(database)\n",
+                "Collections.swift": """
+                var values: Set<Int> = []
+                let db = 123
+                values.insert(db)
+                let database = 456
+                values.insert(database)
+                """
+            }
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(reported, [])
+
+    def test_ignores_line_comments(self):
+        code, reported = self._run(
+            {
+                "Storage.swift": """
+                // do not call record.insert(db)
+                let x = 1  // and never try record.insert(database) either
+                """
+            }
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(reported, [])
+
+    def test_ignores_block_comments_including_nested_ones(self):
+        code, reported = self._run(
+            {
+                "Storage.swift": """
+                /* outer
+                   /* nested: try record.insert(db) */
+                   still commented: try record.insert(database)
+                */
+                try real.insert(db)
+                """
             }
         )
 
         self.assertEqual(code, 1)
-        self.assertEqual(output.count("\n- "), 2)
+        self.assertEqual(reported, ["Storage.swift:5: try real.insert(db)"])
+
+    def test_ignores_string_literals(self):
+        code, reported = self._run(
+            {
+                "Storage.swift": """
+                let message = "record.insert(database)"
+                let escaped = "he said \\"try record.insert(db)\\" loudly"
+                let url = "https://example.com/try record.insert(db)"
+                """
+            }
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(reported, [])
+
+    def test_ignores_multiline_and_raw_string_literals(self):
+        code, reported = self._run(
+            {
+                "Storage.swift": '''
+                let doc = """
+                  Never write try record.insert(db) here.
+                  """
+                let raw = #"try record.insert(database)"#
+                let rawer = ##"try record.insert(db)"##
+                '''
+            }
+        )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(reported, [])
+
+    def test_flags_a_real_call_sharing_a_line_with_a_lookalike_comment(self):
+        code, reported = self._run(
+            {"Storage.swift": "try record.insert(db)  // not values.insert(db)\n"}
+        )
+
+        self.assertEqual(code, 1)
+        self.assertEqual(
+            reported, ["Storage.swift:1: try record.insert(db)  // not values.insert(db)"]
+        )
+
+    def test_reports_every_violation_not_just_the_first(self):
+        code, reported = self._run(
+            {
+                "A.swift": "try one.insert(db)\n",
+                "B.swift": "try two.insert(database)\ntry three.insert(db)\n",
+            }
+        )
+
+        self.assertEqual(code, 1)
+        self.assertEqual(
+            sorted(reported),
+            [
+                "A.swift:1: try one.insert(db)",
+                "B.swift:1: try two.insert(database)",
+                "B.swift:2: try three.insert(db)",
+            ],
+        )
 
     def test_missing_sources_dir_is_a_usage_error(self):
         buffer = io.StringIO()
