@@ -1,7 +1,7 @@
-/// Public share-link base URL for self-hosting (#4339).
-///
-/// Matches backend `OMI_SHARE_BASE_URL` / desktop share helpers.
-/// Override at build time with `--dart-define=OMI_SHARE_BASE_URL=https://share.example.com`.
+// Public share-link base URL for self-hosting (#4339).
+//
+// Matches backend `OMI_SHARE_BASE_URL` / desktop share helpers.
+// Override at build time with `--dart-define=OMI_SHARE_BASE_URL=https://share.example.com`.
 
 const defaultShareBaseUrl = 'https://h.omi.me';
 
@@ -23,11 +23,19 @@ String shareBaseUrl([String? raw]) {
   final uri = Uri.tryParse(value);
   if (uri == null ||
       uri.host.isEmpty ||
+      uri.userInfo.isNotEmpty ||
+      uri.hasQuery ||
+      uri.hasFragment ||
       (uri.scheme != 'http' && uri.scheme != 'https') ||
       !_hostOk.hasMatch(uri.host)) {
     return defaultShareBaseUrl;
   }
-  return value.replaceFirst(RegExp(r'/+$'), '');
+  final origin = uri.hasPort ? '${uri.scheme}://${uri.host}:${uri.port}' : '${uri.scheme}://${uri.host}';
+  final path = uri.path.replaceFirst(RegExp(r'/+$'), '');
+  if (path.isEmpty || path == '/') {
+    return origin;
+  }
+  return '$origin$path';
 }
 
 /// Join [shareBaseUrl] with a path (leading slash optional).

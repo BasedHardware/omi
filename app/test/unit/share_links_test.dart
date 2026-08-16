@@ -16,6 +16,17 @@ void main() {
     test('falls back for malformed overrides', () {
       expect(shareBaseUrl('ftp://share.example.com'), defaultShareBaseUrl);
       expect(shareBaseUrl('not a url'), defaultShareBaseUrl);
+      expect(shareBaseUrl('https://share.example.com?x=1'), defaultShareBaseUrl);
+      expect(shareBaseUrl('https://share.example.com#frag'), defaultShareBaseUrl);
+      expect(shareBaseUrl('https://user:pass@share.example.com'), defaultShareBaseUrl);
+    });
+
+    test('preserves path prefix without query or fragment', () {
+      expect(shareBaseUrl('https://share.example.com/omi/'), 'https://share.example.com/omi');
+      expect(
+        conversationShareUrl('c1', raw: 'https://share.example.com/omi/'),
+        'https://share.example.com/omi/conversations/c1',
+      );
     });
   });
 
