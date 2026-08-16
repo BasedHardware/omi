@@ -387,9 +387,12 @@ justification for having no such step is no longer "there is no hotkey".
 
 - `swift test --package-path desktop/context-for-claude` — 1123 tests today (was 146 when this plan
   was written); new behaviour adds tests (pid exclusion, sound gating, step machine).
-- `scripts/build.sh` then a genuinely cold run: `tccutil reset All com.omi.context-for-claude`,
-  `defaults delete com.omi.context-for-claude`, delete the Keychain session, clear both MCP
-  registrations. **Reset TCC only while the app is installed** — `tccutil` resolves bundle ids through
+- `scripts/build.sh` then a genuinely cold run. A local build is signed with a developer
+  certificate, so it carries the **developer** identifiers and those are the ones to reset —
+  `tccutil reset All com.omi.context-for-claude.dev`, `defaults delete com.omi.context-for-claude.dev`,
+  delete the Keychain session, clear both MCP registrations (`context-for-claude-dev`). Resetting
+  the release identifiers instead would destroy the installed app's grants and leave the build under
+  test untouched. **Reset TCC only while the app is installed** — `tccutil` resolves bundle ids through
   LaunchServices and grants survive uninstall, so resetting after deleting the app silently restores
   the old grants on reinstall.
 - Screenshot every beat and compare against the reference; the menu bar gets a side-by-side against a
