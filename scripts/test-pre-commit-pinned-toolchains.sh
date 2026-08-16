@@ -220,6 +220,7 @@ printf '{\n  "devDependencies": {\n    "prettier": "^2.8.8",\n    "prettier-plug
 make_prettier_lock "$REPO/web/admin" 2.8.8
 make_prettier_stub "$REPO/web/admin" 2.8.8
 make_prettier_plugin "$REPO/web/admin" 0.3.0
+git -C "$REPO" add web/admin/package.json web/admin/package-lock.json
 printf 'const staged = {b:1}\n' >"$REPO/web/admin/src/a.ts"
 git -C "$REPO" add web/admin/src/a.ts
 printf 'const staged = {b:1}\nconst unstaged = 2\n' >"$REPO/web/admin/src/a.ts"
@@ -231,5 +232,25 @@ rm -rf "$REPO/web/unpinned"
 git -C "$REPO" reset -q -- web/unpinned
 run_hook >/dev/null
 grep -q 'PRETTIER_2.8.8_FORMATTED' "$REPO/web/admin/src/a.ts"
+
+# --- The generated OpenAPI client under web/admin is excluded from format-and-add ---
+mkdir -p "$REPO/web/admin/lib/services/omi-api"
+printf 'export const omiApi = {  untouched: 1 }\n' >"$REPO/web/admin/lib/services/omi-api/omiApi.generated.ts"
+printf 'const gen = {b:1}\n' >"$REPO/web/admin/src/b.ts"
+git -C "$REPO" add web/admin/lib/services/omi-api/omiApi.generated.ts web/admin/src/b.ts
+run_hook >/dev/null
+grep -q 'PRETTIER_2.8.8_FORMATTED' "$REPO/web/admin/src/b.ts"
+test "$(cat "$REPO/web/admin/lib/services/omi-api/omiApi.generated.ts")" = "export const omiApi = {  untouched: 1 }"
+git -C "$REPO" reset -q --hard
+
+# --- A missing package-lock with a matching-major prettier must refuse, not fall back (#11304) ---
+mkdir -p "$REPO/web/nolock/src"
+printf '{\n  "devDependencies": {\n    "prettier": "^2.8.8",\n    "prettier-plugin-tailwindcss": "^0.3.0"\n  }\n}\n' >"$REPO/web/nolock/package.json"
+make_prettier_stub "$REPO/web/nolock" 2.0.0
+make_prettier_plugin "$REPO/web/nolock" 0.3.0
+printf 'const nolock = {b:1}\n' >"$REPO/web/nolock/src/a.ts"
+git -C "$REPO" add web/nolock/src/a.ts web/nolock/package.json
+expect_refusal "missing lockfile with same-major prettier"
+test "$(cat "$REPO/web/nolock/src/a.ts")" = "const nolock = {b:1}"
 
 echo "pre-commit pinned-toolchain refusal tests passed"
