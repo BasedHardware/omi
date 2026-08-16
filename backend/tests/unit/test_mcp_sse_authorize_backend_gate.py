@@ -66,6 +66,21 @@ def test_protected_resource_fails_when_oidc_issuer_missing(monkeypatch):
     assert exc.value.status_code == 501
 
 
+def test_protected_resource_head_matches_get_availability_under_misconfig(monkeypatch):
+    # HEAD probe must see the SAME availability as GET: 501 when OIDC discovery is misconfigured, not a
+    # blanket 200 (cubic PR 10887 mcp_sse.py:745).
+    from routers.mcp_sse import oauth_protected_resource_metadata_head
+
+    monkeypatch.setenv("AUTH_BACKEND", "oidc")
+    monkeypatch.delenv("OIDC_ISSUER", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        oauth_protected_resource_metadata_head()
+    assert exc.value.status_code == 501
+    # And when correctly configured, HEAD is 200 (same availability GET advertises).
+    monkeypatch.setenv("OIDC_ISSUER", "https://idp.example/realms/omi")
+    assert oauth_protected_resource_metadata_head().status_code == 200
+
+
 def test_mcp_sse_info_omits_builtin_oauth_under_oidc(monkeypatch):
     # /v1/mcp/sse/info must not advertise the built-in oauth2 (authorize/token 501 under OIDC); only api_key
     # (cubic PR 10887 mcp_sse.py:1889).

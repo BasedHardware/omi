@@ -732,22 +732,28 @@ MCP_TOOLS: List[Dict[str, Any]] = [
 
 @router.get("/.well-known/oauth-protected-resource", tags=["mcp"])
 @router.get("/.well-known/oauth-protected-resource/v1/mcp/sse", tags=["mcp"])
-def oauth_protected_resource_metadata():
+def _protected_resource_authorization_servers() -> list:
+    """The ``authorization_servers`` to advertise for MCP protected-resource discovery. Shared by GET and
+    HEAD so a probe (HEAD) and a client (GET) see the SAME availability — HEAD must not 200 while GET 501s
+    for the same misconfiguration (cubic PR 10887 mcp_sse.py:745)."""
     if auth_backend_name() == "firebase":
-        authorization_servers = [MCP_AUTHORIZATION_SERVER_URL]
-    else:
-        # Non-firebase (OIDC): the built-in authorization server (authorize/consent/token) is unavailable,
-        # so point clients at the configured OIDC issuer — they discover the real IdP's own metadata
-        # instead of the built-in /authorize that 501s (cubic PR 10887 mcp_sse.py:1584). If OIDC_ISSUER is
-        # not configured, FAIL rather than fall back to the Firebase-only server (which would send clients
-        # to a dead endpoint) — a misconfiguration should surface, not silently mislead (cubic mcp_sse.py:743).
-        issuer = (os.getenv("OIDC_ISSUER") or "").strip().rstrip("/")
-        if not issuer:
-            raise HTTPException(
-                status_code=501,
-                detail="MCP OAuth discovery unavailable: AUTH_BACKEND=oidc requires OIDC_ISSUER to be set",
-            )
-        authorization_servers = [issuer]
+        return [MCP_AUTHORIZATION_SERVER_URL]
+    # Non-firebase (OIDC): the built-in authorization server (authorize/consent/token) is unavailable,
+    # so point clients at the configured OIDC issuer — they discover the real IdP's own metadata
+    # instead of the built-in /authorize that 501s (cubic PR 10887 mcp_sse.py:1584). If OIDC_ISSUER is
+    # not configured, FAIL rather than fall back to the Firebase-only server (which would send clients
+    # to a dead endpoint) — a misconfiguration should surface, not silently mislead (cubic mcp_sse.py:743).
+    issuer = (os.getenv("OIDC_ISSUER") or "").strip().rstrip("/")
+    if not issuer:
+        raise HTTPException(
+            status_code=501,
+            detail="MCP OAuth discovery unavailable: AUTH_BACKEND=oidc requires OIDC_ISSUER to be set",
+        )
+    return [issuer]
+
+
+def oauth_protected_resource_metadata():
+    authorization_servers = _protected_resource_authorization_servers()
     return {
         "resource": MCP_RESOURCE_URL,
         "authorization_servers": authorization_servers,
@@ -760,6 +766,9 @@ def oauth_protected_resource_metadata():
 @router.head("/.well-known/oauth-protected-resource", tags=["mcp"])
 @router.head("/.well-known/oauth-protected-resource/v1/mcp/sse", tags=["mcp"])
 def oauth_protected_resource_metadata_head():
+    # Same availability check as GET: 501 when OIDC discovery is misconfigured, so a HEAD probe does not
+    # report the resource as available when GET would 501 (cubic PR 10887 mcp_sse.py:745).
+    _protected_resource_authorization_servers()
     return Response(status_code=200)
 
 

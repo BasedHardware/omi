@@ -61,13 +61,17 @@ def _oidc_http(call: Any) -> Any:
         raise errors.JWKSUnavailable(f"OIDC endpoint unreachable: {exc}")
 
 
-def _oidc_json(resp: Any) -> Any:
-    """Parse a response body, mapping a non-JSON payload to a neutral ``AuthError`` instead of leaking a
-    raw ValueError/JSONDecodeError through the port."""
+def _oidc_json(resp: Any) -> dict:
+    """Parse a response body into a JSON object, mapping a non-JSON payload OR a valid-but-not-object
+    payload (list/string/number) to a neutral ``AuthError`` — otherwise the raw ValueError/JSONDecodeError
+    or a later ``.get`` ``AttributeError`` leaks through the port (cubic PR 10887 oidc.py:68)."""
     try:
-        return resp.json()
+        parsed = resp.json()
     except ValueError as exc:
         raise errors.AuthError(f"OIDC returned a non-JSON response: {exc}")
+    if not isinstance(parsed, dict):
+        raise errors.AuthError(f"OIDC returned a non-object JSON payload: {type(parsed).__name__}")
+    return parsed
 
 
 def _signing_algs() -> list[str]:
@@ -178,7 +182,10 @@ class OIDCAuthProvider:
         )
         if resp.status_code != 200:
             raise errors.JWKSUnavailable(f"OIDC introspection failed: status={resp.status_code}")
-        return bool(_oidc_json(resp).get("active", False))
+        # RFC 7662: `active` is a JSON boolean. Require the literal ``True`` — ``bool(...)`` would treat a
+        # non-compliant string like ``"false"`` (truthy) as an active token, failing OPEN on revocation
+        # (cubic PR 10887 oidc.py:181). Anything that is not literally True keeps revocation fail-closed.
+        return _oidc_json(resp).get("active") is True
 
     # --- Admin API (Keycloak) ---
     def _admin_token(self) -> str:

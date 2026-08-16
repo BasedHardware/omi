@@ -62,7 +62,7 @@
     {
       "clientId": "omi-backend-admin",
       "name": "Backend admin API (service account)",
-      "description": "Confidential service-account client for the Keycloak admin API (OIDC_ADMIN_* in backend.env): user-name resolution for memory attribution. DEV secret — regenerate for production.",
+      "description": "Admin-API service-account (OIDC_ADMIN_*). DEV/SEED ONLY: known committed secret for turnkey localhost dev. NEVER import into a reachable Keycloak (secret+realm-management=admin token). Prod: omi-realm.example.json (CHANGE_ME).",
       "enabled": true,
       "publicClient": false,
       "standardFlowEnabled": false,

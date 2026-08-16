@@ -91,6 +91,34 @@ def test_introspect_inactive_flag(monkeypatch):
     assert OIDCAuthProvider()._introspect_active("tok") is False
 
 
+def test_introspect_non_boolean_active_is_fail_closed(monkeypatch):
+    # A non-compliant IdP returning the STRING "false" for `active` must NOT be read as active — bool("false")
+    # is truthy, so only the literal boolean True counts (cubic PR 10887 oidc.py:181).
+    monkeypatch.setenv("OIDC_ISSUER", "http://keycloak:8080/realms/omi")
+    monkeypatch.setenv("OIDC_ADMIN_CLIENT_ID", "omi-backend-admin")
+    monkeypatch.setenv("OIDC_ADMIN_CLIENT_SECRET", "secret")
+    for bogus in ("false", "true", 1, 0, "active"):
+        monkeypatch.setattr(
+            httpx,
+            "post",
+            lambda url, data=None, timeout=None, _v=bogus: SimpleNamespace(status_code=200, json=lambda: {"active": _v}),
+        )
+        assert OIDCAuthProvider()._introspect_active("tok") is False, f"non-bool active {bogus!r} must be inactive"
+
+
+def test_introspect_non_object_json_raises_autherror(monkeypatch):
+    # Valid JSON that is not an object (a list here) must surface as a neutral AuthError, not leak an
+    # AttributeError from the later `.get("active")` through the auth port (cubic PR 10887 oidc.py:68).
+    monkeypatch.setenv("OIDC_ISSUER", "http://keycloak:8080/realms/omi")
+    monkeypatch.setenv("OIDC_ADMIN_CLIENT_ID", "omi-backend-admin")
+    monkeypatch.setenv("OIDC_ADMIN_CLIENT_SECRET", "secret")
+    monkeypatch.setattr(
+        httpx, "post", lambda url, data=None, timeout=None: SimpleNamespace(status_code=200, json=lambda: ["not", "an", "object"])
+    )
+    with pytest.raises(errors.AuthError):
+        OIDCAuthProvider()._introspect_active("tok")
+
+
 def test_introspect_missing_credentials_fails_closed(monkeypatch):
     monkeypatch.setenv("OIDC_ISSUER", "http://keycloak:8080/realms/omi")
     monkeypatch.delenv("OIDC_ADMIN_CLIENT_ID", raising=False)
