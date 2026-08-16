@@ -3218,5 +3218,7 @@
     "chatScopeToday": "Šiandien",
     "chatScopeThisWeek": "Šią savaitę",
     "chatScopeAbout": "Apie: {title}",
-    "askAboutThisConversation": "Paklausti apie tai"
+    "askAboutThisConversation": "Paklausti apie tai",
+    "sendRawAudioToOmi": "Siųsti neapdorotą garsą į Omi",
+    "sendRawAudioToOmiDescription": "Išjunkite, kad neapdorotas garsas nebūtų siunčiamas į Omi. Transkripcijos ir debesies funkcijoms reikalingi duomenys vis tiek gali būti siunčiami į Omi."
 }

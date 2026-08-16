@@ -9796,4 +9796,11 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get askAboutThisConversation => 'اسأل عن هذا';
+
+  @override
+  String get sendRawAudioToOmi => 'إرسال الصوت الخام إلى Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'أوقف هذا الخيار لمنع إرسال الصوت الخام إلى Omi. قد يستمر إرسال النصوص والبيانات اللازمة للميزات السحابية إلى Omi.';
 }

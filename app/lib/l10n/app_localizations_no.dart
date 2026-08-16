@@ -9853,4 +9853,11 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get askAboutThisConversation => 'Spør om dette';
+
+  @override
+  String get sendRawAudioToOmi => 'Send rå lyd til Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Slå av for å hindre at rå lyd sendes til Omi. Transkripsjoner og data som skyfunksjoner trenger, kan fortsatt bli sendt til Omi.';
 }

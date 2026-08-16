@@ -3253,5 +3253,7 @@
     "chatScopeToday": "Bugün",
     "chatScopeThisWeek": "Bu hafta",
     "chatScopeAbout": "Hakkında: {title}",
-    "askAboutThisConversation": "Bunu sor"
+    "askAboutThisConversation": "Bunu sor",
+    "sendRawAudioToOmi": "Ham sesi Omi'ye gönder",
+    "sendRawAudioToOmiDescription": "Ham sesin Omi'ye gönderilmesini önlemek için kapatın. Transkriptler ve bulut özelliklerinin gerektirdiği veriler yine de Omi'ye gönderilebilir."
 }

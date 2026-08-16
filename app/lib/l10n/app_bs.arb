@@ -10784,5 +10784,7 @@
     "chatScopeToday": "Danas",
     "chatScopeThisWeek": "Ove sedmice",
     "chatScopeAbout": "O: {title}",
-    "askAboutThisConversation": "Pitaj o ovome"
+    "askAboutThisConversation": "Pitaj o ovome",
+    "sendRawAudioToOmi": "Šalji sirovi zvuk u Omi",
+    "sendRawAudioToOmiDescription": "Isključite da spriječite slanje sirovog zvuka u Omi. Transkripti i podaci potrebni za funkcije u oblaku i dalje se mogu slati u Omi."
 }

@@ -9941,4 +9941,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get askAboutThisConversation => 'Demander à ce sujet';
+
+  @override
+  String get sendRawAudioToOmi => 'Envoyer l\'audio brut à Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Désactivez cette option pour empêcher l\'envoi de l\'audio brut à Omi. Les transcriptions et les données nécessaires aux fonctions cloud peuvent toujours être envoyées à Omi.';
 }

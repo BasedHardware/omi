@@ -3223,5 +3223,7 @@
     "chatScopeToday": "Hôm nay",
     "chatScopeThisWeek": "Tuần này",
     "chatScopeAbout": "Về: {title}",
-    "askAboutThisConversation": "Hỏi về điều này"
+    "askAboutThisConversation": "Hỏi về điều này",
+    "sendRawAudioToOmi": "Gửi âm thanh thô đến Omi",
+    "sendRawAudioToOmiDescription": "Tắt để ngăn âm thanh thô được gửi đến Omi. Bản chép lời và dữ liệu cần cho các tính năng đám mây vẫn có thể được gửi đến Omi."
 }

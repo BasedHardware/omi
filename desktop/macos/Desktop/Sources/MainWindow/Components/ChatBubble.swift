@@ -111,16 +111,24 @@ struct ChatBubble: View {
   /// Whether this message should be truncated
   private var shouldTruncate: Bool {
     ChatBubbleTruncation.shouldTruncate(
-      text: message.text,
+      text: bubbleText,
       isStreaming: message.isStreaming,
       isExpanded: isExpanded
     )
   }
 
+  /// Visible answer body. Pre-tool model commentary is not the turn output.
+  private var bubbleText: String {
+    if message.sender == .ai, !message.contentBlocks.isEmpty {
+      return message.visibleAnswerText
+    }
+    return message.text
+  }
+
   /// The text to display (truncated or full) — keeps the start of the message visible
   private var displayText: String {
     ChatBubbleTruncation.displayText(
-      message.text,
+      bubbleText,
       isStreaming: message.isStreaming,
       isExpanded: isExpanded
     )
@@ -240,21 +248,26 @@ struct ChatBubble: View {
         TypingIndicator()
       }
     } else if message.sender == .ai && !message.contentBlocks.isEmpty {
-      if groupedBlocks.isEmpty, !message.text.isEmpty {
-        messageTextBubble(message.text)
-      }
       ForEach(groupedBlocks) { group in
-        groupView(group)
+        if case .text = group {
+          EmptyView()
+        } else {
+          groupView(group)
+        }
+      }
+      if !message.visibleAnswerText.isEmpty {
+        messageTextBubble(displayText)
+        truncationControl
       }
       if message.isStreaming, app != nil {
-        if case .toolCalls(_, let calls) = groupedBlocks.last,
-          calls.contains(where: { block in
+        let hasInFlightTool = groupedBlocks.contains { group in
+          guard case .toolCalls(_, let calls) = group else { return false }
+          return calls.contains { block in
             if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
             return false
-          })
-        {
-          // Tool group has a running tool — its card already shows a spinner
-        } else {
+          }
+        }
+        if !hasInFlightTool {
           TypingIndicator()
         }
       }
@@ -299,19 +312,7 @@ struct ChatBubble: View {
           messageTextBubble(displayText)
         }
 
-        if backgroundAgentSummary == nil, message.text.count > Self.truncationThreshold {
-          if isExpanded {
-            Button(action: { isExpanded.toggle() }) {
-              // Pairs with `showMoreButton`; left `.white`, it vanished on the light panel.
-              Text("Show less")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.accent)
-            }
-            .buttonStyle(.plain)
-          } else if shouldTruncate {
-            showMoreButton
-          }
-        }
+        truncationControl
 
         if message.sender != .user, let resourceStrip {
           resourceStrip
@@ -380,6 +381,22 @@ struct ChatBubble: View {
     .accessibilityHint("Expand the full message")
   }
 
+  @ViewBuilder
+  private var truncationControl: some View {
+    if backgroundAgentSummary == nil, bubbleText.count > Self.truncationThreshold {
+      if isExpanded {
+        Button(action: { isExpanded.toggle() }) {
+          Text("Show less")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.accent)
+        }
+        .buttonStyle(.plain)
+      } else if shouldTruncate {
+        showMoreButton
+      }
+    }
+  }
+
   private var agentOpenClosure: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? {
     guard hasAgentOpenAction else { return nil }
     return openAgent(ref:completion:)
@@ -401,6 +418,8 @@ struct ChatBubble: View {
           onOpenCitation: onOpenInlineCitation
         )
         .chatMessageBlock(filled: false))
+    case .commentary(_, let text):
+      return AnyView(TurnCommentaryRow(text: text))
     case .toolCalls(_, let calls):
       return AnyView(
         ToolCallsGroup(
@@ -1120,6 +1139,7 @@ extension ChatBubble: @preconcurrency Equatable {
 /// Groups consecutive tool call blocks into a single collapsible group
 enum ContentBlockGroup: Identifiable {
   case text(id: String, text: String)
+  case commentary(id: String, text: String)
   case toolCalls(id: String, calls: [ChatContentBlock])
   case thinking(id: String, text: String)
   case discoveryCard(id: String, title: String, summary: String, fullText: String)
@@ -1152,6 +1172,7 @@ enum ContentBlockGroup: Identifiable {
   var id: String {
     switch self {
     case .text(let id, _): return id
+    case .commentary(let id, _): return id
     case .toolCalls(let id, _): return id
     case .thinking(let id, _): return id
     case .discoveryCard(let id, _, _, _): return id
@@ -1297,10 +1318,37 @@ enum ContentBlockGroup: Identifiable {
         return trimmedRun.isEmpty ? nil : "run:\(trimmedRun)"
       }
     )
-    return group(blocks, richBlockRenderingEnabled: richBlockRenderingEnabled).compactMap { group in
+    let grouped = group(blocks, richBlockRenderingEnabled: richBlockRenderingEnabled)
+    let lastToolIndex = grouped.lastIndex { group in
+      if case .toolCalls = group { return true }
+      return false
+    }
+    let hasTextAfterLastTool =
+      lastToolIndex.map { toolIndex in
+        grouped[(toolIndex + 1)...].contains { group in
+          if case .text(_, let text) = group {
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          }
+          return false
+        }
+      } ?? false
+
+    return grouped.enumerated().compactMap { index, group in
       switch group {
       case .text(_, let text):
-        return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : group
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return nil }
+        if let lastToolIndex, index < lastToolIndex {
+          if isStreaming {
+            return .commentary(id: group.id, text: trimmed)
+          }
+          if hasTextAfterLastTool {
+            return nil
+          }
+        }
+        return group
+      case .commentary:
+        return isStreaming ? group : nil
       case .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink,
         .agentSpawn, .agentCompletion:
         return group
@@ -1487,6 +1535,41 @@ struct ToolCallsGroup: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .fixedSize(horizontal: false, vertical: true)
+  }
+}
+
+/// Live-only model narration that preceded tools. Same rail as tool chips; dropped
+/// when the turn settles so only the final answer remains.
+struct TurnCommentaryRow: View {
+  let text: String
+
+  var body: some View {
+    ToolCallActivityHeadline(name: "commentary", status: .completed) {
+      Text(text)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .frame(maxWidth: .infinity, minHeight: ToolActivityTimelineLayout.rowMinHeight, alignment: .topLeading)
+    .background(alignment: .topLeading) {
+      GeometryReader { proxy in
+        Rectangle()
+          .fill(Ink.secondary.opacity(0.28))
+          .frame(
+            width: ToolActivityTimelineLayout.connectorWidth,
+            height: max(0, proxy.size.height - ToolActivityTimelineLayout.connectorBottomTrim)
+          )
+          .offset(
+            x: ToolActivityTimelineLayout.connectorOriginX,
+            y: ToolActivityTimelineLayout.connectorTopInset
+          )
+      }
+      .accessibilityHidden(true)
+    }
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel(text)
+    .accessibilityIdentifier("query-shell-turn-commentary")
   }
 }
 

@@ -232,6 +232,10 @@ extension SBOnboardingModel {
   /// (the exact spot users hit it). See `ScreenCaptureService.primeCaptureConsent`.
   func primeScreenCaptureConsentIfNeeded() {
     guard !didPrimeScreenCapture else { return }
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: appState.screenRecordingGrantedAtLaunch)
+    else { return }
     didPrimeScreenCapture = true
     if #available(macOS 14.0, *) {
       Task.detached { await ScreenCaptureService.primeCaptureConsent() }

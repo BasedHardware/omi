@@ -3196,5 +3196,7 @@
     "chatScopeToday": "Avui",
     "chatScopeThisWeek": "Aquesta setmana",
     "chatScopeAbout": "Sobre: {title}",
-    "askAboutThisConversation": "Pregunta sobre això"
+    "askAboutThisConversation": "Pregunta sobre això",
+    "sendRawAudioToOmi": "Envia l'àudio sense processar a Omi",
+    "sendRawAudioToOmiDescription": "Desactiva-ho per impedir que l'àudio sense processar s'enviï a Omi. Les transcripcions i les dades necessàries per a les funcions al núvol encara es poden enviar a Omi."
 }

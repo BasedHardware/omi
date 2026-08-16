@@ -17,11 +17,45 @@ from llm_gateway.gateway.accounting import (
     ProviderUsage,
     anthropic_usage_from_response,
     build_accounting_event,
+    cache_requested_for_openai_request,
     cache_write_ttl_for_anthropic_request,
     image_usage,
     openai_usage_from_response,
     vertex_usage_from_response,
 )
+
+
+def test_openai_cache_request_detection_matches_explicit_contract() -> None:
+    breakpoint_messages = [
+        {
+            'role': 'system',
+            'content': [
+                {
+                    'type': 'text',
+                    'text': 'static instructions',
+                    'prompt_cache_breakpoint': {'mode': 'explicit'},
+                }
+            ],
+        }
+    ]
+
+    assert cache_requested_for_openai_request(
+        {
+            'prompt_cache_key': 'omi-transcript-structure-v1',
+            'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'},
+            'messages': breakpoint_messages,
+        }
+    )
+    assert not cache_requested_for_openai_request(
+        {
+            # Include the routing key so the check reaches the breakpoint-detection
+            # branch instead of short-circuiting on the missing prompt_cache_key guard.
+            'prompt_cache_key': 'omi-transcript-structure-v1',
+            'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'},
+            'messages': [{'role': 'system', 'content': 'unique transcript'}],
+        }
+    )
+    assert cache_requested_for_openai_request({'prompt_cache_key': 'legacy-key', 'messages': []})
 
 
 def test_openai_usage_distinguishes_cache_hit_miss_and_unobserved_cache() -> None:
@@ -65,6 +99,42 @@ def test_openai_usage_distinguishes_cache_hit_miss_and_unobserved_cache() -> Non
     assert no_cache_read is not None and no_cache_read.cache_status == CacheStatus.NO_CACHE_READ_OBSERVED
 
 
+def test_openai_flex_tier_is_recorded_and_priced_at_batch_rates() -> None:
+    metadata = openai_usage_from_response(
+        {
+            'id': 'chatcmpl-flex',
+            'model': 'gpt-5.6-luna',
+            'service_tier': 'flex',
+            'usage': {'prompt_tokens': 1_000_000, 'completion_tokens': 1_000_000},
+        }
+    )
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openai',
+        configured_model='gpt-5.6-luna',
+        route_artifact_id='route.memory_conflict_flex.model_config.001',
+        fallback_reason=None,
+        retry_ordinal=0,
+        outcome='success',
+        error_class='none',
+        metadata=metadata,
+    )
+    context = AccountingContext.create(
+        request_id='request-flex',
+        caller='memory-maintenance-job',
+        user_uid=None,
+        feature='memory_conflict',
+        api_surface='openai.chat_completions',
+        payer='omi',
+    )
+
+    event = build_accounting_event(context, attempt)
+
+    assert event.traffic_type == 'flex'
+    assert event.estimated_cost_micro_usd == 700_000
+    assert event.cost_basis == 'flex_batch_token_rates_excludes_cache_storage'
+
+
 def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None:
     usage = openai_usage_from_response(
         {
@@ -98,6 +168,91 @@ def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None
     assert event.cache_write_tokens == 400_000
     assert event.estimated_cost_micro_usd == 1_384_000
     assert event.rate_card_id == 'openai.gpt-5.6-luna.2026-07-30'
+
+
+def test_cache_write_only_miss_reports_negative_net_cache_savings() -> None:
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openai',
+        configured_model='gpt-5.6-luna',
+        route_artifact_id='route.test.001',
+        fallback_reason=None,
+        retry_ordinal=0,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(
+                prompt_tokens=1_000_000,
+                cache_write_tokens=1_000_000,
+                cache_write_ttl='30m',
+            )
+        ),
+    )
+
+    event = build_accounting_event(_context(), attempt)
+
+    # A write costs $0.25/M while the ordinary input counterfactual costs
+    # $0.20/M, so this first miss is a $0.05/M net loss until it is reused.
+    assert event.estimated_cost_micro_usd == 250_000
+    assert event.estimated_cache_savings_micro_usd == -50_000
+
+
+def test_cache_write_and_read_report_net_cache_savings() -> None:
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openai',
+        configured_model='gpt-5.6-luna',
+        route_artifact_id='route.test.001',
+        fallback_reason=None,
+        retry_ordinal=0,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(
+                prompt_tokens=2_000_000,
+                cached_input_tokens=1_000_000,
+                uncached_input_tokens=0,
+                cache_write_tokens=1_000_000,
+                cache_write_ttl='30m',
+                output_tokens=1_000_000,
+            )
+        ),
+    )
+
+    event = build_accounting_event(_context(), attempt)
+
+    # Counterfactual input bill: 2M * $0.20 = $0.40. Actual input bill is
+    # 1M * $0.02 + 1M * $0.25 = $0.27, for $0.13 net savings.
+    assert event.estimated_cost_micro_usd == 1_470_000
+    assert event.estimated_cache_savings_micro_usd == 130_000
+
+
+def test_flex_halves_complete_net_cache_savings_and_total_cost() -> None:
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openai',
+        configured_model='gpt-5.6-luna',
+        route_artifact_id='route.test.001',
+        fallback_reason=None,
+        retry_ordinal=0,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(
+                prompt_tokens=2_000_000,
+                cached_input_tokens=1_000_000,
+                cache_write_tokens=1_000_000,
+                cache_write_ttl='30m',
+                output_tokens=1_000_000,
+            ),
+            traffic_type='flex',
+        ),
+    )
+
+    event = build_accounting_event(_context(), attempt)
+
+    assert event.estimated_cost_micro_usd == 735_000
+    assert event.estimated_cache_savings_micro_usd == 65_000
 
 
 def test_empty_usage_object_is_unreported_not_a_zero_cost_completion() -> None:

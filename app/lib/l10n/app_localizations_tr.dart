@@ -9865,4 +9865,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get askAboutThisConversation => 'Bunu sor';
+
+  @override
+  String get sendRawAudioToOmi => 'Ham sesi Omi\'ye gönder';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Ham sesin Omi\'ye gönderilmesini önlemek için kapatın. Transkriptler ve bulut özelliklerinin gerektirdiği veriler yine de Omi\'ye gönderilebilir.';
 }

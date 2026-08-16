@@ -9689,4 +9689,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get askAboutThisConversation => '이에 대해 질문';
+
+  @override
+  String get sendRawAudioToOmi => '원본 오디오를 Omi로 보내기';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      '끄면 원본 오디오가 Omi로 전송되지 않습니다. 텍스트 변환 결과와 클라우드 기능에 필요한 데이터는 계속 Omi로 전송될 수 있습니다.';
 }

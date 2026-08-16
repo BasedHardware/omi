@@ -3253,5 +3253,7 @@
     "chatScopeToday": "Aujourd’hui",
     "chatScopeThisWeek": "Cette semaine",
     "chatScopeAbout": "À propos de : {title}",
-    "askAboutThisConversation": "Demander à ce sujet"
+    "askAboutThisConversation": "Demander à ce sujet",
+    "sendRawAudioToOmi": "Envoyer l'audio brut à Omi",
+    "sendRawAudioToOmiDescription": "Désactivez cette option pour empêcher l'envoi de l'audio brut à Omi. Les transcriptions et les données nécessaires aux fonctions cloud peuvent toujours être envoyées à Omi."
 }

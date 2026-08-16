@@ -418,7 +418,11 @@ overlay:
             version: latest
     jobs:
       notifications-job:
+        flags:
+          --task-timeout: 3600s
         env:
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           PINECONE_INDEX_NAME:
@@ -439,6 +443,8 @@ overlay:
             value: 'false'
           MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
             value: 'false'
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
           MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
             value: '25'
           PINECONE_INDEX_NAME:

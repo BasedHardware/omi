@@ -1226,13 +1226,21 @@ public class ProactiveAssistantsPlugin: NSObject {
         detail: payload["detail"]
       )
 
-      log("NotificationTestCLI: Received test trigger (title=\(resolvedTitle), assistantId=\(resolvedAssistantId))")
+      // Functional notices (screen-recording repair, meeting hand-off) opt into a system
+      // banner; the proactive default does not. The CLI carries the flag so both delivery
+      // contracts stay exercisable against a real running bundle.
+      let deliverSystemBanner = payload["deliverSystemBanner"] == "true"
+
+      log(
+        "NotificationTestCLI: Received test trigger (title=\(resolvedTitle), "
+          + "assistantId=\(resolvedAssistantId), deliverSystemBanner=\(deliverSystemBanner))")
       NotificationService.shared.sendNotification(
         ownerID: ownerID,
         title: resolvedTitle,
         message: resolvedMessage,
         assistantId: resolvedAssistantId,
-        context: context
+        context: context,
+        deliverSystemBanner: deliverSystemBanner
       )
     }
   }

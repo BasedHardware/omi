@@ -3196,5 +3196,7 @@
     "chatScopeToday": "Dnes",
     "chatScopeThisWeek": "Tento týden",
     "chatScopeAbout": "O: {title}",
-    "askAboutThisConversation": "Zeptat se na toto"
+    "askAboutThisConversation": "Zeptat se na toto",
+    "sendRawAudioToOmi": "Odesílat nezpracovaný zvuk do Omi",
+    "sendRawAudioToOmiDescription": "Vypnutím zabráníte odesílání nezpracovaného zvuku do Omi. Přepisy a data potřebná pro cloudové funkce se mohou do Omi nadále odesílat."
 }

@@ -3218,5 +3218,7 @@
     "chatScopeToday": "I dag",
     "chatScopeThisWeek": "Denne uken",
     "chatScopeAbout": "Om: {title}",
-    "askAboutThisConversation": "Spør om dette"
+    "askAboutThisConversation": "Spør om dette",
+    "sendRawAudioToOmi": "Send rå lyd til Omi",
+    "sendRawAudioToOmiDescription": "Slå av for å hindre at rå lyd sendes til Omi. Transkripsjoner og data som skyfunksjoner trenger, kan fortsatt bli sendt til Omi."
 }

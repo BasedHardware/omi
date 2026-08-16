@@ -3218,5 +3218,7 @@
     "chatScopeToday": "Täna",
     "chatScopeThisWeek": "Sel nädalal",
     "chatScopeAbout": "Teave: {title}",
-    "askAboutThisConversation": "Küsi selle kohta"
+    "askAboutThisConversation": "Küsi selle kohta",
+    "sendRawAudioToOmi": "Saada töötlemata heli Omisse",
+    "sendRawAudioToOmiDescription": "Lülita välja, et töötlemata heli Omisse ei saadetaks. Transkriptsioone ja pilvefunktsioonide jaoks vajalikke andmeid võidakse endiselt Omisse saata."
 }

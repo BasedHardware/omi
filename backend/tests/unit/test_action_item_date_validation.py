@@ -333,6 +333,11 @@ update_action_item_tool = action_item_tools.update_action_item_tool
 # discard_parser only needs pydantic and langchain_core, so load the real module.
 _load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm" / "discard_parser.py")
 
+# prompt_cache is stdlib-only, so load the real module. utils.llm is stubbed with an
+# empty __path__ above, which leaves conversation_processing's absolute import of it
+# unresolvable.
+_load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" / "prompt_cache.py")
+
 conversation_processing = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",

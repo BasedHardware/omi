@@ -3254,5 +3254,7 @@
     "chatScopeToday": "Hoje",
     "chatScopeThisWeek": "Esta semana",
     "chatScopeAbout": "Sobre: {title}",
-    "askAboutThisConversation": "Perguntar sobre isto"
+    "askAboutThisConversation": "Perguntar sobre isto",
+    "sendRawAudioToOmi": "Enviar áudio em bruto para o Omi",
+    "sendRawAudioToOmiDescription": "Desative para impedir o envio de áudio em bruto para o Omi. As transcrições e os dados necessários às funcionalidades na nuvem ainda podem ser enviados para o Omi."
 }

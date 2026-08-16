@@ -9883,4 +9883,11 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get askAboutThisConversation => 'Zapytaj o to';
+
+  @override
+  String get sendRawAudioToOmi => 'Wysyłaj surowy dźwięk do Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Wyłącz, aby surowy dźwięk nie był wysyłany do Omi. Transkrypcje i dane wymagane przez funkcje chmurowe mogą nadal być wysyłane do Omi.';
 }

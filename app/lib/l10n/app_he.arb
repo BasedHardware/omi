@@ -10784,5 +10784,7 @@
     "chatScopeToday": "היום",
     "chatScopeThisWeek": "השבוע הזה",
     "chatScopeAbout": "אודות: {title}",
-    "askAboutThisConversation": "שאל על זה"
+    "askAboutThisConversation": "שאל על זה",
+    "sendRawAudioToOmi": "שליחת שמע גולמי ל-Omi",
+    "sendRawAudioToOmiDescription": "כבו כדי למנוע שליחת שמע גולמי ל-Omi. תמלילים ונתונים הדרושים לתכונות הענן עדיין עשויים להישלח ל-Omi."
 }

@@ -3196,5 +3196,7 @@
     "chatScopeToday": "Днес",
     "chatScopeThisWeek": "Тази седмица",
     "chatScopeAbout": "За: {title}",
-    "askAboutThisConversation": "Попитай за това"
+    "askAboutThisConversation": "Попитай за това",
+    "sendRawAudioToOmi": "Изпращане на необработен звук към Omi",
+    "sendRawAudioToOmiDescription": "Изключете, за да спрете изпращането на необработен звук към Omi. Транскрипции и данни, нужни за облачните функции, все още може да се изпращат към Omi."
 }

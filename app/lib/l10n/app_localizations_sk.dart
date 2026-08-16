@@ -9847,4 +9847,11 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get askAboutThisConversation => 'Opýtať sa na to';
+
+  @override
+  String get sendRawAudioToOmi => 'Odosielať nespracovaný zvuk do Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Vypnutím zabránite odosielaniu nespracovaného zvuku do Omi. Prepisy a údaje potrebné pre cloudové funkcie sa môžu naďalej odosielať do Omi.';
 }

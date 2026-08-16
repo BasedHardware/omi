@@ -9839,4 +9839,11 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get askAboutThisConversation => 'Spørg om dette';
+
+  @override
+  String get sendRawAudioToOmi => 'Send rå lyd til Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Slå fra for at forhindre, at rå lyd sendes til Omi. Transskriptioner og data, som cloudfunktioner kræver, kan stadig blive sendt til Omi.';
 }

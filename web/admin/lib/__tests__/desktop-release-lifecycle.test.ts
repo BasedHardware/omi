@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  desktopQualificationFromMetadata,
   desktopReleaseLifecycle,
   desktopReleaseLifecycleLabel,
   desktopStableCandidateFromMetadata,
+  newestSparkleVersion,
+  tagBuildNumber,
 } from "../desktop-release-lifecycle";
 
 const completeNomination = {
@@ -14,52 +15,15 @@ const completeNomination = {
   stableCandidateAt: "2026-07-10T12:00:00Z",
   stableCandidateBy: "release-operator",
   stableCandidateRationale: "soak passed",
-  stableCandidateQualificationEvidence: "qualification-evidence.json",
   stableCandidateSoakReview: "24h reviewed",
   stableCandidateTelemetryReview: "health reviewed",
   stableCandidateReleaseNotesReview: "rollup reviewed",
 };
 const expectedNomination = {
   releaseTag: "v1.2.3+123-macos",
-  qualificationEvidence: "qualification-evidence.json",
 };
 
 describe("desktop release lifecycle", () => {
-  it("reads canonical qualification metadata", () => {
-    const qualification = desktopQualificationFromMetadata({
-      qualifiedBeta: "true",
-      qualifiedBetaAt: "2026-07-10T10:00:00Z",
-      qualifiedBetaEvidence: "qualification-evidence.json",
-    });
-    expect(qualification).toEqual({
-      qualified: true,
-      qualifiedAt: "2026-07-10T10:00:00Z",
-      evidence: "qualification-evidence.json",
-      source: "canonical",
-    });
-  });
-
-  it("accepts legacy qualification metadata", () => {
-    const qualification = desktopQualificationFromMetadata({
-      blessed: "true",
-      blessedAt: "2026-07-09T10:00:00Z",
-      blessedEvidence: "legacy-evidence.json",
-    });
-    expect(qualification.qualified).toBe(true);
-    expect(qualification.source).toBe("legacy");
-    expect(qualification.evidence).toBe("legacy-evidence.json");
-  });
-
-  it("lets canonical metadata override stale legacy metadata", () => {
-    const qualification = desktopQualificationFromMetadata({
-      qualifiedBeta: "false",
-      blessed: "true",
-      blessedEvidence: "legacy-evidence.json",
-    });
-    expect(qualification.qualified).toBe(false);
-    expect(qualification.source).toBe("canonical");
-  });
-
   it("requires every nomination field before declaring a stable candidate", () => {
     expect(
       desktopStableCandidateFromMetadata(completeNomination, expectedNomination)
@@ -76,20 +40,27 @@ describe("desktop release lifecycle", () => {
     ).toBe(false);
   });
 
-  it("rejects a nomination tied to stale qualification evidence", () => {
+  it("rejects a nomination tied to a different release tag", () => {
     expect(
       desktopStableCandidateFromMetadata(completeNomination, {
-        ...expectedNomination,
-        qualificationEvidence: "new-evidence.json",
+        releaseTag: "v9.9.9+999-macos",
       }).complete,
     ).toBe(false);
   });
 
-  it("distinguishes all four lifecycle states", () => {
-    const unqualified = desktopQualificationFromMetadata({});
-    const qualified = desktopQualificationFromMetadata({
-      qualifiedBeta: "true",
-    });
+  it("does not require qualification evidence for a stable candidate", () => {
+    expect(
+      desktopStableCandidateFromMetadata(
+        {
+          ...completeNomination,
+          stableCandidateQualificationEvidence: "",
+        },
+        expectedNomination,
+      ).complete,
+    ).toBe(true);
+  });
+
+  it("distinguishes candidate, live beta, stable-candidate, and stable", () => {
     const notNominated = desktopStableCandidateFromMetadata(
       {},
       expectedNomination,
@@ -99,30 +70,35 @@ describe("desktop release lifecycle", () => {
       expectedNomination,
     );
 
-    expect(
-      desktopReleaseLifecycle("candidate", unqualified, notNominated),
-    ).toBe("build_candidate");
-    expect(desktopReleaseLifecycle("beta", qualified, notNominated)).toBe(
-      "qualified_beta",
+    expect(desktopReleaseLifecycle("candidate", false, notNominated)).toBe(
+      "build_candidate",
     );
-    expect(desktopReleaseLifecycle("beta", qualified, nominated)).toBe(
+    expect(desktopReleaseLifecycle("beta", true, notNominated)).toBe(
+      "beta_live",
+    );
+    expect(desktopReleaseLifecycle("beta", true, nominated)).toBe(
       "stable_candidate",
     );
-    expect(desktopReleaseLifecycle("stable", qualified, nominated)).toBe(
-      "stable",
-    );
+    expect(desktopReleaseLifecycle("stable", true, nominated)).toBe("stable");
   });
 
-  it("uses the canonical four-state operator labels", () => {
+  it("uses the canonical operator labels", () => {
     expect(desktopReleaseLifecycleLabel("build_candidate")).toBe(
       "Build candidate",
     );
-    expect(desktopReleaseLifecycleLabel("qualified_beta")).toBe(
-      "Qualified beta",
-    );
+    expect(desktopReleaseLifecycleLabel("beta_live")).toBe("Beta");
     expect(desktopReleaseLifecycleLabel("stable_candidate")).toBe(
       "Stable candidate",
     );
     expect(desktopReleaseLifecycleLabel("stable")).toBe("Stable");
+  });
+
+  it("matches live beta by the newest sparkle version", () => {
+    expect(tagBuildNumber("v0.12.172+12172-macos")).toBe(12172);
+    expect(
+      newestSparkleVersion(
+        '<item><sparkle:version>12170</sparkle:version></item><item sparkle:version="12172"/>',
+      ),
+    ).toBe(12172);
   });
 });

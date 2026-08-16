@@ -9863,4 +9863,11 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get askAboutThisConversation => 'याबद्दल विचारा';
+
+  @override
+  String get sendRawAudioToOmi => 'Omi ला कच्चा ऑडिओ पाठवा';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Omi ला कच्चा ऑडिओ पाठवणे थांबवण्यासाठी हे बंद करा. प्रतिलेख आणि क्लाउड वैशिष्ट्यांसाठी आवश्यक डेटा अजूनही Omi ला पाठवला जाऊ शकतो.';
 }

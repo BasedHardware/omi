@@ -3314,5 +3314,7 @@
     "chatScopeToday": "Ma",
     "chatScopeThisWeek": "Ezen a héten",
     "chatScopeAbout": "Erről: {title}",
-    "askAboutThisConversation": "Kérdezz erről"
+    "askAboutThisConversation": "Kérdezz erről",
+    "sendRawAudioToOmi": "Nyers hang küldése az Ominak",
+    "sendRawAudioToOmiDescription": "Kapcsold ki, hogy a nyers hang ne kerüljön az Omihoz. Az átiratok és a felhőfunkciókhoz szükséges adatok továbbra is elküldhetők az Ominak."
 }

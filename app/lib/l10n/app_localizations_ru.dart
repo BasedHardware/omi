@@ -9891,4 +9891,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get askAboutThisConversation => 'Спросить об этом';
+
+  @override
+  String get sendRawAudioToOmi => 'Отправлять необработанный звук в Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Отключите, чтобы необработанный звук не отправлялся в Omi. Расшифровки и данные, необходимые облачным функциям, всё ещё могут отправляться в Omi.';
 }

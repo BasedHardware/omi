@@ -9910,4 +9910,11 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get askAboutThisConversation => 'Pregunta sobre això';
+
+  @override
+  String get sendRawAudioToOmi => 'Envia l\'àudio sense processar a Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Desactiva-ho per impedir que l\'àudio sense processar s\'enviï a Omi. Les transcripcions i les dades necessàries per a les funcions al núvol encara es poden enviar a Omi.';
 }

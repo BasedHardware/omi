@@ -3218,5 +3218,7 @@
     "chatScopeToday": "Hari ini",
     "chatScopeThisWeek": "Minggu ini",
     "chatScopeAbout": "Perihal: {title}",
-    "askAboutThisConversation": "Tanya tentang ini"
+    "askAboutThisConversation": "Tanya tentang ini",
+    "sendRawAudioToOmi": "Hantar audio mentah ke Omi",
+    "sendRawAudioToOmiDescription": "Matikan untuk menghalang audio mentah daripada dihantar ke Omi. Transkrip dan data yang diperlukan oleh ciri awan mungkin masih dihantar ke Omi."
 }

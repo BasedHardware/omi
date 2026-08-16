@@ -9889,4 +9889,11 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get askAboutThisConversation => 'Pitaj o ovome';
+
+  @override
+  String get sendRawAudioToOmi => 'Šalji neobrađeni zvuk u Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Isključite kako biste spriječili slanje neobrađenog zvuka u Omi. Transkripti i podaci potrebni za funkcije u oblaku i dalje se mogu slati u Omi.';
 }

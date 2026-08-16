@@ -10784,5 +10784,7 @@
     "chatScopeToday": "Сёння",
     "chatScopeThisWeek": "Гэты тыдзень",
     "chatScopeAbout": "Пра: {title}",
-    "askAboutThisConversation": "Спытаць пра гэта"
+    "askAboutThisConversation": "Спытаць пра гэта",
+    "sendRawAudioToOmi": "Адпраўляць неапрацаванае аўдыя ў Omi",
+    "sendRawAudioToOmiDescription": "Выключыце, каб не адпраўляць у Omi неапрацаванае аўдыя. Расшыфроўкі і даныя, патрэбныя воблачным функцыям, усё яшчэ могуць адпраўляцца ў Omi."
 }
