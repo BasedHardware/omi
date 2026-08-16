@@ -38,7 +38,8 @@ The factory:
 4. obtains Auth only from that exact app;
 5. returns an exact plain adapter whose source is derived from the observed
    environment and whose only operation delegates
-   `verifyIdToken(token, true)`; and
+   `verifyIdToken(token, checkRevoked)` for both local signature verification
+   and the windowed revocation check; and
 6. returns a separate idempotent close operation that deletes only the app it
    created and makes later verification fail closed.
 
@@ -69,8 +70,10 @@ test infrastructure and credentials and are not replaced by hermetic fakes.
 
 1. Exact configuration constructs one named app with exact project id and an
    application-default credential, then binds Auth to that same app.
-2. Verification delegates the unchanged token with literal `true` exactly once
-   and returns the SDK-decoded value unchanged to the identity boundary.
+2. Verification delegates the unchanged token with the caller's `checkRevoked`
+   flag exactly once and returns the SDK-decoded value unchanged to the identity
+   boundary. Revoked/disabled/invalid SDK codes collapse to a closed rejection;
+   network and unclassified failures collapse to a closed unavailability.
 3. A present emulator variable makes deployed construction fail before
    credential, app, or Auth construction; local-test mode alone reports the
    emulator source.

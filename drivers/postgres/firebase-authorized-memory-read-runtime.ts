@@ -12,7 +12,7 @@ import type { RenderNode } from "../../core/retrieve/render";
 import type { ApplicationGrantProjectedTreeInputSnapshot } from
   "../../core/retrieve/authorization-boundary";
 import { isInvalidMcpCursorError } from "../../apps/mcp/cursor";
-import { createFirebaseIdentityVerifier } from "../../apps/service/auth/firebase-identity";
+import { createFirebaseIdentityVerifier, isFirebaseIdentityRefreshUnavailable } from "../../apps/service/auth/firebase-identity";
 import {
   readDirectAuthorizedMemoryPage,
 } from "../../apps/service/composition/memory-read";
@@ -207,7 +207,8 @@ export const createPostgresFirebaseAuthorizedMemoryReadRuntime = (
   return Object.freeze({
     [RUNTIME_PORT]: true as const,
     async authenticate(idToken: string, nowEpochSeconds: number) {
-      return await identityVerifier.resolve(idToken, nowEpochSeconds) !== null;
+      const resolved = await identityVerifier.resolve(idToken, nowEpochSeconds);
+      return resolved !== null && !isFirebaseIdentityRefreshUnavailable(resolved);
     },
     async read(
       idToken: string,

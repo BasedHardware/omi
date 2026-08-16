@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isProxy } from "node:util/types";
 
 const MAX_PROJECT_ID_CODE_UNITS = 128;
@@ -7,12 +8,38 @@ const MAX_DECODED_CLAIMS = 128;
 const JWT_PART = /^[A-Za-z0-9_-]+$/;
 const PROJECT_ID = /^[A-Za-z0-9._:-]+$/;
 
+/**
+ * How often a cryptographically valid token is re-checked for revocation at Google.
+ *
+ * Buys: a local-first app can open on a plane, on dead wifi, and during a Google
+ * outage. Signature, expiry, issuer, and audience stay local and strict on every
+ * request; only the network revocation round trip is deferred.
+ *
+ * Costs: a session revoked at Google remains accepted for up to this window.
+ * That cost is accepted. Do not "optimize" this to an hour without knowing
+ * you are widening the revoked-session survival time.
+ */
+export const FIREBASE_REVOCATION_RECHECK_WINDOW_SECONDS = 15 * 60;
+
+/** Closed adapter signal that verification could not reach Google. Not a rejected token. */
+export const FIREBASE_ID_TOKEN_VERIFICATION_UNAVAILABLE = "firebase_admin_identity_unavailable";
+
+/**
+ * Honest failure when the signature is valid but revocation could not be re-checked.
+ * Not a logout (`null`) and not a grant (a `FirebaseIdentity`).
+ */
+export const FIREBASE_IDENTITY_REFRESH_UNAVAILABLE = Object.freeze({
+  kind: "firebase_identity_refresh_unavailable" as const,
+});
+
+export type FirebaseIdentityRefreshUnavailable = typeof FIREBASE_IDENTITY_REFRESH_UNAVAILABLE;
+
 export type FirebaseIdentityRuntimeMode = "deployed" | "local_test";
 export type FirebaseIdentityVerificationSource = "firebase_production" | "firebase_auth_emulator";
 
 export interface FirebaseIdTokenVerificationAdapter {
   readonly verification_source: FirebaseIdentityVerificationSource;
-  verifyIdToken(token: string, checkRevoked: true): Promise<unknown>;
+  verifyIdToken(token: string, checkRevoked: boolean): Promise<unknown>;
 }
 
 export interface FirebaseIdentityVerifierConfig {
@@ -28,8 +55,13 @@ export interface FirebaseIdentity {
   readonly expires_at_epoch_seconds: number;
 }
 
+export type FirebaseIdentityResolution =
+  | FirebaseIdentity
+  | FirebaseIdentityRefreshUnavailable
+  | null;
+
 export interface FirebaseIdentityVerifier {
-  resolve(token: string, nowEpochSeconds: number): Promise<FirebaseIdentity | null>;
+  resolve(token: string, nowEpochSeconds: number): Promise<FirebaseIdentityResolution>;
 }
 
 type DataDescriptors = Readonly<
@@ -139,6 +171,20 @@ const parseIdentity = (
   });
 };
 
+const digestToken = (token: string): string =>
+  createHash("sha256").update(token, "utf8").digest("hex");
+
+const verificationUnavailable = (error: unknown): boolean =>
+  error instanceof Error && error.message === FIREBASE_ID_TOKEN_VERIFICATION_UNAVAILABLE;
+
+const revocationFresh = (checkedAt: number, now: number): boolean =>
+  now >= checkedAt && now - checkedAt < FIREBASE_REVOCATION_RECHECK_WINDOW_SECONDS;
+
+export const isFirebaseIdentityRefreshUnavailable = (
+  value: unknown,
+): value is FirebaseIdentityRefreshUnavailable =>
+  value === FIREBASE_IDENTITY_REFRESH_UNAVAILABLE;
+
 /**
  * Builds an identity-only Firebase verifier over an injected cryptographic and
  * revocation-checking adapter. It cannot map the Firebase uid to an account or
@@ -178,17 +224,43 @@ export const createFirebaseIdentityVerifier = (
     && verificationSource === "firebase_auth_emulator";
   const adapterObject = config.adapter!.value as FirebaseIdTokenVerificationAdapter;
   const verify = verifyIdToken as FirebaseIdTokenVerificationAdapter["verifyIdToken"];
+  const revocationCheckedAt = new Map<string, number>();
+
+  const verifyLocal = async (token: string): Promise<unknown | typeof FIREBASE_IDENTITY_REFRESH_UNAVAILABLE> => {
+    try {
+      return await verify.call(adapterObject, token, false);
+    } catch (error) {
+      if (verificationUnavailable(error)) return FIREBASE_IDENTITY_REFRESH_UNAVAILABLE;
+      return null;
+    }
+  };
 
   return Object.freeze({
-    async resolve(token: string, nowEpochSeconds: number): Promise<FirebaseIdentity | null> {
+    async resolve(token: string, nowEpochSeconds: number): Promise<FirebaseIdentityResolution> {
       if (!safeEpoch(nowEpochSeconds) || !validTokenShape(token, allowUnsignedEmulator)) return null;
-      let decoded: unknown;
+      const decoded = await verifyLocal(token);
+      if (decoded === FIREBASE_IDENTITY_REFRESH_UNAVAILABLE) return FIREBASE_IDENTITY_REFRESH_UNAVAILABLE;
+      const identity = parseIdentity(decoded, projectId, nowEpochSeconds);
+      if (identity === null) return null;
+
+      const digest = digestToken(token);
+      const checkedAt = revocationCheckedAt.get(digest);
+      if (checkedAt !== undefined && revocationFresh(checkedAt, nowEpochSeconds)) return identity;
+
       try {
-        decoded = await verify.call(adapterObject, token, true);
-      } catch {
+        const revokedDecoded = await verify.call(adapterObject, token, true);
+        const confirmed = parseIdentity(revokedDecoded, projectId, nowEpochSeconds);
+        if (confirmed === null) {
+          revocationCheckedAt.delete(digest);
+          return null;
+        }
+        revocationCheckedAt.set(digest, nowEpochSeconds);
+        return confirmed;
+      } catch (error) {
+        if (verificationUnavailable(error)) return FIREBASE_IDENTITY_REFRESH_UNAVAILABLE;
+        revocationCheckedAt.delete(digest);
         return null;
       }
-      return parseIdentity(decoded, projectId, nowEpochSeconds);
     },
   });
 };

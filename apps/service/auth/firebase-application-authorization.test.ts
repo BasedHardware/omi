@@ -9,6 +9,7 @@ import {
   type FirebaseApplicationAuthorizationConfig,
   type FirebaseApplicationAuthorizationSourceRequest,
 } from "./firebase-application-authorization";
+import { FIREBASE_IDENTITY_REFRESH_UNAVAILABLE } from "./firebase-identity";
 
 const NOW = 100;
 const ACCOUNT = "account:alice";
@@ -195,6 +196,17 @@ describe("single Firebase application-authorization composition", () => {
       expect(fixture.order).toEqual(["identity"]);
       expect(JSON.stringify(await fixture.authorizer.authorize("bad", -1))).not.toContain(ACCOUNT);
     }
+  });
+
+  test("a valid signature whose revocation check cannot be refreshed is unavailable, not a logout", async () => {
+    const fixture = setup({ identityResult: FIREBASE_IDENTITY_REFRESH_UNAVAILABLE });
+    expect(await fixture.authorizer.authorize("header.payload.signature", NOW)).toEqual({
+      authorized: false,
+      outcome: "unavailable",
+    });
+    expect(fixture.order).toEqual(["identity"]);
+    expect(JSON.stringify(await fixture.authorizer.authorize("header.payload.signature", NOW)))
+      .not.toContain(ACCOUNT);
   });
 
   test("absent or invalid authorization never asks the control source", async () => {

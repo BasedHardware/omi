@@ -10,7 +10,10 @@ import {
   type AuthorizedLedgerWriteContext,
 } from "./authorized-context";
 import { createAuthorizedLedgerWriteContextIssuer } from "./authorized-context-internal";
-import type { FirebaseIdentityVerifier } from "./firebase-identity";
+import {
+  isFirebaseIdentityRefreshUnavailable,
+  type FirebaseIdentityVerifier,
+} from "./firebase-identity";
 
 const MAX_IDENTIFIER_CODE_UNITS = 256;
 const MAX_FIREBASE_UID_CODE_UNITS = 128;
@@ -313,6 +316,7 @@ export const composeFirebaseApplicationAuthorization = (
       } catch {
         return denyAuthentication;
       }
+      if (isFirebaseIdentityRefreshUnavailable(rawIdentity)) return denyUnavailable;
       const verified = parseIdentity(rawIdentity, nowEpochSeconds);
       if (verified === null) return denyAuthentication;
 
