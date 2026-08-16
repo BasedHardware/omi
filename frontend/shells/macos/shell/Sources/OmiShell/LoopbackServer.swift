@@ -8,6 +8,14 @@ import Network
 
 final class LoopbackServer: @unchecked Sendable {
   static let defaultPort: UInt16 = 5290
+  // Copied from apps/service/net/port-lease.ts SURFACE_TEST_PORT_*.
+  // Verification origins must not share the headed app's persistent WebKit store.
+  static let verificationPortMin: UInt16 = 15290
+  static let verificationPortMax: UInt16 = 15309
+
+  static func isVerificationOrigin(_ port: UInt16) -> Bool {
+    port >= verificationPortMin && port <= verificationPortMax
+  }
 
   let port: UInt16
   let root: URL

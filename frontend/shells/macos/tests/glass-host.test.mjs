@@ -116,7 +116,11 @@ test("fixture shells keep WebKit state in scratch custody and never show a modal
   const shell = await read("shell/Sources/OmiShell/main.swift");
 
   assert.match(shell, /config\.websiteDataStore = \.nonPersistent\(\)/);
-  assert.match(shell, /ephemeral: fixtureCapture \|\| semanticWindow/);
+  assert.match(shell, /LoopbackServer\.isVerificationOrigin\(loopbackPort\)/);
+  assert.match(shell, /ephemeral: fixtureCapture \|\| semanticWindow \|\| verificationOrigin/);
+  // red-proof: dropping verificationOrigin puts L3 evidence launches back on
+  // the persistent WKWebsiteDataStore. Sequential L3s then reuse 15290 and
+  // macos chat:messages climbs by 2 per run while the gate still passes.
   assert.match(
     shell,
     /if fixtureCapture \|\| semanticWindow \{[\s\S]*?LOOPBACK: failed port=[\s\S]*?Darwin\.exit\(1\)/,
