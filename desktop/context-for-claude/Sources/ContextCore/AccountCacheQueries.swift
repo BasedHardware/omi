@@ -48,6 +48,12 @@ public enum AccountCacheQueries {
     /// Ordered and limited in SQL rather than in the caller: the trim below keeps the table small,
     /// but "small" is per source, and a caller wanting fifty would otherwise decode six hundred to
     /// throw most of them away — on the launch path this exists to shorten.
+    ///
+    /// **`id` breaks ties, and ties are ordinary here.** `at` is not unique: a date-only task is
+    /// stamped at 11:59 PM like every other date-only task, and a batch of memories backfilled
+    /// together shares an instant. Without a second key SQLite may pick any subset for the bounded
+    /// page and any order within it — so the page a launch paints could differ from the page the
+    /// trim below decided to keep, and the same corpus could draw in a different order each time.
     public static func recent(
         _ store: ContextStore, source: String, limit: Int
     ) throws -> [CachedAccountRow] {
@@ -57,7 +63,7 @@ public enum AccountCacheQueries {
                 db,
                 sql: """
                     SELECT source, id, at, payload FROM account_rows
-                    WHERE source = ? ORDER BY at DESC LIMIT ?
+                    WHERE source = ? ORDER BY at DESC, id DESC LIMIT ?
                     """,
                 arguments: [source, limit]
             ).map {
@@ -101,7 +107,7 @@ public enum AccountCacheQueries {
             try db.execute(
                 sql: """
                     DELETE FROM account_rows WHERE source = ? AND id NOT IN (
-                      SELECT id FROM account_rows WHERE source = ? ORDER BY at DESC LIMIT ?
+                      SELECT id FROM account_rows WHERE source = ? ORDER BY at DESC, id DESC LIMIT ?
                     )
                     """,
                 arguments: [source, source, max(limit, 0)])

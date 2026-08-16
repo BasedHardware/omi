@@ -122,6 +122,30 @@ final class AccountCacheQueriesTests: XCTestCase {
             "trimming one source must not touch another")
     }
 
+    /// **Ties on `at` are ordinary, so the order may not depend on them alone.** A date-only task is
+    /// stamped at 11:59 PM like every other one; a backfilled batch of memories shares an instant.
+    /// Without `id` as a second key SQLite may return any subset in any order, so the page a launch
+    /// paints can disagree with the page the trim decided to keep.
+    func testRowsSharingAnInstantAreOrderedAndTrimmedStably() throws {
+        let tied = ["b", "d", "a", "c"].map { row($0, at: 100) }
+        try AccountCacheQueries.replace(
+            fixture.store, source: "conversations", rows: tied, keeping: 50)
+
+        let first = try AccountCacheQueries.recent(
+            fixture.store, source: "conversations", limit: 50
+        ).map(\.id)
+        XCTAssertEqual(first, ["d", "c", "b", "a"], "id decides, descending, when the instant cannot")
+
+        // And the trim keeps the same rows the read would have shown, which is the half that
+        // silently loses data when the two orders disagree.
+        try AccountCacheQueries.replace(
+            fixture.store, source: "conversations", rows: tied, keeping: 2)
+        XCTAssertEqual(
+            try AccountCacheQueries.recent(fixture.store, source: "conversations", limit: 50)
+                .map(\.id),
+            ["d", "c"])
+    }
+
     /// Signing out. One account's rows must never be the first thing the next account sees.
     func testClearEmptiesEverySource() throws {
         try AccountCacheQueries.replace(

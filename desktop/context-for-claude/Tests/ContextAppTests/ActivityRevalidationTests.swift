@@ -173,6 +173,56 @@ final class ActivityRevalidationTests: XCTestCase {
             store.days.isEmpty, "the previous account's conversations are off the screen")
     }
 
+    /// **The race cubic caught, and the reason `forgetTheAccount` advances the generation.**
+    ///
+    /// An account read is a network round trip; signing out is a keystroke. The two overlap
+    /// routinely, and before the fence the read that left *before* the sign-out landed after it,
+    /// passed a guard comparing a generation nothing had moved, and repainted the panel with the
+    /// previous account's conversations — after the store had just finished forgetting them.
+    @MainActor
+    func testAReadInFlightWhenTheUserSignsOutCannotRepaintTheirAccount() async {
+        let gate = Gate()
+        let account = HeldAccount(
+            feed: ActivityAccountFeed(conversations: [conversation("a", at: 0)]), gate: gate)
+        let store = ActivityStore(store: { nil }, account: account, calendar: Self.calendar)
+
+        // A read is now in flight, blocked inside the account.
+        store.start()
+        await waitUntil("the read to reach the account") { account.started > 0 }
+        XCTAssertTrue(store.days.isEmpty, "precondition: nothing has landed yet")
+
+        store.forgetTheAccount()
+        await gate.open()
+        await settle()
+
+        XCTAssertTrue(
+            store.days.isEmpty,
+            "a read minted before the sign-out may not repaint the previous account")
+        XCTAssertFalse(store.accountReachable)
+        XCTAssertEqual(store.accountUnreachableReason, .signedOut)
+    }
+
+    /// And the panel must still work for whoever signs in next — the fence may invalidate the old
+    /// read without also wedging the store against the new one.
+    @MainActor
+    func testTheNextAccountCanStillBeReadAfterASignOutInvalidatedAReadInFlight() async {
+        let gate = Gate()
+        let account = HeldAccount(
+            feed: ActivityAccountFeed(conversations: [conversation("a", at: 0)]), gate: gate)
+        let store = ActivityStore(store: { nil }, account: account, calendar: Self.calendar)
+
+        store.start()
+        await waitUntil("the read to reach the account") { account.started > 0 }
+        store.forgetTheAccount()
+        await gate.open()
+        await settle()
+
+        // Signed in again: `revalidate` is the path the store's own sign-in subscription takes.
+        store.revalidate(now: Date(timeIntervalSince1970: Self.base))
+        await waitUntil("the new account's rows") { !store.days.isEmpty }
+        XCTAssertTrue(store.accountReachable)
+    }
+
     /// And the wiring that calls it, so the sign-out edge cannot be quietly disconnected.
     @MainActor
     func testTheSpineForgetsTheAccountWhenTheSignInPublisherGoesFalse() async {
@@ -222,8 +272,31 @@ final class ActivityRevalidationTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// Lets the store's detached reads and its main-actor absorption run. Several hops, because a
-    /// read crosses the actor twice and the seed crosses it a third time.
+    /// Waits until `condition` holds, or fails the test.
+    ///
+    /// **Not a fixed sleep.** A sleep long enough to be safe on a loaded CI box is a sleep that
+    /// costs every green run, and one short enough to be cheap is a flake — the suite people stop
+    /// trusting. This returns the instant the work lands and only spends the deadline when
+    /// something is actually broken, which is the shape a hermetic test wants.
+    private func waitUntil(
+        _ description: String,
+        timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ condition: @MainActor () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await MainActor.run(body: condition) { return }
+            await Task.yield()
+        }
+        XCTFail("timed out waiting for \(description)", file: file, line: line)
+    }
+
+    /// Lets the store's detached reads and its main-actor absorption run, for the assertions that
+    /// are about something *not* happening and so have no state to wait on. Bounded and short: the
+    /// positive half of every one of those tests is waited for properly first, so by the time this
+    /// runs the machinery is already known to be idle.
     private func settle() async {
         for _ in 0..<8 { await Task.yield() }
         try? await Task.sleep(nanoseconds: 40_000_000)
@@ -270,4 +343,48 @@ private final class CountingAccount: ActivityAccountReading, ActivityAccountCurs
 
     func refreshHead() async { lock.withLock { _refreshes += 1 } }
     func forget() async { lock.withLock { _forgets += 1 } }
+}
+
+/// An account whose read blocks until the test lets it finish, so a sign-out can be driven into the
+/// exact window where a response is already on its way back.
+private final class HeldAccount: ActivityAccountReading, ActivityAccountCursor, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _started = 0
+    private let feed: ActivityAccountFeed
+    private let gate: Gate
+
+    init(feed: ActivityAccountFeed, gate: Gate) {
+        self.feed = feed
+        self.gate = gate
+    }
+
+    /// How many reads have reached the account. The signal a test waits on to know the request is
+    /// genuinely in flight rather than merely scheduled.
+    var started: Int { lock.withLock { _started } }
+
+    func read(since: Double?, until: Double?, limit: Int) async -> ActivityAccountFeed {
+        lock.withLock { _started += 1 }
+        await gate.wait()
+        return feed
+    }
+
+    func refreshHead() async {}
+    func forget() async {}
+}
+
+/// A latch, so a test can hold a response mid-flight and assert on the ordering around it.
+private actor Gate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        for waiter in waiters { waiter.resume() }
+        waiters = []
+    }
 }

@@ -1182,6 +1182,55 @@ extension OmiActivityFeedTests {
             "and what it holds is what this read returned, not what the last account said")
     }
 
+    /// **The third of the sign-out races.** `read` fetches and *then* commits, so a `forget()` that
+    /// lands between the two used to have its emptied corpus repopulated by the page already on its
+    /// way back — the previous account's conversations, filed after the store had finished
+    /// forgetting them. The epoch is captured before a request leaves and quoted by every commit.
+    ///
+    /// **The two accounts return different ids on purpose.** The corpus files rows by identity and
+    /// replaces one it already holds, so a test where both reads return the same id cannot tell a
+    /// surviving row from a re-fetched one — it passes with the fence torn out, which is worth
+    /// nothing. Distinct ids make the difference a row count: one row if the sign-out was honoured,
+    /// two if the previous account's page survived it.
+    func testAPageFetchedBeforeSignOutIsNeverFiled() async {
+        let gate = ReadGate()
+        let calls = Counter()
+        let feed = OmiActivityFeed(
+            isAirgapped: { false },
+            isSignedIn: { true },
+            fetchConversations: { _ in
+                let first = await calls.next() == 0
+                // Only the first read — the one raced with the sign-out — is held.
+                if first { await gate.arriveAndWait() }
+                let id = first ? "previous-account" : "next-account"
+                return [
+                    WireConversation(
+                        id: id, createdAt: nil, startedAt: WireInstant(seconds: 1_786_000_000),
+                        finishedAt: nil,
+                        structured: WireConversation.WireStructured(
+                            title: id, overview: nil, emoji: "🎙️"))
+                ]
+            },
+            fetchMemories: { _ in [] },
+            fetchTasks: { _ in WireActionItemPage(actionItems: []) },
+            now: { Self.placement })
+
+        async let reading = feed.read(since: nil, until: nil, limit: 10)
+        await gate.waitUntilArrived()
+
+        // Sign-out, while the previous account's response is in flight.
+        await feed.forget()
+        await gate.open()
+        _ = await reading
+
+        // The read's own return value may carry what it fetched — it is a value, not state. What
+        // must not have happened is the *filing*, so the next account's read sees its own row alone.
+        let next = await feed.read(since: nil, until: nil, limit: 10)
+        XCTAssertEqual(
+            next.conversations.map(\.id), ["next-account"],
+            "the previous account's page was in flight across the sign-out and must not be held")
+    }
+
     private static func readUntilSettled(
         _ feed: OmiActivityFeed, limit: Int, reads: Int = 40
     ) async -> ActivityAccountFeed {
@@ -1292,5 +1341,39 @@ private actor RetitlingBackend {
                 structured: WireConversation.WireStructured(
                     title: currentTitle, overview: nil, emoji: "🎙️"))
         ]
+    }
+}
+
+/// A latch that also reports when the request reached it, so a test can drive a sign-out into the
+/// window between a fetch leaving and its response being filed.
+private actor ReadGate {
+    private var arrived = false
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func arriveAndWait() async {
+        arrived = true
+        guard !isOpen else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func waitUntilArrived() async {
+        while !arrived { await Task.yield() }
+    }
+
+    func open() {
+        isOpen = true
+        for waiter in waiters { waiter.resume() }
+        waiters = []
+    }
+}
+
+/// A call counter, so a fetcher can answer differently for the read before a sign-out and the read
+/// after it.
+private actor Counter {
+    private var count = 0
+    func next() -> Int {
+        defer { count += 1 }
+        return count
     }
 }

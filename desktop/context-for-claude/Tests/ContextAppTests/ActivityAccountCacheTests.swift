@@ -28,18 +28,24 @@ final class ActivityAccountCacheTests: XCTestCase {
             .appendingPathComponent("activity-cache-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         store = try ContextStore(url: root.appendingPathComponent("context.db"))
+        let store = self.store!
+        cache = ActivityAccountCache(store: { store })
     }
 
     override func tearDown() {
+        cache = nil
         store = nil
         try? FileManager.default.removeItem(at: root)
         root = nil
     }
 
-    private var cache: ActivityAccountCache {
-        let store = self.store!
-        return ActivityAccountCache(store: { store })
-    }
+    /// One actor per test, held rather than rebuilt on each access: the epoch that fences writes
+    /// against a sign-out lives *in* the actor, so a computed property handing out a fresh instance
+    /// every time would make every test quietly epoch-0 and the fence untestable.
+    private var cache: ActivityAccountCache!
+
+    /// The epoch a write must quote to be accepted. Zero until something clears.
+    private func epoch() async -> Int { await cache.currentEpoch() }
 
     private static let base: Double = 1_760_000_000
 
@@ -67,7 +73,7 @@ final class ActivityAccountCacheTests: XCTestCase {
             ],
             answered: Set(ActivityAccountSource.allCases))
 
-        await cache.save(written)
+        await cache.save(written, epoch: await epoch())
         let read = await cache.load()
 
         XCTAssertEqual(read.conversations, written.conversations)
@@ -92,7 +98,7 @@ final class ActivityAccountCacheTests: XCTestCase {
             ActivityAccountFeed(
                 conversations: [conversation("c1")],
                 memories: [ActivityAccountMemory(id: "m1", content: "Ships Friday", at: Self.base)],
-                answered: [.conversations]))
+                answered: [.conversations]), epoch: await epoch())
 
         let read = await cache.load()
         XCTAssertEqual(read.conversations.count, 1)
@@ -110,7 +116,7 @@ final class ActivityAccountCacheTests: XCTestCase {
             ActivityAccountFeed(
                 memories: [ActivityAccountMemory(id: "m1", content: "Ships Friday", at: Self.base)],
                 answered: [.memories],
-                locallySourced: [.memories]))
+                locallySourced: [.memories]), epoch: await epoch())
 
         let read = await cache.load()
         XCTAssertTrue(read.memories.isEmpty)
@@ -122,9 +128,10 @@ final class ActivityAccountCacheTests: XCTestCase {
         await cache.save(
             ActivityAccountFeed(
                 conversations: [conversation("c1"), conversation("c2", at: 60)],
-                answered: [.conversations]))
+                answered: [.conversations]), epoch: await epoch())
         await cache.save(
-            ActivityAccountFeed(conversations: [conversation("c1")], answered: [.conversations]))
+            ActivityAccountFeed(conversations: [conversation("c1")], answered: [.conversations]),
+            epoch: await epoch())
 
         let read = await cache.load()
         XCTAssertEqual(
@@ -139,7 +146,7 @@ final class ActivityAccountCacheTests: XCTestCase {
             conversation("c\($0)", at: Double($0))
         }
         await cache.save(
-            ActivityAccountFeed(conversations: many, answered: [.conversations]))
+            ActivityAccountFeed(conversations: many, answered: [.conversations]), epoch: await epoch())
 
         let read = await cache.load()
         XCTAssertEqual(read.conversations.count, ActivityAccountCache.ceiling)
@@ -151,11 +158,50 @@ final class ActivityAccountCacheTests: XCTestCase {
     /// Signing out. One account's conversations must never be the first thing the next sees.
     func testClearingLeavesNothingToPaint() async {
         await cache.save(
-            ActivityAccountFeed(conversations: [conversation("c1")], answered: [.conversations]))
+            ActivityAccountFeed(conversations: [conversation("c1")], answered: [.conversations]),
+            epoch: await epoch())
         await cache.clear()
 
         let read = await cache.load()
         XCTAssertTrue(read.conversations.isEmpty)
+    }
+
+    /// **The second race cubic caught.** A save is spawned detached off a read that has already
+    /// been absorbed, so at sign-out there can be one in flight carrying the previous account's
+    /// rows. Serialising through the actor makes the two orderable but does not decide the order —
+    /// the save can simply arrive second and be perfectly serialised, and still be wrong. The epoch
+    /// is what makes "which account is this" the question rather than "which ran last".
+    func testASaveMintedBeforeSignOutCannotRepopulateTheClearedCache() async {
+        let minted = await epoch()
+        await cache.save(
+            ActivityAccountFeed(conversations: [conversation("c1")], answered: [.conversations]),
+            epoch: minted)
+        let seeded = await cache.load()
+        XCTAssertFalse(seeded.conversations.isEmpty, "precondition")
+
+        // Sign-out.
+        await cache.clear()
+        // …and the write that was already on its way, quoting the epoch it was minted under.
+        await cache.save(
+            ActivityAccountFeed(conversations: [conversation("c2")], answered: [.conversations]),
+            epoch: minted)
+
+        let afterSignOut = await cache.load()
+        XCTAssertTrue(
+            afterSignOut.conversations.isEmpty,
+            "the next account's first paint must not be the previous account's conversations")
+    }
+
+    /// The epoch invalidates writes even when the delete itself could not run — a clear that failed
+    /// to reach the database must still stop the saves behind it, or a failed delete becomes the
+    /// previous account's rows written back a moment later.
+    func testAClearThatCannotReachTheDatabaseStillInvalidatesWritesBehindIt() async {
+        let absent = ActivityAccountCache(store: { nil })
+        let minted = await absent.currentEpoch()
+        await absent.clear()
+        let after = await absent.currentEpoch()
+        XCTAssertNotEqual(
+            after, minted, "the fence advances on intent, not on the delete succeeding")
     }
 
     // MARK: - What a cached paint may claim
@@ -167,15 +213,15 @@ final class ActivityAccountCacheTests: XCTestCase {
     @MainActor
     func testASeededStoreDrawsRowsAndClaimsNothingAboutTheAccount() async {
         await cache.save(
-            ActivityAccountFeed(conversations: [conversation("c1")], answered: [.conversations]))
+            ActivityAccountFeed(conversations: [conversation("c1")], answered: [.conversations]),
+            epoch: await epoch())
 
         // An account that never answers, so the only thing on screen can be the cache.
         let store = ActivityStore(
             store: { nil }, account: SilentAccount(), cache: cache, calendar: Self.calendar)
         store.start()
-        await settle()
+        await waitUntil("the cached conversation to paint") { store.days.count == 1 }
 
-        XCTAssertEqual(store.days.count, 1, "the cached conversation is on screen")
         XCTAssertFalse(store.accountReachable, "and the account has still said nothing")
         XCTAssertTrue(store.accountAnswered.isEmpty, "no source answered — a copy is not an answer")
         XCTAssertFalse(
@@ -191,7 +237,8 @@ final class ActivityAccountCacheTests: XCTestCase {
     @MainActor
     func testACachedPaintNeverOverwritesAnAnswerThatAlreadyLanded() async {
         await cache.save(
-            ActivityAccountFeed(conversations: [conversation("stale")], answered: [.conversations]))
+            ActivityAccountFeed(conversations: [conversation("stale")], answered: [.conversations]),
+            epoch: await epoch())
 
         let gate = Gate()
         let store = self.store!
@@ -207,7 +254,7 @@ final class ActivityAccountCacheTests: XCTestCase {
             calendar: Self.calendar)
 
         spine.start()
-        await settle()
+        await waitUntil("the account's own answer") { !spine.accountAnswered.isEmpty }
         XCTAssertTrue(spine.days.isEmpty, "the account answered, and it answered with nothing")
 
         await gate.open()
@@ -224,17 +271,16 @@ final class ActivityAccountCacheTests: XCTestCase {
     @MainActor
     func testAnUnreachableAccountStillGetsTheCachedPaint() async {
         await cache.save(
-            ActivityAccountFeed(conversations: [conversation("c1")], answered: [.conversations]))
+            ActivityAccountFeed(conversations: [conversation("c1")], answered: [.conversations]),
+            epoch: await epoch())
 
         let store = ActivityStore(
             store: { nil }, account: SilentAccount(), cache: cache, calendar: Self.calendar)
         store.start()
-        await settle()
-        // The failing read has certainly landed by now; the cache still has to paint behind it.
-        XCTAssertFalse(store.accountReachable, "precondition: nobody answered")
-        XCTAssertEqual(
-            store.days.count, 1,
-            "an offline launch shows what the account last said, which is the whole point")
+        await waitUntil("the cached paint behind a failing read") { store.days.count == 1 }
+        XCTAssertFalse(
+            store.accountReachable,
+            "and nobody answered — an offline launch showing the last answer is the whole point")
     }
 
     private static let calendar: Calendar = {
@@ -243,6 +289,29 @@ final class ActivityAccountCacheTests: XCTestCase {
         return calendar
     }()
 
+    /// Waits until `condition` holds, or fails.
+    ///
+    /// **Not a fixed sleep.** A sleep long enough to be safe on a loaded CI box costs every green
+    /// run; one short enough to be cheap is a flake, and a suite people distrust is worse than a
+    /// smaller one. This returns the instant the work lands and only spends the deadline when
+    /// something is genuinely broken.
+    private func waitUntil(
+        _ description: String,
+        timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ condition: @MainActor () -> Bool
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await MainActor.run(body: condition) { return }
+            await Task.yield()
+        }
+        XCTFail("timed out waiting for \(description)", file: file, line: line)
+    }
+
+    /// For the one assertion that is about something *not* happening and so has no state to wait
+    /// on. It waits on a positive signal first, so this only covers the last hop back.
     private func settle() async {
         for _ in 0..<8 { await Task.yield() }
         try? await Task.sleep(nanoseconds: 60_000_000)

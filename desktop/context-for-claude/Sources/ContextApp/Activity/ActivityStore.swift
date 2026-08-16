@@ -426,9 +426,30 @@ final class ActivityStore: ObservableObject {
     /// of what a signed-out user should still be able to see.
     func forgetTheAccount() {
         ContextLog.info("Signed out; forgetting the account half of the spine", "activity")
-        Task { [account, cache] in
+
+        // **The generation advances, and that is what makes this safe rather than merely tidy.**
+        // Every landing path in this store — the account read, the cached paint, the opening read,
+        // a day of frames, the write-back — is already fenced on it, so one increment invalidates
+        // all of them at once. Without it a read that left before the user signed out lands
+        // afterwards, passes a guard comparing a generation nothing moved, and repopulates the panel
+        // with the previous account's conversations. That read is in flight for as long as the
+        // network takes; sign-out is a keystroke. The window is not narrow.
+        //
+        // It advances *without* re-opening the window, which is the difference between this and
+        // `openWindow()`. Frames and speech on this Mac were captured whether or not anybody was
+        // signed in, so re-reading them would be spending the whole day walk to discard nothing.
+        generation &+= 1
+        // The in-flight stamp belongs to the read that is now orphaned. Left set, it would refuse
+        // the next account's revalidation for as long as the process lived.
+        accountReadInFlight = nil
+
+        Task { [weak self, account, cache] in
             await (account as? ActivityAccountCursor)?.forget()
             await cache?.clear()
+            // Read back rather than incremented locally: the cache owns the number, and a second
+            // copy of it maintained here is a second thing to get wrong.
+            guard let cache, let epoch = await cache.currentEpoch() as Int? else { return }
+            await MainActor.run { self?.accountCacheEpoch = epoch }
         }
 
         accountFeed = .unreachable
@@ -524,6 +545,7 @@ final class ActivityStore: ObservableObject {
         readFailure = nil
         loader.purge()
 
+        refreshCacheEpoch()
         seedFromCache(generation: generation)
         readAccount(generation: generation)
 
@@ -721,9 +743,28 @@ final class ActivityStore: ObservableObject {
 
     /// Writes the answer back for the next cold launch to paint. Detached: this is a SQLite write on
     /// the path of a read that has already been absorbed, and nothing on screen is waiting for it.
+    ///
+    /// **Two fences, because they close different holes.** The generation check here refuses a write
+    /// belonging to a window that has since moved; the epoch travels *into* the cache and is checked
+    /// inside the actor, which is the only place that can order this write against a `clear()` that
+    /// has not run yet. Checking the generation alone would leave the sign-out race exactly as it
+    /// was: the guard passes, the task is spawned, sign-out clears the table, and this lands after.
     private func write(_ feed: ActivityAccountFeed, toCache generation: Int) {
         guard let cache, generation == self.generation, feed.reachable else { return }
-        Task.detached(priority: .utility) { await cache.save(feed) }
+        let epoch = accountCacheEpoch
+        Task.detached(priority: .utility) { await cache.save(feed, epoch: epoch) }
+    }
+
+    /// The cache epoch this window's reads were minted under. Refreshed when a window opens and
+    /// after a sign-out, which are the two moments the account under the panel can change.
+    private var accountCacheEpoch = 0
+
+    private func refreshCacheEpoch() {
+        guard let cache else { return }
+        Task { [weak self] in
+            let epoch = await cache.currentEpoch()
+            self?.accountCacheEpoch = epoch
+        }
     }
 
     // MARK: - Hydration

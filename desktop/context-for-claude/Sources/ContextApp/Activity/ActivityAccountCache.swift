@@ -42,10 +42,31 @@ import Foundation
 
 /// Reads and writes the spine's account rows to `context.db`.
 ///
-/// A struct over a store provider rather than a singleton, for the reason every boundary in this
-/// package is one: the store opens lazily on the engine's queue, so anything that captured it at
-/// build time would hold the `nil` of the first instant forever.
-struct ActivityAccountCache: Sendable {
+/// **An actor, and the serialisation is load-bearing.** Saves are spawned detached off a read that
+/// has already been absorbed, so at sign-out there can be one in flight with the previous account's
+/// rows in it. A struct would let that save's `replace` commit *after* `clear()` had emptied the
+/// table, and the next account's first paint would then be somebody else's conversations — the one
+/// outcome this cache must never produce. Serialising every write through one actor makes the two
+/// orderable; `epoch` is what decides which of the two orders wins.
+///
+/// The store is still a provider rather than a held handle, for the reason every boundary in this
+/// package is one: it opens lazily on the engine's queue, so anything that captured it at build
+/// time would hold the `nil` of the first instant forever.
+actor ActivityAccountCache {
+
+    /// Bumped by `clear()`. A save carrying an older epoch was minted for an account that has since
+    /// been signed out of, and is dropped rather than written.
+    ///
+    /// Ordering alone is not enough even with the actor: the save may simply *arrive* second and be
+    /// perfectly serialised, and still be wrong. What makes it wrong is not when it ran but which
+    /// account it describes, so that is what is checked. Same reasoning as
+    /// `ConversationCacheWriteScope` in the main app, which fences its cache writes on a generation
+    /// for this exact failure.
+    private var epoch = 0
+
+    /// The epoch a caller must quote to have its write accepted. Read when the work that will
+    /// produce the rows *starts*, not when it finishes.
+    func currentEpoch() -> Int { epoch }
 
     /// How many rows of one source are kept. One page — see the note at the top of the file.
     static let ceiling = OmiActivityFeed.maxPerSource
@@ -117,7 +138,14 @@ struct ActivityAccountCache: Sendable {
     /// would mean a second copy of somebody else's table, and — worse — a later launch would read
     /// them back as *the account's* answer, which is a claim this app has no business making on
     /// their behalf.
-    func save(_ feed: ActivityAccountFeed) async {
+    /// - Parameter epoch: the value `currentEpoch()` gave when the read behind `feed` began. A save
+    ///   quoting a stale one is dropped: the account it describes has been signed out of.
+    func save(_ feed: ActivityAccountFeed, epoch: Int) async {
+        guard epoch == self.epoch else {
+            ContextLog.info(
+                "Account cache: dropping a write from a signed-out session", Self.category)
+            return
+        }
         guard let store = await store() else { return }
         let cacheable = feed.answered.subtracting(feed.locallySourced)
         guard !cacheable.isEmpty else { return }
@@ -169,6 +197,10 @@ struct ActivityAccountCache: Sendable {
     /// Empties it. Signing out is the caller — one account's rows must never be the first thing the
     /// next account sees.
     func clear() async {
+        // Before the write, and unconditionally — a clear that could not reach the database must
+        // still invalidate the saves in flight behind it, or a failed delete becomes the previous
+        // account's rows being written back a moment later.
+        epoch &+= 1
         guard let store = await store() else { return }
         try? AccountCacheQueries.clear(store)
     }

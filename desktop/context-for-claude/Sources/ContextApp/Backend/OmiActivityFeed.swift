@@ -232,17 +232,25 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing, Activ
         // `tried` is what keeps that from becoming a retry ladder: a source that has already been
         // asked in this read is not asked again, whatever it answered. One attempt per source per
         // read, here as everywhere else in this file — `OmiAPI` has already done the retrying.
+        // **Which account this read belongs to, captured before a single request leaves.** A read is
+        // a network round trip and `forget()` is a keystroke, so the two overlap: without this, a
+        // page fetched for the account the user has just signed out of commits into a corpus that
+        // was emptied while it was in flight, and the panel repopulates with the previous account's
+        // conversations. The commits below quote it and `AccountCorpus` drops the ones that no
+        // longer match.
+        let epoch = await corpus.epoch()
+
         var tried: Set<ActivityAccountSource> = []
         pages: for _ in ActivityAccountSource.allCases.indices {
             let before = await corpus.rowCount()
             switch await corpus.next(skipping: tried) {
             case .opening:
                 // The opening read has asked all three already; there is nothing left to try.
-                await readOpeningPage(limit: bounded)
+                await readOpeningPage(limit: bounded, epoch: epoch)
                 break pages
             case .page(let source, let offset):
                 tried.insert(source)
-                await readPage(source, offset: offset, limit: bounded)
+                await readPage(source, offset: offset, limit: bounded, epoch: epoch)
             case .settled:
                 // Every source has ended, failed out, spent its budget or been asked already.
                 // Nothing more is asked, and the answer is what is already held — which is what
@@ -284,7 +292,7 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing, Activ
     /// blocked on, so serial reads would cost the sum of three round trips to show one screen; every
     /// page after this one lands behind a list the reader can already use, where a second request in
     /// flight buys nothing and spends someone's account.
-    private func readOpeningPage(limit: Int) async {
+    private func readOpeningPage(limit: Int, epoch: Int) async {
         async let conversationRows = attempt(
             "conversations", fetchConversations, Self.conversationQuery(limit: limit, offset: 0))
         async let memoryRows = attemptMemories(limit: limit, offset: 0)
@@ -294,24 +302,27 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing, Activ
         // and windowing by either would drop the undated commitments that matter most.
         async let taskPage = attempt("action-items", fetchTasks, Self.taskQuery(limit: limit, offset: 0))
 
-        await corpus.commit(conversations: await conversationRows)
-        await corpus.commit(memories: await memoryRows)
-        await corpus.commit(tasks: await taskPage)
+        await corpus.commit(conversations: await conversationRows, epoch: epoch)
+        await corpus.commit(memories: await memoryRows, epoch: epoch)
+        await corpus.commit(tasks: await taskPage, epoch: epoch)
     }
 
     /// One page of one source, at the offset the cursor asked for.
-    private func readPage(_ source: ActivityAccountSource, offset: Int, limit: Int) async {
+    private func readPage(
+        _ source: ActivityAccountSource, offset: Int, limit: Int, epoch: Int
+    ) async {
         switch source {
         case .conversations:
             let outcome = await attempt(
                 "conversations", fetchConversations, Self.conversationQuery(limit: limit, offset: offset))
-            await corpus.commit(conversations: outcome)
+            await corpus.commit(conversations: outcome, epoch: epoch)
         case .memories:
-            await corpus.commit(memories: await attemptMemories(limit: limit, offset: offset))
+            await corpus.commit(
+                memories: await attemptMemories(limit: limit, offset: offset), epoch: epoch)
         case .tasks:
             let outcome = await attempt(
                 "action-items", fetchTasks, Self.taskQuery(limit: limit, offset: offset))
-            await corpus.commit(tasks: outcome)
+            await corpus.commit(tasks: outcome, epoch: epoch)
         }
     }
 
@@ -654,14 +665,28 @@ private actor AccountCorpus {
         return .settled
     }
 
-    func commit(conversations outcome: OmiActivityFeed.SourceOutcome<[WireConversation]>) {
+    /// Which account the rows in here belong to. Bumped by `forgetEverything`; quoted by every
+    /// commit, so a page fetched for an account the user has since signed out of is dropped instead
+    /// of repopulating an emptied corpus. See `epoch` in `OmiActivityFeed.read`.
+    private var generation = 0
+
+    func epoch() -> Int { generation }
+
+    /// Whether a page fetched at `epoch` may still be filed. False after a sign-out.
+    private func isCurrent(_ epoch: Int) -> Bool { epoch == generation }
+
+    func commit(
+        conversations outcome: OmiActivityFeed.SourceOutcome<[WireConversation]>, epoch: Int
+    ) {
+        guard isCurrent(epoch) else { return }
         record(.conversations, outcome, received: outcome.rows?.count)
         for row in outcome.rows ?? [] {
             absorb(.conversations, id: row.id, row: row, into: &conversations)
         }
     }
 
-    func commit(memories outcome: OmiActivityFeed.SourceOutcome<[WireMemory]>) {
+    func commit(memories outcome: OmiActivityFeed.SourceOutcome<[WireMemory]>, epoch: Int) {
+        guard isCurrent(epoch) else { return }
         if outcome.beganPastHead { memoriesBeganPastHead = true }
         record(.memories, outcome, received: outcome.rows?.count)
         for row in outcome.rows ?? [] {
@@ -669,7 +694,8 @@ private actor AccountCorpus {
         }
     }
 
-    func commit(tasks outcome: OmiActivityFeed.SourceOutcome<WireActionItemPage>) {
+    func commit(tasks outcome: OmiActivityFeed.SourceOutcome<WireActionItemPage>, epoch: Int) {
+        guard isCurrent(epoch) else { return }
         record(.tasks, outcome, received: outcome.rows?.actionItems.count)
         // The one source that can say it has reached the end without an empty page to prove it.
         if let page = outcome.rows, !page.hasMore { state[.tasks]?.isExhausted = true }
@@ -691,6 +717,9 @@ private actor AccountCorpus {
     /// than reassigned wholesale — an actor cannot replace `self`, and a field added later that this
     /// forgot to clear would be one account's data surviving into another's session.
     func forgetEverything() {
+        // First, so that a page already in flight for the previous account cannot file itself
+        // between this call and the next read.
+        generation &+= 1
         conversations = []
         memories = []
         tasks = []
