@@ -289,6 +289,51 @@ def test_canonical_capture_drops_only_the_ungrounded_candidate(monkeypatch):
     assert replacement_payloads[0]["content"] == "The user works at Acme."
 
 
+def test_canonical_capture_accepts_an_extractor_that_yields_no_candidates(monkeypatch):
+    """An extractor that returns zero candidates is a quiet conversation, not a failed run.
+
+    The all-ungrounded guard must key off candidates the loop actually saw. Keying
+    off the returned container's truthiness misreads any truthy-but-empty iterable
+    (a generator's stand-in, a test double) as "every candidate failed grounding"
+    and aborts conversation finalization for a conversation with nothing to learn.
+    """
+    pc = _load_process_conversation()
+    from models.conversation import Conversation
+    from models.conversation_enums import CategoryEnum, ConversationSource
+    from models.structured import Structured
+    from models.transcript_segment import TranscriptSegment
+
+    mock_service = MagicMock()
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    # Truthy, but yields nothing — exactly what a bare MagicMock extractor does.
+    monkeypatch.setattr(pc, "extract_canonical_l1_memory_candidates", MagicMock(return_value=MagicMock()))
+    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
+
+    conversation = Conversation(
+        id="conv-no-candidates",
+        created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 6, 1, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title="Test", overview="Overview", category=CategoryEnum.personal),
+        transcript_segments=[
+            TranscriptSegment(
+                text="We talked about the weather.",
+                speaker="SPEAKER_00",
+                is_user=True,
+                start=0.0,
+                end=4.0,
+            )
+        ],
+    )
+
+    result = pc._extract_memories_canonical("uid-no-candidates", conversation, db_client=MagicMock())
+
+    assert result.count == 0
+    replacement_payloads = mock_service.replace_conversation_memories.call_args.args[2]
+    assert replacement_payloads == []
+
+
 @pytest.mark.parametrize(
     "matched_segments",
     [
