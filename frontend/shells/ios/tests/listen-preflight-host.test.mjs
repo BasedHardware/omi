@@ -10,6 +10,9 @@ import test from "node:test";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const appDelegate = await readFile(resolve(ROOT, "app/ios/Runner/AppDelegate.swift"), "utf8");
 const dartHost = await readFile(resolve(ROOT, "app/lib/listen_socket_host.dart"), "utf8");
+const dartMain = await readFile(resolve(ROOT, "app/lib/main.dart"), "utf8");
+const dartPolicy = await readFile(resolve(ROOT, "app/lib/listen_preflight_policy.dart"), "utf8");
+const dartProbe = await readFile(resolve(ROOT, "app/lib/control_probe.dart"), "utf8");
 
 function hasDart() {
   try { execFileSync("dart", ["--version"], { stdio: "ignore" }); return true; }
@@ -30,6 +33,14 @@ test("iOS Listen preflight uses native permission APIs and never exposes hardwar
   assert.match(dartHost, /_listenPreflightReady/);
   assert.match(dartHost, /if \(evidenceAudioEnabled\) return true/);
   assert.match(dartHost, /_emitEvidencePreflight/);
+  assert.match(dartPolicy, /bool listenEvidenceAudioEnabled/);
+  assert.match(dartMain, /listenEvidenceAudioEnabled\(/);
+  assert.match(dartMain, /controlProbe: _probeFilename\.isNotEmpty/);
+  assert.match(dartMain, /useJavaScriptChannel: true/);
+  assert.match(dartMain, /resumeAfterNavigation/);
+  assert.match(dartMain, /controlProbeChannelName/);
+  assert.match(dartProbe, /__omiCAInstallWatch === document/);
+  assert.match(dartProbe, /__omiCAHostPoll === document/);
   assert.match(dartHost, /'type': 'close', 'code': 1008/);
   assert.match(dartHost, /permission.*unavailable/s);
   assert.doesNotMatch(dartHost, /device(?:Id|UUID|Uid)\b|serial(?:number)?\b/i);

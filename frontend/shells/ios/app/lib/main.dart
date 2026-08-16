@@ -17,6 +17,7 @@ import 'consumer_evidence.dart';
 import 'control_probe.dart';
 import 'gen/bridge.g.dart';
 import 'gen/bridge_http_contract.g.dart';
+import 'listen_preflight_policy.dart';
 import 'listen_socket_host.dart';
 import 'loop_server.dart';
 import 'scheme_host.dart';
@@ -343,7 +344,12 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     if (!_captureOnly && _apiBaseUrl.isNotEmpty && apiBase != null && apiBase.hasScheme && apiBase.host.isNotEmpty) {
       final authority = ShellTransportAuthority(baseUrl: apiBase, token: _apiToken, runId: _runClientId);
       _http = authority.makeHttpHost();
-      _listen = authority.makeListenHost(evidenceAudioEnabled: _consumerEvidenceFilename.isNotEmpty);
+      _listen = authority.makeListenHost(
+        evidenceAudioEnabled: listenEvidenceAudioEnabled(
+          consumerEvidence: _consumerEvidenceFilename.isNotEmpty,
+          controlProbe: _probeFilename.isNotEmpty,
+        ),
+      );
       final sink = ChatBridgeJavaScriptSink(
         (source) => _controller.runJavaScript(source),
         documentInitiallyActive: false,
@@ -520,6 +526,10 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     }
     if (_probeFilename.isNotEmpty) {
       await _chatSink?.activateDocument();
+      if (_controlProbeStarted) {
+        await _controlProbe?.resumeAfterNavigation();
+        return;
+      }
       unawaited(_startControlProbe());
       return;
     }
@@ -562,6 +572,14 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     await _listen?.register(_controller);
     await _chatStream?.register(_controller);
     await _chatStaging?.register(_controller);
+    if (_probeFilename.isNotEmpty) {
+      await _controller.addJavaScriptChannel(
+        controlProbeChannelName,
+        onMessageReceived: (JavaScriptMessage message) {
+          unawaited(_dispatchProbeChannel(message.message));
+        },
+      );
+    }
     switch (_mode) {
       case SurfaceMode.dev:
         await _loadOwnedDocument(Uri.parse('http://$_devHost/'));
@@ -661,6 +679,15 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     await _consumerEvidence!.start();
   }
 
+  Future<void> _dispatchProbeChannel(String message) async {
+    final probe = _controlProbe;
+    if (probe == null) {
+      _probeChannelInbox.add(message);
+      return;
+    }
+    await probe.acceptChannel(message);
+  }
+
   Future<void> _startControlProbe() async {
     if (_controlProbeStarted) return;
     _controlProbeStarted = true;
@@ -686,6 +713,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
         resultPath: resultPath,
         evaluate: _controller.runJavaScriptReturningResult,
         hostQuery: _surfaceQuerySuffix,
+        useJavaScriptChannel: true,
       );
       _controlProbe = probe;
       final inbox = List<String>.of(_probeChannelInbox);

@@ -23,10 +23,12 @@ node integration/control-acceptance/run.mjs
 node integration/control-acceptance/run.mjs --screen-proof
 
 # Same driver.js and verdict.mjs, iOS simulator WKWebView at omi-ui://local.
-# Not an L3/L4 gate. Refuses before leasing a stack if no iOS simulator is
-# booted. A missing screen bridge or a simulator without a real microphone
-# tap is a real token (bridge-unreachable / empty-transcript /
-# skipped-tcc-denied), never a new skip word.
+# Not an L3/L4 gate. Acquires a run-scoped simulator lease before leasing a
+# stack; never attaches to a stranger's already-booted device. A missing
+# screen bridge or a simulator without a real microphone tap is a real token
+# (bridge-unreachable / empty-transcript / skipped-tcc-denied), never a new
+# skip word. The iOS control probe wires the same synthetic-PCM Listen grant
+# the evidence walk uses: a simulator never grants microphone TCC.
 node integration/control-acceptance/run.mjs --ios
 ```
 
