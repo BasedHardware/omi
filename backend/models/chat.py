@@ -133,7 +133,7 @@ class Message(BaseModel):
         def get_sender_name(message: Message) -> str:
             if message.sender == 'human':
                 return 'User'
-            if message.app_id is not None and use_plugin_name_if_available:
+            if use_plugin_name_if_available and message.app_id and message.app_id.strip():
                 return message.app_id
             return message.sender.upper()
 
@@ -164,7 +164,7 @@ class Message(BaseModel):
         def get_sender_name(message: Message) -> str:
             if message.sender == 'human':
                 return 'User'
-            if message.app_id is not None and use_plugin_name_if_available:
+            if use_plugin_name_if_available and message.app_id and message.app_id.strip():
                 return message.app_id
             return message.sender.upper()
 
