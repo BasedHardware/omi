@@ -611,6 +611,10 @@ export const createMemoryReadChatGenerationContextSource = (
   options: MemoryReadChatGenerationContextSourceOptions,
 ): ChatGenerationContextSource => Object.freeze({
   async load(input: ChatGenerationContextSourceInput): Promise<ChatGenerationContextPacket> {
+    // Admission is fire-and-forget. `readCanonicalPage` does not yield until
+    // the authorized memory page is built, so without this hop the first Chat
+    // POST waits on gathering_context.
+    await Promise.resolve();
     const generationId = input.generationId ?? input.admitted.generationId
       ?? `generation:${input.admitted.message.id}`;
     const nowEpochMilliseconds = input.nowEpochMilliseconds ?? input.admitted.message.createdAt;

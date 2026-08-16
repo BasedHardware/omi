@@ -184,6 +184,7 @@ import {
   createInMemoryChatMessagesStore,
   type InMemoryChatMessagesStore,
   type ChatMessagesStore,
+  type StoredChatMessage,
 } from "./stores/chat-messages-store";
 import {
   createInMemoryChatAttachmentsStore,
@@ -445,6 +446,12 @@ export interface LocalService {
   readonly evidence: QaProducerEvidence;
   readonly reseed: () => void;
   readonly seedIdentity: () => Readonly<Record<string, string | number>>;
+  /**
+   * Compiles the Chat memory-context path without admitting a message.
+   * Long-lived `dev-server` awaits this before it listens so the first user
+   * send does not pay first-execution cost. Tests do not have to call it.
+   */
+  readonly warmupChatGenerationContext: () => Promise<void>;
   readonly memoryFormation: LocalMemoryFormation;
   /**
    * The write path's stores and arbiters, exposed so a test or a booted stack
@@ -1116,6 +1123,41 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     },
   });
 
+  const warmupAdmitted: StoredChatMessage = Object.freeze({
+    generationId: "warmup:chat-generation-context",
+    message: Object.freeze({
+      id: "warmup:chat-generation-context",
+      text: "",
+      sender: "human",
+      type: "text",
+      createdAt: 0,
+      updatedAt: 0,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 1,
+      payloadHash: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      revision: "warmup",
+      attachments: Object.freeze([]),
+    }),
+  });
+  const warmupChatGenerationContext = async (): Promise<void> => {
+    try {
+      await generationContext.load({
+        accountId: options.ownerAccountId,
+        generationId: "warmup:chat-generation-context",
+        admitted: warmupAdmitted,
+        nowEpochMilliseconds: 0,
+        history: [],
+        bearerToken: devToken,
+      });
+    } catch {
+      // Boot still serves Chat; the first user send pays first-execution cost.
+    }
+  };
+
   return Object.freeze({
     app,
     websocket,
@@ -1124,6 +1166,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     evidence: producerEvidence,
     reseed,
     seedIdentity,
+    warmupChatGenerationContext,
     memoryFormation,
     writePath: Object.freeze({
       conversations,
