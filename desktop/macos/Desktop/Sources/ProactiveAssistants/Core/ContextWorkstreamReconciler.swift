@@ -316,7 +316,8 @@ enum ContextWorkstreamTagging {
     }
     var counts: [String: Int] = [:]
     for bucketID in bucketOrder {
-      counts[proposalsByBucket[bucketID]!.first!, default: 0] += 1
+      guard let firstProposal = proposalsByBucket[bucketID]?.first else { continue }
+      counts[firstProposal, default: 0] += 1
     }
 
     func isAllowed(_ tag: String, bucketID: String) -> Bool {
@@ -333,7 +334,7 @@ enum ContextWorkstreamTagging {
       // earlier proposals that were sanitizable but unattestable, generic,
       // or below the new-label threshold are skipped, not fatal.
       guard
-        let tag = proposalsByBucket[bucketID]!.first(where: {
+        let tag = proposalsByBucket[bucketID]?.first(where: {
           isAllowed($0, bucketID: bucketID)
         })
       else { continue }
