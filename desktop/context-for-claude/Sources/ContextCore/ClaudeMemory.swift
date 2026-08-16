@@ -34,8 +34,29 @@ public enum ClaudeMemory {
     /// The fences. Comments rather than a heading, so the block is invisible in any Markdown
     /// renderer and unmistakable to this code — a heading called "Context for Claude" is something a
     /// user might reasonably type themselves, and we must never edit a section they wrote.
-    public static let beginMarker = "<!-- BEGIN Context for Claude — managed block, edits here are overwritten -->"
-    public static let endMarker = "<!-- END Context for Claude -->"
+    ///
+    /// **A development build owns a different pair**, because these markers are what `write` replaces:
+    /// sharing them would mean a locally built app silently overwrote the installed release's block
+    /// in the user's global memory, and describing whichever binary happened to launch last. Each
+    /// build now manages only its own block. The release strings are byte-identical to what has
+    /// already shipped — changing those would orphan every block written by an installed copy.
+    public static let beginMarker = beginMarker(forBundle: ContextPaths.bundleIdentifier)
+    public static let endMarker = endMarker(forBundle: ContextPaths.bundleIdentifier)
+
+    /// The rules over a stated identifier. Taken as a parameter rather than read from the ambient
+    /// bundle because under `swift test` the resolved identifier *is* the shipping one — a guard
+    /// written against the ambient value passes whether or not the split exists, which is no guard.
+    public static func beginMarker(forBundle bundleIdentifier: String) -> String {
+        ContextPaths.isDevelopmentBuild(bundleIdentifier)
+            ? "<!-- BEGIN Context for Claude Dev — managed block, edits here are overwritten -->"
+            : "<!-- BEGIN Context for Claude — managed block, edits here are overwritten -->"
+    }
+
+    public static func endMarker(forBundle bundleIdentifier: String) -> String {
+        ContextPaths.isDevelopmentBuild(bundleIdentifier)
+            ? "<!-- END Context for Claude Dev -->"
+            : "<!-- END Context for Claude -->"
+    }
 
     /// What the block says.
     ///
@@ -43,11 +64,15 @@ public enum ClaudeMemory {
     /// deliberate: *when* (every prompt, not "when it seems relevant" — that judgement is the thing
     /// that fails), *what to call*, and *what never to say*, because the observed failure mode is a
     /// confident "I don't have access to that" from a machine that is holding the answer.
-    public static let instruction = """
+    public static let instruction = instruction(forServer: ClaudeConfig.serverName)
+
+    /// The block's text over a stated server name, for the same reason the markers take one.
+    public static func instruction(forServer serverName: String) -> String {
+        """
         ## Context for Claude (this Mac)
 
         This Mac runs Context for Claude, which continuously records what this user says, hears and
-        has on screen, and serves it over the `context-for-claude` MCP server along with their Omi
+        has on screen, and serves it over the `\(serverName)` MCP server along with their Omi
         history. **Treat it as part of your context, not as a fallback.**
 
         **Before you answer, plan, ask a clarifying question, or touch code, check it.** Every time,
@@ -69,6 +94,7 @@ public enum ClaudeMemory {
 
         Say in one line which context you used.
         """
+    }
 
     /// The block as it appears in the file, markers included.
     public static var block: String {

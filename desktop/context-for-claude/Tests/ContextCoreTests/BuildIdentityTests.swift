@@ -144,6 +144,44 @@ final class BuildIdentityTests: XCTestCase {
                 in: existing, mcpBinaryPath: local, as: ClaudeConfig.serverName(forBundle: shipping)))
     }
 
+    /// **The managed block in the user's global `~/.claude/CLAUDE.md` is replaced by marker match**,
+    /// so two builds sharing markers means a locally built app overwrites the installed release's
+    /// block — in the file that steers every Claude session on this Mac. The release markers must
+    /// also stay byte-identical to what has shipped, or every block already written by an installed
+    /// copy is orphaned and `write` appends a second one.
+    func testTheManagedMemoryBlockIsOwnedPerBuild() {
+        // Byte-for-byte what shipped. Changing these orphans every block an installed copy wrote,
+        // and `write` then appends a second one instead of replacing it.
+        XCTAssertEqual(
+            ClaudeMemory.beginMarker(forBundle: shipping),
+            "<!-- BEGIN Context for Claude — managed block, edits here are overwritten -->")
+        XCTAssertEqual(ClaudeMemory.endMarker(forBundle: shipping), "<!-- END Context for Claude -->")
+
+        XCTAssertNotEqual(
+            ClaudeMemory.beginMarker(forBundle: development),
+            ClaudeMemory.beginMarker(forBundle: shipping),
+            "a dev build sharing the release's marker overwrites its block in the user's global memory")
+        XCTAssertNotEqual(
+            ClaudeMemory.endMarker(forBundle: development),
+            ClaudeMemory.endMarker(forBundle: shipping))
+    }
+
+    /// The block tells Claude which MCP server to call, so it has to name the one this build
+    /// actually registered — otherwise a dev build instructs the model to call a server that is not
+    /// there, and every tool it advertises goes unused.
+    func testTheManagedBlockNamesTheServerThisBuildRegisters() {
+        let releaseText = ClaudeMemory.instruction(
+            forServer: ClaudeConfig.serverName(forBundle: shipping))
+        let devText = ClaudeMemory.instruction(
+            forServer: ClaudeConfig.serverName(forBundle: development))
+
+        XCTAssertTrue(releaseText.contains("`context-for-claude` MCP server"))
+        XCTAssertTrue(devText.contains("`context-for-claude-dev` MCP server"))
+        XCTAssertFalse(
+            devText.contains("`context-for-claude` MCP server"),
+            "a dev build must not point Claude at the release's server name")
+    }
+
     private func object(_ value: Any?) throws -> [String: Any] {
         try XCTUnwrap(value as? [String: Any])
     }
