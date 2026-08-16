@@ -44,6 +44,10 @@ import {
   appSubscriptionsCacheKey,
 } from "@/app/api/omi/stats/app-subscriptions/route";
 import { computeKFactor } from "@/app/api/omi/stats/k-factor/posthog/route";
+import {
+  computeActivation,
+  activationCacheKey,
+} from "@/app/api/omi/stats/activation/route";
 import { setPayload } from "@/lib/payload-cache";
 
 export const dynamic = "force-dynamic";
@@ -79,6 +83,9 @@ const NOTIFICATIONS_DAYS = 30;
 const ONBOARDING_DAYS = 30;
 const TRENDS_MONTHS = 12;
 const K_FACTOR_DAYS = 30;
+// Activation fans out one aggregation query per macOS signup in the window, so
+// it belongs here behind the long timeout rather than on the request path.
+const ACTIVATION_DAYS = 60;
 
 function defaultOverheadMonthly(): number {
   const envOverhead = parseFloat(process.env.ADMIN_INFRA_OVERHEAD_MONTHLY || "");
@@ -136,6 +143,12 @@ export async function POST(request: NextRequest) {
   await run("macosVersions", async () => {
     const payload = await computeMacosVersions();
     await setPayload(macosVersionsCacheKey(), payload);
+  });
+
+  // Activation (Firestore conversation records, not desktop telemetry)
+  await run("activation", async () => {
+    const payload = await computeActivation(ACTIVATION_DAYS);
+    await setPayload(activationCacheKey(ACTIVATION_DAYS), payload);
   });
 
   // Notifications

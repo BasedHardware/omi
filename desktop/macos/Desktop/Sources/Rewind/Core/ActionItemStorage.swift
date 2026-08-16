@@ -696,7 +696,7 @@ actor ActionItemStorage {
             if !newRecord.completed && !newRecord.deleted {
               visibilityChanged = true
             }
-            try newRecord.insert(database)
+            _ = try newRecord.inserted(database)
           }
         }
         try authorization.require()

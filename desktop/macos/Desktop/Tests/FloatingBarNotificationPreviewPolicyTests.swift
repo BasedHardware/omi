@@ -15,7 +15,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   func testPreviewsAndBarEnabledShowsPreviewWithNoForcedBanner() {
     XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-        previewsEnabled: true, floatingBarEnabled: true))
+        previewsEnabled: true, floatingBarEnabled: true, deliverSystemBanner: false))
     XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
         previewsEnabled: true, floatingBarEnabled: true, deliverSystemBanner: false))
@@ -24,7 +24,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   func testFloatingBarDisabledPresentsViaTempShowWithNoForcedBanner() {
     XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-        previewsEnabled: true, floatingBarEnabled: false),
+        previewsEnabled: true, floatingBarEnabled: false, deliverSystemBanner: false),
       "bar disabled + notifications owed must still present the in-bar card via temp-show")
     XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
@@ -35,7 +35,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   func testPreviewsMutedSkipsPreviewAndFallsBackToBanner() {
     XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-        previewsEnabled: false, floatingBarEnabled: true))
+        previewsEnabled: false, floatingBarEnabled: true, deliverSystemBanner: false))
     XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
         previewsEnabled: false, floatingBarEnabled: true, deliverSystemBanner: false))
@@ -44,7 +44,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   func testFloatingBarDisabledAndPreviewsMutedStillTempShowsTheCard() {
     XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-        previewsEnabled: false, floatingBarEnabled: false),
+        previewsEnabled: false, floatingBarEnabled: false, deliverSystemBanner: false),
       "previews muted + bar disabled must still temp-show the card; only the notification toggle silences")
     XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
@@ -55,7 +55,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   func testBarDisabledDoesNotSilenceWhenMasterNotificationsAreOffTheMasterGateDoes() {
     XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-        previewsEnabled: true, floatingBarEnabled: false))
+        previewsEnabled: true, floatingBarEnabled: false, deliverSystemBanner: false))
     XCTAssertEqual(
       InsightAssistantTelemetry.Reason.masterNotificationsDisabled.rawValue,
       "master_notifications_disabled",
@@ -86,12 +86,71 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
         floatingBarAccepted: false))
   }
 
+  /// A functional caller (`deliverSystemBanner: true`) with the bar disabled must keep the
+  /// persistent banner it asked for. Routing it through the temp-show card marks the
+  /// floating bar as having accepted delivery, which suppresses the banner — and the
+  /// screen-recording repair notice is one-per-episode, so the seconds-long card is the
+  /// only notice the user ever gets while capture stays broken.
+  func testFunctionalBannerWithBarDisabledKeepsItsBannerInsteadOfTheTempShowCard() {
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: true, floatingBarEnabled: false, deliverSystemBanner: true),
+      "a functional notice with the bar disabled must not be swallowed by the temp-show card")
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+        previewsEnabled: true,
+        floatingBarEnabled: false,
+        deliverSystemBanner: true,
+        floatingBarAccepted: false),
+      "skipping the card must leave the explicit system banner as the delivered surface")
+  }
+
+  /// The muted-previews variant of the same case: still no card, still the banner.
+  func testFunctionalBannerWithBarDisabledAndPreviewsMutedStillDeliversTheBanner() {
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: false, floatingBarEnabled: false, deliverSystemBanner: true))
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+        previewsEnabled: false,
+        floatingBarEnabled: false,
+        deliverSystemBanner: true,
+        floatingBarAccepted: false))
+  }
+
+  /// The bar-enabled contract is untouched: the card stays authoritative and an explicit
+  /// banner request does not duplicate it.
+  func testFunctionalBannerWithBarEnabledStillPresentsTheCardAndNoDuplicateBanner() {
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: true, floatingBarEnabled: true, deliverSystemBanner: true))
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+        previewsEnabled: true,
+        floatingBarEnabled: true,
+        deliverSystemBanner: true,
+        floatingBarAccepted: true))
+  }
+
+  /// Proactive delivery with the bar disabled keeps the temp-show card (the #11636 fix).
+  func testProactiveDeliveryWithBarDisabledStillUsesTheTempShowCard() {
+    XCTAssertTrue(
+      FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: true, floatingBarEnabled: false, deliverSystemBanner: false))
+    XCTAssertFalse(
+      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+        previewsEnabled: true,
+        floatingBarEnabled: false,
+        deliverSystemBanner: false,
+        floatingBarAccepted: true))
+  }
+
   func testDirectorMutedPreviewFallsBackToBannerInsteadOfSilentQuotaBurn() {
     // Context-director presentation must use this policy: muted previews with
     // the floating bar still enabled keep a visible system-banner surface.
     XCTAssertFalse(
       FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-        previewsEnabled: false, floatingBarEnabled: true))
+        previewsEnabled: false, floatingBarEnabled: true, deliverSystemBanner: false))
     XCTAssertTrue(
       FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
         previewsEnabled: false, floatingBarEnabled: true, deliverSystemBanner: false),

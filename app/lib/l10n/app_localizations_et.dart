@@ -9834,4 +9834,11 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Avaa kauppa';
+
+  @override
+  String get sendRawAudioToOmi => 'Saada töötlemata heli Omisse';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Lülita välja, et töötlemata heli Omisse ei saadetaks. Transkriptsioone ja pilvefunktsioonide jaoks vajalikke andmeid võidakse endiselt Omisse saata.';
 }

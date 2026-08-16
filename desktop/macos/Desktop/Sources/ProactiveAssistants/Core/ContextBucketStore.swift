@@ -31,6 +31,11 @@ struct ContextBucketSnapshot: Equatable, Sendable {
   let tail: [String]
   let validatedFacts: [String]
   let notifyWorthiness: Double
+  /// Qualifying visits to this bucket. Read live rather than baked into
+  /// `header`, because it changes every visit and the header is part of the
+  /// director's cached prefix. `var` with a default keeps the memberwise
+  /// initializer source-compatible for callers that do not have a count.
+  var visitCount: Int = 0
 }
 
 enum ContextBucketStoreError: Error {
@@ -349,6 +354,7 @@ actor ContextBucketStore {
     guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
     try await pool.write { db in
       _ = try ContextBucketSchema.deleteExpiredDeliveries(in: db, now: now)
+      _ = try ContextBucketSchema.deleteExpiredProactiveCandidates(in: db, now: now)
       try db.execute(
         sql: "DELETE FROM bucket_facts WHERE expiresAt IS NOT NULL AND expiresAt <= ?",
         arguments: [now])
@@ -425,26 +431,6 @@ actor ContextBucketStore {
     } catch {
       return .stale
     }
-  }
-
-  /// Active workstream labels for the extraction prompt's closed vocabulary,
-  /// most recently used first. Read-only and advisory: failure means an empty
-  /// vocabulary, which only weakens label reuse for one extraction.
-  func activeWorkstreamTags(now: Date = Date(), limit: Int = 12) async -> [String] {
-    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let pool else { return [] }
-    return
-      (try? await pool.read { db in
-        try String.fetchAll(
-          db,
-          sql: """
-            SELECT workstreamTag FROM bucket_facts
-            WHERE workstreamTag IS NOT NULL AND validityState = 'validated'
-              AND (expiresAt IS NULL OR expiresAt > ?)
-            GROUP BY workstreamTag ORDER BY MAX(createdAt) DESC LIMIT ?
-            """,
-          arguments: [now, max(0, limit)])
-      }) ?? []
   }
 
   /// The workstream to pool for this evaluation: the visit's own validated fact
@@ -556,6 +542,220 @@ actor ContextBucketStore {
       }) ?? []
   }
 
+  func workstreamTags(for bucketID: String) async -> [String] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    return
+      (try? await pool.read { db in
+        try ContextWorkstreamTagging.tags(for: bucketID, in: db)
+      }) ?? []
+  }
+
+  func armedCandidates(
+    bucketID: String, tags: [String], now: Date = Date()
+  ) async -> [ContextProactiveCandidate] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    return
+      (try? await pool.write { db in
+        try ContextProactiveCandidateLookup.expireStale(now: now, in: db)
+        return try ContextProactiveCandidateLookup.lookupArmed(
+          bucketID: bucketID, tags: tags, now: now, in: db)
+      }) ?? []
+  }
+
+  func consumeCandidate(id: String, now: Date = Date()) async -> Bool {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return false }
+    return
+      (try? await pool.write { db in
+        try ContextProactiveCandidateLookup.consume(id: id, now: now, in: db)
+      }) ?? false
+  }
+
+  /// Retires a gated-down candidate immediately instead of leaving it armed to
+  /// be re-selected — and re-billed for another paid gate call — on every
+  /// subsequent visit until its full 12-hour lifetime elapses.
+  @discardableResult
+  func declineCandidate(id: String, now: Date = Date()) async -> Bool {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return false }
+    return
+      (try? await pool.write { db in
+        try ContextProactiveCandidateLookup.decline(id: id, now: now, in: db)
+      }) ?? false
+  }
+
+  @discardableResult
+  func restoreCandidate(id: String, now: Date = Date()) async -> Bool {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return false }
+    return
+      (try? await pool.write { db in
+        try ContextProactiveCandidateLookup.restore(id: id, now: now, in: db)
+      }) ?? false
+  }
+
+  func recentDeliveredForAssignedWorkstreams(
+    tags: [String],
+    excludingBucketID: String,
+    now: Date = Date(),
+    limit: Int = ContextBucketRecentDelivery.promptCap
+  ) async -> [ContextBucketRecentDelivery] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    return
+      (try? await pool.read { db in
+        try ContextProactiveCandidateLookup.recentDeliveredForAssignedTags(
+          tags: tags, excludingBucketID: excludingBucketID, now: now, limit: limit, in: db)
+      }) ?? []
+  }
+
+  /// Whether every grounding fact behind an armed candidate is still
+  /// validated and unexpired. A candidate can sit armed for up to 12 hours;
+  /// the fact(s) it cited at write time may since have expired or been
+  /// superseded, so this must be rechecked before the candidate is ever
+  /// offered as deliverable.
+  func groundingFactIDsAreCurrentlyValid(
+    _ factIDs: [String], bucketID: String, now: Date = Date()
+  ) async -> Bool {
+    guard !factIDs.isEmpty else { return false }
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return false }
+    return
+      (try? await pool.read { db in
+        let valid = try ContextProactiveCandidateWriter.validatedFactIDs(
+          factIDs, bucketID: bucketID, now: now, in: db)
+        return Set(valid) == Set(factIDs)
+      }) ?? false
+  }
+
+  func recentContextPool(
+    excludingBucketID: String, now: Date = Date()
+  ) async -> [ContextWorkstreamPoolItem] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    let cutoff = now.addingTimeInterval(-ContextWorkstreamPooling.recentContextWindow)
+    return
+      (try? await pool.read { db in
+        try Row.fetchAll(
+          db,
+          sql: """
+            SELECT id, bucketID, appName, statement, notifyWorthiness, createdAt
+            FROM bucket_facts
+            WHERE bucketID <> ? AND validityState = 'validated'
+              AND (expiresAt IS NULL OR expiresAt > ?)
+              AND notifyWorthiness >= ?
+              AND createdAt >= ?
+            ORDER BY createdAt DESC LIMIT ?
+            """,
+          arguments: [
+            excludingBucketID, now, ContextWorkstreamPooling.recentContextWorthinessFloor, cutoff,
+            ContextWorkstreamPooling.candidateFetchLimit,
+          ]
+        ).compactMap { row -> ContextWorkstreamPoolItem? in
+          guard let factID: String = row["id"], let bucketID: String = row["bucketID"],
+            let statement: String = row["statement"], let createdAt: Date = row["createdAt"]
+          else { return nil }
+          return ContextWorkstreamPoolItem(
+            factID: factID,
+            bucketID: bucketID,
+            appName: row["appName"] ?? "",
+            statement: statement,
+            notifyWorthiness: row["notifyWorthiness"] ?? 0,
+            createdAt: createdAt)
+        }
+      }) ?? []
+  }
+
+  func runWorkstreamReconcilePass(
+    lastPassAt: Date?, now: Date
+  ) async throws -> ContextWorkstreamReconcileOutcome {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
+    // Only the expiry sweep needs the writer lock. Everything below it is a
+    // read-only batch selection over up to 14 buckets; running that inside
+    // the same pool.write would hold SQLite's single writer lock for the
+    // whole selection and block a hot-path writeExtraction/delivery
+    // pool.write until it finished, for no atomicity benefit — the tag and
+    // candidate inserts this batch feeds commit later in their own
+    // transactions regardless.
+    try await pool.write { db in
+      try ContextProactiveCandidateLookup.expireStale(now: now, in: db)
+    }
+    return try await pool.read { db in
+      let newestValidated = try Date.fetchOne(
+        db,
+        sql: """
+          SELECT MAX(updatedAt) FROM bucket_facts WHERE validityState = 'validated'
+          """)
+      if let lastPassAt, let newestValidated, newestValidated <= lastPassAt {
+        return .skippedNoNewFacts
+      }
+      let eligible = try ContextWorkstreamBatchSelection.fetchEligible(in: db, now: now)
+      let batchIDs = ContextWorkstreamBatchSelection.applyExploration(
+        rankedIDs: eligible.map(\.bucketID))
+      guard !batchIDs.isEmpty else { return .skippedEmptyBatch }
+      let allFacts = try ContextWorkstreamBatchSelection.fetchFacts(
+        bucketIDs: batchIDs, now: now, in: db)
+      let factsByBucket = Dictionary(grouping: allFacts, by: \.bucketID)
+      let existingTags = try ContextWorkstreamTagging.existingTags(in: db)
+      var groups: [ContextWorkstreamReconcileGroup] = []
+      for bucketID in batchIDs {
+        let facts = ContextWorkstreamBatchSelection.selectFacts(factsByBucket[bucketID] ?? [])
+        guard !facts.isEmpty else { continue }
+        let tags = try ContextWorkstreamTagging.tags(for: bucketID, in: db)
+        let hasHighWorthiness = facts.contains {
+          $0.notifyWorthiness >= ContextWorkstreamBatchSelection.candidateWorthinessFloor
+        }
+        // `&&` is `rethrows` over an autoclosure, so the throwing call cannot sit
+        // on its right-hand side; evaluate it separately.
+        var needsCandidate = false
+        if hasHighWorthiness {
+          needsCandidate = try !ContextProactiveCandidateWriter.hasArmedCandidate(
+            bucketID: bucketID, now: now, in: db)
+        }
+        groups.append(
+          ContextWorkstreamReconcileGroup(
+            bucketID: bucketID,
+            facts: facts,
+            needsCandidate: needsCandidate,
+            workstreamTag: tags.first))
+      }
+      guard !groups.isEmpty else { return .skippedEmptyBatch }
+      return .ready(
+        ContextWorkstreamReconcileBatch(groups: groups, existingTags: existingTags))
+    }
+  }
+
+  func insertWorkstreamAssignments(
+    _ assignments: [ContextWorkstreamTagging.AcceptedAssignment], now: Date
+  ) async throws {
+    guard !assignments.isEmpty else { return }
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
+    try await pool.write { db in
+      for assignment in assignments {
+        try ContextWorkstreamTagging.insertAssignment(
+          bucketID: assignment.bucketID, tag: assignment.tag, now: now, in: db)
+      }
+    }
+  }
+
+  func insertArmedCandidates(
+    _ proposed: [ContextProactiveCandidateWriter.Response.Candidate],
+    groups: [ContextWorkstreamReconcileGroup],
+    now: Date
+  ) async throws {
+    guard !proposed.isEmpty else { return }
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
+    try await pool.write { db in
+      try ContextProactiveCandidateWriter.insertValidatedCandidates(
+        proposed, groups: groups, now: now, in: db)
+    }
+  }
+
   func markVisitSettled(_ fence: ContextVisitFence, at date: Date = Date()) async throws {
     let pool = try await pool(for: fence)
     try await pool.write { db in
@@ -632,6 +832,9 @@ actor ContextBucketStore {
             AND (expiresAt IS NULL OR expiresAt > ?)
           """,
         arguments: [bucketID, now]) ?? 0
+    let visitCount =
+      try Int.fetchOne(
+        db, sql: "SELECT visitCount FROM context_buckets WHERE id = ?", arguments: [bucketID]) ?? 0
     return ContextBucketSnapshot(
       bucketID: bucketID,
       versionID: version["id"],
@@ -640,7 +843,8 @@ actor ContextBucketStore {
       frozenRankedSegment: version["frozenRankedSegment"],
       tail: Array(tail),
       validatedFacts: facts,
-      notifyWorthiness: worthiness)
+      notifyWorthiness: worthiness,
+      visitCount: visitCount)
   }
 
   func snapshot(for fence: ContextVisitFence) async -> ContextBucketSnapshot? {

@@ -1,7 +1,7 @@
 """Shared httpx.AsyncClient instances for outbound HTTP.
 
 Implements Lane 1 of the 3-lane async architecture (issue #6369):
-- Connection pooling per service (4 clients)
+- Connection pooling per service
 - Bounded concurrency via asyncio.Semaphore
 - Per-target circuit breakers for webhooks
 - Latest-wins dropping for audio-byte-level calls
@@ -331,6 +331,10 @@ def get_stt_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('stt', 8)
 
 
+def get_stt_proxy_semaphore() -> asyncio.Semaphore:
+    return _get_semaphore('stt_proxy', 4)
+
+
 def get_tts_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('tts', 32)
 
@@ -455,6 +459,29 @@ def get_stt_client() -> httpx.AsyncClient:
         lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(300.0, connect=5.0),
             limits=httpx.Limits(max_connections=8, max_keepalive_connections=4),
+        ),
+    )
+
+
+def get_stt_proxy_client() -> httpx.AsyncClient:
+    """Return a shared async HTTP client for the client-facing STT proxy route.
+
+    Isolated from `get_stt_client()` on purpose: proxy uploads can hold a
+    connection for minutes each, and the listen pipeline's latency-sensitive
+    internal callers (VAD, speaker embedding, speech profile) share that pool
+    without a semaphore — bulk user traffic must never starve them.
+
+    Keep-alive is disabled for the same reason as `get_auth_client()` /
+    `get_tts_client()`: volume is low and idle gaps are long, so a silently
+    dropped keep-alive socket would surface as a RuntimeError (500) instead
+    of a clean 502. A TLS handshake per request is noise next to GPU
+    transcription time.
+    """
+    return _get_client(
+        'stt_proxy',
+        lambda: httpx.AsyncClient(
+            timeout=httpx.Timeout(300.0, connect=5.0),
+            limits=httpx.Limits(max_connections=4, max_keepalive_connections=0),
         ),
     )
 

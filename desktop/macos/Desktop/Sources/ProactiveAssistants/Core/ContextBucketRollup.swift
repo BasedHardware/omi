@@ -9,15 +9,9 @@ struct BucketExtraction: Codable, Equatable, Sendable {
     let evidenceRefs: [String]
     let confidence: Double
     let notifyWorthiness: Double
-    /// Proposed workstream label, `unknown` when the model abstains.
-    ///
-    /// Optional so a response predating this field still decodes (same
-    /// `decodeIfPresent` reasoning as `destination` below); `var` with a
-    /// default keeps the memberwise initializer source-compatible.
-    var workstream: String? = nil
 
     enum CodingKeys: String, CodingKey {
-      case statement, identifiers, confidence, workstream
+      case statement, identifiers, confidence
       case evidenceText = "evidence_text"
       case evidenceRefs = "evidence_refs"
       case notifyWorthiness = "notify_worthiness"
@@ -103,30 +97,106 @@ enum BucketFactValidator {
       && !evidenceRefs.isEmpty
     return hasIdentifier && evidenceResolves ? .validated : .needsReview
   }
+
+  /// Model bookkeeping (`fact-001`, `f-002`, `visit:3`) and handles that never
+  /// appear in the quoted on-screen wording are not identifiers.
+  static let bookkeepingIdentifierPattern = #"^(fact|f|ftn|visit|screenshot)[-:_ ]?\d+$"#
+
+  static func acceptedIdentifiers(_ identifiers: [String], evidenceText: String) -> [String] {
+    // Case-fold only the containment check, never the identifier itself: a
+    // model-emitted handle like `pr-123` must still count as present when the
+    // on-screen quote reads `PR-123`, but the accepted value keeps the case
+    // the model actually produced.
+    let lowercasedEvidence = evidenceText.lowercased()
+    return identifiers.filter { identifier in
+      identifier.range(
+        of: bookkeepingIdentifierPattern, options: [.regularExpression, .caseInsensitive]
+      ) == nil && lowercasedEvidence.contains(identifier.lowercased())
+    }
+  }
+}
+
+/// Gateway cache keys for the proactive prompts.
+///
+/// Deliberately constant. A key is only a routing hint — a hit still requires a
+/// byte-identical literal prefix — so a key naming the bucket and version was
+/// strictly more volatile than the content it named: `publishVersion` runs on
+/// every completed visit, which fragmented the cache into one entry per bucket
+/// per visit and guaranteed each one was written and never read. One constant
+/// key per prompt shape lets every call of that shape share the instruction
+/// prefix.
+enum ContextPromptCacheKey {
+  static let director = "director:v1"
+  static let reconcilerTagging = "reconciler:v1"
+  static let reconcilerCandidates = "reconciler-candidates:v1"
 }
 
 enum ContextBucketPromptAssembler {
-  static let injectionTokenBudget = 5_000
+  /// Sized so the enlarged frozen segment is genuinely additional context rather
+  /// than context stolen from facts and tail: 16_000 frozen bytes + the 8_000-byte
+  /// fact reservation + the ~6_000 bytes the tail has always had.
+  static let injectionTokenBudget = 7_500
   static let ambientTailCompactionThreshold = 3_500
-  static let frozenRankedByteBudget = 6_000
+  static let factByteReservation = 8_000
+  /// Frozen history is the one block that is both large and byte-stable, so it is
+  /// the only one worth buying at scale: past the first call of a bucket it is
+  /// billed at cached rates.
+  static let frozenRankedByteBudget = 16_000
 
+  /// Eviction drops the *oldest* lines, which live at the head — exactly the bytes
+  /// the cache prefix is made of. Trimming to the budget on every publish therefore
+  /// moved the head every time a saturated bucket published, and `publishVersion`
+  /// runs on every completed visit.
+  ///
+  /// Measured on live dogfood data before this change: across 138 version
+  /// transitions the frozen prefix survived into the next version only 59% of the
+  /// time, and for the two buckets actually at the budget the median surviving
+  /// share was 0.00 — consecutive versions shared 8 bytes, the length of
+  /// `"- entry:"`. Those are the largest buckets, so caching failed precisely
+  /// where it was worth the most: 0 cached tokens across 91 recorded director calls.
+  ///
+  /// Evicting down to a low-water mark instead spends one prefix break to buy many
+  /// stable publishes. The gap is refilled at roughly 500 bytes per compaction, so
+  /// a 4_000-byte gap holds the prefix steady for about eight publishes rather than
+  /// breaking it on every one.
+  static let frozenRankedLowWaterMark = 12_000
+
+  /// Deliberately constant. Everything above the frozen segment is part of the
+  /// longest-common-prefix the gateway matches on, so a per-visit counter here
+  /// made a cross-visit cache hit structurally impossible — it changed bytes
+  /// above the segment it was supposed to be stabilizing. The visit count now
+  /// rides in the volatile director section instead, where changing is free.
+  static let stableHeader = "Persistent work context."
+
+  /// Blocks are ordered least-volatile first, because cache matching is
+  /// longest-common-prefix and the first differing byte discards everything
+  /// after it: constant header, then the append-only frozen segment, then
+  /// validated facts, and only then the rolling five-entry tail, which rewrites
+  /// on every visit and would otherwise invalidate the facts sitting behind it.
+  ///
+  /// Facts are only stable across visits that validated no new fact — the
+  /// snapshot orders them newest-first, so a new one lands at the head of the
+  /// block rather than the end. The frozen segment above them is the part that
+  /// is stable unconditionally, and it is the part that was made large.
   static func assemble(_ snapshot: ContextBucketSnapshot) -> Data {
-    var data = Data(("== BUCKET HEADER ==\n" + snapshot.header + "\n== FROZEN RANKED CONTEXT ==\n").utf8)
+    // Always the constant header, never `snapshot.header`: versions published
+    // before this change stored a per-visit counter in that column, and putting
+    // those bytes back above the frozen segment would keep the cache prefix
+    // uncacheable until every bucket republished.
+    var data = Data(("== BUCKET HEADER ==\n" + stableHeader + "\n== FROZEN RANKED CONTEXT ==\n").utf8)
     // This exact byte segment is the stable cache prefix. Never decode/re-encode it.
     data.append(snapshot.frozenRankedSegment)
     let totalByteBudget = injectionTokenBudget * 4
-    let facts =
-      snapshot.validatedFacts.isEmpty
-      ? "" : "\n== VALIDATED FACTS ==\n\(snapshot.validatedFacts.joined(separator: "\n"))"
-    let factReservation = min(8_000, max(0, totalByteBudget - data.count))
-    let tailBudget = max(0, totalByteBudget - data.count - factReservation)
+    if !snapshot.validatedFacts.isEmpty {
+      data.append(
+        utf8Prefix(
+          "\n== VALIDATED FACTS ==\n\(snapshot.validatedFacts.joined(separator: "\n"))",
+          maxBytes: min(factByteReservation, max(0, totalByteBudget - data.count))))
+    }
     data.append(
       utf8Prefix(
         "\n== RECENT TAIL ==\n\(snapshot.tail.joined(separator: "\n"))",
-        maxBytes: tailBudget))
-    if !snapshot.validatedFacts.isEmpty {
-      data.append(utf8Prefix(facts, maxBytes: max(0, totalByteBudget - data.count)))
-    }
+        maxBytes: max(0, totalByteBudget - data.count)))
     return data
   }
 
@@ -160,38 +230,28 @@ struct ContextDirectorTaskContext: Equatable, Sendable {
 
 enum ContextProactivityPromptBuilder {
   static func extractionPrompt(
-    frame: CapturedFrame, fence: ContextVisitFence, workstreamVocabulary: [String] = []
+    frame: CapturedFrame, fence: ContextVisitFence
   ) -> String {
     let evidenceRef = frame.screenshotId.map { "screenshot:\($0)" } ?? "visit:\(fence.visitID)"
     return extractionPrompt(
-      appName: frame.appName, windowTitle: frame.windowTitle, evidenceRef: evidenceRef,
-      workstreamVocabulary: workstreamVocabulary)
+      appName: frame.appName, windowTitle: frame.windowTitle, evidenceRef: evidenceRef)
   }
 
   static func extractionPrompt(
-    appName: String, windowTitle: String?, evidenceRef: String,
-    workstreamVocabulary: [String] = []
+    appName: String, windowTitle: String?, evidenceRef: String
   ) -> String {
-    // Closed-vocabulary bias: reusing an active label is what makes context from
-    // different apps collide in one workstream, so existing labels are quoted and
-    // coining a new one is framed as the exception.
-    let activeLabels =
-      workstreamVocabulary.isEmpty
-      ? "none yet"
-      : workstreamVocabulary.map { ContextDestinationKey.singleLine($0, limit: 40) }
-        .joined(separator: ", ")
     let base = """
       \(ScreenDerivedContent.untrustedPreamble)
-      Produce a 150-400 token ambient narrative and discrete factual records. Facts are
-      proposals; include an identifier, surviving evidence text, and evidence ref for each.
-      Also set each fact's "workstream": the durable project or activity its content belongs
-      to, judged by the content itself rather than by which app is open. Strongly prefer one
-      of the active labels: \(activeLabels). Only when none fits, coin one new short
-      kebab-case label for a durable project, or answer "unknown" for generic activity you
-      cannot place.
+      Write a 150-400 token summary of what is happening, then discrete factual records.
+      Each statement must be a plain declarative sentence a colleague could act on. Do not
+      label, number, or prefix statements.
+      Good: Nik asked for the demo recording before tomorrow's launch video.
+      Bad: Ambient narrative: the user appears to be coordinating a recording workflow.
+      Fill identifiers with names, ticket numbers, or other handles copied from the quoted
+      on-screen text. Fill evidence_text with that supporting on-screen wording. Put this
+      ref in every evidence_refs list: \(evidenceRef)
       App: \(appName)
       Window: \(ContextDestinationKey.singleLine(windowTitle ?? "", limit: 160))
-      Evidence ref: \(evidenceRef)
       """
     // Browser-scoped by design. Unscoped destination labelling was measured at 6%
     // precision: the model answers `telegram` for every thread and collapses
@@ -218,7 +278,8 @@ enum ContextProactivityPromptBuilder {
     \(directorStablePrompt(snapshot: snapshot))
 
     \(directorVolatilePrompt(
-      tasks: tasks, frame: frame, recentDeliveries: recentDeliveries, timeZone: timeZone))
+      tasks: tasks, frame: frame, recentDeliveries: recentDeliveries,
+      visitCount: snapshot.visitCount, timeZone: timeZone))
     """
   }
 
@@ -271,8 +332,11 @@ enum ContextProactivityPromptBuilder {
       update, recommendation, or useful follow-up without an explicit commitment, promise, or
       request is insight or suggest; never infer an owner or due date and never create a task
       candidate from actionability alone.
-      Do not re-deliver a point already delivered for this bucket unless the validated facts
-      add something materially new. Prefer silence over restating.
+      Do not restate what is already visible on the user's screen. Speak only when you add
+      something they cannot currently see: a commitment, a deadline, a conflict, or a
+      connection to other work.
+      The recently-delivered list is a prohibition, not background. Do not re-send a point
+      already delivered, even reworded.
       Timestamps supplied below are already in the user's local time zone. When a message
       mentions a date or time, use that local form as written; never convert to or mention UTC.\(lookup)
 
@@ -280,10 +344,14 @@ enum ContextProactivityPromptBuilder {
       """
   }
 
+  /// `visitCount` lives here, not in the bucket header, because it changes on
+  /// every visit and anything that changes must sit below the cached prefix.
+  /// Zero means "not supplied" and prints nothing.
   static func directorVolatilePrompt(
     tasks: [ContextDirectorTaskContext],
     frame: CapturedFrame,
     recentDeliveries: [ContextBucketRecentDelivery] = [],
+    visitCount: Int = 0,
     timeZone: TimeZone = .current
   ) -> String {
     let actionableCutoff = frame.captureTime.addingTimeInterval(
@@ -306,41 +374,39 @@ enum ContextProactivityPromptBuilder {
       Window: \(frame.windowTitle ?? "")
       Captured at: \(localTimestamp(frame.captureTime, timeZone: timeZone))
       """
-    if let recent = recentDeliveriesSection(recentDeliveries, now: frame.captureTime) {
+    if visitCount > 0 {
+      prompt += "\nQualifying visits to this context: \(visitCount)"
+    }
+    if let recent = recentDeliveriesSection(recentDeliveries, timeZone: timeZone) {
       prompt += "\n\n\(recent)"
     }
     return prompt
   }
 
+  /// Rendered with absolute local timestamps rather than a relative age, so the
+  /// same delivery set produces the same bytes on every call. A "3m ago" age
+  /// rewrote this block every time it was built, which is what kept it — and
+  /// everything the model could learn from it — off the cacheable side.
   static func recentDeliveriesSection(
     _ deliveries: [ContextBucketRecentDelivery],
-    now: Date
+    timeZone: TimeZone = .current
   ) -> String? {
     let entries = Array(deliveries.prefix(ContextBucketRecentDelivery.promptCap))
     guard !entries.isEmpty else { return nil }
     let lines = entries.map { delivery -> String in
       let decision = String(delivery.decisionType.prefix(32))
-      let age = relativeAge(from: delivery.deliveredAt, now: now)
+      let at = localTimestamp(delivery.deliveredAt, timeZone: timeZone)
       let summary = boundedSummary(delivery.message)
       if summary.isEmpty {
-        return "- \(decision) (\(age))"
+        return "- \(decision) (\(at))"
       }
-      return "- \(decision) (\(age)): \(summary)"
+      return "- \(decision) (\(at)): \(summary)"
     }
     return """
       == RECENTLY DELIVERED FOR THIS BUCKET ==
+      Do not re-send any of these points, even reworded.
       \(lines.joined(separator: "\n"))
       """
-  }
-
-  static func relativeAge(from deliveredAt: Date, now: Date) -> String {
-    let seconds = max(0, Int(now.timeIntervalSince(deliveredAt).rounded(.down)))
-    if seconds < 60 { return "\(seconds)s ago" }
-    let minutes = seconds / 60
-    if minutes < 60 { return "\(minutes)m ago" }
-    let hours = minutes / 60
-    if hours < 48 { return "\(hours)h ago" }
-    return "\(hours / 24)d ago"
   }
 
   static func boundedSummary(_ message: String?) -> String {
@@ -373,6 +439,24 @@ enum ContextBucketCompactionPolicy {
     // entry would fall outside that read window, even when narratives are
     // short, so context cannot disappear between the tail and frozen segment.
     return uncompressedCount > retainedTailCount
+  }
+
+  /// Drop the oldest ranked lines when the frozen segment is over budget.
+  ///
+  /// Eviction takes from the head, where the oldest lines are and where the cache
+  /// prefix also is, so this is the one operation that can invalidate the prefix.
+  /// It therefore evicts only when the budget is genuinely exceeded, and then all
+  /// the way to the low-water mark, so the head stays put across the publishes that
+  /// follow. Trimming to exactly the budget instead moved the head on every publish
+  /// of a saturated bucket.
+  static func evictToLowWaterMark(_ lines: [String]) -> [String] {
+    func bytes(_ lines: [String]) -> Int { lines.reduce(0) { $0 + $1.utf8.count } }
+    guard bytes(lines) > ContextBucketPromptAssembler.frozenRankedByteBudget else { return lines }
+    var kept = lines
+    while bytes(kept) > ContextBucketPromptAssembler.frozenRankedLowWaterMark, kept.count > 1 {
+      kept.removeFirst()
+    }
+    return kept
   }
 }
 
@@ -457,13 +541,17 @@ extension ContextBucketStore {
         }
         for fact in extraction.facts.prefix(20) {
           let statement = String(fact.statement.prefix(500))
+          if ContextWorkstreamPooling.isScaffolding(statement) { continue }
           let evidenceText = String(fact.evidenceText.prefix(1_000))
           let evidenceRefs = BucketFactValidator.resolvableEvidenceRefs(
             Array(fact.evidenceRefs.prefix(10)), allowed: allowedEvidenceRefs)
-          let identifiers = fact.identifiers.prefix(8).map {
-            String($0.prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
-          }
-          .filter { !$0.isEmpty }
+          let identifiers = BucketFactValidator.acceptedIdentifiers(
+            Array(
+              fact.identifiers.prefix(8).map {
+                String($0.prefix(200)).trimmingCharacters(in: .whitespacesAndNewlines)
+              }
+              .filter { !$0.isEmpty }),
+            evidenceText: evidenceText)
           paraphraseObserved =
             paraphraseObserved
             || BucketFactValidator.hasParaphraseMatch(
@@ -494,7 +582,7 @@ extension ContextBucketStore {
               evidenceText,
               String(data: try evidenceEncoder.encode(evidenceRefs), encoding: .utf8) ?? "[]",
               validity.rawValue, min(max(fact.confidence, 0), 1), worthiness,
-              ContextWorkstreamTag.sanitize(fact.workstream), now, now,
+              nil as String?, now, now,
             ])
           if validity == .validated {
             existingFactIdentities.append(
@@ -594,17 +682,14 @@ extension ContextBucketStore {
         try db.execute(
           sql: "UPDATE bucket_entries SET isCompacted = 1 WHERE id = ?", arguments: [row["id"] as String])
       }
-      while rankedLines.reduce(0, { $0 + $1.utf8.count }) > ContextBucketPromptAssembler.frozenRankedByteBudget,
-        rankedLines.count > 1
-      {
-        rankedLines.removeFirst()
-      }
+      rankedLines = ContextBucketCompactionPolicy.evictToLowWaterMark(rankedLines)
       frozen = Data(rankedLines.joined().utf8)
     }
-    let visitCount =
-      try Int.fetchOne(
-        db, sql: "SELECT visitCount FROM context_buckets WHERE id = ?", arguments: [bucketID]) ?? 0
-    let header = "Persistent work context; \(visitCount) qualifying visits."
+    // Constant on purpose: this string is published above the frozen segment on
+    // every version, so interpolating the visit count here changed bytes at the
+    // very top of the cache prefix once per visit. The count is read live from
+    // `context_buckets` into the volatile director section instead.
+    let header = ContextBucketPromptAssembler.stableHeader
     try db.execute(
       sql: """
         INSERT INTO bucket_versions
@@ -709,6 +794,11 @@ enum ContextBucketPurger {
           arguments: [bucketID])
         try db.execute(
           sql: "DELETE FROM proactive_deliveries WHERE bucketID = ?", arguments: [bucketID])
+        // Candidate messages quote this bucket's facts. Leaving them armed
+        // after a privacy purge would keep excluded-app prose in the database
+        // and on the next delivery path.
+        try db.execute(
+          sql: "DELETE FROM proactive_candidates WHERE bucketID = ?", arguments: [bucketID])
         // Recompute visit metadata from surviving completed visits so the
         // bucket no longer reports deleted activity as recent or count it.
         let survivingCount =
@@ -774,8 +864,7 @@ actor ContextBucketRollupWriter {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.fenceIsValid(fence)
     else { return }
-    let prompt = ContextProactivityPromptBuilder.extractionPrompt(
-      frame: frame, fence: fence, workstreamVocabulary: await store.activeWorkstreamTags())
+    let prompt = ContextProactivityPromptBuilder.extractionPrompt(frame: frame, fence: fence)
     do {
       let result = try await client.complete(
         operation: ModelQoS.Proactivity.extractionOperation,
@@ -866,14 +955,10 @@ actor ContextBucketRollupWriter {
               "evidence_refs": ["type": "array", "items": ["type": "string"]],
               "confidence": ["type": "number"],
               "notify_worthiness": ["type": "number"],
-              "workstream": ["type": "string"],
             ],
-            // Strict structured output requires every declared property listed as
-            // required, so the prompt tells the model to answer "unknown" when it
-            // cannot place a fact in a workstream.
             "required": [
               "statement", "identifiers", "evidence_text", "evidence_refs", "confidence",
-              "notify_worthiness", "workstream",
+              "notify_worthiness",
             ],
             "additionalProperties": false,
           ],

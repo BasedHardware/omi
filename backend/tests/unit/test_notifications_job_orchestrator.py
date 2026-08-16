@@ -41,6 +41,16 @@ def test_start_job_source_does_not_invoke_memory_maintenance():
     assert "run_canonical_short_term_maintenance_cron" not in source
 
 
+def test_notifications_job_budgets_x_flex_from_whole_job_start():
+    jobs_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "jobs.py"
+    source = jobs_path.read_text(encoding="utf-8")
+
+    started_at = source.index("job_started_at = time.monotonic()")
+    notifications = source.index("await start_cron_notification_job()")
+    x_sync = source.index("await run_x_sync_job(job_started_at=job_started_at)")
+    assert started_at < notifications < x_sync
+
+
 def test_memory_maintenance_job_entrypoint_calls_cron_runner():
     entry_path = Path(__file__).resolve().parents[2] / "modal" / "memory_maintenance_job.py"
     source = entry_path.read_text(encoding="utf-8")

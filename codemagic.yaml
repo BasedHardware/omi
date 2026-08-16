@@ -23,7 +23,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -237,7 +237,7 @@ workflows:
         PACKAGE_NAME: "com.friend.ios"
         APP_ID: 6502156163
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -454,7 +454,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -639,7 +639,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -829,7 +829,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -1001,7 +1001,7 @@ workflows:
         - shorebird
       vars:
         APP_ID: 6502156163
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -1135,7 +1135,7 @@ workflows:
         PLATFORM: "macos"
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
         DMGBUILD_VERSION: "1.6.7"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -1667,7 +1667,7 @@ workflows:
         - shorebird
       vars:
         PACKAGE_NAME: "com.friend.ios"
-      flutter: 3.41.9
+      flutter: 3.44.5
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
