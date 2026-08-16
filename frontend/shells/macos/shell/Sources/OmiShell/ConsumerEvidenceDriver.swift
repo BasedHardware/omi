@@ -1,4 +1,5 @@
 import AppKit
+import CoreFoundation
 import Darwin
 import Foundation
 import WebKit
@@ -51,6 +52,80 @@ final class ConsumerEvidenceDriver {
     return ConsumerEvidenceRoute.allCases[routeIndex].rawValue
   }
 
+  private func timeoutReason() -> String {
+    let route = currentRouteName()
+    let polls = routeDriveState.pollCount
+    guard routeIndex < ConsumerEvidenceRoute.allCases.count else {
+      return
+        "timed out waiting for rendered semantic observation on \(route) (wait=rendered-observation selectorMatched=n/a clickIssued=n/a latchedAtPoll=none pollsSinceLatch=none pollCount=\(polls))"
+    }
+    switch ConsumerEvidenceRoute.allCases[routeIndex] {
+    case .listen:
+      if let latched = routeDriveState.listenClickLatchPoll {
+        return
+          "timed out waiting for rendered transcript on listen (wait=transcript-after-click selectorMatched=true clickIssued=true latchedAtPoll=\(latched) pollsSinceLatch=\(polls - latched) pollCount=\(polls))"
+      }
+      return
+        "timed out waiting for start-listen click on listen (wait=start-listen-selector selectorMatched=false clickIssued=false latchedAtPoll=none pollsSinceLatch=none pollCount=\(polls))"
+    case .chat:
+      if routeDriveState.chatAdmissionBaseline == nil {
+        return
+          "timed out waiting for chat composer on chat (wait=chat-author selectorMatched=false clickIssued=false latchedAtPoll=none pollsSinceLatch=none pollCount=\(polls))"
+      }
+      if let latched = routeDriveState.chatSubmitLatchPoll {
+        return
+          "timed out waiting for chat admission on chat (wait=chat-admission-after-submit selectorMatched=true clickIssued=true latchedAtPoll=\(latched) pollsSinceLatch=\(polls - latched) pollCount=\(polls))"
+      }
+      return
+        "timed out waiting for chat submit on chat (wait=chat-submit-selector selectorMatched=false clickIssued=false latchedAtPoll=none pollsSinceLatch=none pollCount=\(polls))"
+    case .memories, .tasks, .conversations, .folders, .settings, .screen:
+      return
+        "timed out waiting for rendered semantic observation on \(route) (wait=rendered-observation selectorMatched=n/a clickIssued=n/a latchedAtPoll=none pollsSinceLatch=none pollCount=\(polls))"
+    }
+  }
+
+  private static func evidenceLog(_ line: String) {
+    FileHandle.standardError.write(Data("CONSUMER-EVIDENCE: \(line)\n".utf8))
+  }
+
+  /// WKWebView boxes JS booleans as NSNumber. `as? Bool` is the historical
+  /// latch; this keeps that answer and also accepts the boxed form so the log
+  /// and the latch describe the same value.
+  private static func jsFlag(_ value: Any?) -> Bool {
+    if let flag = value as? Bool { return flag }
+    if let number = value as? NSNumber { return number.boolValue }
+    return false
+  }
+
+  private static func describeJSResult(_ value: Any?, error: Error?) -> String {
+    let errorText: String
+    if let error {
+      let raw = error.localizedDescription.replacingOccurrences(of: "\n", with: " ")
+      errorText = raw.count <= 160 ? raw : String(raw.prefix(160))
+    } else {
+      errorText = "none"
+    }
+    let valueText: String
+    switch value {
+    case nil, is NSNull:
+      valueText = "nil"
+    case let flag as Bool:
+      valueText = flag ? "true" : "false"
+    case let number as NSNumber:
+      if CFGetTypeID(number) == CFBooleanGetTypeID() {
+        valueText = number.boolValue ? "true" : "false"
+      } else {
+        valueText = number.stringValue
+      }
+    case let text as String:
+      let compact = text.replacingOccurrences(of: "\n", with: " ")
+      valueText = compact.count <= 80 ? compact : String(compact.prefix(80))
+    default:
+      valueText = String(describing: type(of: value as Any))
+    }
+    return "value=\(valueText) error=\(errorText)"
+  }
+
   private func loadCurrentRoute() {
     guard let controller, routeIndex < ConsumerEvidenceRoute.allCases.count else { return }
     let route = ConsumerEvidenceRoute.allCases[routeIndex]
@@ -88,27 +163,33 @@ final class ConsumerEvidenceDriver {
     guard let controller, routeIndex < ConsumerEvidenceRoute.allCases.count else { return }
     routeDriveState.pollCount += 1
     if routeDriveState.pollCount > 200 {
-      let route = ConsumerEvidenceRoute.allCases[routeIndex].rawValue
-      fail("timed out waiting for rendered semantic observation on \(route)")
+      fail(timeoutReason())
       return
     }
     let expected = ConsumerEvidenceRoute.allCases[routeIndex]
+    let poll = routeDriveState.pollCount
     if expected == .listen && !routeDriveState.listenStartRequested {
       controller.webView.evaluateJavaScript(
         Self.startListenScript
-      ) { [weak self] value, _ in
+      ) { [weak self] value, error in
         MainActor.assumeIsolated {
           guard let self, !self.failed else { return }
-          self.routeDriveState.listenStartRequested = value as? Bool == true
+          Self.evidenceLog(
+            "listen-click poll=\(poll) \(Self.describeJSResult(value, error: error))")
+          let clicked = Self.jsFlag(value)
+          self.routeDriveState.listenStartRequested = clicked
+          if clicked { self.routeDriveState.listenClickLatchPoll = poll }
           self.schedulePoll()
         }
       }
       return
     }
     if expected == .chat && routeDriveState.chatAdmissionBaseline == nil {
-      controller.webView.evaluateJavaScript(Self.authorChatScript) { [weak self] value, _ in
+      controller.webView.evaluateJavaScript(Self.authorChatScript) { [weak self] value, error in
         MainActor.assumeIsolated {
           guard let self, !self.failed else { return }
+          Self.evidenceLog(
+            "chat-author poll=\(poll) \(Self.describeJSResult(value, error: error))")
           if let number = value as? NSNumber {
             self.routeDriveState.chatAdmissionBaseline = number.intValue
           }
@@ -118,10 +199,14 @@ final class ConsumerEvidenceDriver {
       return
     }
     if expected == .chat && !routeDriveState.chatSubmitted {
-      controller.webView.evaluateJavaScript(Self.submitChatScript) { [weak self] value, _ in
+      controller.webView.evaluateJavaScript(Self.submitChatScript) { [weak self] value, error in
         MainActor.assumeIsolated {
           guard let self, !self.failed else { return }
-          self.routeDriveState.chatSubmitted = value as? Bool == true
+          Self.evidenceLog(
+            "chat-submit poll=\(poll) \(Self.describeJSResult(value, error: error))")
+          let submitted = Self.jsFlag(value)
+          self.routeDriveState.chatSubmitted = submitted
+          if submitted { self.routeDriveState.chatSubmitLatchPoll = poll }
           self.schedulePoll()
         }
       }

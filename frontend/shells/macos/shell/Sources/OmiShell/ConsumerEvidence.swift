@@ -6,8 +6,10 @@ struct ConsumerEvidenceRouteDriveState {
   private var expected: AnyObject?
   var pollCount = 0
   var listenStartRequested = false
+  var listenClickLatchPoll: Int?
   var chatAdmissionBaseline: Int?
   var chatSubmitted = false
+  var chatSubmitLatchPoll: Int?
 
   mutating func begin(_ navigation: AnyObject?) -> Bool {
     guard let navigation else {
@@ -17,8 +19,10 @@ struct ConsumerEvidenceRouteDriveState {
     expected = navigation
     pollCount = 0
     listenStartRequested = false
+    listenClickLatchPoll = nil
     chatAdmissionBaseline = nil
     chatSubmitted = false
+    chatSubmitLatchPoll = nil
     return true
   }
 
