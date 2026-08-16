@@ -5,12 +5,16 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+# Disposable repos must not inherit a pre-push hook's GIT_DIR or hooksPath.
+GIT_ISOLATION = ("-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false")
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parents[1]
@@ -123,6 +127,7 @@ class AdminDeployScopeClassifierTests(unittest.TestCase):
 
 class AdminDeployPushRangeTests(unittest.TestCase):
     def git(self, repo: Path, *args: str) -> str:
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
         completed = subprocess.run(
             [
                 "git",
@@ -130,14 +135,14 @@ class AdminDeployPushRangeTests(unittest.TestCase):
                 "user.name=admin-scope-fixture",
                 "-c",
                 "user.email=admin-scope-fixture@example.com",
-                "-c",
-                "commit.gpgsign=false",
+                *GIT_ISOLATION,
                 *args,
             ],
             cwd=repo,
             check=True,
             capture_output=True,
             text=True,
+            env=env,
         )
         return completed.stdout.strip()
 

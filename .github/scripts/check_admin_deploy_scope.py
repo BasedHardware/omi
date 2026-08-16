@@ -97,7 +97,11 @@ def admin_deploy_applies(
 
 
 def _git(*args: str, cwd: str | Path | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], check=False, capture_output=True, text=True, cwd=cwd)
+    env = None
+    if cwd is not None:
+        # Fixture repos must not inherit a hook's GIT_DIR / GIT_INDEX_FILE.
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    return subprocess.run(["git", *args], check=False, capture_output=True, text=True, cwd=cwd, env=env)
 
 
 def is_missing_or_zero_sha(value: str | None) -> bool:
