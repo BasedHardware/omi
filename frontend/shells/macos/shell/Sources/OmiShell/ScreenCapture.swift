@@ -192,6 +192,7 @@ actor ScreenCaptureEngine {
   private var videoCallTick = 0
   private var sharingBackoffUntil: Date?
   private var lastPreflightCheck = Date.distantPast
+  private var lastNoFrameBundleId: String?
   private var statusSink: (@Sendable (ScreenStatusEvent) -> Void)?
   private var running = false
 
@@ -233,12 +234,14 @@ actor ScreenCaptureEngine {
       state = .error
       reason = "permission"
       emit()
+      logScreenCapture("screen-capture: hop start denied permission")
       return ScreenStartResult(sessionId: "", state: .error)
     }
     sessionId = UUID().uuidString.lowercased()
     running = true
     state = .recording
     emit()
+    logScreenCapture("screen-capture: hop start session=\(sessionId ?? "")")
     loopTask = Task { await self.runLoop() }
     ingestTask = Task { await self.runIngestLoop() }
     _ = store.sweepIfDue(now: Date())
@@ -378,13 +381,12 @@ actor ScreenCaptureEngine {
         switch ScreenCadencePolicy.decide(input) {
         case .skip(let skipReason):
           if skipReason == "dhash-static" { lastCaptureAt = now }
-          if skipReason == "lock" || skipReason == "screensaver" || skipReason == "loginwindow"
-            || skipReason == "screen-sharing"
-          {
-            if state == .recording {
-              state = .paused
-              reason = skipReason
-              emit()
+          if ScreenCadencePolicy.pausesRecording(skipReason) {
+            let wasRecording = state == .recording
+            pauseRecording(skipReason)
+            if wasRecording {
+              logScreenCapture(
+                "screen-capture: hop skip=\(skipReason) app=\(preview.appBundleId)")
             }
           }
         case .capture(let captureReason):
@@ -396,8 +398,20 @@ actor ScreenCaptureEngine {
           lastAppBundleId = preview.appBundleId
           lastWindowTitle = preview.windowTitle
           lastCaptureAt = now
+          lastNoFrameBundleId = nil
           if captureReason == "anchor" { lastAnchorAt = now }
+          logScreenCapture(
+            "screen-capture: hop capture=\(captureReason) app=\(preview.appBundleId)")
           _ = await process(frame: preview, env: env, precomputedHash: hash)
+        }
+      } else {
+        let excluded = store.isExcluded(env.frontmostBundleId)
+        let wasRecording = state == .recording
+        if excluded { pauseRecording("excluded") }
+        if wasRecording || lastNoFrameBundleId != env.frontmostBundleId {
+          logScreenCapture(
+            "screen-capture: hop no-frame frontmost=\(env.frontmostBundleId) excluded=\(excluded)")
+          lastNoFrameBundleId = env.frontmostBundleId
         }
       }
       try? await Task.sleep(nanoseconds: 1_000_000_000)
@@ -408,8 +422,11 @@ actor ScreenCaptureEngine {
   private func runIngestLoop() async {
     while running && !Task.isCancelled {
       if let ingest, let sessionId {
-        _ = ScreenIngestSync.flush(
+        let flushed = ScreenIngestSync.flush(
           store: store, client: ingest, sessionId: sessionId, deviceName: deviceName, now: Date())
+        if flushed != "idle" && flushed != "backoff" {
+          logScreenCapture("screen-ingest: hop flush=\(flushed)")
+        }
         _ = ScreenIngestSync.collectRetired(store: store, client: ingest)
       }
       _ = store.sweepIfDue(now: Date())
@@ -452,11 +469,25 @@ actor ScreenCaptureEngine {
         ocr: ocr,
         allowWrite: allowWrite)
       lastAnchorAt = lastAnchorAt ?? frame.capturedAt
+      logScreenCapture(
+        "screen-capture: hop stored app=\(frame.appBundleId) ocr=\(ocr != nil)")
       emit()
       return row
     } catch {
       return nil
     }
+  }
+
+  private func pauseRecording(_ skipReason: String) {
+    if state == .recording {
+      state = .paused
+      reason = skipReason
+      emit()
+    }
+  }
+
+  private func logScreenCapture(_ line: String) {
+    FileHandle.standardError.write(Data("\(line)\n".utf8))
   }
 
   private func permission() -> ScreenPermission {

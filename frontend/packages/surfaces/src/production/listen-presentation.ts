@@ -1,6 +1,28 @@
 import type { PlatformListenPreflightSnapshot } from "@omi-core/adapters-platform";
 import type { MessageKey } from "@omi-core/i18n";
+import type { TranscriptSegment } from "@omi-core/wire-listen";
 import type { CaptureDescription, CaptureState } from "./capture-state.js";
+
+/**
+ * Exact canned lines `createScriptedTranscriptionSource` emits. Keep in lockstep
+ * with `SCRIPTED_LOCAL_TRANSCRIPT_TEXTS` in apps/service/listen/transcription-source.ts.
+ * A Listen panel that shows only these lines is not the user's speech.
+ */
+export const SCRIPTED_LISTEN_TRANSCRIPT_CONNECTED = "Local transcription is connected.";
+export const SCRIPTED_LISTEN_TRANSCRIPT_TIMING = "This segment arrived with real timing.";
+export const SCRIPTED_LISTEN_TRANSCRIPT_TEXTS = Object.freeze([
+  SCRIPTED_LISTEN_TRANSCRIPT_CONNECTED,
+  SCRIPTED_LISTEN_TRANSCRIPT_TIMING,
+]);
+
+export function isScriptedListenTranscript(
+  segments: readonly Pick<TranscriptSegment, "text">[],
+): boolean {
+  if (segments.length === 0) return false;
+  return segments.every((segment) => (
+    SCRIPTED_LISTEN_TRANSCRIPT_TEXTS as readonly string[]
+  ).includes(segment.text.trim()));
+}
 
 type CatalogKey<T extends MessageKey> = T;
 

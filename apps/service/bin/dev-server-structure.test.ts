@@ -45,6 +45,7 @@ test("dev-server routes generation through the gateway or fails closed without o
 test("dev-server STT is opt-in mlx-whisper and app-facing stays scripted", () => {
   expect(source).toContain("OMI_STT_ENGINE");
   expect(source).toContain("createMlxWhisperTranscriptionSource");
+  expect(source).toContain("sttEngine: config.stt.kind");
   expect(appFacingSource).toContain("createScriptedTranscriptionSource()");
   expect(appFacingSource).not.toContain("createMlxWhisperTranscriptionSource");
 });

@@ -6,6 +6,7 @@ import {
   highlightRectsFor,
   snippetParts,
   SCREEN_PLAYBACK_RATES,
+  screenPausedMessageKey,
   type ScreenEmptyKind,
   type ScreenPlaybackRate,
 } from "./screen-presentation.js";
@@ -301,7 +302,14 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
               >
                 {engine === "recording" || engine === "paused" || engine === "starting" ? t(locale, "screen.stop") : t(locale, "screen.start")}
               </button>
-              {paused && <span className="screen-capture-badge is-paused">{t(locale, "screen.capturePaused")}</span>}
+              {paused && (
+                <span
+                  className="screen-capture-badge is-paused"
+                  data-capture-reason={capture?.reason ?? "paused"}
+                >
+                  {t(locale, screenPausedMessageKey(capture?.reason ?? null))}
+                </span>
+              )}
               {recovering && <span className="screen-capture-badge is-recovering">{t(locale, "screen.recovering")}</span>}
               {permissionNeedsAction && (
                 <button type="button" className="screen-permission-action" onClick={() => void run(() => store.requestPermission())}>

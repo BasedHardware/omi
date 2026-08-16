@@ -133,11 +133,16 @@
 .listen-state-body,
 .listen-elapsed,
 .listen-buffered,
-.listen-entitlement-usage {
+.listen-entitlement-usage,
+.listen-scripted-stt {
   margin: var(--space-xs) 0 0;
   color: var(--content-secondary);
   font-size: var(--type-meta-size);
   line-height: var(--type-meta-line);
+}
+
+.listen-scripted-stt {
+  color: var(--danger);
 }
 
 .listen-open-conversations {

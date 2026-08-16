@@ -161,6 +161,8 @@ describe("demo persona HTTP routes", () => {
         memory_count: DEMO_PERSONA_MEMORY_COUNT,
         persona: "demo",
       });
+      const status = await (await request("/v1/qa/status")).json() as { readonly stt_engine?: string };
+      expect(status.stt_engine).toBe("scripted");
     } finally {
       db.close();
     }
@@ -229,5 +231,28 @@ describe("persona fence", () => {
     const devServer = readFileSync(join(root, "apps/service/bin/dev-server.ts"), "utf8");
     expect(devServer.includes("qa/demo-persona")).toBe(true);
     expect(devServer.includes("OMI_SEED_PERSONA")).toBe(true);
+  });
+});
+
+describe("qa status reports the live STT engine", () => {
+  test("mlx-whisper is visible on /v1/qa/status when composed", async () => {
+    const db = new Database(":memory:");
+    const service = createLocalDevService({
+      db,
+      ownerAccountId: OWNER,
+      memoryCount: 12,
+      accountTimezone: TIMEZONE,
+      devSecretLabel: SECRET,
+      listenDefaultUnmetered: true,
+      sttEngine: "mlx-whisper",
+    });
+    try {
+      const status = await (await service.app.request("/v1/qa/status")).json() as {
+        readonly stt_engine?: string;
+      };
+      expect(status.stt_engine).toBe("mlx-whisper");
+    } finally {
+      db.close();
+    }
   });
 });

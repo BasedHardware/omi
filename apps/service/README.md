@@ -266,7 +266,9 @@ All are optional.
 
 ## On-device listen transcription (opt-in)
 
-The `/v4/listen` seam (`TranscriptionSource`) is provider-agnostic. The registered local composition still defaults to `createScriptedTranscriptionSource` so a cold checkout and every hermetic test stay deterministic. A real engine is **opt-in for the human app path**.
+The `/v4/listen` seam (`TranscriptionSource`) is provider-agnostic. Hermetic tests and `createLocalService` still default to `createScriptedTranscriptionSource` so a cold checkout stays deterministic. **`bun run app` / `integration/dev-app.sh` sets `OMI_STT_ENGINE=mlx-whisper`** so the headed human path transcribes real microphone audio. L3 `--lease` / `--assert` leaves the env unset on purpose: that path injects synthetic PCM.
+
+If mlx-whisper is not bootstrapped, the headed stack fails closed with a pointer at `scripts/stt-bootstrap.sh` rather than emitting canned "Local transcription is connected." rows that look like speech.
 
 ### Bootstrap (once per machine / checkout)
 
@@ -288,10 +290,13 @@ Default model: **`mlx-community/whisper-large-v3-turbo`** (~1.6 GB). It is the s
 ### Enable
 
 ```bash
+# headed human path (`bun run app`) sets this for you
 OMI_STT_ENGINE=mlx-whisper bun run apps/service/bin/dev-server.ts
 ```
 
 `bin/dev-server.ts` is the only process that constructs `createMlxWhisperTranscriptionSource`. Production entrypoints and `createLocalService` never import it. If the env asks for `mlx-whisper` and the venv or model is missing, boot prints a precise refusal pointing at `scripts/stt-bootstrap.sh` and exits 1.
+
+`integration/dev-app.sh` also refuses to launch the headed shell against a stack whose `/v1/qa/status` `stt_engine` is not `mlx-whisper`. Reusing an already-running scripted listener used to look like a working mic: the scripted adapter emits two canned lines, then drops every further PCM frame.
 
 The service owns a long-lived Python worker (`apps/service/listen/mlx-whisper-worker.py`). The worker loads the model once, reads JSON-lines on stdin, writes JSON-lines on stdout, and **exits when stdin hits EOF**, so a dead parent cannot leave an orphan. Mic audio is 16 kHz mono `pcm16` (or `linear16`). Other listen codecs are rejected with a typed error rather than silently mis-decoded.
 

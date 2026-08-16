@@ -38,7 +38,7 @@ while (( $# )); do
     --help|-h)
       sed -n '2,8p' "$0"
       printf '%s\n' "usage: integration/dev-app.sh [--accept]"
-      printf '%s\n' "  boots or reuses the local stack with OMI_SEED_PERSONA=demo, then launches the macOS shell."
+      printf '%s\n' "  boots or reuses the local stack with OMI_SEED_PERSONA=demo and OMI_STT_ENGINE=mlx-whisper, then launches the macOS shell."
       printf '%s\n' "  OMI_CHAT_MODEL=real opts into the local real-model proxy (see integration/README.md)."
       printf '%s\n' "  stop the stack with: integration/dev-stack.sh --stop"
       exit 0
@@ -81,7 +81,7 @@ fi
 
 booted=0
 if (( service_up == 0 && gateway_up == 0 )); then
-  OMI_SEED_PERSONA=demo "$STACK" --up
+  OMI_SEED_PERSONA=demo OMI_STT_ENGINE=mlx-whisper "$STACK" --up
   booted=1
 fi
 
@@ -126,6 +126,13 @@ IDENTITY="$(SETTINGS_JSON="$SETTINGS_JSON" STATUS_JSON="$STATUS_JSON" node -e '
   exit 1
 }
 
+stt_engine="$(STATUS_JSON="$STATUS_JSON" node -e '
+  try {
+    const status = JSON.parse(process.env.STATUS_JSON);
+    if (typeof status?.stt_engine === "string") process.stdout.write(status.stt_engine);
+  } catch {}
+')"
+
 printf 'omi local demo app\n\n'
 printf '  base URL   %s\n' "$SERVICE_URL"
 if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then
@@ -135,6 +142,16 @@ else
 fi
 printf '  identity   %s\n' "$IDENTITY"
 printf '  surface    %s\n' "$SURFACE_URL"
+if [[ "$stt_engine" == "mlx-whisper" ]]; then
+  printf '  stt        mlx-whisper (on-device; your speech should appear in Listen)\n'
+else
+  printf 'ERROR: this stack is not transcribing real speech (stt=%s).\n' "${stt_engine:-missing}" >&2
+  printf '       Listen will show canned "Local transcription is connected." rows instead of what you say.\n' >&2
+  printf '       Stop it and boot the headed path: integration/dev-stack.sh --stop\n' >&2
+  printf '       then: OMI_SEED_PERSONA=demo OMI_STT_ENGINE=mlx-whisper integration/dev-stack.sh --up\n' >&2
+  printf '       after scripts/stt-bootstrap.sh if the on-device engine is not on this machine.\n' >&2
+  exit 1
+fi
 if (( booted )); then
   printf '  stack      booted with the demo persona for this process\n'
 elif [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then

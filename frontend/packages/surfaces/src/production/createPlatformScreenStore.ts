@@ -29,6 +29,7 @@ import type { ProductionScreenStore, ScreenCaptureTone, ScreenFrameImageState } 
 import {
   adjacentCaptureDay,
   calendarDayFromInstant,
+  followNewestCaptureDay,
   frameAtCursor,
   groupScreenSearchHits,
   playbackTickMs,
@@ -45,6 +46,9 @@ const EMPTY_DAYS: ScreenDaySpanSummary = {
   newest_captured_at: null,
   frame_count: 0,
 };
+
+/** Ingest flushes every 2s; wait just past that so the timeline can include the new row. */
+const LIVE_TIMELINE_REFRESH_MS = 2_500;
 
 function captureTone(status: PlatformScreenStatus | null, bridgeAvailable: boolean): ScreenCaptureTone {
   if (!bridgeAvailable || status === null) return "red";
@@ -257,6 +261,11 @@ export function createPlatformProductionScreenStore(options: {
       fetchScreenRetention(http),
     ]);
     if (daySpan.kind === "page") {
+      selectedDay = followNewestCaptureDay({
+        previousDays: days.days,
+        selectedDay,
+        nextDays: daySpan.value.days,
+      });
       days = daySpan.value;
     } else if (daySpan.kind === "auth-invalid" || daySpan.kind === "unavailable" || daySpan.kind === "unreadable") {
       status = {
@@ -301,9 +310,29 @@ export function createPlatformProductionScreenStore(options: {
     notify();
   };
 
+  let lastFramesStored = captureStatus()?.framesStored ?? 0;
+  let cancelLiveRefresh: (() => void) | null = null;
+  let liveRefreshInFlight = false;
+  const scheduleLiveTimelineRefresh = (): void => {
+    cancelLiveRefresh?.();
+    cancelLiveRefresh = options.env.delay(LIVE_TIMELINE_REFRESH_MS, () => {
+      cancelLiveRefresh = null;
+      if (liveRefreshInFlight) return;
+      liveRefreshInFlight = true;
+      void refreshAll().finally(() => {
+        liveRefreshInFlight = false;
+      });
+    });
+  };
+
   if (bridge.available) {
     unsubscribeBridge = bridge.subscribe(() => {
       applyCaptureEnabled();
+      const stored = captureStatus()?.framesStored ?? 0;
+      if (stored > lastFramesStored) {
+        lastFramesStored = stored;
+        scheduleLiveTimelineRefresh();
+      }
       notify();
     });
   }
@@ -316,6 +345,8 @@ export function createPlatformProductionScreenStore(options: {
         listeners.delete(listener);
         if (listeners.size === 0) {
           cancelSearch?.();
+          cancelLiveRefresh?.();
+          cancelLiveRefresh = null;
           stopPlayback();
           unsubscribeBridge?.();
           unsubscribeBridge = null;

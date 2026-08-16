@@ -292,3 +292,30 @@ test("Rewind citation href helper pins the frame query without inventing a citat
     await rendered.cleanup();
   }
 });
+
+test("excluded pause names that this app is not being captured", async () => {
+  const ScreenProduction = await loadProductionExport("ScreenProduction.tsx", "ScreenProduction");
+  const fixtureScreenStore = await loadProductionExport("screen-fixtures.ts", "fixtureScreenStore");
+  const base = fixtureScreenStore("ready");
+  const store = {
+    ...base,
+    captureStatus: () => ({
+      ...base.captureStatus(),
+      state: "paused",
+      reason: "excluded",
+    }),
+    engineState: () => "paused",
+  };
+  const rendered = await renderComponent(ScreenProduction, { store, locale: "en" });
+  try {
+    const badge = rendered.container.querySelector(".screen-capture-badge.is-paused");
+    assert.ok(badge, "paused capture is visible on Rewind");
+    assert.equal(badge.getAttribute("data-capture-reason"), "excluded");
+    assert.equal(badge.textContent, EN_MESSAGES["screen.capturePausedExcluded"]);
+    assert.notEqual(badge.textContent, EN_MESSAGES["screen.capturePaused"]);
+  } finally {
+    await rendered.cleanup();
+  }
+  // red-proof: a generic "Capture paused" badge while Rewind is frontmost
+  // looks like recording is working.
+});

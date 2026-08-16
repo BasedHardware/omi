@@ -193,6 +193,7 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
   private var protocolReadyIds = Set<String>()
   private var capture: ListenMicrophoneCapture?
   private var captureSocketId: String?
+  private var loggedFirstPcmChunk = false
 
   private func listenPreflightPayload() -> [String: Any] {
     let hasInput = AVCaptureDevice.default(for: .audio) != nil
@@ -445,6 +446,10 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
     let session = ListenMicrophoneCapture()
     let started = session.start { [weak self] data in
       guard let self, let task = self.tasksById[id], !data.isEmpty else { return }
+      if !self.loggedFirstPcmChunk {
+        self.loggedFirstPcmChunk = true
+        self.logListen("listen-capture: hop first-pcm-bytes=\(data.count)")
+      }
       task.send(.data(data)) { [weak self, weak task] error in
         guard error != nil, let self, let task, let webView = self.webViewsById[id]
         else { return }
@@ -473,6 +478,7 @@ final class ListenSocketHandler: NSObject, WKScriptMessageHandler, URLSessionWeb
     capture?.stop()
     capture = nil
     captureSocketId = nil
+    loggedFirstPcmChunk = false
   }
 
   private func tccName(_ status: AVAuthorizationStatus) -> String {
