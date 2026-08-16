@@ -237,6 +237,7 @@ class ListenSocketHost {
   }
 
   Future<bool> _listenPreflightReady() async {
+    if (evidenceAudioEnabled) return true;
     try {
       final value = await _preflightChannel.invokeMethod<Object?>('check');
       return value is Map && listenPreflightCanOpen(value.cast<Object?, Object?>());
@@ -250,6 +251,10 @@ class ListenSocketHost {
   }
 
   Future<void> _handlePreflight(WebViewController controller, String id, String operation) async {
+    if (evidenceAudioEnabled) {
+      await _emitEvidencePreflight(controller, id);
+      return;
+    }
     Map<String, Object?> payload;
     try {
       final method = switch (operation) {
@@ -274,6 +279,15 @@ class ListenSocketHost {
       'recovery': payload['recovery'],
     };
     await _emit(controller, id, response, callback: '__omiListenPreflightEvent');
+  }
+
+  Future<void> _emitEvidencePreflight(WebViewController controller, String id) {
+    return _emit(
+      controller,
+      id,
+      <String, Object?>{'type': 'preflight', 'requestId': id, ...listenEvidencePreflightPayload},
+      callback: '__omiListenPreflightEvent',
+    );
   }
 
   static const _unavailablePreflight = <String, Object?>{

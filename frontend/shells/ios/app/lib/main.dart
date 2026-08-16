@@ -509,6 +509,11 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
         }
       } catch (error) {
         debugPrint('CONSUMER-EVIDENCE: FAIL $error');
+        try {
+          final snapshot = await _controller.runJavaScriptReturningResult(abortConsumerEvidenceJavaScript);
+          await _scheme?.log('CONSUMER-EVIDENCE abort-at snapshot=$snapshot');
+        } catch (_) {}
+        await _scheme?.log('CONSUMER-EVIDENCE FAIL $error');
         if (_consumerEvidenceExit) exit(1);
       }
       return;

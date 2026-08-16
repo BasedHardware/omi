@@ -248,6 +248,88 @@ void main() {
     expect(await result.exists(), isTrue);
   });
 
+  test('Listen-first times out on Listen and never advances to a later route', () async {
+    // The night's hang looked like "whatever is last." Listen is fifth of eight.
+    // Driving it first: if this still names Listen, the defect is Listen.
+    final scratch = await Directory.systemTemp.createTemp('omi-ios-listen-first-');
+    addTearDown(() => scratch.delete(recursive: true));
+    final collector = ConsumerEvidenceCollector(
+      resultPath: '${scratch.path}/result.json',
+      runId: 'run-ios-listen-first',
+      hashes: const ConsumerEvidenceTreeHashes(shell: hashA, surface: hashB),
+    );
+    await collector.prepare();
+    final navigated = <Uri>[];
+    final driver = ConsumerEvidenceDriver(
+      collector: collector,
+      routes: const [ConsumerEvidenceRoute.listen, ConsumerEvidenceRoute.memories],
+      navigate: (uri) async => navigated.add(uri),
+      observe: () async => null,
+      startListen: () async => false,
+      authorChat: () async => 0,
+      submitChat: () async => true,
+      observeChatAfterAdmission: (_) async => null,
+      delay: (_) async {},
+      maxPolls: 2,
+    );
+    await driver.start();
+    await expectLater(
+      driver.pageFinished(navigated.single.toString()),
+      throwsA(isA<StateError>().having((error) => error.message, 'message', contains('timed out waiting for a Listen transcript'))),
+    );
+    expect(navigated.map((uri) => uri.queryParameters['route']), ['listen']);
+    expect(await File('${scratch.path}/result.json').exists(), isFalse);
+  });
+
+  test('default walk times out on Listen, not on the last matrix route', () async {
+    final scratch = await Directory.systemTemp.createTemp('omi-ios-listen-middle-');
+    addTearDown(() => scratch.delete(recursive: true));
+    final collector = ConsumerEvidenceCollector(
+      resultPath: '${scratch.path}/result.json',
+      runId: 'run-ios-listen-middle',
+      hashes: const ConsumerEvidenceTreeHashes(shell: hashA, surface: hashB),
+    );
+    await collector.prepare();
+    final navigated = <Uri>[];
+    var listenStarted = false;
+    final driver = ConsumerEvidenceDriver(
+      collector: collector,
+      navigate: (uri) async => navigated.add(uri),
+      observe: () async {
+        final route = ConsumerEvidenceRoute.values.byName(navigated.last.queryParameters['route']!);
+        if (route == ConsumerEvidenceRoute.listen) return null;
+        return jsonEncode(observation(route).toJson());
+      },
+      startListen: () async {
+        listenStarted = true;
+        return false;
+      },
+      authorChat: () async => 0,
+      submitChat: () async => true,
+      observeChatAfterAdmission: (_) async => jsonEncode(observation(ConsumerEvidenceRoute.chat).toJson()),
+      delay: (_) async {},
+      maxPolls: 2,
+    );
+    await driver.start();
+    Object? caught;
+    for (var i = 0; i < 16; i++) {
+      try {
+        await driver.pageFinished(navigated.last.toString());
+      } catch (error) {
+        caught = error;
+        break;
+      }
+    }
+    expect(caught, isA<StateError>());
+    expect((caught as StateError).message, contains('Listen transcript'));
+    expect(
+      navigated.map((uri) => uri.queryParameters['route']).toList(),
+      ['memories', 'tasks', 'conversations', 'folders', 'listen'],
+    );
+    expect(listenStarted, isTrue);
+    expect(await File('${scratch.path}/result.json').exists(), isFalse);
+  });
+
   test('iOS evidence ignores a late prior-route finish and advances only the owned load', () async {
     final scratch = await Directory.systemTemp.createTemp('omi-ios-consumer-owned-load-');
     addTearDown(() => scratch.delete(recursive: true));
@@ -351,5 +433,14 @@ void main() {
     expect(navigated.map((uri) => uri.queryParameters['route']), ['memories', 'tasks']);
     expect(navigated.map((uri) => uri.queryParameters['__omiHttpDocument']), ['d1', 'd2']);
     await driver.teardown();
+  });
+
+  test('screen observation JS admits a host-absent timeline and still refuses a present-bridge miss', () {
+    expect(
+      renderedConsumerObservationJavaScript,
+      contains("image === 'unavailable' && e.dataset.bridge === 'absent'"),
+    );
+    expect(abortConsumerEvidenceJavaScript, contains('frameImage'));
+    expect(abortConsumerEvidenceJavaScript, contains('bridge'));
   });
 }

@@ -201,7 +201,8 @@ final class ConsumerEvidenceDriver {
     required this.observeChatAfterAdmission,
     this.delay = _defaultDelay,
     this.maxPolls = 200,
-  });
+    List<ConsumerEvidenceRoute>? routes,
+  }) : routes = List<ConsumerEvidenceRoute>.unmodifiable(routes ?? ConsumerEvidenceRoute.values);
 
   final ConsumerEvidenceCollector collector;
   final EvidenceOwnNavigation ownNavigation;
@@ -213,6 +214,7 @@ final class ConsumerEvidenceDriver {
   final EvidenceObserveChatAfterAdmission observeChatAfterAdmission;
   final Future<void> Function(Duration duration) delay;
   final int maxPolls;
+  final List<ConsumerEvidenceRoute> routes;
   int _routeIndex = 0;
   bool _polling = false;
   bool _closed = false;
@@ -221,10 +223,24 @@ final class ConsumerEvidenceDriver {
   static Future<void> _defaultDelay(Duration duration) => Future<void>.delayed(duration);
   static Uri _identityNavigation(Uri uri) => uri;
 
-  Future<void> start() async => _navigateTo(ConsumerEvidenceRoute.values.first);
+  static String _timeoutMessage(ConsumerEvidenceRoute expected) {
+    if (expected == ConsumerEvidenceRoute.listen) {
+      return 'timed out waiting for a Listen transcript: Start stays disabled until '
+          'microphone preflight is granted, and a simulator has no TCC prompt surface. '
+          'Evidence audio must advertise granted/available so the synthetic PCM path can run.';
+    }
+    if (expected == ConsumerEvidenceRoute.screen) {
+      return 'timed out waiting for a Screen frame image: iOS has no screen-capture '
+          'bridge, so history frames stay data-frame-image=unavailable. Observation '
+          'must accept that finished host-absent state instead of waiting for ready.';
+    }
+    return 'timed out waiting for rendered semantic observation on ${expected.wireName}';
+  }
+
+  Future<void> start() async => _navigateTo(routes.first);
 
   Future<void> pageFinished(String? finishedUrl, {Future<void> Function()? prepareOwnedDocument}) async {
-    if (_closed || _polling || _routeIndex >= ConsumerEvidenceRoute.values.length) {
+    if (_closed || _polling || _routeIndex >= routes.length) {
       return;
     }
     final expectedFinishedUri = _expectedFinishedUri;
@@ -236,7 +252,7 @@ final class ConsumerEvidenceDriver {
     _polling = true;
     try {
       await prepareOwnedDocument?.call();
-      final expected = ConsumerEvidenceRoute.values[_routeIndex];
+      final expected = routes[_routeIndex];
       var listenStarted = false;
       int? chatAdmissionBaseline;
       var chatSubmitted = false;
@@ -269,17 +285,17 @@ final class ConsumerEvidenceDriver {
           final observation = RenderedConsumerObservation.decodeRenderedJson(encoded);
           collector.accept(observation, expected);
           _routeIndex++;
-          if (_routeIndex == ConsumerEvidenceRoute.values.length) {
+          if (_routeIndex == routes.length) {
             await collector.finish();
             _closed = true;
           } else {
-            await _navigateTo(ConsumerEvidenceRoute.values[_routeIndex]);
+            await _navigateTo(routes[_routeIndex]);
           }
           return;
         }
         await delay(const Duration(milliseconds: 150));
       }
-      throw StateError('timed out waiting for rendered semantic observation on ${expected.wireName}');
+      throw StateError(_timeoutMessage(expected));
     } catch (_) {
       _closed = true;
       await collector.teardown();
@@ -321,7 +337,7 @@ const renderedConsumerObservationJavaScript = r'''
     const frames = Number(e.dataset.frameTotal);
     const image = e.dataset.frameImage;
     if (!Number.isSafeInteger(frames) || frames < 0) return null;
-    if (frames > 0 && image !== 'ready') return null;
+    if (frames > 0 && image !== 'ready' && !(image === 'unavailable' && e.dataset.bridge === 'absent')) return null;
   }
   if (route === 'listen') {
     const transcript = e.dataset.consumerTranscript;
@@ -330,6 +346,28 @@ const renderedConsumerObservationJavaScript = r'''
   }
   if (e.dataset.consumerTranscript !== undefined) return null;
   return JSON.stringify({route, state:'ready', semantic});
+})()
+''';
+
+const abortConsumerEvidenceJavaScript = r'''
+(() => {
+  const e = document.querySelector("main[data-production-shell='true']");
+  if (!e) return JSON.stringify({productionShell:false});
+  const button = e.querySelector("[data-consumer-action='start-listen']");
+  return JSON.stringify({
+    productionShell: true,
+    route: e.dataset.route || null,
+    surfaceState: e.dataset.surfaceState || null,
+    qaFixture: e.dataset.qaFixture || null,
+    captureKind: e.dataset.captureKind || null,
+    semantic: e.dataset.consumerSemantic || null,
+    transcriptPresent: e.dataset.consumerTranscript !== undefined,
+    startListenPresent: Boolean(button),
+    startListenDisabled: button ? Boolean(button.disabled) : null,
+    bridge: e.dataset.bridge || null,
+    frameTotal: e.dataset.frameTotal || null,
+    frameImage: e.dataset.frameImage || null
+  });
 })()
 ''';
 

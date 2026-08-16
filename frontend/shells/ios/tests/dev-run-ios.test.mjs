@@ -239,6 +239,10 @@ exit 0
     assert.equal(existsSync(evidence), false, "build failure cannot retain host success");
 
     writeFileSync(evidence, "stale before timeout");
+    mkdirSync(path.join(container, "Documents"), { recursive: true });
+    writeFileSync(path.join(container, "Documents/probe-log.txt"), "GET listen\nCONSUMER-EVIDENCE FAIL transcript\n");
+    const runDir = path.join(scratch, "l3-run");
+    mkdirSync(runDir, { recursive: true });
     const timeout = spawnSync("/bin/bash", [
       launcher, "--route", "chat", "--device", "simulator-proof",
       "--evidence-out", evidence, "--run-id", "run-launcher-proof",
@@ -248,10 +252,21 @@ exit 0
         ...env,
         OMI_TEST_NO_NATIVE_RESULT: "1",
         OMI_CONSUMER_EVIDENCE_WAIT_SECONDS: "1",
+        OMI_DEV_STACK_RUNDIR: runDir,
       },
     });
     assert.equal(timeout.status, 124, timeout.stderr || timeout.stdout);
     assert.equal(existsSync(evidence), false, "timeout cannot retain host success");
+    assert.match(timeout.stderr, /iOS probe-log \(last 80 lines\)/);
+    assert.match(timeout.stderr, /CONSUMER-EVIDENCE FAIL transcript/);
+    assert.equal(
+      readFileSync(path.join(runDir, "ios-probe-log.txt"), "utf8"),
+      "GET listen\nCONSUMER-EVIDENCE FAIL transcript\n",
+    );
+    assert.match(
+      readFileSync(originalLauncher, "utf8"),
+      /iOS evidence process exited before writing the native result/,
+    );
 
     writeFileSync(evidence, "stale before invalid native result");
     const invalidNative = spawnSync("/bin/bash", [

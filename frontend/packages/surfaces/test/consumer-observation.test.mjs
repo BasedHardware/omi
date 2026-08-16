@@ -90,7 +90,7 @@ test("semantic and Listen transcript values are bounded", async () => {
   // text into the host-readable contract instead of one bounded semantic fact.
 });
 
-test("screen observation is ready with no frames, and refuses a timeline whose image did not decode", async () => {
+test("screen observation is ready with no frames or a host-absent timeline, and refuses a present bridge whose image did not decode", async () => {
   const read = await loadProductionExport(
     "consumer-observation.ts",
     "readRenderedConsumerObservation",
@@ -112,21 +112,47 @@ test("screen observation is ready with no frames, and refuses a timeline whose i
     state: "ready",
     semantic: "screen:frames:0:hits:0:image:absent",
   });
+  assert.deepEqual(read(documentWith({
+    ...base,
+    "data-frame-total": "3",
+    "data-frame-image": "unavailable",
+    "data-bridge": "absent",
+    "data-consumer-semantic": "screen:frames:3:hits:0:image:unavailable",
+  })), {
+    route: "screen",
+    state: "ready",
+    semantic: "screen:frames:3:hits:0:image:unavailable",
+  });
+  assert.equal(read(documentWith({
+    ...base,
+    "data-frame-total": "3",
+    "data-frame-image": "unavailable",
+    "data-bridge": "present",
+  })), null);
   assert.equal(read(documentWith({
     ...base,
     "data-frame-total": "3",
     "data-frame-image": "unavailable",
   })), null);
+  assert.equal(read(documentWith({
+    ...base,
+    "data-frame-total": "3",
+    "data-frame-image": "loading",
+    "data-bridge": "present",
+  })), null);
   assert.deepEqual(read(documentWith({
     ...base,
     "data-frame-total": "3",
     "data-frame-image": "ready",
+    "data-bridge": "present",
   })), {
     route: "screen",
     state: "ready",
     semantic: "screen:frames:3:hits:0:image:ready",
   });
-  // red-proof: drop the image-ready gate. A dangling chunk ref still produces
-  // frames>0 with data-frame-image=unavailable, and Rewind stays observably
-  // broken while this helper returns a live row.
+  // red-proof: drop the present-bridge image-ready gate. A dangling chunk ref
+  // still produces frames>0 with data-frame-image=unavailable, and Rewind stays
+  // observably broken while this helper returns a live row.
+  // red-proof: treat host-absent unavailable as in-flight. iOS has no
+  // screen-capture bridge, so evidence waits 30s on a finished Rewind surface.
 });
