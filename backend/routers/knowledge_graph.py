@@ -3,16 +3,19 @@ import sys
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Callable, Optional, cast
+from typing import List, Dict, Any, Callable, Literal, Optional, cast
 
 from database import knowledge_graph as kg_db
 from database.auth import get_user_name
 from utils.memory import canonical_graph as canonical_graph_service
 from utils.executors import db_executor, llm_executor, run_blocking
+from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
 from utils.subscription import is_trial_paywalled
+from utils import knowledge_graph_sync as kg_sync
 
 router = APIRouter()
+LOCAL_KG_SYNC_MAX_ROWS = 100
 RateLimitFactory = Callable[[Any, str], Any]
 with_rate_limit: RateLimitFactory = cast(RateLimitFactory, getattr(auth, "with_rate_limit"))
 CANONICAL_GRAPH_MUTATION_CONFLICT = (
@@ -79,6 +82,23 @@ class RebuildResponse(BaseModel):
 
 class DeleteKnowledgeGraphResponse(BaseModel):
     status: str
+
+
+class LocalKgSyncRequest(BaseModel):
+    table: Literal["local_kg_nodes", "local_kg_edges"]
+    rows: List[Dict[str, Any]] = Field(min_length=0, max_length=LOCAL_KG_SYNC_MAX_ROWS)
+    source_namespace: str = Field(min_length=1, max_length=256)
+    reconcile_complete: bool = False
+
+
+class LocalKgSyncResponse(BaseModel):
+    table: str
+    merged: int
+    skipped: int
+    nodes_evicted: int
+    edges_evicted: int
+    quarantined: int = 0
+    deleted: int = 0
 
 
 class ExtractKnowledgeGraphRequest(BaseModel):
@@ -236,4 +256,37 @@ async def extract_knowledge_graph(
 
 @router.delete('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=DeleteKnowledgeGraphResponse)
 def delete_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
-    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=CANONICAL_GRAPH_MUTATION_CONFLICT)
+    _require_legacy_graph_mutation(uid)
+    kg_db.delete_knowledge_graph(uid)
+    return {"status": "deleted"}
+
+
+@router.post('/v1/knowledge-graph/sync', tags=['knowledge_graph'], response_model=LocalKgSyncResponse)
+def sync_local_knowledge_graph(
+    payload: LocalKgSyncRequest,
+    uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:sync")),
+):
+    """Merge agent-VM synced local_kg_* rows into the user's Firestore graph projection."""
+    try:
+        _require_legacy_graph_mutation(uid)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_409_CONFLICT:
+            record_fallback(
+                component="agent_tools",
+                from_mode="cloud_promotion",
+                to_mode="local_only",
+                reason="policy",
+                outcome="degraded",
+            )
+        raise
+    try:
+        result = kg_sync.merge_synced_local_kg(
+            uid,
+            payload.table,
+            payload.rows,
+            payload.source_namespace,
+            reconcile_complete=payload.reconcile_complete,
+        )
+    except (kg_sync.MissingKnowledgeGraphEndpointsError, kg_db.InvalidKnowledgeGraphDocumentIdError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    return LocalKgSyncResponse(**result)

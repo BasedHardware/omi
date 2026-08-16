@@ -21,7 +21,7 @@ _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
-from database.knowledge_graph import upsert_knowledge_edge
+from database.knowledge_graph import InvalidKnowledgeGraphDocumentIdError, upsert_knowledge_edge
 
 mock_db = MagicMock()
 
@@ -134,13 +134,8 @@ class TestEdgeIdSanitization:
         assert '/' not in result['id']
         assert result['id'] == 'abc___def'
 
-    def test_caller_provided_dotdot_id_unchanged(self):
-        """Caller-provided edge_id '..' is not a slash issue — passes through.
-
-        Note: '..' as a standalone Firestore doc ID is reserved, but in practice
-        edge IDs are always '{uuid}_{label}_{uuid}' format so '..' cannot occur
-        from normal construction. This test documents current behavior.
-        """
+    def test_caller_provided_dotdot_id_rejected(self):
+        """Caller-provided edge_id '..' is rejected as a reserved Firestore document ID."""
         edge_data = {
             'id': '..',
             'source_id': 's',
@@ -148,5 +143,5 @@ class TestEdgeIdSanitization:
             'label': 'x',
             'memory_ids': ['m1'],
         }
-        result = upsert_knowledge_edge('uid-1', edge_data)
-        assert result['id'] == '..'
+        with pytest.raises(InvalidKnowledgeGraphDocumentIdError):
+            upsert_knowledge_edge('uid-1', edge_data)

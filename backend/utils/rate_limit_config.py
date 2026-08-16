@@ -107,6 +107,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "users:ai_profile_synthesize": (8, 86400),
     # Canonical graph reads — paginated Firestore + assertion hydration
     "knowledge_graph:canonical": (120, 3600),
+    "knowledge_graph:sync": (60, 3600),
     "wrapped:generate": (2, 86400),
     # Integration (key = app_id:uid)
     "integration:conversations": (10, 3600),
