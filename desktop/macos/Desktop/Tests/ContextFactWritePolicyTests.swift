@@ -136,4 +136,47 @@ final class ContextFactWritePolicyTests: XCTestCase {
   func testEveryPatternCompiles() {
     XCTAssertTrue(ContextFactWritePolicy.allPatternsCompile)
   }
+
+  /// Paraphrased instruction echoes from live data (77 of 2,531 corpus facts,
+  /// every one verified an echo by reading). The anchored machinery patterns
+  /// miss these because the model rewords; the conjunctive frame+vocabulary
+  /// detector catches them.
+  func testParaphrasedInstructionEchoesAreDropped() {
+    for statement in [
+      "The designated destination value is set to unknown/.",
+      "There is a note indicating a destination should be set to unknown/.",
+      "Destination is set to unknown/ per instruction.",
+      "If domain confidence is low, the response should be unknown/.",
+      "The user requires that each factual record be a plain declarative sentence.",
+      "The task requires filling identifiers with names or handles copied from on-screen text.",
+      "Instructions require plain declarative sentences without labels or numbering.",
+      "The user asks to identify the website page-group this tab belongs to, as destination.",
+      "Format requirement: statements must be plain declarative sentences suitable for colleagues.",
+    ] {
+      XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .dropMachinery, statement)
+    }
+  }
+
+  /// The negatives the echo detector was tested against before adoption: real
+  /// facts that share single ingredients with echoes (the bare `unknown/`
+  /// token, an instruction-shaped frame with no prompt vocabulary) must never
+  /// be dropped. This is the class the earlier unanchored patterns deleted.
+  func testRealFactsSharingEchoIngredientsAreNotDropped() {
+    XCTAssertNotEqual(
+      ContextFactWritePolicy.verdict("Push to unknown/production failed."), .dropMachinery)
+    XCTAssertNotEqual(
+      ContextFactWritePolicy.verdict("The destination branch cannot fast-forward."),
+      .dropMachinery)
+    XCTAssertNotEqual(
+      ContextFactWritePolicy.verdict("The response should be sent to the customer before EOD."),
+      .dropMachinery)
+    XCTAssertNotEqual(
+      ContextFactWritePolicy.verdict(
+        "The user must re-authenticate before the deploy can continue."),
+      .dropMachinery)
+    XCTAssertNotEqual(
+      ContextFactWritePolicy.verdict(
+        "A policy note states that undivisible PRs involve an outside collaborator with repo Admin rights."),
+      .dropMachinery)
+  }
 }

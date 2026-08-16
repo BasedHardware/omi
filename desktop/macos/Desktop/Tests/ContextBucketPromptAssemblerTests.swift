@@ -34,6 +34,9 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     "- A material change, status update, recommendation, or useful follow-up without an",
     "  explicit commitment, promise, or request is insight or suggest. Never infer an",
     "  owner or a due date. Never create a task candidate from actionability alone.",
+    "- A commitment is required only for task_candidate. Insight, suggest, and resurface",
+    "  never require one: new, useful, grounded information the user has not seen is",
+    "  enough. Do not stay silent just because nobody made a commitment.",
     "Use only supplied bucket-entry refs.",
     "Timestamps supplied below are already in the user's local time zone. When a message",
     "mentions a date or time, use that local form as written; never convert to or mention UTC.",
@@ -423,20 +426,30 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     XCTAssertEqual(prompt.subdata(in: try XCTUnwrap(prompt.range(of: frozen))), frozen)
   }
 
-  func testOnlyResolvableIdentifiedFactsValidate() {
+  func testValidityIsEvidenceResolutionOnly() {
+    // A missing identifier no longer demotes: on live data the identifier
+    // requirement demoted content and scenery at identical rates (41.9% vs
+    // 41.5%) while making the fact invisible to every downstream consumer.
     XCTAssertEqual(
       BucketFactValidator.validity(
-        identifiers: ["PR-123"], evidenceText: "PR-123 is blocked", evidenceRefs: ["visit:1"],
-        duplicate: false),
+        evidenceText: "PR-123 is blocked", evidenceRefs: ["visit:1"], duplicate: false),
       .validated)
     XCTAssertEqual(
       BucketFactValidator.validity(
-        identifiers: [], evidenceText: "do this immediately", evidenceRefs: ["visit:1"],
-        duplicate: false),
-      .needsReview)
+        evidenceText: "Aarav: can you change my status from contributor to maintainer?",
+        evidenceRefs: ["visit:1"], duplicate: false),
+      .validated,
+      "an identifier-less fact with resolvable evidence must validate")
+    XCTAssertEqual(
+      BucketFactValidator.validity(evidenceText: "  ", evidenceRefs: ["visit:1"], duplicate: false),
+      .needsReview, "empty evidence text still demotes")
     XCTAssertEqual(
       BucketFactValidator.validity(
-        identifiers: ["PR-123"], evidenceText: "same", evidenceRefs: ["visit:1"], duplicate: true),
+        evidenceText: "quoted wording", evidenceRefs: [], duplicate: false),
+      .needsReview, "unresolvable evidence refs still demote")
+    XCTAssertEqual(
+      BucketFactValidator.validity(
+        evidenceText: "same", evidenceRefs: ["visit:1"], duplicate: true),
       .superseded)
   }
 
@@ -525,7 +538,6 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
         existingFacts: existing))
     XCTAssertEqual(
       BucketFactValidator.validity(
-        identifiers: ["handoff-013"],
         evidenceText: "The handoff is complete.",
         evidenceRefs: ["visit:2"],
         duplicate: false),

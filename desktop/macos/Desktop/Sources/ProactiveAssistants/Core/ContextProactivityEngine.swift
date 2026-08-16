@@ -44,8 +44,32 @@ enum ContextDirectorEligibility {
 }
 
 enum ContextDirectorGrounding {
-  static func permitsNonSilence(entryRefs: [String], factIDs: [String]) -> Bool {
-    !entryRefs.isEmpty && !factIDs.isEmpty
+  /// Grounding requirement, per decision type.
+  ///
+  /// The old rule demanded a bucket-entry ref AND a validated-fact ref for every
+  /// non-silence decision. But a resurface grounds on an *open task* — supplied
+  /// in the prompt, not citable as a bucket entry — connected to the current
+  /// context, so its natural citation is the validated fact(s) evidencing the
+  /// connection, with no entry ref at all. Measured on two independent
+  /// installations: every suppressed row with non-empty fact_ids is a decision
+  /// the model made to speak that this guard overrode (the silence path forcibly
+  /// empties fact_ids), and there were 9 of them in our dogfood window and 7 of
+  /// 76 on an independent beta install — including "This is an overdue open task
+  /// with a timely connection to the active overnight fleetctl workflow", the
+  /// exact class resurface exists for. Cross-workstream pooling being enabled
+  /// did not prevent the vetoes, so the guard itself was the cause.
+  ///
+  /// Deliberately NOT relaxed to a blanket OR: insight, suggest, and
+  /// task_candidate make new claims about bucket content and keep the full
+  /// anti-hallucination invariant (at least one entry ref and one fact ref).
+  /// Resurface requires at least one citation of either kind — never zero.
+  static func permitsNonSilence(
+    decision: String, entryRefs: [String], factIDs: [String]
+  ) -> Bool {
+    if decision == "resurface" {
+      return !entryRefs.isEmpty || !factIDs.isEmpty
+    }
+    return !entryRefs.isEmpty && !factIDs.isEmpty
   }
 }
 
@@ -501,13 +525,22 @@ actor ContextProactivityEngine {
           message: nil, state: "suppressed")
         return
       }
-      // Deliberately evaluated on bucket refs alone: a delivery must still stand
-      // on at least one bucket entry and one validated bucket fact, exactly as
-      // before the retrieval hop existed. Retrieved refs are additive citations
-      // and can never substitute for bucket grounding.
-      guard ContextDirectorGrounding.permitsNonSilence(entryRefs: entryRefs, factIDs: factIDs) else {
+      // Deliberately evaluated on bucket refs alone: retrieved refs are additive
+      // citations and can never substitute for bucket grounding. When the guard
+      // vetoes, the row records what the model actually decided and why it was
+      // suppressed — a forced silence was previously indistinguishable from a
+      // model-chosen one, which made the veto rate invisible until it was
+      // recovered from the fact_ids side effect.
+      guard
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision.decision, entryRefs: entryRefs, factIDs: factIDs)
+      else {
+        provenance["suppression_reason"] = "grounding_veto"
+        provenance["model_decision"] = decision.decision
+        let vetoData = try JSONSerialization.data(withJSONObject: provenance, options: [.sortedKeys])
         try await store.completeDelivery(
-          id: deliveryID, decisionType: "silence", provenanceJSON: provenanceJSON,
+          id: deliveryID, decisionType: "silence",
+          provenanceJSON: String(data: vetoData, encoding: .utf8) ?? provenanceJSON,
           message: nil, state: "suppressed")
         return
       }
@@ -663,6 +696,20 @@ actor ContextProactivityEngine {
         deliveryID: deliveryID,
         decisionType: "silence",
         provenanceJSON: "{\"failure\":\"pre_model_gate\"}",
+        state: "suppressed")
+      return
+    }
+    // Candidate-mix ceiling, checked before the gate's model call so a capped
+    // candidate costs no tokens. The candidate is deliberately NOT declined:
+    // it stays armed for a window with headroom, unlike a gate refusal, which
+    // retires it. The visit's delivery row still terminates as suppressed.
+    let candidateShows = await store.candidateDeliveriesInWindow(now: currentFrame.captureTime)
+    guard candidateShows < ContextDeliveryBudget.candidateDailyShowCeiling else {
+      log("Context candidate suppressed before model: candidate_show_ceiling")
+      await terminalize(
+        deliveryID: deliveryID,
+        decisionType: "silence",
+        provenanceJSON: "{\"failure\":\"candidate_show_ceiling\"}",
         state: "suppressed")
       return
     }

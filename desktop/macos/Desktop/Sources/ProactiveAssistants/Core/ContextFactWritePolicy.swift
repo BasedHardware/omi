@@ -146,10 +146,62 @@ enum ContextFactWritePolicy {
       "\\b([A-Z][a-z]{2,}(?:\\s+[A-Z][a-z]{2,})?)\\s+(?:also\\s+|then\\s+|again\\s+|later\\s+)?"
       + speechVerbs + "\\b")
 
+  // MARK: - Prompt-echo detection
+  //
+  // The anchored machinery patterns above catch near-verbatim echoes; live data
+  // shows the model also *paraphrases* its instructions into facts — "The
+  // designated destination value is set to unknown/.", "If domain confidence is
+  // low, the response should be unknown/.", "The user requires that each factual
+  // record be a plain declarative sentence." — 77 such statements in the 2,531-
+  // fact corpus this was fitted on, every one a genuine echo on reading. The
+  // detector is deliberately conjunctive so no single pattern can delete a real
+  // fact: an *instruction-reporting frame* (a subject like user/task/instructions
+  // followed by a requesting verb) must co-occur with *prompt-specific
+  // vocabulary* (terms that exist only in these prompts). Negatives verified to
+  // pass: "Push to unknown/production failed." (vocabulary, no frame), "The
+  // response should be sent to the customer before EOD." (frame, no vocabulary),
+  // "The destination branch cannot fast-forward." (neither).
+
+  /// Terms that occur in the extraction/destination prompts and essentially
+  /// nowhere in real work prose.
+  /// `unknown/` sits outside the word-boundary group: the slash is already a
+  /// delimiter, and a trailing `\b` cannot match between `/` and end-of-sentence
+  /// punctuation, which made "… should be unknown/." invisibly unmatched.
+  private static let echoVocabularyPattern =
+    #"(?i)(?:\bunknown/|\b(?:page-group|evidence_refs|evidence_text|notify_worthiness"#
+    + #"|token summary|factual records?|declarative sentences?|on-screen wording"#
+    + #"|site suffix|screen-derived|quoted data|domain/section|facts list"#
+    + #"|evidence reference|handles copied|copied from (?:the )?(?:quoted )?on-screen)\b)"#
+
+  /// "<instruction-ish subject> … <requesting verb>" within one clause.
+  private static let echoFramePattern =
+    #"(?i)\b(?:user|task|instructions?|rules?|content|output|format|prompt"#
+    + #"|requirements?|response|statements?|records?|evidence(?: blocks?| text)?|summary)\b"#
+    + #"[^.]{0,50}\b(?:requests?|requires?|required|instructed|instructs?|specif\w+"#
+    + #"|demands?|asks?|must|should|needs? to|are to be|is to be)\b"#
+
+  /// The destination-abstention echo family ("Destination is set to unknown/",
+  /// "Direct instruction to set destination path to unknown/"). Requires the
+  /// word "destination" (or an explicit "set to") near `unknown/`, so "Push to
+  /// unknown/production failed." — a real fact containing the bare token — is
+  /// untouched.
+  private static let destinationEchoPatterns: [String] = [
+    #"(?i)\bdestination\b[^.]{0,50}\bunknown/"#,
+    #"(?i)\b(?:is|are|be|been)\s+set\s+to\b[^.]{0,25}\bunknown/"#,
+  ]
+
+  static func isPromptEcho(_ statement: String) -> Bool {
+    if matchesAny(destinationEchoPatterns, in: statement) { return true }
+    return statement.range(of: echoVocabularyPattern, options: .regularExpression) != nil
+      && statement.range(of: echoFramePattern, options: .regularExpression) != nil
+  }
+
   static func verdict(_ statement: String) -> ContextFactWriteVerdict {
     let trimmed = statement.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return .dropMachinery }
-    if matchesAny(machineryPatterns, in: trimmed) { return .dropMachinery }
+    if matchesAny(machineryPatterns, in: trimmed) || isPromptEcho(trimmed) {
+      return .dropMachinery
+    }
     if isHumanEvent(trimmed) { return .floorHumanEvent }
     if matchesAny(sceneryPatterns, in: trimmed) { return .capScenery }
     return .pass
@@ -183,8 +235,9 @@ enum ContextFactWritePolicy {
   /// Asserted by the tests so a typo cannot quietly disable enforcement.
   static var allPatternsCompile: Bool {
     humanEventRegex != nil
-      && (machineryPatterns + sceneryPatterns).allSatisfy {
-        (try? NSRegularExpression(pattern: $0)) != nil
-      }
+      && (machineryPatterns + sceneryPatterns + destinationEchoPatterns
+        + [echoVocabularyPattern, echoFramePattern]).allSatisfy {
+          (try? NSRegularExpression(pattern: $0)) != nil
+        }
   }
 }
