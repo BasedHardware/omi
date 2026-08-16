@@ -9,11 +9,10 @@
 //         package's build config. Narrowly allowlisted below by exact path, not by
 //         loosening the traversal check generally.
 // Rule 3: fetch/axios/WebSocket against backend hosts may only appear inside an
-//         ADAPTER package (packages/adapters-legacy/, packages/adapters-platform/)
-//         or shells/ — the sync layer speaks contracts, not endpoints. The rule is
-//         about the LAYER, not about one package: adapters-platform speaks the new
-//         contracts-native wire and is just as much the designated home for a raw
-//         route as adapters-legacy is for a legacy one.
+//         ADAPTER package (packages/adapters-platform/) or shells/ — the sync
+//         layer speaks contracts, not endpoints. The rule is about the LAYER,
+//         not about one package: adapters-platform is the designated home for
+//         a raw route. The legacy adapter package is retired.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
@@ -64,13 +63,12 @@ for (const file of walk(ROOT)) {
   }
 
   const inAdapterOrShell =
-    rel.startsWith("packages/adapters-legacy/") ||
     rel.startsWith("packages/adapters-platform/") ||
     rel.startsWith("packages/dev-recall-stub/") || // dev fixture SERVER: it serves the route it names
     rel.startsWith("shells/") ||
     rel.startsWith("packages/testkit/src/test/"); // tests may ASSERT the wire paths adapters speak
   if (!inAdapterOrShell && RAW_ENDPOINT_RE.test(text)) {
-    failures.push(`${rel}: raw backend endpoint outside adapters-legacy//shells/ (rule 3)`);
+    failures.push(`${rel}: raw backend endpoint outside adapters-platform/shells/ (rule 3)`);
   }
 }
 

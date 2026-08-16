@@ -6,7 +6,6 @@ import {
 } from "./HomeProduction.js";
 import {
   homeConversationHitFromRecord,
-  homeMemoryHitFromLegacy,
   homeMemoryHitFromSynthesized,
   type HomeConversationHit,
   type HomeMemoryHit,
@@ -16,47 +15,35 @@ import {
  * Open Home's two search projections from the host's already-resolved
  * generation selection.
  *
- * Platform memories come from `openSynthesizedMemories()`, never from
- * `openMemories()` — that port stays the legacy store (David's 2026-08-16
- * ruling retired in-place edits; the port is still not pointed at the
- * synthesized read model). Platform conversations come from
- * `openPlatformConversations()` by the same rule.
- * Mapping to Home's hit shape happens here, at the surface boundary.
+ * Platform memories come from `openSynthesizedMemories()`. Platform
+ * conversations come from `openPlatformConversations()`. Mapping to Home's
+ * hit shape happens here, at the surface boundary. There is no legacy arm:
+ * the retired generation is not served.
  */
 export async function openHomeSearchSources(
   stores: PlatformProductionStoreFactory,
 ): Promise<{
   sources: HomeSearchSources;
-  memoriesGeneration: "legacy" | "platform";
-  conversationsGeneration: "legacy" | "platform";
+  memoriesGeneration: "platform";
+  conversationsGeneration: "platform";
 }> {
-  const memoriesGeneration = stores.selection.memories;
-  const conversationsGeneration = stores.selection.conversations;
   const [memories, conversations] = await Promise.all([
     openHomeMemoryProjection(stores),
     openHomeConversationProjection(stores),
   ]);
-  return { sources: { memories, conversations }, memoriesGeneration, conversationsGeneration };
+  return { sources: { memories, conversations }, memoriesGeneration: "platform", conversationsGeneration: "platform" };
 }
 
 async function openHomeMemoryProjection(
   stores: PlatformProductionStoreFactory,
 ): Promise<SearchProjection<HomeMemoryHit>> {
-  if (stores.selection.memories === "platform") {
-    const store = await stores.openSynthesizedMemories();
-    return mapHomeProjection(store, homeMemoryHitFromSynthesized);
-  }
-  const store = await stores.openMemories();
-  return mapHomeProjection(store, homeMemoryHitFromLegacy);
+  const store = await stores.openSynthesizedMemories();
+  return mapHomeProjection(store, homeMemoryHitFromSynthesized);
 }
 
 async function openHomeConversationProjection(
   stores: PlatformProductionStoreFactory,
 ): Promise<SearchProjection<HomeConversationHit>> {
-  if (stores.selection.conversations === "platform") {
-    const store = await stores.openPlatformConversations();
-    return mapHomeProjection(store, homeConversationHitFromRecord);
-  }
-  const store = await stores.openConversations();
+  const store = await stores.openPlatformConversations();
   return mapHomeProjection(store, homeConversationHitFromRecord);
 }

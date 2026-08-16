@@ -361,7 +361,11 @@ function unsupportedRoute(): React.JSX.Element {
 if (query.get("lab") === "1") {
   void import("../lab/main.js");
 } else if (query.get("rig") === "dev") {
-  void import("../dev/main.js");
+  // The old live-fetch harness was retired with adapters-legacy. `?rig=dev`
+  // must not load a client that can issue requests — including to production.
+  const root = createRoot(document.getElementById("root")!);
+  root.render(<StrictMode>{unsupportedRoute()}</StrictMode>);
+  emitReady("unsupported");
 } else {
   const fixtureValue = polishFixture?.fixture ?? query.get("state");
   const fixtureRequest = requestedRoute === null;
@@ -440,24 +444,12 @@ if (query.get("lab") === "1") {
         // adapter, not the in-memory one — a degradation from an overnight
         // run must still be there in the morning.
         const env = realEnv(await openOnDiskFallbackSink(bridge));
-        // One factory for every route. `PlatformProductionStoreFactory` extends the legacy
-        // one, so `openConversations()` / `openFolders()` / `openTasks()` stay the legacy
-        // writable ports. Home, Conversations, Folders, and Tasks routes branch to the
-        // named platform ports — they do not repoint the shared factory.
-        //
-        // Both transports resolve through the same bridge channel today because
-        // `BridgeHttpRequest` carries no binding selector: the shell holds exactly one base
-        // URL. That means single-origin operation — point the shell at the platform service
-        // and the platform read path is live. Two ORIGINS at once needs an additive
-        // `binding` field on the bridge request, which is FE-CORE's contract to change; see
-        // blocked/FE-SURFACES-bridge-two-origin-binding.md. Passing the same client twice is
-        // stated here rather than hidden, because the silent version of this is exactly how
-        // a client ends up reading the legacy wire while believing it is on the new one.
+        // One factory for every route. David's 2026-08-16 ruling retired the
+        // legacy generation: named platform ports are the only live data path.
         const platform = createPlatformProductionStoreFactory(
           bridge,
           env,
           {
-            legacyHttp: http,
             platformHttp: http,
             ...(route === "chat"
               ? {
@@ -468,8 +460,7 @@ if (query.get("lab") === "1") {
           },
           generationSelection,
         );
-        const stores = platform;
-        if (route === "memories" && platform.selection.memories === "platform") {
+        if (route === "memories") {
           const store = await platform.openSynthesizedMemories();
           const correction = await platform.openMemoryCorrection();
           await store.refresh();
@@ -558,10 +549,6 @@ if (query.get("lab") === "1") {
           });
           markRendered("settings", null);
           root.render(<StrictMode><SettingsProduction store={store} screenStore={screenStore} locale={locale} presentation={settingsPresentation} returnHref={settingsReturnHref} onReady={() => emitReady("bridge:platform-settings")} /></StrictMode>);
-        } else if (route === "memories") {
-          const store = await stores.openMemories();
-          markRendered("memories-legacy", "legacy");
-          root.render(<StrictMode><MemoriesProduction store={store} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else {
           root.render(<StrictMode>{unsupportedRoute()}</StrictMode>);
           emitReady("unsupported");

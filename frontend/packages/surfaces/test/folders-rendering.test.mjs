@@ -118,28 +118,15 @@ function folderStub(name) {
   };
 }
 
-test("openFolderRouteSource on a platform selection never opens the legacy store", async () => {
+test("openFolderRouteSource opens the platform store", async () => {
   const openFolderRouteSource = await loadProductionExport("folder-sources.ts", "openFolderRouteSource");
-  const calls = { folders: 0, platformFolders: 0 };
+  const calls = { platformFolders: 0 };
   const { foldersGeneration } = await openFolderRouteSource({
-    selection: { memories: "platform", conversations: "platform", folders: "platform", tasks: "legacy" },
-    async openFolders() { calls.folders += 1; return folderStub("legacy-folders"); },
+    selection: { memories: "platform", conversations: "platform", folders: "platform", tasks: "platform" },
     async openPlatformFolders() { calls.platformFolders += 1; return folderStub("platform-folders"); },
   });
   assert.equal(foldersGeneration, "platform");
-  assert.deepEqual(calls, { folders: 0, platformFolders: 1 });
-  // red-proof: routing Folders through openFolders() under a platform selection
-  // hits the unpaginated legacy array this service dual-serves.
-});
-
-test("openFolderRouteSource on a legacy selection stays on the legacy store", async () => {
-  const openFolderRouteSource = await loadProductionExport("folder-sources.ts", "openFolderRouteSource");
-  const calls = { folders: 0, platformFolders: 0 };
-  const { foldersGeneration } = await openFolderRouteSource({
-    selection: { memories: "legacy", conversations: "legacy", folders: "legacy", tasks: "legacy" },
-    async openFolders() { calls.folders += 1; return folderStub("legacy-folders"); },
-    async openPlatformFolders() { calls.platformFolders += 1; return folderStub("platform-folders"); },
-  });
-  assert.equal(foldersGeneration, "legacy");
-  assert.deepEqual(calls, { folders: 1, platformFolders: 0 });
+  assert.deepEqual(calls, { platformFolders: 1 });
+  // red-proof: routing Folders through a retired openFolders() port would hit
+  // the unpaginated legacy array this service dual-serves.
 });

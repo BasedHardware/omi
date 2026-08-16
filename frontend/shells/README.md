@@ -31,7 +31,7 @@ called out below:
 | `OMI_API_TOKEN` | Dev credential, held by the **shell**, never given to the page. |
 | `OMI_DEV_TOKEN_ISSUER_URL` | Optional dev-mode issuer; used when no token is set. |
 | `--fixture <name>` | iOS visual-QA **FIXTURE** mode — deterministic in-page data, bridge bypassed; never registered/local-production evidence. macOS fixture capture is `macos/scripts/dev-capture-macos.sh`, not the live launcher. |
-| `--generation <legacy\|platform>` | Live Memories generation. Default `platform` so a plain launch shows served platform rows; `legacy` keeps the old UI reachable. |
+| `--generation platform` | Live generation. Default `platform`. `--generation legacy` is refused (exit 2): the legacy generation is retired. |
 | `--accept` | Headless acceptance run; exits nonzero on **zero** served traffic. |
 | `--device <udid>` | iOS only. Defaults to the booted simulator. |
 

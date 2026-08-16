@@ -7,7 +7,7 @@
 #
 #   ./scripts/dev-run-macos.sh --route chat        # LIVE Chat against the local backend
 #   ./scripts/dev-run-macos.sh --api http://127.0.0.1:4851 --route home
-#   ./scripts/dev-run-macos.sh --generation legacy # LIVE against the legacy Memories UI
+#   ./scripts/dev-run-macos.sh --generation platform # LIVE against the platform generation (default)
 #   ./scripts/dev-run-macos.sh --accept            # headless acceptance, exits nonzero on zero traffic
 #
 # Env (all overridable, all with local-sane defaults — nothing is hardcoded at
@@ -47,7 +47,7 @@ while (( $# )); do
   case "$1" in
     --api) api_base="${2:?--api needs a URL}"; shift 2 ;;
     --route) route="${2:?--route needs a name}"; shift 2 ;;
-    --generation) generation="${2:?--generation needs legacy or platform}"; shift 2 ;;
+    --generation) generation="${2:?--generation needs platform}"; shift 2 ;;
     --accept) accept=1; shift ;;
     --evidence-out) evidence_out="${2:?--evidence-out needs a path}"; shift 2 ;;
     --run-id) run_id_arg="${2:?--run-id needs a raw run id}"; shift 2 ;;
@@ -89,9 +89,9 @@ case "$route" in
     ;;
 esac
 case "$generation" in
-  legacy|platform) ;;
+  platform) ;;
   *)
-    echo "ERROR: --generation must be legacy or platform" >&2
+    echo "ERROR: --generation ${generation} cannot be served (legacy generation is retired); available: platform" >&2
     exit 2
     ;;
 esac
@@ -157,14 +157,9 @@ export OMI_SURFACE_PORT="$port"
 # Inherited overrides would let main.swift bypass the frozen candidate origin
 # or load stale/remote content. The QA launcher owns the surface selection.
 unset OMI_SURFACE_URL OMI_SURFACE_PATH
-# Live local production talks to the platform Memories door. Legacy stays
-# reachable with `--generation legacy` (or `generation=legacy` in a query).
-surface_query="route=${route}&platform=desktop"
-if [[ "$generation" == "legacy" ]]; then
-  surface_query="${surface_query}&generation=legacy"
-else
-  surface_query="${surface_query}&generation=platform"
-fi
+# Live local production talks to the platform generation. The legacy
+# generation is retired; `--generation legacy` is a refusal, not a fallback.
+surface_query="route=${route}&platform=desktop&generation=platform"
 export OMI_SURFACE_QUERY="$surface_query"
 export OMI_API_BASE_URL="$api_base"
 

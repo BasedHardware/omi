@@ -2,12 +2,9 @@
 export * from "./chat-codec.js";
 export * from "./chat-store.js";
 export * from "./conversations-codec.js";
-export * from "./conversations-store.js";
 export * from "./folders-codec.js";
-export * from "./folders-store.js";
 export * from "./generation-selection.js";
 export * from "./memories-codec.js";
-export * from "./memories-store.js";
 export * from "./memory-correction-store.js";
 export * from "./platform-conversations-store.js";
 export * from "./platform-folders-store.js";
@@ -16,4 +13,3 @@ export * from "./platform-tasks-store.js";
 export * from "./store-status.js";
 export * from "./synthesized-memories-store.js";
 export * from "./tasks-codec.js";
-export * from "./tasks-store.js";

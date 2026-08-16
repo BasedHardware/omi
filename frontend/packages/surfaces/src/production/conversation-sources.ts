@@ -1,38 +1,32 @@
 import type {
   PlatformProductionStoreFactory,
-  ProductionConversationStore,
-  ProductionFolderStore,
   ProductionPlatformConversationStore,
   ProductionPlatformFolderStore,
 } from "./ProductionStores.js";
 
 /**
- * Open the Conversations route's two stores from the host's already-resolved
- * generation selection.
+ * Open the Conversations route's two stores.
  *
- * Platform conversations come from `openPlatformConversations()`, never from
- * `openConversations()` — that port stays the legacy writable store other
- * callers depend on. Folders on this route follow `selection.folders` the
- * same way. Mapping stays at this boundary; the shared factory is not
- * repointed.
+ * Platform conversations come from `openPlatformConversations()`. Folders on
+ * this route come from `openPlatformFolders()`. There is no legacy arm: the
+ * retired generation is not served.
  */
 export async function openConversationRouteSources(
   stores: PlatformProductionStoreFactory,
 ): Promise<{
-  store: ProductionConversationStore | ProductionPlatformConversationStore;
-  foldersStore: ProductionFolderStore | ProductionPlatformFolderStore;
-  conversationsGeneration: "legacy" | "platform";
-  foldersGeneration: "legacy" | "platform";
+  store: ProductionPlatformConversationStore;
+  foldersStore: ProductionPlatformFolderStore;
+  conversationsGeneration: "platform";
+  foldersGeneration: "platform";
 }> {
-  const conversationsGeneration = stores.selection.conversations;
-  const foldersGeneration = stores.selection.folders;
   const [store, foldersStore] = await Promise.all([
-    conversationsGeneration === "platform"
-      ? stores.openPlatformConversations()
-      : stores.openConversations(),
-    foldersGeneration === "platform"
-      ? stores.openPlatformFolders()
-      : stores.openFolders(),
+    stores.openPlatformConversations(),
+    stores.openPlatformFolders(),
   ]);
-  return { store, foldersStore, conversationsGeneration, foldersGeneration };
+  return {
+    store,
+    foldersStore,
+    conversationsGeneration: "platform",
+    foldersGeneration: "platform",
+  };
 }

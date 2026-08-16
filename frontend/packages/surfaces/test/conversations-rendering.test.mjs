@@ -187,37 +187,19 @@ function sourceStub(name) {
   };
 }
 
-test("openConversationRouteSources on a platform selection never opens the legacy stores", async () => {
+test("openConversationRouteSources opens the platform stores", async () => {
   const openConversationRouteSources = await loadProductionExport("conversation-sources.ts", "openConversationRouteSources");
-  const calls = { conversations: 0, platformConversations: 0, folders: 0, platformFolders: 0 };
+  const calls = { platformConversations: 0, platformFolders: 0 };
   const { conversationsGeneration, foldersGeneration } = await openConversationRouteSources({
-    selection: { memories: "platform", conversations: "platform", folders: "platform", tasks: "legacy" },
-    async openConversations() { calls.conversations += 1; return sourceStub("legacy-conversations"); },
+    selection: { memories: "platform", conversations: "platform", folders: "platform", tasks: "platform" },
     async openPlatformConversations() { calls.platformConversations += 1; return sourceStub("platform-conversations"); },
-    async openFolders() { calls.folders += 1; return sourceStub("legacy-folders"); },
     async openPlatformFolders() { calls.platformFolders += 1; return sourceStub("platform-folders"); },
   });
   assert.equal(conversationsGeneration, "platform");
   assert.equal(foldersGeneration, "platform");
-  assert.deepEqual(calls, { conversations: 0, platformConversations: 1, folders: 0, platformFolders: 1 });
-  // red-proof: routing Conversations through openConversations() under a platform
-  // selection hits the legacy offset list this service dual-serves, and paints
-  // "Showing saved data. Couldn't refresh."
-});
-
-test("openConversationRouteSources on a legacy selection stays on the legacy stores", async () => {
-  const openConversationRouteSources = await loadProductionExport("conversation-sources.ts", "openConversationRouteSources");
-  const calls = { conversations: 0, platformConversations: 0, folders: 0, platformFolders: 0 };
-  const { conversationsGeneration, foldersGeneration } = await openConversationRouteSources({
-    selection: { memories: "legacy", conversations: "legacy", folders: "legacy", tasks: "legacy" },
-    async openConversations() { calls.conversations += 1; return sourceStub("legacy-conversations"); },
-    async openPlatformConversations() { calls.platformConversations += 1; return sourceStub("platform-conversations"); },
-    async openFolders() { calls.folders += 1; return sourceStub("legacy-folders"); },
-    async openPlatformFolders() { calls.platformFolders += 1; return sourceStub("platform-folders"); },
-  });
-  assert.equal(conversationsGeneration, "legacy");
-  assert.equal(foldersGeneration, "legacy");
-  assert.deepEqual(calls, { conversations: 1, platformConversations: 0, folders: 1, platformFolders: 0 });
+  assert.deepEqual(calls, { platformConversations: 1, platformFolders: 1 });
+  // red-proof: routing Conversations through a retired openConversations()
+  // port would hit the legacy offset list this service dual-serves.
 });
 
 test("Conversations still shows the failure notice when refresh genuinely fails", async () => {

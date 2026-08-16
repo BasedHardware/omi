@@ -18,9 +18,6 @@
       "path": "../sync"
     },
     {
-      "path": "../adapters-legacy"
-    },
-    {
       "path": "../adapters-platform"
     }
   ]

@@ -1,6 +1,5 @@
 /**
- * The platform generation's task store, and the factory-level flip R7 still
- * forbids.
+ * The platform generation's task store.
  *
  * Two things are pinned here:
  *
@@ -11,9 +10,9 @@
  *     Completeness stays the server's envelope. Opaque read handles without a
  *     write id are refused rather than upserted.
  *
- * The factory-level `openTasks()` flip is still pinned by
- * `frontend/scripts/check-openTasks-parked.mjs` (David's 2026-08-16 park lift
- * branches at the route, not in the factory).
+ * Live Tasks open this store by name (`openPlatformTasks()`). The retired
+ * `openTasks()` factory port and R7 (`check-openTasks-parked.mjs`) are gone
+ * with the legacy generation.
  */
 
 import assert from "node:assert/strict";
@@ -303,8 +302,3 @@ test("a patch against a bare opaque read handle is refused rather than upserted"
     /opaque read handle has no write id/,
   );
 });
-
-// THE FACTORY-LEVEL FLIP PIN IS NOT HERE. `createPlatformProductionStoreFactory`
-// lives in `@omi-core/surfaces`. R7 still forbids that flip after David's
-// 2026-08-16 park lift — the route branches instead — and that is pinned by
-// `frontend/scripts/check-openTasks-parked.mjs`.

@@ -24,8 +24,8 @@
  * an auth header, a status code, a field name, or an encoding fails HERE — in
  * the one place that is looking at both ends at once.
  *
- * This is deliberately outside `core/`: core isolation rule 3 forbids `fetch`
- * against backend endpoint shapes anywhere but `adapters-legacy/` and
+ * This is deliberately outside `frontend/`: isolation rule 3 forbids `fetch`
+ * against backend endpoint shapes anywhere but `adapters-platform/` and
  * `shells/`, and an end-to-end driver must do exactly that.
  */
 

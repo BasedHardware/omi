@@ -1,60 +1,20 @@
 /**
- * TASKS RENDERING-PARITY HARNESS (R8, ratchet item 5's second half)
+ * TASKS RENDERING HARNESS (was R8 parity; legacy generation retired)
  * ===================================================================
  *
- * "The production tasks surface renders identically off either generation
- * over seeded-equivalent data" (R7/R8), satisfied at the seeded-parity venue
- * R7 names — never a real account, and the flip stays PARKED (R7):
- * `openTasks()` is untouched by this file, and nothing here calls it.
+ * After David's 2026-08-16 ruling retired the legacy generation, this file
+ * no longer compares two generations. What remains:
  *
- * WHAT WAS FOUND BEFORE THIS FILE, so the shape below isn't arbitrary:
+ *   - the replica of `TasksProduction.tsx`'s grouping/sort/indent/truncation
+ *     is still pinned against the real source (`assertSourceStillMatches`)
+ *   - the platform adapter is still exercised through the REAL write door
+ *     (`POST /v1/tasks/ops`) and the REAL `fetchPlatformTaskPage` against a
+ *     live local service
  *
- *   - `PlatformTaskItem` and `Task` are FIELD-COMPLETE with each other — all
- *     thirteen fields, same names, same types, checked by reading both
- *     interfaces directly (`frontend/contracts/src/domain/{tasks,platform-tasks}.ts`).
- *     The one difference is `id`'s nominal TS type (`RecordId`, a branded
- *     string, vs a plain `string`) — erased at runtime, so mapping one to the
- *     other invents nothing and decides nothing.
- *   - `TasksProduction.tsx` (`frontend/packages/surfaces/src/production/`) has NO
- *     unit-test seam — it is a Vite/React bundle, no jsdom or
- *     `@testing-library` anywhere in this workspace. Its actual field usage
- *     was read directly rather than assumed: `id`, `description`, `dueAt`,
- *     `completed`, `indentLevel` are RENDERED (indent as a CSS class AND a
- *     keyboard-driven patch); `owner`/`source`/`provenance`/`createdAt`/
- *     `updatedAt`/`revision` are on the type but never read by this
- *     component. So "renders identically" is decided by five fields, not
- *     thirteen, and this file says so rather than silently narrowing scope.
- *
- * WHAT THIS FILE DOES, since it cannot render React: it derives the exact
- * DATA a render would need — grouping (overdue/today/tomorrow/later/noDeadline), sort order
- * within a group, and the five rendered per-task values — using functions
- * whose bodies are PINNED against `TasksProduction.tsx`'s own source text
- * below (`assertSourceStillMatches`), so a change to the real algorithm that
- * is not mirrored here fails LOUDLY rather than silently validating a stale
- * copy. This is the same discipline `tasks-production.test.mjs` already uses
- * for this exact file (regex-matching source, because there is nothing to
- * import) — extended here to comparing TWO generations' data through it,
- * which that file does not do.
- *
- * SEEDING, real on both sides:
- *   - platform: the REAL write door (`POST /v1/tasks/ops`) against the REAL
- *     registered app, booted via `platform/integration/control/live-service.ts`
- *     — reused from `tasks-wire-agreement.test.mjs` rather than a second boot
- *     script (rule 17's reasoning: a second door is the defect, not a
- *     convenience).
- *   - legacy: there is no legacy backend to boot in this program (it is the
- *     OLD production system). So legacy is seeded through a SCRIPTED
- *     `HttpClient` feeding the REAL legacy adapter function,
- *     `fetchTasks` (`@omi-core/adapters-legacy`) — never a hand-rolled
- *     `Task[]`. The scripted body is the real legacy WIRE SHAPE (snake_case,
- *     ISO-8601 timestamps, `action_items` envelope), read directly from
- *     `adapters-legacy/src/tasks.ts`'s own parser rather than guessed.
- *
- * NOT YET RUN BY L2, for the same reason `tasks-wire-agreement.test.mjs`
- * isn't: `integration/lanes.mjs` names its cross-side step by filename and is
- * STACK's file under the charter's churn-magnet table.
- * (`data/run-2026-08-09/blocked/READ-l2-does-not-run-the-tasks-cross-side-test.md`
- * already covers this same class of gap for the sibling file.)
+ * COVERAGE LOST: R8 "the production tasks surface renders identically off
+ * either generation over seeded-equivalent data". There is no second
+ * generation to compare. The field-by-field cross-generation equality
+ * assertion is gone with the legacy adapter.
  */
 
 import { spawn } from "node:child_process";
@@ -63,9 +23,6 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 
-const { fetchTasks } = await import(
-  new URL("../../frontend/packages/adapters-legacy/dist/index.js", import.meta.url).href
-);
 const { fetchPlatformTaskPage } = await import(
   new URL("../../frontend/packages/adapters-platform/dist/index.js", import.meta.url).href
 );
@@ -192,7 +149,7 @@ function platformItemAsTaskShape(item) {
   };
 }
 
-// ── Seeded-equivalent content, one definition shared by both generations ───
+// ── Seeded content for the platform write door ─────────────────────────────
 const SEED_NOW = Date.UTC(2026, 7, 9, 12, 0, 0);
 function seedContent(index) {
   return {
@@ -211,31 +168,6 @@ function seedContent(index) {
   };
 }
 const SEED_COUNT = 6;
-
-// ── Legacy side: scripted HttpClient, real adapter parse ───────────────────
-function legacyWireRow(index, content) {
-  return {
-    id: `legacy-task-${index}`,
-    description: content.description,
-    completed: content.completed,
-    completed_at: content.completedAt === null ? null : new Date(content.completedAt).toISOString(),
-    due_at: content.dueAt === null ? null : new Date(content.dueAt).toISOString(),
-    owner: content.owner,
-    source: content.source,
-    provenance: content.provenance,
-    sort_order: content.sortOrder,
-    indent_level: content.indentLevel,
-    created_at: new Date(content.createdAt).toISOString(),
-    updated_at: new Date(content.updatedAt).toISOString(),
-  };
-}
-
-class ScriptedLegacyHttp {
-  constructor(actionItems) { this.actionItems = actionItems; }
-  async request(_method, _path) {
-    return { status: 200, json: { action_items: this.actionItems }, text: JSON.stringify({ action_items: this.actionItems }) };
-  }
-}
 
 // ── Platform side: real server, real write door, real client parse ─────────
 function realHttpClient(base, token) {
@@ -334,26 +266,18 @@ after(async () => {
   }
 });
 
-describe("the production tasks surface derives identical presentation off either generation", () => {
+describe("the production tasks surface derives presentation from the platform adapter", () => {
   test("the replica algorithm still matches TasksProduction.tsx's real source", () => {
     assertSourceStillMatches();
   });
 
-  test("all thirteen fields survive both real adapters, over the same seeded content", async () => {
+  test("all thirteen fields survive the real platform adapter, over seeded content", async () => {
     await seedPlatform(SEED_COUNT);
     const platformHttp = realHttpClient(baseUrl, TOKEN);
     const platformOutcome = await fetchPlatformTaskPage(platformHttp, { limit: SEED_COUNT + 1 });
     assert.equal(platformOutcome.kind, "page", `platform read failed: ${JSON.stringify(platformOutcome)}`);
     assert.equal(platformOutcome.page.items.length, SEED_COUNT);
 
-    const legacyRows = Array.from({ length: SEED_COUNT }, (_, index) => legacyWireRow(index, seedContent(index)));
-    const legacyHttp = new ScriptedLegacyHttp(legacyRows);
-    const legacyTasks = await fetchTasks(legacyHttp);
-    assert.ok(legacyTasks, "the real legacy adapter could not parse the scripted wire rows");
-    assert.equal(legacyTasks.length, SEED_COUNT);
-
-    // Both real adapters produced real domain objects; neither is empty, and
-    // both sides survived their own real parse path, not a fixture shortcut.
     for (const item of platformOutcome.page.items) {
       assert.deepEqual(
         Object.keys(item).sort(),
@@ -361,47 +285,23 @@ describe("the production tasks surface derives identical presentation off either
           "indentLevel", "owner", "provenance", "revision", "sortOrder", "source", "updatedAt"],
       );
     }
-    for (const task of legacyTasks) {
-      assert.deepEqual(
-        Object.keys(task).sort(),
-        ["completed", "completedAt", "createdAt", "description", "dueAt", "id",
-          "indentLevel", "owner", "provenance", "revision", "sortOrder", "source", "updatedAt"],
-      );
-    }
   });
 
-  test("surface bytes agree, field by field, for the fields the surface actually renders", async () => {
+  test("surface bytes group every seeded row the way TasksProduction.tsx would", async () => {
     await post("/v1/qa/control/reset", {});
     await seedPlatform(SEED_COUNT);
     const platformHttp = realHttpClient(baseUrl, TOKEN);
     const platformOutcome = await fetchPlatformTaskPage(platformHttp, { limit: SEED_COUNT + 1 });
     assert.equal(platformOutcome.kind, "page");
     const platformAsTasks = platformOutcome.page.items.map(platformItemAsTaskShape);
-
-    const legacyRows = Array.from({ length: SEED_COUNT }, (_, index) => legacyWireRow(index, seedContent(index)));
-    const legacyTasks = await fetchTasks(new ScriptedLegacyHttp(legacyRows));
-
-    const legacyBytes = surfaceBytes(legacyTasks, SEED_NOW);
     const platformBytes = surfaceBytes(platformAsTasks, SEED_NOW);
 
-    // The claim, over EACH group, so a mismatch names its group rather than
-    // dumping an undifferentiated diff.
     for (const group of ["overdue", "today", "tomorrow", "later", "noDeadline"]) {
-      assert.deepEqual(
-        platformBytes[group].map((row) => ({ ...row, hasId: undefined })),
-        legacyBytes[group].map((row) => ({ ...row, hasId: undefined })),
-        `group "${group}" diverges between generations for identical seeded content`,
-      );
-      // `id` is generation-specific by construction (opaque key, never
-      // compared by value) — checked present on every row instead.
       assert.ok(platformBytes[group].every((row) => row.hasId), `platform group "${group}" has a row with no id`);
-      assert.ok(legacyBytes[group].every((row) => row.hasId), `legacy group "${group}" has a row with no id`);
-      assert.equal(platformBytes[group].length, legacyBytes[group].length, `group "${group}" has different counts`);
     }
 
-    // And the claim actually exercised every group and every seeded row,
-    // so an empty comparison cannot read as agreement.
     const totalRows = ["overdue", "today", "tomorrow", "later", "noDeadline"].reduce((sum, g) => sum + platformBytes[g].length, 0);
     assert.equal(totalRows, SEED_COUNT);
+    assert.ok(platformBytes.today.length > 0, "seed must populate today so grouping is not vacuously empty");
   });
 });

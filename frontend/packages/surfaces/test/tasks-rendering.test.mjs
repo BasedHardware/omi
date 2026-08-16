@@ -390,28 +390,15 @@ function taskRouteStub(name) {
   };
 }
 
-test("openTaskRouteSource on a platform selection never opens the legacy store", async () => {
+test("openTaskRouteSource opens the platform store", async () => {
   const openTaskRouteSource = await loadProductionExport("task-sources.ts", "openTaskRouteSource");
-  const calls = { tasks: 0, platformTasks: 0 };
+  const calls = { platformTasks: 0 };
   const { tasksGeneration } = await openTaskRouteSource({
     selection: { memories: "platform", conversations: "platform", folders: "platform", tasks: "platform" },
-    async openTasks() { calls.tasks += 1; return taskRouteStub("legacy-tasks"); },
     async openPlatformTasks() { calls.platformTasks += 1; return taskRouteStub("platform-tasks"); },
   });
   assert.equal(tasksGeneration, "platform");
-  assert.deepEqual(calls, { tasks: 0, platformTasks: 1 });
-  // red-proof: routing Tasks through openTasks() under a platform selection
-  // keeps the last surface on the legacy wire.
-});
-
-test("openTaskRouteSource on a legacy selection stays on the legacy store", async () => {
-  const openTaskRouteSource = await loadProductionExport("task-sources.ts", "openTaskRouteSource");
-  const calls = { tasks: 0, platformTasks: 0 };
-  const { tasksGeneration } = await openTaskRouteSource({
-    selection: { memories: "legacy", conversations: "legacy", folders: "legacy", tasks: "legacy" },
-    async openTasks() { calls.tasks += 1; return taskRouteStub("legacy-tasks"); },
-    async openPlatformTasks() { calls.platformTasks += 1; return taskRouteStub("platform-tasks"); },
-  });
-  assert.equal(tasksGeneration, "legacy");
-  assert.deepEqual(calls, { tasks: 1, platformTasks: 0 });
+  assert.deepEqual(calls, { platformTasks: 1 });
+  // red-proof: routing Tasks through a retired openTasks() port would keep
+  // the last surface on a wire nothing serves.
 });

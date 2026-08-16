@@ -35,7 +35,7 @@ what you need, stop and surface it; that is a foundation gap, not your call to f
 
 1. **Never import old-tree code** (`app/`, `desktop/`, `web/`, `backend/`) into `frontend/`.
    Old code is reference material only. `check-isolation.mjs` enforces this.
-2. **Raw backend endpoints appear only in `packages/adapters-legacy/` and `shells/`.**
+2. **Raw backend endpoints appear only in `packages/adapters-platform/` and `shells/`.**
    Domain and sync code speak contracts. Also enforced by `check-isolation.mjs`.
 3. **No wall clock, no `Math.random`, no ambient timers** in `contracts/`, `packages/domain`,
    `packages/sync`, `packages/kernel` logic — take an `Env` (`@omi-core/kernel`); this is what

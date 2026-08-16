@@ -4,9 +4,8 @@
  *
  * `write-ops.ts` owns the two pure pieces of this wire (build an envelope,
  * classify a response). This file is the binding that drains journaled ops
- * through them: it is to `write-ops.ts` what `tasksTransport` in
- * `adapters-legacy` is to `sendTaskOp`. Tasks is the first — and today the
- * only — writable domain (COORD-write-path-rulings B6).
+ * through them. Tasks is the first — and today the only — writable domain
+ * (COORD-write-path-rulings B6).
  *
  * ── WHAT THIS SENDER DELIBERATELY CANNOT DO ────────────────────────────────
  *
