@@ -413,8 +413,15 @@ class _OpenAIEmbeddingsProxy:
         if name.startswith('a'):
 
             async def _wrapped_async(*args, **kwargs):
-                if args:  # aembed_query/aembed_documents: cap the input on the local endpoint path
+                # aembed_query(text)/aembed_documents(texts): cap the input on the local endpoint path whether
+                # it arrives positionally OR as a keyword — a kwargs-only call left args empty, so long input
+                # slipped through uncapped and failed at the local server (cubic PR 10887 clients.py:416).
+                if args:
                     args = (self._cap_local_input(args[0]), *args[1:])
+                elif 'text' in kwargs:
+                    kwargs = {**kwargs, 'text': self._cap_local_input(kwargs['text'])}
+                elif 'texts' in kwargs:
+                    kwargs = {**kwargs, 'texts': self._cap_local_input(kwargs['texts'])}
                 try:
                     return await attr(*args, **kwargs)
                 except Exception as e:

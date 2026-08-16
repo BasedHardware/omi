@@ -2,6 +2,8 @@
 over-context splitting is off, so the proxy must cap input length itself or a long memory fails to embed
 (cubic review PR 10887, clients.py:264). No-op on the cloud path."""
 
+import asyncio
+
 from utils.llm.clients import _OpenAIEmbeddingsProxy
 
 
@@ -26,3 +28,26 @@ def test_cloud_path_does_not_cap():
     long = "x" * 50000
     p = _proxy({})  # cloud OpenAI: LangChain handles ctx length
     assert p._cap_local_input(long) == long
+
+
+def test_async_wrapper_caps_keyword_input(monkeypatch):
+    # aembed_query(text=...)/aembed_documents(texts=...) called with KEYWORDS (args empty) must still be
+    # capped on the local endpoint (cubic PR 10887 clients.py:416).
+    captured: dict = {}
+
+    class _Fake:
+        async def aembed_query(self, text):
+            captured["text"] = text
+            return [0.0]
+
+        async def aembed_documents(self, texts):
+            captured["texts"] = texts
+            return [[0.0]]
+
+    monkeypatch.setattr(_OpenAIEmbeddingsProxy, "_resolve", lambda self: _Fake())
+    p = _proxy({"check_embedding_ctx_length": False})  # local endpoint
+    long = "x" * 50000
+    asyncio.run(p.aembed_query(text=long))
+    assert len(captured["text"]) == 32000
+    asyncio.run(p.aembed_documents(texts=[long, "short"]))
+    assert [len(t) for t in captured["texts"]] == [32000, 5]
