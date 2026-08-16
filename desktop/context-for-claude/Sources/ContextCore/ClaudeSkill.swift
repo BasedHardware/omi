@@ -17,7 +17,15 @@ import Foundation
 /// deleted whole when the user disconnects.
 public enum ClaudeSkill {
     /// The skill's directory name, which is also the name Claude lists it under.
-    public static let name = "context-for-claude"
+    ///
+    /// Split per build for the same reason as ``ClaudeConfig/serverName``: this is a directory a dev
+    /// build would otherwise overwrite and, on disconnect, delete out from under the installed app.
+    public static let name = name(forBundle: ContextPaths.bundleIdentifier)
+
+    public static func name(forBundle bundleIdentifier: String) -> String {
+        ContextPaths.isDevelopmentBuild(bundleIdentifier)
+            ? "context-for-claude-dev" : "context-for-claude"
+    }
 
     /// `~/.claude/skills/context-for-claude`
     ///
@@ -41,7 +49,7 @@ public enum ClaudeSkill {
     /// should trigger it rather than as a summary of what the skill contains.
     public static let document = """
         ---
-        name: context-for-claude
+        name: \(name)
         description: >-
           Read what this user has actually said, heard, and had on screen — and look at their real
           screen as an image. Use whenever a request assumes context you were not given ("this",
@@ -54,7 +62,7 @@ public enum ClaudeSkill {
         # Context for Claude
 
         This Mac runs Context for Claude, which continuously records what the user says, hears, and
-        has on screen, and serves it over the `context-for-claude` MCP server together with their
+        has on screen, and serves it over the `\(ClaudeConfig.serverName)` MCP server together with their
         full Omi account history. **You are not limited to the current conversation.** Never tell
         this user you cannot see what they were doing, or ask them to paste something back that they
         have already lived through — call a tool instead.

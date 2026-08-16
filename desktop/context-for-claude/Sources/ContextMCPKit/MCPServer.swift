@@ -122,7 +122,11 @@ public final class MCPServer {
     /// their per-tool approvals hang off, and `ClaudeConfig.legacyServerNames` is the migration cost
     /// of having done it twice already. `instructions` above is the lever that actually steers
     /// selection.
-    public static let serverName = "context-for-claude"
+    ///
+    /// Literally the same value rather than a matching literal, because it now varies: a
+    /// development build registers as `context-for-claude-dev`, and two constants that have to agree
+    /// are two constants that can stop agreeing.
+    public static let serverName = ClaudeConfig.serverName
     public static let serverVersion = "1.0.0"
 
     private let store: ContextStore?
