@@ -120,7 +120,9 @@ export function createProductionCommandRegistry(): readonly ProductionCommand[] 
       textEntryPolicy: "ignore",
       repeatPolicy: "ignore",
     }),
-    routeCommand("navigate-home", "nav.home", "chat", { key: "1", modifier: true }),
+    // Cmd+1 and the palette still open leftover search (`route=home`). The Home
+    // pill itself goes to Chat; this command is the remaining door to search.
+    routeCommand("navigate-home", "nav.home", "home", { key: "1", modifier: true }),
     routeCommand("navigate-conversations", "nav.conversations", "conversations", { key: "2", modifier: true }),
     routeCommand("navigate-memories", "nav.memories", "memories", { key: "3", modifier: true }),
     routeCommand("navigate-folders", "nav.folders", "folders"),
