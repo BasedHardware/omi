@@ -24,12 +24,24 @@ enum RewindHistoryReach {
   /// - Parameters:
   ///   - days: local start-of-day instants that hold capture, newest first.
   ///   - surveyed: whether the walk over the capture database has finished at least once.
-  static func spanLabel(days: [Date], surveyed: Bool, calendar: Calendar = .current) -> String {
+  ///   - calendar: the calendar the days were bucketed in — and, therefore, the one they are named in.
+  ///   - locale: how the resulting dates are worded; the user's, so the label reads in their language.
+  static func spanLabel(
+    days: [Date], surveyed: Bool, calendar: Calendar = .current, locale: Locale = .current
+  ) -> String {
     guard surveyed else { return "Checking how far back your capture goes…" }
     guard let newest = days.first, let oldest = days.last else { return "No screen capture yet" }
 
     let formatter = DateFormatter()
     formatter.calendar = calendar
+    // **A day has to be named in the zone it was bucketed in.** `days` are start-of-day instants
+    // produced by `capturedDayStarts(calendar:)`, so they mean midnight *in that calendar's zone*.
+    // `DateFormatter.timeZone` does not follow `formatter.calendar`: left unset it is the machine's,
+    // and rendering another zone's midnight in the machine's zone prints the day before or the day
+    // after for every caller whose calendar is not `.current` — `SpineStore` already passes its own.
+    // The label would then disagree with the day the popover jumps to, which is the whole contract.
+    formatter.timeZone = calendar.timeZone
+    formatter.locale = locale
     formatter.dateStyle = .medium
     formatter.timeStyle = .none
 

@@ -28,38 +28,123 @@ extension ChatToolExecutor {
     let text = userText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     guard !text.isEmpty else { return false }
 
-    // Keep this validator aligned with the runtime external-surface policy:
+    // Keep this validator in lockstep with hasExplicitMemorySaveIntent in
+    // desktop/macos/agent/src/runtime/external-surface-tool-policy.ts:
     // negations, recall questions, and assistant-authored suggestions are not
-    // authorization for a write.
+    // authorization for a write. Shared cases live in
+    // agent/tests/fixtures/memory-save-intent-corpus.json.
     let negativePattern =
-      #"(?:\b(?:don't|do not|never|no longer|without)\b[^.!?]{0,96}\b(?:remember|save|store|keep)\b|\b(?:remember|save|store|keep)\b[^.!?]{0,96}\b(?:not|never)\b)"#
+      #"(?:\b(?:don't|do not|never|no longer|without|not to)\b[^.!?]{0,96}\b(?:remember|save|store|keep)\b|\b(?:remember|save|store|keep)\b[^.!?]{0,96}\b(?:not|never)\b)"#
     guard text.range(of: negativePattern, options: .regularExpression) == nil else { return false }
-    let questionPattern =
-      #"^\s*(?:should|would|could|can|do|did|why|what)\b[^.!?]*\b(?:remember|save|store|keep)\b[^.!?]*\?\s*$"#
-    guard text.range(of: questionPattern, options: .regularExpression) == nil else { return false }
+
+    if text.contains("?") {
+      let politeCommand =
+        text.range(
+          of: #"\bplease\b[^.!?]*\b(?:remember|save|store|keep)\b"#,
+          options: .regularExpression) != nil
+        || text.range(
+          of: #"^(?:hey\s+)?(?:please\s+)?(?:remember|save|store|keep)\b"#,
+          options: .regularExpression) != nil
+      if !politeCommand,
+        text.range(of: #"\b(?:remember|save|store|keep)\b"#, options: .regularExpression) != nil
+      {
+        return false
+      }
+    }
+
+    let passiveMentionPattern =
+      #"\b(?:should|could|would)\s+(?:remember|save|store|keep)\b|\b(?:ability|able)\s+to\s+(?:remember|save|store|keep)\b"#
+    guard text.range(of: passiveMentionPattern, options: .regularExpression) == nil else { return false }
+
+    let thirdPartyCommandPattern =
+      #"\b(?:ask|tell|have|get|let|want|need)\s+(?!you\b)\w+(?:\s+\w+){0,2}\s+to\s+(?:remember|save|store|keep)\b"#
+    guard text.range(of: thirdPartyCommandPattern, options: .regularExpression) == nil else { return false }
 
     let directCommandPattern = #"^(?:hey\s+)?(?:please\s+)?(?:remember|save|store|keep)\b"#
     let sentenceCommandPattern = #"(?:^|[.!?,;]\s+)(?:please\s+)?(?:remember|save|store|keep)\b"#
     let delegatedCommandPattern = #"\b(?:want|need|ask)\s+(?:you\s+)?to\s+(?:please\s+)?(?:remember|save|store|keep)\b"#
+    let rememberThatCommandPattern = #"(?:^|[.!?,;]\s+)(?:please\s+)?remember\s+that\b"#
     let anaphoricCommandPattern =
-      #"\b(?:remember|save|store|keep)\s+(?:this|that|it|my|our|the following)\b"#
+      #"\b(?:remember|save|store|keep)\s+(?:this|it|my|our|the following)\b"#
+    let memoryPhrasePattern =
+      #"\b(?:add this to memory|create a memory|make this a memory|save to memory|save as a memory|store(?:\s+this)? in memory|keep in mind(?:\s+that)?)\b"#
     let hasCommand =
       text.range(of: directCommandPattern, options: .regularExpression) != nil
       || text.range(of: sentenceCommandPattern, options: .regularExpression) != nil
       || text.range(of: delegatedCommandPattern, options: .regularExpression) != nil
+      || text.range(of: rememberThatCommandPattern, options: .regularExpression) != nil
       || text.range(of: anaphoricCommandPattern, options: .regularExpression) != nil
+      || text.range(of: memoryPhrasePattern, options: .regularExpression) != nil
     guard hasCommand else { return false }
     return text.range(
       of: #"\b(?:i|we|you|they)\s+(?:remember|save|store|keep)\b"#,
       options: .regularExpression) == nil
   }
 
-  nonisolated static func isMemoryContentUserSupplied(content: String, userText: String?) -> Bool {
+  /// Memory writes may paraphrase the user's fact, but the content must still
+  /// be grounded in this turn. Verbatim spans pass; anaphoric-only commands
+  /// ("remember this") carry no extractable fact here; otherwise a meaningful
+  /// token overlap is required so invented facts cannot ride explicit save intent.
+  nonisolated static func isMemoryContentGroundedInUserRequest(content: String, userText: String?) -> Bool {
     guard let userText else { return false }
     let normalizedContent = normalizeMemoryText(content)
     let normalizedUserText = normalizeMemoryText(userText)
     guard !normalizedContent.isEmpty, !normalizedUserText.isEmpty else { return false }
-    return " \(normalizedUserText) ".contains(" \(normalizedContent) ")
+    if " \(normalizedUserText) ".contains(" \(normalizedContent) ") { return true }
+    if isAnaphoricOnlyMemoryCommand(userText) { return true }
+
+    let contentTokens = memoryGroundingTokens(content)
+    guard !contentTokens.isEmpty else { return false }
+    let promptTokens = Set(memoryGroundingTokens(userText))
+    let overlap = contentTokens.filter { promptTokens.contains($0) }
+    let required =
+      contentTokens.count <= 2
+      ? 1
+      : max(2, Int(ceil(Double(contentTokens.count) * 0.5)))
+    return overlap.count >= required
+  }
+
+  private nonisolated static func isAnaphoricOnlyMemoryCommand(_ prompt: String) -> Bool {
+    let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let hasDeicticCommand =
+      text.range(of: #"\b(?:remember|save|store|keep)\s+(?:this|that|it)\b"#, options: .regularExpression) != nil
+      || text.range(of: #"\b(?:add this to memory|make this a memory)\b"#, options: .regularExpression) != nil
+    guard hasDeicticCommand else { return false }
+    return memoryGroundingTokens(stripMemoryCommandPhrases(text)).count < 2
+  }
+
+  private nonisolated static func stripMemoryCommandPhrases(_ text: String) -> String {
+    var stripped = text
+    let replacements: [(String, String)] = [
+      (#"^(?:hey\s+)?(?:please\s+)?(?:remember|save|store|keep)\b[:\s]*"#, ""),
+      (#"\b(?:want|need|ask)\s+you\s+to\s+(?:please\s+)?(?:remember|save|store|keep)\b[:\s]*"#, ""),
+      (#"\b(?:remember|save|store|keep)\s+(?:that|this|it|my|our|the following)\b[:\s,]*"#, ""),
+      (
+        #"\b(?:add this to memory|create a memory|make this a memory|save to memory|save as a memory|store(?:\s+this)? in memory|keep in mind(?:\s+that)?)\b[:\s]*"#,
+        ""
+      ),
+    ]
+    for (pattern, replacement) in replacements {
+      stripped = stripped.replacingOccurrences(
+        of: pattern,
+        with: replacement,
+        options: .regularExpression)
+    }
+    return stripped.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private nonisolated static let memoryGroundingStopWords: Set<String> = [
+    "a", "an", "and", "as", "at", "be", "been", "being", "but", "for", "from", "had", "has",
+    "have", "hey", "i", "im", "in", "is", "it", "me", "my", "of", "on", "or", "please", "that",
+    "the", "this", "to", "was", "were", "with", "you", "your",
+    "keep", "remember", "save", "store",
+  ]
+
+  private nonisolated static func memoryGroundingTokens(_ value: String) -> [String] {
+    normalizeMemoryText(value)
+      .split(separator: " ")
+      .map(String.init)
+      .filter { $0.count > 1 && !memoryGroundingStopWords.contains($0) }
   }
 
   private nonisolated static func normalizeMemoryText(_ value: String) -> String {
@@ -139,7 +224,7 @@ extension ChatToolExecutor {
         #"non-whitespace characters."}}"#,
       ].joined()
     }
-    guard isMemoryContentUserSupplied(content: input.content, userText: originatingUserText) else {
+    guard isMemoryContentGroundedInUserRequest(content: input.content, userText: originatingUserText) else {
       return [
         #"{"ok":false,"error":{"code":"memory_content_not_user_supplied","message":"Memory content must appear in "#,
         #"the current typed user request."}}"#,

@@ -40,7 +40,7 @@ def test_unknown_feature_route_ref_uses_default_explicit_route():
         feature=feature,
         model='gpt-5.6-luna',
         provider='openai',
-        options={'extra_body': {"prompt_cache_retention": "24h"}},
+        options={},
     )
     assert get_model(feature) == 'gpt-5.6-luna'
     assert get_provider(feature) == 'openai'
@@ -53,7 +53,7 @@ def test_pinned_feature_route_ref_preserves_pinned_route_and_options():
         feature='fair_use',
         model='gpt-5.6-luna',
         provider='openai',
-        options={'extra_body': {"prompt_cache_retention": "24h"}},
+        options={},
     )
     assert get_model('fair_use') == 'gpt-5.6-luna'
     assert get_provider('fair_use') == 'openai'

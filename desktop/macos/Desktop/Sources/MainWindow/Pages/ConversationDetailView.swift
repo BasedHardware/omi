@@ -46,7 +46,6 @@ struct ConversationDetailView: View {
   @State private var showEditDialog = false
   @State private var editedTitle = ""
   @State private var isUpdatingTitle = false
-  @State private var isCopyingLink = false
   @State private var isDeleting = false
 
   // Speaker naming state
@@ -409,20 +408,16 @@ struct ConversationDetailView: View {
 
   private var inlineActionButtons: some View {
     HStack(spacing: OmiSpacing.sm) {
-      // Copy link button
-      Button(action: { Task { await copyLink() } }) {
-        Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 28, height: 28)
-          .background(
-            Circle()
-              .fill(Ink.rowFillHover)
-          )
-      }
-      .buttonStyle(.plain)
-      .disabled(isCopyingLink)
-      .help("Copy link")
+      // Copy share link (minting flips visibility to shared; the control
+      // discloses and confirms that itself).
+      ConversationShareLinkButton(
+        conversationId: conversation.id,
+        canShare: canShareConversation,
+        onCopied: {
+          AnalyticsManager.shared.shareAction(
+            category: "conversation", properties: ["conversation_id": conversation.id])
+        }
+      )
 
       // Copy transcript button
       Button(action: copyTranscript) {
@@ -503,6 +498,14 @@ struct ConversationDetailView: View {
     displayConversation.transcriptPresenceState != .lockedOrRedacted
   }
 
+  /// Sharing publishes the conversation (visibility flips to "shared"), so it
+  /// honors the same lock/redaction gate as copying the transcript: content
+  /// this surface refuses to put on the pasteboard must not be publishable to
+  /// an unauthenticated share URL from the same toolbar.
+  private var canShareConversation: Bool {
+    canCopyTranscript
+  }
+
   // MARK: - Actions
 
   private func copyTranscript() {
@@ -523,22 +526,6 @@ struct ConversationDetailView: View {
 
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(transcript, forType: .string)
-  }
-
-  private func copyLink() async {
-    isCopyingLink = true
-    defer { isCopyingLink = false }
-
-    do {
-      let shareableUrl = try await APIClient.shared.getConversationShareLink(id: conversation.id)
-      await MainActor.run {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(shareableUrl, forType: .string)
-      }
-      AnalyticsManager.shared.shareAction(category: "conversation", properties: ["conversation_id": conversation.id])
-    } catch {
-      logError("Failed to get share link", error: error)
-    }
   }
 
   private func updateTitle() async {

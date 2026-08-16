@@ -43,7 +43,7 @@ signing errors. Instead:
       `USE_AUTH_CUSTOM_TOKEN`/`USE_WEB_AUTH` flow match (custom-token auth; a
       natively-minted Firebase token is rejected by `api.omiapi.com` with 401).
 - [ ] Build and install via
-      `FLUTTER_BIN=/path/to/flutter-3.41.9/bin/flutter app/scripts/rayban_dat.sh run -d <device-id>`.
+      `FLUTTER_BIN=/path/to/flutter-3.44.5/bin/flutter app/scripts/rayban_dat.sh run -d <device-id>`.
       Never hand-install a stale `build/ios/iphoneos/Runner.app`.
 - [ ] Before pairing, inspect the launch log: no duplicate SwiftProtobuf class
       warning, `SIGSEGV`, `EXC_BAD_ACCESS`, or `swift_getObjectType` crash.

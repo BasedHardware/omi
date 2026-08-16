@@ -40,6 +40,17 @@ struct ContextTransitionQueue: Sendable {
   }
 }
 
+/// A frame candidate for grounding a director evaluation, paired with the
+/// moment it entered the tracker. On the switch tick the next context's frame
+/// is *captured* before the departing visit's `endedAt` is written, but only
+/// *stored* here after the transition persisted the departure — so
+/// `storedAt <= endedAt` holds exactly for frames belonging to the departed
+/// visit's own context.
+struct TrackedDirectorFrame: Sendable {
+  let frame: CapturedFrame
+  let storedAt: Date
+}
+
 /// Coordinates all proactive assistants, distributing frames and managing lifecycle
 @MainActor
 class AssistantCoordinator {
@@ -55,6 +66,7 @@ class AssistantCoordinator {
   private var lastTrackedApp: String?
   private var lastTrackedWindowTitle: String?
   private var lastTrackedFrame: CapturedFrame?
+  private var lastTrackedFrameStoredAt: Date?
   private var contextTransitionQueue = ContextTransitionQueue()
 
   /// Backpressure: track which assistants are currently analyzing a frame.
@@ -265,11 +277,45 @@ class AssistantCoordinator {
   /// Keep the latest frame reference fresh (call on every capture, even during delay).
   func trackFrame(_ frame: CapturedFrame) {
     lastTrackedFrame = frame
+    lastTrackedFrameStoredAt = Date()
   }
 
-  func trackedFrameForDirector(startedAt: Date) -> CapturedFrame? {
-    guard let frame = lastTrackedFrame, frame.captureTime >= startedAt else { return nil }
-    return frame
+  /// The latest tracked frame as a director grounding candidate. Only frames
+  /// captured at or after the visit began qualify here; the departed-visit
+  /// bound is applied by the caller with `frameMayGroundDirector` AFTER
+  /// re-reading visit freshness, because a bound computed from a pre-lookup
+  /// freshness read races the context switch — the switch can land between
+  /// that read and this lookup, leaving the lookup unbounded exactly when it
+  /// must not be.
+  func trackedFrameForDirector(startedAt: Date) -> TrackedDirectorFrame? {
+    guard
+      let frame = lastTrackedFrame,
+      let storedAt = lastTrackedFrameStoredAt,
+      frame.captureTime >= startedAt
+    else { return nil }
+    return TrackedDirectorFrame(frame: frame, storedAt: storedAt)
+  }
+
+  /// Whether a sampled frame may ground a director evaluation for a visit
+  /// whose freshness was read AFTER the frame was sampled.
+  ///
+  /// Active visit (`endedAt == nil`): any frame captured at or after
+  /// `startedAt`, today's behavior. Departed visit: the frame must also have
+  /// entered the tracker no later than the departure (`storedAt <= endedAt`).
+  /// Capture time alone cannot exclude the next context's screen on the switch
+  /// tick — that frame is *captured* before the transition writes `endedAt` —
+  /// but it is only *stored* after `checkContextSwitch` (which persists the
+  /// departure) returns, so the stored-at bound separates the two exactly. The
+  /// capture-time epsilon additionally keeps the frame near the visit's own
+  /// window under clock skew.
+  nonisolated static func frameMayGroundDirector(
+    captureTime: Date, storedAt: Date, startedAt: Date, endedAt: Date?
+  ) -> Bool {
+    guard captureTime >= startedAt else { return false }
+    guard let endedAt else { return true }
+    return storedAt <= endedAt
+      && captureTime
+        <= endedAt.addingTimeInterval(ContextDeliveryBudget.departedFrameCaptureEpsilonSeconds)
   }
 
   /// Distribute a captured frame to all enabled assistants

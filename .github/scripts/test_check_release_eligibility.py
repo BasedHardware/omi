@@ -52,6 +52,13 @@ class ReleaseIdentityTests(unittest.TestCase):
         with self.assertRaisesRegex(VERIFIER.ReleaseEligibilityError, "refs/heads/main"):
             VERIFIER.validate(self.identity(ref="refs/heads/release"))
 
+    def test_accepts_ci_evidence_ref_matching_the_release_sha(self) -> None:
+        VERIFIER.validate(self.identity(ref=f"refs/heads/ci-evidence/{SHA}"))
+
+    def test_rejects_ci_evidence_ref_that_does_not_match_the_release_sha(self) -> None:
+        with self.assertRaisesRegex(VERIFIER.ReleaseEligibilityError, "ci-evidence"):
+            VERIFIER.validate(self.identity(ref=f"refs/heads/ci-evidence/{BASE_SHA}"))
+
     def test_rejects_ambiguous_or_non_sha_release_identity(self) -> None:
         for value in ("main", "a" * 7, "A" * 40, "0" * 40):
             with self.subTest(value=value), self.assertRaisesRegex(VERIFIER.ReleaseEligibilityError, "release SHA"):
@@ -94,23 +101,29 @@ class WorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("release eligibility must not path-filter or otherwise narrow main pushes", CHECKER.validate(root))
 
-    def test_manual_dispatch_is_rejected(self) -> None:
+    def test_missing_workflow_dispatch_is_rejected(self) -> None:
         root = self.fixture_root()
         workflow = root / ".github/workflows/release-eligibility.yml"
         workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace("on:\n", "on:\n  workflow_dispatch:\n", 1),
+            workflow.read_text(encoding="utf-8").replace("  workflow_dispatch:\n", "", 1),
             encoding="utf-8",
         )
-        self.assertIn("release eligibility must declare only the automatic push trigger", CHECKER.validate(root))
+        self.assertIn(
+            "release eligibility must declare the automatic push trigger and workflow_dispatch",
+            CHECKER.validate(root),
+        )
 
     def test_quoted_extra_trigger_is_rejected(self) -> None:
         root = self.fixture_root()
         workflow = root / ".github/workflows/release-eligibility.yml"
         workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace("on:\n", "on:\n  'workflow_dispatch':\n", 1),
+            workflow.read_text(encoding="utf-8").replace("on:\n", "on:\n  'repository_dispatch':\n", 1),
             encoding="utf-8",
         )
-        self.assertIn("release eligibility must declare only the automatic push trigger", CHECKER.validate(root))
+        self.assertIn(
+            "release eligibility must declare the automatic push trigger and workflow_dispatch",
+            CHECKER.validate(root),
+        )
 
     def test_conditional_result_job_is_rejected(self) -> None:
         root = self.fixture_root()
