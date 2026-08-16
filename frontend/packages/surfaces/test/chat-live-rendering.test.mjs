@@ -1013,6 +1013,11 @@ test("agent activity renders safe capability, context, two tools, approval statu
   try {
     const timeline = rendered.container.querySelector(".chat-agent-run");
     assert.ok(timeline);
+    const summary = timeline.querySelector("summary");
+    // red-proof: drop summary from the production focus contract and this native
+    // control is still in the tree while styles.css paints a UA ring instead of --focus.
+    assert.ok(summary, "agent-run details expose a native summary the focus contract must paint");
+    assert.equal(summary.closest(".production-shell") != null, true);
     assert.equal(timeline.dataset.agentRunState, "complete");
     assert.ok(timeline.textContent.includes(EN_MESSAGES["chat.agentScripted"]));
     assert.equal(timeline.querySelectorAll('[data-agent-event="tool_request"]').length, 2);
