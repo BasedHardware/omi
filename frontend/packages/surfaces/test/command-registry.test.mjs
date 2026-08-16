@@ -128,7 +128,7 @@ test("disabled commands do not consume events and route commands cover every liv
     assert.deepEqual(calls, []);
 
     for (const [key, route] of [
-      ["1", "chat"], ["2", "conversations"], ["3", "memories"],
+      ["1", "home"], ["2", "conversations"], ["3", "memories"],
       ["4", "tasks"], ["5", "rewind"], ["6", "apps"], [",", "settings"],
     ]) {
       const event = new rendered.window.KeyboardEvent("keydown", { key, metaKey: true, bubbles: true });
@@ -147,7 +147,7 @@ test("disabled commands do not consume events and route commands cover every liv
     assert.equal(dispatch(backFromInput, registry, context), false, "Escape in a text field stays with the field");
 
     for (const [id, route] of [
-      ["navigate-home", "chat"], ["navigate-memories", "memories"], ["navigate-conversations", "conversations"],
+      ["navigate-home", "home"], ["navigate-memories", "memories"], ["navigate-conversations", "conversations"],
       ["navigate-folders", "folders"], ["navigate-tasks", "tasks"], ["navigate-chat", "chat"],
       ["navigate-rewind", "rewind"], ["navigate-apps", "apps"], ["navigate-brain-map", "brain-map"],
       ["navigate-settings", "settings"], ["navigate-listen", "listen"],
