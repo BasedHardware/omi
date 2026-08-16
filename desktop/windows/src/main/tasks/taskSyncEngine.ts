@@ -183,8 +183,9 @@ function toEpochMs(iso: string | null | undefined): number | null {
 }
 
 /** Map a backend action item → the storage `SyncActionItem` for syncTaskActionItems.
- *  `now` fills a missing created_at so the required `createdAt` is always present. */
-function mapBackendItem(item: BackendActionItem, now: number): SyncActionItem {
+ *  `now` fills a missing created_at so the required `createdAt` is always present.
+ *  Exported for the contracts/parity wire-decode conformance test. */
+export function mapBackendItem(item: BackendActionItem, now: number): SyncActionItem {
   const createdAt = toEpochMs(item.created_at) ?? now
   const updatedAt = toEpochMs(item.updated_at) ?? createdAt
   return {

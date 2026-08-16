@@ -1,0 +1,57 @@
+{
+  "$comment": "Relative day labels (Today / Yesterday / Tomorrow) as used by the Windows conversation section headers (lib/conversations/filtering.ts sectionLabel) and the Windows task due badge (Tasks.tsx formatDue). The rule under contract: relative labels are a CALENDAR day relationship, never a fixed 24h offset, because on the two DST transition days a local day is 23h or 25h long and a plus or minus DAY_MS comparison silently misses the neighbor day. Cases with requires_dst_transition_between only run when the runtime zone actually changes offset between the two listed local days (they execute on any US zone machine and are counted skips on UTC CI; the non DST cases always run). conversation_section is null when the section shows a formatted date instead of a relative label; due_badge is null when the badge shows a formatted date. now and days are local components [year, month, day, hour, minute] / [year, month, day].",
+  "cases": [
+    {
+      "name": "today_label",
+      "now": [2026, 8, 15, 10, 0],
+      "target_day": [2026, 8, 15],
+      "labels": { "conversation_section": "Today", "due_badge": "Today" }
+    },
+    {
+      "name": "yesterday_label",
+      "now": [2026, 8, 15, 10, 0],
+      "target_day": [2026, 8, 14],
+      "labels": { "conversation_section": "Yesterday", "due_badge": "Yesterday" }
+    },
+    {
+      "name": "tomorrow_label",
+      "now": [2026, 8, 15, 10, 0],
+      "target_day": [2026, 8, 16],
+      "labels": { "conversation_section": null, "due_badge": "Tomorrow" }
+    },
+    {
+      "name": "two_days_ago_is_dated",
+      "now": [2026, 8, 15, 10, 0],
+      "target_day": [2026, 8, 13],
+      "labels": { "conversation_section": null, "due_badge": null }
+    },
+    {
+      "name": "fall_back_yesterday",
+      "now": [2026, 11, 2, 9, 0],
+      "target_day": [2026, 11, 1],
+      "requires_dst_transition_between": [[2026, 11, 1], [2026, 11, 2]],
+      "labels": { "conversation_section": "Yesterday", "due_badge": "Yesterday" }
+    },
+    {
+      "name": "spring_forward_yesterday",
+      "now": [2026, 3, 9, 9, 0],
+      "target_day": [2026, 3, 8],
+      "requires_dst_transition_between": [[2026, 3, 8], [2026, 3, 9]],
+      "labels": { "conversation_section": "Yesterday", "due_badge": "Yesterday" }
+    },
+    {
+      "name": "fall_back_tomorrow",
+      "now": [2026, 11, 1, 9, 0],
+      "target_day": [2026, 11, 2],
+      "requires_dst_transition_between": [[2026, 11, 1], [2026, 11, 2]],
+      "labels": { "conversation_section": null, "due_badge": "Tomorrow" }
+    },
+    {
+      "name": "spring_forward_tomorrow",
+      "now": [2026, 3, 8, 9, 0],
+      "target_day": [2026, 3, 9],
+      "requires_dst_transition_between": [[2026, 3, 8], [2026, 3, 9]],
+      "labels": { "conversation_section": null, "due_badge": "Tomorrow" }
+    }
+  ]
+}
