@@ -197,6 +197,30 @@ describe("structured Chat generation context packets", () => {
     expect(packet.ownerAccountId).toBe(ACCOUNT);
   });
 
+  test("memory-read context load yields before touching the authorized page", async () => {
+    // red-proof: remove the Promise.resolve hop at the start of
+    // createMemoryReadChatGenerationContextSource.load and entered is true
+    // before the caller awaits, so POST /v1/chat-messages waits on the page.
+    let entered = false;
+    const source = createMemoryReadChatGenerationContextSource({
+      readCanonicalPage: async () => {
+        entered = true;
+        return null;
+      },
+    });
+    const pending = source.load({
+      accountId: ACCOUNT,
+      generationId: "generation:yield-before-page",
+      admitted: admitted("human:yield-before-page", "generation:yield-before-page"),
+      nowEpochMilliseconds: 250,
+      history: Object.freeze([]),
+      bearerToken: "context-token",
+    });
+    expect(entered).toBe(false);
+    await pending;
+    expect(entered).toBe(true);
+  });
+
   test("deterministically compacts priority/conflicting evidence and records self-noise", () => {
     const input = {
       accountId: ACCOUNT,

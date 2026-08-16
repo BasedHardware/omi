@@ -370,6 +370,8 @@ const main = async (): Promise<void> => {
     return fail(`failed to admit the local owner for platform writes: ${message}`, "local_owner_cutover_failed");
   }
 
+  await service.warmupChatGenerationContext();
+
   let server: { stop: (closeActive?: boolean) => void };
   try {
     const bind = config.testLease === null
