@@ -351,7 +351,6 @@ def test_sync_route_delegates_to_merge(monkeypatch):
         }
 
     monkeypatch.setattr(kg_router.kg_sync, "merge_synced_local_kg", fake_merge)
-    monkeypatch.setattr(kg_router, "firestore_db", object())
     monkeypatch.setattr(kg_router, "_require_legacy_graph_mutation", lambda _uid: None)
 
     rows = [{"nodeId": "n1", "label": "Test"}]

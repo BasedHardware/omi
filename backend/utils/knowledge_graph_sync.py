@@ -3,19 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, cast
+from typing import Any, Dict, Iterable, List, Literal, Optional, cast
 
 from database import knowledge_graph as kg_db
 from database import _client
-from utils.memory.memory_system import MemorySystem
-from utils.memory.memory_system_pin import pin_memory_system
-
-
-def is_assertion_backed_graph_account(uid: str, *, db_client: Any) -> bool:
-    """Canonical-memory and assertion-backed accounts cannot mutate the legacy graph."""
-    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
-        return True
-    return kg_db.has_stored_memory_graph_assertions(uid, db_client=db_client)
 
 
 class MissingKnowledgeGraphEndpointsError(ValueError):
@@ -226,31 +217,3 @@ def merge_synced_local_kg(
         db_client=db_client,
     )
 
-
-def run_legacy_graph_rebuild_task(uid: str, user_name: str, *, db_client: Any) -> None:
-    """Rebuild the legacy graph from stored memories unless the account is canonical/assertion-backed.
-
-    Public route files must not select legacy vs canonical by uid or read the
-    legacy memory store directly (universal-memory route ratchet), so the whole
-    rebuild task lives here in the service layer.
-    """
-    if is_assertion_backed_graph_account(uid, db_client=db_client):
-        return
-    from database import memories as memories_db
-
-    legacy_memories = memories_db.get_memories(uid, limit=500)
-    memories = [memory for memory in legacy_memories if not memory.get('is_locked', False)]
-    if is_assertion_backed_graph_account(uid, db_client=db_client):
-        return
-    _run_legacy_graph_rebuild(uid, memories, user_name)
-
-
-def _run_legacy_graph_rebuild(uid: str, memories: List[Dict[str, Any]], user_name: str) -> None:
-    import importlib
-
-    rebuild_module = importlib.import_module("utils.llm.knowledge_graph")
-    rebuild_knowledge_graph = cast(
-        Callable[[str, List[Dict[str, Any]], str], Dict[str, Any]],
-        getattr(rebuild_module, "rebuild_knowledge_graph"),
-    )
-    rebuild_knowledge_graph(uid, memories, user_name)
