@@ -18,8 +18,14 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
 
-    const onDeviceConfig = CustomSttConfig(provider: SttProvider.onDeviceWhisper, sendRawAudioToOmi: false);
-    const cloudConfig = CustomSttConfig(provider: SttProvider.openai, sendRawAudioToOmi: true);
+    const onDeviceConfig = CustomSttConfig(
+      provider: SttProvider.onDeviceWhisper,
+      sendRawAudioToOmi: false,
+    );
+    const cloudConfig = CustomSttConfig(
+      provider: SttProvider.openai,
+      sendRawAudioToOmi: true,
+    );
     await SharedPreferencesUtil().saveCustomSttConfig(onDeviceConfig);
     await SharedPreferencesUtil().saveConfigForProvider(SttProvider.onDeviceWhisper, onDeviceConfig);
     await SharedPreferencesUtil().saveConfigForProvider(SttProvider.openai, cloudConfig);
@@ -48,8 +54,9 @@ void main() {
     );
     await tester.pump();
 
-    SwitchListTile forwardingTile() =>
-        tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'Send raw audio to Omi'));
+    SwitchListTile forwardingTile() => tester.widget<SwitchListTile>(
+          find.widgetWithText(SwitchListTile, 'Send raw audio to Omi'),
+        );
 
     expect(forwardingTile().value, isFalse);
 
@@ -70,6 +77,9 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
 
     expect(forwardingTile().value, isFalse);
-    expect(SharedPreferencesUtil().getConfigForProvider(SttProvider.onDeviceWhisper)?.sendRawAudioToOmi, isFalse);
+    expect(
+      SharedPreferencesUtil().getConfigForProvider(SttProvider.onDeviceWhisper)?.sendRawAudioToOmi,
+      isFalse,
+    );
   });
 }

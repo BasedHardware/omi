@@ -978,7 +978,10 @@ void main() {
 
     test('keeps native Omi background audio disabled when Custom STT raw forwarding is off', () async {
       await SharedPreferencesUtil().saveCustomSttConfig(
-        const CustomSttConfig(provider: SttProvider.onDeviceWhisper, sendRawAudioToOmi: false),
+        const CustomSttConfig(
+          provider: SttProvider.onDeviceWhisper,
+          sendRawAudioToOmi: false,
+        ),
       );
       final provider = CaptureProvider();
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
@@ -1082,7 +1085,10 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       await SharedPreferencesUtil.init();
       await SharedPreferencesUtil().saveCustomSttConfig(
-        const CustomSttConfig(provider: SttProvider.onDeviceWhisper, sendRawAudioToOmi: false),
+        const CustomSttConfig(
+          provider: SttProvider.onDeviceWhisper,
+          sendRawAudioToOmi: false,
+        ),
       );
       await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', true);
     });
@@ -1270,11 +1276,12 @@ void main() {
       _GatedSocketCaptureProvider provider, {
       BleAudioCodec codec = BleAudioCodec.pcm16,
       int sampleRate = 16000,
-    }) => provider.changeAudioRecordProfile(
-      audioCodec: codec,
-      sampleRate: sampleRate,
-      source: ConversationSource.phone.name,
-    );
+    }) =>
+        provider.changeAudioRecordProfile(
+          audioCodec: codec,
+          sampleRate: sampleRate,
+          source: ConversationSource.phone.name,
+        );
 
     test('drops a reconnect attempt while one is still in flight', () async {
       final provider = _GatedSocketCaptureProvider();
