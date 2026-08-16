@@ -4,14 +4,27 @@ import type { ScreenOcrBlock, ScreenTextSearchHit } from "@omi-core/adapters-pla
 import type { ProductionScreenStore, ScreenFrameImageState } from "./ProductionScreenStore.js";
 import {
   highlightRectsFor,
+  screenActivityBlocks,
+  screenAdjacentAppIndex,
+  screenAppColor,
+  screenAppMonogram,
   screenDaySpanKind,
+  screenNearestFrameIndex,
   snippetParts,
   SCREEN_PLAYBACK_RATES,
+  SCREEN_TRACK_ASSUMED_WIDTH,
   screenPausedMessageKey,
+  screenTrackBadges,
+  screenTrackRange,
+  screenTrackTickFormat,
+  screenTrackTickStepMs,
+  screenTrackTicks,
   type ScreenEmptyKind,
   type ScreenPlaybackRate,
 } from "./screen-presentation.js";
+import type { ScreenTimelineFrame } from "@omi-core/adapters-platform";
 import { ProductionChrome } from "./ProductionChrome.js";
+import { ProductionIcon } from "./ProductionIcon.js";
 import {
   ProductionDataSourceBadge,
   ProductionDisabledControl,
@@ -89,6 +102,154 @@ function FrameHighlights({
         />
       ))}
     </ul>
+  );
+}
+
+/**
+ * The time-linear track, ported from `RewindTrackNSView`.
+ *
+ * The substantive change is the axis, not the paint. The `input[type=range]`
+ * this replaces mapped a pixel to an *array index*, so a three-hour gap between
+ * two captures occupied exactly the width of a three-second one: a lunch break
+ * was invisible, and "drag left to go back in time" was not true, because how
+ * far a pixel travelled depended on how densely that stretch happened to be
+ * captured. Here x is the capture's instant over the visible window.
+ *
+ * The range input survives underneath, transparent. It is what gives the track
+ * a role, a name, a value, and arrow keys; the drawing above is a picture of the
+ * same state. Pointer events are handled on the wrapper instead, because the
+ * input's own click-to-position is index-linear and would disagree with what is
+ * drawn.
+ */
+function ScreenTrack({
+  frames,
+  cursor,
+  locale,
+  label,
+  valueText,
+  onSelectFrame,
+  onStepFrame,
+}: {
+  frames: readonly ScreenTimelineFrame[];
+  cursor: number;
+  locale: Locale;
+  label: string;
+  valueText: string | null;
+  onSelectFrame: (index: number) => void;
+  onStepFrame: (delta: number) => void;
+}): React.JSX.Element {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [trackWidth, setTrackWidth] = useState(SCREEN_TRACK_ASSUMED_WIDTH);
+
+  useEffect(() => {
+    const node = trackRef.current;
+    if (node === null || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      if (width > 0) setTrackWidth(width);
+    });
+    observer.observe(node);
+    return () => { observer.disconnect(); };
+  }, []);
+
+  const range = screenTrackRange(frames);
+  const blocks = screenActivityBlocks(frames);
+  const span = range === null ? 0 : range.endedAt - range.startedAt;
+  const fraction = (instant: number): number => (span > 0 ? (instant - range!.startedAt) / span : 0);
+  const percent = (instant: number): string => `${fraction(instant) * 100}%`;
+
+  const badges = range === null ? [] : screenTrackBadges(blocks, range, trackWidth);
+  const ticks = range === null ? [] : screenTrackTicks(range.startedAt, range.endedAt);
+  const tickFormat = screenTrackTickFormat(screenTrackTickStepMs(span));
+  const selectedInstant = Date.parse(frames[cursor]?.captured_at ?? "");
+  const hasPlayhead = range !== null && Number.isFinite(selectedInstant);
+
+  /** Maps a pointer x onto an instant, then onto the capture nearest it. */
+  const selectAtClientX = (clientX: number): void => {
+    const node = trackRef.current;
+    if (node === null || range === null) return;
+    const rect = node.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    const index = screenNearestFrameIndex(frames, range.startedAt + ratio * span);
+    if (index !== null) onSelectFrame(index);
+  };
+
+  return (
+    <div
+      className="screen-track"
+      ref={trackRef}
+      data-track="true"
+      onPointerDown={(event) => {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        selectAtClientX(event.clientX);
+      }}
+      onPointerMove={(event) => {
+        if (event.buttons === 0) return;
+        selectAtClientX(event.clientX);
+      }}
+      onWheel={(event) => {
+        event.preventDefault();
+        onStepFrame(event.deltaY > 0 ? 1 : -1);
+      }}
+    >
+      <div className="screen-track-bar">
+        {range !== null && blocks.map((block, index) => (
+          <div
+            className="screen-track-block"
+            data-track-app={block.app}
+            key={`${block.app}:${block.startedAt}:${index}`}
+            style={{
+              left: percent(block.startedAt),
+              // A sub-pixel block still happened; Swift floors it at 2px so it
+              // is a visible sliver rather than nothing.
+              width: `max(2px, ${(fraction(block.endedAt) - fraction(block.startedAt)) * 100}%)`,
+              background: screenAppColor(block.app).css,
+            }}
+          />
+        ))}
+      </div>
+      <div className="screen-track-badges" aria-hidden="true">
+        {badges.map((badge) => (
+          <span
+            className="screen-track-badge"
+            data-track-badge={badge.app}
+            key={`${badge.app}:${badge.blockIndex}`}
+            style={{
+              left: `${badge.centerFraction * 100}%`,
+              background: screenAppColor(badge.app).css,
+            }}
+          >
+            {screenAppMonogram(badge.app)}
+          </span>
+        ))}
+      </div>
+      <div className="screen-track-ticks" aria-hidden="true">
+        {ticks.map((tick) => (
+          <span className="screen-track-tick" key={tick} style={{ left: percent(tick) }}>
+            <span className="screen-track-tick-label">{formatDate(tick, locale, tickFormat)}</span>
+          </span>
+        ))}
+      </div>
+      {hasPlayhead && (
+        <div
+          className="screen-track-playhead"
+          data-track-playhead="true"
+          style={{ left: percent(selectedInstant) }}
+        />
+      )}
+      <input
+        className="screen-track-input"
+        type="range"
+        min={0}
+        max={Math.max(0, frames.length - 1)}
+        value={cursor}
+        aria-label={label}
+        {...(valueText === null ? {} : { "aria-valuetext": valueText })}
+        disabled={frames.length === 0}
+        onChange={(event) => onSelectFrame(Number(event.target.value))}
+      />
+    </div>
   );
 }
 
@@ -190,6 +351,9 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
   const counterTotal = frames.length;
   const counterCurrent = counterTotal === 0 ? 0 : cursor + 1;
   const empty = emptyKind !== null ? emptyCopy(emptyKind, locale) : null;
+  const selectedStamp = selected === null ? null : frameTimestamp(selected.captured_at, locale);
+  const previousAppIndex = screenAdjacentAppIndex(frames, cursor, "previous");
+  const nextAppIndex = screenAdjacentAppIndex(frames, cursor, "next");
   const daySpanKind = screenDaySpanKind({
     phase: status.refresh.phase,
     oldestCapturedAt: days.oldest_captured_at,
@@ -392,9 +556,15 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
             <section className="screen-stage" aria-label={t(locale, "screen.currentFrame")}>
               {selected && (
                 <header className="screen-stage-meta">
-                  <span className="screen-app-badge" data-app-badge="true">{selected.app_name}</span>
+                  <span className="screen-app-badge" data-app-badge="true">
+                    <span
+                      className="screen-app-swatch"
+                      aria-hidden="true"
+                      style={{ background: screenAppColor(selected.app_name).css }}
+                    />
+                    {selected.app_name}
+                  </span>
                   <span className="screen-window-title" data-window-title="true">{selected.window_title}</span>
-                  <span className="screen-timestamp-pill" data-timestamp-pill="true">{frameTimestamp(selected.captured_at, locale)}</span>
                 </header>
               )}
               <div className="screen-frame-stage">
@@ -422,6 +592,48 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
                     <ProductionEmptyState icon="screen" title={t(locale, "screen.frameImageUnavailable")} />
                   </div>
                 ) : null}
+                {/*
+                  Chrome that sits *on* the picture, as `RewindStageChrome` draws
+                  it: the app chevrons on the frame's edges and the moment it was
+                  taken at bottom-left. A control that steps through the picture
+                  belongs on the picture — parked on the stage's margin above it,
+                  the pill read as a caption for the page rather than a label on
+                  the frame.
+
+                  Each chevron is absent, not disabled, at the ends of the day:
+                  a disabled control still advertises a step that does not exist.
+                  Name via aria-label and tooltip, following the glyph precedent
+                  the composer's attach button set.
+                */}
+                {selected && (
+                  <div className="screen-stage-chrome">
+                    {previousAppIndex !== null && (
+                      <button
+                        type="button"
+                        className="screen-stage-chevron is-previous"
+                        aria-label={t(locale, "screen.previousApp")}
+                        title={t(locale, "screen.previousApp")}
+                        onClick={() => store.selectFrame(previousAppIndex)}
+                      >
+                        <ProductionIcon name="back" />
+                      </button>
+                    )}
+                    {nextAppIndex !== null && (
+                      <button
+                        type="button"
+                        className="screen-stage-chevron is-next"
+                        aria-label={t(locale, "screen.nextApp")}
+                        title={t(locale, "screen.nextApp")}
+                        onClick={() => store.selectFrame(nextAppIndex)}
+                      >
+                        <ProductionIcon name="forward" />
+                      </button>
+                    )}
+                    <span className="screen-timestamp-pill" data-timestamp-pill="true">
+                      {selectedStamp}
+                    </span>
+                  </div>
+                )}
               </div>
               {extracted !== "" && (
                 <section className="screen-extracted" aria-label={t(locale, "screen.extractedText")}>
@@ -434,19 +646,21 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
               )}
             </section>
             <section className="screen-timeline" aria-label={t(locale, "screen.timeline")}>
-              <input
-                type="range"
-                min={0}
-                max={Math.max(0, frames.length - 1)}
-                value={cursor}
-                aria-label={t(locale, "screen.timeline")}
-                disabled={frames.length === 0}
-                onChange={(event) => store.selectFrame(Number(event.target.value))}
-                onWheel={(event) => {
-                  event.preventDefault();
-                  store.stepFrame(event.deltaY > 0 ? 1 : -1);
-                }}
+              <ScreenTrack
+                frames={frames}
+                cursor={cursor}
+                locale={locale}
+                label={t(locale, "screen.timeline")}
+                valueText={selectedStamp}
+                onSelectFrame={(index) => store.selectFrame(index)}
+                onStepFrame={(delta) => store.stepFrame(delta)}
               />
+              <div className="screen-track-footer">
+                <span className="screen-track-footer-hint">{t(locale, "screen.trackHint")}</span>
+                <span className="screen-frame-counter" data-frame-counter="true">
+                  {t(locale, "screen.frameCounter", { current: counterCurrent, total: counterTotal })}
+                </span>
+              </div>
               <div className="screen-playback">
                 <button type="button" className="control-primary screen-play-control" onClick={() => playing ? store.pause() : store.play()}>
                   {playing ? t(locale, "screen.pause") : t(locale, "screen.play")}
@@ -464,9 +678,6 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
                     </button>
                   ))}
                 </div>
-                <span className="screen-frame-counter" data-frame-counter="true">
-                  {t(locale, "screen.frameCounter", { current: counterCurrent, total: counterTotal })}
-                </span>
               </div>
             </section>
           </div>

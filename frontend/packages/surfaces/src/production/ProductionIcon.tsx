@@ -1,6 +1,7 @@
 import {
   CalendarDays,
   ChevronLeft,
+  ChevronRight,
   CircleAlert,
   CircleCheck,
   Ellipsis,
@@ -39,6 +40,7 @@ export type ProductionIconName =
   | "check"
   | "close"
   | "conversations"
+  | "forward"
   | "history"
   | "inbox"
   | "library"
@@ -64,6 +66,7 @@ const productionIcons: Readonly<Record<ProductionIconName, LucideIcon>> = {
   check: CircleCheck,
   close: X,
   conversations: MessageCircle,
+  forward: ChevronRight,
   history: History,
   inbox: Inbox,
   library: Library,

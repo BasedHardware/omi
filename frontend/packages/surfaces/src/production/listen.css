@@ -246,40 +246,117 @@
   outline-offset: 2px;
 }
 
+/*
+ * Speaker bubbles, ported from `LiveSegmentView` in the macOS shell. Rows are
+ * not dividers between paragraphs: the user's speech is a tinted bubble on the
+ * right and everyone else's is a neutral bubble on the left, which is what
+ * makes a two-person conversation readable without reading it.
+ *
+ * The 60px gutter is Swift's `Spacer(minLength: 60)` — a bubble never spans the
+ * full width, so the side it is on stays legible as a side.
+ */
 .listen-transcript-row {
-  width: min(88%, 620px);
-  padding: var(--space-md) 0;
+  display: flex;
+  padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
 }
 
-.listen-transcript-row + .listen-transcript-row {
-  border-block-start: 1px solid var(--border);
-}
-
 .listen-transcript-row.is-user {
-  justify-self: end;
+  justify-content: flex-end;
 }
 
-.listen-transcript-row.is-user .listen-transcript-text {
+.listen-transcript-bubble-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  align-items: flex-start;
+  max-width: calc(100% - 60px);
+}
+
+.listen-transcript-row.is-user .listen-transcript-bubble-group {
+  align-items: flex-end;
+}
+
+.listen-transcript-heading {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.listen-transcript-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-circular);
+  background: var(--surface-hover);
   color: var(--content-primary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: 1;
+}
+
+.listen-transcript-row.is-user .listen-transcript-avatar {
+  background: var(--content-primary);
+  color: var(--content-inverse);
 }
 
 .listen-transcript-speaker {
-  margin: 0 0 var(--space-xs);
+  margin: 0;
   color: var(--content-tertiary);
   font-family: var(--type-label-family);
   font-size: var(--type-label-size);
   font-weight: var(--type-label-weight);
 }
 
+/* A resolved name is the speaker's identity; "Speaker 2" is a placeholder for one. */
+.listen-transcript-speaker.is-named {
+  color: var(--content-primary);
+  font-weight: 600;
+}
+
+.listen-transcript-clock {
+  color: var(--content-tertiary);
+  font-family: var(--type-meta-family);
+  font-size: var(--type-meta-size);
+  font-variant-numeric: tabular-nums;
+}
+
 .listen-transcript-text {
   margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-control);
+  background: var(--surface-hover);
   color: var(--content-primary);
   font-size: var(--type-body-size);
   line-height: var(--type-body-line);
   overflow-wrap: anywhere;
+}
+
+.listen-transcript-row.is-user .listen-transcript-text {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--content-primary);
+}
+
+.listen-transcript-translation {
+  margin: 0;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--surface-hover) 50%, transparent);
+  color: var(--content-secondary);
+  font-size: var(--type-body-size);
+  font-style: italic;
+  line-height: var(--type-body-line);
+  overflow-wrap: anywhere;
+}
+
+.listen-transcript-row.is-user .listen-transcript-translation {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
 .listen-backlog-label {
