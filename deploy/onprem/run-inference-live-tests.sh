@@ -21,23 +21,19 @@
 #     (the services won't reach HuggingFace on the internal network). If a service never
 #     turns healthy, that provisioning is missing.
 #   - The offline test image (default omi-onprem-backend-test:v2); built here if absent.
-#   - LibriSpeech test-clean.tar.gz for the Parakeet WER gate; downloaded on the host
-#     (outside the guard) into $LIBRISPEECH_CACHE if absent.
 #
 # Usage:  deploy/onprem/run-inference-live-tests.sh [diarizer|nllb|whisper ...]
 #   (no args = all three). Override defaults via env: COMPOSE_PROJECT, TEST_IMAGE,
-#   LIBRISPEECH_CACHE, ENCRYPTION_SECRET.
+#   ITALIAN_AUDIO, ENCRYPTION_SECRET.
 set -euo pipefail
 
 PROJECT="${COMPOSE_PROJECT:-omi-onprem}"
 COMPOSE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$COMPOSE_DIR/../.." && pwd)"
 TEST_IMAGE="${TEST_IMAGE:-omi-onprem-backend-test:v2}"
-LIBRISPEECH_CACHE="${LIBRISPEECH_CACHE:-$HOME/.cache/omi-onprem/librispeech}"
 ITALIAN_AUDIO="${ITALIAN_AUDIO:-$HOME/.cache/omi-onprem/audio/italian.wav}"
 # Dev-only test secret; the live tests only need a non-empty, well-formed value.
 ENC_SECRET="${ENCRYPTION_SECRET:-omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv}"
-LIBRISPEECH_URL="https://www.openslr.org/resources/12/test-clean.tar.gz"
 
 SERVICES=("$@"); [ ${#SERVICES[@]} -eq 0 ] && SERVICES=(diarizer nllb whisper)
 
@@ -83,7 +79,9 @@ fi
 
 # --- 1. bring the declared services up -------------------------------------------------
 log "Bringing up compose inference profile: ${SERVICES[*]}"
-compose --profile inference up -d "${SERVICES[@]}"
+# --build: the inference services are build-only images (no pullable tag), so a fresh checkout can't start
+# them without building first (cubic 10887).
+compose --profile inference up -d --build "${SERVICES[@]}"
 for svc in "${SERVICES[@]}"; do wait_health "$svc"; done
 
 declare -A RESULT
@@ -108,7 +106,7 @@ for svc in "${SERVICES[@]}"; do
     whisper)
       # ADR-0037 default STT: multilingual transcription via the thin parakeet gateway (NIM mode) ->
       # whisper. Bring the gateway up too, then prove the full path with a non-English (Italian) clip.
-      compose --profile inference up -d parakeet
+      compose --profile inference up -d --build parakeet
       wait_health parakeet
       if [ ! -f "$ITALIAN_AUDIO" ]; then
         log "whisper: fetching a FLEURS Italian sample on the host -> $ITALIAN_AUDIO"
@@ -121,9 +119,16 @@ open('/out/$(basename "$ITALIAN_AUDIO")','wb').write(s['audio']['bytes'])
 PY"
       fi
       log "whisper: multilingual STT via the parakeet gateway (Italian audio -> gateway -> whisper)"
+      # Post the clip from the already-built $TEST_IMAGE (via httpx) instead of pulling an unpinned
+      # curlimages/curl:latest — keeps the script reproducible and registry-independent (cubic 10887).
+      audio_name="$(basename "$ITALIAN_AUDIO")"
       resp=$(docker run --rm --network "container:$(cid parakeet)" -v "$(dirname "$ITALIAN_AUDIO")":/audio:ro \
-        curlimages/curl:latest -s -X POST http://127.0.0.1:8080/v1/transcribe \
-        -F "file=@/audio/$(basename "$ITALIAN_AUDIO");type=audio/wav")
+        "$TEST_IMAGE" /opt/venv/bin/python -c "
+import sys, httpx
+f = '/audio/$audio_name'
+r = httpx.post('http://127.0.0.1:8080/v1/transcribe',
+               files={'file': (f, open(f, 'rb'), 'audio/wav')}, timeout=120)
+sys.stdout.write(r.text)")
       printf '  -> %.200s\n' "$resp"
       # A non-empty transcription proves gateway -> whisper -> STT end to end (auto-detected language).
       if echo "$resp" | grep -qE '"text"[[:space:]]*:[[:space:]]*"[^"]+"'; then

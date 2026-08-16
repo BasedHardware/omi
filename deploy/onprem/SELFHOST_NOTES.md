@@ -29,7 +29,7 @@ front keycloak/ntfy → **selfhost**.
 
 | Posture | Entrypoint | Includes | `omi` network | Backends |
 |---|---|---|---|---|
-| **on-prem prod** (hermetic) | `compose.prod.yaml` | base + **selfhost** | `internal: true` — **no egress** (ADR-0001 proof) | self-hosted (see port matrix) |
+| **on-prem prod** | `compose.prod.yaml` | base + **selfhost** | **bridged** — egress-capable; data sovereignty by **configuration** (every port wired to a local endpoint), not network isolation (ADR-0048) | self-hosted (see port matrix) |
 | **dev** | `compose.dev.yaml` | base + selfhost (+ Firestore emulator opt-in `--profile firestore`) | egress — backend reaches **host** inference; API on `:8000` | self-hosted; `LOCAL_DEVELOPMENT` dev-auth available |
 | **seed** | `compose.seed.yaml` | base + selfhost | egress | dev + **real OIDC**, drives the MELD 5-user seed (D35) |
 | **cloud prod** | `compose.prod.cloud.yaml` | **base only** (no selfhost) | egress — reaches the cloud | **managed** (Firestore/Pinecone/Firebase/GCS) |
@@ -70,7 +70,7 @@ cd deploy/onprem
 for e in base prod; do cp backend.env.$e.example backend.env.$e; done
 sed -i "s/^ENCRYPTION_SECRET=.*/ENCRYPTION_SECRET=$(openssl rand -hex 32)/" backend.env.base
 
-# ── PROD · on-prem self-hosted (hermetic, no egress) ──────────────────────────
+# ── PROD · on-prem self-hosted (bridged; data sovereignty by config, ADR-0048) ─
 #   Mongo starts by default; profiles add TLS+OIDC (auth), vector (chat), object (objstore), push.
 docker compose -f compose.prod.yaml --profile auth --profile chat --profile objstore --profile push up -d --build
 docker compose -f compose.prod.yaml ps            # services must become 'healthy'
@@ -149,7 +149,8 @@ the other postures. Always pass the same `--profile` flags you brought the stack
 
 ## Verification (WP0 acceptance)
 
-The network is `internal` -> no published port: test from **inside** the containers.
+The `omi` network is **bridged** (egress-capable, ADR-0048), but the backend does not publish a host
+port — only the edge proxies do — so test the backend from **inside** the containers.
 
 ```bash
 # 1) the backend responds (no auth)
@@ -165,14 +166,19 @@ docker compose -f compose.prod.yaml exec -T backend curl -sS -o /dev/null -w '%{
   http://localhost:8080/v3/memories
 #    expected: 401 (auth enforced)
 
-# 3) HERMETICITY PROOF: no egress to the internet
-docker compose -f compose.prod.yaml exec -T backend sh -c 'curl -m3 https://api.openai.com/v1/models; echo "exit=$?"'
-#    expected: FAILURE ("Could not resolve host", exit 6) -> zero external calls by construction
+# 3) DATA SOVEREIGNTY (by configuration, not network isolation — ADR-0048): the omi network is BRIDGED, so
+#    the backend CAN reach the internet; sovereignty holds because every port is wired to a LOCAL endpoint.
+#    Verify no cloud endpoint/key is configured (STORAGE_BACKEND=mongo, OBJECT_STORE_BACKEND=s3,
+#    VECTOR_STORE_BACKEND=qdrant, AUTH_BACKEND=oidc, *_BASE_URL/GATEWAY_URL -> local service names):
+docker compose -f compose.prod.yaml exec -T backend sh -c 'env | grep -iE "STORAGE_BACKEND|OBJECT_STORE_BACKEND|VECTOR_STORE_BACKEND|AUTH_BACKEND|BASE_URL|GATEWAY_URL"'
+#    expected: backends = mongo/s3/qdrant/oidc; URLs point at local service names (llm_gateway, keycloak, ...).
+#    For a HARD air-gap, add `internal: true` to the omi network explicitly — ADR-0048 dropped it as the
+#    default (bridged) but the operator can opt back in; models are then pre-provisioned (see Local inference).
 ```
 
 ### Curl from the host (dev convenience, accepts egress)
 
-The hermetic posture publishes no ports. To poke the endpoints from the host:
+The prod posture publishes no backend port (only the edge proxies do). To poke the endpoints from the host:
 
 ```bash
 docker compose -f compose.dev.yaml up -d
@@ -276,10 +282,10 @@ Three on-prem requirements the gateway wiring encodes (each was a real failure t
    needs no runtime download (would hit `openaipublic.blob.core.windows.net` → fails no-egress).
 
 Reproducible live E2E (declarative, no ad-hoc `docker run`) — brings the profile up, sends a real
-chat message, asserts a streamed answer, and proves the backend has zero egress:
+chat message, and asserts a streamed answer from the local model:
 ```bash
 deploy/onprem/run-chat-e2e.sh
-# expected: PASS — real streamed answer from your local model; backend cannot reach api.openai.com.
+# expected: PASS — real streamed answer from your local model (LLM served by llm_gateway, no cloud call).
 # (Uses LOCAL_DEVELOPMENT=true dev-auth, Bearer dev -> uid 123, for a focused chat smoke test.)
 ```
 
@@ -438,9 +444,10 @@ Requirements and gotchas:
   13.2 is involved either way. `INSTALL_SYSTEM_CUDA=1` (the default) reproduces upstream's image
   byte-for-byte. Verified here: `torch 2.8.0+cu128`, `torch.cuda.is_available()` True on the RTX
   5060 Ti (capability (12,0)), and the speaker-embedding live contract below passes on the slim image.
-- **Models are pre-provisioned, not downloaded at runtime.** The `omi` network is `internal: true`
-  (no egress) — the proof of "zero external calls". Populate the `inference-models` volume before the
-  first `--profile inference` run:
+- **Models are pre-provisioned, not downloaded at runtime.** This keeps the inference services offline-
+  capable regardless of network posture (the `omi` network is bridged by default, ADR-0048; an operator
+  wanting a hard air-gap sets `internal: true` explicitly, and pre-provisioning is what makes that work).
+  Populate the `inference-models` volume before the first `--profile inference` run:
   - **NLLB:** convert `facebook/nllb-200-distilled-600M` to CTranslate2 int8 and place it at
     `nllb-200-distilled-600M-ct2-int8/` inside the volume (matches `NLLB_MODEL_DIR`). Serving then
     makes **zero** external calls.
@@ -819,10 +826,10 @@ cert from `gen-dev-certs.sh`, SAN=HOST_IP).
 **Addressing (why UNIFIEDPUSH_INTERNAL_BASE_URL exists).** The phone's UnifiedPush distributor
 registers with the server on its **host-facing** URL (`NTFY_BASE_URL = https://<HOST_IP>:${NTFY_HTTPS_PORT}`)
 and hands the app an endpoint like `https://<HOST_IP>:${NTFY_HTTPS_PORT}/<topic>?up=1`, which the app
-saves to the backend (`POST /v1/users/unifiedpush-endpoint`). The backend sits on the **internal**
-`omi` network (no egress) and cannot reach that host address — so it keeps only the endpoint's *path*
-and POSTs to `${UNIFIEDPUSH_INTERNAL_BASE_URL}${path}` = `http://ntfy:80/<topic>?up=1`, reaching the
-same server by service name. **`UNIFIEDPUSH_INTERNAL_BASE_URL` is REQUIRED and fail-closed** (cubic
+saves to the backend (`POST /v1/users/unifiedpush-endpoint`). That stored URL is the **phone-facing**
+`<HOST_IP>:${NTFY_HTTPS_PORT}` address (split-horizon); the backend reaches the same ntfy by its internal
+service name, so it keeps only the endpoint's *path* and POSTs to `${UNIFIEDPUSH_INTERNAL_BASE_URL}${path}`
+= `http://ntfy:80/<topic>?up=1`, reaching the same server by service name. **`UNIFIEDPUSH_INTERNAL_BASE_URL` is REQUIRED and fail-closed** (cubic
 review PR 10887): the registered endpoint is user-controlled, so POSTing to it verbatim would be an
 SSRF primitive — with the base unset the backend refuses to send that endpoint rather than fetching a
 user-supplied URL.

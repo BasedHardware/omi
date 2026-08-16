@@ -171,8 +171,15 @@ services:
     volumes:
       - qdrant-storage:/qdrant/storage
     healthcheck:
-      # Qdrant serves /readyz once the storage is up; no curl in the image, use the bundled shell probe.
-      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' 2>/dev/null || exit 1"]
+      # Probe /readyz (not just a TCP open): Qdrant accepts connections before storage is ready to serve, so
+      # a bare TCP check reports healthy too early and the first writes/queries can fail transiently (cubic
+      # 10887). No curl in the image and /bin/sh (dash) has no /dev/tcp, so run bash: send a raw HTTP GET and
+      # require a 200 status line. Validated live against the pinned image (returns "HTTP/1.0 200 OK").
+      test:
+        - CMD
+        - bash
+        - -c
+        - "exec 3<>/dev/tcp/localhost/6333; printf 'GET /readyz HTTP/1.0\\r\\n\\r\\n' >&3; head -n1 <&3 | grep -q 200"
       interval: 10s
       timeout: 5s
       retries: 12

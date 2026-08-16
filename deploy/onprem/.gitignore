@@ -9,6 +9,9 @@ backend.env.*
 llm_gateway.env.*
 !backend.env.*.example
 !llm_gateway.env.*.example
+# Exact negation: llm_gateway.env.example has no middle segment, so `llm_gateway.env.*.example` (which
+# needs one, like backend.env.base.example) does not re-include it. Without this it stays ignored (cubic 10887).
+!llm_gateway.env.example
 
 # GCP service-account key for the cloud posture (compose.prod.cloud mounts ./secrets/gcp-sa.json).
 secrets/

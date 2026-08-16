@@ -52,12 +52,18 @@ generated_route_overrides:
     primary: {provider: openai, model: qwen2.5:14b}
   - feature: memory_conflict
     primary: {provider: openai, model: qwen2.5:14b}
+  # The three *_flex features are long-running extraction calls: the cloud config sets request_timeout_ms:
+  # 900000 (config_loader defaults would otherwise cap them at 30s non-streaming / 120s streaming). On a
+  # locally served model they run at least as long, so preserve the explicit 900s timeout (cubic 10887).
   - feature: memory_conflict_flex
     primary: {provider: openai, model: qwen2.5:14b}
+    request_timeout_ms: 900000
   - feature: memory_l2_flex
     primary: {provider: openai, model: qwen2.5:14b}
+    request_timeout_ms: 900000
   - feature: x_memory_extraction_flex
     primary: {provider: openai, model: qwen2.5:14b}
+    request_timeout_ms: 900000
   - feature: memory_l1
     primary: {provider: openai, model: qwen2.5:14b}
   - feature: memory_l2
