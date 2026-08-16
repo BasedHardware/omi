@@ -301,9 +301,61 @@ class AuthService {
       case AuthTokenMissingUser():
         break;
       case AuthTokenTransientFailure():
+        _scheduleLocalDevRecovery();
         break;
     }
     return null;
+  }
+
+  bool _localDevRecoveryInFlight = false;
+
+  /// Recover a local-development session by minting a new token instead of
+  /// refreshing the old one.
+  ///
+  /// Local dev has an escape hatch production does not: the harness mints a fresh
+  /// custom token on demand, so a session can be *replaced* rather than
+  /// refreshed. That matters because `getIdTokenResult(true)` is not reliable
+  /// against the Auth emulator — measured on iPhone 17 Pro / iOS 27.0 the forced
+  /// refresh never returned, while `signInWithCustomToken` against the same
+  /// emulator succeeded every time.
+  ///
+  /// Scheduled rather than awaited, and deliberately off the current call stack.
+  /// An earlier version awaited it inline from [getIdToken] and **deadlocked on
+  /// device**: the recovery re-enters sign-in from inside the refresh call stack,
+  /// and the probe showed it entering `signInWithLocalDevToken()` and never
+  /// returning — no HTTP request ever left the app — while the identical call
+  /// from the sign-in button succeeds. The caller therefore gets its failure
+  /// immediately, and the *next* request picks up the re-minted session.
+  ///
+  /// Deliberately narrow: `local_dev` only, only after a transient refresh
+  /// failure, and re-entrancy guarded. Production is untouched — a failed refresh
+  /// must stay a failed refresh there, because silently re-authenticating would
+  /// hide exactly the signal an expired or revoked session is meant to give.
+  void _scheduleLocalDevRecovery() {
+    if (Env.profile != AppEnvironmentProfile.localDev) return;
+    if (_localDevRecoveryInFlight) return;
+    _localDevRecoveryInFlight = true;
+
+    unawaited(Future<void>.delayed(Duration.zero, () async {
+      try {
+        Logger.debug('local-dev: refresh failed, re-minting a session out of band');
+        final credential = await signInWithLocalDevToken();
+        final user = credential?.user;
+        if (user == null) return;
+        // Unforced: sign-in just populated a fresh token, so read the cached one
+        // rather than re-entering the forced-refresh path that just failed.
+        final token = await user.getIdToken();
+        if (token == null || token.isEmpty) return;
+        SharedPreferencesUtil().authToken = token;
+        _sessionExpired = false;
+        markAuthenticatedUser(user.uid);
+        Logger.debug('local-dev: session re-minted; the next request will use it');
+      } catch (e) {
+        Logger.debug('local-dev: re-mint failed: $e');
+      } finally {
+        _localDevRecoveryInFlight = false;
+      }
+    }));
   }
 
   Future<AuthTokenResult> refreshIdToken() {
