@@ -1,0 +1,733 @@
+.github/checks-manifest.yaml
+  s_d58145f2e376ea::t_412f6f0a510086 227-236
+.github/failure-classes/FC-attestation-scoped-to-batch-not-item.json
+  s_d58145f2e376ea::t_6207ea8baecaec 1-16
+.github/failure-classes/FC-broadened-default-surface-absorbs-explicit-delivery.json
+  s_d58145f2e376ea::t_c329d6ae7fc23c 1-16
+.github/failure-classes/FC-cache-prefix-evicted-from-head.json
+  s_d58145f2e376ea::t_4135cbeafc2ac0 1-16
+.github/failure-classes/FC-permissive-cors-origin-allowlist.json
+  s_d58145f2e376ea::t_057d8cd4788ec7 1-13
+.github/failure-classes/FC-prompt-machinery-vocabulary-echoed-as-content.json
+  s_d58145f2e376ea::t_3a77d5d36f2a6b 1-13
+.github/failure-classes/FC-runtime-image-boundary.json
+  s_d58145f2e376ea::t_f56d4b8dbfaef1 6
+.github/failure-classes/FC-unestablished-capability-default.json
+  s_d58145f2e376ea::t_9a261c9549cf2d 6-9
+.github/scripts/check_agents_md_lean.py
+  s_d58145f2e376ea::t_2174bf6c682cc9 99-101
+.github/scripts/fixtures/codemagic_workflow_contract/v1.json
+  s_d58145f2e376ea::t_835cd55085de32 2-3
+.github/workflows/gcp_notifications_job.yml
+  s_d58145f2e376ea::t_e206d05b972d9b 83-98,106,139-151,165-166
+AGENTS.md
+  s_d58145f2e376ea::t_1d2b322c6e617c 20
+app/AGENTS.md
+  s_d58145f2e376ea::t_e7f18f5533d5d5 29-31
+app/android/app/src/main/kotlin/com/friend/ios/batch/CustomSttRawAudioPolicy.kt
+  s_d58145f2e376ea::t_86e9e3211f6c88 1-17
+app/android/app/src/main/kotlin/com/friend/ios/batch/OmiBackgroundAudioStreamer.kt
+  s_d58145f2e376ea::t_5790fc322df153 275-278
+app/android/app/src/test/kotlin/com/friend/ios/batch/CustomSttRawAudioPolicyTest.kt
+  s_d58145f2e376ea::t_ad7a27fc929fda 1-36
+app/lib/l10n/app_ar.arb
+  s_d58145f2e376ea::t_2d15158c81484f 3193-3195
+app/lib/l10n/app_be.arb
+  s_d58145f2e376ea::t_60c120a17fc4b4 10783-10785
+app/lib/l10n/app_bg.arb
+  s_d58145f2e376ea::t_f52764ceacf046 3195-3197
+app/lib/l10n/app_bn.arb
+  s_d58145f2e376ea::t_de1e68e1762078 10783-10785
+app/lib/l10n/app_bs.arb
+  s_d58145f2e376ea::t_cbf8affca6c13d 10783-10785
+app/lib/l10n/app_ca.arb
+  s_d58145f2e376ea::t_887f77f1ef5b8e 3195-3197
+app/lib/l10n/app_cs.arb
+  s_d58145f2e376ea::t_3ed223f544b26d 3195-3197
+app/lib/l10n/app_da.arb
+  s_d58145f2e376ea::t_806a205a08f441 3235-3237
+app/lib/l10n/app_de.arb
+  s_d58145f2e376ea::t_dba0e5ea1d44c8 3194-3196
+app/lib/l10n/app_el.arb
+  s_d58145f2e376ea::t_5487f9d4739f0e 3217-3219
+app/lib/l10n/app_en.arb
+  s_d58145f2e376ea::t_e5783c214e0fa4 11637-11644
+app/lib/l10n/app_es.arb
+  s_d58145f2e376ea::t_27ae531728617b 3218-3220
+app/lib/l10n/app_et.arb
+  s_d58145f2e376ea::t_7f44847b211377 3217-3219
+app/lib/l10n/app_fa.arb
+  s_d58145f2e376ea::t_b2cc90be5a14fb 10783-10785
+app/lib/l10n/app_fi.arb
+  s_d58145f2e376ea::t_fcf672862f2692 3217-3219
+app/lib/l10n/app_fr.arb
+  s_d58145f2e376ea::t_9a5328399d4cad 3252-3254
+app/lib/l10n/app_he.arb
+  s_d58145f2e376ea::t_7297871e588816 10783-10785
+app/lib/l10n/app_hi.arb
+  s_d58145f2e376ea::t_56844812eedc55 3218-3220
+app/lib/l10n/app_hr.arb
+  s_d58145f2e376ea::t_cd3ee029ee6c98 10783-10785
+app/lib/l10n/app_hu.arb
+  s_d58145f2e376ea::t_8e3e58b6b3ae05 3313-3315
+app/lib/l10n/app_id.arb
+  s_d58145f2e376ea::t_0e4c13bc1e443f 3259-3261
+app/lib/l10n/app_it.arb
+  s_d58145f2e376ea::t_d78587add22f5d 3217-3219
+app/lib/l10n/app_ja.arb
+  s_d58145f2e376ea::t_2eeffd1dba79fd 3193-3195
+app/lib/l10n/app_kn.arb
+  s_d58145f2e376ea::t_f55ef83405179d 10783-10785
+app/lib/l10n/app_ko.arb
+  s_d58145f2e376ea::t_080d3db39b04a5 3217-3219
+app/lib/l10n/app_localizations.dart
+  s_d58145f2e376ea::t_5f49a8b7e3d986 18335-18346
+app/lib/l10n/app_localizations_ar.dart
+  s_d58145f2e376ea::t_272e71cffa3702 9785-9791
+app/lib/l10n/app_localizations_be.dart
+  s_d58145f2e376ea::t_871c7ba0eef5f4 9875-9881
+app/lib/l10n/app_localizations_bg.dart
+  s_d58145f2e376ea::t_278bf85d5234b1 9880-9886
+app/lib/l10n/app_localizations_bn.dart
+  s_d58145f2e376ea::t_765a67fbc891f0 9848-9854
+app/lib/l10n/app_localizations_bs.dart
+  s_d58145f2e376ea::t_7e52c7afd618dd 9871-9877
+app/lib/l10n/app_localizations_ca.dart
+  s_d58145f2e376ea::t_e8b4069ec58c6d 9899-9905
+app/lib/l10n/app_localizations_cs.dart
+  s_d58145f2e376ea::t_0371c73e82e3b6 9844-9850
+app/lib/l10n/app_localizations_da.dart
+  s_d58145f2e376ea::t_0e9f48190dbd44 9828-9834
+app/lib/l10n/app_localizations_de.dart
+  s_d58145f2e376ea::t_fbd84ce2599ec2 9925-9931
+app/lib/l10n/app_localizations_el.dart
+  s_d58145f2e376ea::t_ed91aa1fe1f370 9912-9918
+app/lib/l10n/app_localizations_en.dart
+  s_d58145f2e376ea::t_fd9f12e0c993e7 9835-9841
+app/lib/l10n/app_localizations_es.dart
+  s_d58145f2e376ea::t_2bd5e9df52b0cf 9866-9872
+app/lib/l10n/app_localizations_et.dart
+  s_d58145f2e376ea::t_f706dd4b58cd71 9837-9843
+app/lib/l10n/app_localizations_fa.dart
+  s_d58145f2e376ea::t_f4ecadcd9a00f3 9843-9849
+app/lib/l10n/app_localizations_fi.dart
+  s_d58145f2e376ea::t_d4659d009bd70e 9843-9849
+app/lib/l10n/app_localizations_fr.dart
+  s_d58145f2e376ea::t_1b3db67e624069 9930-9936
+app/lib/l10n/app_localizations_he.dart
+  s_d58145f2e376ea::t_f28be9b92555ff 9765-9771
+app/lib/l10n/app_localizations_hi.dart
+  s_d58145f2e376ea::t_2a5221dd98c281 9822-9828
+app/lib/l10n/app_localizations_hr.dart
+  s_d58145f2e376ea::t_97c1ea1d259cba 9878-9884
+app/lib/l10n/app_localizations_hu.dart
+  s_d58145f2e376ea::t_592bfd49a8aa1c 9883-9889
+app/lib/l10n/app_localizations_id.dart
+  s_d58145f2e376ea::t_a03a53a5e51514 9853-9859
+app/lib/l10n/app_localizations_it.dart
+  s_d58145f2e376ea::t_d9d4bfda978d88 9900-9906
+app/lib/l10n/app_localizations_ja.dart
+  s_d58145f2e376ea::t_a394b65b23239d 9677-9682
+app/lib/l10n/app_localizations_kn.dart
+  s_d58145f2e376ea::t_57a63507e85abd 9874-9880
+app/lib/l10n/app_localizations_ko.dart
+  s_d58145f2e376ea::t_e3e5eeefdd849d 9678-9684
+app/lib/l10n/app_localizations_lt.dart
+  s_d58145f2e376ea::t_78da805110aad3 9862-9868
+app/lib/l10n/app_localizations_lv.dart
+  s_d58145f2e376ea::t_e20da3d1a49f50 9866-9872
+app/lib/l10n/app_localizations_mk.dart
+  s_d58145f2e376ea::t_ef5e57096842cd 9895-9901
+app/lib/l10n/app_localizations_mr.dart
+  s_d58145f2e376ea::t_38cb24d6c5dd74 9852-9858
+app/lib/l10n/app_localizations_ms.dart
+  s_d58145f2e376ea::t_97b5ddb172c793 9868-9874
+app/lib/l10n/app_localizations_nl.dart
+  s_d58145f2e376ea::t_408bd408a63a52 9870-9876
+app/lib/l10n/app_localizations_no.dart
+  s_d58145f2e376ea::t_0993ce2c218581 9842-9848
+app/lib/l10n/app_localizations_pl.dart
+  s_d58145f2e376ea::t_299d3950c25a56 9872-9878
+app/lib/l10n/app_localizations_pt.dart
+  s_d58145f2e376ea::t_e8ad3c6e75e886 9851-9857
+app/lib/l10n/app_localizations_ro.dart
+  s_d58145f2e376ea::t_8110ad78200804 9890-9896
+app/lib/l10n/app_localizations_ru.dart
+  s_d58145f2e376ea::t_3611387c970ae2 9880-9886
+app/lib/l10n/app_localizations_sk.dart
+  s_d58145f2e376ea::t_3f92fcafed5308 9836-9842
+app/lib/l10n/app_localizations_sl.dart
+  s_d58145f2e376ea::t_2fd5a22650681c 9873-9879
+app/lib/l10n/app_localizations_sr.dart
+  s_d58145f2e376ea::t_554a4973d00e05 9858-9864
+app/lib/l10n/app_localizations_sv.dart
+  s_d58145f2e376ea::t_17f8106e40302d 9847-9853
+app/lib/l10n/app_localizations_ta.dart
+  s_d58145f2e376ea::t_e4b1159b7131d7 9912-9918
+app/lib/l10n/app_localizations_te.dart
+  s_d58145f2e376ea::t_99bcf8a4b44397 9891-9897
+app/lib/l10n/app_localizations_th.dart
+  s_d58145f2e376ea::t_82c2ac17e499fa 9787-9793
+app/lib/l10n/app_localizations_tl.dart
+  s_d58145f2e376ea::t_9c70bf8411565c 9933-9939
+app/lib/l10n/app_localizations_tr.dart
+  s_d58145f2e376ea::t_521c57b9f4afd9 9854-9860
+app/lib/l10n/app_localizations_uk.dart
+  s_d58145f2e376ea::t_564618c2fb54de 9865-9871
+app/lib/l10n/app_localizations_ur.dart
+  s_d58145f2e376ea::t_93a1b391b90ef4 9855-9861
+app/lib/l10n/app_localizations_vi.dart
+  s_d58145f2e376ea::t_a7f04f47fc798a 9839-9845
+app/lib/l10n/app_localizations_zh.dart
+  s_d58145f2e376ea::t_54a7b9fadac633 9659-9664
+app/lib/l10n/app_lt.arb
+  s_d58145f2e376ea::t_a1bba413d5cf1b 3217-3219
+app/lib/l10n/app_lv.arb
+  s_d58145f2e376ea::t_e4a5a613001087 3217-3219
+app/lib/l10n/app_mk.arb
+  s_d58145f2e376ea::t_1965346c9498c9 10783-10785
+app/lib/l10n/app_mr.arb
+  s_d58145f2e376ea::t_23c31058d04ed1 10783-10785
+app/lib/l10n/app_ms.arb
+  s_d58145f2e376ea::t_4206ad7d55e07a 3217-3219
+app/lib/l10n/app_nl.arb
+  s_d58145f2e376ea::t_e738717ab472e4 3217-3219
+app/lib/l10n/app_no.arb
+  s_d58145f2e376ea::t_e3066a9551175c 3217-3219
+app/lib/l10n/app_pl.arb
+  s_d58145f2e376ea::t_f7b7fa6b07a08d 3252-3254
+app/lib/l10n/app_pt.arb
+  s_d58145f2e376ea::t_53e8b3d678d286 3253-3255
+app/lib/l10n/app_ro.arb
+  s_d58145f2e376ea::t_df41614ba671e3 3217-3219
+app/lib/l10n/app_ru.arb
+  s_d58145f2e376ea::t_99509fd64511df 3252-3254
+app/lib/l10n/app_sk.arb
+  s_d58145f2e376ea::t_9e83319806e2be 3222-3224
+app/lib/l10n/app_sl.arb
+  s_d58145f2e376ea::t_28e98f5cdd49ea 10783-10785
+app/lib/l10n/app_sr.arb
+  s_d58145f2e376ea::t_72a858630b73c3 10783-10785
+app/lib/l10n/app_sv.arb
+  s_d58145f2e376ea::t_bc7dc68ee7b834 3217-3219
+app/lib/l10n/app_ta.arb
+  s_d58145f2e376ea::t_d5b5759a47ce9f 10783-10785
+app/lib/l10n/app_te.arb
+  s_d58145f2e376ea::t_fe57f4de1bd24e 10783-10785
+app/lib/l10n/app_th.arb
+  s_d58145f2e376ea::t_658c63d980f4af 3217-3219
+app/lib/l10n/app_tl.arb
+  s_d58145f2e376ea::t_650c76c28a2dc1 10783-10785
+app/lib/l10n/app_tr.arb
+  s_d58145f2e376ea::t_38c1d6a99c5b48 3252-3254
+app/lib/l10n/app_uk.arb
+  s_d58145f2e376ea::t_de81654026d0e7 3217-3219
+app/lib/l10n/app_ur.arb
+  s_d58145f2e376ea::t_be1f2291922e92 10783-10785
+app/lib/l10n/app_vi.arb
+  s_d58145f2e376ea::t_2400fb4a7bda2a 3222-3224
+app/lib/l10n/app_zh.arb
+  s_d58145f2e376ea::t_8f6e60e640d87b 3239-3241
+app/lib/models/custom_stt_config.dart
+  s_d58145f2e376ea::t_08206769220c67 20,35,119,142,168,188,203
+app/lib/pages/action_items/action_items_page.dart
+  s_d58145f2e376ea::t_64a4d4b90becb0 17-18,348-350
+app/lib/pages/action_items/task_categorization.dart
+  s_d58145f2e376ea::t_b82ed51f17e744 1-67
+app/lib/pages/conversations/conversations_page.dart
+  s_d58145f2e376ea::t_c1cd14e9aa519f 55-56,85-86,96-97,116-117,290-291,397,576
+app/lib/pages/conversations/widgets/search_widget.dart
+  s_d58145f2e376ea::t_0b52acaf58a1b5 161,169-171,173,177
+app/lib/pages/home/page.dart
+  s_d58145f2e376ea::t_d6b1dd4213e730 993,1007
+app/lib/pages/settings/transcription_settings_page.dart
+  s_d58145f2e376ea::t_6ac09106bdd1aa 49,197,380,398,466,619,748,830-831,1002-1007,1041-1043,1047,1074,1084,1087-1090,1097,1138-1139,1186-1188,1197,1327-1352,2054,2217
+app/lib/providers/conversation_provider.dart
+  s_d58145f2e376ea::t_22cec7b9c03ea3 52-53,180-181,785-786,789-791,807-810,827-828,895-901,987,989-991
+app/lib/services/capture/capture_controller.dart
+  s_d58145f2e376ea::t_4a45ca6349f42c 533,601,736-752,1189,1235-1252
+app/lib/services/sockets/composite_transcription_socket.dart
+  s_d58145f2e376ea::t_88d515f44d240c 16,29,66,152-154
+app/lib/services/sockets/transcription_service.dart
+  s_d58145f2e376ea::t_ee76662dcc1c0a 307-310,374,501,513
+app/lib/utils/analytics/analytics_manager.dart
+  s_d58145f2e376ea::t_45ded8b8718311 1040,1044-1047
+app/lib/widgets/calendar_date_picker_sheet.dart
+  s_d58145f2e376ea::t_597bb2b866da47 1,5,7-9,46-147
+app/pubspec.yaml
+  s_d58145f2e376ea::t_29c0e170655fee 183-190
+app/setup.sh
+  s_d58145f2e376ea::t_1816220e89f07c 8,32
+app/setup/scripts/setup.ps1
+  s_d58145f2e376ea::t_d82a62b424ae0a 6,28
+app/test/parity/parity_contracts_test.dart
+  s_d58145f2e376ea::t_721cebdb0821cf 1-133
+app/test/providers/capture_provider_test.dart
+  s_d58145f2e376ea::t_a28eb977fc4066 21,979-996,1083-1116
+app/test/providers/conversation_date_range_filter_test.dart
+  s_d58145f2e376ea::t_d1401e6d155386 1-119
+app/test/providers/conversation_provider_processing_reconcile_test.dart
+  s_d58145f2e376ea::t_10e19146bfadcc 872-873,884-885,898-899,981-982
+app/test/unit/composite_transcription_socket_test.dart
+  s_d58145f2e376ea::t_9b43796e932ce3 1-233
+app/test/unit/custom_stt_config_test.dart
+  s_d58145f2e376ea::t_81bf9374fbbb41 1-34
+app/test/widgets/transcription_settings_forwarding_test.dart
+  s_d58145f2e376ea::t_456e1adfc7c128 1-85
+backend/AGENTS.md
+  s_d58145f2e376ea::t_14d54b25175ed9 144,149,252
+backend/Dockerfile.desktop_backend
+  s_d58145f2e376ea::t_0f2a778e94aae7 28
+backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
+  s_d58145f2e376ea::t_686be7a7963af2 152-153
+backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
+  s_d58145f2e376ea::t_2106146ec5d45d 132-133,150
+backend/charts/llm-gateway/templates/backendconfig.yaml
+  s_d58145f2e376ea::t_f0a07f7ecc1645 7-10
+backend/database/goals.py
+  s_d58145f2e376ea::t_46f99b741ee064 340,343-354,361
+backend/database/redis_db.py
+  s_d58145f2e376ea::t_f6b992ffc3bbca 1071-1080
+backend/database/users.py
+  s_d58145f2e376ea::t_7e487202c260fa 1549-1553,1685-1689
+backend/deploy/runtime_env.yaml
+  s_d58145f2e376ea::t_29e474c9e74199 47-49,863-864,866-868,882-888,965-967,1024-1026,1115,1338,1494,1631,1734,1777-1778,1780-1782,1796-1802,1834,1866,1873-1875
+backend/deploy/runtime_env/_base.yaml
+  s_d58145f2e376ea::t_681181e65fc250 54-56,494-495,497-499,513-519,585-587
+backend/deploy/runtime_env/dev.overlay.yaml
+  s_d58145f2e376ea::t_eca9d6b542f56c 421-422,424-425,446-447
+backend/deploy/runtime_env/prod.overlay.yaml
+  s_d58145f2e376ea::t_541d311fdf18d8 62,197,276,329,364,367-368,370-371,375-376,385,390-391
+backend/desktop_backend.py
+  s_d58145f2e376ea::t_8ee7e7baa243da 66-110
+backend/docs/llm/model_endpoint_inventory.yaml
+  s_d58145f2e376ea::t_953186c51dc14a 40,42,52
+backend/llm_gateway/config/cost_rate_cards.yaml
+  s_d58145f2e376ea::t_4dd52a7153d32a 7-16,32-50,58-88
+backend/llm_gateway/config/generated_route_overrides.yaml
+  s_d58145f2e376ea::t_795e6c527bb599 78-89
+backend/llm_gateway/gateway/accounting.py
+  s_d58145f2e376ea::t_9f8a354eacfbd7 177-187,198-235,343,346-349,357,364,533,667,695-706,708,713-715,719-731,733-748,752-759,780-786,788-798,870-873
+backend/llm_gateway/gateway/config_loader.py
+  s_d58145f2e376ea::t_fc6e0a562a8ba5 244-250
+backend/llm_gateway/gateway/schemas.py
+  s_d58145f2e376ea::t_9e3c9e32a8fee5 148
+backend/llm_gateway/gateway/validator.py
+  s_d58145f2e376ea::t_f3504c765e9f63 7-10,36,64,157-158,164-165,171-172,184,195-196,203-216
+backend/main.py
+  s_d58145f2e376ea::t_2ecc0d297c78f9 83,214,244-247
+backend/models/action_item.py
+  s_d58145f2e376ea::t_f4eaf1d2236e8d 3,7,240-252
+backend/models/chat.py
+  s_d58145f2e376ea::t_fbf8d037c507aa 136-138,167-169
+backend/route_policy_manifest.yaml
+  s_d58145f2e376ea::t_17d2e3cfbc857c 76-147,152-174
+backend/routers/desktop_proactivity.py
+  s_d58145f2e376ea::t_9fbc7760fa520b 26,32,43-53,63-75,77-79,150-161,185-188,202,363,371,373,378-395,453-473,496,499-500,502-509,526-528,531-532,581,584,586-592,597,605-606,610,613-614,618-619,637-638,644-645,648-649,653,657-658,661,673-676,683,687,691,696
+backend/routers/developer.py
+  s_d58145f2e376ea::t_c95e37fd11369e 1945-1949
+backend/routers/focus_sessions.py
+  s_d58145f2e376ea::t_c7d1d4c94e5e91 3-5,12,79-148
+backend/routers/speech_profile.py
+  s_d58145f2e376ea::t_e53d7350c5df0d 10,48-54,65-84,121-123
+backend/routers/stt.py
+  s_d58145f2e376ea::t_198a1ea3284455 1-139
+backend/runtime_images.json
+  s_d58145f2e376ea::t_e83dc73dde78f7 155-158
+backend/scripts/export_openapi.py
+  s_d58145f2e376ea::t_4bfbe859c162d2 82
+backend/scripts/firestore_query_coverage_baseline.json
+  s_d58145f2e376ea::t_89c88ed5e15117 2,48
+backend/scripts/runtime_env_validation/manifest.py
+  s_d58145f2e376ea::t_bc608432a46905 234-258,286
+backend/scripts/runtime_image_contracts.py
+  s_d58145f2e376ea::t_470def81ed4bd9 33-36,394-435,653
+backend/tests/fast_unit_duration_allowlist.txt
+  s_d58145f2e376ea::t_0f042b73012aa3 70-72,274-275
+backend/tests/unit/test_action_item_date_validation.py
+  s_d58145f2e376ea::t_134420c6273742 319-323
+backend/tests/unit/test_backend_runtime_env_validator.py
+  s_d58145f2e376ea::t_28775c6e6060cd 192
+backend/tests/unit/test_canonical_consolidation.py
+  s_d58145f2e376ea::t_18fb30af6acd9f 20-24,26-31,935-946,979-994,1030-1033,1085-1088,1093-1096,1120-1131,1161-1167,1172-1179,1226-1230,1264-1267,1466-1551
+backend/tests/unit/test_canonical_short_term_maintenance_cron.py
+  s_d58145f2e376ea::t_fd8b24a1c6cc70 58-62,117,122,124,131,134,145,149,168,171-173,183-184,186,194,197,201,211-214,216-217,243-289,312-316
+backend/tests/unit/test_conversation_structure_timezone.py
+  s_d58145f2e376ea::t_f3298c16a86fb4 141-144,336-338,341-415
+backend/tests/unit/test_desktop_backend_cors.py
+  s_d58145f2e376ea::t_80b5b748ab3a12 1-148
+backend/tests/unit/test_desktop_proactivity.py
+  s_d58145f2e376ea::t_459639d304603e 11,13-18,20-34,37,52,58-64,76-103,111,122,162-163,180,199-200,203,241,245,315-358,362-364,390,396,478-521,560,568,570-604,715-717,803,810-976
+backend/tests/unit/test_dev_goals_limit_include_inactive.py
+  s_d58145f2e376ea::t_d89037487e99e0 1-178
+backend/tests/unit/test_flutter_rest_inventory.py
+  s_d58145f2e376ea::t_bba9b346e8f7df 1-127
+backend/tests/unit/test_llm_gateway_accounting.py
+  s_d58145f2e376ea::t_533f8ae42f9eda 20,28-60,102-139,171-173,177-265,630-728
+backend/tests/unit/test_llm_gateway_config.py
+  s_d58145f2e376ea::t_d818b6833c34be 45,80
+backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+  s_d58145f2e376ea::t_35763b6f836f42 125-133
+backend/tests/unit/test_llm_gateway_deploy_contract.py
+  s_d58145f2e376ea::t_274a0bf3f7d052 146-152
+backend/tests/unit/test_llm_gateway_route_refs.py
+  s_d58145f2e376ea::t_422368be9c9930 43,56
+backend/tests/unit/test_llm_gateway_validator.py
+  s_d58145f2e376ea::t_5d3b19ca54c1e2 6-9,46-75,99-102,107-113,208-211,240-245,268-273
+backend/tests/unit/test_memory_enabled_product_flag.py
+  s_d58145f2e376ea::t_ded2b1311ef7a2 63,88-89,91-92
+backend/tests/unit/test_memory_promotion_flex.py
+  s_d58145f2e376ea::t_49bc67195d0ab7 1-255
+backend/tests/unit/test_memory_replace_policy.py
+  s_d58145f2e376ea::t_cbafc60e6cb1e6 228-291
+backend/tests/unit/test_message_formatting.py
+  s_d58145f2e376ea::t_7240322a7747bd 1-94
+backend/tests/unit/test_notifications_job_orchestrator.py
+  s_d58145f2e376ea::t_eb27916ad71091 44-53
+backend/tests/unit/test_omi_qos_tiers.py
+  s_d58145f2e376ea::t_6db8363f1eb38a 253,256,260,464-465,484,547
+backend/tests/unit/test_parity_contracts.py
+  s_d58145f2e376ea::t_8009bff4241ffa 1-178
+backend/tests/unit/test_process_conversation_usage_context.py
+  s_d58145f2e376ea::t_e6ff20264d0ccb 1034-1035
+backend/tests/unit/test_prompt_cache_wire_payload.py
+  s_d58145f2e376ea::t_f62b3fa8dbb59a 1-128
+backend/tests/unit/test_prompt_caching.py
+  s_d58145f2e376ea::t_32e581f26a6f05 17-18,198,207,287,305,311,318-320,327,339-360
+backend/tests/unit/test_render_backend_runtime_env.py
+  s_d58145f2e376ea::t_b6668c77472d96 114,165-166,172,176-184,208-210,213,215-216
+backend/tests/unit/test_runtime_image_contracts.py
+  s_d58145f2e376ea::t_cc01ea1bed7242 56-74
+backend/tests/unit/test_screen_activity_list_endpoint.py
+  s_d58145f2e376ea::t_75d32cba9a95c0 1-97
+backend/tests/unit/test_screen_activity_summary_endpoint.py
+  s_d58145f2e376ea::t_1231f4d5cc6c03 1-96
+backend/tests/unit/test_speech_profile_status.py
+  s_d58145f2e376ea::t_b5a014ba973d89 1-103
+backend/tests/unit/test_stt_router.py
+  s_d58145f2e376ea::t_064f432ff72fc0 1-324
+backend/tests/unit/test_subscription_import_cycle.py
+  s_d58145f2e376ea::t_6778bc0163f82a 1-62
+backend/tests/unit/test_windows_rest_inventory.py
+  s_d58145f2e376ea::t_a0235834582c13 1-169
+backend/tests/unit/test_ws_b_short_term_lifecycle.py
+  s_d58145f2e376ea::t_64a5553d3beac0 564-588
+backend/tests/unit/test_x_memory_extraction_retry.py
+  s_d58145f2e376ea::t_0387baf922cd84 97-150
+backend/utils/conversations/process_conversation.py
+  s_d58145f2e376ea::t_205bbc8749bd3d 912,919-924,952-970
+backend/utils/http_client.py
+  s_d58145f2e376ea::t_18c6a8b68e3680 4,334-337,466-488
+backend/utils/llm/clients.py
+  s_d58145f2e376ea::t_11880ab5feacfa 462,529-533,535,541-542,556-561
+backend/utils/llm/conversation_processing.py
+  s_d58145f2e376ea::t_c247c18e322852 27-31,48-65,67-70,75,160-163,962,974,977-979,984,989,1148-1149,1152-1154,1170,1175,1256-1257,1259-1264,1316-1317,1320-1323
+backend/utils/llm/memories.py
+  s_d58145f2e376ea::t_61642f2186c157 331,345-359,370-373
+backend/utils/llm/model_config.py
+  s_d58145f2e376ea::t_498b9e8921ba27 64,67,71,147-149,264-267
+backend/utils/llm/prompt_cache.py
+  s_d58145f2e376ea::t_12ad30dff62727 1-36
+backend/utils/memory/ARCHITECTURE.md
+  s_d58145f2e376ea::t_1ea0c29516ada9 107-132
+backend/utils/memory/canonical_consolidation.py
+  s_d58145f2e376ea::t_1e49eee4fcf95f 24-27,37-41,64-67,257,294,307,310,441-444,471-474,842-848,976-977,1059-1063,1083-1088,1406-1411,1481,1611-1683,1692-1693,1827,1842-1845,1899-1913,1939-1955,1968,2070-2073
+backend/utils/memory/canonical_required_processing.py
+  s_d58145f2e376ea::t_102e342c24d914 57,232,311,324,326-373,925-926,948,972-973,981-1001,1054-1055,1074-1075
+backend/utils/memory/canonical_short_term_maintenance_cron.py
+  s_d58145f2e376ea::t_4e0ec7aeba8c0e 26,29,41-49,146-149,298-301,321-328,358,407-408,410,413-417,436-447,455-473
+backend/utils/memory/promotion_flex.py
+  s_d58145f2e376ea::t_569786515bd097 1-266
+backend/utils/memory/short_term_promotion.py
+  s_d58145f2e376ea::t_f9ef76dc335517 33,40,327-331,352-354,369-370
+backend/utils/other/jobs.py
+  s_d58145f2e376ea::t_b8c22cdb694e4a 1-2,9,16
+backend/utils/rate_limit_config.py
+  s_d58145f2e376ea::t_3e2855b5688ebf 54-55
+backend/utils/x_connector.py
+  s_d58145f2e376ea::t_a448d867385d1f 25,39,329-335,359-370,420,523-544,560-566,622,631,636,640-641
+codemagic.yaml
+  s_d58145f2e376ea::t_ecc25cc13badc9 26,240,457,642,832,1004,1138,1670
+config/deployment-setting-classification.json
+  s_d58145f2e376ea::t_7bdea2975444e0 113,123
+contracts/parity/README.md
+  s_d58145f2e376ea::t_b9a521919befce 1-81
+contracts/parity/day_keys.json
+  s_d58145f2e376ea::t_079df45993dc65 1-60
+contracts/parity/section_labels.json
+  s_d58145f2e376ea::t_e8c49ab9e49280 1-57
+contracts/parity/task_due_buckets.json
+  s_d58145f2e376ea::t_e0787fd164cb22 1-110
+contracts/parity/wire_action_item.json
+  s_d58145f2e376ea::t_e3408a66da15ae 1-121
+desktop/macos/CHANGELOG.json
+  s_d58145f2e376ea::t_420436651b9e6a 4-52
+desktop/macos/Desktop/Sources/AppState/AppState+MeetingGatePause.swift
+  s_d58145f2e376ea::t_7b727507527ec5 1-37
+desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  s_d58145f2e376ea::t_3937d2feeb33f0 619-620
+desktop/macos/Desktop/Sources/AppState/MeetingConversationBoundaryPolicy.swift
+  s_d58145f2e376ea::t_98442093e11948 3-17
+desktop/macos/Desktop/Sources/Chat/ChatCitation.swift
+  s_d58145f2e376ea::t_7923dd27baef44 90-132,195-196,202-211,223,225-231,233-236,238,241-242,244-428,498-609,712-732,749-751,753-765,768-773,780-808,830,847-850,855,869
+desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
+  s_d58145f2e376ea::t_93dcb81858b079 11-13,20,120-121,132,135,146-149,230-252,356-365
+desktop/macos/Desktop/Sources/Chat/KernelTurnJournal.swift
+  s_d58145f2e376ea::t_ac7c5b03cf51eb 296-299,337,341,343,345-349
+desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
+  s_d58145f2e376ea::t_daf6cab1c3c278 198,202-205,252
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_d58145f2e376ea::t_b0069940b5ad39 2078,2082-2085,2128
+desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift
+  s_d58145f2e376ea::t_3bd3f000890302 10994-11083,14967-14990,15039
+desktop/macos/Desktop/Sources/MainWindow/CaptureListeningLogic.swift
+  s_d58145f2e376ea::t_2a6db2112dae25 65-93,96-100,102,104,108,118
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  s_d58145f2e376ea::t_a9b23cb5abb09c 114,120-127,131,252-260,263-265,268-270,315,384-399,421-422,1142,1175,1321-1336,1339-1351,1541-1575
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubbleSupport.swift
+  s_d58145f2e376ea::t_608a643ad332af 22-64,90-108,111,113
+desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift
+  s_d58145f2e376ea::t_c4b290f135694b 1052,1057-1061,1066
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_d58145f2e376ea::t_d2ffba6a6a26c0 1802
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
+  s_d58145f2e376ea::t_52f9b5778d1eb0 207-228,251-259,264,266-270,272,274,311-320,353-359,381-386,399-400,403-410,436-447,453-456,467-468,472-482
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_d58145f2e376ea::t_7eac1f94590918 525-526,1349
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistantSettings.swift
+  s_d58145f2e376ea::t_c23cf082c8e41e 131
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistantSettings.swift
+  s_d58145f2e376ea::t_ba1e979b6a619b 192
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistantSettings.swift
+  s_d58145f2e376ea::t_4ab9a598ad39b3 326
+desktop/macos/Desktop/Sources/ProactiveAssistants/ContextBucketDirectorProbe.swift
+  s_d58145f2e376ea::t_2f248b58e34f2d 71-72,93-95,142-144,174-182
+desktop/macos/Desktop/Sources/ProactiveAssistants/ContextBucketDirectorProbeRegistration.swift
+  s_d58145f2e376ea::t_9195389362af03 11
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketRollup.swift
+  s_d58145f2e376ea::t_c14e69cd38b2b5 14,100-131,135-138,140-180,182-186,190-195,199,233,237,241,245-252,281-282,335-339,347-349,354,377-380,386-389,392,398,401,403,407,443-460,544,548-554,585,685,688-692,797-801,867,961
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketSchema.swift
+  s_d58145f2e376ea::t_cbe4fc6ae1a8e1 13-14,113-161,201-211
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketStore.swift
+  s_d58145f2e376ea::t_c6f1b9509573dc 34-38,357,545-758,835-837,846-847
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketsFeature.swift
+  s_d58145f2e376ea::t_985299dcda27ae 123-141
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDeliveryAuthority.swift
+  s_d58145f2e376ea::t_a9b54e2f35c2d2 43-52,60-63,274-277,280-282,321-326,345,349-351
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextProactivityEngine.swift
+  s_d58145f2e376ea::t_9e5b28a2f9afe9 260,271,287-336,343,347-348,350-361,388,644-843,949
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextWorkstreamPooling.swift
+  s_d58145f2e376ea::t_1e523a4555b822 61-66,75,107-112,116-119,139-151,158-190,197-198
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextWorkstreamReconciler.swift
+  s_d58145f2e376ea::t_9f1d20f48cb9e9 1-996
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveLaneClient.swift
+  s_d58145f2e376ea::t_0519d7b1316472 65-66,80-83
+desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+NotificationSettings.swift
+  s_d58145f2e376ea::t_1f5267f7b7cfa0 52
+desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
+  s_d58145f2e376ea::t_a75bea4c9ec2b5 1229-1236,1242-1243
+desktop/macos/Desktop/Sources/ProactiveAssistants/Services/AIUserProfileService.swift
+  s_d58145f2e376ea::t_6a13d8e3636b77 77
+desktop/macos/Desktop/Sources/ProactiveAssistants/Services/FloatingBarNotificationPreviewPolicy.swift
+  s_d58145f2e376ea::t_e228501e80b2c2 16-28
+desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationService.swift
+  s_d58145f2e376ea::t_f56e9201c5cdcb 347-351,471-472,601-602,653-654
+desktop/macos/Desktop/Sources/ProactiveAssistants/Services/SettingsSyncManager.swift
+  s_d58145f2e376ea::t_66619b037a3bc6 77-78,96-97,114-115,152-153,166-167,179-180,207-208,215-225,238-252,257-282,288,293-295,319-322
+desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift
+  s_d58145f2e376ea::t_616a6aceb396ad 93,108-293
+desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  s_d58145f2e376ea::t_11bcaf2b4a8b39 788-796,798,2496-2497,3477-3478,3488-3494,4812,4814-4821,5092-5095,5098-5117
+desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  s_d58145f2e376ea::t_c966478ee18de3 248-252,1449-1450,1487,1500,1521,1541-1561,1589-1594,1608-1613,1642-1648,1669,1672-1687
+desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift
+  s_d58145f2e376ea::t_53aeba45abf5c0 699
+desktop/macos/Desktop/Sources/Rewind/Core/RewindAbandonedVideoChunkRecovery.swift
+  s_d58145f2e376ea::t_bc75bb3e6c4d1e 119
+desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  s_d58145f2e376ea::t_c1e5bdbcd9c372 2781
+desktop/macos/Desktop/Sources/Rewind/UI/RewindHistoryReach.swift
+  s_d58145f2e376ea::t_a89cd93ed333f6 27-31,37-44
+desktop/macos/Desktop/Tests/APIClientAssistantSettingsTests.swift
+  s_d58145f2e376ea::t_4c3b50c08e9e17 20-21,33-34,48-49,59-63,65,68-70,93-247
+desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift
+  s_d58145f2e376ea::t_d082b66adecc12 395-396
+desktop/macos/Desktop/Tests/ChatCitationTests.swift
+  s_d58145f2e376ea::t_57f0dc19c7ac0f 13-20,128,307-703
+desktop/macos/Desktop/Tests/ChatJournalWritePathTests.swift
+  s_d58145f2e376ea::t_1cfe4b07b3ebbd 272-347
+desktop/macos/Desktop/Tests/ChatTimelineContinuityTests.swift
+  s_d58145f2e376ea::t_4a89ac6674a4a0 86-152,177-291
+desktop/macos/Desktop/Tests/ContextBucketDirectorProbeTests.swift
+  s_d58145f2e376ea::t_adc43bbf7a4bac 106-110,272
+desktop/macos/Desktop/Tests/ContextBucketPromptAssemblerTests.swift
+  s_d58145f2e376ea::t_e97ad6387cad4d 24-31,51-52,62-63,67-68,98-102,115,119,121-122,124-127,172-176,191-193,199-289,306-307,315,318,325,327,330-345,347-365,434-473,534-538,541-544,550,554-616
+desktop/macos/Desktop/Tests/ContextBucketPurgerTests.swift
+  s_d58145f2e376ea::t_6b2a67502c9f65 96-103,112
+desktop/macos/Desktop/Tests/ContextBucketRecentDeliveryTests.swift
+  s_d58145f2e376ea::t_147b67682850fc 40,47-48,52,55-57,63-65,81,85,88,107-109,111-140,142-143,174,201-202,216
+desktop/macos/Desktop/Tests/ContextBucketSchemaTests.swift
+  s_d58145f2e376ea::t_ac91588c6c0e5e 76-113,239-270
+desktop/macos/Desktop/Tests/ContextBucketStoreCompactionTests.swift
+  s_d58145f2e376ea::t_ec28aaf840ff4b 80-85
+desktop/macos/Desktop/Tests/ContextDeliveryAuthorityTests.swift
+  s_d58145f2e376ea::t_4145b9ac2cbe1d 117,121-125
+desktop/macos/Desktop/Tests/ContextProactivityEngineTests.swift
+  s_d58145f2e376ea::t_246c7c6c42a3ab 572-574,580-599,613-615,640,804,808,811,813-814,818,825-827,832-847,887,920,936-996
+desktop/macos/Desktop/Tests/ContextWorkstreamPoolingTests.swift
+  s_d58145f2e376ea::t_60b8f8bc7c2b8a 60,76,103-145
+desktop/macos/Desktop/Tests/ContextWorkstreamReconcilerTests.swift
+  s_d58145f2e376ea::t_fa1db2cc3ffff1 1-685
+desktop/macos/Desktop/Tests/FloatingBarNotificationPreviewPolicyTests.swift
+  s_d58145f2e376ea::t_6cf86a7c41580d 18,27,38,47,58,89-147,153
+desktop/macos/Desktop/Tests/HomeRedesignRegressionTests.swift
+  s_d58145f2e376ea::t_9a9f393776fd9c 366-378,393-394,403-404,412-413
+desktop/macos/Desktop/Tests/OmiMarkdownCitationInteractionTests.swift
+  s_d58145f2e376ea::t_3817230781300c 92-118
+desktop/macos/Desktop/Tests/ProactiveLaneClientTests.swift
+  s_d58145f2e376ea::t_9ce34829256700 47-65
+desktop/macos/Desktop/Tests/RewindAllTimeSearchTests.swift
+  s_d58145f2e376ea::t_ca582d23ef02a0 82-146,149,155,178-180,192-194,202-206,217,219-221,236,238-239,241-242,257-258,261-270,273,277-278,280,296-299,315-318,405,407,409-410
+desktop/macos/Desktop/Tests/RewindHistoryReachTests.swift
+  s_d58145f2e376ea::t_0d07398c3f4367 16-39,67,70-72,87-88,92-103
+desktop/macos/Desktop/Tests/ShellListeningCycleTests.swift
+  s_d58145f2e376ea::t_db4ea74c108e65 1-223
+desktop/macos/Desktop/Tests/ShellStatusIconLegibilityTests.swift
+  s_d58145f2e376ea::t_4d5b52981dae26 599,619,630-632,636
+desktop/macos/agent/src/runtime/types.ts
+  s_d58145f2e376ea::t_f3d516ccb16083 127-140
+desktop/macos/changelog/releases/0.12.176.json
+  s_d58145f2e376ea::t_6d6746d0cfd8a3 1-7
+desktop/macos/changelog/releases/0.12.177.json
+  s_d58145f2e376ea::t_bfdf559cba37ce 1-9
+desktop/macos/changelog/releases/0.12.178.json
+  s_d58145f2e376ea::t_2872e043a08a95 1-7
+desktop/macos/changelog/releases/0.12.179.json
+  s_d58145f2e376ea::t_ff39dbf7c73c7d 1-9
+desktop/macos/changelog/releases/0.12.180.json
+  s_d58145f2e376ea::t_104ee4c4ee85eb 1-8
+desktop/macos/changelog/releases/0.12.181.json
+  s_d58145f2e376ea::t_f3bd1f89f00427 1-9
+desktop/macos/e2e/flows/audio-recording.yaml
+  s_d58145f2e376ea::t_c18b3939f8c287 13
+desktop/macos/e2e/flows/context-buckets-dogfood.yaml
+  s_d58145f2e376ea::t_3a3d6f174486d8 21
+desktop/macos/scripts/check-grdb-insert-idiom.py
+  s_d58145f2e376ea::t_18d59863a889b1 1-236
+desktop/macos/tests/test_check_grdb_insert_idiom.py
+  s_d58145f2e376ea::t_00b11839a0f475 1-278
+desktop/windows/src/main/audio/systemAudioMute.ts
+  s_d58145f2e376ea::t_1ea9c629ad62a5 75-84
+desktop/windows/src/main/automation/bridge.ts
+  s_d58145f2e376ea::t_63110d0ace029f 11-15,21-23,32-34,49-57,61-65,67-68,85,119,124-131,155-158,191-193
+desktop/windows/src/main/automation/helper/Program.cs
+  s_d58145f2e376ea::t_b869d019bc6116 29-31,50-54,462-466
+desktop/windows/src/main/ocr/helperProcess.ts
+  s_d58145f2e376ea::t_11538fb95345b2 25-27,36-39,66-74,76-82,84-86,103,119,162-164,171-173
+desktop/windows/src/main/ocr/helperProtocol.test.ts
+  s_d58145f2e376ea::t_c2bb4ae4b9c736 49-68
+desktop/windows/src/main/ocr/helperProtocol.ts
+  s_d58145f2e376ea::t_87cdfba4c264e4 15-22,34-39
+desktop/windows/src/main/ocr/win-ocr-helper/Program.cs
+  s_d58145f2e376ea::t_df6e3334d717c4 23-25,48-52,117,132-142,197
+desktop/windows/src/main/tasks/parityWire.test.ts
+  s_d58145f2e376ea::t_424ab948d19559 1-72
+desktop/windows/src/main/tasks/taskSyncEngine.ts
+  s_d58145f2e376ea::t_e903933d958e54 186-188
+desktop/windows/src/renderer/src/lib/conversations/filtering.ts
+  s_d58145f2e376ea::t_276bb44b9d0c08 6,136-138,142-149
+desktop/windows/src/renderer/src/lib/graphLayout.test.ts
+  s_d58145f2e376ea::t_a097e890e99ce1 56-99
+desktop/windows/src/renderer/src/lib/graphLayout.ts
+  s_d58145f2e376ea::t_8204e1c39a09a0 26-29,32-33,37-44,48-53,55-58
+desktop/windows/src/renderer/src/lib/kgTech.test.ts
+  s_d58145f2e376ea::t_454ab1888eee2a 56-60,99-107
+desktop/windows/src/renderer/src/lib/kgTech.ts
+  s_d58145f2e376ea::t_45d16812a621ab 10-13
+desktop/windows/src/renderer/src/lib/localDay.ts
+  s_d58145f2e376ea::t_6c94467eac5db1 1-28
+desktop/windows/src/renderer/src/lib/memoryExtract.test.ts
+  s_d58145f2e376ea::t_110b87327947c1 1-18
+desktop/windows/src/renderer/src/lib/memoryExtract.ts
+  s_d58145f2e376ea::t_523db01ec74030 16-18
+desktop/windows/src/renderer/src/lib/omiApi.generated.ts
+  s_d58145f2e376ea::t_ee4ca67a5183e8 2997-3023,3254-3260,4076-4083,4517-4520,4551,4667,7204-7233,8716-8725,13628-13692,16701-16719,16758
+desktop/windows/src/renderer/src/lib/onboardingGraphModel.test.ts
+  s_d58145f2e376ea::t_5622cc037b6312 47-57
+desktop/windows/src/renderer/src/lib/onboardingGraphModel.ts
+  s_d58145f2e376ea::t_8cd4990291d313 32,37-40
+desktop/windows/src/renderer/src/lib/parityContracts.test.ts
+  s_d58145f2e376ea::t_fccbf1dbc1c62f 1-117
+desktop/windows/src/renderer/src/lib/screenGrouping.test.ts
+  s_d58145f2e376ea::t_0ccf873edbd9ab 41-48
+desktop/windows/src/renderer/src/lib/screenGrouping.ts
+  s_d58145f2e376ea::t_82f5cea5cc358f 40-45
+desktop/windows/src/renderer/src/lib/taskBuckets.ts
+  s_d58145f2e376ea::t_abb0e3bc72f7ed 1-43
+desktop/windows/src/renderer/src/pages/Tasks.tsx
+  s_d58145f2e376ea::t_2f0ad4982c5c32 10,276-296,307,321
+docs/api-reference/app-client-openapi.json
+  s_d58145f2e376ea::t_66447abc92dfcb 18184-18331,19681-19714,24807-24854,46108-46285,46291,46316,46322-46348,46351-46353,46355-46393,46438-46442,46467,46469,46473-46476,46478-46494,46537,46562,46564,46568,46570-46618,46621-46631,46636-46645,46653,60451-60528
+docs/doc/developer/AppSetup.mdx
+  s_d58145f2e376ea::t_12c812141eaaa9 174,186
+docs/doc/developer/backend/transcription.mdx
+  s_d58145f2e376ea::t_50bb1626435301 180-206
+docs/rayban-meta-dat-setup.md
+  s_d58145f2e376ea::t_4d1f489ed906cb 17,97
+docs/rayban-meta-founder-acceptance.md
+  s_d58145f2e376ea::t_1f6b0bbb86eef7 46
+plugins/omi-hermes-agent-app/.env.example
+  s_d58145f2e376ea::t_62daa8a4a6d268 1-10
+plugins/omi-hermes-agent-app/Dockerfile
+  s_d58145f2e376ea::t_b17e5c8c5776b8 1-10
+plugins/omi-hermes-agent-app/README.md
+  s_d58145f2e376ea::t_6b5e5f27c5e354 1-141
+plugins/omi-hermes-agent-app/main.py
+  s_d58145f2e376ea::t_f9e0749684b0cf 1-242
+plugins/omi-hermes-agent-app/requirements.txt
+  s_d58145f2e376ea::t_f22df5aeff4eed 1-3
+plugins/omi-hermes-agent-app/test_main.py
+  s_d58145f2e376ea::t_8cfd2cf4f6fe7c 1-308
+scripts/dev-harness/dev_harness/cli.py
+  s_d58145f2e376ea::t_c6af3b1e1bcdc7 225,242,1028-1067,1070-1072,1103
+scripts/dev-harness/dev_harness/safety.py
+  s_d58145f2e376ea::t_68725135f8735f 521-566
+scripts/dev-harness/tests/test_cli.py
+  s_d58145f2e376ea::t_45e8ec064e4ad1 5,8,282-390
+web/admin/app/(protected)/dashboard/classic/page.tsx
+  s_d58145f2e376ea::t_01471e4f2d56f2 230,232-234,245-253,484-489,678-679,681-685,1716,1914-1915,2305-2306,2308-2317,2321
+web/admin/app/api/internal/precompute/route.ts
+  s_d58145f2e376ea::t_d48c8b3b3043ab 47-50,86-88,148-153
+web/admin/app/api/omi/stats/activation/route.ts
+  s_d58145f2e376ea::t_40561c1a0ccbc9 1-154
+web/admin/app/api/omi/stats/viral-metrics/route.ts
+  s_d58145f2e376ea::t_7ed2790717c6f7 4-7,11-17,142-157,160,162-164,167-173,177-181,188,194-195,327-329,334-335,340-342,361-367
+web/admin/lib/__tests__/activation-route.test.ts
+  s_d58145f2e376ea::t_b62f2201e887c6 1-239
+web/admin/lib/__tests__/growth-metrics.test.ts
+  s_d58145f2e376ea::t_e4ea1ee780730e 6-7,41-42,46-161
+web/admin/lib/growth-metrics.ts
+  s_d58145f2e376ea::t_cfcf1770048364 17-24,31,33-56,104-112,122-127,130-133,150,155-156,159-267
+web/admin/lib/services/omi-api/omiApi.generated.ts
+  s_d58145f2e376ea::t_e6aa392c7b3e47 2997-3023,3254-3260,4076-4083,4517-4520,4551,4667,7204-7233,8716-8725,13628-13692,16701-16719,16758
+web/app/src/lib/omiApi.generated.ts
+  s_d58145f2e376ea::t_253f8d0baef184 2997-3023,3254-3260,4076-4083,4517-4520,4551,4667,7204-7233,8716-8725,13628-13692,16701-16719,16758
+web/personas-open-source/src/lib/omiApi.generated.ts
+  s_d58145f2e376ea::t_93166f0af5a6ef 2997-3023,3254-3260,4076-4083,4517-4520,4551,4667,7204-7233,8716-8725,13628-13692,16701-16719,16758
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "de5a88f77507255fed08fe9d2aa7e83df9bc1f27",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
