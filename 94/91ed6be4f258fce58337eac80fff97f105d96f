@@ -1,0 +1,27 @@
+desktop/context-for-claude/Tests/ContextCoreTests/AccountCacheQueriesTests.swift
+  s_31a21db428771c::t_439b1ef3c76f4f 1-149
+desktop/context-for-claude/Sources/ContextCore/Store.swift
+  s_31a21db428771c::t_46185d1b7755ce 1226-1254
+desktop/context-for-claude/Sources/ContextCore/AccountCacheQueries.swift
+  s_31a21db428771c::t_9a133f3fa00a75 1-3,25-26,32-42,44-48,54-55,67-74,77,80,82-91,93-102,105-110,112-118
+  s_31a21db428771c::t_255f234930adb0 4-24,27-31,43,49-53,56-66,75-76,78-79,81,92,103-104,111
+  s_31a21db428771c::t_52802a9ac0b032 119-126
+desktop/context-for-claude/Tests/ContextCoreTests/StoreTests.swift
+  s_31a21db428771c::t_0829bdbb976bb4 167-169,182,273-275,288
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "9491ed6be4f258fce58337eac80fff97f105d96f",
+  "prompts": {},
+  "sessions": {
+    "s_31a21db428771c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1bdb0c54-f98d-4b5f-9e7f-cee463cdb235",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
