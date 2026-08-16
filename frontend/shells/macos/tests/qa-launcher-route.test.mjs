@@ -100,7 +100,9 @@ test("macOS QA launcher freezes origin, URLs, and the eight evidence routes befo
   // red-proof: append ::macos in the launcher or retain a prior host result;
   // the raw-run action log or pre-gate stale-file assertion fails.
   const source = readFileSync(launcher, "utf8");
-  assert.match(source, /OMI_SURFACE_PORT:-5290/);
+  assert.match(source, /OMI_SURFACE_PORT:-\$PINNED_APP_ORIGIN_PORT/);
+  assert.match(source, /PINNED_APP_ORIGIN_PORT=5290/);
+  assert.match(source, /VERIFICATION_SURFACE_PORT_MIN=15290/);
   assert.match(source, /home\|memories\|conversations\|tasks\|folders\|chat\|settings\|listen/);
   assert.doesNotMatch(source, /qa=|rig=dev|--fixture|4841/);
 
@@ -123,6 +125,13 @@ test("macOS QA launcher freezes origin, URLs, and the eight evidence routes befo
       encoding: "utf8", env: { ...run.environment, OMI_SURFACE_PORT: "5291" },
     });
     assert.equal(wrongOrigin.status, 1);
+    assert.match(`${wrongOrigin.stdout}${wrongOrigin.stderr}`, /refusal, not a fallback/);
+    assert.equal(run.readActions(), "");
+
+    const serviceTestPort = spawnSync(run.launcher, ["--route", "chat"], {
+      encoding: "utf8", env: { ...run.environment, OMI_SURFACE_PORT: "14851" },
+    });
+    assert.equal(serviceTestPort.status, 1);
     assert.equal(run.readActions(), "");
 
     const forbiddenApiVariants = [
@@ -183,8 +192,16 @@ test("macOS QA launcher freezes origin, URLs, and the eight evidence routes befo
       encoding: "utf8", env: run.environment,
     });
     assert.equal(defaultHome.status, 0);
+    assert.match(`${defaultHome.stdout}${defaultHome.stderr}`, /pinned app http:\/\/127\.0\.0\.1:5290/);
     actions = run.readActions();
     assert.match(actions, /launch\|query=route=home&platform=desktop&generation=platform\|.*api=http:\/\/127\.0\.0\.1:4851\|/);
+
+    const verificationOrigin = spawnSync(run.launcher, ["--api", "http://127.0.0.1:4851", "--route", "chat"], {
+      encoding: "utf8", env: { ...run.environment, OMI_SURFACE_PORT: "15290" },
+    });
+    assert.equal(verificationOrigin.status, 0, verificationOrigin.stderr || verificationOrigin.stdout);
+    assert.match(`${verificationOrigin.stdout}${verificationOrigin.stderr}`, /verification http:\/\/127\.0\.0\.1:15290/);
+    assert.doesNotMatch(`${verificationOrigin.stdout}${verificationOrigin.stderr}`, /pinned app/);
 
     const legacyMemories = spawnSync(run.launcher, ["--api", "http://127.0.0.1:4851", "--route", "memories", "--generation", "legacy"], {
       encoding: "utf8", env: run.environment,

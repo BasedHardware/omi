@@ -15,14 +15,22 @@
 #   OMI_API_BASE_URL   default http://127.0.0.1:4851   (registered local production)
 #   OMI_API_TOKEN      dev token; if unset and an issuer is set, it is fetched
 #   OMI_DEV_TOKEN_ISSUER_URL   optional dev-mode token issuer
-#   OMI_SURFACE_PORT   fixed 5290
+#   OMI_SURFACE_PORT   default 5290 (pinned app origin)
 #   OMI_SURFACES_DIST  default ../../packages/surfaces/dist
 #   OMI_BUILD_DIR / OMI_APP_NAME   scratch bundle location and name
 #
-# THE PORT IS AN ORIGIN, NOT A PREFERENCE. The surface's IndexedDB is keyed by
-# origin including the port. Changing OMI_SURFACE_PORT between launches is a
-# silent wipe of local surface storage, so this script refuses to pick an
-# ephemeral one and warns loudly if you override it.
+# THE PORT IS AN ORIGIN, NOT A PREFERENCE. IndexedDB is keyed by origin
+# including the port. Two origins exist, and they are different product
+# stores — do not unify these branches because they look similar.
+#
+#   5290            the long-lived app. IndexedDB persists across relaunch.
+#                   This is the only origin integration/dev-app.sh uses.
+#   15290-15309     a verification run. A clean origin is the point: no
+#                   state carried in from a previous run or from the app.
+#
+# A verification run that cannot acquire a port in 15290-15309 must refuse
+# loudly. Falling back to 5290 (or any other port) would let a lane report
+# green against the wrong origin. This launcher will not do that.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
@@ -113,10 +121,21 @@ if [[ ! "$app_name" =~ ^omi-on-[A-Za-z0-9][A-Za-z0-9.-]*$ ]]; then
   exit 1
 fi
 
-port="${OMI_SURFACE_PORT:-5290}"
-if [[ "$port" != "5290" ]]; then
-  echo "ERROR: OMI_SURFACE_PORT must remain 5290 for the production-shaped macOS origin." >&2
+PINNED_APP_ORIGIN_PORT=5290
+# Copied from apps/service/net/port-lease.ts SURFACE_TEST_PORT_*. Do not widen
+# this to "any free port". Do not fold 5290 into it.
+VERIFICATION_SURFACE_PORT_MIN=15290
+VERIFICATION_SURFACE_PORT_MAX=15309
+
+port="${OMI_SURFACE_PORT:-$PINNED_APP_ORIGIN_PORT}"
+if [[ "$port" == "$PINNED_APP_ORIGIN_PORT" ]]; then
+  echo "origin: pinned app http://127.0.0.1:${port}/ — IndexedDB persists across relaunch."
+elif [[ "$port" =~ ^[0-9]+$ ]] && (( port >= VERIFICATION_SURFACE_PORT_MIN && port <= VERIFICATION_SURFACE_PORT_MAX )); then
+  echo "origin: verification http://127.0.0.1:${port}/ — clean IndexedDB is the point; do not fold this path back into ${PINNED_APP_ORIGIN_PORT}."
+else
+  echo "ERROR: OMI_SURFACE_PORT must be the pinned app origin ${PINNED_APP_ORIGIN_PORT} or a leased verification origin in ${VERIFICATION_SURFACE_PORT_MIN}-${VERIFICATION_SURFACE_PORT_MAX} (got '$port')." >&2
   echo "       IndexedDB is origin-keyed; another port is a different product store." >&2
+  echo "       This is a refusal, not a fallback — this launcher will not drift to ${PINNED_APP_ORIGIN_PORT}." >&2
   exit 1
 fi
 

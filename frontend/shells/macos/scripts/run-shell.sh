@@ -1,7 +1,10 @@
 #!/bin/bash
 # The native inner loop: kill the running shell, regenerate + rebuild, relaunch.
 # Usage: OMI_BUILD_DIR=<scratch> OMI_SURFACE_PROFILE=<unique-id> scripts/run-shell.sh
-# Serves the real @omi-core/surfaces dist/ from the app's fixed-port loopback (5290).
+# Serves the real @omi-core/surfaces dist/ from a loopback origin.
+# Default 5290 is the pinned app origin (IndexedDB persists across relaunch).
+# A verification run passes OMI_SURFACE_PORT in 15290-15309 for a clean origin.
+# Those are different product stores — do not fold verification back onto 5290.
 # A profile is passed as a URL namespace (`?profile=...`) by the shell; this
 # deliberately avoids deleting WebKit/IndexedDB data when a clean run is needed.
 set -euo pipefail
@@ -56,7 +59,7 @@ port_pid="$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -1 || true)"
 if [[ -n "$port_pid" ]] && [[ "$(ps -o comm= -p "$port_pid" 2>/dev/null)" == "$executable" ]]; then
   kill "$port_pid" 2>/dev/null || true
 fi
-# Port may still be held briefly after kill; wait for free so relaunch binds 5290.
+# Port may still be held briefly after kill; wait for free so relaunch binds this origin.
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   if ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     break

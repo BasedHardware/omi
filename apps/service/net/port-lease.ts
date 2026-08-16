@@ -40,6 +40,17 @@ export const PRODUCTION_SURFACE_PORT = 5290;
 export const SURFACE_TEST_PORT_MIN = 15_290;
 export const SURFACE_TEST_PORT_MAX = 15_309;
 
+/**
+ * 5290 is the long-lived app origin: IndexedDB persists across relaunch.
+ * 15290-15309 is a verification origin: a clean store is the point. These
+ * are different product stores. Do not fold one range into the other.
+ */
+export function isSurfaceTestPort(port: number): boolean {
+  return Number.isInteger(port)
+    && port >= SURFACE_TEST_PORT_MIN
+    && port <= SURFACE_TEST_PORT_MAX;
+}
+
 export type PortLeaseRole = "app-facing" | "gateway-test" | "gateway-real" | "surface";
 
 export type PortRange = {

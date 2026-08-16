@@ -11,6 +11,12 @@
  * Stays alive until SIGTERM/SIGINT, or until --parent-pid dies.
  * Releasing the process releases the locks. A crash leaves a stale lock
  * whose dead pid the next acquire replaces, unless a stranger is listening.
+ *
+ * Surface is the same mechanism as service and gateway, not a second one.
+ * 5290 stays the long-lived app origin (IndexedDB persists across relaunch).
+ * A verification run leases 15290-15309 so it gets a clean origin. Do not
+ * unify those paths: a leased run that cannot acquire a surface port refuses
+ * loudly and never falls back to 5290.
  */
 
 import { writeFileSync } from "node:fs";
@@ -111,6 +117,10 @@ try {
 
   let surfacePort: number | null = null;
   if (roles.includes("surface")) {
+    // Verification origin. Persistence across relaunch is a property only the
+    // long-lived app on 5290 needs. This run wants the opposite: a clean
+    // origin, no IndexedDB from a previous run or from the app David clicks.
+    // Do not "unify" this acquire with 5290 because the two look similar.
     const surfaceLease = acquirePortLease({
       role: "surface",
       runId,

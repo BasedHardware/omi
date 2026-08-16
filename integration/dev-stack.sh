@@ -22,6 +22,10 @@ MODEL_GATEWAY_PORT=8791
 GATEWAY_SCRIPT_NEEDLE="local-test-gateway.mjs"
 MACOS_ORIGIN="http://127.0.0.1:5290"
 SURFACE_PORT=5290
+# 5290 is the pinned app origin used when this harness is not --lease.
+# Verification (--lease) overwrites both from the surface lock below.
+# Persistence across relaunch is a property only the long-lived app needs;
+# a verification run wants a clean origin. Do not unify the two paths.
 SURFACES="$CORE_REPO/frontend/packages/surfaces"
 MACOS_LAUNCHER="$CORE_REPO/frontend/shells/macos/scripts/dev-run-macos.sh"
 IOS_LAUNCHER="$CORE_REPO/frontend/shells/ios/scripts/dev-run-ios.sh"
@@ -275,7 +279,11 @@ listener() { lsof -nP -iTCP:"$1" -sTCP:LISTEN 2>/dev/null || true; }
 if (( LEASE_MODE )); then
   LEASE_FILE="$RUN_DIR/port-lease.json"
   APP_FACING_LEASE="$RUN_DIR/app-facing-test-lease.json"
-  LEASE_ROLES="service,gateway"
+  # Surface is the same lease as service and gateway, not a second mechanism.
+  # 5290 stays the long-lived app origin. Verification leases 15290-15309 so
+  # it gets a clean IndexedDB. Do not unify these paths, and do not fall back
+  # to 5290 if this acquire fails.
+  LEASE_ROLES="service,gateway,surface"
   GATEWAY_KIND="test"
   if [[ "${OMI_CHAT_MODEL:-}" == "real" ]]; then GATEWAY_KIND="real"; fi
   rm -f -- "$LEASE_HOLDER_PID_PATH" "$LEASE_HOLDER_IDENTITY_FILE" "$LEASE_FILE" "$APP_FACING_LEASE"
@@ -305,19 +313,20 @@ if (( LEASE_MODE )); then
   GATEWAY_PORT="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j.ports.gateway))' "$LEASE_FILE")"
   SERVICE_URL="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(j.urls.service)' "$LEASE_FILE")"
   GATEWAY_URL="http://127.0.0.1:${GATEWAY_PORT}"
-  printf 'lease service=%s gateway=%s\n' "$SERVICE_PORT" "$GATEWAY_PORT"
+  SURFACE_PORT="$(node -e '
+    const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+    const port=j.ports && j.ports.surface;
+    if (!Number.isInteger(port) || port < 15290 || port > 15309 || port === 5290) process.exit(2);
+    process.stdout.write(String(port));
+  ' "$LEASE_FILE")" || {
+    echo "ERROR: verification lease did not acquire a run-scoped surface origin in 15290-15309; refusing to use or fall back to the pinned app origin 5290." >&2
+    if [[ -s "$RUN_DIR/port-lease-holder.log" ]]; then cat "$RUN_DIR/port-lease-holder.log" >&2; fi
+    runtime_log warn dev-stack.refused --reason port_lease_failed
+    exit 1
+  }
+  MACOS_ORIGIN="http://127.0.0.1:${SURFACE_PORT}"
+  printf 'lease service=%s gateway=%s surface=%s\n' "$SERVICE_PORT" "$GATEWAY_PORT" "$SURFACE_PORT"
   cp -f -- "$LEASE_FILE" "$RUNDIR/port-lease.json"
-  if (( MODE_UP == 0 )); then
-    # The macOS QA launcher pins 5290 (IndexedDB origin). That pin is
-    # sibling-owned under frontend/shells; this lane cannot lease it.
-    held="$(listener 5290)"
-    if [[ -n "$held" ]]; then
-      echo "ERROR: required port 5290 is occupied; this harness will not kill it or drift ports." >&2
-      printf '%s\n' "$held" >&2
-      runtime_log warn dev-stack.refused --reason port_occupied
-      exit 1
-    fi
-  fi
 else
   occupied=0
   held="$(listener 4851)"
@@ -337,6 +346,9 @@ else
     occupied=1
   fi
   if (( MODE_UP == 0 )); then
+    # Pinned app origin. --lease never reaches here: it already took a
+    # verification port in 15290-15309. Occupied 5290 is still a loud
+    # refusal on this path, not a cue to drift.
     held="$(listener 5290)"
     if [[ -n "$held" ]]; then
       echo "ERROR: required port 5290 is occupied; this harness will not kill it or drift ports." >&2

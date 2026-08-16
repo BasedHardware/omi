@@ -8,8 +8,9 @@ import WebKit
 
 let env = ProcessInfo.processInfo.environment
 
-/// Fixed loopback port. Storage (IndexedDB) is origin-keyed including the port —
-/// changing this wipes the offline task queue across relaunches.
+/// Default 5290 is the long-lived app origin (IndexedDB persists across
+/// relaunch). Verification sets OMI_SURFACE_PORT to a leased port in
+/// 15290-15309 so it does not share that store. Do not fold the two together.
 let loopbackPort: UInt16 = {
   UInt16(env["OMI_SURFACE_PORT"] ?? "") ?? LoopbackServer.defaultPort
 }()

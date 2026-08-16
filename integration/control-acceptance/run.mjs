@@ -189,6 +189,9 @@ const ownerPath = booted
 
 let token = "";
 let serviceUrl = PRODUCTION_SERVICE_URL;
+// SCREEN_PROOF attaches to the long-lived app, so 5290 is correct there.
+// A leased verification boot must overwrite this from ports.surface; if it
+// cannot, we refuse rather than share IndexedDB with the app on 5290.
 let surfacePort = "5290";
 let runScopedDir = "";
 try {
@@ -210,14 +213,24 @@ try {
 }
 const leasePath = join(dirname(ownerPath), "port-lease.json");
 if (existsSync(leasePath)) {
+  let lease;
   try {
-    const lease = JSON.parse(readFileSync(leasePath, "utf8"));
-    if (typeof lease?.urls?.service === "string") serviceUrl = lease.urls.service;
-    // macOS origin stays 5290: the launcher pin is sibling-owned. A leased
-    // surface port here would be a silent drift, not a concurrent stack.
+    lease = JSON.parse(readFileSync(leasePath, "utf8"));
   } catch {
     fail("ERROR: stack port lease record is unreadable.");
   }
+  if (typeof lease?.urls?.service === "string") serviceUrl = lease.urls.service;
+  // Same surface lease as service/gateway, not a second mechanism.
+  // Persistence across relaunch is a property only the long-lived app on
+  // 5290 needs. This run wants a clean origin. Missing or out-of-range
+  // surface is a refusal, never a fallback onto 5290.
+  const leasedSurface = lease?.ports?.surface;
+  if (!Number.isInteger(leasedSurface) || leasedSurface < 15290 || leasedSurface > 15309 || leasedSurface === 5290) {
+    fail("ERROR: verification lease did not include a run-scoped surface origin in 15290-15309; refusing to use the pinned app origin 5290. This is a refusal, not a fallback.");
+  }
+  surfacePort = String(leasedSurface);
+} else if (!SCREEN_PROOF) {
+  fail("ERROR: verification boot produced no port-lease.json; refusing to use the pinned app origin 5290.");
 }
 
 let baseline = { conversationIds: [], memoryIds: [] };
@@ -270,6 +283,11 @@ if (SCREEN_PROOF) {
 }
 
 const started = Date.now();
+if (surfacePort !== "5290") {
+  process.stdout.write(
+    `control-acceptance verification origin http://127.0.0.1:${surfacePort} (pinned app origin 5290 is not this run)\n`,
+  );
+}
 const launched = spawnSync(launcher, ["--api", serviceUrl, "--route", JOURNEY ? "listen" : "home"], {
   cwd: dirname(launcher),
   env: childEnv,

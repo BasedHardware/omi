@@ -39,6 +39,12 @@ test("RED-PROOF stop instructions name the existing stack stopper", () => {
   assert.match(stack, /STOP_ONLY=1/);
 });
 
+test("RED-PROOF the demo launcher stays on the pinned origin 5290", () => {
+  assert.match(app, /SURFACE_URL="http:\/\/127\.0\.0\.1:5290"/);
+  assert.match(app, /OMI_SURFACE_PORT=5290/);
+  assert.doesNotMatch(app, /OMI_SURFACE_PORT=15290|OMI_SURFACE_PORT="\$|--lease/);
+});
+
 test("RED-PROOF bun run app is wired to the one launcher", () => {
   assert.equal(pkg.scripts.app, "bash integration/dev-app.sh");
 });

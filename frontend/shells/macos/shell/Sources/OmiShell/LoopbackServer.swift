@@ -1,6 +1,8 @@
-// Minimal fixed-port loopback static file server for the shared surface dist/.
-// Port must stay constant across launches — IndexedDB/localStorage are origin-keyed
-// including the port (ephemeral bind = silent wipe on relaunch).
+// Minimal loopback static file server for the shared surface dist/.
+// defaultPort 5290 is the long-lived app origin: IndexedDB persists across
+// relaunch. A verification run passes OMI_SURFACE_PORT in 15290-15309 so it
+// gets a clean origin. Those are different product stores — do not "fix"
+// verification back onto 5290 because this default exists.
 import Foundation
 import Network
 
