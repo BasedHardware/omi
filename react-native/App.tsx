@@ -1152,6 +1152,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const stableChatMessageIds = useRef(new Set<string>()).current;
   const animatedChatMessageIds = useRef(new Set<string>()).current;
   const chatScrollRef = useRef<ScrollView>(null);
+  const composerRef = useRef<TextInput>(null);
   const shouldFollowChat = useRef(false);
   const [olderChatCursor, setOlderChatCursor] = useState<string | null>(null);
   const [hasOlderChat, setHasOlderChat] = useState(false);
@@ -1713,6 +1714,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           onFocus={() => setComposerFocused(true)}
           placeholder="Ask anything..."
           placeholderTextColor="#888888"
+          ref={composerRef}
           style={styles.composerInput}
           value={draft}
         />
@@ -2071,7 +2073,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                 <FocusPressable
                                   accessibilityRole="button"
                                   key={prompt}
-                                  onPress={() => setDraft(prompt)}
+                                  onPress={() => {
+                                    setDraft(prompt);
+                                    composerRef.current?.focus();
+                                  }}
                                   style={({pressed}) => [
                                     styles.promptChip,
                                     compact && styles.promptChipCompact,

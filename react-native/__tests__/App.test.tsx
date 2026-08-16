@@ -1564,7 +1564,7 @@ test('resizes the desktop rail directly when motion is reduced', async () => {
   expect(width.setValue).toHaveBeenCalledWith(280);
 });
 
-test('fills and preserves the ask pill draft from a quick prompt', async () => {
+test('fills, focuses, and preserves the ask pill draft from a quick prompt', async () => {
   const renderer = await renderApp();
   const openChat = renderer.root.find(
     node => node.props.accessibilityLabel === 'Open Chat',
@@ -1589,6 +1589,7 @@ test('fills and preserves the ask pill draft from a quick prompt', async () => {
     renderer.root.find(node => String(node.type) === 'ArrowUp').props,
   ).toEqual(expect.objectContaining({size: 18, strokeWidth: 2.5}));
 
+  mockSearchFocus.mockClear();
   await ReactTestRenderer.act(async () => {
     prompt.props.onPress();
   });
@@ -1597,6 +1598,7 @@ test('fills and preserves the ask pill draft from a quick prompt', async () => {
     renderer.root.find(node => node.props.accessibilityLabel === 'Ask Omi')
       .props.value,
   ).toBe('What should I remember?');
+  expect(mockSearchFocus).toHaveBeenCalledTimes(1);
 });
 
 test('matches the compact resting stage, prompt grid, and composer geometry', async () => {
