@@ -11,6 +11,9 @@ environments:
     gke:
       backend-listen:
         env:
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -67,9 +70,6 @@ environments:
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
-          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
-            value: standby
-            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
             category: rollout
@@ -174,6 +174,9 @@ environments:
       pusher:
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -238,9 +241,6 @@ environments:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
             category: service_discovery
-          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
-            value: standby
-            category: rollout
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -368,6 +368,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -429,9 +432,6 @@ environments:
             SYNC_LEDGER_FENCE_MODE:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
-              category: rollout
-            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
-              value: standby
               category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
@@ -504,6 +504,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -571,9 +574,6 @@ environments:
             SYNC_LEDGER_FENCE_MODE:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
-              category: rollout
-            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
-              value: standby
               category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
@@ -643,6 +643,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -710,9 +713,6 @@ environments:
             SYNC_LEDGER_FENCE_MODE:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
-              category: rollout
-            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
-              value: standby
               category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
@@ -988,6 +988,9 @@ environments:
     gke:
       backend-listen:
         env:
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -1044,9 +1047,6 @@ environments:
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
-          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
-            value: standby
-            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
             category: rollout
@@ -1172,12 +1172,6 @@ environments:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
-      pusher:
-        values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
-        env:
-          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
-            value: standby
-            category: rollout
       parakeet:
         env:
           PARAKEET_STREAM_CAPACITY:
@@ -1277,6 +1271,9 @@ environments:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1338,9 +1335,6 @@ environments:
             SYNC_LEDGER_FENCE_MODE:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
-              category: rollout
-            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
-              value: standby
               category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
@@ -1430,6 +1424,9 @@ environments:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1497,9 +1494,6 @@ environments:
             SYNC_LEDGER_FENCE_MODE:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
-              category: rollout
-            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
-              value: standby
               category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
@@ -1570,6 +1564,9 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1637,9 +1634,6 @@ environments:
             SYNC_LEDGER_FENCE_MODE:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
-              category: rollout
-            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
-              value: standby
               category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
